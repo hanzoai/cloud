@@ -24,6 +24,15 @@ import (
 // that had the ledger linked — which the payment rail never does. A settlement that
 // can debit but not credit is not a settlement, so this is what makes "both sides
 // or neither" reachable from another binary.
+//
+// SAY WHAT THIS IS: the first op on the internal plane that CREATES money. The
+// others move it out of a ledger, read it, or gate it; this one puts it in. The
+// plane's whole boundary is the socket — 0700 in the fleet's own run dir, reachable
+// only by the children the router spawned — and that was already the boundary
+// protecting a secret read (plane.KMSGet) and a debit (plane.FinanceRecord). It is
+// the same boundary and it is now carrying more weight. Narrowing it means peer
+// credentials on the plane itself (SO_PEERCRED, per-op), which is a fleet-wide seam
+// and belongs to whoever owns it — not smuggled in behind a payment fix.
 
 // exposeCredit publishes the ledger credit. Mount calls it.
 func exposeCredit() {

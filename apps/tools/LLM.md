@@ -167,6 +167,29 @@ was never started. `cmd/cloud/wake.go` publishes `zip.App.Start` as `host_start`
 the router's own socket, and `cloud.Peer` asks it when a socket is unbound
 (`cmd/cloud/wake_test.go`).
 
+### Still NOT closed — a listing claims a tool NAME, and names are fleet-wide
+
+`CheapestPublicForTool` (`apps/marketplace/store.go`) resolves a price by tool NAME
+across every publisher, and takes the cheapest. That was inert while nothing could
+pay; with the rail live it is a live seam, so state the shape plainly:
+
+- tool names are a flat fleet-wide namespace (`tool.go`), but an org registering an
+  external MCP server contributes names prefixed by that server's `brand` — so two
+  orgs registering a server branded `stripe` both contribute `stripe_charge`, and
+  those are different capabilities with one name;
+- any org may publish a PUBLIC listing for any name. The cheapest wins. So a listing
+  published by someone who does not own the capability can undercut the real one and
+  receive its payments.
+
+The payee is still always a wallet in the LISTING's own publisher org — a buyer
+cannot redirect anything, and no cross-tenant read is possible — so the exploit is a
+seller-side one: divert a small payment, and suppress the genuine price.
+
+Closing it is a decision about the listing KEY, not about the rail: either the
+resource id carries the publishing org, or a name with two public claimants is
+refused as unroutable exactly as zip refuses two plugins owning one tool name. Both
+change what a listing means, which is the marketplace's call to make.
+
 ### Still NOT closed — the tool REGISTRY across the boundary
 
 Same bug class, different seam, and it is why a seller cannot list and a buyer cannot

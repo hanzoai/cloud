@@ -140,12 +140,7 @@ func ServePlane(name string, log luxlog.Logger) (func() error, error) {
 	app := Plane()
 	errs := make(chan error, 1)
 	go func() { errs <- app.Listen(path) }()
-	if err := awaitSocket(path, planeBindWait); err != nil {
-		select {
-		case lerr := <-errs:
-			return nil, fmt.Errorf("plane %s: %w", name, lerr)
-		default:
-		}
+	if err := awaitSocket(path, errs, planeBindWait); err != nil {
 		return nil, fmt.Errorf("plane %s: %w", name, err)
 	}
 	if log != nil {
@@ -221,9 +216,17 @@ func reach(ctx context.Context, app string) error {
 		return nil
 	}
 	if !exists(zip.SocketPath(plane.HostApp)) {
-		// No router in this process tree: nothing can start an app, and nothing
-		// is going to. A single-app process and a developer's test are exactly
-		// this shape, and for them "not deployed here" is simply true.
+		if underRouter() {
+			// We were SPAWNED by a router and its door is gone. That is an outage,
+			// and reading it as "not deployed here" would be the fail-open this
+			// whole change exists to close — a payment rail that concluded nothing
+			// is priced because the router's socket was missing for a moment.
+			return fmt.Errorf("wake %s: this process runs under a router whose start door is not there", app)
+		}
+		// No router in this process tree and none expected: nothing can start an
+		// app, and nothing is going to. A single-app binary run directly and a
+		// developer's test are exactly this shape, and for them "not deployed
+		// here" is simply true.
 		return fmt.Errorf("%w: %s (no socket, no router)", ErrNoPeer, app)
 	}
 	ctx, cancel := context.WithTimeout(ctx, wakeTimeout)
@@ -252,6 +255,15 @@ func reach(ctx context.Context, app string) error {
 	return nil
 }
 
+// underRouter reports whether this process was started BY the fleet router.
+//
+// zip hands every child it spawns the private socket it must serve on, so a set
+// ZIP_ADDR is proof of a parent that owns a plugin table — the one thing that can
+// start a sibling. It is what separates "this deployment does not run that app"
+// from "the thing that would have told me is down", and only the first of those may
+// ever be read as free.
+func underRouter() bool { return strings.TrimSpace(os.Getenv("ZIP_ADDR")) != "" }
+
 // exists is the HOT-PATH question — "is there a socket to dial" — and it is a
 // stat, because it runs before every plane call and a connect does not. A stale
 // file left by a crash passes it; that is correct, because "the app is here and
@@ -262,12 +274,22 @@ func exists(path string) bool {
 	return err == nil
 }
 
-// awaitSocket blocks until path ACCEPTS, or the deadline passes. This one really
-// does connect: it runs once, at bind, and the whole point is to know a listener
-// is there before anyone is told the app is up.
-func awaitSocket(path string, within time.Duration) error {
+// awaitSocket blocks until path ACCEPTS, or the listener gives up, or the deadline
+// passes. This one really does connect: it runs once, at bind, and the whole point
+// is to know a listener is there before anyone is told the app is up.
+//
+// It watches the listener WHILE it waits. A stale socket left by a crash fails Listen
+// immediately with "address already in use", and a poll that only looked at the path
+// would spend its entire budget waiting for a listener that had already returned —
+// turning an instant, nameable failure into a timeout with the wrong reason on it.
+func awaitSocket(path string, errs <-chan error, within time.Duration) error {
 	deadline := time.Now().Add(within)
 	for {
+		select {
+		case err := <-errs:
+			return fmt.Errorf("listener on %s gave up: %w", path, err)
+		default:
+		}
 		c, err := net.DialTimeout("unix", path, time.Second)
 		if err == nil {
 			_ = c.Close()
