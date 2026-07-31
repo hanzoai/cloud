@@ -35,6 +35,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
@@ -55,6 +56,105 @@ import (
 type state struct {
 	kms         *Client
 	iamTokenURL string
+}
+
+// The prose for this subsystem's seven operations. None of them is a typed op —
+// each answers a map assembled in the handler, and two answer the same body under
+// two statuses — so there is no doc comment for zipdoc to lift, and the prose is
+// declared beside the route table instead.
+//
+// Written under one rule, because this is the credential broker: a description
+// says what an operation DOES and where its answer is scoped, and never implies
+// that secret material turns up anywhere but the one response body that exists to
+// carry it. The list op returns metadata, the read op returns a value, and neither
+// a log line nor an error body ever carries either — that asymmetry is the thing a
+// reader most needs stated, so it is stated.
+func init() {
+	openapi.Describe("/v1/kms/secrets", http.MethodGet,
+		"List the secrets your org holds, without their values",
+		"Returns the METADATA of the caller's own secrets: each one's name, path, "+
+			"environment and sealing scheme. No value and no ciphertext is included — this "+
+			"operation exists to enumerate what is held, and reading a value is a separate, "+
+			"per-secret call.\n\n"+
+			"Scoped to the caller's own org and nothing else, structurally: there is no org "+
+			"in the path, the store root is derived from the validated org claim, and a "+
+			"caller therefore has no way to name another tenant's namespace. `path` narrows "+
+			"to a subpath and `env` selects the environment; both are also accepted under "+
+			"the operator's spellings, `secretPath` and `environment`.\n\n"+
+			"Admission is fail-closed and in order: a validated member, an org that is a "+
+			"DNS-1123 label, and a store holding a master key — 403, 400 and 503 "+
+			"respectively, all decided before any record is touched.")
+	openapi.Describe("/v1/kms/secrets", http.MethodPost,
+		"Store or replace one secret in your org",
+		"Upserts one secret under the caller's own org. The value is sealed before it is "+
+			"written — a fresh per-secret data key, itself wrapped by the master key — so "+
+			"plaintext never reaches disk. The receipt confirms the name and environment "+
+			"that were written and does not echo the value.\n\n"+
+			"`env` is REQUIRED on a write and has no default, which is the rule most easily "+
+			"got wrong here: reads and deletes still fall back to the default environment "+
+			"for older callers, but a write must not, because the environment is part of the "+
+			"storage key. A silently defaulted write lands in a bucket the readers that "+
+			"resolve project, environment and path never look in, and the stale value keeps "+
+			"being served — so the write fails loudly instead.\n\n"+
+			"`name` is required, `path` is an optional subpath beneath the org root, and the "+
+			"org is taken from the validated claim rather than the body. Same fail-closed "+
+			"admission as the rest of the secret surface: validated member, well-formed org, "+
+			"master key present.")
+	openapi.Describe("/v1/kms/secrets/+", http.MethodGet,
+		"Read one secret's value",
+		"Opens one sealed secret belonging to the caller's own org and returns its value in "+
+			"the response body, with the name and environment it was resolved under. This is "+
+			"the broker's purpose, and the response body is the ONLY place the value appears "+
+			"— it is not logged, and it is never carried in an error.\n\n"+
+			"The trailing path is the secret's subpath and name beneath the caller's org "+
+			"root; `env` selects the environment and falls back to the default when omitted. "+
+			"A secret that is not there is a plain 404 that names nothing about the store.\n\n"+
+			"Scoped to the caller's own org and nothing else: there is no org in the path, so "+
+			"another tenant's secret is not merely refused, it is unnameable. Admission is "+
+			"fail-closed — validated member, well-formed org, master key present — and an "+
+			"unconfigured master key is 503 rather than an empty read.")
+	openapi.Describe("/v1/kms/secrets/+", http.MethodDelete,
+		"Delete one secret from your org",
+		"Removes one secret from the caller's own org and confirms the name and environment "+
+			"that were removed. Deleting a secret that is not there is a 404, not a silent "+
+			"success, so a caller can tell a real deletion from a typo.\n\n"+
+			"The trailing path is the secret's subpath and name beneath the caller's org "+
+			"root, and `env` selects the environment, defaulting when omitted. Scoped to the "+
+			"caller's own org — the store root comes from the validated claim, never from the "+
+			"request — under the same fail-closed admission as the reads.")
+	openapi.Describe("/v1/kms/auth/login", http.MethodPost,
+		"Exchange a machine credential for an IAM bearer token",
+		"Takes a tenant's machine credential — a client id and client secret — and returns "+
+			"an owner-scoped IAM access token with its lifetime, which is the bearer the "+
+			"caller then carries on the org-scoped secret operations.\n\n"+
+			"It is deliberately public and unauthenticated, because it IS the credential "+
+			"exchange and runs before any principal exists. That makes it the one route in "+
+			"this subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather "+
+			"than on any caller-supplied header.\n\n"+
+			"The submitted secret is never logged and never echoed, and failures collapse to "+
+			"one clean status with no upstream detail: 401 when the credential does not "+
+			"authenticate, 502 when the identity provider is unreachable, 503 when no issuer "+
+			"is configured. That is on purpose — a richer error would be a validity oracle "+
+			"for guessed credentials.")
+	openapi.Describe("/v1/kms/health", http.MethodGet,
+		"Whether this broker can actually serve secrets",
+		"A real readiness probe, not a liveness stub: 200 only when the store is open AND a "+
+			"master key is configured, with `signing` reporting whether signing keys are set "+
+			"up too. Anything less answers 503 with `ready:false` and the reason — no "+
+			"in-process store, or no master key — which are exactly the two states in which "+
+			"the secret operations refuse.\n\n"+
+			"Not token-gated, because the platform must be able to probe it without a "+
+			"credential. It reports the broker's configuration state only; no secret, no key "+
+			"material and no tenant name appears in it.")
+	openapi.Describe("/v1/kms/config", http.MethodGet,
+		"Runtime configuration for the KMS console",
+		"Returns what the console needs before anyone has signed in: the brand, the OIDC "+
+			"issuer it authenticates against, the API base for this subsystem and the path "+
+			"of the login exchange.\n\n"+
+			"Public on purpose, and it holds nothing sensitive — it is deliberately kept "+
+			"under this subsystem's own namespace rather than under an admin prefix, so a "+
+			"gateway that admin-gates the admin routes cannot break the console's legitimate "+
+			"pre-login fetch.")
 }
 
 // Mount wires /v1/kms/* onto app. The concrete-client cast (deps.KMS → *Client),

@@ -36,47 +36,57 @@ import (
 
 // exposeCredit publishes the ledger credit. Mount calls it.
 func exposeCredit() {
-	zip.Post[plane.CreditIn, plane.Credited](cloud.Plane(), "/finance/credit",
-		func(ctx context.Context, in *plane.CreditIn) (*plane.Credited, error) {
-			org, err := callerOrg(ctx, "credit")
-			if err != nil {
-				return nil, err
-			}
-			amount, err := in.Amount.Parse()
-			if err != nil {
-				return nil, zip.ErrBadRequest("credit: " + err.Error())
-			}
-			if amount.Sign() <= 0 {
-				return nil, zip.ErrBadRequest("credit: amount must be positive")
-			}
-			if in.Ref == "" {
-				// Without a ref this op is a money printer: a retry — and a settlement
-				// retries by construction — would credit twice. The key is required
-				// rather than defaulted, because a default nobody chose is a key that
-				// collides.
-				return nil, zip.ErrBadRequest("credit: ref is required (the idempotency key)")
-			}
-			subject := in.Subject
-			if subject == "" {
-				subject = org
-			}
-			fin, err := books("credit")
-			if err != nil {
-				return nil, err
-			}
-			// Org comes from the CALLER, never the argument: a caller that could name
-			// the credited org could pay itself out of someone else's books.
-			if _, derr := fin.Deposit(ctx, types.DepositInput{
-				Org: org, Subject: subject, Currency: amount.Currency().Code,
-				// The EXACT decimal, never Minor(): a settlement is routinely a
-				// fraction of a cent, and the minor unit would round it to nothing.
-				Amount: credit.FromDecimal(amount.Decimal()),
-				Ref:    in.Ref, Notes: in.Notes, Tags: in.Tags,
-			}); derr != nil {
-				return nil, zip.Errorf(500, "credit %s/%s: %v", org, subject, derr)
-			}
-			return &plane.Credited{Amount: in.Amount}, nil
-		},
+	zip.Post[plane.CreditIn, plane.Credited](cloud.Plane(), "/finance/credit", planeCredit,
 		zip.WithOperationID(plane.FinanceCredit),
 		zip.WithSummary("Credit one subject's prepaid ledger, exactly once per ref"))
+}
+
+// Puts money INTO one subject's prepaid ledger — the seller's half of a
+// settlement, and the only op on this plane that creates a balance rather than
+// moving, reading or gating one.
+//
+// REF IS REQUIRED and is the idempotency key. Without it this op is a money
+// printer: a settlement retries by construction, and a retry would credit twice.
+// It is required rather than defaulted, because a default nobody chose is a key
+// that collides. The amount must PARSE and must be positive — a credit is not a
+// debit spelled with a sign.
+//
+// The ORG comes from the CALLER, never the argument: a caller able to name the
+// credited org could pay itself out of someone else's books. An empty subject
+// credits the org's own account. The amount is deposited as the EXACT decimal
+// rather than its minor unit, because a settlement is routinely a fraction of a
+// cent and rounding to the minor unit would round it to nothing.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeCredit(ctx context.Context, in *plane.CreditIn) (*plane.Credited, error) {
+	org, err := callerOrg(ctx, "credit")
+	if err != nil {
+		return nil, err
+	}
+	amount, err := in.Amount.Parse()
+	if err != nil {
+		return nil, zip.ErrBadRequest("credit: " + err.Error())
+	}
+	if amount.Sign() <= 0 {
+		return nil, zip.ErrBadRequest("credit: amount must be positive")
+	}
+	if in.Ref == "" {
+		return nil, zip.ErrBadRequest("credit: ref is required (the idempotency key)")
+	}
+	subject := in.Subject
+	if subject == "" {
+		subject = org
+	}
+	fin, err := books("credit")
+	if err != nil {
+		return nil, err
+	}
+	if _, derr := fin.Deposit(ctx, types.DepositInput{
+		Org: org, Subject: subject, Currency: amount.Currency().Code,
+		Amount: credit.FromDecimal(amount.Decimal()),
+		Ref:    in.Ref, Notes: in.Notes, Tags: in.Tags,
+	}); derr != nil {
+		return nil, zip.Errorf(500, "credit %s/%s: %v", org, subject, derr)
+	}
+	return &plane.Credited{Amount: in.Amount}, nil
 }

@@ -155,6 +155,15 @@ func commerceMasterKey(master []byte, lg log.Logger) []byte {
 	return nil
 }
 
+// zipdoc lifts the doc comment off each typed op into zipdoc_gen.go, which is the
+// ONLY way that prose reaches the plane's registry and the MCP tool list — Go
+// drops comments at compile time. commerce's typed ops are its internal
+// /finance/* plane ops (balance_rpc.go, credit_rpc.go, meter_rpc.go); its HTTP
+// surface belongs to the embedded module and states its prose through
+// openapi.Describe instead (describe.go).
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // Mount boots commerce ON the shared zip app (native co-residence).
 // commerce's own setupRoutes registers /v1/commerce/* and /_/commerce/*
 // directly; the standalone-only surfaces (bare /healthz, legacy /admin SPA,

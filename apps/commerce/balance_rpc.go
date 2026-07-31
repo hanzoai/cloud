@@ -55,37 +55,49 @@ func books(op string) (financeclient.Client, error) {
 
 // exposeBalance publishes the ledger read. Mount calls it.
 func exposeBalance() {
-	zip.Post[plane.BalanceIn, plane.Balance](cloud.Plane(), "/finance/balance",
-		func(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, error) {
-			org, err := callerOrg(ctx, "balance")
-			if err != nil {
-				return nil, err
-			}
-			// The subject is the caller's to choose, but only within that org — it is
-			// a wallet inside the ledger the caller's identity already pinned.
-			subject := in.Subject
-			if subject == "" {
-				subject = org
-			}
-			currency := in.Currency
-			if currency == "" {
-				currency = "usd"
-			}
-			fin, err := books("balance")
-			if err != nil {
-				return nil, err
-			}
-			bal, err := fin.Balance(ctx, org, subject, currency, false)
-			if err != nil {
-				return nil, fmt.Errorf("balance: read %s/%s: %w", org, subject, err)
-			}
-			// The ledger answered exactly; the plane carries exactly. Flattening to
-			// cents here was the console's understatement: every sub-cent tail of
-			// the true balance vanished between the one writer and every reader.
-			return &plane.Balance{Amount: plane.Amount(bal.Unwrap())}, nil
-		},
+	zip.Post[plane.BalanceIn, plane.Balance](cloud.Plane(), "/finance/balance", planeBalance,
 		zip.WithOperationID(plane.FinanceBalance),
 		zip.WithSummary("Spendable prepaid balance"))
+}
+
+// Reads one subject's spendable prepaid balance out of the ledger this process
+// owns, so a process that must never open the file can still report a balance.
+//
+// The ORG is the caller's — the gateway's assertion, or what a background job
+// stated once and explicitly — and can never be named in the input, so a caller
+// cannot read another tenant's books. The SUBJECT is the caller's to choose, but
+// only within that org: it is a wallet inside the ledger the caller's identity
+// already pinned. An empty subject reads the org's own account and an empty
+// currency reads usd. A missing ledger is an ERROR, never a zero — answering zero
+// from the process that owns the file would report every account as broke.
+//
+// The amount crosses the plane EXACTLY. Flattening it to cents here was the
+// console's understatement: every sub-cent tail of the true balance vanished
+// between the one writer and every reader.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeBalance(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, error) {
+	org, err := callerOrg(ctx, "balance")
+	if err != nil {
+		return nil, err
+	}
+	subject := in.Subject
+	if subject == "" {
+		subject = org
+	}
+	currency := in.Currency
+	if currency == "" {
+		currency = "usd"
+	}
+	fin, err := books("balance")
+	if err != nil {
+		return nil, err
+	}
+	bal, err := fin.Balance(ctx, org, subject, currency, false)
+	if err != nil {
+		return nil, fmt.Errorf("balance: read %s/%s: %w", org, subject, err)
+	}
+	return &plane.Balance{Amount: plane.Amount(bal.Unwrap())}, nil
 }
 
 // The welcome grant, published for the same reason the balance read is: the ledger
@@ -103,24 +115,39 @@ func exposeBalance() {
 // finance, which dedups inside the same transaction as the insert; this op only
 // carries the question across.
 func exposeStarter() {
-	zip.Post[plane.StarterIn, plane.Granted](cloud.Plane(), "/finance/starter",
-		func(ctx context.Context, in *plane.StarterIn) (*plane.Granted, error) {
-			org, err := callerOrg(ctx, "starter")
-			if err != nil {
-				return nil, err
-			}
-			subject := in.Subject
-			if subject == "" {
-				subject = org
-			}
-			cents, err := cloud.GrantStarter(ctx, org, subject)
-			if err != nil {
-				return nil, fmt.Errorf("starter: %w", err)
-			}
-			return &plane.Granted{Amount: plane.Amount(money.FromUSD(cents))}, nil
-		},
+	zip.Post[plane.StarterIn, plane.Granted](cloud.Plane(), "/finance/starter", planeStarter,
 		zip.WithOperationID(plane.FinanceStarter),
 		zip.WithSummary("Issue the opening credit for an org, once"))
+}
+
+// Grants a new account its opening welcome credit and answers the amount granted.
+//
+// GRANTED ONCE, whoever asks. The idempotency key is the ACCOUNT and nothing
+// else, so asking twice — from two processes, after a restart, or concurrently —
+// grants exactly once; that property lives in the ledger, which dedups inside the
+// same transaction as the insert, and this op only carries the question across.
+//
+// The org is the CALLER'S and can never be named in the input; an empty subject
+// grants to the org's own account. It is published because the grant runs as
+// middleware on EVERY app's chain while the ledger has one writer and lives here
+// — a grant that could not reach it left new orgs unfunded and correctly
+// paywalled for a reason nobody had chosen.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeStarter(ctx context.Context, in *plane.StarterIn) (*plane.Granted, error) {
+	org, err := callerOrg(ctx, "starter")
+	if err != nil {
+		return nil, err
+	}
+	subject := in.Subject
+	if subject == "" {
+		subject = org
+	}
+	cents, err := cloud.GrantStarter(ctx, org, subject)
+	if err != nil {
+		return nil, fmt.Errorf("starter: %w", err)
+	}
+	return &plane.Granted{Amount: plane.Amount(money.FromUSD(cents))}, nil
 }
 
 // usageReadLimit matches what the co-resident reader asks for, so the page a
@@ -134,77 +161,105 @@ const usageReadLimit = 2000
 // from these — sending the envelope would need the renderer to live with the
 // ledger, which is the import cycle that shape implies.
 func exposeUsage() {
-	zip.Post[struct{}, plane.UsageRows](cloud.Plane(), "/finance/usage",
-		func(ctx context.Context, _ *struct{}) (*plane.UsageRows, error) {
-			org, err := callerOrg(ctx, "usage")
-			if err != nil {
-				return nil, err
-			}
-			fin, err := books("usage")
-			if err != nil {
-				return nil, err
-			}
-			lister, ok := fin.(interface {
-				ListUsage(context.Context, string, int) ([]financeclient.UsageRow, error)
-			})
-			if !ok {
-				return nil, fmt.Errorf("usage: this ledger does not list usage")
-			}
-			rows, err := lister.ListUsage(ctx, org, usageReadLimit)
-			if err != nil {
-				return nil, fmt.Errorf("usage: %w", err)
-			}
-			out := make([]plane.UsageRow, 0, len(rows))
-			for _, r := range rows {
-				out = append(out, plane.UsageRow{
-					ID: r.ID, Model: r.Model,
-					// r.Amount is the ledger's own value; r.Cents is its rounding.
-					// Rebuilding an "exact" plane amount FROM the rounding was the
-					// sharpest form of the flatten: the wire type promised precision
-					// the value had already lost.
-					Amount:    plane.Amount(r.Amount.Unwrap()),
-					CreatedAt: r.CreatedAt,
-				})
-			}
-			return &plane.UsageRows{Rows: out}, nil
-		},
+	zip.Post[struct{}, plane.UsageRows](cloud.Plane(), "/finance/usage", planeUsage,
 		zip.WithOperationID(plane.FinanceUsage),
 		zip.WithSummary("Recorded debits for this org"))
+}
+
+// Lists the caller org's recorded usage debits — id, model, exact amount and
+// timestamp — most recent first, bounded to the same page size the co-resident
+// reader asks for so the page a customer sees does not change with which process
+// answered.
+//
+// It takes NO input at all: the org comes from the caller and there is nothing
+// else to name, so one org can never list another's debits. It sends ROWS rather
+// than a rendered view — the HTTP surface builds its own envelope from these,
+// because sending the envelope would put the renderer next to the ledger, which
+// is the import cycle that shape implies. A ledger implementation that cannot
+// list usage is an error, not an empty page.
+//
+// Each amount is the ledger's OWN value, never rebuilt from its cent rounding:
+// reconstructing an exact plane amount from the rounding was the sharpest form of
+// the flatten, a wire type promising precision the value had already lost.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeUsage(ctx context.Context, _ *struct{}) (*plane.UsageRows, error) {
+	org, err := callerOrg(ctx, "usage")
+	if err != nil {
+		return nil, err
+	}
+	fin, err := books("usage")
+	if err != nil {
+		return nil, err
+	}
+	lister, ok := fin.(interface {
+		ListUsage(context.Context, string, int) ([]financeclient.UsageRow, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("usage: this ledger does not list usage")
+	}
+	rows, err := lister.ListUsage(ctx, org, usageReadLimit)
+	if err != nil {
+		return nil, fmt.Errorf("usage: %w", err)
+	}
+	out := make([]plane.UsageRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, plane.UsageRow{
+			ID: r.ID, Model: r.Model,
+			Amount:    plane.Amount(r.Amount.Unwrap()),
+			CreatedAt: r.CreatedAt,
+		})
+	}
+	return &plane.UsageRows{Rows: out}, nil
 }
 
 // The ledger's entries. Three customer-facing pages read this one list, and all
 // three answered 501 from a process that does not hold the ledger.
 func exposeTxns() {
-	zip.Post[struct{}, plane.Txns](cloud.Plane(), "/finance/txns",
-		func(ctx context.Context, _ *struct{}) (*plane.Txns, error) {
-			org, err := callerOrg(ctx, "txns")
-			if err != nil {
-				return nil, err
-			}
-			fin, err := books("txns")
-			if err != nil {
-				return nil, err
-			}
-			lister, ok := fin.(interface {
-				ListEntries(context.Context, string, int) ([]financeclient.TxnRow, error)
-			})
-			if !ok {
-				return nil, fmt.Errorf("txns: this ledger does not list entries")
-			}
-			rows, err := lister.ListEntries(ctx, org, usageReadLimit)
-			if err != nil {
-				return nil, fmt.Errorf("txns: %w", err)
-			}
-			out := make([]plane.Txn, 0, len(rows))
-			for _, r := range rows {
-				out = append(out, plane.Txn{
-					ID: r.ID, Kind: r.Kind, Ref: r.Ref, Memo: r.Memo,
-					Amount:    plane.Money{Decimal: r.Amount.String(), Currency: "USD"},
-					CreatedAt: r.CreatedAt,
-				})
-			}
-			return &plane.Txns{Rows: out}, nil
-		},
+	zip.Post[struct{}, plane.Txns](cloud.Plane(), "/finance/txns", planeTxns,
 		zip.WithOperationID(plane.FinanceTxns),
 		zip.WithSummary("Ledger entries for this org"))
+}
+
+// Lists the caller org's ledger entries — id, kind, ref, memo, amount and
+// timestamp — most recent first and bounded to one page. It is the movement list
+// behind the customer-facing transactions, credits and receipts pages, all three
+// of which read this one list.
+//
+// It takes NO input: the org comes from the caller and there is nothing else to
+// name, so one org can never read another's entries. Unlike the usage read the
+// amount crosses as a DECIMAL STRING with its currency rather than a bare
+// quantity, because an entry is a movement a customer reads rather than a number
+// a gate does arithmetic on. A ledger implementation that cannot list entries is
+// an error, not an empty page.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeTxns(ctx context.Context, _ *struct{}) (*plane.Txns, error) {
+	org, err := callerOrg(ctx, "txns")
+	if err != nil {
+		return nil, err
+	}
+	fin, err := books("txns")
+	if err != nil {
+		return nil, err
+	}
+	lister, ok := fin.(interface {
+		ListEntries(context.Context, string, int) ([]financeclient.TxnRow, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("txns: this ledger does not list entries")
+	}
+	rows, err := lister.ListEntries(ctx, org, usageReadLimit)
+	if err != nil {
+		return nil, fmt.Errorf("txns: %w", err)
+	}
+	out := make([]plane.Txn, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, plane.Txn{
+			ID: r.ID, Kind: r.Kind, Ref: r.Ref, Memo: r.Memo,
+			Amount:    plane.Money{Decimal: r.Amount.String(), Currency: "USD"},
+			CreatedAt: r.CreatedAt,
+		})
+	}
+	return &plane.Txns{Rows: out}, nil
 }
