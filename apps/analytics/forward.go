@@ -12,14 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// forward.go is the fan-out seam of the canonical event plane. After the ONE write
-// core (ingestEvents) commits a batch to hanzo.events, the batch goes two ways:
+// forward.go is the CONSUMER fan-out seam of the canonical event plane. The ONE
+// write core (ingestEvents) commits a batch as FACTS — the publish that the sink
+// lands in event.event and its sibling signal tables; nothing here writes storage.
+// This file used to sit beside a second storage write (the wide hanzo.events INSERT)
+// and hand the plane its only copy of each batch; that double-write is gone — the
+// fact publish IS the commit — and what remains here are the two SUBSCRIBER
+// hand-offs an accepted batch still owes:
 //
-//   - onto the PLANE (PublishEvents, bus.go) — always, because this package owns the
-//     platform event stream and publishing to it is not an opt-in integration. Every
-//     bus consumer (webhook delivery today; alerting, replay, exports next) is served
-//     by that one publish, and none of them touches this file to be added.
-//   - to a COPY-taking downstream SINK — the destinations subsystem — which translates
+//   - the ENVELOPE onto the plane (PublishEvents, bus.go) — the webhook-delivery
+//     contract (apps/webhooks): orgs subscribe to event.<folded name> subjects and
+//     receive the EventEnvelope verbatim. It is a second VOCABULARY on the one
+//     stream (EventSignalKey, bus.go), not a second write to any table — the
+//     warehouse drain acks it as errNotAFact and lands nothing for it.
+//   - a COPY-taking downstream SINK — the destinations subsystem — which translates
 //     and forwards each event to the org's connected ad/analytics platforms (GA4, Meta
 //     CAPI, …).
 //

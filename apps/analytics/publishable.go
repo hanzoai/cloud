@@ -49,8 +49,10 @@
 //
 // The tenant is whatever IAM resolves the key to, never a body or header claim,
 // so the tenant invariant the rest of the plane enforces holds here too. Every
-// door funnels through the SAME write core (ingestEvents) into the SAME
-// hanzo.events table: one write path, many front doors.
+// door funnels through the SAME write core (ingestEvents) onto the SAME event
+// plane: one write path, many front doors. An error is the one signal with a
+// table of its own — normalize routes it to event.error, never event.event — so
+// that is the table this lens reads.
 
 package analytics
 
@@ -174,10 +176,10 @@ func foldException(e CaptureEvent) CaptureEvent {
 
 // ── handlers ─────────────────────────────────────────────────────────────────
 
-// capturedError is one captured browser/runtime error as the error lens returns it. The
-// columns are the first-class ones the capture path promotes; exception is the folded
-// $exception object lifted out of the property bag so a reader does not have to dig
-// for it.
+// capturedError is one captured browser/runtime error as the error lens returns it.
+// The wire shape is unchanged by the plane flip; the columns now come from
+// event.error's envelope, with library/libraryVersion read from the attributes map
+// and exception from the attributes['$exception'] entry the fold stamped.
 type capturedError struct {
 	// ID is the row's stable event id — the client's own idempotency id when it sent
 	// one, else the server-minted one.
@@ -217,9 +219,9 @@ type errorList struct {
 }
 
 // Errors returns the caller org's most recently captured errors, newest first. The
-// error-tracking read view over the same table the capture doors write: only rows
-// stored as type 'error', each with its captured exception lifted out of the property
-// bag as a first-class field.
+// error-tracking read view over event.error — the plane table the write core's error
+// facts land in (errors are DELIBERATELY not on event.event) — each with its captured
+// exception surfaced from the attributes map as a first-class field.
 //
 // The org is the validated principal's — never a parameter — and this read requires a
 // real bearer, NEVER the write-only publishable key: pk- can attribute a write and can
@@ -232,41 +234,45 @@ func (o readOps) errors(ctx context.Context, in *limitQuery) (*errorList, error)
 		return nil, err
 	}
 	rows, err := datastore.Query(ctx, `
-		SELECT id, timestamp, event, distinct_id, session_id, product, url, path,
-		       library, library_version, properties
-		FROM hanzo.events
-		WHERE tenant_id = ? AND event_type = 'error'
-		ORDER BY timestamp DESC
+		SELECT id, time, name, distinct_id, session_id, product, url, path, attributes
+		FROM `+errorsTable+`
+		WHERE org = ?
+		ORDER BY time DESC
 		LIMIT ?`, org, in.rows())
 	if err != nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 	out := make([]capturedError, 0, len(rows))
 	for _, r := range rows {
+		attrs := aStrMap(r["attributes"])
 		e := capturedError{
-			ID: asStr(r["id"]), Timestamp: asStr(r["timestamp"]), Event: asStr(r["event"]),
+			ID: asStr(r["id"]), Timestamp: asStr(r["time"]), Event: asStr(r["name"]),
 			DistinctID: asStr(r["distinct_id"]), SessionID: asStr(r["session_id"]),
 			Product: asStr(r["product"]), URL: asStr(r["url"]), Path: asStr(r["path"]),
-			Library: asStr(r["library"]), LibraryVer: asStr(r["library_version"]),
+			Library: attrs["library"], LibraryVer: attrs["library_version"],
 		}
-		if p := asStr(r["properties"]); p != "" && json.Valid([]byte(p)) {
-			e.Properties = json.RawMessage(p)
-			e.Exception = extractException(p)
+		if ex := attrs["$exception"]; ex != "" && json.Valid([]byte(ex)) {
+			e.Exception = json.RawMessage(ex)
+		}
+		if p := attrsJSON(attrs); p != nil {
+			e.Properties = p
 		}
 		out = append(out, e)
 	}
 	return &errorList{Data: out}, nil
 }
 
-// extractException pulls the $exception object out of a properties JSON blob so
-// the errors lens surfaces it as a first-class field. "" (nil) when absent.
-func extractException(props string) json.RawMessage {
-	var m map[string]json.RawMessage
-	if json.Unmarshal([]byte(props), &m) != nil {
+// attrsJSON renders an attributes map as the lens's properties object. The map's
+// values are strings (the plane stores Map(LowCardinality(String), String)); a
+// non-scalar the caller sent is therefore a JSON-encoded string here rather than a
+// nested object — the one honest shape the storage holds. nil for an empty map.
+func attrsJSON(attrs map[string]string) json.RawMessage {
+	if len(attrs) == 0 {
 		return nil
 	}
-	if ex, ok := m["$exception"]; ok {
-		return ex
+	b, err := json.Marshal(attrs)
+	if err != nil {
+		return nil
 	}
-	return nil
+	return b
 }
