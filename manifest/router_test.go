@@ -48,12 +48,13 @@ import (
 //
 // Three causes, all of them at the composition root:
 //
-//   - AN ADDRESS ANOTHER APP OWNS (1). A prefix is a SUBTREE and it is
+//   - AN ADDRESS ANOTHER APP OWNS (0). A prefix is a SUBTREE and it is
 //     exclusive. The /v1/billing REMAINDER belongs to account-bridge — the
 //     session-scoped data bridge the console calls — so any billing leaf
 //     commerce publishes that the manifest does not name deeper reaches the
-//     bridge instead. The one left is /v1/billing/payment-methods, which the
-//     billing app serves itself. (The rest of the money surface used to sit here: plans,
+//     bridge instead. The last one was /v1/billing/payment-methods, which the
+//     billing app serves itself; commerce dropped the registration, so the
+//     address has ONE owner again. (The rest of the money surface used to sit here: plans,
 //     invoices, subscriptions, subscribe/card, topup/token, spend-alerts,
 //     payouts, payment-config — the entire self-service paid path. Every one
 //     was registered co-resident and reachable by nobody, so the public plan
@@ -87,7 +88,15 @@ var unreachable = []string{
 	// than resolved. It is resolved now: analytics dropped the claim (its wire is
 	// /v1/event), the tracker product keeps the name, and this ledger records only
 	// paths that are still owned twice.
-	"commerce /v1/billing/payment-methods -> billing",
+	// /v1/billing/payment-methods is no longer here either, and it went the same
+	// way. apps/commerce registered a POST at an address manifest.Apps gives to the
+	// BILLING app — which serves both methods there, because the GET is billing's
+	// proxy to commerce's /v1/billing/portal/payment-methods and the host claims a
+	// prefix for every method at once. So the registration was unreachable in the
+	// fleet AND a second claim on one address, which openapi.Weave refuses rather
+	// than pick a winner between: the fleet document could not be woven at all until
+	// commerce dropped it. The published operation is identical from either app —
+	// same id, same tag, no declared body — so nothing moved but the ownership.
 	"git / -> nothing",
 	"git /{org}/{repo} -> nothing",
 	"git /{org}/{repo}/blob/{wildcard1} -> nothing",
