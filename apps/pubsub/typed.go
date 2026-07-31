@@ -214,10 +214,15 @@ func busErr(err error) error {
 
 // ----- tenancy --------------------------------------------------------------
 
-// tenantPrefix marks every tenant-created stream and KV bucket, keeping the
+// TenantPrefix marks every tenant-created stream and KV bucket, keeping the
 // tenant plane disjoint by construction from the platform's own streams (EVENT
 // et al.), which never carry it.
-const tenantPrefix = "t-"
+//
+// It is EXPORTED for the one question a platform subsystem must be able to ask
+// before it removes a stream it did not create: is this a tenant's? Asking the
+// prefix's OWNER is what keeps that check from becoming a second "t-" literal
+// somewhere else, which is how the two would drift apart.
+const TenantPrefix = "t-"
 
 // orgOf resolves the VALIDATED org — the tenant-isolation key — from the
 // context cloud.Bridge parked it on. It is never an In field: an In field is
@@ -263,7 +268,7 @@ func token(s string, dash bool) bool {
 func root(org string) string { return "pub." + org + "." }
 
 // phys is the physical (whole-plane) name of an org's stream or bucket.
-func phys(org, name string) string { return tenantPrefix + org + "-" + name }
+func phys(org, name string) string { return TenantPrefix + org + "-" + name }
 
 // mapSubject validates a caller subject and roots it in the org's namespace.
 // Wildcards ('*', and '>' as the last token) are legal only where wild says so:
