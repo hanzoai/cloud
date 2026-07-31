@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/http"
@@ -246,14 +247,22 @@ func (o toolOps) listServers(ctx context.Context, _ *noInput) (*mcpServerList, e
 	return &mcpServerList{Servers: servers}, nil
 }
 
-// createServerReq registers one external MCP server.
+// createServerReq registers one external MCP server: either a URL the org typed
+// in, or a catalog listing it picked off the shelf. Exactly one of URL and
+// Listing — they are two ways to name the same thing, and a request that gave
+// both would be asking for two servers.
 type createServerReq struct {
-	// Name labels the server for the org. Required, at most 128 characters.
+	// Name labels the server for the org. Required with URL; with Listing it
+	// defaults to the listing's own title.
 	Name string `json:"name"`
 	// URL is the server's JSON-RPC endpoint. It must be an http(s) URL naming a
 	// PUBLIC host: loopback, link-local, private and cloud-metadata addresses are
 	// refused here and again when the dialer connects.
 	URL string `json:"url"`
+	// Listing enables a CATALOG entry instead — the id from GET /v1/tools/catalog.
+	// The endpoint is the listing's own streamable-http remote, so a listing that
+	// only ships a stdio package is refused: there is nothing to reach yet.
+	Listing string `json:"listing"`
 	// AuthHeader is the request header the credential is injected into, e.g.
 	// "Authorization". Empty means the server needs no credential.
 	AuthHeader string `json:"authHeader"`
@@ -262,15 +271,24 @@ type createServerReq struct {
 	Secret string `json:"secret"`
 }
 
-// CreateServer registers one of the caller org's own external MCP servers, so its
-// tools join the unified registry and become activatable. The credential VALUE is
-// sealed in KMS under a per-org ref; the row keeps only the URL, the header name
-// to inject it into, and a has-secret flag — so a secret with no KMS configured
-// is refused 503 rather than stored in the clear. The URL is SSRF-validated here
-// and re-checked by the dialer at connect time, which is the DNS-rebinding
-// defense. Answers 201 with the stored record.
+// CreateServer gives the caller's org one more external MCP server, so its tools
+// join the org's tool plane and the fleet's MCP door. It is the ONE way an org
+// gains a server, whether it typed the URL in or enabled a catalog listing: both
+// write the SAME record, and `source` says which it was. A second registration
+// path would be a second place for a server to exist, and then a second place to
+// forget to check the credential.
 //
-// Example: {"name": "myserver", "url": "https://mcp.example.com/rpc", "authHeader": "Authorization", "secret": "Bearer …"}
+// The credential VALUE is sealed in KMS under a per-org ref; the row keeps only
+// the URL, the header name to inject it into, and a has-secret flag — so a secret
+// with no KMS configured is refused 503 rather than stored in the clear. The URL
+// is SSRF-validated here and re-checked by the dialer at connect time, which is
+// the DNS-rebinding defense.
+//
+// Enabling a listing the org already enabled REVISES that server rather than
+// adding a near-duplicate beside it, so a retried enable is the same one server.
+// Answers 201 with the stored record.
+//
+// Example: {"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "Bearer …"}
 func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPServer, error) {
 	org, err := tenantOf(ctx)
 	if err != nil {
@@ -278,6 +296,32 @@ func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPSer
 	}
 	name := strings.TrimSpace(in.Name)
 	url := strings.TrimSpace(in.URL)
+	listing := strings.TrimSpace(in.Listing)
+	id := ""
+	if url != "" && listing != "" {
+		return nil, zip.ErrBadRequest("give a url or a listing, not both")
+	}
+	if listing != "" {
+		l, err := o.listing(ctx, listing)
+		if err != nil {
+			return nil, err
+		}
+		if l.Hidden && !adminOf(ctx) {
+			return nil, zip.ErrNotFound("listing not found")
+		}
+		if url = l.Endpoint(); url == "" {
+			return nil, zip.Errorf(http.StatusUnprocessableEntity,
+				"%s publishes no streamable-http endpoint; it ships a package that has to be run", l.Name)
+		}
+		if name == "" {
+			name = cmp.Or(l.Title, l.Name)
+		}
+		// The server id PREFIXES every tool name this server contributes, so an
+		// enabled listing's tools read "stripe_create_payment_link" rather than
+		// carrying a random handle a model has no way to interpret. It is a
+		// PREFERENCE: the store resolves a collision within the org.
+		id = brand(l.Vendor)
+	}
 	if name == "" || len(name) > maxName {
 		return nil, zip.ErrBadRequest("name is required (<=128 chars)")
 	}
@@ -292,7 +336,8 @@ func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPSer
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "KMS not configured; refusing to store an MCP server secret")
 	}
 	created, err := o.s.State.servers.Create(ctx, MCPServer{
-		Org: org, Name: name, URL: url, AuthHeader: strings.TrimSpace(in.AuthHeader), HasSecret: hasSecret,
+		ID: id, Org: org, Name: name, URL: url, AuthHeader: strings.TrimSpace(in.AuthHeader),
+		HasSecret: hasSecret, Listing: listing,
 	})
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "create server: %v", err)
@@ -333,6 +378,218 @@ func (o toolOps) deleteServer(ctx context.Context, in *serverRef) (*noContent, e
 	}
 	o.audit(ctx, "tools.call", org, "server:"+id, "deleted", http.StatusOK)
 	return nil, nil
+}
+
+// ── the catalog: what the public registries publish ─────────────────────────────
+
+// catalogQuery narrows the catalog listing. Every field is a query parameter and
+// every one is optional; the zero value is the whole visible shelf.
+//
+// Featured and Official are STRINGS and not bools for the reason every other
+// filter on this plane is: the route compares the raw query value to the literal
+// "true", so `?featured=1` and a bare `?featured` mean "no filter" rather than
+// silently selecting a different set for the same URL.
+type catalogQuery struct {
+	// Q matches the name, title or description, case-insensitively.
+	Q string `json:"q"`
+	// Featured keeps only the listings we put on the front of the shelf, and only
+	// when it is exactly the string "true".
+	Featured string `json:"featured"`
+	// Official keeps only the vendors' OWN servers — not third-party copies of
+	// them — and only when it is exactly the string "true".
+	Official string `json:"official"`
+}
+
+// mcpCatalog is a page of the catalog. Never null: an unsynced deployment gets
+// an empty array, not a null.
+type mcpCatalog struct {
+	// Catalog is every listing the caller may see, featured first, then by name.
+	Catalog []MCPListing `json:"catalog"`
+	// Total is how many that is.
+	Total int `json:"total"`
+}
+
+// ListCatalog lists the MCP servers the public registries publish, as we hold
+// them: our canonical copy of registry.modelcontextprotocol.io, plus what we
+// decided about each entry.
+//
+// This is the SHELF an org picks from. A listing with a streamable-http endpoint
+// can be enabled as-is — POST /v1/mcp/servers with its id — and its tools then
+// join the org's tool plane and the fleet's MCP door. A listing that only ships a
+// stdio package needs a process to run it, which is why the transports are on
+// every entry rather than implied.
+//
+// Hidden entries are absent: they are the ones we took off the shelf. A platform
+// SuperAdmin sees them, because the same query answers "what is on the shelf" and
+// "what is in the catalog" and two queries would drift apart.
+func (o toolOps) listCatalog(ctx context.Context, in *catalogQuery) (*mcpCatalog, error) {
+	if _, err := tenantOf(ctx); err != nil {
+		return nil, err
+	}
+	if o.s.State.catalog == nil {
+		return &mcpCatalog{Catalog: []MCPListing{}}, nil
+	}
+	out, err := o.s.State.catalog.List(ctx, Query{
+		Text:     strings.TrimSpace(in.Q),
+		Featured: in.Featured == "true",
+		Official: in.Official == "true",
+		Hidden:   adminOf(ctx),
+	})
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list catalog: %v", err)
+	}
+	return &mcpCatalog{Catalog: out, Total: len(out)}, nil
+}
+
+// listingRef addresses one catalog listing. The id is the path segment: the URL
+// is the addressing authority.
+type listingRef struct {
+	// ID is the listing, from the path. It is the publisher's reverse-DNS name
+	// with its one slash written as an underscore — "com.stripe_mcp".
+	ID string `json:"id"`
+}
+
+// GetListing returns one catalog entry in full: the publisher's description, its
+// repository and site, every package form with the runtime that launches it, and
+// every hosted endpoint. It is what a branding page renders, and what tells a
+// caller whether the listing can be enabled here and now (a streamable-http
+// remote) or needs somewhere to run first (a stdio package).
+//
+// A HIDDEN listing is not served to an org — a shelf that renders what it does
+// not list would be a way around the shelf — but is served to a SuperAdmin, who
+// is the one deciding whether to put it back.
+func (o toolOps) getListing(ctx context.Context, in *listingRef) (*MCPListing, error) {
+	if _, err := tenantOf(ctx); err != nil {
+		return nil, err
+	}
+	l, err := o.listing(ctx, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	if l.Hidden && !adminOf(ctx) {
+		return nil, zip.ErrNotFound("listing not found")
+	}
+	return &l, nil
+}
+
+// mcpCatalogSync reports what one upstream pass changed.
+type mcpCatalogSync struct {
+	// Added is how many listings the catalog did not have before.
+	Added int `json:"added"`
+	// Updated is how many the publisher has changed since we last looked.
+	Updated int `json:"updated"`
+	// Total is how many listings the catalog holds now.
+	Total int `json:"total"`
+	// Registry is the upstream this pass read.
+	Registry string `json:"registry"`
+}
+
+// SyncCatalog pulls the public MCP registry into our canonical copy and reports
+// what changed. SuperAdmin only; every other caller is refused.
+//
+// It is IDEMPOTENT: a listing is keyed by the publisher's own reverse-DNS name,
+// so a second pass over an unchanged registry rewrites the same rows and reports
+// added=0, updated=0. It never deletes — a listing that vanishes upstream may be
+// one an org has already enabled, and dropping its description would not drop its
+// server. And it never touches CURATION: hidden, featured, an admin-set official
+// and a logo survive every sync, because the write does not name those columns.
+func (o toolOps) syncCatalog(ctx context.Context, _ *noInput) (*mcpCatalogSync, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !adminOf(ctx) {
+		return nil, zip.ErrForbidden("admin required")
+	}
+	if o.s.State.catalog == nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "the catalog store is not open")
+	}
+	added, updated, err := o.s.State.catalog.Sync(ctx)
+	if err != nil {
+		o.s.Log.Error("catalog sync failed", "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "sync failed: %v", err)
+	}
+	total, err := o.s.State.catalog.Count(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "count catalog: %v", err)
+	}
+	o.audit(ctx, "catalog.sync", org, "catalog", "ok", http.StatusOK)
+	return &mcpCatalogSync{Added: added, Updated: updated, Total: total, Registry: registryURL()}, nil
+}
+
+// curateReq is a patch of our decisions about one listing. Every field is a
+// POINTER because this is a patch and not a replacement: an absent field leaves
+// what is there, so featuring a listing cannot silently un-hide it.
+type curateReq struct {
+	// ID is the listing to curate, from the path.
+	ID string `json:"id"`
+	// Hidden takes the listing off the org-visible shelf, or puts it back.
+	Hidden *bool `json:"hidden"`
+	// Featured puts the listing on the front of the shelf, or takes it off.
+	Featured *bool `json:"featured"`
+	// Official overrides the derivation: setting it makes this answer FINAL, so
+	// no later sync re-derives over it. That is the difference between a default
+	// and a decision — the derivation can only tell that a domain-verified
+	// publisher serves the endpoint, not that the product is theirs.
+	Official *bool `json:"official"`
+	// Logo is the brand mark to render, an https URL. Empty clears ours and lets
+	// the next sync adopt the publisher's own icon again.
+	Logo *string `json:"logo"`
+}
+
+// CurateListing sets what WE say about one catalog entry — hidden, featured,
+// official, logo — and answers with the stored listing. SuperAdmin only; every
+// other caller is refused.
+//
+// Curation is the half of a catalog row a sync cannot write, and this is the only
+// thing that writes it. The upstream half is never editable here: a description
+// that disagreed with the publisher's would be a fork of their listing, and the
+// next sync would silently undo it.
+//
+// Example: {"featured": true, "official": false}
+func (o toolOps) curateListing(ctx context.Context, in *curateReq) (*MCPListing, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !adminOf(ctx) {
+		return nil, zip.ErrForbidden("admin required")
+	}
+	if in.Logo != nil {
+		if logo := strings.TrimSpace(*in.Logo); logo != "" && !strings.HasPrefix(logo, "https://") {
+			return nil, zip.ErrBadRequest("logo must be an https URL")
+		}
+	}
+	if o.s.State.catalog == nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "the catalog store is not open")
+	}
+	l, err := o.s.State.catalog.Curate(ctx, strings.TrimSpace(in.ID), Curation{
+		Hidden: in.Hidden, Featured: in.Featured, Official: in.Official, Logo: in.Logo,
+	})
+	if err != nil {
+		if errors.Is(err, ErrUnknownTool) {
+			return nil, zip.ErrNotFound("listing not found")
+		}
+		return nil, zip.Errorf(http.StatusInternalServerError, "curate listing: %v", err)
+	}
+	o.audit(ctx, "catalog.curate", org, "listing:"+l.ID, "ok", http.StatusOK)
+	return &l, nil
+}
+
+// listing resolves one catalog entry, mapping an absent store and an unknown id
+// to the answers the wire gives.
+func (o toolOps) listing(ctx context.Context, id string) (MCPListing, error) {
+	if o.s.State.catalog == nil {
+		return MCPListing{}, zip.Errorf(http.StatusServiceUnavailable, "the catalog store is not open")
+	}
+	l, err := o.s.State.catalog.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		if errors.Is(err, ErrUnknownTool) {
+			return MCPListing{}, zip.ErrNotFound("listing not found")
+		}
+		return MCPListing{}, zip.Errorf(http.StatusInternalServerError, "read listing: %v", err)
+	}
+	return l, nil
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────────

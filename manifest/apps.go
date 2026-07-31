@@ -165,7 +165,12 @@ var Apps = []App{
 	{Name: "admission", Prefixes: []string{"/v1/flags/waitlist"}},
 	{Name: "tasks", Prefixes: []string{"/tasks", "/v1/tasks"}},
 	{Name: "automations", Prefixes: []string{"/v1/automations"}},
-	{Name: "tools", Prefixes: []string{"/v1/mcp/servers", "/v1/plugins", "/v1/skills", "/v1/tools"}},
+	// Open: the tool plane also serves the CALLER's own tools — its connectors,
+	// skills, agents, and the external MCP servers it enabled — which are rows and
+	// cannot be in a build-time catalogue. The host asks it per caller on a
+	// tools/list that names one. It is the only open app in the fleet, and zip
+	// refuses a second.
+	{Name: "tools", Open: true, Prefixes: []string{"/v1/mcp/servers", "/v1/plugins", "/v1/skills", "/v1/tools"}},
 	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}},
 	{Name: "referrals", Prefixes: []string{"/v1/admin/referrals/bonuses", "/v1/admin/referrals/sweep", "/v1/referrals"}},
 	{Name: "guide", Prefixes: []string{"/v1/guide"}},

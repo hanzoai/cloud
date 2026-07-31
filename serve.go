@@ -197,10 +197,21 @@ func Serve(plugins []Plugin, enable []string) error {
 	// fasthttp rejected the body before any handler ran, and its wire error is the
 	// opaque 400 "Error when parsing request", which reads like a malformed
 	// payload rather than a size cap. Env GATEWAY_BODY_LIMIT (see config.go).
+	// The per-caller half of this binary's MCP door, from the composition root
+	// (Plugin.Door). Nil for every app but the tool plane, which is the only one
+	// whose tools are ROWS — an org's connectors, skills, agents and the servers
+	// it enabled — and therefore the only one that cannot be projected at build
+	// time. The build-time half is unaffected: it is still the typed-op array,
+	// still rendered once, still served as bytes.
+	source, err := door(plugins)
+	if err != nil {
+		return err
+	}
 	app := zip.New(zip.Config{
 		Logger:         deps.Logger,
 		ReadBufferSize: cfg.ReadBufferSize,
 		BodyLimit:      cfg.BodyLimit,
+		MCP:            zip.MCPConfig{Source: source},
 		// Static Server fallback for responses the ProductionHeaders middleware
 		// cannot reach — the transport's own pre-routing errors (431/400) and any
 		// fiber path that bypasses the chain. Set to this deployment's brand so
