@@ -329,8 +329,12 @@ func TestEventColumnsMatchArgsWidth(t *testing.T) {
 
 // ── HTTP contract (datastore is DOWN in this harness) ────────────────────────
 
-// capturePaths are the three POST ingest routes the capture plane owns.
-var capturePaths = []string{"/v1/analytics", "/v1/analytics/batch", "/v1/tracker"}
+// canonDoor is the ONE path the canonical wire is served on. The three name-aliases
+// this file used to sweep (/v1/analytics{,/batch}, /v1/tracker) are retired, and
+// doors_test.go holds them shut on both surfaces. The properties below are the
+// canonical door's own; the per-wire generalisation over every declared door lives
+// in doors_test.go, which builds each door's body from its own decoder.
+const canonDoor = "/v1/event"
 
 // doBody issues a request with a JSON body, mirroring http_test.go's do() (which
 // carries no body). user/org simulate the SanitizeIdentity-minted headers.
@@ -353,27 +357,25 @@ func doBody(t *testing.T, app *zip.App, method, path, user, org, body string) (i
 	return resp.StatusCode, b
 }
 
-// TestCapture_NoPrincipalGetsAnonymousLane: a credential-less POST to a deprecated
-// alias is no longer refused outright — it takes the SAME anonymous lane the canonical
-// door has always taken, because the aliases speak the same wire and admission is now
-// decided by trust level rather than per door. A pageview is admitted (503, datastore
-// down) under the reserved public tenant, and everything beyond the allowlist is
-// dropped, which is what these routes used to get WRONG in the other direction: they
+// TestCapture_NoPrincipalGetsAnonymousLane: a credential-less POST is not refused
+// outright — it takes the anonymous lane, because admission is decided by trust level
+// rather than per door. A pageview is admitted (503, datastore down) under the
+// reserved public tenant, and everything beyond the allowlist is dropped, which is
+// what the retired alias routes used to get WRONG in the other direction: they
 // resolved a REAL brand org from the Host and admitted the lot.
 func TestCapture_NoPrincipalGetsAnonymousLane(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
-	for _, p := range capturePaths {
-		if code, body := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
-			t.Fatalf("no-principal POST %s want 503 (anonymous lane, admitted), got %d (%s)", p, code, body)
-		}
-		code, body := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`)
-		if code != http.StatusOK {
-			t.Fatalf("no-principal commerce POST %s want 200 all-dropped, got %d (%s)", p, code, body)
-		}
-		if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-			t.Fatalf("no-principal commerce POST %s receipt = %+v, want accepted:0 dropped:1", p, r)
-		}
+	p := canonDoor
+	if code, body := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
+		t.Fatalf("no-principal POST %s want 503 (anonymous lane, admitted), got %d (%s)", p, code, body)
+	}
+	code, body := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("no-principal commerce POST %s want 200 all-dropped, got %d (%s)", p, code, body)
+	}
+	if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
+		t.Fatalf("no-principal commerce POST %s receipt = %+v, want accepted:0 dropped:1", p, r)
 	}
 }
 
@@ -386,22 +388,21 @@ func TestCapture_NoPrincipalGetsAnonymousLane(t *testing.T) {
 func TestCapture_ForgedOrgWithoutBearerBuysNothing(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
-	for _, p := range capturePaths {
-		code, body := doBody(t, app, http.MethodPost, p, "", "maxpower",
-			`{"batch":[{"type":"event","event":"steal","groupId":"maxpower","personId":"victim","revenue":1}]}`)
-		if code != http.StatusOK {
-			t.Fatalf("forged-org-no-bearer POST %s want 200 all-dropped, got %d (%s)", p, code, body)
-		}
-		if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-			t.Fatalf("forged-org-no-bearer POST %s receipt = %+v, want accepted:0 dropped:1", p, r)
-		}
+	p := canonDoor
+	code, body := doBody(t, app, http.MethodPost, p, "", "maxpower",
+		`{"batch":[{"type":"event","event":"steal","groupId":"maxpower","personId":"victim","revenue":1}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("forged-org-no-bearer POST %s want 200 all-dropped, got %d (%s)", p, code, body)
+	}
+	if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
+		t.Fatalf("forged-org-no-bearer POST %s receipt = %+v, want accepted:0 dropped:1", p, r)
 	}
 }
 
 func TestCapture_EmptyBatchOK(t *testing.T) {
 	app := mountApp(t)
 	// Empty batch returns 200 with zero counts BEFORE the datastore is consulted.
-	code, body := doBody(t, app, http.MethodPost, "/v1/analytics", "user-dave", "acme", `{"batch":[]}`)
+	code, body := doBody(t, app, http.MethodPost, canonDoor, "user-dave", "acme", `{"batch":[]}`)
 	if code != http.StatusOK {
 		t.Fatalf("empty batch want 200, got %d (%s)", code, body)
 	}
@@ -422,7 +423,7 @@ func TestCapture_TooLarge400(t *testing.T) {
 		sb.WriteString(`{"type":"pageview"}`)
 	}
 	sb.WriteString(`]}`)
-	code, _ := doBody(t, app, http.MethodPost, "/v1/analytics", "user-dave", "acme", sb.String())
+	code, _ := doBody(t, app, http.MethodPost, canonDoor, "user-dave", "acme", sb.String())
 	if code != http.StatusBadRequest {
 		t.Fatalf("oversized batch want 400, got %d", code)
 	}
@@ -432,7 +433,7 @@ func TestCapture_DatastoreDownHonest503(t *testing.T) {
 	app := mountApp(t)
 	// A real batch with a validated principal but no datastore → honest 503,
 	// never a fake 200 (mirrors the read side's no-fabrication contract).
-	code, _ := doBody(t, app, http.MethodPost, "/v1/analytics", "user-dave", "acme", `{"batch":[{"type":"event","event":"signup_completed"}]}`)
+	code, _ := doBody(t, app, http.MethodPost, canonDoor, "user-dave", "acme", `{"batch":[{"type":"event","event":"signup_completed"}]}`)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("datastore-down capture want 503, got %d", code)
 	}
@@ -469,13 +470,18 @@ func doHost(t *testing.T, app *zip.App, path, user, org, host, body string) (int
 func TestCapture_HostIsNotATenant(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
-	for _, tc := range []struct{ path, host string }{
-		{"/v1/analytics", "hanzo.ai"},
-		{"/v1/tracker", "app.lux.cloud"},
-		{"/v1/analytics", "evil.example.com"}, // an unknown Host is treated the same
-		{"/v1/tracker", "evil.example.com"},
+	// Each row carries its door's OWN wire: a canonical pageview decodes to nothing
+	// on the PostHog door and would answer 200 all-dropped, which reads like the
+	// refusal this test exists to rule out. The wire has to be the door's or the
+	// assertion measures the decoder instead of the tenant rule.
+	for _, tc := range []struct{ path, host, body string }{
+		{canonDoor, "hanzo.ai", canonPageview},
+		{canonDoor, "app.lux.cloud", canonPageview},
+		{canonDoor, "evil.example.com", canonPageview}, // an unknown Host is treated the same
+		{"/v1/insights/e", "hanzo.ai", posthogPage},
+		{"/v1/insights/e", "evil.example.com", posthogPage},
 	} {
-		if code, body := doHost(t, app, tc.path, "", "", tc.host, `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
+		if code, body := doHost(t, app, tc.path, "", "", tc.host, tc.body); code != http.StatusServiceUnavailable {
 			t.Fatalf("anonymous pageview %s on host %q want 503 (admitted), got %d (%s)", tc.path, tc.host, code, body)
 		}
 	}
@@ -486,7 +492,7 @@ func TestCapture_PublicCaptureDisabled(t *testing.T) {
 	app := mountApp(t)
 	// With public capture disabled, even a recognized brand host is refused
 	// without a validated principal.
-	code, _ := doHost(t, app, "/v1/analytics", "", "", "hanzo.ai", `{"batch":[{"type":"pageview"}]}`)
+	code, _ := doHost(t, app, canonDoor, "", "", "hanzo.ai", `{"batch":[{"type":"pageview"}]}`)
 	if code != http.StatusForbidden {
 		t.Fatalf("public-capture-off anonymous want 403, got %d", code)
 	}

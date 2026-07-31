@@ -95,14 +95,21 @@ var Apps = []App{
 	{Name: "validators", Prefixes: []string{"/v1/validators"}},
 	{Name: "social", Prefixes: []string{"/v1/social"}},
 	// The INGESTION doors are load-bearing, not decorative: apps/analytics/event.go's
-	// `doors` table serves /v1/event, /v1/insights/e, /v1/analytics and /v1/analytics/batch,
-	// and every beacon the products emit lands on one of them. Listing only the read
-	// endpoints (as this row did) sent every write to commerce's bare "/v1" catch-all,
-	// which does not serve them — 405, silently, for every event in the fleet. The row was
-	// harmless while each app called its own routes(); it became the router when the
-	// mega-build died, so a missing prefix is now an outage. Bare "/v1/analytics" covers
-	// the batch door and the four read lenses; "/v1/event" covers the Team SPA's
-	// (product, team, LLM-obs, Sentry envelope). /v1/tracker is NOT here: apps/tracker owns that name.
+	// `doors` table serves /v1/event and /v1/insights/e, and every beacon the products
+	// emit lands on one of the two. Listing only the read endpoints (as this row did)
+	// sent every write to commerce's bare "/v1" catch-all, which does not serve them —
+	// 405, silently, for every event in the fleet. The row was harmless while each app
+	// called its own routes(); it became the router when the mega-build died, so a
+	// missing prefix is now an outage.
+	//
+	// "/v1/event" is the ONE canonical ingest door — the product, team, LLM-obs and
+	// Sentry-envelope wires all arrive on it. "/v1/insights/e" is the PostHog wire,
+	// held open by an ingress rewrite on insights.hanzo.ai rather than by a caller
+	// that names it. The other four prefixes are READ ONLY: bare "/v1/analytics" now
+	// carries only the four lenses (overview, timeseries, top, health) — the ingest
+	// aliases under it are retired — and /v1/errors, /v1/insights/events and
+	// /v1/insights/health are GET lenses. /v1/tracker is NOT here and never was:
+	// the tracker product owns that name (its row is above, and it wins the prefix).
 	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/insights/e", "/v1/insights/events", "/v1/insights/health"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},

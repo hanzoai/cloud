@@ -43,16 +43,17 @@ import (
 // edit here to do it.
 //
 // It pins the whole TRIPLE, not just the path. A door is a path bound to a wire, and
-// rebinding one is as much a surface change as adding a path: swap /v1/analytics onto
-// decodeInsights and every canonical-wire beacon silently decodes to nothing, or
-// relabel a door's source and the $source column — which is the sunset signal, and
-// the only per-row record of which door a write came through — starts lying.
+// rebinding one is as much a surface change as adding a path: swap /v1/insights/e onto
+// decodeIngest and every PostHog beacon silently decodes to nothing, or relabel a
+// door's source and the $source property — the only per-row record of which wire a
+// write came in on — starts lying.
+//
+// TWO ENTRIES IS THE POINT: one door per WIRE. A path that merely renames a wire
+// already served here is an alias, and the set below is what makes adding one an
+// explicit act rather than a quiet convenience.
 var wantDoors = []door{
 	{path: "/v1/event", decode: decodeIngest, source: sourceEvent},
 	{path: "/v1/insights/e", decode: decodeInsights, source: sourcePostHog},
-	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
-	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
-	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
 }
 
 // samePtr reports whether two func values are the SAME function, by code pointer.
@@ -69,11 +70,25 @@ func samePtr(a, b any) bool {
 func sameWire(a, b decode) bool { return samePtr(a, b) }
 
 // retiredDoors are paths that WERE ingest doors and must now be gone from every
-// surface — not routed, and not carved on a site host either. /v1/ingest was the
-// publishable-key door; @hanzo/event 0.3.0 moved pk- onto /v1/event and a fleet sweep
-// found no remaining caller, so it was deleted. A door is not retired until it is
-// absent from BOTH surfaces, which is the half that used to be forgotten.
-var retiredDoors = []string{"/v1/ingest"}
+// surface — not routed, and not carved on a site host either. A door is not retired
+// until it is absent from BOTH surfaces, which is the half that used to be forgotten.
+//
+//   - /v1/ingest was the publishable-key door; @hanzo/event 0.3.0 moved pk- onto
+//     /v1/event and a fleet sweep found no remaining caller.
+//   - /v1/analytics, /v1/analytics/batch and /v1/tracker were name-aliases of the
+//     canonical wire /v1/event already serves. @hanzo/capture, the one SDK that
+//     named them, has no importer left in the fleet.
+//
+// /v1/tracker is retired FROM THIS PACKAGE only, and this list is scoped to this
+// package's two surfaces (its own router and the carve it hands sites). The path
+// itself belongs to the tracker product, which owns the prefix in the app manifest
+// and keeps serving /v1/tracker/projects/… — analytics squatting the bare path is
+// precisely what ends here. mountApp mounts analytics alone, so a 404 in this
+// harness is the honest statement that ANALYTICS no longer answers there.
+var retiredDoors = []string{
+	"/v1/ingest",
+	"/v1/analytics", "/v1/analytics/batch", "/v1/tracker",
+}
 
 // notDoors are paths that must never ingest: the read lenses, near-miss spellings, and
 // the neighbouring subsystem's route. They are the paired negative for every positive

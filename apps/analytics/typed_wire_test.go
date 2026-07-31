@@ -40,10 +40,7 @@ var untypedByDesign = map[string]string{
 		"{status,code,error} and drops the report. Writing the body from inside the op does not escape " +
 		"it either — a nil Out is stamped cmp.Or(op.Status, 204) over whatever was written.",
 
-	"POST /v1/event":           canonWireReason,
-	"POST /v1/analytics":       canonWireReason,
-	"POST /v1/analytics/batch": canonWireReason,
-	"POST /v1/tracker":         canonWireReason,
+	"POST /v1/event": canonWireReason,
 	"POST /v1/insights/e": "the PostHog wire (decodeInsights, insights.go) — an object, so the array " +
 		"blocker does not apply here, but admission does. " + admissionReason,
 
