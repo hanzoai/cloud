@@ -165,6 +165,14 @@
         ]
       }
     },
+    "/v1/billing/subscribe/card": {
+      "post": {
+        "operationId": "post_v1_billing_subscribe_card",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/v1/billing/subscriptions": {
       "get": {
         "operationId": "get_v1_billing_subscriptions",
@@ -206,6 +214,14 @@
               "type": "string"
             }
           }
+        ]
+      }
+    },
+    "/v1/billing/test-mode": {
+      "post": {
+        "operationId": "post_v1_billing_test-mode",
+        "tags": [
+          "billing"
         ]
       }
     },
