@@ -8,12 +8,13 @@
 //
 //   - REGISTRY (api.go, store.go) — /v1/webhooks CRUD. An org manages ONLY its own
 //     endpoints; each org's registry is a physically separate {DataDir}/orgs/{slug}/
-//     webhooks.db (the clients/books per-org SQLite idiom via cloud.OrgStore), so one
+//     webhooks.db (the apps/books per-org SQLite idiom via cloud.OrgStore), so one
 //     tenant can never read or mutate another's. The org is the VALIDATED principal
-//     (principal.Org, gateway-minted X-Org-Id), exactly like clients/notify — 401 for
+//     (principal.Org, gateway-minted X-Org-Id), exactly like apps/notify — 401 for
 //     an unauthenticated caller.
-//   - DISPATCHER (dispatch.go, match.go) — a durable JetStream consumer on cloud's own
-//     embedded bus (clients/pubsub, stream COMMERCE, subjects commerce.>). It resolves
+//   - DISPATCHER (dispatch.go, match.go) — a durable JetStream consumer on the platform
+//     bus (apps/pubsub), over the streams dispatch.go names: COMMERCE (commerce.>) and
+//     EVENTS (event.>, bridge.go). It resolves
 //     each event's org from the envelope, matches ONLY that org's active subscriptions
 //     (NATS subject-wildcard semantics), and POSTs each match with a fresh
 //     HMAC-SHA256 signature and a bounded retry ladder. Org isolation is by
@@ -22,7 +23,7 @@
 //
 // FAIL-SOFT MOUNT. The registry always mounts. The dispatcher is best-effort: no bus
 // URL ⇒ inert; a down bus ⇒ background reconnect-retry. A messaging fault never crashes
-// the shared cloud binary.
+// the process.
 package webhooks
 
 import (
@@ -46,7 +47,7 @@ type state struct {
 }
 
 // mounted is the process-wide handle Shutdown reaches the dispatcher + stores through
-// (the same package-global pattern clients/crm and clients/books use).
+// (the same package-global pattern apps/crm and apps/books use).
 var mounted *state
 
 // removeSink unregisters the bridge's fan-out consumer on Shutdown.

@@ -9,7 +9,7 @@ import (
 	"github.com/hanzoai/cloud/cek"
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" database/sql name under both build tags). Blank import registers
-	// the driver — same as clients/integrations.
+	// the driver — same as apps/integrations.
 	_ "github.com/hanzoai/sqlite"
 )
 

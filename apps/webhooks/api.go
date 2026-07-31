@@ -2,7 +2,7 @@ package webhooks
 
 // api.go — the /v1/webhooks registry surface: an org's CRUD over its OWN webhook
 // endpoints. Every handler resolves the caller's org from the VALIDATED principal
-// (principal.Org — the gateway-minted X-Org-Id, HIP-0026), exactly like clients/notify,
+// (principal.Org — the gateway-minted X-Org-Id, HIP-0026), exactly like apps/notify,
 // and never from a client-supplied body/header. An unauthenticated caller gets 401; a
 // signed-in caller sees and mutates ONLY its own org's endpoints (physical per-org
 // SQLite makes cross-tenant access impossible).
@@ -174,7 +174,7 @@ type noInput struct{}
 
 // tenant resolves the caller's org for a TYPED op — the VALIDATED org
 // cloud.Bridge parked on the context, 401 otherwise. It is the same gate
-// clients/notify applies and the same decision principal.Org makes (a validated
+// apps/notify applies and the same decision principal.Org makes (a validated
 // principal, then a non-empty bounded org); OrgFrom is only how that one answer
 // reaches a handler whose signature has no request in it.
 //
@@ -457,7 +457,6 @@ func (o ops) rotateSecret(ctx context.Context, in *endpointRef) (*Endpoint, erro
 	// e.Secret is intentionally NOT redacted — this IS the reveal-once response.
 	return &e, nil
 }
-
 
 // ---- validation + helpers ----
 
