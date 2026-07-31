@@ -11,6 +11,7 @@
 // Registration is written by the CLI over the public tasks surface
 // (POST /v1/tasks/namespaces/fleet/activities + heartbeat) — this subsystem only
 // READS, and only ever the caller's own tenant (principal.Org → org shard).
+
 package visor
 
 import (

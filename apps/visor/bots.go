@@ -29,6 +29,7 @@
 // (principal.Org, taken from the IAM owner claim), forwarded to vm as
 // ?owner=<org>, so a caller can only ever read or mutate its OWN bots. No
 // validated principal ⇒ 403, before anything reaches vm.
+
 package visor
 
 import (

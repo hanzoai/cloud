@@ -13,6 +13,7 @@
 // "building" rows). It is idempotent (applyService is create-or-update; a row is
 // advanced off "building" once handled) and org-scoped (every write targets
 // tenant-<row.Org>, derived from the row, never a request value).
+
 package platform
 
 import (
