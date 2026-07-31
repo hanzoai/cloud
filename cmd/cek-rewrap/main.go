@@ -19,9 +19,18 @@ func main() {
 	dry := flag.Bool("dry-run", false, "report without writing")
 	flag.Parse()
 
-	mk := os.Getenv("CLOUD_KMS_MASTER_KEY")
+	// The SAME variable cloud reads. This asked for CLOUD_KMS_MASTER_KEY while every
+	// deployment sets CLOUD_KMS_MASTER_KEY_REF, so the tool exited 2 in the only
+	// environment it was meant to run in — which is part of why the migration it
+	// carries never ran, and two stores stayed unopenable until the outage surfaced
+	// them. A tool that cannot read the deployment's own configuration is a tool
+	// that was never going to be run.
+	//
+	// Kept as a fallback rather than a rename, because a one-off already invoked
+	// with the old name must keep working.
+	mk := firstSet("CLOUD_KMS_MASTER_KEY_REF", "CLOUD_KMS_MASTER_KEY")
 	if mk == "" {
-		fmt.Fprintln(os.Stderr, "CLOUD_KMS_MASTER_KEY (base64) is required")
+		fmt.Fprintln(os.Stderr, "CLOUD_KMS_MASTER_KEY_REF (base64) is required — the same variable cloud reads")
 		os.Exit(2)
 	}
 	master, err := base64.StdEncoding.DecodeString(mk)
@@ -76,4 +85,14 @@ func main() {
 	if bad > 0 {
 		os.Exit(1)
 	}
+}
+
+// firstSet returns the first of names that is set and non-empty.
+func firstSet(names ...string) string {
+	for _, n := range names {
+		if v := os.Getenv(n); v != "" {
+			return v
+		}
+	}
+	return ""
 }
