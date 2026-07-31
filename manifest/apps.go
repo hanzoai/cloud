@@ -130,6 +130,7 @@ var Apps = []App{
 	{Name: "meet", Prefixes: []string{"/v1/meet/getToken", "/v1/meet/health"}},
 	{Name: "settings", Prefixes: []string{"/v1/settings"}},
 	{Name: "prefs", Prefixes: []string{"/v1/prefs"}},
+	{Name: "sessions", Prefixes: []string{"/v1/sessions"}},
 	{Name: "notify", Prefixes: []string{"/v1/notify"}},
 	{Name: "channels", Prefixes: []string{"/v1/channels"}},
 	{Name: "gateway", Prefixes: []string{"/v1/gateway"}},

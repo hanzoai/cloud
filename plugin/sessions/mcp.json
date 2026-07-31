@@ -1,0 +1,10 @@
+[
+  {
+    "description": "ListSessions returns the coding sessions on the caller's org machines that are live right now \u2014 host, workspace, repo and branch, plus the URL of the terminal each one is publishing. Liveness is a heartbeat TTL, so a machine that sleeps or loses its link drops off this list and returns when it comes back.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_sessions"
+  }
+]
