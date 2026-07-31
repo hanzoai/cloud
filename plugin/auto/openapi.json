@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package auto is Hanzo Auto: durable workflow automation — flows built from trigger/action pieces, executed as durable runs on the hanzo tasks plane.",
+    "description": "Package auto is Hanzo Auto: build a flow from triggers and actions, publish it, and watch every run.",
     "version": "v1"
   },
   "servers": [
