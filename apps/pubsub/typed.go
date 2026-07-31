@@ -1285,8 +1285,13 @@ func (o ops) next(ctx context.Context, in *fetchQuery) (*messagePage, error) {
 			out.Time = meta.Timestamp.UTC().Format(time.RFC3339)
 		}
 		// The at-most-once hand-off: delivery is this HTTP response, so the ack
-		// happens here. An ack the server refuses (ack:none) changes nothing.
-		_ = m.Ack()
+		// happens here. A refused ack (ack:none consumers have none to send) is
+		// nothing; a FAILED ack on an explicit consumer means the plane will
+		// redeliver what this response already carried, so it is logged rather
+		// than swallowed.
+		if aerr := m.Ack(); aerr != nil && !errors.Is(aerr, jetstream.ErrMsgAlreadyAckd) {
+			o.s.Log.Debug("fetch ack failed; message may redeliver", "stream", in.Stream, "consumer", in.Name, "seq", out.Seq, "err", aerr)
+		}
 		page = append(page, out)
 	}
 	if err := msgs.Error(); err != nil && !errors.Is(err, nats.ErrTimeout) {
