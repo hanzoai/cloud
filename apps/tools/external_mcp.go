@@ -50,8 +50,24 @@ type MCPServer struct {
 	// HasSecret is whether a credential is sealed in KMS for this server. The
 	// VALUE is never returned by any route.
 	HasSecret bool `json:"hasSecret"`
+	// Listing is the catalog entry this server was enabled from, when it was.
+	// Empty means the org typed the URL in itself.
+	Listing string `json:"listing,omitempty"`
+	// Source is where the registration came from: "catalog" when it was enabled
+	// off the shelf, "org" when the org registered the URL itself. It is DERIVED
+	// from Listing rather than stored, because two columns for one fact is two
+	// chances to disagree.
+	Source string `json:"source"`
 	// CreatedAt is when the server was registered, Unix seconds.
 	CreatedAt int64 `json:"createdAt"`
+}
+
+// source is where a registration came from. One fact, read one way.
+func (s MCPServer) source() string {
+	if s.Listing != "" {
+		return "catalog"
+	}
+	return "org"
 }
 
 // MCPServerStore is the per-org registry of external MCP servers (one SQLite file,
@@ -84,10 +100,28 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   auth_header TEXT NOT NULL DEFAULT '',
   has_secret  INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL,
+  listing     TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (org, id)
 );`); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("tools: mcp-server migrate: %w", err)
+	}
+	// The listing column arrived after the table did, so a deployment that already
+	// has rows gets it HERE — and before the index that reads it, or the index
+	// would be the statement that fails on exactly the databases this exists for.
+	// "duplicate column" is the migration having already run, which is the only
+	// outcome after the first boot; every other error is real and refuses the open.
+	if _, err := db.Exec(`ALTER TABLE mcp_servers ADD COLUMN listing TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		_ = db.Close()
+		return nil, fmt.Errorf("tools: mcp-server migrate listing: %w", err)
+	}
+	// One enablement per (org, listing), enforced by the store rather than
+	// remembered by a caller: enabling the same shelf entry twice is one server.
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_listing
+  ON mcp_servers (org, listing) WHERE listing <> ''`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("tools: mcp-server listing index: %w", err)
 	}
 	return s, nil
 }
@@ -100,32 +134,121 @@ func (s *MCPServerStore) Close() error {
 	return s.db.Close()
 }
 
-// Create inserts a server row (id generated). It does NOT touch KMS — the handler
-// stores the secret first, then records has_secret here.
+// Create writes one server for an org, and is the ONE place a registration comes
+// into being — typed in or enabled off the shelf. It does NOT touch KMS: the
+// handler stores the secret first, then records has_secret here.
+//
+// srv.ID is a PREFERRED id, not a demand. Empty gets a random handle, which is
+// what a hand-registered server has always had. A catalog enablement asks for the
+// vendor's brand instead, because the id PREFIXES every tool name the server
+// contributes — so the difference between a readable "stripe_create_payment_link"
+// and an opaque "m4f21c8_create_payment_link" is one argument here. Taken names
+// are suffixed rather than refused: two servers from one vendor is a thing an org
+// is allowed to have.
+//
+// Re-enabling a listing the org already has REVISES that row in place, keeping its
+// id — so the tool names an agent already learned do not move under it, and a
+// retried enable is one server rather than a near-duplicate beside it.
 func (s *MCPServerStore) Create(ctx context.Context, srv MCPServer) (MCPServer, error) {
-	if srv.ID == "" {
-		srv.ID = "m" + randHex(6)
+	srv.Source = srv.source()
+	if srv.Listing != "" {
+		if cur, err := s.byListing(ctx, srv.Org, srv.Listing); err == nil {
+			srv.ID, srv.CreatedAt = cur.ID, cur.CreatedAt
+			if _, err := s.db.ExecContext(ctx,
+				`UPDATE mcp_servers SET name=?, url=?, auth_header=?, has_secret=? WHERE org=? AND id=?`,
+				srv.Name, srv.URL, srv.AuthHeader, boolInt(srv.HasSecret), srv.Org, srv.ID); err != nil {
+				return MCPServer{}, fmt.Errorf("tools: revise mcp server: %w", err)
+			}
+			return srv, nil
+		}
 	}
+	id, err := s.handle(ctx, srv.Org, srv.ID)
+	if err != nil {
+		return MCPServer{}, err
+	}
+	srv.ID = id
 	srv.CreatedAt = time.Now().Unix()
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO mcp_servers (id, org, name, url, auth_header, has_secret, created_at) VALUES (?,?,?,?,?,?,?)`,
-		srv.ID, srv.Org, srv.Name, srv.URL, srv.AuthHeader, boolInt(srv.HasSecret), srv.CreatedAt); err != nil {
+		`INSERT INTO mcp_servers (id, org, name, url, auth_header, has_secret, created_at, listing) VALUES (?,?,?,?,?,?,?,?)`,
+		srv.ID, srv.Org, srv.Name, srv.URL, srv.AuthHeader, boolInt(srv.HasSecret), srv.CreatedAt, srv.Listing); err != nil {
 		return MCPServer{}, fmt.Errorf("tools: create mcp server: %w", err)
 	}
 	return srv, nil
 }
 
+// handle resolves a preferred id to a free one within the org: the preference
+// itself when nothing holds it, then "-2", "-3", and a random handle when even
+// those are taken or nothing was preferred.
+func (s *MCPServerStore) handle(ctx context.Context, org, want string) (string, error) {
+	want = sanitize(want)
+	for i := 0; want != "" && i < 16; i++ {
+		id := want
+		if i > 0 {
+			id = fmt.Sprintf("%s-%d", want, i+1)
+		}
+		var n int
+		if err := s.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM mcp_servers WHERE org=? AND id=?`, org, id).Scan(&n); err != nil {
+			return "", fmt.Errorf("tools: check mcp server id: %w", err)
+		}
+		if n == 0 {
+			return id, nil
+		}
+	}
+	return "m" + randHex(6), nil
+}
+
+// byListing is the org's server for one catalog listing, or ErrUnknownTool.
+func (s *MCPServerStore) byListing(ctx context.Context, org, listing string) (MCPServer, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+serverCols+` FROM mcp_servers WHERE org=? AND listing=?`, org, listing)
+	return scanServer(row)
+}
+
+// sanitize reduces a preferred id to what a tool name may carry: lowercase
+// letters, digits and dashes. An UNDERSCORE is dropped rather than mapped,
+// because "<id>_<tool>" is cut on the FIRST underscore — an id containing one
+// would take a bite out of every tool name it prefixes.
+func sanitize(want string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(want)) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+			b.WriteRune(r)
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+// brand is the publisher's own name inside a reverse-DNS namespace: the
+// registrable domain, which is the SECOND label ("com.stripe" → stripe,
+// "ac.inference.sh" → inference). Under a code forge the namespace attests an
+// ACCOUNT and not a domain, so the account is the publisher ("io.github.alice" →
+// alice). It is what an enabled listing's tools are prefixed with, so it is
+// chosen to be the word a person would use for the thing.
+func brand(vendor string) string {
+	labels := strings.Split(vendor, ".")
+	if len(labels) < 2 {
+		return vendor
+	}
+	forge := labels[0] + "." + labels[1]
+	if len(labels) > 2 && (forge == "io.github" || forge == "io.gitlab") {
+		return labels[2]
+	}
+	return labels[1]
+}
+
 // Get returns one server for (org, id).
 func (s *MCPServerStore) Get(ctx context.Context, org, id string) (MCPServer, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, org, name, url, auth_header, has_secret, created_at FROM mcp_servers WHERE org=? AND id=?`, org, id)
+		`SELECT `+serverCols+` FROM mcp_servers WHERE org=? AND id=?`, org, id)
 	return scanServer(row)
 }
 
 // List returns an org's registered servers, sorted by name.
 func (s *MCPServerStore) List(ctx context.Context, org string) ([]MCPServer, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, org, name, url, auth_header, has_secret, created_at FROM mcp_servers WHERE org=? ORDER BY name`, org)
+		`SELECT `+serverCols+` FROM mcp_servers WHERE org=? ORDER BY name`, org)
 	if err != nil {
 		return nil, fmt.Errorf("tools: list mcp servers: %w", err)
 	}
@@ -153,16 +276,20 @@ func (s *MCPServerStore) Delete(ctx context.Context, org, id string) (bool, erro
 
 type rowScanner interface{ Scan(dest ...any) error }
 
+const serverCols = `id, org, name, url, auth_header, has_secret, created_at, listing`
+
 func scanServer(r rowScanner) (MCPServer, error) {
 	var srv MCPServer
 	var hasSecret int
-	if err := r.Scan(&srv.ID, &srv.Org, &srv.Name, &srv.URL, &srv.AuthHeader, &hasSecret, &srv.CreatedAt); err != nil {
+	if err := r.Scan(&srv.ID, &srv.Org, &srv.Name, &srv.URL, &srv.AuthHeader, &hasSecret,
+		&srv.CreatedAt, &srv.Listing); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return MCPServer{}, ErrUnknownTool
 		}
 		return MCPServer{}, err
 	}
 	srv.HasSecret = hasSecret != 0
+	srv.Source = srv.source()
 	return srv, nil
 }
 

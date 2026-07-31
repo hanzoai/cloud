@@ -27,7 +27,7 @@ import (
 // exactly one place in the fleet that speaks it.
 //
 // The remaining entry is wire-bound and was re-read against the PINNED zip
-// (v1.18.12), not inherited as prose from an older pass.
+// (v1.18.14), not inherited as prose from an older pass.
 var untypedByDesign = map[string]string{
 	// The plugin builder. A FAILED build answers 422 carrying the build
 	// DIAGNOSTICS as a domain body — the bundler's error, the source that failed,
@@ -111,8 +111,8 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	}
 	// The MEASURED partition, so "all but one" in the docs cannot drift from the
 	// binary. Changing these numbers is a deliberate edit, which is the point.
-	if len(served) != 15 || len(typed) != 14 {
-		t.Errorf("served = %d (want 15), typed = %d (want 14)", len(served), len(typed))
+	if len(served) != 19 || len(typed) != 18 {
+		t.Errorf("served = %d (want 19), typed = %d (want 18)", len(served), len(typed))
 	}
 }
 
