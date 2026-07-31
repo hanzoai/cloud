@@ -195,3 +195,53 @@ func (s *Store) mustGet(t *testing.T, org, provider, owner string) (Connection, 
 	}
 	return c, ok
 }
+
+// The key only helps if the connect path FILLS it. Setting the owner nowhere
+// would leave every GitHub account colliding on the empty string — the exact
+// failure the widened key exists to prevent — while the schema looked correct.
+func TestOnlyAMultiAccountProviderIsKeyedByAccount(t *testing.T) {
+	res := &ExchangeResult{AccountLabel: "hanzo-apps", ExternalID: "143008414"}
+
+	gh, ok := snapshotRegistry()["github"]
+	if !ok {
+		t.Fatal("github is not registered")
+	}
+	if !gh.MultiAccount {
+		t.Fatal("a GitHub App is installed per account; the provider must say so")
+	}
+	if got := connOwner(gh, res); got != "hanzo-apps" {
+		t.Errorf("github connection keyed by %q, want the account", got)
+	}
+
+	// A provider with one account per org keeps the empty owner its callers read.
+	single := &Provider{ID: "slack"}
+	if got := connOwner(single, res); got != "" {
+		t.Errorf("single-account provider keyed by %q, want empty", got)
+	}
+}
+
+// Three GitHub accounts under one org must produce three rows, each with its own
+// installation — this is the production case: hanzoai, hanzo-apps, hanzo-docs.
+func TestThreeGithubAccountsSurviveTogether(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	gh := &Provider{ID: "github", MultiAccount: true}
+	for owner, inst := range map[string]string{
+		"hanzoai": "143007410", "hanzo-apps": "143008414", "hanzo-docs": "150229336",
+	} {
+		res := &ExchangeResult{AccountLabel: owner, ExternalID: inst}
+		if err := s.Upsert(ctx, Connection{
+			Org: "hanzo", Provider: "github",
+			Owner: connOwner(gh, res), ExternalID: res.ExternalID, AccountLabel: owner,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	conns, err := s.ListFor(ctx, "hanzo", "github")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(conns) != 3 {
+		t.Fatalf("want 3 accounts, got %d — they collided on the owner", len(conns))
+	}
+}
