@@ -396,7 +396,7 @@ func TestGenToken(t *testing.T) {
 func TestCreateOrgGate(t *testing.T) {
 	s, mp := newTestService(t, "sql")
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/sql", create(s, "sql"))
+	app.Post("/v1/sql", create(s, "sql")...)
 
 	req, _ := http.NewRequest("POST", "/v1/sql", strings.NewReader(`{"name":"orders"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -423,9 +423,9 @@ func TestCreateOrgGate(t *testing.T) {
 func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
 	s, mp := newTestService(t, "sql")
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/sql", create(s, "sql"))
-	app.Delete("/v1/sql/:name", drop(s, "sql"))
-	app.Get("/v1/sql", list(s, "sql"))
+	app.Post("/v1/sql", create(s, "sql")...)
+	app.Delete("/v1/sql/:name", drop(s, "sql")...)
+	app.Get("/v1/sql", list(s, "sql")...)
 
 	for _, tc := range []struct{ method, path, body string }{
 		{"POST", "/v1/sql", `{"name":"orders"}`},

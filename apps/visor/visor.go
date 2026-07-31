@@ -43,8 +43,26 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/fleet"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// The two launches cannot be typed ops — each answers a price quote at 200 or a
+// created resource at 201, and one typed Out cannot state both — but the half
+// that IS one shape stays declarable: both bind a named request struct, and this
+// says which. It is pure description, moving no route, status, field or byte;
+// without it the two writes reach every generated SDK indistinguishable from a
+// route that takes no body at all.
+//
+// Only the REQUEST is stated. The response is the polymorphic half, so declaring
+// one shape for it would publish a contract the route does not keep.
+//
+// init, not Mount: Register panics on a duplicate declaration, and Mount runs
+// once per process only by convention.
+func init() {
+	openapi.Register("/v1/machines", "POST", launchReq{}, nil)
+	openapi.Register("/v1/compute/bots/launch", "POST", botLaunchReq{}, nil)
+}
 
 // state is visor's own data; the shared deps (logger, brand) live in the embedded
 // cloud.Base (reached as s.Log / s.Brand). bill is KEPT here on purpose: it is the

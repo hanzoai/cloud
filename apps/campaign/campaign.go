@@ -48,16 +48,24 @@
 //	DELETE /v1/campaign/:id/channels/:kind     remove a channel             -> Campaign
 //
 // serve.go auto-registers GET /v1/campaign/health (no OwnsHealth here).
+//
+// EVERY ROUTE IS A TYPED OP (zip.Get/Post/Put/Delete with concrete In/Out structs),
+// so the surface is ONE registry with N projections: REST, the OpenAPI document, the
+// MCP tool list and the CLI all derive from these same registrations. Handler prose
+// is lifted into the spec at build time by cmd/zipdoc, because Go does not keep
+// comments at run time.
 package campaign
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -129,29 +137,48 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // captured by the id param, and the deeper /:id/… routes have a distinct segment
 // count so none shadows another.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/campaign/summary", cloud.Handle(s, summary))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every op below resolves
+	// its tenant through it. Bounded to campaign's own subtree.
+	app.Group("/v1/campaign").Use(cloud.Bridge())
 
-	app.Get("/v1/campaign", cloud.Handle(s, listCampaigns))
-	app.Post("/v1/campaign", cloud.Handle(s, createCampaign))
-	app.Get("/v1/campaign/:id", cloud.Handle(s, getCampaign))
-	app.Put("/v1/campaign/:id", cloud.Handle(s, updateCampaign))
-	app.Delete("/v1/campaign/:id", cloud.Handle(s, deleteCampaign))
+	zip.Get(z, "/v1/campaign/summary", o.summary)
 
-	app.Post("/v1/campaign/:id/launch", cloud.Handle(s, launchCampaign))
-	app.Post("/v1/campaign/:id/pause", cloud.Handle(s, pauseCampaign))
-	app.Get("/v1/campaign/:id/metrics", cloud.Handle(s, metricsCampaign))
+	zip.Get(z, "/v1/campaign", o.listCampaigns)
+	zip.Post(z, "/v1/campaign", o.createCampaign, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/campaign/:id", o.getCampaign)
+	zip.Put(z, "/v1/campaign/:id", o.updateCampaign)
+	zip.Delete(z, "/v1/campaign/:id", o.deleteCampaign)
 
-	app.Post("/v1/campaign/:id/channels", cloud.Handle(s, addChannel))
-	app.Delete("/v1/campaign/:id/channels/:kind", cloud.Handle(s, removeChannel))
+	zip.Post(z, "/v1/campaign/:id/launch", o.launchCampaign)
+	zip.Post(z, "/v1/campaign/:id/pause", o.pauseCampaign)
+	zip.Get(z, "/v1/campaign/:id/metrics", o.metricsCampaign)
+
+	zip.Post(z, "/v1/campaign/:id/channels", o.addChannel)
+	zip.Delete(z, "/v1/campaign/:id/channels/:kind", o.removeChannel)
 }
 
 // ---- shared helpers (mirror clients/ads) ----
 
-// tenant resolves the org — the tenant-isolation KEY — for a request, EXACTLY as
-// SanitizeIdentity minted it from the validated IAM owner claim (HIP-0026).
-func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+// ops binds the service to campaign's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, the only bound form
+// cmd/zipdoc can lift prose from. ops carries STATE and no logic.
+type ops struct{ s *cloud.Service[state] }
 
-func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
+// tenant resolves the org — the tenant-isolation KEY — EXACTLY as SanitizeIdentity
+// minted it from the validated IAM owner claim (HIP-0026), carried across the typed
+// seam by cloud.Bridge. It is never an input field: an input is what the caller says
+// about itself.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("valid bearer required")
+	}
+	return org, nil
+}
 
 // genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
 func genID(prefix string) (string, error) {
@@ -171,9 +198,10 @@ func clip(s string) string {
 	return s
 }
 
-func limitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
+// limitOf bounds a caller's page size: absent, unparseable or non-positive means
+// defaultLimit, and nothing above maxLimit is honoured.
+func limitOf(n int) int {
+	if n <= 0 {
 		return defaultLimit
 	}
 	if n > maxLimit {
@@ -270,28 +298,100 @@ func shortErr(err error) string {
 	return s
 }
 
+// ---- wire types ----
+
+// CampaignRef addresses one campaign.
+type CampaignRef struct {
+	// ID is the campaign id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// CampaignPage is the bound + filter a campaign list accepts.
+type CampaignPage struct {
+	// Status narrows to one lifecycle state (draft, live, paused, failed); empty
+	// means every campaign.
+	Status string `json:"status"`
+	// Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.
+	Limit int `json:"limit"`
+}
+
+// CampaignList is a page of campaigns.
+type CampaignList struct {
+	// Data is the page; an empty array when the org has created no campaign.
+	Data []Campaign `json:"data"`
+}
+
+// Summary is the org's campaign roll-up plus the channels this deployment can run.
+type Summary struct {
+	// Campaigns is how many campaigns the org has.
+	Campaigns int `json:"campaigns"`
+	// Live is how many of them are currently live.
+	Live int `json:"live"`
+	// Budget is the summed budget in cents.
+	Budget int64 `json:"budget"`
+	// Channels are the channel kinds with an executor wired in this deployment.
+	Channels []string `json:"channels"`
+}
+
+// ChannelInput adds or replaces one channel on a campaign. Status, externalId and
+// detail are server-owned: a caller can never assert a launched state.
+type ChannelInput struct {
+	// ID is the campaign id from the path.
+	ID string `json:"id"`
+	// Kind is the executor family: paid, organic or email. Required.
+	Kind string `json:"kind"`
+	// Platform is the provider within the kind (meta, google, x, a mail provider).
+	Platform string `json:"platform"`
+	// Account is the provider account reference — an ad-account, page or list id.
+	Account string `json:"account,omitempty"`
+}
+
+// ChannelRef addresses one channel of one campaign, by kind.
+type ChannelRef struct {
+	// ID is the campaign id from the path.
+	ID string `json:"id"`
+	// Kind is the channel to remove: paid, organic or email.
+	Kind string `json:"kind"`
+}
+
+// MetricsQuery is the window a campaign's results are read over.
+type MetricsQuery struct {
+	// ID is the campaign id from the path.
+	ID string `json:"id"`
+	// Range is 24h, 7d, 30d or 90d; empty means 30d. Ignored when start and end are given.
+	Range string `json:"range"`
+	// Start is the RFC3339 window start; honoured only together with end.
+	Start string `json:"start"`
+	// End is the RFC3339 window end; honoured only together with start.
+	End string `json:"end"`
+}
+
 // ---- CRUD ----
 
-func createCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
+// createCampaign stores a new campaign in the caller's org as a draft. Name is
+// required; every channel kind must be paid, organic or email, and one channel is
+// kept per kind. Budget is cents and is clamped to >= 0. The id, status and
+// timestamps of the input are ignored — the server assigns them.
+//
+// Example: {"name": "Spring Launch", "audience": "signups", "content": ["Try it free"], "channels": [{"kind": "paid", "platform": "meta"}], "budget": 50000}
+func (o ops) createCampaign(ctx context.Context, in *Campaign) (*Campaign, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Campaign
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	name := clip(body.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	channels, okCh := normChannels(body.Channels)
 	if !okCh {
-		return zip.ErrBadRequest("each channel kind must be one of paid, organic, email")
+		return nil, zip.ErrBadRequest("each channel kind must be one of paid, organic, email")
 	}
 	id, err := genID("cmp")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
 	camp := Campaign{
@@ -300,58 +400,68 @@ func createCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 		ScheduleAt: nonNeg(body.ScheduleAt), Budget: nonNeg(body.Budget),
 		Status: StatusDraft, CreatedAt: now, UpdatedAt: now,
 	}
-	saved, err := s.State.store.CreateCampaign(c.Context(), camp)
+	saved, err := s.State.store.CreateCampaign(ctx, camp)
 	if err != nil {
-		return mapErr(err, "")
+		return nil, mapErr(err, "")
 	}
-	return c.JSON(http.StatusCreated, saved)
+	return &saved, nil
 }
 
-func listCampaigns(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
-	rows, err := s.State.store.ListCampaigns(c.Context(), org, status, limitOf(c))
+// listCampaigns returns the caller org's campaigns, most recently updated first,
+// optionally narrowed to one lifecycle status.
+//
+// Example: {"status": "live", "limit": 50}
+func (o ops) listCampaigns(ctx context.Context, in *CampaignPage) (*CampaignList, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	status := strings.ToLower(strings.TrimSpace(in.Status))
+	rows, err := s.State.store.ListCampaigns(ctx, org, status, limitOf(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	return &CampaignList{Data: rows}, nil
 }
 
-func getCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+// getCampaign returns one of the caller org's campaigns. A campaign belonging to
+// another org reads as not found.
+//
+// Example: {"id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) getCampaign(ctx context.Context, in *CampaignRef) (*Campaign, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, camp)
+	camp, err := s.State.store.GetCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "campaign not found")
+	}
+	return &camp, nil
 }
 
-// updateCampaign edits the campaign's core fields. Channels are replaced only
-// when the campaign is a draft — once launched, channels carry provider state
-// (add/remove them explicitly via the channels sub-resource so a live launch is
-// never silently orphaned).
-func updateCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	current, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+// updateCampaign edits a campaign's core fields; name is required. Channels are
+// replaced only while the campaign is a draft — once launched they carry provider
+// state, so add and remove them through the channels sub-resource instead and a live
+// launch is never silently orphaned.
+//
+// Example: {"id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60", "name": "Spring Launch", "budget": 75000}
+func (o ops) updateCampaign(ctx context.Context, in *Campaign) (*Campaign, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, err
 	}
-	var body Campaign
-	if err := c.Bind(&body); err != nil {
-		return err
+	current, err := s.State.store.GetCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "campaign not found")
 	}
+	body := *in
 	name := clip(body.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	current.Name = name
 	current.Audience = clip(body.Audience)
@@ -361,51 +471,58 @@ func updateCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 	if current.Status == StatusDraft {
 		channels, okCh := normChannels(body.Channels)
 		if !okCh {
-			return zip.ErrBadRequest("each channel kind must be one of paid, organic, email")
+			return nil, zip.ErrBadRequest("each channel kind must be one of paid, organic, email")
 		}
 		current.Channels = channels
 	}
 	current.UpdatedAt = time.Now().Unix()
-	saved, err := s.State.store.Save(c.Context(), current)
+	saved, err := s.State.store.Save(ctx, current)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, mapErr(err, "campaign not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
-func deleteCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	deleted, err := s.State.store.DeleteCampaign(c.Context(), org, idParam(c))
+// deleteCampaign removes one of the caller org's campaigns and answers 204. It
+// deletes the record only — a live channel is not paused or retracted first.
+//
+// Example: {"id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) deleteCampaign(ctx context.Context, in *CampaignRef) (*struct{}, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := s.State.store.DeleteCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("campaign not found")
+		return nil, zip.ErrNotFound("campaign not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ---- channels sub-resource ----
 
-func addChannel(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+// addChannel adds one fan-out channel to a campaign, replacing any channel already
+// registered for that kind — a campaign runs one executor per kind. The channel
+// starts pending; launching is a separate call.
+//
+// Example: {"id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60", "kind": "paid", "platform": "meta", "account": "act_123"}
+func (o ops) addChannel(ctx context.Context, in *ChannelInput) (*Campaign, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, err
 	}
-	var body ChannelSpec
-	if err := c.Bind(&body); err != nil {
-		return err
+	camp, err := s.State.store.GetCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "campaign not found")
 	}
-	n, okCh := normChannel(body)
+	n, okCh := normChannel(ChannelSpec{Kind: in.Kind, Platform: in.Platform, Account: in.Account})
 	if !okCh {
-		return zip.ErrBadRequest("channel kind must be one of paid, organic, email")
+		return nil, zip.ErrBadRequest("channel kind must be one of paid, organic, email")
 	}
 	// Replace an existing channel of the same kind, else append (one per kind).
 	replaced := false
@@ -418,28 +535,33 @@ func addChannel(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if !replaced {
 		if len(camp.Channels) >= maxChannels {
-			return zip.ErrBadRequest("too many channels")
+			return nil, zip.ErrBadRequest("too many channels")
 		}
 		camp.Channels = append(camp.Channels, n)
 	}
 	camp.UpdatedAt = time.Now().Unix()
-	saved, err := s.State.store.Save(c.Context(), camp)
+	saved, err := s.State.store.Save(ctx, camp)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, mapErr(err, "campaign not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
-func removeChannel(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+// removeChannel drops one channel kind from a campaign. The channel is removed from
+// the record only — a live execution at the provider is not paused first.
+//
+// Example: {"id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60", "kind": "paid"}
+func (o ops) removeChannel(ctx context.Context, in *ChannelRef) (*Campaign, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, err
 	}
-	kind := strings.ToLower(strings.TrimSpace(c.Param("kind")))
+	camp, err := s.State.store.GetCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "campaign not found")
+	}
+	kind := strings.ToLower(strings.TrimSpace(in.Kind))
 	out := make([]ChannelSpec, 0, len(camp.Channels))
 	for _, ch := range camp.Channels {
 		if ch.Kind != kind {
@@ -447,32 +569,34 @@ func removeChannel(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 	if len(out) == len(camp.Channels) {
-		return zip.ErrNotFound("channel not found")
+		return nil, zip.ErrNotFound("channel not found")
 	}
 	camp.Channels = out
 	camp.UpdatedAt = time.Now().Unix()
-	saved, err := s.State.store.Save(c.Context(), camp)
+	saved, err := s.State.store.Save(ctx, camp)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, mapErr(err, "campaign not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
 // ---- summary ----
 
-func summary(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	total, live, budget, err := s.State.store.Counts(c.Context(), org)
+// summary reports the caller org's campaign counts and total budget, plus which
+// channel kinds this deployment actually has an executor wired for.
+//
+// Response: {"campaigns": 12, "live": 3, "budget": 250000, "channels": ["paid", "email"]}
+func (o ops) summary(ctx context.Context, _ *struct{}) (*Summary, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"campaigns": total, "live": live, "budget": budget,
-		"channels": registeredKinds(),
-	})
+	total, live, budget, err := s.State.store.Counts(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
+	}
+	return &Summary{Campaigns: total, Live: live, Budget: budget, Channels: registeredKinds()}, nil
 }
 
 // Shutdown closes the campaign store. Idempotent.

@@ -146,7 +146,7 @@ func teamException(props map[string]any) *Exception {
 	return &ex
 }
 
-// teamTime converts the SPA's epoch-millis number to the RFC3339 string the write core
+// teamTime converts the SPA's epoch-millis number to the RFC3339 string the ingest core
 // parses. A zero/absent timestamp stays EMPTY so clampTS anchors it to server-now,
 // which is the same honest default every other wire gets — never 1970.
 func teamTime(ms int64) string {
@@ -157,7 +157,7 @@ func teamTime(ms int64) string {
 }
 
 // decodeTeam is the team SPA's wire decoder: the bare JSON array it POSTs → the
-// canonical []CaptureEvent the ONE write core consumes. A non-array body is an error
+// canonical []CaptureEvent the ONE ingest core consumes. A non-array body is an error
 // rather than a best-effort guess — the SPA emits an array unconditionally, so anything
 // else is a misconfigured caller and an honest 400 beats a silent empty receipt. An
 // empty/whitespace-only body yields no events (an honest empty receipt, not an error),

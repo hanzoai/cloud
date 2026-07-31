@@ -38,6 +38,8 @@
 // git.hanzo.ai manifest later, with no shape change. See deployDesiredTODO.
 package deploy
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"fmt"
@@ -137,6 +139,12 @@ type state struct {
 
 // Mount wires /v1/deploy/* onto app. Every handler gates on c.IsAdmin() first.
 func Mount(app cloud.Router, deps cloud.Deps) error {
+	// Most of the surface is TYPED ops, and the op registry lives on the *zip.App —
+	// a Router that is not backed by one has nowhere to put them, so the mount
+	// fails rather than serving routes no projection knows about.
+	if app != nil && cloud.ZipApp(app) == nil {
+		return fmt.Errorf("deploy.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
 	return cloud.Mount(app, deps, "deploy",
 		func(b cloud.Base) (state, error) { return build(b, newOAuth(deps)) }, routes)
 }
@@ -160,19 +168,27 @@ func build(b cloud.Base, o oauth) (state, error) {
 // routes registers the /v1/deploy/* surface. Every observing/mutating route is
 // SuperAdmin-gated; the health probe is public (real k8s reachability).
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Liveness — public (probe-able without a JWT).
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every typed op below
+	// reaches the request (identity, cookies) through it.
+	app.Group("/v1/deploy").Use(cloud.Bridge())
+	// Liveness — public (probe-able without a JWT). UNTYPED: a degraded cluster is
+	// answered 503 WITH the same body, and a typed op declares exactly one success
+	// status — typing it would turn every degraded answer into a 200.
 	app.Get("/v1/deploy/health", cloud.Handle(s, health))
 	// Sign-in — necessarily public: these three routes ARE how a browser gets an
 	// authenticated principal for this host. They grant nothing themselves; the
 	// session they mint is an IAM JWT the identity boundary re-verifies on every
 	// later request, and a principal outside the admin org is refused a cookie.
 	// See login.go.
+	// UNTYPED (both): their success answer is a 302 to the provider and back to the
+	// console, and a typed op answers a JSON value or an error — never a redirect.
 	app.Get(loginPath, cloud.Handle(s, login))
 	app.Get(callbackPath, cloud.Handle(s, callback))
 	// POST, not GET: signing out changes state, and a state-changing GET is
 	// reachable by a cross-site top-level navigation that a SameSite=Lax cookie
 	// still rides. See logout in login.go.
-	app.Post(logoutPath, cloud.Handle(s, logout))
+	zip.Post(cloud.ZipApp(app), logoutPath, ops{s: s}.logout)
 	// Engine (write) reconcile — the embedded gitops-engine that replaces
 	// universe-crs. Gated by DEPLOY_ENGINE_ENABLED; see engine_mount.go.
 	registerEngineRoutes(app, s)

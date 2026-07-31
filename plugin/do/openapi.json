@@ -22,20 +22,85 @@
     "/v1/load-balancers": {
       "get": {
         "operationId": "get_v1_load-balancers",
+        "summary": "listLBs lists the load balancers the caller's org owns, under their friendly names.",
+        "description": "listLBs lists the load balancers the caller's org owns, under their friendly names.\nThe account-wide DigitalOcean inventory is filtered to the caller's org prefix, so\nanother tenant's load balancers are invisible rather than forbidden.",
         "tags": [
           "load-balancers"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "loadBalancers": [
+                    {
+                      "id": "1b2c3d4e-5f60-7182-93a4-b5c6d7e8f901",
+                      "ip": "203.0.113.7",
+                      "name": "edge",
+                      "status": "active",
+                      "targets": 3,
+                      "type": "REGIONAL"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/lbList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_load-balancers",
+        "summary": "createLB creates a load balancer in the caller's org under a friendly name.",
+        "description": "createLB creates a load balancer in the caller's org under a friendly name. Name\nand region are required; omitted forwarding rules default to plain HTTP 80→80, so\na minimal create still yields a usable load balancer, and a name already taken in\nthis org is a 409.",
         "tags": [
           "load-balancers"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "forwarding_rules": [
+                  {
+                    "entry_port": 80,
+                    "entry_protocol": "http",
+                    "target_port": 8080,
+                    "target_protocol": "http"
+                  }
+                ],
+                "name": "edge",
+                "region": "nyc3",
+                "size": "lb-small"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createLBReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/lbView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/load-balancers/{id}": {
       "delete": {
-        "operationId": "delete_v1_load-balancers_by_id",
+        "operationId": "delete_v1_load-balancers_id",
+        "summary": "deleteLB deletes one load balancer the caller's org owns.",
+        "description": "deleteLB deletes one load balancer the caller's org owns. Ownership is confirmed\nbefore the delete, so a cross-tenant id is a not-found rather than another org's loss.",
         "tags": [
           "load-balancers"
         ],
@@ -44,14 +109,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the DigitalOcean load balancer id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "1b2c3d4e-5f60-7182-93a4-b5c6d7e8f901"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_load-balancers_by_id",
+        "operationId": "get_v1_load-balancers_id",
+        "summary": "getLB reads one load balancer the caller's org owns.",
+        "description": "getLB reads one load balancer the caller's org owns. A load balancer in another\norg's namespace is reported not-found, never forbidden.",
         "tags": [
           "load-balancers"
         ],
@@ -60,30 +134,101 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the DigitalOcean load balancer id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "1b2c3d4e-5f60-7182-93a4-b5c6d7e8f901"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/lbView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/vpcs": {
       "get": {
         "operationId": "get_v1_vpcs",
+        "summary": "listVPCs lists the VPCs owned by the caller's org, under their friendly names.",
+        "description": "listVPCs lists the VPCs owned by the caller's org, under their friendly names.\nThe account-wide DigitalOcean inventory is filtered to the caller's org prefix,\nso another tenant's VPCs are invisible rather than forbidden.",
         "tags": [
           "vpcs"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "vpcs": [
+                    {
+                      "cidr": "10.10.0.0/20",
+                      "id": "8a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9",
+                      "name": "web",
+                      "region": "nyc3",
+                      "status": "active",
+                      "subnets": []
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/vpcList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_vpcs",
+        "summary": "createVPC creates a VPC in the caller's org under a friendly name.",
+        "description": "createVPC creates a VPC in the caller's org under a friendly name.\nName and region are required; an empty ip_range lets DigitalOcean pick the CIDR.\nA name already taken in this org is a 409.",
         "tags": [
           "vpcs"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "ip_range": "10.10.0.0/20",
+                "name": "web",
+                "region": "nyc3"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createVPCReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/vpcView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/vpcs/{id}": {
       "delete": {
-        "operationId": "delete_v1_vpcs_by_id",
+        "operationId": "delete_v1_vpcs_id",
+        "summary": "deleteVPC deletes one VPC the caller's org owns.",
+        "description": "deleteVPC deletes one VPC the caller's org owns. Ownership is confirmed before\nthe delete, so a cross-tenant id is a not-found rather than another org's loss.",
         "tags": [
           "vpcs"
         ],
@@ -92,14 +237,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the DigitalOcean VPC id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "8a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_vpcs_by_id",
+        "operationId": "get_v1_vpcs_id",
+        "summary": "getVPC reads one VPC the caller's org owns.",
+        "description": "getVPC reads one VPC the caller's org owns. A VPC in another org's namespace is\nreported not-found, never forbidden, so the id space leaks no existence.",
         "tags": [
           "vpcs"
         ],
@@ -108,11 +262,180 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the DigitalOcean VPC id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "8a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/vpcView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "createLBReq": {
+        "properties": {
+          "forwarding_rules": {
+            "description": "ForwardingRules are the entry→target port mappings; empty defaults to HTTP 80→80.",
+            "items": {
+              "$ref": "#/components/schemas/fwdRule"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the friendly load balancer name, a DNS-safe slug of at most 40\ncharacters. It is namespaced to the caller's org before it reaches DigitalOcean.",
+            "type": "string"
+          },
+          "region": {
+            "description": "Region is the DigitalOcean region slug to create the load balancer in. Required.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is DO's size slug; empty takes DO's default.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is DO's load balancer type; empty takes DO's default (REGIONAL).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "createVPCReq": {
+        "properties": {
+          "ip_range": {
+            "description": "IPRange is the VPC's CIDR; empty lets DigitalOcean assign one.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the friendly VPC name, a DNS-safe slug of at most 40 characters.\nIt is namespaced to the caller's org before it reaches DigitalOcean.",
+            "type": "string"
+          },
+          "region": {
+            "description": "Region is the DigitalOcean region slug to create the VPC in. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "fwdRule": {
+        "properties": {
+          "entry_port": {
+            "description": "EntryPort is the port the load balancer listens on.",
+            "type": "integer"
+          },
+          "entry_protocol": {
+            "description": "EntryProtocol is the protocol the load balancer listens with, e.g. http or https.",
+            "type": "string"
+          },
+          "target_port": {
+            "description": "TargetPort is the port on the backend droplets.",
+            "type": "integer"
+          },
+          "target_protocol": {
+            "description": "TargetProtocol is the protocol used to reach the backend droplets.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "lbList": {
+        "properties": {
+          "loadBalancers": {
+            "description": "LoadBalancers are the caller's own load balancers; another org's are invisible.",
+            "items": {
+              "$ref": "#/components/schemas/lbView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "lbView": {
+        "properties": {
+          "id": {
+            "description": "ID is DigitalOcean's own load balancer id — the value GET and DELETE address.",
+            "type": "string"
+          },
+          "ip": {
+            "description": "IP is the load balancer's public address, empty while it is still provisioning.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the FRIENDLY name the tenant supplied, with the org prefix stripped.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is DO's own lifecycle value, e.g. new or active.",
+            "type": "string"
+          },
+          "targets": {
+            "description": "Targets is the count of backend droplets attached to the load balancer.",
+            "type": "integer"
+          },
+          "type": {
+            "description": "Type is DO's load balancer type, e.g. REGIONAL or GLOBAL.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "vpcList": {
+        "properties": {
+          "vpcs": {
+            "description": "VPCs are the caller's own VPCs; another org's are invisible, not forbidden.",
+            "items": {
+              "$ref": "#/components/schemas/vpcView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "vpcView": {
+        "properties": {
+          "cidr": {
+            "description": "CIDR is the VPC's IP range in CIDR notation.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is DigitalOcean's own VPC id — the value GET and DELETE address.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the FRIENDLY name the tenant supplied, with the org prefix stripped.",
+            "type": "string"
+          },
+          "region": {
+            "description": "Region is the DigitalOcean region slug the VPC lives in.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is always \"active\" — DO VPCs have no lifecycle state.",
+            "type": "string"
+          },
+          "subnets": {
+            "description": "Subnets is always empty: a DO VPC is a single IP range with no sub-network\nobjects in the API.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

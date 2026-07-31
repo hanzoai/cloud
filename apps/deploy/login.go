@@ -291,9 +291,18 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 // still rides, so any site could sign a SuperAdmin out at will. A nuisance rather
 // than a compromise, but a state-changing GET is a bug regardless; POST is not
 // carried cross-site by a Lax cookie, so the class is closed.
-func logout(s *cloud.Service[state], c *zip.Ctx) error {
+// logout clears the console session cookie and reports the caller signed out.
+// POST, not GET: signing out changes state, and a state-changing GET is reachable
+// by a cross-site top-level navigation a SameSite=Lax cookie still rides.
+//
+// Response: {"loggedIn": false, "loginUrl": "/v1/deploy/login"}
+func (o ops) logout(ctx context.Context, _ *struct{}) (*userInfoView, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("not authorized for this deploy console")
+	}
 	clearCookie(c, sessionCookie)
-	return c.JSON(http.StatusOK, map[string]any{"loggedIn": false, "loginUrl": loginPath})
+	return &userInfoView{LoggedIn: false, LoginURL: loginPath}, nil
 }
 
 // exchange redeems the authorization code at IAM's token endpoint with the PKCE

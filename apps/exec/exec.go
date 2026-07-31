@@ -140,6 +140,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Own each prefix for every method (POST /exec, POST /upload, GET
 	// /download/{id}, GET /files/{sid}). Registered before ai (order 150), so
 	// these specific paths win over ai's bare /v1/* glob.
+	//
+	// NOTHING here is a typed op, and that is a property of a proxy rather than an
+	// omission. A typed op declares the In it DECODES and the Out it RETURNS; this
+	// subsystem decodes nothing and returns nothing — it forwards the caller's
+	// bytes to the executor and the executor's bytes back, which is the whole
+	// reason there is zero drift from the LibreChat contract. Declaring the
+	// executor's {lang, code, files} shape here would be asserting a body this
+	// binary never binds, and typing the route would replace the proxy with a
+	// second implementation of somebody else's API. The wildcard siblings and the
+	// every-method registration close it twice over: a typed op is ONE method and
+	// may carry no `*` segment, and /upload is multipart while /download streams
+	// bytes. So this surface is invisible to the OpenAPI schema, the MCP tool list
+	// and the CLI — the executor is what owns that contract.
 	for _, p := range prefixes {
 		app.All(p, h)      // exact match, e.g. /v1/exec, /v1/upload
 		app.All(p+"/*", h) // subpaths, e.g. /v1/exec/programmatic, /v1/files/{sid}

@@ -19,15 +19,126 @@
     "/v1/gateway/config": {
       "get": {
         "operationId": "get_v1_gateway_config",
+        "summary": "get returns the effective edge policy the caller is subject to.",
+        "description": "get returns the effective edge policy the caller is subject to.\n\nThat is the platform CORS allowlist + per-IP flood cap in force, fused with\nthe caller's own OrgRPM ceiling, cache TTL and method allowlist.\nA SuperAdmin may inspect a specific tenant with ?org=\u003cslug\u003e.",
         "tags": [
           "gateway"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "description": "Org selects which tenant's effective policy to return, SuperAdmin only.\nEmpty — and, for every other caller, always — means the caller's own org.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "acme"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cors_origins": [
+                    "https://console.hanzo.ai"
+                  ],
+                  "org_rpm": 1200,
+                  "per_ip_rpm": 600,
+                  "window_sec": 60
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_gateway_config",
+        "summary": "put writes one edge policy scope and returns the policy now in force.",
+        "description": "put writes one edge policy scope and returns the policy now in force.\n\nA body carrying any PLATFORM field (cors_origins, per_ip_rpm, window_sec) is a\nplatform write and requires SuperAdmin; otherwise it is a per-org write\n(org_rpm, cache_ttl_sec, cache_paths, methods) scoped to the caller's own org\n(or, for a SuperAdmin, ?org=\u003cslug\u003e).\nMetadata is server-stamped, never client-supplied, and every field is\nbounds-checked before it is persisted.",
         "tags": [
           "gateway"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "cache_ttl_sec": 30,
+                "methods": [
+                  "GET",
+                  "POST"
+                ],
+                "org_rpm": 1200
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Policy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Policy": {
+        "properties": {
+          "cache_paths": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "cache_ttl_sec": {
+            "type": "integer"
+          },
+          "cors_origins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "methods": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "org_rpm": {
+            "type": "integer"
+          },
+          "per_ip_rpm": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "integer"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "window_sec": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

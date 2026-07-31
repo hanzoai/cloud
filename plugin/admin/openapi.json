@@ -19,8 +19,8 @@
     "/v1/admin/aimetrics": {
       "get": {
         "operationId": "adminAIMetrics",
-        "summary": "aimetrics is the fleet AI board: O11yAI generations (count, cost, avg/p95 latency,\nper-model), per-model usage from the live cloud_usage ledger, and the eval plane\n(traces, scores, score names, runs, and the average-score trend).\n\nEvery signal degrades INDEPENDENTLY — a table that is absent or errors contributes its\nzero value and the read still succeeds.",
-        "description": "aimetrics is the fleet AI board: O11yAI generations (count, cost, avg/p95 latency,\nper-model), per-model usage from the live cloud_usage ledger, and the eval plane\n(traces, scores, score names, runs, and the average-score trend).\n\nEvery signal degrades INDEPENDENTLY — a table that is absent or errors contributes its\nzero value and the read still succeeds. O11yAI latency is a SEPARATE query from\ngenerations and cost on purpose: a Nullable end_time or a column mismatch there must\nnot zero the two numbers that did read.",
+        "summary": "aimetrics is the fleet AI board.",
+        "description": "aimetrics is the fleet AI board. It carries O11yAI generations (count, cost, avg/p95\nlatency, per-model), per-model usage from the live cloud_usage ledger, and the eval\nplane (traces, scores, score names, runs, and the average-score trend).\n\nEvery signal degrades INDEPENDENTLY — a table that is absent or errors contributes its\nzero value and the read still succeeds. O11yAI latency is a SEPARATE query from\ngenerations and cost on purpose: a Nullable end_time or a column mismatch there must\nnot zero the two numbers that did read.",
         "tags": [
           "admin"
         ],
@@ -118,8 +118,8 @@
     "/v1/admin/applications": {
       "get": {
         "operationId": "adminApplications",
-        "summary": "applications lists IAM applications for one owner org, forwarded VERBATIM from IAM's\nget-applications.",
-        "description": "applications lists IAM applications for one owner org, forwarded VERBATIM from IAM's\nget-applications. These are the platform's OIDC clients — the console reads clientId\noff each row.",
+        "summary": "applications lists IAM applications for one owner org.",
+        "description": "applications lists IAM applications for one owner org. The rows are forwarded VERBATIM\nfrom IAM's get-applications — these are the platform's OIDC clients, and the console\nreads clientId off each row.",
         "tags": [
           "admin"
         ],
@@ -184,8 +184,8 @@
     "/v1/admin/audit": {
       "get": {
         "operationId": "adminAudit",
-        "summary": "Records reads cloud's tamper-evident audit trail, newest first, with the chain's live\nintegrity attached so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list.",
-        "description": "Records reads cloud's tamper-evident audit trail, newest first, with the chain's live\nintegrity attached so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list. Those rows carry no integrity of ours, so the field is\nnull there.",
+        "summary": "Records reads cloud's tamper-evident audit trail, newest first.",
+        "description": "Records reads cloud's tamper-evident audit trail, newest first. The chain's live\nintegrity is attached, so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list. Those rows carry no integrity of ours, so the field is\nnull there.",
         "tags": [
           "admin"
         ],
@@ -324,8 +324,8 @@
     "/v1/admin/audit/verify": {
       "get": {
         "operationId": "adminAuditVerify",
-        "summary": "Verify walks the WHOLE hash chain and reports whether it is intact: how many records\nwere checked, the head hash to pin externally against tail-truncation, and — when the\nchain is broken — the seq of the first bad record and why.\n\nbrokenAt is -1 exactly when ok is true.",
-        "description": "Verify walks the WHOLE hash chain and reports whether it is intact: how many records\nwere checked, the head hash to pin externally against tail-truncation, and — when the\nchain is broken — the seq of the first bad record and why.\n\nbrokenAt is -1 exactly when ok is true. An unconfigured store is an honest failure\nhere rather than a fabricated pass.",
+        "summary": "Verify walks the WHOLE hash chain and reports whether it is intact.",
+        "description": "Verify walks the WHOLE hash chain and reports whether it is intact. It returns how\nmany records were checked, the head hash to pin externally against tail-truncation,\nand — when the chain is broken — the seq of the first bad record and why.\n\nbrokenAt is -1 exactly when ok is true. An unconfigured store is an honest failure\nhere rather than a fabricated pass.",
         "tags": [
           "admin"
         ],
@@ -356,8 +356,8 @@
     "/v1/admin/bases": {
       "get": {
         "operationId": "adminBases",
-        "summary": "bases lists the tenant Base instances in the caller's window — a SuperAdmin sees every\ntenant's, anyone else only their own subtree's.\n\nThe scope is enforced TWICE: the upstream is asked for the caller's org, AND every row\nit returns is re-checked against the resolved scope.",
-        "description": "bases lists the tenant Base instances in the caller's window — a SuperAdmin sees every\ntenant's, anyone else only their own subtree's.\n\nThe scope is enforced TWICE: the upstream is asked for the caller's org, AND every row\nit returns is re-checked against the resolved scope. An upstream that ignored the\nfilter therefore degrades to empty, never to a cross-tenant leak.\n\nThe Base engine is being embedded into cloud; until it lands this proxies\nBASE_ADMIN_URL and, when that is unset, answers 200 with an empty list and msg saying\nso — the honest not-yet state, never fabricated instances.",
+        "summary": "bases lists the tenant Base instances in the caller's window.",
+        "description": "bases lists the tenant Base instances in the caller's window. A SuperAdmin sees every\ntenant's, anyone else only their own subtree's.\n\nThe scope is enforced TWICE: the upstream is asked for the caller's org, AND every row\nit returns is re-checked against the resolved scope. An upstream that ignored the\nfilter therefore degrades to empty, never to a cross-tenant leak.\n\nThe Base engine is being embedded into cloud; until it lands this proxies\nBASE_ADMIN_URL and, when that is unset, answers 200 with an empty list and msg saying\nso — the honest not-yet state, never fabricated instances.",
         "tags": [
           "admin"
         ],
@@ -394,8 +394,8 @@
     "/v1/admin/block-storage": {
       "get": {
         "operationId": "adminBlockStorage",
-        "summary": "blockStorage is the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured.",
-        "description": "blockStorage is the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
+        "summary": "blockStorage is the realtime block-storage board.",
+        "description": "blockStorage is the realtime block-storage board. It carries the DigitalOcean volume\nfleet (count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
         "tags": [
           "admin"
         ],
@@ -449,8 +449,8 @@
     "/v1/admin/compute": {
       "get": {
         "operationId": "adminCompute",
-        "summary": "compute rolls the fleet's compute usage up to one row per (org, app, project, kind):\nhow many distinct machines ran in the window, how many are still active, what they\nbilled, and when each group last emitted an event.",
-        "description": "compute rolls the fleet's compute usage up to one row per (org, app, project, kind):\nhow many distinct machines ran in the window, how many are still active, what they\nbilled, and when each group last emitted an event. The console folds these into its\norg → app → project tree.\n\nA machine counts as ACTIVE when its LATEST lifecycle event is not a terminal one\n(stop/destroy/terminate/delete/off/shutdown/expire and their past tenses) — the same\nfold the console applies, done in the warehouse so the count is over every machine and\nnot just the page.\n\nHonest-empty when the warehouse is not connected or hanzo.compute_usage is not\nprovisioned yet: an empty list, never a fabricated fleet.",
+        "summary": "compute rolls the fleet's compute usage up to one row per workload group.",
+        "description": "compute rolls the fleet's compute usage up to one row per workload group. The group is\n(org, app, project, kind), and each row reports how many distinct machines ran in the\nwindow, how many are still active, what they billed, and when the group last emitted an\nevent. The console folds these into its org → app → project tree.\n\nA machine counts as ACTIVE when its LATEST lifecycle event is not a terminal one\n(stop/destroy/terminate/delete/off/shutdown/expire and their past tenses) — the same\nfold the console applies, done in the warehouse so the count is over every machine and\nnot just the page.\n\nHonest-empty when the warehouse is not connected or hanzo.compute_usage is not\nprovisioned yet: an empty list, never a fabricated fleet.",
         "tags": [
           "admin"
         ],
@@ -571,8 +571,8 @@
     "/v1/admin/customers": {
       "get": {
         "operationId": "adminCustomers",
-        "summary": "Customers lists every customer org at a glance, sorted by slug: owner email, plan,\nsuspend status, member count, balance, month-to-date spend and MRR.\n\nEach row costs one IAM read plus the org's money reads, fanned out under a fixed\nconcurrency ceiling so a large fleet cannot stampede the upstreams.",
-        "description": "Customers lists every customer org at a glance, sorted by slug: owner email, plan,\nsuspend status, member count, balance, month-to-date spend and MRR.\n\nEach row costs one IAM read plus the org's money reads, fanned out under a fixed\nconcurrency ceiling so a large fleet cannot stampede the upstreams. Every read is\nbest-effort per row: an upstream miss degrades THAT field to its honest zero rather\nthan failing the fleet.",
+        "summary": "Customers lists every customer org at a glance, sorted by slug.",
+        "description": "Customers lists every customer org at a glance, sorted by slug. Each row carries owner\nemail, plan, suspend status, member count, balance, month-to-date spend and MRR.\n\nEach row costs one IAM read plus the org's money reads, fanned out under a fixed\nconcurrency ceiling so a large fleet cannot stampede the upstreams. Every read is\nbest-effort per row: an upstream miss degrades THAT field to its honest zero rather\nthan failing the fleet.",
         "tags": [
           "admin"
         ],
@@ -646,8 +646,8 @@
     "/v1/admin/customers/{org}/credit": {
       "post": {
         "operationId": "adminGrantCredit",
-        "summary": "GrantCredit issues a staff credit grant to the org named in the path — a comp, refund\nor promo — through the ONE credit-write path core.ApplyGrant, which validates the\namount against the per-grant cap, checks the org exists, moves the money and records\nthe tamper-evident audit row.\n\nThe credit lands on the account account.Payer resolves, NOT necessarily the org: name\na member of a pooled org and the pool is credited.",
-        "description": "GrantCredit issues a staff credit grant to the org named in the path — a comp, refund\nor promo — through the ONE credit-write path core.ApplyGrant, which validates the\namount against the per-grant cap, checks the org exists, moves the money and records\nthe tamper-evident audit row.\n\nThe credit lands on the account account.Payer resolves, NOT necessarily the org: name\na member of a pooled org and the pool is credited. The receipt echoes the subject so\nthe caller can see which.",
+        "summary": "GrantCredit issues a staff credit grant to the org named in the path.",
+        "description": "GrantCredit issues a staff credit grant to the org named in the path. The grant is a\ncomp, refund or promo, written through the ONE credit-write path core.ApplyGrant, which\nvalidates the amount against the per-grant cap, checks the org exists, moves the money\nand records the tamper-evident audit row.\n\nThe credit lands on the account account.Payer resolves, NOT necessarily the org: name\na member of a pooled org and the pool is credited. The receipt echoes the subject so\nthe caller can see which.",
         "tags": [
           "admin"
         ],
@@ -765,8 +765,8 @@
     "/v1/admin/customers/{org}/suspend": {
       "post": {
         "operationId": "adminSuspendCustomer",
-        "summary": "SuspendCustomer cuts off every member of the org: IAM refuses a forbidden user at\nlogin AND at token issuance, so a suspended customer can neither sign in nor mint a\nfresh token.",
-        "description": "SuspendCustomer cuts off every member of the org: IAM refuses a forbidden user at\nlogin AND at token issuance, so a suspended customer can neither sign in nor mint a\nfresh token. Fully reversible with ReactivateCustomer.\n\nThe result names every user updated and every user that was NOT — a partial failure\nleaves the org in a mixed state and says so instead of reporting a clean success.",
+        "summary": "SuspendCustomer cuts off every member of the org.",
+        "description": "SuspendCustomer cuts off every member of the org. IAM refuses a forbidden user at\nlogin AND at token issuance, so a suspended customer can neither sign in nor mint a\nfresh token. Fully reversible with ReactivateCustomer.\n\nThe result names every user updated and every user that was NOT — a partial failure\nleaves the org in a mixed state and says so instead of reporting a clean success.",
         "tags": [
           "admin"
         ],
@@ -843,8 +843,8 @@
     "/v1/admin/finance/backfill": {
       "post": {
         "operationId": "adminFinanceBackfill",
-        "summary": "Backfill carries ONE org's current commerce prepaid balance into the native finance\nwallet — the one-time cutover between the two ledgers.\n\nIt is IDEMPOTENT: the deposit uses the fixed ref \"backfill:\u003corg\u003e\", so re-running it\ncredits the wallet at most once.",
-        "description": "Backfill carries ONE org's current commerce prepaid balance into the native finance\nwallet — the one-time cutover between the two ledgers.\n\nIt is IDEMPOTENT: the deposit uses the fixed ref \"backfill:\u003corg\u003e\", so re-running it\ncredits the wallet at most once. Safe to retry.\n\nThe pre-migration balance is read from the CO-RESIDENT commerce ledger, not over HTTP:\nthe admin HTTP client dials an unroutable in-process address and would read $0, and a\nphantom zero would silently carry nothing while reporting success. When commerce is\nnot co-resident this fails rather than migrating nothing.",
+        "summary": "Backfill carries ONE org's prepaid balance into the native finance wallet.",
+        "description": "Backfill carries ONE org's prepaid balance into the native finance wallet. It is the\none-time cutover from the commerce ledger.\n\nIt is IDEMPOTENT: the deposit uses the fixed ref \"backfill:\u003corg\u003e\", so re-running it\ncredits the wallet at most once. Safe to retry.\n\nThe pre-migration balance is read from the CO-RESIDENT commerce ledger, not over HTTP:\nthe admin HTTP client dials an unroutable in-process address and would read $0, and a\nphantom zero would silently carry nothing while reporting success. When commerce is\nnot co-resident this fails rather than migrating nothing.",
         "tags": [
           "admin"
         ],
@@ -925,8 +925,8 @@
     "/v1/admin/flags/{key}": {
       "put": {
         "operationId": "adminSetFlag",
-        "summary": "setFlag stores or overwrites ONE platform switch's definition and answers with the\nwhole board as it now stands.",
-        "description": "setFlag stores or overwrites ONE platform switch's definition and answers with the\nwhole board as it now stands. The flip is hot: this pod applies it immediately and\npeers converge within one evaluation TTL (15s by default), with no redeploy.\n\nThe body reaches the flag engine BYTE-FOR-BYTE — it is the engine's definition\nformat, not this layer's, so a field the engine understands and admin does not must\nstill arrive intact. setFlagIn names the two fields that matter for documentation; it\nis not a filter.\n\nThe write is recorded in the store's activity log against the caller's email.",
+        "summary": "setFlag stores or overwrites ONE platform switch's definition.",
+        "description": "setFlag stores or overwrites ONE platform switch's definition. It answers with the\nwhole board as it now stands. The flip is hot: this pod applies it immediately and\npeers converge within one evaluation TTL (15s by default), with no redeploy.\n\nThe body reaches the flag engine BYTE-FOR-BYTE — it is the engine's definition\nformat, not this layer's, so a field the engine understands and admin does not must\nstill arrive intact. setFlagIn names the two fields that matter for documentation; it\nis not a filter.\n\nThe write is recorded in the store's activity log against the caller's email.",
         "tags": [
           "admin"
         ],
@@ -1064,8 +1064,8 @@
       },
       "post": {
         "operationId": "adminIssueGrant",
-        "summary": "IssueGrant issues a credit grant to any org from the operator Grants view, with the\ntarget named in the body.",
-        "description": "IssueGrant issues a credit grant to any org from the operator Grants view, with the\ntarget named in the body. It funnels through the SAME core.ApplyGrant that\nPOST /v1/admin/customers/:org/credit uses, so there is exactly ONE credit-write path\nand one audit trail behind both.",
+        "summary": "IssueGrant issues a credit grant to any org from the operator Grants view.",
+        "description": "IssueGrant issues a credit grant to any org from the operator Grants view. The target\nis named in the body. It funnels through the SAME core.ApplyGrant that\nPOST /v1/admin/customers/:org/credit uses, so there is exactly ONE credit-write path\nand one audit trail behind both.",
         "tags": [
           "admin"
         ],
@@ -1117,8 +1117,8 @@
     "/v1/admin/infra": {
       "get": {
         "operationId": "adminInfra",
-        "summary": "read serves the whole DigitalOcean infrastructure board: droplets, volumes, DOKS\nclusters and load balancers, each cross-referenced against every cluster's live\nKubernetes state so the board can say what is safe to destroy and what is not.\n\nIt is cached for up to a minute because one read is a fan-out over the DO API plus a\nfull pod/PV listing per cluster.",
-        "description": "read serves the whole DigitalOcean infrastructure board: droplets, volumes, DOKS\nclusters and load balancers, each cross-referenced against every cluster's live\nKubernetes state so the board can say what is safe to destroy and what is not.\n\nIt is cached for up to a minute because one read is a fan-out over the DO API plus a\nfull pod/PV listing per cluster. Staleness is never load-bearing: every MUTATION\nre-scans from scratch and ignores this cache.\n\nOnly an unusable DO account is a hard failure. A partial read still produces a board,\nwith the failing source named in sources[] — except for clusters and volumes, which\nthe safety verdict depends on; without those the analysis degrades rather than\nclassifying anything it cannot prove.",
+        "summary": "read serves the whole DigitalOcean infrastructure board.",
+        "description": "read serves the whole DigitalOcean infrastructure board. It covers droplets, volumes,\nDOKS clusters and load balancers, each cross-referenced against every cluster's live\nKubernetes state so the board can say what is safe to destroy and what is not.\n\nIt is cached for up to a minute because one read is a fan-out over the DO API plus a\nfull pod/PV listing per cluster. Staleness is never load-bearing: every MUTATION\nre-scans from scratch and ignores this cache.\n\nOnly an unusable DO account is a hard failure. A partial read still produces a board,\nwith the failing source named in sources[] — except for clusters and volumes, which\nthe safety verdict depends on; without those the analysis degrades rather than\nclassifying anything it cannot prove.",
         "tags": [
           "admin"
         ],
@@ -1169,8 +1169,8 @@
     "/v1/admin/infra/clusters/{id}/nodepools/{pool}/scale": {
       "post": {
         "operationId": "adminScaleNodePool",
-        "summary": "scaleNodePool sets a node pool's node count — the ONE correct way to change how many\nnodes a DOKS cluster has.\n\nThe response states what the board could NOT prove: DOKS picks which nodes a shrink\nremoves, so no particular pod is shown to survive one.",
-        "description": "scaleNodePool sets a node pool's node count — the ONE correct way to change how many\nnodes a DOKS cluster has.\n\nThe response states what the board could NOT prove: DOKS picks which nodes a shrink\nremoves, so no particular pod is shown to survive one. See NodePool.ScaleTo.",
+        "summary": "scaleNodePool sets a node pool's node count.",
+        "description": "scaleNodePool sets a node pool's node count. It is the ONE correct way to change how\nmany nodes a DOKS cluster has.\n\nThe response states what the board could NOT prove: DOKS picks which nodes a shrink\nremoves, so no particular pod is shown to survive one. See NodePool.ScaleTo.",
         "tags": [
           "admin"
         ],
@@ -1396,8 +1396,8 @@
     "/v1/admin/infra/nodes/{id}/cordon": {
       "post": {
         "operationId": "adminCordonNode",
-        "summary": "cordonNode marks one cluster node unschedulable — or schedulable again — and can drain\nthe pods already on it.\n\nIt is the ONE infra change that does not go through the run discipline, because there\nis no destructive verdict to check: cordoning is reversible and evicting respects the\ncluster's own PodDisruptionBudgets.",
-        "description": "cordonNode marks one cluster node unschedulable — or schedulable again — and can drain\nthe pods already on it.\n\nIt is the ONE infra change that does not go through the run discipline, because there\nis no destructive verdict to check: cordoning is reversible and evicting respects the\ncluster's own PodDisruptionBudgets. It reads the cached board for the same reason.\nThe outcome is audited either way, and the result reports how many pods were evicted.",
+        "summary": "cordonNode marks one cluster node unschedulable, or schedulable again.",
+        "description": "cordonNode marks one cluster node unschedulable, or schedulable again. It can also\ndrain the pods already on it.\n\nIt is the ONE infra change that does not go through the run discipline, because there\nis no destructive verdict to check: cordoning is reversible and evicting respects the\ncluster's own PodDisruptionBudgets. It reads the cached board for the same reason.\nThe outcome is audited either way, and the result reports how many pods were evicted.",
         "tags": [
           "admin"
         ],
@@ -1452,8 +1452,8 @@
     "/v1/admin/infra/volumes/{id}": {
       "delete": {
         "operationId": "adminDeleteVolume",
-        "summary": "deleteVolume destroys a volume the board has just proven no PersistentVolume in any\ncluster references.",
-        "description": "deleteVolume destroys a volume the board has just proven no PersistentVolume in any\ncluster references. Irreversible, so it snapshots first unless explicitly waived —\nthe snapshot IS the undo.",
+        "summary": "deleteVolume destroys a volume no cluster PersistentVolume references.",
+        "description": "deleteVolume destroys a volume no cluster PersistentVolume references. The board has\njust proven that. Irreversible, so it snapshots first unless explicitly waived — the\nsnapshot IS the undo.",
         "tags": [
           "admin"
         ],
@@ -1673,8 +1673,8 @@
     "/v1/admin/me": {
       "get": {
         "operationId": "adminMe",
-        "summary": "me answers with the validated operator identity — who the console is signed in as,\nwhich tier they are, and how wide their tenant window is.",
-        "description": "me answers with the validated operator identity — who the console is signed in as,\nwhich tier they are, and how wide their tenant window is. The fields come from the\nsanitized identity headers the gate just read, so they are authoritative and never\nclient-forgeable; nothing is looked up.",
+        "summary": "me answers with the validated operator identity.",
+        "description": "me answers with the validated operator identity. It reports who the console is signed\nin as, which tier they are, and how wide their tenant window is. The fields come from\nthe sanitized identity headers the gate just read, so they are authoritative and never\nclient-forgeable; nothing is looked up.",
         "tags": [
           "admin"
         ],
@@ -1707,8 +1707,8 @@
     "/v1/admin/metrics": {
       "get": {
         "operationId": "adminMetrics",
-        "summary": "Metrics answers GET /v1/admin/metrics by aggregating commerce.events directly\n(fleet-wide, no per-org fan-out).",
-        "description": "Metrics answers GET /v1/admin/metrics by aggregating commerce.events directly\n(fleet-wide, no per-org fan-out). SuperAdmin only.\n\n\tGET /v1/admin/metrics?window=30d\u0026limit=20",
+        "summary": "Metrics aggregates commerce.events directly.",
+        "description": "Metrics aggregates commerce.events directly. It is fleet-wide with no per-org fan-out,\nSuperAdmin only.\n\n\tGET /v1/admin/metrics?window=30d\u0026limit=20",
         "tags": [
           "admin"
         ],
@@ -1771,8 +1771,8 @@
     "/v1/admin/o11y": {
       "get": {
         "operationId": "adminO11y",
-        "summary": "o11y is the fleet-wide observability board: LLM usage (requests, tokens, cost,\nerrors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in ms,\nerror rate, top services), fleet log volume, and the O11yAI generation rollup — all\naggregated across EVERY tenant, with no org filter applied.\n\nEvery signal degrades INDEPENDENTLY.",
-        "description": "o11y is the fleet-wide observability board: LLM usage (requests, tokens, cost,\nerrors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in ms,\nerror rate, top services), fleet log volume, and the O11yAI generation rollup — all\naggregated across EVERY tenant, with no org filter applied.\n\nEvery signal degrades INDEPENDENTLY. A table that is absent or errors contributes its\nzero value and the read still succeeds, so the board renders exactly what the\nwarehouse holds rather than failing whole because one of four sources is missing.\nSame when the warehouse is not connected at all: the zero board, never a fabricated\nfleet.",
+        "summary": "o11y is the fleet-wide observability board.",
+        "description": "o11y is the fleet-wide observability board. It carries LLM usage (requests, tokens,\ncost, errors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in\nms, error rate, top services), fleet log volume, and the O11yAI generation rollup — all\naggregated across EVERY tenant, with no org filter applied.\n\nEvery signal degrades INDEPENDENTLY. A table that is absent or errors contributes its\nzero value and the read still succeeds, so the board renders exactly what the\nwarehouse holds rather than failing whole because one of four sources is missing.\nSame when the warehouse is not connected at all: the zero board, never a fabricated\nfleet.",
         "tags": [
           "admin"
         ],
@@ -1829,8 +1829,8 @@
     "/v1/admin/orgs": {
       "get": {
         "operationId": "adminOrgs",
-        "summary": "orgs lists the tenant directory one row per org, sorted by slug: member count and the\norg's month-to-date spend and credit balance, read live from IAM and commerce.\n\nThe rows are the caller's tenant window, not the fleet: a SuperAdmin gets every org, a\nwhite-label admin only their own subtree.",
-        "description": "orgs lists the tenant directory one row per org, sorted by slug: member count and the\norg's month-to-date spend and credit balance, read live from IAM and commerce.\n\nThe rows are the caller's tenant window, not the fleet: a SuperAdmin gets every org, a\nwhite-label admin only their own subtree. A per-org read that fails degrades THAT row\nto an honest zero — this panel carries no sources[] channel to report freshness on, so\nthe alternative would be a fleet total that silently reads healthy.",
+        "summary": "orgs lists the tenant directory, one row per org, sorted by slug.",
+        "description": "orgs lists the tenant directory, one row per org, sorted by slug. Each row carries the\nmember count and the org's month-to-date spend and credit balance, read live from IAM\nand commerce.\n\nThe rows are the caller's tenant window, not the fleet: a SuperAdmin gets every org, a\nwhite-label admin only their own subtree. A per-org read that fails degrades THAT row\nto an honest zero — this panel carries no sources[] channel to report freshness on, so\nthe alternative would be a fleet total that silently reads healthy.",
         "tags": [
           "admin"
         ],
@@ -1868,8 +1868,8 @@
     "/v1/admin/overview": {
       "get": {
         "operationId": "adminOverview",
-        "summary": "overview is the Platform Overview tiles: how many orgs and users are in the caller's\ntenant window, the fleet workload counts, and month-to-date spend and credits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless.",
-        "description": "overview is the Platform Overview tiles: how many orgs and users are in the caller's\ntenant window, the fleet workload counts, and month-to-date spend and credits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless. Instead every upstream reports itself in sources[]: ok, degraded, or\nnot-configured. A commerce read that failed for ANY org marks that source degraded,\nbecause the spend/credits totals are then an undercount and must not read healthy.\n\ntokens30d is 0 for the same reason /usage has no series: there is no fleet token\ncounter to read yet.",
+        "summary": "overview is the Platform Overview tiles.",
+        "description": "overview is the Platform Overview tiles. They report how many orgs and users are in\nthe caller's tenant window, the fleet workload counts, and month-to-date spend and\ncredits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless. Instead every upstream reports itself in sources[]: ok, degraded, or\nnot-configured. A commerce read that failed for ANY org marks that source degraded,\nbecause the spend/credits totals are then an undercount and must not read healthy.\n\ntokens30d is 0 for the same reason /usage has no series: there is no fleet token\ncounter to read yet.",
         "tags": [
           "admin"
         ],
@@ -1913,8 +1913,8 @@
     "/v1/admin/products": {
       "get": {
         "operationId": "adminProducts",
-        "summary": "products lists the fleet workload registry: every operator App CR across the platform\nnamespaces with its declared vs running image tag, reconciled health/phase and drift\nverdict.",
-        "description": "products lists the fleet workload registry: every operator App CR across the platform\nnamespaces with its declared vs running image tag, reconciled health/phase and drift\nverdict. Optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/platform/fleet renders — read through the in-process\nplatform seam, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
+        "summary": "products lists the fleet workload registry.",
+        "description": "products lists the fleet workload registry. It reports every operator App CR across\nthe platform namespaces with its declared vs running image tag, reconciled health/phase\nand drift verdict, optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/platform/fleet renders — read through the in-process\nplatform seam, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
         "tags": [
           "admin"
         ],
@@ -1991,8 +1991,8 @@
     "/v1/admin/promos": {
       "get": {
         "operationId": "adminPromo",
-        "summary": "getPromo reads the current platform plan promo — the singleton discount offer, e.g.\nthe 50%-off launch promo.",
-        "description": "getPromo reads the current platform plan promo — the singleton discount offer, e.g.\nthe 50%-off launch promo. Commerce stores it in the reserved platform namespace, so\nthe org sent with the read is the admin org and the service token is what passes\ncommerce's own platform-admin gate.",
+        "summary": "getPromo reads the current platform plan promo.",
+        "description": "getPromo reads the current platform plan promo. The promo is the singleton discount\noffer, e.g. the 50%-off launch promo. Commerce stores it in the reserved platform\nnamespace, so the org sent with the read is the admin org and the service token is\nwhat passes commerce's own platform-admin gate.",
         "tags": [
           "admin"
         ],
@@ -2025,8 +2025,8 @@
       },
       "put": {
         "operationId": "adminSetPromo",
-        "summary": "putPromo upserts the platform plan promo — the ONE place the offer is configured.\n\nThe body is commerce's own promo contract and is forwarded BYTE-FOR-BYTE, so no field\ncommerce accepts is dropped in transit.",
-        "description": "putPromo upserts the platform plan promo — the ONE place the offer is configured.\n\nThe body is commerce's own promo contract and is forwarded BYTE-FOR-BYTE, so no field\ncommerce accepts is dropped in transit. promoIn names its documented fields.",
+        "summary": "putPromo upserts the platform plan promo.",
+        "description": "putPromo upserts the platform plan promo. It is the ONE place the offer is configured.\n\nThe body is commerce's own promo contract and is forwarded BYTE-FOR-BYTE, so no field\ncommerce accepts is dropped in transit. promoIn names its documented fields.",
         "tags": [
           "admin"
         ],
@@ -2080,8 +2080,8 @@
     "/v1/admin/providers/credit": {
       "get": {
         "operationId": "adminProvidersCredit",
-        "summary": "ProvidersCredit serves GET /v1/admin/providers/credit — the per-provider upstream\ncredit ledger.",
-        "description": "ProvidersCredit serves GET /v1/admin/providers/credit — the per-provider upstream\ncredit ledger. SuperAdmin-guarded (see Routes).",
+        "summary": "ProvidersCredit reads the per-provider upstream credit ledger.",
+        "description": "ProvidersCredit reads the per-provider upstream credit ledger. SuperAdmin-guarded\n(see Routes).",
         "tags": [
           "admin"
         ],
@@ -2102,8 +2102,8 @@
     "/v1/admin/revenue": {
       "get": {
         "operationId": "adminRevenue",
-        "summary": "Revenue is the fleet money board: total prepaid balances held, total realized spend,\nMRR, ARPU, a per-customer table sorted highest-revenue first, and a real 30-day spend\ntrend from the usage ledger.\n\nORTHOGONAL to /v1/admin/finance, which is the COGS/margin view of what WE pay vendors.\nThis is the customer side: what each customer holds, spends and subscribes to.\n\narpu divides realized spend by PAYING customers, not by all of them — a fleet of free\nsignups must not deflate the number.",
-        "description": "Revenue is the fleet money board: total prepaid balances held, total realized spend,\nMRR, ARPU, a per-customer table sorted highest-revenue first, and a real 30-day spend\ntrend from the usage ledger.\n\nORTHOGONAL to /v1/admin/finance, which is the COGS/margin view of what WE pay vendors.\nThis is the customer side: what each customer holds, spends and subscribes to.\n\narpu divides realized spend by PAYING customers, not by all of them — a fleet of free\nsignups must not deflate the number. A customer counts as paying when it has spend or\nMRR.\n\nAn org whose money did not read degrades to honest zeros and marks the commerce source\ndegraded in sources[], so a partial fleet read is visible instead of quietly low.",
+        "summary": "Revenue is the fleet money board.",
+        "description": "Revenue is the fleet money board. It reports total prepaid balances held, total\nrealized spend, MRR, ARPU, a per-customer table sorted highest-revenue first, and a\nreal 30-day spend trend from the usage ledger.\n\nORTHOGONAL to /v1/admin/finance, which is the COGS/margin view of what WE pay vendors.\nThis is the customer side: what each customer holds, spends and subscribes to.\n\narpu divides realized spend by PAYING customers, not by all of them — a fleet of free\nsignups must not deflate the number. A customer counts as paying when it has spend or\nMRR.\n\nAn org whose money did not read degrades to honest zeros and marks the commerce source\ndegraded in sources[], so a partial fleet read is visible instead of quietly low.",
         "tags": [
           "admin"
         ],
@@ -2213,8 +2213,8 @@
     "/v1/admin/services": {
       "get": {
         "operationId": "adminServices",
-        "summary": "services reads the launch board: every hosted service in the registry with its LIVE\nwaitlist mode, evaluated through the flag engine.",
-        "description": "services reads the launch board: every hosted service in the registry with its LIVE\nwaitlist mode, evaluated through the flag engine. This is the \"remove the waitlist one\nservice at a time\" view.",
+        "summary": "services reads the launch board.",
+        "description": "services reads the launch board. It lists every hosted service in the registry with\nits LIVE waitlist mode, evaluated through the flag engine. This is the \"remove the\nwaitlist one service at a time\" view.",
         "tags": [
           "admin"
         ],
@@ -2250,8 +2250,8 @@
       },
       "post": {
         "operationId": "adminUpsertService",
-        "summary": "upsertService onboards a hosted service, or edits one, so a new host comes under the\nlaunch gate WITHOUT a redeploy.",
-        "description": "upsertService onboards a hosted service, or edits one, so a new host comes under the\nlaunch gate WITHOUT a redeploy. Re-registering an existing service PRESERVES its live\nswitch — editing the hosts of a service that is already open must not silently close\nit again.",
+        "summary": "upsertService onboards a hosted service, or edits one.",
+        "description": "upsertService onboards a hosted service, or edits one. A new host comes under the\nlaunch gate WITHOUT a redeploy. Re-registering an existing service PRESERVES its live\nswitch — editing the hosts of a service that is already open must not silently close\nit again.",
         "tags": [
           "admin"
         ],
@@ -2424,8 +2424,8 @@
       },
       "post": {
         "operationId": "adminCreateSpendCap",
-        "summary": "createSpendCap sets a usage cap on one org — a platform override of a customer budget,\nwritten to the customer's own spend-alert rows.",
-        "description": "createSpendCap sets a usage cap on one org — a platform override of a customer budget,\nwritten to the customer's own spend-alert rows. The body is commerce's spend-alert\ncontract, forwarded byte-for-byte.",
+        "summary": "createSpendCap sets a usage cap on one org.",
+        "description": "createSpendCap sets a usage cap on one org. It is a platform override of a customer\nbudget, written to the customer's own spend-alert rows. The body is commerce's\nspend-alert contract, forwarded byte-for-byte.",
         "tags": [
           "admin"
         ],
@@ -2701,8 +2701,8 @@
     "/v1/admin/usage": {
       "get": {
         "operationId": "adminUsage",
-        "summary": "usage returns the month-to-date money totals: one org's when org names one, else the\nfleet sum across every org a SuperAdmin can see.\n\nseries and byProduct are ALWAYS empty.",
-        "description": "usage returns the month-to-date money totals: one org's when org names one, else the\nfleet sum across every org a SuperAdmin can see.\n\nseries and byProduct are ALWAYS empty. A daily trend and a per-product split are not\nderivable from the commerce billing API — they live in insights/datastore — so this\nanswers with the honest empty arrays rather than fabricating a shape the console would\nthen chart. Same reason tokens and requests are 0: there is no fleet counter to read.",
+        "summary": "usage returns the month-to-date money totals.",
+        "description": "usage returns the month-to-date money totals. It answers for one org when org names\none, else the fleet sum across every org a SuperAdmin can see.\n\nseries and byProduct are ALWAYS empty. A daily trend and a per-product split are not\nderivable from the commerce billing API — they live in insights/datastore — so this\nanswers with the honest empty arrays rather than fabricating a shape the console would\nthen chart. Same reason tokens and requests are 0: there is no fleet counter to read.",
         "tags": [
           "admin"
         ],
@@ -2748,8 +2748,8 @@
     "/v1/admin/usage/funding": {
       "get": {
         "operationId": "adminUsageFunding",
-        "summary": "UsageFunding splits our upstream AI usage by how it was FUNDED: one row per (provider,\nmodel) over the window, tagged credit (provider grant still remaining), paid (grant\nexhausted) or paid_only (no grant at all).\n\nThe class is resolved at the PROVIDER level from the credit ledger, not per call — the\nper-call split, and the `byo` class, arrive when the metering write stamps a funding\ncolumn on cloud_usage and this can GROUP BY it directly.",
-        "description": "UsageFunding splits our upstream AI usage by how it was FUNDED: one row per (provider,\nmodel) over the window, tagged credit (provider grant still remaining), paid (grant\nexhausted) or paid_only (no grant at all).\n\nThe class is resolved at the PROVIDER level from the credit ledger, not per call — the\nper-call split, and the `byo` class, arrive when the metering write stamps a funding\ncolumn on cloud_usage and this can GROUP BY it directly. Until then a provider with\nremaining grant reports all of its usage as credit, which is right in aggregate and\napproximate at the boundary where a grant runs out mid-window.\n\nAn unparseable window falls back to the last 30 days rather than refusing: this is a\ndashboard read, and a typo in a date must not blank the board.",
+        "summary": "UsageFunding splits our upstream AI usage by how it was FUNDED.",
+        "description": "UsageFunding splits our upstream AI usage by how it was FUNDED. It returns one row per\n(provider, model) over the window, tagged credit (provider grant still remaining), paid\n(grant exhausted) or paid_only (no grant at all).\n\nThe class is resolved at the PROVIDER level from the credit ledger, not per call — the\nper-call split, and the `byo` class, arrive when the metering write stamps a funding\ncolumn on cloud_usage and this can GROUP BY it directly. Until then a provider with\nremaining grant reports all of its usage as credit, which is right in aggregate and\napproximate at the boundary where a grant runs out mid-window.\n\nAn unparseable window falls back to the last 30 days rather than refusing: this is a\ndashboard read, and a typo in a date must not blank the board.",
         "tags": [
           "admin"
         ],
@@ -2889,8 +2889,8 @@
     "/v1/admin/waitlist": {
       "get": {
         "operationId": "adminWaitlist",
-        "summary": "waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine — position,\npoints and referral standing per entry — proxied server-authed with the engine secret,\nnever a client credential.\n\nThe engine's payload is forwarded VERBATIM as data; the console normalizes it.",
-        "description": "waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine — position,\npoints and referral standing per entry — proxied server-authed with the engine secret,\nnever a client credential.\n\nThe engine's payload is forwarded VERBATIM as data; the console normalizes it. When\nthe engine is not configured on this deployment the read still succeeds, with an empty\nobject and a msg saying so, so the panel shows an honest not-wired state instead of an\nerror the operator would chase.",
+        "summary": "waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine.",
+        "description": "waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine. Each entry\ncarries its position, points and referral standing, proxied server-authed with the\nengine secret, never a client credential.\n\nThe engine's payload is forwarded VERBATIM as data; the console normalizes it. When\nthe engine is not configured on this deployment the read still succeeds, with an empty\nobject and a msg saying so, so the panel shows an honest not-wired state instead of an\nerror the operator would chase.",
         "tags": [
           "admin"
         ],
@@ -2957,8 +2957,8 @@
     "/v1/admin/waitlist/boost": {
       "post": {
         "operationId": "adminWaitlistBoost",
-        "summary": "waitlistBoost grants a user waitlist points, moving them up toward the access cutoff.\nThis is the access lever: the cutoff itself does not move, the person does.\n\nIt funnels through the engine's verified grant seam (POST /v1/waitlist/award with\nsource=\"grant\" — the ONE path that honours an explicit points amount) and writes a\ntamper-evident audit row either way, so a FAILED grant is recorded too.",
-        "description": "waitlistBoost grants a user waitlist points, moving them up toward the access cutoff.\nThis is the access lever: the cutoff itself does not move, the person does.\n\nIt funnels through the engine's verified grant seam (POST /v1/waitlist/award with\nsource=\"grant\" — the ONE path that honours an explicit points amount) and writes a\ntamper-evident audit row either way, so a FAILED grant is recorded too. The reason\nfield goes only to that row.",
+        "summary": "waitlistBoost grants a user waitlist points, moving them toward the cutoff.",
+        "description": "waitlistBoost grants a user waitlist points, moving them toward the cutoff. It is the\naccess lever: the cutoff itself does not move, the person does.\n\nIt funnels through the engine's verified grant seam (POST /v1/waitlist/award with\nsource=\"grant\" — the ONE path that honours an explicit points amount) and writes a\ntamper-evident audit row either way, so a FAILED grant is recorded too. The reason\nfield goes only to that row.",
         "tags": [
           "admin"
         ],
@@ -5816,7 +5816,7 @@
             "type": "number"
           },
           "logVolume": {
-            "description": "Logs (distributed_logs_v2), fleet volume over the window.",
+            "description": "Logs (event.log), fleet volume over the window.",
             "type": "integer"
           },
           "models": {
@@ -5839,7 +5839,7 @@
             "type": "integer"
           },
           "traceCount": {
-            "description": "Traces (o11y_index_v3), all services.",
+            "description": "Spans (event.span), all services.",
             "type": "integer"
           },
           "traceErrorRate": {

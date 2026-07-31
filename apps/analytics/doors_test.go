@@ -103,119 +103,161 @@ func doorPaths() []string {
 	return p
 }
 
-// ── a warehouse a test can read back ────────────────────────────────────────
+// ── a tap on the plane, so a test can read what it published ────────────────────────────────────────────
 
-// warehouse is a substituted datastore: it reports ready and records every batch
-// INSERT, so a test can read the TENANT and the $source a lane actually wrote.
-// Without it the pipeline stops at the readiness gate and every lane looks alike —
-// a site-host beacon filed under the public tenant, or a stranger's payload filed
+// tap is a substituted bus: it records every fact PUBLISHED, so a test can read the
+// TENANT and the source a lane actually produced. Without it the pipeline is invisible
+// — a site-host beacon filed under the public tenant, or a stranger's payload filed
 // under a customer's org, produce byte-identical responses.
-type warehouse struct{ rows [][]any }
+//
+// It substitutes the PUBLISH seam rather than a warehouse one, because publish is now
+// where a fact leaves this package: the store is a downstream consumer (warehouse.go)
+// and is not on the request path at all.
+type tap struct{ facts []fact }
 
-// fakeWarehouse substitutes the write path's two seams for this test and restores
-// them after. It also clears the DDL latch, which is process-global: a real earlier
-// test could otherwise leave it set and skip the CREATE, or this test could leave it
-// set and make a later one skip a real one.
-func fakeWarehouse(t *testing.T) *warehouse {
+// fakePlane substitutes the publish seam for this test and restores it after.
+func fakePlane(t *testing.T) *tap {
 	t.Helper()
-	w := &warehouse{}
-	origReady, origExec := warehouseReady, warehouseExec
-	eventsTableReady.Store(false)
-	warehouseReady = func() bool { return true }
-	warehouseExec = func(_ context.Context, stmt string, args ...any) error {
-		if len(args) > 0 { // the DDL carries none; only INSERTs land here
-			w.rows = append(w.rows, args)
-		}
-		_ = stmt
+	p := &tap{}
+	orig := publish
+	publish = func(_ context.Context, fs []fact) error {
+		p.facts = append(p.facts, fs...)
 		return nil
 	}
-	t.Cleanup(func() {
-		warehouseReady, warehouseExec = origReady, origExec
-		eventsTableReady.Store(false)
-	})
-	return w
+	t.Cleanup(func() { publish = orig })
+	return p
 }
 
-// TestWritePathSeamsDefaultToTheRealThing pins what fakeWarehouse and stubResolver
-// SUBSTITUTE: that in production each of these vars holds the real dependency.
-//
-// A seam is a var, so it is exactly as easy to rebind at the DECLARATION as it is in a
-// test. Rebinding warehouseExec to a func returning nil discards every INSERT while
-// the caller still gets its 200 {accepted:N} receipt, and rebinding warehouseReady to
-// `true` removes the gate that would otherwise turn that into an honest 503 — silent
-// data loss behind a success receipt, and NOTHING else in this package notices,
-// because every test that reads a written row installs its own fake first and every
-// test that does not read one only ever asserts a status code. resolveKeyOrg is the
-// same shape on the admission side: bound to a func returning ("", false) it fails
-// closed, but bound to one returning ("acme", true) any key at all buys a real org.
-//
-// So the default is asserted directly, by code pointer (samePtr) rather than by
-// behaviour — the point is the IDENTITY of the callee, and calling the real
-// datastore/IAM to observe its behaviour is exactly what a unit test cannot do.
-//
-// It also holds the fakes honest in the other direction: every substitution in this
-// package restores through t.Cleanup, so if one ever leaks past its test this
-// assertion is what notices.
-func TestWritePathSeamsDefaultToTheRealThing(t *testing.T) {
-	for _, s := range []struct {
-		name string
-		got  any
-		want any
-	}{
-		{"warehouseReady", warehouseReady, datastore.Ready},
-		{"warehouseExec", warehouseExec, datastore.Exec},
-		{"resolveKeyOrg", resolveKeyOrg, cloud.OrgForKey},
-	} {
-		if !samePtr(s.got, s.want) {
-			t.Errorf("%s does not default to the real dependency — a substituted write seam "+
-				"discards rows behind a 200 receipt, and a substituted key seam decides admission", s.name)
-		}
-	}
-}
-
-// col reads one column of one written row by NAME, so these tests bind to the
-// schema's column list rather than to offsets that a new column would shift.
-func (w *warehouse) col(t *testing.T, row int, name string) any {
+// refusePlane makes every publish fail, so a test can assert the door reports the
+// honest 503 rather than a 200 for a fact that never became durable.
+func refusePlane(t *testing.T) {
 	t.Helper()
-	idx := -1
-	for i, c := range eventColumns {
-		if c == name {
-			idx = i
-		}
-	}
-	if idx < 0 {
-		t.Fatalf("no column %q in eventColumns", name)
-	}
-	flat := w.rows[row]
-	if len(flat)%len(eventColumns) != 0 {
-		t.Fatalf("row %d has %d args, not a multiple of %d columns", row, len(flat), len(eventColumns))
-	}
-	return flat[idx]
+	orig := publish
+	publish = func(context.Context, []fact) error { return busErr(errBusUnavailable) }
+	t.Cleanup(func() { publish = orig })
 }
 
-// tenants returns the tenant_id of every row written — the fact the site-host lane
-// and the anonymous lane must disagree about, and the only place that disagreement
-// is visible.
-func (w *warehouse) tenants(t *testing.T) []string {
+// refuse is refusePlane on an installed tap, for a test that wants both.
+func (p *tap) refuse(t *testing.T) { refusePlane(t) }
+
+// col reads one COLUMN of one published fact by NAME, so these tests bind to the
+// schema's own vocabulary rather than to struct fields or to offsets. The names are
+// exactly the envelope's columns (warehouse.go envelopeColumns).
+func (p *tap) col(t *testing.T, row int, name string) any {
 	t.Helper()
-	out := make([]string, 0, len(w.rows))
-	for i := range w.rows {
-		s, _ := w.col(t, i, "tenant_id").(string)
+	if row >= len(p.facts) {
+		t.Fatalf("no fact at row %d (have %d)", row, len(p.facts))
+	}
+	f := p.facts[row]
+	switch name {
+	case "org":
+		return f.org
+	case "time":
+		return f.time
+	case "id":
+		return f.id
+	case "name":
+		return f.name
+	case "kind":
+		return f.kind
+	case "product":
+		return f.product
+	case "session_id":
+		return f.session
+	case "distinct_id":
+		return f.distinct
+	case "anonymous_id":
+		return f.anonymous
+	case "person_id":
+		return f.person
+	case "url":
+		return f.url
+	case "path":
+		return f.path
+	case "signal":
+		return string(f.signal)
+	}
+	t.Fatalf("no column %q on the envelope", name)
+	return nil
+}
+
+// attr reads one attribute of one published fact.
+func (p *tap) attr(t *testing.T, row int, key string) string {
+	t.Helper()
+	if row >= len(p.facts) {
+		t.Fatalf("no fact at row %d (have %d)", row, len(p.facts))
+	}
+	return p.facts[row].attributes[key]
+}
+
+// tenants returns the org of every published fact — the fact the site-host lane and
+// the anonymous lane must disagree about, and the only place that disagreement shows.
+func (p *tap) tenants(t *testing.T) []string {
+	t.Helper()
+	out := make([]string, 0, len(p.facts))
+	for i := range p.facts {
+		s, _ := p.col(t, i, "org").(string)
 		out = append(out, s)
 	}
 	return out
 }
 
-// sources returns each written row's properties.$source — the door it arrived
-// through, and the signal the alias sunset is decided on.
-func (w *warehouse) sources(t *testing.T) []string {
+// sources returns each fact's attributes['source'] — the door it arrived through, and
+// the signal the alias sunset is decided on.
+func (p *tap) sources(t *testing.T) []string {
 	t.Helper()
-	out := make([]string, 0, len(w.rows))
-	for i := range w.rows {
-		raw, _ := w.col(t, i, "properties").(string)
-		out = append(out, decodeProps(t, raw)["$source"].(string))
+	out := make([]string, 0, len(p.facts))
+	for i := range p.facts {
+		out = append(out, p.attr(t, i, "source"))
 	}
 	return out
+}
+
+// signals returns the signal every published fact routed to — which table it lands in.
+func (p *tap) signals(t *testing.T) []string {
+	t.Helper()
+	out := make([]string, 0, len(p.facts))
+	for i := range p.facts {
+		out = append(out, string(p.facts[i].signal))
+	}
+	return out
+}
+
+// TestIngestSeamsDefaultToTheRealThing pins what fakePlane and stubResolver
+// SUBSTITUTE: that in production each of these vars holds the real dependency.
+//
+// A seam is a var, so it is exactly as easy to rebind at the DECLARATION as it is in a
+// test. Rebinding publish to a func returning nil discards every fact while the caller
+// still gets its 200 {accepted:N} receipt — silent data loss behind a success receipt,
+// and NOTHING else in this package notices, because every test that reads a published
+// fact installs its own fake first and every test that does not read one only ever
+// asserts a status code. resolveKeyOrg is the same shape on the admission side: bound
+// to a func returning ("", false) it fails closed, but bound to one returning
+// ("acme", true) any key at all buys a real org.
+//
+// So the default is asserted directly, by code pointer (samePtr) rather than by
+// behaviour — the point is the IDENTITY of the callee, and calling the real bus/IAM to
+// observe its behaviour is exactly what a unit test cannot do.
+//
+// It also holds the fakes honest in the other direction: every substitution in this
+// package restores through t.Cleanup, so if one ever leaks past its test this
+// assertion is what notices.
+func TestIngestSeamsDefaultToTheRealThing(t *testing.T) {
+	for _, s := range []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"publish", publish, publishToStream},
+		{"warehouseReady", warehouseReady, datastore.Ready},
+		{"warehouseExec", warehouseExec, datastore.Exec},
+		{"resolveKeyOrg", resolveKeyOrg, cloud.OrgForKey},
+	} {
+		if !samePtr(s.got, s.want) {
+			t.Errorf("%s does not default to the real dependency — a substituted publish seam "+
+				"discards facts behind a 200 receipt, and a substituted key seam decides admission", s.name)
+		}
+	}
 }
 
 func sameSet(a, b []string) bool {
@@ -372,7 +414,7 @@ func TestIngestSurfaceIsExactlyTheContract(t *testing.T) {
 func TestEveryDoorStampsItsOwnSource(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	for _, d := range doors {
-		w := fakeWarehouse(t)
+		w := fakePlane(t)
 		app := mountApp(t)
 		if code, body := doBody(t, app, http.MethodPost, d.path, "user-dave", "acme", pageviewFor(t, d)); code != http.StatusOK {
 			t.Fatalf("door %s = %d (%s), want 200 (written to the fake warehouse)", d.path, code, body)
@@ -381,7 +423,7 @@ func TestEveryDoorStampsItsOwnSource(t *testing.T) {
 			t.Errorf("door %s ingest lane wrote $source %v, want [%s]", d.path, got, d.source)
 		}
 
-		w = fakeWarehouse(t)
+		w = fakePlane(t)
 		site := carveApp(t, "hanzo")
 		if code := postHost(t, site, "yadota.hanzo.app", d.path, pageviewFor(t, d), nil); code != http.StatusOK {
 			t.Fatalf("site-host door %s = %d, want 200 (admitted and written)", d.path, code)
@@ -407,7 +449,7 @@ func TestEveryDoorStampsItsOwnSource(t *testing.T) {
 func TestSiteHostLaneWritesTheResolvedSiteOrg(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	for _, d := range doors {
-		w := fakeWarehouse(t)
+		w := fakePlane(t)
 		app := carveApp(t, "hanzo")
 		if code := postHost(t, app, "yadota.hanzo.app", d.path, pageviewFor(t, d),
 			map[string]string{"X-Org-Id": "attacker", "X-User-Id": "attacker-user"}); code != http.StatusOK {
@@ -443,7 +485,7 @@ func TestSiteHostLaneWritesTheResolvedSiteOrg(t *testing.T) {
 func TestSiteHostLaneNeverConsultsHandle(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	for _, d := range doors {
-		w := fakeWarehouse(t)
+		w := fakePlane(t)
 		app := carveApp(t, "hanzo")
 		code := postHost(t, app, "yadota.hanzo.app", d.path, commerceFor(t, d),
 			map[string]string{"X-User-Id": "user-dave", "X-Org-Id": "acme"})
@@ -466,7 +508,7 @@ func TestApiHostAnonymousLaneWritesThePublicTenant(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	for _, d := range doors {
 		for _, host := range []string{"api.hanzo.ai", "hanzo.ai"} {
-			w := fakeWarehouse(t)
+			w := fakePlane(t)
 			app := mountApp(t)
 			if code, body := doHost(t, app, d.path, "", "", host, pageviewFor(t, d)); code != http.StatusOK {
 				t.Fatalf("anonymous door %s on %q = %d (%s), want 200", d.path, host, code, body)
@@ -487,7 +529,10 @@ func TestApiHostAnonymousLaneWritesThePublicTenant(t *testing.T) {
 func TestRoutedPostSetIsExactlyTheDoors(t *testing.T) {
 	app := mountApp(t)
 	var posts []string
-	for _, r := range app.Fiber().GetRoutes() {
+	// GetRoutes(true) drops the Use entries: fiber records a middleware as a route
+	// on every method, and a middleware is not an ingest door. This is the same
+	// predicate openapi.Live reads the router through.
+	for _, r := range app.Fiber().GetRoutes(true) {
 		if r.Method == http.MethodPost {
 			posts = append(posts, r.Path)
 		}
@@ -499,7 +544,7 @@ func TestRoutedPostSetIsExactlyTheDoors(t *testing.T) {
 }
 
 // TestEveryDoorIsRoutedAndAdmits is the positive half on the API host: each declared
-// door actually exists (never 404) and reaches the write core for an admissible
+// door actually exists (never 404) and reaches the ingest core for an admissible
 // anonymous event (503, no datastore in the harness).
 func TestEveryDoorIsRoutedAndAdmits(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
@@ -607,7 +652,7 @@ func TestEveryDoorFailsClosedOnUnresolvableCredential(t *testing.T) {
 // stored, and never at full capability into a real org.
 //
 // 503 is the failure signal here, not the success one: it would mean the request
-// reached the write core unprojected. Paired failure: give handle a host fallback, or
+// reached the ingest core unprojected. Paired failure: give handle a host fallback, or
 // let admitPublic see the org, and these turn 503.
 func TestEveryDoorProjectsTheAnonymousCaller(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
@@ -616,7 +661,7 @@ func TestEveryDoorProjectsTheAnonymousCaller(t *testing.T) {
 		for _, host := range []string{"hanzo.ai", "api.hanzo.ai"} {
 			code, body := doHost(t, app, d.path, "", "", host, commerceFor(t, d))
 			if code == http.StatusServiceUnavailable {
-				t.Errorf("door %s on host %q reached the write core at FULL capability — a "+
+				t.Errorf("door %s on host %q reached the ingest core at FULL capability — a "+
 					"credential-less caller must never write revenue/groupId/personId into a real org", d.path, host)
 				continue
 			}
@@ -633,7 +678,7 @@ func TestEveryDoorProjectsTheAnonymousCaller(t *testing.T) {
 
 // TestEveryDoorAdmitsAValidatedPrincipal is the "the gate is not just a wall" half: a
 // validated bearer keeps FULL capability on every door, so the commerce payload the
-// anonymous lane drops is admitted here (503 = reached the write core).
+// anonymous lane drops is admitted here (503 = reached the ingest core).
 func TestEveryDoorAdmitsAValidatedPrincipal(t *testing.T) {
 	app := mountApp(t)
 	for _, d := range doors {
@@ -644,7 +689,7 @@ func TestEveryDoorAdmitsAValidatedPrincipal(t *testing.T) {
 }
 
 // TestEveryDoorAdmitsAResolvedKey: the same for out-of-band keys — a resolvable hk-
-// and a resolvable pk- both reach the write core at full capability on every door.
+// and a resolvable pk- both reach the ingest core at full capability on every door.
 func TestEveryDoorAdmitsAResolvedKey(t *testing.T) {
 	for _, d := range doors {
 		app := mountApp(t)

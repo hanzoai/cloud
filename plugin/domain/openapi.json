@@ -19,17 +19,73 @@
     "/v1/domain/availability": {
       "get": {
         "operationId": "get_v1_domain_availability",
+        "summary": "availability checks exact domain names and prices each at the customer rate.",
+        "description": "availability checks exact domain names and prices each at the customer rate.\nComma-separate the domain value to check several at once; nothing is reserved\nor charged.",
         "tags": [
           "domain"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": false,
+            "description": "Domain is the exact name to check, comma-separated for several. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "hanzo.ai,hanzo.dev"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/offerList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/domain/domains": {
       "get": {
         "operationId": "get_v1_domain_domains",
+        "summary": "list lists the domains the caller's org owns.",
+        "description": "list lists the domains the caller's org owns. Each carries the price paid and the\nexpiry on record, and org is the bound isolation boundary, so another tenant's\ndomains are never returned.",
         "tags": [
           "domain"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "domains": [
+                    {
+                      "costCents": 7000,
+                      "domain": "hanzo.ai",
+                      "expiresAt": "2027-07-29T00:00:00Z",
+                      "nameservers": [
+                        "ns1.hanzo.ai",
+                        "ns2.hanzo.ai"
+                      ],
+                      "org": "acme",
+                      "priceCents": 8050,
+                      "registeredAt": 1780000000
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/recordList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/domain/health": {
@@ -43,33 +99,373 @@
     "/v1/domain/register": {
       "post": {
         "operationId": "post_v1_domain_register",
+        "summary": "register buys a domain for the caller's org.",
+        "description": "register buys a domain for the caller's org. The customer is charged only after\nthe registrar confirms, the zone is provisioned and the name points at Hanzo\nnameservers, so a registrar failure leaves the balance untouched.",
         "tags": [
           "domain"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "domain": "hanzo.ai",
+                "years": 1
+              },
+              "schema": {
+                "$ref": "#/components/schemas/purchaseReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/domain/renew": {
       "post": {
         "operationId": "post_v1_domain_renew",
+        "summary": "renew extends a domain the caller's org already owns.",
+        "description": "renew extends a domain the caller's org already owns. The renewal is re-quoted\nat the current price before charging, and the stored expiry advances only after\nthe registrar confirms.",
         "tags": [
           "domain"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "domain": "hanzo.ai",
+                "years": 2
+              },
+              "schema": {
+                "$ref": "#/components/schemas/renewReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/domain/search": {
       "get": {
         "operationId": "get_v1_domain_search",
+        "summary": "search asks the registrar for available names built from a keyword.",
+        "description": "search asks the registrar for available names built from a keyword. Each\ncandidate is priced at the customer rate, nothing is reserved or charged, and\nTLD narrows the candidates to a comma-separated list.",
         "tags": [
           "domain"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q is the keyword to build candidate names from. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "hanzo"
+          },
+          {
+            "name": "tld",
+            "in": "query",
+            "required": false,
+            "description": "TLD optionally restricts the search to these TLDs, comma-separated.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "ai,com"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/offerList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/domain/transfer": {
       "post": {
         "operationId": "post_v1_domain_transfer",
+        "summary": "transfer brings a domain registered elsewhere into the caller's org.",
+        "description": "transfer brings a domain registered elsewhere into the caller's org. It needs\nthe EPP authorization code from the losing registrar, and it prices and records\nownership exactly as a purchase does.",
         "tags": [
           "domain"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "authCode": "aG9sZGVy",
+                "domain": "hanzo.ai",
+                "years": 1
+              },
+              "schema": {
+                "$ref": "#/components/schemas/transferReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Contacts": {
+        "properties": {
+          "admin": {
+            "$ref": "#/components/schemas/WhoisContact"
+          },
+          "billing": {
+            "$ref": "#/components/schemas/WhoisContact"
+          },
+          "registrant": {
+            "$ref": "#/components/schemas/WhoisContact"
+          },
+          "tech": {
+            "$ref": "#/components/schemas/WhoisContact"
+          }
+        },
+        "type": "object"
+      },
+      "Offer": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "premium": {
+            "type": "boolean"
+          },
+          "priceCents": {
+            "description": "sell (first-term registration)",
+            "type": "integer"
+          },
+          "renewalPriceCents": {
+            "description": "sell (renewal)",
+            "type": "integer"
+          },
+          "tld": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Ownership": {
+        "properties": {
+          "costCents": {
+            "description": "wholesale cost",
+            "type": "integer"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "nameservers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "order": {
+            "description": "registrar order id",
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "priceCents": {
+            "description": "what the customer paid (sell)",
+            "type": "integer"
+          },
+          "registeredAt": {
+            "description": "unix seconds",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RegisterResult": {
+        "properties": {
+          "quote": {
+            "$ref": "#/components/schemas/Offer"
+          },
+          "record": {
+            "$ref": "#/components/schemas/Ownership"
+          }
+        },
+        "type": "object"
+      },
+      "RenewResult": {
+        "properties": {
+          "paidCents": {
+            "type": "integer"
+          },
+          "record": {
+            "$ref": "#/components/schemas/Ownership"
+          }
+        },
+        "type": "object"
+      },
+      "WhoisContact": {
+        "properties": {
+          "address1": {
+            "type": "string"
+          },
+          "address2": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "companyName": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "fax": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "zip": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "offerList": {
+        "properties": {
+          "results": {
+            "description": "Results are the priced availability answers, one per candidate name.",
+            "items": {
+              "$ref": "#/components/schemas/Offer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "purchaseReq": {
+        "properties": {
+          "contacts": {
+            "$ref": "#/components/schemas/Contacts",
+            "description": "Contacts are the WHOIS contacts to register under; omitted uses the\nreseller account's defaults."
+          },
+          "domain": {
+            "description": "Domain is the exact name to buy. Required.",
+            "type": "string"
+          },
+          "years": {
+            "description": "Years is the registration term; 0 means one year.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "recordList": {
+        "properties": {
+          "domains": {
+            "description": "Domains are the domains this org owns, with what each cost and when it expires.",
+            "items": {
+              "$ref": "#/components/schemas/Ownership"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "renewReq": {
+        "properties": {
+          "domain": {
+            "description": "Domain is the name to extend; the caller's org must already own it. Required.",
+            "type": "string"
+          },
+          "years": {
+            "description": "Years is how many years to add; 0 means one year.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "transferReq": {
+        "properties": {
+          "authCode": {
+            "description": "AuthCode is the EPP authorization code from the losing registrar. Required.",
+            "type": "string"
+          },
+          "domain": {
+            "description": "Domain is the name to transfer in. Required.",
+            "type": "string"
+          },
+          "years": {
+            "description": "Years is the term to add on transfer; 0 means one year.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

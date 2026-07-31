@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -120,11 +119,19 @@ func rationaleFor(s suggestion) string {
 
 // suggestResponse is the /v1/guide/suggest body.
 type suggestResponse struct {
-	Next            string       `json:"next"`
-	Suggestions     []suggestion `json:"suggestions"`
-	Narrative       string       `json:"narrative,omitempty"`
-	Funnel          Funnel       `json:"funnel"`
-	Recommendations []string     `json:"recommendations"`
+	// Next is the id of the single next step the static journey names — the
+	// linear answer the ranked Suggestions refine.
+	Next string `json:"next"`
+	// Suggestions are the available, non-terminal quests ranked best-first by how
+	// much downstream work each unblocks.
+	Suggestions []suggestion `json:"suggestions"`
+	// Narrative is the AI's grounded prose over those quests and numbers. Absent
+	// when no AI plane is wired or the completion failed — never fabricated.
+	Narrative string `json:"narrative,omitempty"`
+	// Funnel is the org's trailing-window traffic → signups → orders.
+	Funnel Funnel `json:"funnel"`
+	// Recommendations are the next-best GTM actions derived from that funnel.
+	Recommendations []string `json:"recommendations"`
 }
 
 // buildSuggestions loads the caller's reconciled snapshot + funnel and computes the
@@ -140,16 +147,21 @@ func buildSuggestions(s *cloud.Service[state], ctx context.Context, org string) 
 	return cur, states, rankSuggestions(cur, states), funnel, nil
 }
 
-// suggest answers GET /v1/guide/suggest: the dynamic next-best quests, grounded in
-// the org's real progress + funnel, with a best-effort AI narrative on top.
-func suggest(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	cur, states, sugg, funnel, err := buildSuggestions(s, c.Context(), org)
+// Suggest returns the caller org's next-best quests: the available, non-terminal
+// steps of its journey ranked by how much downstream work each unblocks, each with
+// the grounded reason it is a good next move and whether the Business AI can run
+// it, plus the org's funnel and the GTM recommendations derived from it. A
+// best-effort AI narrative over exactly those quests and numbers is included when
+// an AI plane is wired. READ-ONLY: it advises and never runs a step — the only
+// executing path is POST /v1/guide/steps/{id}/do.
+func (o ops) suggest(ctx context.Context, _ *noInput) (*suggestResponse, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		return nil, err
+	}
+	cur, states, sugg, funnel, err := buildSuggestions(o.s, ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
 	resp := suggestResponse{
 		Next:            cur.Next(states),
@@ -160,12 +172,14 @@ func suggest(s *cloud.Service[state], c *zip.Ctx) error {
 	// Best-effort AI narrative — billed to the CALLER's own payer, grounded only in
 	// the quests + numbers above. A missing/erroring AI plane just omits the prose;
 	// the deterministic suggestions + recommendations always return.
-	resp.Narrative = narrate(s, c, org, groundingText(cur, states, funnel, sugg))
-	return c.JSON(http.StatusOK, resp)
+	resp.Narrative = narrate(o.s, ctx, org, groundingText(cur, states, funnel, sugg))
+	return &resp, nil
 }
 
 // chatRequest is the POST /v1/guide/chat body.
 type chatRequest struct {
+	// Message is the founder's question for the Business AI. Required; trimmed,
+	// and clipped to 4 KiB so a caller cannot amplify the AI prompt.
 	Message string `json:"message"`
 }
 
@@ -173,58 +187,64 @@ type chatRequest struct {
 // same deterministic candidates so the UI can offer a "Do it for me" on the AI-ready
 // ones (which call the gated /do endpoint — chat never runs an action itself).
 type chatResponse struct {
-	Reply       string       `json:"reply"`
+	// Reply is the coach's answer, grounded only in the quests and funnel below.
+	// When no AI plane is reachable it is the deterministic reply naming the top
+	// real quest — never silence, never invention.
+	Reply string `json:"reply"`
+	// Suggestions are the current candidate quests, ranked best-first.
 	Suggestions []suggestion `json:"suggestions"`
-	Funnel      Funnel       `json:"funnel"`
+	// Funnel is the org's trailing-window traffic → signups → orders.
+	Funnel Funnel `json:"funnel"`
 }
 
-// chat answers POST /v1/guide/chat: the founder asks the Business AI about their
-// launch journey and gets a grounded reply + the current candidate quests. It reads
-// and advises only — it never executes a step (see the security note at the top).
-func chat(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var in chatRequest
-	if err := c.Bind(&in); err != nil {
-		return err
+// Chat answers a founder's question about their launch journey as the Business AI
+// coach: it grounds the reply in the org's REAL progress, its ranked available
+// quests and its analytics funnel, and returns those candidate quests alongside so
+// the caller can act on one. READ-ONLY — it advises and never runs a step, so it
+// cannot be talked into performing an action; the only executing path is POST
+// /v1/guide/steps/{id}/do. One AI completion per call, billed to the caller's own
+// payer.
+//
+// Example: {"message": "what should I do next to get my first customers?"}
+func (o ops) chat(ctx context.Context, in *chatRequest) (*chatResponse, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
 	msg := strings.TrimSpace(in.Message)
 	if msg == "" {
-		return zip.ErrBadRequest("message is required")
+		return nil, zip.ErrBadRequest("message is required")
 	}
 	if len(msg) > maxChatMessage {
 		msg = msg[:maxChatMessage]
 	}
-	cur, states, sugg, funnel, err := buildSuggestions(s, c.Context(), org)
+	cur, states, sugg, funnel, err := buildSuggestions(o.s, ctx, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
 	prompt := chatPrompt(groundingText(cur, states, funnel, sugg), msg)
-	reply := narrate(s, c, org, prompt)
+	reply := narrate(o.s, ctx, org, prompt)
 	if strings.TrimSpace(reply) == "" {
 		reply = fallbackReply(sugg) // honest deterministic reply when the AI plane is down
 	}
-	return c.JSON(http.StatusOK, chatResponse{Reply: reply, Suggestions: sugg, Funnel: funnel})
+	return &chatResponse{Reply: reply, Suggestions: sugg, Funnel: funnel}, nil
 }
 
 // narrate runs ONE grounded AI completion for the caller, billed to the caller's own
-// payer (principal.Ledger) and scoped to the caller's own org — so a suggestion/chat
-// can never spend another tenant's budget. Returns "" when no AI plane is wired or
-// the call errors (the caller falls back to the deterministic output). A free
-// function (Go forbids methods on the external cloud.Service) — the ONE
-// billing-scoped call site both handlers share.
-func narrate(s *cloud.Service[state], c *zip.Ctx, org, prompt string) string {
+// payer (ledgerOf) and scoped to the caller's own org — so a suggestion/chat can
+// never spend another tenant's budget. Returns "" when no AI plane is wired or the
+// call errors (the caller falls back to the deterministic output). A free function
+// (Go forbids methods on the external cloud.Service) — the ONE billing-scoped call
+// site both ops share, and therefore the ONE place the payer is resolved.
+func narrate(s *cloud.Service[state], ctx context.Context, org, prompt string) string {
 	if s.State.ai == nil || strings.TrimSpace(prompt) == "" {
 		return ""
 	}
-	payer := principal.Ledger(c)
-	res, err := s.State.ai.ChatCompletion(c.Context(), &cloud.ChatRequest{
+	res, err := s.State.ai.ChatCompletion(ctx, &cloud.ChatRequest{
 		Model:      s.State.model,
 		Prompt:     prompt,
 		Org:        org,
-		BillingOrg: payer,
+		BillingOrg: ledgerOf(ctx),
 	})
 	if err != nil || res == nil {
 		return ""

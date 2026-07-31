@@ -14,11 +14,11 @@
 
 // The embedded collector's ingest door, in ZAP.
 //
-// Cloud runs a real otelcol pipeline; this is the receiver that feeds it. It
+// o11y runs a real otelcol pipeline; this is the receiver that feeds it. It
 // replaces otlpreceiver, which mattered for a reason beyond dependency hygiene:
-// that receiver bound OTLP gRPC to 0.0.0.0:4317, and 4317 is the canonical ZAP
-// port every Hanzo service now sends spans to. An OTLP listener on that port
-// receives ZAP frames it cannot parse.
+// that receiver bound OTLP gRPC to the span port, and the span port is where
+// every Hanzo service sends ZAP frames. An OTLP listener there receives frames
+// it cannot parse.
 //
 // The wire is the one luxfi/trace emits and o11y/pkg/zapreceiver decodes: a JSON
 // SpanBatch inside a ZAP envelope. No protobuf, no OTLP, no gRPC.
@@ -38,6 +38,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/receiver"
 
+	"github.com/hanzoai/cloud"
 	zaplogreceiver "github.com/hanzoai/o11y/pkg/zaplogreceiver"
 	zapreceiver "github.com/hanzoai/o11y/pkg/zapreceiver"
 )
@@ -61,7 +62,7 @@ func newZapReceiverFactory() receiver.Factory {
 	return receiver.NewFactory(
 		component.MustNewType("zap"),
 		func() component.Config {
-			return &zapReceiverConfig{Endpoint: "0.0.0.0:4317", LogsEndpoint: "0.0.0.0:4318"}
+			return &zapReceiverConfig{Endpoint: bindAll(cloud.O11ySpanPort), LogsEndpoint: bindAll(cloud.O11yLogPort)}
 		},
 		receiver.WithTraces(createZapTracesReceiver, component.StabilityLevelBeta),
 		receiver.WithLogs(createZapLogsReceiver, component.StabilityLevelBeta),
@@ -242,7 +243,7 @@ type zapLogsReceiver struct {
 func (r *zapLogsReceiver) Start(_ context.Context, _ component.Host) error {
 	listen := r.cfg.LogsEndpoint
 	if listen == "" {
-		listen = "0.0.0.0:4318"
+		listen = bindAll(cloud.O11yLogPort)
 	}
 	rcv, err := zaplogreceiver.New(zaplogreceiver.Config{
 		Listen: listen,

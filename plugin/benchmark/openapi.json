@@ -18,48 +18,519 @@
   "paths": {
     "/v1/benchmark/catalog": {
       "get": {
-        "operationId": "get_v1_benchmark_catalog",
+        "operationId": "benchmarkCatalog",
+        "summary": "catalog returns the canonical public benchmark set the arena runs.",
+        "description": "catalog returns the canonical public benchmark set the arena runs.\nThat is the top-14 every major provider reports, under one standardized harness.\nStatic registry data: no measurement is read.",
         "tags": [
           "benchmark"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "axis": "science-reasoning",
+                      "id": "gpqa_diamond",
+                      "items": 198,
+                      "native": true,
+                      "source": "hendrydong/gpqa_diamond_mc",
+                      "title": "GPQA-Diamond"
+                    }
+                  ],
+                  "total": 14
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/benchmark/compare": {
       "get": {
-        "operationId": "get_v1_benchmark_compare",
+        "operationId": "benchmarkCompare",
+        "summary": "compare runs the ONLY valid arm-vs-arm test, paired on a common item set.",
+        "description": "compare runs the ONLY valid arm-vs-arm test, paired on a common item set. It\nreports each arm's rescues over the other on the items BOTH models completed, plus\nan exact two-sided McNemar p. Pairing is what prevents the subset artifact — one\nmodel's easy subset scored against another's full run.",
         "tags": [
           "benchmark"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "benchmark",
+            "in": "query",
+            "required": false,
+            "description": "Benchmark is a catalog benchmark id; empty means gpqa_diamond.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "gpqa_diamond"
+          },
+          {
+            "name": "a",
+            "in": "query",
+            "required": true,
+            "description": "A is the first model id. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "grok-4.5"
+          },
+          {
+            "name": "b",
+            "in": "query",
+            "required": true,
+            "description": "B is the second model id. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "gpt-5.6-sol"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "a": "grok-4.5",
+                  "a_correct": 173,
+                  "b": "gpt-5.6-sol",
+                  "b_correct": 168,
+                  "benchmark": "gpqa_diamond",
+                  "mcnemar_p": 0.4049,
+                  "n_common": 196,
+                  "net_a_minus_b": 5,
+                  "rescue_a_over_b": 14,
+                  "rescue_b_over_a": 9
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Comparison"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/benchmark/leaderboard": {
       "get": {
-        "operationId": "get_v1_benchmark_leaderboard",
+        "operationId": "benchmarkLeaderboard",
+        "summary": "leaderboard aggregates one benchmark's measured attempts per model and layers the",
+        "description": "leaderboard aggregates one benchmark's measured attempts per model and layers the\nprovider-published claim beside them, coverage-aware and never blended: gap is\npublished − measured, and a model with only one of the two planes shows null for\nthe other.",
         "tags": [
           "benchmark"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "benchmark",
+            "in": "query",
+            "required": false,
+            "description": "Benchmark is a catalog benchmark id; empty means gpqa_diamond.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "gpqa_diamond"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "benchmark": "gpqa_diamond",
+                  "rows": [
+                    {
+                      "gap": 5.9,
+                      "measured": 88.4,
+                      "model": "grok-4.5",
+                      "n": 198,
+                      "protocol": "provider-reported",
+                      "published": 94.3
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Leaderboard"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/benchmark/presets": {
       "get": {
-        "operationId": "get_v1_benchmark_presets",
+        "operationId": "benchmarkPresets",
+        "summary": "presets lists the router blends available to the caller.",
+        "description": "presets lists the router blends available to the caller. Today that is the single\nbuilt-in reference blend — user presets do not persist yet — so it is the worked\nexample to fork, not an enumeration of anyone's saved blends.",
         "tags": [
           "benchmark"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "arms": [
+                        "enso-ultra",
+                        "zen5-pro"
+                      ],
+                      "name": "ultra",
+                      "note": "example blend; fork it and swap arms by your measured leaderboard.",
+                      "owner": "hanzo",
+                      "panel": 3,
+                      "rank": [
+                        "enso-ultra"
+                      ]
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/PresetList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_benchmark_presets",
+        "operationId": "benchmarkCreatePreset",
+        "summary": "createPreset validates a router blend and answers 202 with its enso-\u003cname\u003e id.",
+        "description": "createPreset validates a router blend and answers 202 with its enso-\u003cname\u003e id. Every\nrank entry must resolve to a declared arm; panel below 1 is raised to 1 and an empty\nrank defaults to the arms order. Nothing is persisted yet — the enso serving layer\nresolves the blend.",
         "tags": [
           "benchmark"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "arms": [
+                  "zen5-pro",
+                  "grok-4.5"
+                ],
+                "name": "mine",
+                "note": "my measured winners",
+                "panel": 2,
+                "rank": [
+                  "zen5-pro"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Preset"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetAccepted"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        }
       }
     },
     "/v1/benchmark/runs": {
       "post": {
-        "operationId": "post_v1_benchmark_runs",
+        "operationId": "benchmarkRun",
+        "summary": "queueRun admits and queues a measurement run, answering 202.",
+        "description": "queueRun admits and queues a measurement run, answering 202. The target is a\ncatalog model or a BYO OpenAI-compatible endpoint. Every benchmark id is validated\nagainst the catalog first, so an unknown id is rejected rather than silently\ndropped. Execution is the async worker; nothing is measured on this call.",
         "tags": [
           "benchmark"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "attempts": 198,
+                "benchmarks": [
+                  "gpqa_diamond"
+                ],
+                "model": "zen5-pro"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunQueued"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Benchmark": {
+        "properties": {
+          "axis": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "integer"
+          },
+          "native": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Catalog": {
+        "properties": {
+          "data": {
+            "description": "Data is every benchmark in the catalog, in registry order.",
+            "items": {
+              "$ref": "#/components/schemas/Benchmark"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many benchmarks the catalog holds.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Comparison": {
+        "properties": {
+          "a": {
+            "description": "A and B are the two model ids compared.",
+            "type": "string"
+          },
+          "a_correct": {
+            "description": "ACorrect and BCorrect are each arm's correct count on the common set.",
+            "type": "integer"
+          },
+          "b": {
+            "type": "string"
+          },
+          "b_correct": {
+            "type": "integer"
+          },
+          "benchmark": {
+            "description": "Benchmark is the benchmark both arms were measured on.",
+            "type": "string"
+          },
+          "mcnemar_p": {
+            "description": "McnemarP is the two-sided exact McNemar p over the discordant pairs.",
+            "type": "number"
+          },
+          "n_common": {
+            "description": "NCommon is how many items BOTH arms completed — the only valid denominator.",
+            "type": "integer"
+          },
+          "net_a_minus_b": {
+            "description": "NetAMinusB is rescue_a_over_b − rescue_b_over_a.",
+            "type": "integer"
+          },
+          "rescue_a_over_b": {
+            "description": "RescueAOverB is items A got right and B got wrong; RescueBOverA the reverse.",
+            "type": "integer"
+          },
+          "rescue_b_over_a": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "LeaderRow": {
+        "properties": {
+          "gap": {
+            "description": "Gap is published − measured, the arena signal. Null unless both planes exist.",
+            "type": "number"
+          },
+          "measured": {
+            "description": "Measured is the hanzo-measured accuracy %, null when the model was not run.",
+            "type": "number"
+          },
+          "model": {
+            "description": "Model is the model id the row aggregates.",
+            "type": "string"
+          },
+          "n": {
+            "description": "N is the coverage (items measured) — NEVER compare rows across different n.",
+            "type": "integer"
+          },
+          "protocol": {
+            "description": "Protocol is how the provider scored their claim (single-attempt/pass@k/agentic).",
+            "type": "string"
+          },
+          "published": {
+            "description": "Published is the provider-claimed %, null when no claim is on file.",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "Leaderboard": {
+        "properties": {
+          "benchmark": {
+            "description": "Benchmark is the benchmark the rows were aggregated for.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Rows is one row per model, sorted by measured accuracy descending.",
+            "items": {
+              "$ref": "#/components/schemas/LeaderRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Preset": {
+        "properties": {
+          "arms": {
+            "description": "Arms is the blend — model ids from the arena.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the blend's name; it is served as enso-\u003cname\u003e.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note records why this blend was authored (audit).",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Owner is the scoping org (never cross-tenant).",
+            "type": "string"
+          },
+          "panel": {
+            "description": "Panel is the fan-out width (\u003e= 1); below 1 it is raised to 1.",
+            "type": "integer"
+          },
+          "rank": {
+            "description": "Rank is the escalation order over arms; empty means the arms order.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "PresetAccepted": {
+        "properties": {
+          "note": {
+            "description": "Note states where the blend is resolved.",
+            "type": "string"
+          },
+          "preset": {
+            "$ref": "#/components/schemas/Preset",
+            "description": "Preset is the normalized preset (panel raised to \u003e= 1, rank defaulted to arms)."
+          },
+          "served_as": {
+            "description": "ServedAs is the model id the enso serving layer resolves this blend under.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"accepted\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PresetList": {
+        "properties": {
+          "data": {
+            "description": "Data is every preset visible to the caller.",
+            "items": {
+              "$ref": "#/components/schemas/Preset"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "RunQueued": {
+        "properties": {
+          "benchmarks": {
+            "description": "Benchmarks echoes the admitted benchmark ids.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "model": {
+            "description": "Model and Endpoint echo the admitted target.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note states the caching rule the runner applies.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"queued\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RunRequest": {
+        "properties": {
+          "attempts": {
+            "description": "Attempts caps how many items to attempt; 0 means the whole benchmark.",
+            "type": "integer"
+          },
+          "benchmarks": {
+            "description": "Benchmarks is the catalog benchmark ids to run. At least one is required.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "endpoint": {
+            "description": "Endpoint is a BYO OpenAI-compatible base URL to measure instead of a\ncatalog model.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the model id to measure. Required unless Endpoint is given.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

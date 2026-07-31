@@ -41,6 +41,32 @@ import (
 // host is the process-global goja host for the plans bundle. nil before Mount.
 var host *goja.Host
 
+// noArgs is the input of an op that takes nothing.
+type noArgs struct{}
+
+// healthView is the GET /v1/plans/health response.
+type healthView struct {
+	// Status is "ok" whenever the route answers — the probe is native, so it needs
+	// neither the bundle nor a catalog to reply.
+	Status string `json:"status"`
+	// Service names which subsystem answered, so a shadowing route is visible.
+	Service string `json:"service"`
+}
+
+// health reports that the plans subsystem is mounted and answering. It runs no JS
+// and reads no catalog, so it stays true when the bundle cannot resolve a plan.
+//
+// Response: {"status": "ok", "service": "plans"}
+func health(context.Context, *noArgs) (*healthView, error) {
+	return &healthView{Status: "ok", Service: "plans"}, nil
+}
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, the ONLY way prose reaches the published document, the MCP tool
+// list and the CLI help — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // Mount registers the /v1/plans/* surface on app per HIP-0106.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
@@ -73,11 +99,23 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	g := app.Group("/v1/plans")
 
-	// Native health endpoint — always answers, no JS, no auth.
-	g.Get("/health", func(c *zip.Ctx) error {
-		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "service": "plans"})
-	})
+	// Native health endpoint — always answers, no JS, no auth. It is the ONE route
+	// here with a shape this package knows, so it is the one typed op; a router with
+	// no registry loses only that declaration, not the surface.
+	if reg := cloud.ZipApp(app); reg != nil {
+		zip.Get(reg, "/v1/plans/health", health)
+	} else {
+		g.Get("/health", func(c *zip.Ctx) error {
+			return c.JSON(http.StatusOK, healthView{Status: "ok", Service: "plans"})
+		})
+	}
 
+	// Every route below dispatches into the goja bundle, which answers with its OWN
+	// bytes and its OWN status (200, or 404 for an unknown plan). Neither is a shape
+	// this package holds — the catalog's schema lives in @hanzo/plans — so none of
+	// them can be a typed op: an Out would have to be invented, and the status
+	// passthrough would be lost.
+	//
 	// Fixed-route handlers. Each maps a path to a bundle route name.
 	// gateway-minted identity (c.Org()) becomes the tenant for catalog scoping.
 	type binding struct{ path, route string }

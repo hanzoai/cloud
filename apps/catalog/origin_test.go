@@ -29,7 +29,7 @@ func TestOriginSeparatesTheNouns(t *testing.T) {
 	repo := fromRepo(ghRepo{Name: "cloud", HTMLURL: "https://github.com/hanzoai/cloud"}, hz)
 
 	got := map[string]string{}
-	for _, e := range publish(t, []Entry{repo}) {
+	for _, e := range publish(t, []CatalogEntry{repo}) {
 		got[e.ID] = e.Origin
 	}
 	for id, want := range map[string]string{

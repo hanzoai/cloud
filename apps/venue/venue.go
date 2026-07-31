@@ -42,7 +42,13 @@
 // external id via STS — no stored access keys); GCP prefers Workload Identity
 // Federation (an external_account config, no service-account private key). Only
 // DigitalOcean requires a stored secret (a PAT), sealed in KMS.
+//
+// EVERY ROUTE IS A TYPED OP (zip.Get/Post/Delete with concrete In/Out structs), so
+// REST, the OpenAPI document, the MCP tool list and the CLI all derive from the one
+// registration. Handler prose is lifted into the spec at build time by cmd/zipdoc.
 package venue
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
 	"context"
@@ -201,27 +207,46 @@ func build(b cloud.Base) (state, error) {
 }
 
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every op below takes the
+	// request (and the validated org it proves) off the context it parks.
+	app.Group("/v1/cloud").Use(cloud.Bridge())
+
 	// Static /v1/cloud/accounts registers before the /:provider wildcards.
-	app.Get("/v1/cloud", cloud.Handle(s, listProviders))
-	app.Get("/v1/cloud/accounts", cloud.Handle(s, listAccountsH))
-	app.Post("/v1/cloud/:provider/accounts", cloud.Handle(s, linkAccount))
-	app.Post("/v1/cloud/:provider/accounts/:label/sync", cloud.Handle(s, syncAccount))
-	app.Delete("/v1/cloud/:provider/accounts/:label", cloud.Handle(s, unlinkAccount))
+	zip.Get(z, "/v1/cloud", o.listProviders)
+	zip.Get(z, "/v1/cloud/accounts", o.listAccounts)
+	zip.Post(z, "/v1/cloud/:provider/accounts", o.linkAccount, zip.WithStatus(http.StatusCreated))
+	zip.Post(z, "/v1/cloud/:provider/accounts/:label/sync", o.syncAccount)
+	zip.Delete(z, "/v1/cloud/:provider/accounts/:label", o.unlinkAccount)
 }
+
+// ops binds the service to venue's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, the only bound form
+// cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
 
 // ── identity / validation ───────────────────────────────────────────────────
 
 // tenant resolves the validated org every handler is scoped by. Missing identity
-// is 403 (a ready-made *zip.HTTPError).
-func tenant(c *zip.Ctx) (string, error) {
+// is 403 (a ready-made *zip.HTTPError). It also hands back the request, which the
+// billing gate, the project scope and the admin bit are read from — absent off the
+// HTTP path, where there is no caller, so the op refuses.
+func tenant(ctx context.Context) (string, *zip.Ctx, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return "", nil, zip.ErrForbidden("a validated principal is required")
+	}
 	org, ok := principal.Org(c)
 	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
+		return "", nil, zip.ErrForbidden("a validated principal is required")
 	}
 	if !validSegment(org) {
-		return "", zip.ErrBadRequest("org must be a DNS-1123 label")
+		return "", nil, zip.ErrBadRequest("org must be a DNS-1123 label")
 	}
-	return org, nil
+	return org, c, nil
 }
 
 // requireAdmin gates a mutation on the caller being an admin of their OWN org
@@ -264,8 +289,8 @@ func labelIn(raw string) (string, error) {
 	return l, nil
 }
 
-func driverFor(s *cloud.Service[state], c *zip.Ctx) (driver, bool) {
-	d, ok := s.State.drivers[strings.TrimSpace(c.Param("provider"))]
+func driverFor(s *cloud.Service[state], provider string) (driver, bool) {
+	d, ok := s.State.drivers[strings.TrimSpace(provider)]
 	return d, ok
 }
 
@@ -287,8 +312,8 @@ func kmsUnavailable() error {
 	return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
 }
 
-// listAccounts reads the org's account index. Absent ⇒ empty (not an error).
-func listAccounts(s *cloud.Service[state], org string) ([]Account, error) {
+// readIndex reads the org's account index. Absent ⇒ empty (not an error).
+func readIndex(s *cloud.Service[state], org string) ([]Account, error) {
 	raw, err := s.State.kms.Get(indexPath(org), indexName, venueEnv)
 	if errors.Is(err, kms.ErrSecretNotFound) {
 		return nil, nil
@@ -382,100 +407,179 @@ type providerCard struct {
 	Requires []string `json:"requires"`
 }
 
+// ── wire types ──────────────────────────────────────────────────────────────
+
+// providerList is the connectable-provider card set.
+type providerList struct {
+	// Providers is one card per cloud venue can link, with the fields each needs.
+	Providers []providerCard `json:"providers"`
+}
+
+// accountList is this org's linked cloud accounts, across every provider.
+type accountList struct {
+	// Accounts is the index (metadata only — a credential is never in a response).
+	Accounts []accountView `json:"accounts"`
+}
+
+// accountRef addresses one linked account: the provider slug and the org-chosen label.
+type accountRef struct {
+	// Provider is the cloud slug from the path: digitalocean, aws, gcp or azure.
+	Provider string `json:"provider"`
+	// Label names the account within that provider; empty means "default".
+	Label string `json:"label"`
+}
+
+// linkRequest is the link body: the org-chosen label plus the credential fields
+// of the provider named in the path. Only that provider's fields are read.
+type linkRequest struct {
+	// Provider is the cloud slug from the path: digitalocean, aws, gcp or azure.
+	Provider string `json:"provider"`
+	// Label names this account within the provider; empty means "default".
+	Label string `json:"label"`
+	// Token is the DigitalOcean personal access token. DigitalOcean only.
+	Token string `json:"token,omitempty"`
+	// RoleARN is the AWS role Hanzo assumes cross-account (no stored keys). AWS only.
+	RoleARN string `json:"roleArn,omitempty"`
+	// ExternalID pins the AWS role assumption to Hanzo (confused-deputy protection).
+	ExternalID string `json:"externalId,omitempty"`
+	// Regions bounds the AWS eks:ListClusters sweep.
+	Regions []string `json:"regions,omitempty"`
+	// CredentialJSON is a Google credentials JSON — an external_account (keyless
+	// Workload Identity Federation) or a service_account key. GCP only.
+	CredentialJSON string `json:"credentialJson,omitempty"`
+	// ProjectIDs bounds the GCP container.clusters.list sweep.
+	ProjectIDs []string `json:"projectIds,omitempty"`
+	// TenantID is the Azure AAD tenant. Azure only.
+	TenantID string `json:"tenantId,omitempty"`
+	// ClientID is the Azure AAD application. Azure only.
+	ClientID string `json:"clientId,omitempty"`
+	// ClientSecret selects the Azure service-principal flow; omitting it selects
+	// keyless Workload Identity Federation.
+	ClientSecret string `json:"clientSecret,omitempty"`
+	// SubscriptionIDs bounds the Azure managedClusters sweep.
+	SubscriptionIDs []string `json:"subscriptionIds,omitempty"`
+}
+
+// credential is the sealed blob this request carries — the same shape the KMS
+// custody path stores, assembled from the flat body.
+func (r linkRequest) credential() cred {
+	return cred{
+		Token: r.Token, RoleARN: r.RoleARN, ExternalID: r.ExternalID, Regions: r.Regions,
+		CredentialJSON: r.CredentialJSON, ProjectIDs: r.ProjectIDs,
+		TenantID: r.TenantID, ClientID: r.ClientID, ClientSecret: r.ClientSecret,
+		SubscriptionIDs: r.SubscriptionIDs,
+	}
+}
+
+// accountResult is a linked (or re-synced) account with the per-cluster fold outcome.
+type accountResult struct {
+	// Account is the account's non-secret index record.
+	Account accountView `json:"account"`
+	// Clusters is one row per discovered cluster: folded, or the reason it was not.
+	Clusters []clusterResult `json:"clusters"`
+}
+
+// unlinkResult is the idempotent answer to an unlink.
+type unlinkResult struct {
+	// Unlinked is always true — unlinking an account that is not linked is a no-op.
+	Unlinked bool `json:"unlinked"`
+}
+
 // ── handlers ────────────────────────────────────────────────────────────────
 
-// listProviders returns the connectable provider cards (what each link needs).
-func listProviders(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, err := tenant(c); err != nil {
-		return err
+// listProviders returns the cloud providers an org can connect and the credential
+// fields each one needs. Keyless providers take no stored secret.
+func (o ops) listProviders(ctx context.Context, _ *struct{}) (*providerList, error) {
+	if _, _, err := tenant(ctx); err != nil {
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"providers": []providerCard{
+	return &providerList{Providers: []providerCard{
 		{ID: providerDO, Name: "DigitalOcean", Keyless: false, Requires: []string{"token"}},
 		{ID: providerAWS, Name: "AWS", Keyless: true, Requires: []string{"roleArn", "externalId", "regions"}},
 		{ID: providerGCP, Name: "Google Cloud", Keyless: true, Requires: []string{"credentialJson", "projectIds"}},
 		{ID: providerAzure, Name: "Azure", Keyless: true, Requires: []string{"tenantId", "clientId", "subscriptionIds"}},
-	}})
+	}}, nil
 }
 
-// listAccountsH lists this org's linked cloud accounts (all providers).
-func listAccountsH(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// listAccounts returns the caller org's linked cloud accounts across every
+// provider — metadata only; a sealed credential never appears in a response.
+func (o ops) listAccounts(ctx context.Context, _ *struct{}) (*accountList, error) {
+	s := o.s
+	org, _, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !kmsReady(s) {
-		return kmsUnavailable()
+		return nil, kmsUnavailable()
 	}
-	list, err := listAccounts(s, org)
+	list, err := readIndex(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]accountView, 0, len(list))
 	for _, a := range list {
 		out = append(out, viewOf(a))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"accounts": out})
+	return &accountList{Accounts: out}, nil
 }
 
-// linkAccount is the intake path: verify the credential LIVE, seal it, then
-// discover + fold the account's clusters. Fail-closed: a bad credential is
-// refused and NOTHING is stored.
-func linkAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// linkAccount links a labeled cloud account: it verifies the credential LIVE,
+// seals it in the org's KMS namespace, then discovers the account's Kubernetes
+// clusters and folds each into the org's fleet. Fail-closed — a credential that
+// does not verify is refused and NOTHING is stored. Org admin only.
+//
+// Example: {"provider": "digitalocean", "label": "team-a", "token": "dop_v1_…"}
+func (o ops) linkAccount(ctx context.Context, in *linkRequest) (*accountResult, error) {
+	s := o.s
+	org, c, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := requireAdmin(c); err != nil {
-		return err
+		return nil, err
 	}
-	d, ok := driverFor(s, c)
+	d, ok := driverFor(s, in.Provider)
 	if !ok {
-		return zip.ErrNotFound("unknown provider")
+		return nil, zip.ErrNotFound("unknown provider")
 	}
 	if !kmsReady(s) {
-		return kmsUnavailable()
+		return nil, kmsUnavailable()
 	}
-	var req struct {
-		Label string `json:"label"`
-		cred
+	cr := in.credential()
+	if err := boundsOf(cr); err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(c.Body(), &req); err != nil {
-		return zip.ErrBadRequest("invalid request body")
-	}
-	if err := boundsOf(req.cred); err != nil {
-		return err
-	}
-	label, err := labelIn(req.Label)
+	label, err := labelIn(in.Label)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// Cap NEW labels per provider (an existing label re-links / re-seals freely).
-	list, err := listAccounts(s, org)
+	list, err := readIndex(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	if _, exists := findAccount(list, d.id(), label); !exists && countForProvider(list, d.id()) >= maxAccounts {
-		return zip.ErrBadRequest("too many accounts for provider")
+		return nil, zip.ErrBadRequest("too many accounts for provider")
 	}
 
 	// Verify LIVE before sealing anything.
-	ident, verr := d.verify(c.Context(), req.cred)
+	ident, verr := d.verify(ctx, cr)
 	if verr != nil {
 		s.Log.Warn("cloud account verify failed", "provider", d.id(), "org", org, "err", verr)
-		return zip.ErrBadRequest("credential verification failed")
+		return nil, zip.ErrBadRequest("credential verification failed")
 	}
 	// Seal the credential before writing any row.
 	path, err := credPath(org, d.id(), label)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	blob, err := json.Marshal(req.cred)
+	blob, err := json.Marshal(cr)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "marshal credential")
+		return nil, zip.Errorf(http.StatusInternalServerError, "marshal credential")
 	}
 	if err := s.State.kms.Put(path, credName, venueEnv, blob); err != nil {
 		s.Log.Warn("cloud account seal failed", "provider", d.id(), "org", org, "err", err)
-		return zip.Errorf(http.StatusServiceUnavailable, "credential custody failed")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "credential custody failed")
 	}
 
 	prev, _ := findAccount(list, d.id(), label)
@@ -485,85 +589,93 @@ func linkAccount(s *cloud.Service[state], c *zip.Ctx) error {
 		LinkedAt: firstNonEmpty(prev.LinkedAt, nowRFC3339()),
 	}
 	// Discover + fold. Per-cluster failures are DATA, not a link failure.
-	results, acct := discoverAndFold(s, c, org, req.cred, d, acct)
+	results, acct := discoverAndFold(s, c, org, cr, d, acct)
 	acct.SyncedAt = nowRFC3339()
 	list = upsertAccount(list, acct)
 	if err := writeIndex(s, org, list); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "persist account: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "persist account: %v", err)
 	}
-	return c.JSON(http.StatusCreated, map[string]any{"account": viewOf(acct), "clusters": results})
+	return &accountResult{Account: viewOf(acct), Clusters: results}, nil
 }
 
-// syncAccount re-discovers + re-folds an existing account (refreshes kubeconfigs,
-// reconciles the fold set). Idempotent.
-func syncAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// syncAccount re-discovers and re-folds an already linked account: kubeconfigs are
+// refreshed, clusters deleted upstream are detached, new ones are folded.
+// Idempotent. Org admin only.
+//
+// Example: {"provider": "digitalocean", "label": "team-a"}
+func (o ops) syncAccount(ctx context.Context, in *accountRef) (*accountResult, error) {
+	s := o.s
+	org, c, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := requireAdmin(c); err != nil {
-		return err
+		return nil, err
 	}
-	d, ok := driverFor(s, c)
+	d, ok := driverFor(s, in.Provider)
 	if !ok {
-		return zip.ErrNotFound("unknown provider")
+		return nil, zip.ErrNotFound("unknown provider")
 	}
-	label, err := labelIn(c.Param("label"))
+	label, err := labelIn(in.Label)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !kmsReady(s) {
-		return kmsUnavailable()
+		return nil, kmsUnavailable()
 	}
-	list, err := listAccounts(s, org)
+	list, err := readIndex(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	acct, found := findAccount(list, d.id(), label)
 	if !found {
-		return zip.ErrNotFound("cloud account not linked")
+		return nil, zip.ErrNotFound("cloud account not linked")
 	}
 	cr, err := loadCred(s, org, d.id(), label)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	results, acct := discoverAndFold(s, c, org, cr, d, acct)
 	acct.SyncedAt = nowRFC3339()
 	list = upsertAccount(list, acct)
 	if err := writeIndex(s, org, list); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "persist account: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "persist account: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"account": viewOf(acct), "clusters": results})
+	return &accountResult{Account: viewOf(acct), Clusters: results}, nil
 }
 
-// unlinkAccount detaches every cluster this account folded, then forgets the
-// sealed credential + index row. Idempotent.
-func unlinkAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// unlinkAccount detaches every cluster the account folded, forgets the sealed
+// credential and drops the index row. Idempotent — unlinking an account that is
+// not linked succeeds. Org admin only.
+//
+// Example: {"provider": "digitalocean", "label": "team-a"}
+func (o ops) unlinkAccount(ctx context.Context, in *accountRef) (*unlinkResult, error) {
+	s := o.s
+	org, c, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := requireAdmin(c); err != nil {
-		return err
+		return nil, err
 	}
-	d, ok := driverFor(s, c)
+	d, ok := driverFor(s, in.Provider)
 	if !ok {
-		return zip.ErrNotFound("unknown provider")
+		return nil, zip.ErrNotFound("unknown provider")
 	}
-	label, err := labelIn(c.Param("label"))
+	label, err := labelIn(in.Label)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !kmsReady(s) {
-		return kmsUnavailable()
+		return nil, kmsUnavailable()
 	}
-	list, err := listAccounts(s, org)
+	list, err := readIndex(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	acct, found := findAccount(list, d.id(), label)
 	if !found {
-		return c.JSON(http.StatusOK, map[string]any{"unlinked": true})
+		return &unlinkResult{Unlinked: true}, nil
 	}
 	// Detach the clusters this account folded (only its own fold names, in its
 	// recorded fleet shard) — reverses the fold.
@@ -585,9 +697,9 @@ func unlinkAccount(s *cloud.Service[state], c *zip.Ctx) error {
 		out = append(out, a)
 	}
 	if err := writeIndex(s, org, out); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "persist account: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "persist account: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"unlinked": true})
+	return &unlinkResult{Unlinked: true}, nil
 }
 
 // ── discovery + fold ────────────────────────────────────────────────────────

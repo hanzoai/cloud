@@ -206,6 +206,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// concatLink(LOVE_ENDPOINT, '/getToken') from a published bundle, so with
 	// LOVE_ENDPOINT=/v1/meet the wire lands here. Renaming it means shipping a new
 	// front image, not editing a manifest.
+	//
+	// A RAW handler, and not a typed op: the success body is the token as
+	// text/plain (the caller reads it with res.text()), and a typed op answers
+	// application/json — the one shape it can state — so declaring this one would
+	// publish a contract the office client cannot consume. See mint.
 	app.Post("/v1/meet/getToken", cloud.Handle(s, mint))
 
 	// /v1/meet/health makes "the office is unconfigured" a SIGNAL rather than a grep.
@@ -219,6 +224,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// public. ready:false is the whole dashboard fact; the reason, which names the key
 	// file and the Secret, stays in the boot log where the operator already is. Same
 	// posture as the getToken 503 (see health, below) — one file, one answer.
+	//
+	// A RAW handler, and not a typed op, for the same reason it answers 503: the
+	// DEGRADED body — {service, status, ready:false} under a 503 — IS the probe's
+	// contract, and a typed op states exactly ONE success status and turns every
+	// other answer into zip's fixed error shape, which is where ready:false would
+	// go to die.
 	app.Get("/v1/meet/health", cloud.Handle(s, health))
 
 	if !s.State.ready() {

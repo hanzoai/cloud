@@ -80,7 +80,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		State: state{store: store, idv: provider, webhook: webhook, audit: deps.Audit},
 	}
 	mounted = s
-	routes(app, s)
+	if err := routes(app, s); err != nil {
+		return err
+	}
 	s.Log.Info("compliance mounted", "brand", deps.Brand, "provider", provider.Name(), "webhook", webhook != nil, "audit", deps.Audit != nil)
 	return nil
 }
@@ -99,32 +101,109 @@ func kmsGetter(deps cloud.Deps) idv.SecretFn {
 
 // routes registers the compliance surface. Static + collection routes register
 // before :id params so an id can never shadow a sibling route (Fiber first-match).
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/compliance")
-	g.Get("/health", cloud.Handle(s, health))
-	g.Get("/status", cloud.Handle(s, status))
-	g.Get("/records", cloud.Handle(s, listRecords))
-	g.Get("/audit", cloud.Handle(s, auditRead))
+func routes(app cloud.Router, s *cloud.Service[state]) error {
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("compliance.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	o := ops{s: s}
+	// The bridge FIRST — fiber runs middleware in registration order — bounded to
+	// compliance's own subtree; every org-scoped op resolves its tenant through it.
+	app.Group("/v1/compliance").Use(cloud.Bridge())
 
-	g.Post("/subjects", cloud.Handle(s, createSubject))
-	g.Get("/subjects", cloud.Handle(s, listSubjects))
-	g.Get("/subjects/:id", cloud.Handle(s, getSubject))
+	zip.Get(zapp, "/v1/compliance/health", o.health)
+	zip.Get(zapp, "/v1/compliance/status", o.status)
+	zip.Get(zapp, "/v1/compliance/records", o.listRecords)
+	zip.Get(zapp, "/v1/compliance/audit", o.auditRead)
 
-	g.Post("/verifications", cloud.Handle(s, startVerification))
-	g.Get("/verifications", cloud.Handle(s, listVerifications))
+	zip.Post(zapp, "/v1/compliance/subjects", o.createSubject, zip.WithStatus(http.StatusCreated))
+	zip.Get(zapp, "/v1/compliance/subjects", o.listSubjects)
+	zip.Get(zapp, "/v1/compliance/subjects/:id", o.getSubject)
+
+	zip.Post(zapp, "/v1/compliance/verifications", o.startVerification, zip.WithStatus(http.StatusCreated))
+	zip.Get(zapp, "/v1/compliance/verifications", o.listVerifications)
 	// A terminal status is reachable by exactly three orthogonal paths, never a raw
 	// client assertion: a SIGNATURE-authenticated provider webhook (push), an internal
 	// provider RECONCILE (pull), or a role-gated, attributed reviewer DECISION. The
 	// webhook route is static, registered before :id (Fiber first-match).
-	g.Post("/verifications/webhook", cloud.Handle(s, verificationWebhook))
-	g.Get("/verifications/:id", cloud.Handle(s, getVerification))
-	g.Post("/verifications/:id/refresh", cloud.Handle(s, refreshVerification))
-	g.Post("/verifications/:id/decision", cloud.Handle(s, decideVerification))
+	//
+	// It stays a RAW handler: it authenticates by HMAC over the EXACT request bytes,
+	// which a typed op never sees — zip hands the handler a decoded In, and a
+	// re-encoded body does not reproduce the signed bytes. Typing it would break
+	// signature verification, so it is declared nowhere rather than declared wrong.
+	app.Post("/v1/compliance/verifications/webhook", cloud.Handle(s, verificationWebhook))
+	zip.Get(zapp, "/v1/compliance/verifications/:id", o.getVerification)
+	zip.Post(zapp, "/v1/compliance/verifications/:id/refresh", o.refreshVerification)
+	zip.Post(zapp, "/v1/compliance/verifications/:id/decision", o.decideVerification)
 
-	g.Post("/accreditation", cloud.Handle(s, createAccreditation))
-	g.Get("/accreditation", cloud.Handle(s, listAccreditation))
-	g.Get("/accreditation/:id", cloud.Handle(s, getAccreditation))
-	g.Post("/accreditation/:id/decision", cloud.Handle(s, decideAccreditation))
+	zip.Post(zapp, "/v1/compliance/accreditation", o.createAccreditation, zip.WithStatus(http.StatusCreated))
+	zip.Get(zapp, "/v1/compliance/accreditation", o.listAccreditation)
+	zip.Get(zapp, "/v1/compliance/accreditation/:id", o.getAccreditation)
+	zip.Post(zapp, "/v1/compliance/accreditation/:id/decision", o.decideAccreditation)
+	return nil
+}
+
+// ops binds the service to compliance's typed handlers: a TypedHandler has no
+// parameter for the service, so it arrives as a RECEIVER — also the one bound form
+// cmd/zipdoc lifts prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// None is the input of an op that takes none: no body, no query, no path param.
+type None struct{}
+
+// Page bounds a list read.
+type Page struct {
+	// Limit caps the rows returned; 0 means the store's own default.
+	Limit int `json:"limit"`
+}
+
+// tenant resolves the org — the tenant-isolation KEY — that cloud.Bridge carried
+// across the typed seam from the validated IAM owner claim. It is never an In
+// field: an In field is what the caller says about itself.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
+}
+
+// reviewer admits a role-gated DECISION and returns the reviewer it will be
+// attributed to. Fails closed off the HTTP path, where there is no reviewer.
+func reviewer(ctx context.Context, what string) (string, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("a " + what + " requires an org admin or platform reviewer")
+	}
+	if !principal.IsSuperAdmin(c) && !principal.IsOrgAdmin(c) {
+		return "", zip.ErrForbidden("a " + what + " requires an org admin or platform reviewer")
+	}
+	if c.User() == "" {
+		return "", zip.ErrForbidden("a " + what + " requires a signed-in reviewer")
+	}
+	return c.User(), nil
+}
+
+// noStore marks a response uncacheable — these reads carry PII or posture. A no-op
+// off the HTTP path, where there is no response to mark.
+func noStore(ctx context.Context) {
+	if c, ok := cloud.Request(ctx); ok {
+		c.SetHeader("Cache-Control", "no-store")
+	}
+}
+
+// capBody holds the request-body bound the raw handlers enforced before decoding.
+// A typed op is handed its In already decoded, so the check moves to the top of
+// each write op — same limit, same 413.
+func capBody(ctx context.Context) error {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil
+	}
+	if len(c.Fiber().Body()) > maxBody {
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
+	}
+	return nil
 }
 
 // Shutdown closes the record store. Idempotent; safe if Mount never ran.
@@ -139,34 +218,67 @@ func Shutdown() error {
 
 // ---- health / status ----
 
-// health is fail-open liveness: the subsystem opened its store, so it is live. It
-// does NOT probe the external provider (a provider outage must not fail liveness).
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "provider": s.State.idv.Name()})
+// ProviderHealth is the subsystem's liveness answer.
+type ProviderHealth struct {
+	// Status is "ok" while the surface is serving.
+	Status string `json:"status"`
+	// Provider is the wired identity-verification provider.
+	Provider string `json:"provider"`
 }
 
-// status is the org's honest posture read: the wired provider and the per-status
-// tally of its verifications. It is deliberately NOT a boolean "compliant" — it
-// reports counts of provider-reported states and carries the boundary disclaimer.
-func status(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	counts, err := s.State.store.StatusCounts(c.Context(), org)
+// health reports that the compliance surface is serving and which identity
+// provider is wired. It does NOT probe that provider — a provider outage must not
+// fail liveness.
+//
+// Response: {"status": "ok", "provider": "manual"}
+func (o ops) health(ctx context.Context, _ *None) (*ProviderHealth, error) {
+	return &ProviderHealth{Status: "ok", Provider: o.s.State.idv.Name()}, nil
+}
+
+// VerificationTally counts the org's verifications by provider-reported status.
+type VerificationTally struct {
+	// ByStatus is the count per status, one key per status seen.
+	ByStatus map[string]int `json:"byStatus"`
+	// Total is the sum across statuses.
+	Total int `json:"total"`
+}
+
+// Posture is the org's honest compliance posture.
+type Posture struct {
+	// Provider is the wired identity-verification provider.
+	Provider string `json:"provider"`
+	// Verifications is the per-status tally of the org's verifications.
+	Verifications VerificationTally `json:"verifications"`
+	// Disclaimer is the boundary made visible on the wire: Hanzo records what
+	// licensed providers report; it does not itself determine compliance.
+	Disclaimer string `json:"disclaimer"`
+}
+
+// status returns the org's compliance posture: the wired provider and the count of
+// its verifications per provider-reported status. It is deliberately NOT a boolean
+// "compliant" — the platform reports what providers said, nothing more.
+//
+// Response: {"provider": "manual", "verifications": {"byStatus": {"pending": 2}, "total": 2}, "disclaimer": "..."}
+func (o ops) status(ctx context.Context, _ *None) (*Posture, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "status: %v", err)
+		return nil, err
+	}
+	counts, err := s.State.store.StatusCounts(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "status: %v", err)
 	}
 	total := 0
 	for _, n := range counts {
 		total += n
 	}
-	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, map[string]any{
-		"provider":      s.State.idv.Name(),
-		"verifications": map[string]any{"byStatus": counts, "total": total},
-		"disclaimer":    Disclaimer,
-	})
+	noStore(ctx)
+	return &Posture{
+		Provider:      s.State.idv.Name(),
+		Verifications: VerificationTally{ByStatus: counts, Total: total},
+		Disclaimer:    Disclaimer,
+	}, nil
 }
 
 // ---- subjects ----
@@ -175,34 +287,51 @@ func status(s *cloud.Service[state], c *zip.Ctx) error {
 // name/email so a list read never sprays PII. The full record (with contact PII) is
 // returned only on an explicit single-subject GET.
 type subjectSummary struct {
-	ID        string      `json:"id"`
-	Kind      SubjectKind `json:"kind"`
-	Ref       string      `json:"ref,omitempty"`
-	HasEmail  bool        `json:"hasEmail"`
-	CreatedAt int64       `json:"createdAt"`
+	// ID is the subject id, the value every verification and accreditation names.
+	ID string `json:"id"`
+	// Kind is individual or business.
+	Kind SubjectKind `json:"kind"`
+	// Ref is the org's own opaque external id for this subject.
+	Ref string `json:"ref,omitempty"`
+	// HasEmail reports whether contact email is on file, without disclosing it.
+	HasEmail bool `json:"hasEmail"`
+	// CreatedAt is the unix second the subject was recorded.
+	CreatedAt int64 `json:"createdAt"`
 }
 
-func createSubject(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body struct {
-		Kind  SubjectKind `json:"kind"`
-		Ref   string      `json:"ref"`
-		Email string      `json:"email"`
-		Name  string      `json:"name"`
-	}
-	if err := decode(c, &body); err != nil {
-		return err
-	}
-	sub, err := newSubject(s, c.Context(), org, body.Kind, body.Ref, body.Email, body.Name)
+// SubjectRequest records a person or business to verify.
+type SubjectRequest struct {
+	// Kind is individual or business, required.
+	Kind SubjectKind `json:"kind"`
+	// Ref is the org's own opaque external id; required when no email is given.
+	Ref string `json:"ref"`
+	// Email is contact PII, sealed at rest and returned only on a single-subject
+	// read to the owning org. Required when no ref is given.
+	Email string `json:"email"`
+	// Name is contact PII, sealed at rest.
+	Name string `json:"name"`
+}
+
+// createSubject records a person or business to verify. It needs an email or the
+// org's own ref. Contact PII is sealed at rest and never returned by a list read.
+//
+// Example: {"kind": "individual", "ref": "cust_814", "email": "ada@acme.com", "name": "Ada Lovelace"}
+func (o ops) createSubject(ctx context.Context, in *SubjectRequest) (*Subject, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	emitAudit(s, c, "compliance.subject.create", audit.Resource{Type: "compliance.subject", ID: sub.ID},
+	if err := capBody(ctx); err != nil {
+		return nil, err
+	}
+	sub, err := newSubject(s, ctx, org, in.Kind, in.Ref, in.Email, in.Name)
+	if err != nil {
+		return nil, err
+	}
+	emitAudit(s, ctx, "compliance.subject.create", audit.Resource{Type: "compliance.subject", ID: sub.ID},
 		"success", http.StatusCreated, map[string]any{"subjectId": sub.ID, "kind": sub.Kind})
-	return c.JSON(http.StatusCreated, sub)
+	return &sub, nil
 }
 
 // newSubject validates and persists a subject. PII (name/email) is sealed at rest by
@@ -228,74 +357,112 @@ func newSubject(s *cloud.Service[state], ctx context.Context, org string, kind S
 	return sub, nil
 }
 
-func listSubjects(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	subs, err := s.State.store.ListSubjects(c.Context(), org, limitOf(c))
+// SubjectList is the org's subjects, PII-minimized.
+type SubjectList struct {
+	// Data is one row per subject. It carries no name or email — only whether an
+	// email is on file — so a list read never sprays PII.
+	Data []subjectSummary `json:"data"`
+}
+
+// listSubjects returns the caller org's subjects without their contact PII: a row
+// says whether an email is on file, never what it is.
+//
+// Example: {"limit": 50}
+func (o ops) listSubjects(ctx context.Context, in *Page) (*SubjectList, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list subjects: %v", err)
+		return nil, err
+	}
+	subs, err := s.State.store.ListSubjects(ctx, org, in.Limit)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list subjects: %v", err)
 	}
 	out := make([]subjectSummary, 0, len(subs))
 	for _, sub := range subs {
 		out = append(out, subjectSummary{ID: sub.ID, Kind: sub.Kind, Ref: sub.Ref, HasEmail: sub.Email != "", CreatedAt: sub.CreatedAt})
 	}
-	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	noStore(ctx)
+	return &SubjectList{Data: out}, nil
 }
 
-func getSubject(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// SubjectRef addresses one of the caller org's subjects by id.
+type SubjectRef struct {
+	// ID is the subject id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// getSubject returns one of the caller org's subjects INCLUDING its contact PII.
+// This is the only surface that discloses it, and only to the owning org.
+//
+// Example: {"id": "sub_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) getSubject(ctx context.Context, in *SubjectRef) (*Subject, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	sub, err := s.State.store.GetSubject(c.Context(), org, c.Param("id"))
+	sub, err := s.State.store.GetSubject(ctx, org, in.ID)
 	if err == errNotFound {
-		return zip.ErrNotFound("subject not found")
+		return nil, zip.ErrNotFound("subject not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get subject: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get subject: %v", err)
 	}
 	// This explicit single-subject read is the only surface that returns contact PII,
 	// and only to the owning org. No PII cache in any intermediary.
-	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, sub)
+	noStore(ctx)
+	return &sub, nil
 }
 
 // ---- verifications (KYC / KYB) ----
 
-func startVerification(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// StartVerificationRequest opens a KYC/KYB verification. It names an existing
+// subject, or supplies the fields to create one inline.
+type StartVerificationRequest struct {
+	// SubjectID verifies an existing subject. When empty, one is created inline
+	// from kind/ref/email/name.
+	SubjectID string `json:"subjectId"`
+	// Kind is individual or business, for an inline subject.
+	Kind SubjectKind `json:"kind"`
+	// Ref is the org's own opaque external id, for an inline subject.
+	Ref string `json:"ref"`
+	// Email is contact PII, for an inline subject; sealed at rest.
+	Email string `json:"email"`
+	// Name is contact PII, for an inline subject; sealed at rest.
+	Name string `json:"name"`
+}
+
+// startVerification opens a KYC/KYB verification for a subject through the wired
+// provider, creating the subject inline when no subjectId is given. A start is
+// never a decision: the record comes back pending even if the provider reports
+// otherwise, so no path here yields a verified check.
+//
+// Example: {"kind": "individual", "email": "ada@acme.com", "name": "Ada Lovelace"}
+func (o ops) startVerification(ctx context.Context, in *StartVerificationRequest) (*CheckView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body struct {
-		SubjectID string      `json:"subjectId"`
-		Kind      SubjectKind `json:"kind"`
-		Ref       string      `json:"ref"`
-		Email     string      `json:"email"`
-		Name      string      `json:"name"`
-	}
-	if err := decode(c, &body); err != nil {
-		return err
+	if err := capBody(ctx); err != nil {
+		return nil, err
 	}
 
 	// Resolve the subject: an existing one by id, or create one inline from the body.
 	var sub Subject
-	var err error
-	if strings.TrimSpace(body.SubjectID) != "" {
-		sub, err = s.State.store.GetSubject(c.Context(), org, body.SubjectID)
+	if strings.TrimSpace(in.SubjectID) != "" {
+		sub, err = s.State.store.GetSubject(ctx, org, in.SubjectID)
 		if err == errNotFound {
-			return zip.ErrNotFound("subject not found")
+			return nil, zip.ErrNotFound("subject not found")
 		}
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "get subject: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "get subject: %v", err)
 		}
 	} else {
-		sub, err = newSubject(s, c.Context(), org, body.Kind, body.Ref, body.Email, body.Name)
+		sub, err = newSubject(s, ctx, org, in.Kind, in.Ref, in.Email, in.Name)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -303,9 +470,9 @@ func startVerification(s *cloud.Service[state], c *zip.Ctx) error {
 	// provider-reported and, by the seam's contract, non-terminal on a fresh start —
 	// there is NO path here that yields a verified check. A provider error is a 502;
 	// it never degrades to verified.
-	sess, err := s.State.idv.Start(c.Context(), org, idv.Subject{Kind: sub.Kind, Name: sub.Name, Email: sub.Email, Ref: sub.Ref})
+	sess, err := s.State.idv.Start(ctx, org, idv.Subject{Kind: sub.Kind, Name: sub.Name, Email: sub.Email, Ref: sub.Ref})
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "verification start failed")
+		return nil, zip.Errorf(http.StatusBadGateway, "verification start failed")
 	}
 	// A "start" is never a decision. Clamp any terminal status the provider returns
 	// here to pending at the product boundary — belt-and-suspenders over the idv
@@ -317,7 +484,7 @@ func startVerification(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	id, err := genID("chk")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
 	chk := Check{
@@ -325,44 +492,71 @@ func startVerification(s *cloud.Service[state], c *zip.Ctx) error {
 		Provider: s.State.idv.Name(), ProviderRef: sess.Ref, VerifyURL: sess.VerifyURL,
 		Status: initial, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.State.store.CreateCheck(c.Context(), chk); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "create check: %v", err)
+	if err := s.State.store.CreateCheck(ctx, chk); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "create check: %v", err)
 	}
-	emitAudit(s, c, "compliance.verification.start", audit.Resource{Type: "compliance.check", ID: chk.ID},
+	emitAudit(s, ctx, "compliance.verification.start", audit.Resource{Type: "compliance.check", ID: chk.ID},
 		"success", http.StatusCreated,
 		map[string]any{"checkId": chk.ID, "subjectId": sub.ID, "provider": chk.Provider, "kind": chk.Kind, "status": chk.Status})
-	return c.JSON(http.StatusCreated, checkView(chk))
+	v := checkView(chk)
+	return &v, nil
 }
 
-func listVerifications(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	chks, err := s.State.store.ListChecks(c.Context(), org, limitOf(c))
+// VerificationList is the org's verifications.
+type VerificationList struct {
+	// Data is one row per verification, each carrying only opaque ids and the
+	// provider-reported status — never subject PII.
+	Data []CheckView `json:"data"`
+	// Disclaimer is the boundary made visible on the wire.
+	Disclaimer string `json:"disclaimer"`
+}
+
+// listVerifications returns the caller org's verifications, each with its
+// provider-reported status and no subject PII.
+//
+// Example: {"limit": 50}
+func (o ops) listVerifications(ctx context.Context, in *Page) (*VerificationList, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list checks: %v", err)
+		return nil, err
 	}
-	out := make([]map[string]any, 0, len(chks))
+	chks, err := s.State.store.ListChecks(ctx, org, in.Limit)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list checks: %v", err)
+	}
+	out := make([]CheckView, 0, len(chks))
 	for _, chk := range chks {
 		out = append(out, checkView(chk))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out, "disclaimer": Disclaimer})
+	return &VerificationList{Data: out, Disclaimer: Disclaimer}, nil
 }
 
-func getVerification(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// CheckRef addresses one of the caller org's verifications by id.
+type CheckRef struct {
+	// ID is the verification id from the path, as returned by start.
+	ID string `json:"id"`
+}
+
+// getVerification returns one of the caller org's verifications with its current
+// recorded status.
+//
+// Example: {"id": "chk_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) getVerification(ctx context.Context, in *CheckRef) (*CheckView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	chk, err := s.State.store.GetCheck(c.Context(), org, c.Param("id"))
+	chk, err := s.State.store.GetCheck(ctx, org, in.ID)
 	if err == errNotFound {
-		return zip.ErrNotFound("verification not found")
+		return nil, zip.ErrNotFound("verification not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get check: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get check: %v", err)
 	}
-	return c.JSON(http.StatusOK, checkView(chk))
+	v := checkView(chk)
+	return &v, nil
 }
 
 // reconcileCheck is the ONE provider-consult core: it reads the wired provider's
@@ -398,27 +592,34 @@ func reconcileCheck(s *cloud.Service[state], ctx context.Context, chk Check) (Ch
 // the wired provider for the current decision. For the Manual provider this stays
 // pending; for a hosted provider it reflects the provider's settled status,
 // provider-attributed. A poll error is a 502, never a verification.
-func refreshVerification(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// refreshVerification polls the wired provider for a verification's current
+// decision and records it, attributed to the provider. With the manual provider it
+// stays pending; a poll error is a 502 and never a verification.
+//
+// Example: {"id": "chk_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) refreshVerification(ctx context.Context, in *CheckRef) (*CheckView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	chk, err := s.State.store.GetCheck(c.Context(), org, c.Param("id"))
+	chk, err := s.State.store.GetCheck(ctx, org, in.ID)
 	if err == errNotFound {
-		return zip.ErrNotFound("verification not found")
+		return nil, zip.ErrNotFound("verification not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get check: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get check: %v", err)
 	}
-	chk, changed, err := reconcileCheck(s, c.Context(), chk)
+	chk, changed, err := reconcileCheck(s, ctx, chk)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "verification refresh failed")
+		return nil, zip.Errorf(http.StatusBadGateway, "verification refresh failed")
 	}
 	if changed {
-		emitAudit(s, c, "compliance.verification.refresh", audit.Resource{Type: "compliance.check", ID: chk.ID},
+		emitAudit(s, ctx, "compliance.verification.refresh", audit.Resource{Type: "compliance.check", ID: chk.ID},
 			"success", http.StatusOK, map[string]any{"checkId": chk.ID, "provider": chk.Provider, "status": chk.Status})
 	}
-	return c.JSON(http.StatusOK, checkView(chk))
+	v := checkView(chk)
+	return &v, nil
 }
 
 // verificationWebhook is the external PUSH reconcile: a provider (or a Hanzo relay)
@@ -473,73 +674,106 @@ func verificationWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 // provider_verified (a provider decision is the provider's to report, via the webhook
 // or a reconcile). It is ROLE-GATED (an org admin or platform reviewer) AND ATTRIBUTED
 // (the reviewer's user id is DecidedBy), so a manual pass is always accountable.
-func decideVerification(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// CheckDecision is a reviewer's manual decision on a verification.
+type CheckDecision struct {
+	// ID is the verification id from the path; a body value is ignored.
+	ID string `json:"id"`
+	// Status must be reviewer_confirmed (a pass) or manual_review (withhold). A
+	// provider_verified or provider_rejected status is the provider's to report and
+	// is refused here.
+	Status idv.Status `json:"status"`
+}
+
+// decideVerification records a reviewer's manual decision on a verification — the
+// human-in-the-loop path, and the only route to a passing status when no real
+// provider is wired. It requires an org admin or platform reviewer and is
+// attributed to them, and it can only record reviewer_confirmed or manual_review.
+//
+// Example: {"id": "chk_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "status": "reviewer_confirmed"}
+func (o ops) decideVerification(ctx context.Context, in *CheckDecision) (*CheckView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if !principal.IsSuperAdmin(c) && !principal.IsOrgAdmin(c) {
-		return zip.ErrForbidden("a verification decision requires an org admin or platform reviewer")
+	who, err := reviewer(ctx, "verification decision")
+	if err != nil {
+		return nil, err
 	}
-	reviewer := c.User()
-	if reviewer == "" {
-		return zip.ErrForbidden("a verification decision requires a signed-in reviewer")
-	}
-	var body struct {
-		Status idv.Status `json:"status"`
-	}
-	if err := decode(c, &body); err != nil {
-		return err
+	if err := capBody(ctx); err != nil {
+		return nil, err
 	}
 	// A reviewer CONFIRMS (a pass) or WITHHOLDS to review — never asserts a provider
 	// decision. provider_verified/provider_rejected belong to the provider paths.
-	if body.Status != idv.StatusReviewerConfirmed && body.Status != idv.StatusReview {
-		return zip.ErrBadRequest("decision status must be reviewer_confirmed or manual_review")
+	if in.Status != idv.StatusReviewerConfirmed && in.Status != idv.StatusReview {
+		return nil, zip.ErrBadRequest("decision status must be reviewer_confirmed or manual_review")
 	}
 	now := time.Now().Unix()
 	decidedAt := int64(0)
-	if body.Status.Terminal() {
+	if in.Status.Terminal() {
 		decidedAt = now
 	}
-	if err := s.State.store.UpdateCheckStatus(c.Context(), org, c.Param("id"), body.Status, reviewer, now, decidedAt); err != nil {
+	if err := s.State.store.UpdateCheckStatus(ctx, org, in.ID, in.Status, who, now, decidedAt); err != nil {
 		if err == errNotFound {
-			return zip.ErrNotFound("verification not found")
+			return nil, zip.ErrNotFound("verification not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "update check: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update check: %v", err)
 	}
-	chk, err := s.State.store.GetCheck(c.Context(), org, c.Param("id"))
+	chk, err := s.State.store.GetCheck(ctx, org, in.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get check: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get check: %v", err)
 	}
-	emitAudit(s, c, "compliance.verification.decision", audit.Resource{Type: "compliance.check", ID: chk.ID},
-		"success", http.StatusOK, map[string]any{"checkId": chk.ID, "status": chk.Status, "decidedBy": reviewer})
-	return c.JSON(http.StatusOK, checkView(chk))
+	emitAudit(s, ctx, "compliance.verification.decision", audit.Resource{Type: "compliance.check", ID: chk.ID},
+		"success", http.StatusOK, map[string]any{"checkId": chk.ID, "status": chk.Status, "decidedBy": who})
+	v := checkView(chk)
+	return &v, nil
 }
 
 // ---- accreditation (state tracking) ----
 
-func createAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// AccreditationRequest records an ASSERTED accreditation state for a subject.
+type AccreditationRequest struct {
+	// SubjectID is the subject the assertion is about; it must exist in the org.
+	SubjectID string `json:"subjectId"`
+	// Method is how the state was established: self_attested, third_party_letter
+	// or provider_verified.
+	Method AccreditationMethod `json:"method"`
+	// Basis is what qualifies the subject: income, net_worth,
+	// professional_license or entity.
+	Basis AccreditationBasis `json:"basis"`
+	// Status may only be asserted (or empty, which means asserted). Every
+	// confirmed, rejected or expired state is set through the decision endpoint,
+	// so it always carries the reviewer who recorded it.
+	Status AccreditationStatus `json:"status"`
+	// EvidenceDocID references the supporting document, if any.
+	EvidenceDocID string `json:"evidenceDocId"`
+	// Note is a non-PII operator note.
+	Note string `json:"note"`
+	// ExpiresAt is the unix second the assertion lapses, 0 for none.
+	ExpiresAt int64 `json:"expiresAt"`
+}
+
+// createAccreditation records an ASSERTED accreditation state for one of the org's
+// subjects. A create can only ever record an assertion — every confirmed, rejected
+// or expired state goes through the decision endpoint, so it always names the
+// reviewer who recorded it.
+//
+// Example: {"subjectId": "sub_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "method": "self_attested", "basis": "income"}
+func (o ops) createAccreditation(ctx context.Context, in *AccreditationRequest) (*AccreditationView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body struct {
-		SubjectID     string              `json:"subjectId"`
-		Method        AccreditationMethod `json:"method"`
-		Basis         AccreditationBasis  `json:"basis"`
-		Status        AccreditationStatus `json:"status"`
-		EvidenceDocID string              `json:"evidenceDocId"`
-		Note          string              `json:"note"`
-		ExpiresAt     int64               `json:"expiresAt"`
+	if err := capBody(ctx); err != nil {
+		return nil, err
 	}
-	if err := decode(c, &body); err != nil {
-		return err
-	}
+	body := *in
 	if !validAccMethod(body.Method) {
-		return zip.ErrBadRequest("method must be self_attested, third_party_letter, or provider_verified")
+		return nil, zip.ErrBadRequest("method must be self_attested, third_party_letter, or provider_verified")
 	}
 	if !validAccBasis(body.Basis) {
-		return zip.ErrBadRequest("basis must be income, net_worth, professional_license, or entity")
+		return nil, zip.ErrBadRequest("basis must be income, net_worth, professional_license, or entity")
 	}
 	// A create records only an ASSERTED state — the subject's own assertion, with no
 	// verifier. Every CONFIRMED state (provider_verified, reviewer_confirmed) and every
@@ -551,17 +785,17 @@ func createAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
 		st = AccAsserted
 	}
 	if st != AccAsserted {
-		return zip.ErrBadRequest("on create, status may only be asserted; a provider_verified/reviewer_confirmed/rejected/expired state is set via the decision endpoint")
+		return nil, zip.ErrBadRequest("on create, status may only be asserted; a provider_verified/reviewer_confirmed/rejected/expired state is set via the decision endpoint")
 	}
 	// The subject must exist within the org.
-	if _, err := s.State.store.GetSubject(c.Context(), org, body.SubjectID); err == errNotFound {
-		return zip.ErrNotFound("subject not found")
+	if _, err := s.State.store.GetSubject(ctx, org, body.SubjectID); err == errNotFound {
+		return nil, zip.ErrNotFound("subject not found")
 	} else if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get subject: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get subject: %v", err)
 	}
 	id, err := genID("acc")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
 	a := Accreditation{
@@ -569,43 +803,68 @@ func createAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
 		Status: st, EvidenceDocID: strings.TrimSpace(body.EvidenceDocID), Note: strings.TrimSpace(body.Note),
 		ExpiresAt: body.ExpiresAt, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.State.store.CreateAccreditation(c.Context(), a); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "create accreditation: %v", err)
+	if err := s.State.store.CreateAccreditation(ctx, a); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "create accreditation: %v", err)
 	}
-	emitAudit(s, c, "compliance.accreditation.create", audit.Resource{Type: "compliance.accreditation", ID: a.ID},
+	emitAudit(s, ctx, "compliance.accreditation.create", audit.Resource{Type: "compliance.accreditation", ID: a.ID},
 		"success", http.StatusCreated, map[string]any{"accreditationId": a.ID, "subjectId": a.SubjectID, "method": a.Method, "basis": a.Basis, "status": a.Status})
-	return c.JSON(http.StatusCreated, accView(a))
+	v := accView(a)
+	return &v, nil
 }
 
-func listAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.ListAccreditation(c.Context(), org, limitOf(c))
+// AccreditationList is the org's accreditation records.
+type AccreditationList struct {
+	// Data is one row per accreditation record.
+	Data []AccreditationView `json:"data"`
+	// Disclaimer is the boundary made visible on the wire.
+	Disclaimer string `json:"disclaimer"`
+}
+
+// listAccreditation returns the caller org's accreditation records with their
+// method, basis and current state.
+//
+// Example: {"limit": 50}
+func (o ops) listAccreditation(ctx context.Context, in *Page) (*AccreditationList, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list accreditation: %v", err)
+		return nil, err
 	}
-	out := make([]map[string]any, 0, len(rows))
+	rows, err := s.State.store.ListAccreditation(ctx, org, in.Limit)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list accreditation: %v", err)
+	}
+	out := make([]AccreditationView, 0, len(rows))
 	for _, a := range rows {
 		out = append(out, accView(a))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out, "disclaimer": Disclaimer})
+	return &AccreditationList{Data: out, Disclaimer: Disclaimer}, nil
 }
 
-func getAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// AccreditationRef addresses one of the caller org's accreditation records by id.
+type AccreditationRef struct {
+	// ID is the accreditation id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// getAccreditation returns one of the caller org's accreditation records.
+//
+// Example: {"id": "acc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) getAccreditation(ctx context.Context, in *AccreditationRef) (*AccreditationView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	a, err := s.State.store.GetAccreditation(c.Context(), org, c.Param("id"))
+	a, err := s.State.store.GetAccreditation(ctx, org, in.ID)
 	if err == errNotFound {
-		return zip.ErrNotFound("accreditation not found")
+		return nil, zip.ErrNotFound("accreditation not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get accreditation: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get accreditation: %v", err)
 	}
-	return c.JSON(http.StatusOK, accView(a))
+	v := accView(a)
+	return &v, nil
 }
 
 // decideAccreditation records an org reviewer's decision on an accreditation record.
@@ -614,41 +873,51 @@ func getAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
 // verifier report), a rejection, or an expiry — and the reviewer's identity is
 // recorded as ReviewerSub and audited. Human-in-the-loop: the platform never confirms
 // on its own, and even a provider_verified state carries the reviewer who recorded it.
-func decideAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// AccreditationDecision is a reviewer's decision on an accreditation record.
+type AccreditationDecision struct {
+	// ID is the accreditation id from the path; a body value is ignored.
+	ID string `json:"id"`
+	// Status must be reviewer_confirmed, provider_verified, rejected or expired.
+	Status AccreditationStatus `json:"status"`
+}
+
+// decideAccreditation records a reviewer's decision on an accreditation record and
+// attributes it to them. It requires an org admin or platform reviewer: the
+// platform never confirms on its own, and even a provider_verified state carries
+// the reviewer who recorded the evidence.
+//
+// Example: {"id": "acc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "status": "reviewer_confirmed"}
+func (o ops) decideAccreditation(ctx context.Context, in *AccreditationDecision) (*AccreditationView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if !principal.IsSuperAdmin(c) && !principal.IsOrgAdmin(c) {
-		return zip.ErrForbidden("an accreditation decision requires an org admin or platform reviewer")
+	who, err := reviewer(ctx, "accreditation decision")
+	if err != nil {
+		return nil, err
 	}
-	var body struct {
-		Status AccreditationStatus `json:"status"`
+	if err := capBody(ctx); err != nil {
+		return nil, err
 	}
-	if err := decode(c, &body); err != nil {
-		return err
-	}
-	if body.Status != AccReviewerConfirmed && body.Status != AccProviderVerified && body.Status != AccRejected && body.Status != AccExpired {
-		return zip.ErrBadRequest("decision status must be reviewer_confirmed, provider_verified, rejected, or expired")
-	}
-	reviewer := c.User()
-	if reviewer == "" {
-		return zip.ErrForbidden("a reviewer decision requires a signed-in reviewer")
+	if in.Status != AccReviewerConfirmed && in.Status != AccProviderVerified && in.Status != AccRejected && in.Status != AccExpired {
+		return nil, zip.ErrBadRequest("decision status must be reviewer_confirmed, provider_verified, rejected, or expired")
 	}
 	now := time.Now().Unix()
-	if err := s.State.store.UpdateAccreditationDecision(c.Context(), org, c.Param("id"), body.Status, reviewer, now); err != nil {
+	if err := s.State.store.UpdateAccreditationDecision(ctx, org, in.ID, in.Status, who, now); err != nil {
 		if err == errNotFound {
-			return zip.ErrNotFound("accreditation not found")
+			return nil, zip.ErrNotFound("accreditation not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "update accreditation: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update accreditation: %v", err)
 	}
-	a, err := s.State.store.GetAccreditation(c.Context(), org, c.Param("id"))
+	a, err := s.State.store.GetAccreditation(ctx, org, in.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get accreditation: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get accreditation: %v", err)
 	}
-	emitAudit(s, c, "compliance.accreditation.decision", audit.Resource{Type: "compliance.accreditation", ID: a.ID},
-		"success", http.StatusOK, map[string]any{"accreditationId": a.ID, "status": a.Status, "reviewerSub": reviewer})
-	return c.JSON(http.StatusOK, accView(a))
+	emitAudit(s, ctx, "compliance.accreditation.decision", audit.Resource{Type: "compliance.accreditation", ID: a.ID},
+		"success", http.StatusOK, map[string]any{"accreditationId": a.ID, "status": a.Status, "reviewerSub": who})
+	v := accView(a)
+	return &v, nil
 }
 
 // ---- records / audit ----
@@ -656,28 +925,44 @@ func decideAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
 // listRecords is the unified compliance-record view for the org: its verifications
 // and accreditation records together, each provider-reported/tracked, never platform-
 // asserted. PII stays in the subject store; records carry only opaque ids + statuses.
-func listRecords(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	chks, err := s.State.store.ListChecks(c.Context(), org, limitOf(c))
+// Records is the org's verifications and accreditation records together.
+type Records struct {
+	// Verifications are the org's KYC/KYB checks, provider-reported.
+	Verifications []CheckView `json:"verifications"`
+	// Accreditation is the org's accreditation records, tracked.
+	Accreditation []AccreditationView `json:"accreditation"`
+	// Disclaimer is the boundary made visible on the wire.
+	Disclaimer string `json:"disclaimer"`
+}
+
+// listRecords returns the caller org's verifications and accreditation records
+// together. Every row carries opaque ids and statuses only — subject PII stays in
+// the subject store.
+//
+// Example: {"limit": 50}
+func (o ops) listRecords(ctx context.Context, in *Page) (*Records, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list checks: %v", err)
+		return nil, err
 	}
-	accs, err := s.State.store.ListAccreditation(c.Context(), org, limitOf(c))
+	chks, err := s.State.store.ListChecks(ctx, org, in.Limit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list accreditation: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list checks: %v", err)
 	}
-	cv := make([]map[string]any, 0, len(chks))
+	accs, err := s.State.store.ListAccreditation(ctx, org, in.Limit)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list accreditation: %v", err)
+	}
+	cv := make([]CheckView, 0, len(chks))
 	for _, chk := range chks {
 		cv = append(cv, checkView(chk))
 	}
-	av := make([]map[string]any, 0, len(accs))
+	av := make([]AccreditationView, 0, len(accs))
 	for _, a := range accs {
 		av = append(av, accView(a))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"verifications": cv, "accreditation": av, "disclaimer": Disclaimer})
+	return &Records{Verifications: cv, Accreditation: av, Disclaimer: Disclaimer}, nil
 }
 
 // auditRead is the compliance-scoped read of the SHARED tamper-evident audit plane —
@@ -685,18 +970,39 @@ func listRecords(s *cloud.Service[state], c *zip.Ctx) error {
 // org is PINNED to the caller's validated org (a client `org` param is ignored) and
 // the rows are narrowed to compliance.* actions. Fail-closed: no principal → 403, no
 // store → 501.
-func auditRead(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// AuditFilter narrows the compliance-scoped audit read.
+type AuditFilter struct {
+	// Result keeps only rows with that outcome (success, denied, ...).
+	Result string `json:"result"`
+}
+
+// AuditTrail is the compliance slice of the shared tamper-evident audit plane.
+type AuditTrail struct {
+	// Data is one row per privileged compliance action: who started or decided
+	// what, and when. It is pinned to the caller's own org.
+	Data []audit.Wire `json:"data"`
+	// Disclaimer is the boundary made visible on the wire.
+	Disclaimer string `json:"disclaimer"`
+}
+
+// auditRead returns the caller org's compliance actions from the shared
+// tamper-evident audit trail — who started or decided what, and when. The org is
+// pinned to the caller's own; 501 when no audit store is configured.
+//
+// Example: {"result": "success"}
+func (o ops) auditRead(ctx context.Context, in *AuditFilter) (*AuditTrail, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if s.State.audit == nil {
-		return zip.Errorf(http.StatusNotImplemented, "audit trail is not configured")
+		return nil, zip.Errorf(http.StatusNotImplemented, "audit trail is not configured")
 	}
-	f := audit.Filter{Org: org, Result: strings.TrimSpace(c.Query("result")), Limit: 1000}
-	rows, _, err := s.State.audit.Query(c.Context(), f)
+	f := audit.Filter{Org: org, Result: strings.TrimSpace(in.Result), Limit: 1000}
+	rows, _, err := s.State.audit.Query(ctx, f)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "audit query failed")
+		return nil, zip.Errorf(http.StatusBadGateway, "audit query failed")
 	}
 	out := make([]audit.Wire, 0, len(rows))
 	for _, r := range rows {
@@ -704,60 +1010,79 @@ func auditRead(s *cloud.Service[state], c *zip.Ctx) error {
 			out = append(out, r.ToWire())
 		}
 	}
-	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, map[string]any{"data": out, "disclaimer": Disclaimer})
+	noStore(ctx)
+	return &AuditTrail{Data: out, Disclaimer: Disclaimer}, nil
 }
 
 // ---- views ----
 
-// checkView renders a verification WITHOUT any subject PII (only the opaque subjectId
-// + provider-reported status). This is the shape every list/detail/record surface
-// uses, so no PII path can leak through a verification response.
-func checkView(chk Check) map[string]any {
-	v := map[string]any{
-		"id":        chk.ID,
-		"subjectId": chk.SubjectID,
-		"kind":      chk.Kind,
-		"provider":  chk.Provider,
-		"status":    chk.Status,
-		"createdAt": chk.CreatedAt,
-		"updatedAt": chk.UpdatedAt,
-	}
-	if chk.VerifyURL != "" {
-		v["verifyUrl"] = chk.VerifyURL
-	}
-	if chk.DecidedBy != "" {
-		v["decidedBy"] = chk.DecidedBy
-	}
-	if chk.DecidedAt != 0 {
-		v["decidedAt"] = chk.DecidedAt
-	}
-	return v
+// CheckView is a verification WITHOUT any subject PII — only the opaque subjectId
+// and the provider-reported status. It is the shape every list, detail and record
+// surface uses, so no PII path can leak through a verification response.
+type CheckView struct {
+	// ID is the verification id.
+	ID string `json:"id"`
+	// SubjectID is the opaque subject this verifies.
+	SubjectID string `json:"subjectId"`
+	// Kind is individual or business.
+	Kind SubjectKind `json:"kind"`
+	// Provider is the identity provider that holds the verification.
+	Provider string `json:"provider"`
+	// Status is provider-reported or pending — never platform-asserted.
+	Status idv.Status `json:"status"`
+	// CreatedAt is the unix second the verification was started.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is the unix second of the last recorded change.
+	UpdatedAt int64 `json:"updatedAt"`
+	// VerifyURL is where the subject completes verification, while one is open.
+	VerifyURL string `json:"verifyUrl,omitempty"`
+	// DecidedBy names who settled it: the provider, or the reviewer's user id.
+	DecidedBy string `json:"decidedBy,omitempty"`
+	// DecidedAt is the unix second it reached a terminal status.
+	DecidedAt int64 `json:"decidedAt,omitempty"`
 }
 
-func accView(a Accreditation) map[string]any {
-	v := map[string]any{
-		"id":        a.ID,
-		"subjectId": a.SubjectID,
-		"method":    a.Method,
-		"basis":     a.Basis,
-		"status":    a.Status,
-		"createdAt": a.CreatedAt,
-		"updatedAt": a.UpdatedAt,
+// AccreditationView is one accreditation record on the wire.
+type AccreditationView struct {
+	// ID is the accreditation id.
+	ID string `json:"id"`
+	// SubjectID is the opaque subject the record is about.
+	SubjectID string `json:"subjectId"`
+	// Method is how the state was established.
+	Method AccreditationMethod `json:"method"`
+	// Basis is what qualifies the subject.
+	Basis AccreditationBasis `json:"basis"`
+	// Status is the tracked state: asserted until a reviewer decides.
+	Status AccreditationStatus `json:"status"`
+	// CreatedAt is the unix second the record was created.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is the unix second of the last recorded change.
+	UpdatedAt int64 `json:"updatedAt"`
+	// EvidenceDocID references the supporting document, when one is named.
+	EvidenceDocID string `json:"evidenceDocId,omitempty"`
+	// ReviewerSub is the org user who recorded the decision, once decided.
+	ReviewerSub string `json:"reviewerSub,omitempty"`
+	// Note is a non-PII operator note, when one is set.
+	Note string `json:"note,omitempty"`
+	// ExpiresAt is the unix second the record lapses, when one is set.
+	ExpiresAt int64 `json:"expiresAt,omitempty"`
+}
+
+// checkView projects a verification onto the PII-free wire shape.
+func checkView(chk Check) CheckView {
+	return CheckView{
+		ID: chk.ID, SubjectID: chk.SubjectID, Kind: chk.Kind, Provider: chk.Provider,
+		Status: chk.Status, CreatedAt: chk.CreatedAt, UpdatedAt: chk.UpdatedAt,
+		VerifyURL: chk.VerifyURL, DecidedBy: chk.DecidedBy, DecidedAt: chk.DecidedAt,
 	}
-	if a.EvidenceDocID != "" {
-		v["evidenceDocId"] = a.EvidenceDocID
+}
+
+func accView(a Accreditation) AccreditationView {
+	return AccreditationView{
+		ID: a.ID, SubjectID: a.SubjectID, Method: a.Method, Basis: a.Basis, Status: a.Status,
+		CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt, EvidenceDocID: a.EvidenceDocID,
+		ReviewerSub: a.ReviewerSub, Note: a.Note, ExpiresAt: a.ExpiresAt,
 	}
-	if a.ReviewerSub != "" {
-		v["reviewerSub"] = a.ReviewerSub
-	}
-	if a.Note != "" {
-		v["note"] = a.Note
-	}
-	if a.ExpiresAt != 0 {
-		v["expiresAt"] = a.ExpiresAt
-	}
-	return v
 }
 
 // ---- shared helpers ----
@@ -767,8 +1092,12 @@ func accView(a Accreditation) map[string]any {
 // carries opaque ids + statuses ONLY — NEVER subject PII — and is redacted as a
 // second layer of defense. The actor is the validated principal (the acting user),
 // never a subject.
-func emitAudit(s *cloud.Service[state], c *zip.Ctx, action string, res audit.Resource, result string, statusCode int, after map[string]any) {
+func emitAudit(s *cloud.Service[state], ctx context.Context, action string, res audit.Resource, result string, statusCode int, after map[string]any) {
 	if s.State.audit == nil {
+		return
+	}
+	c, ok := cloud.Request(ctx)
+	if !ok {
 		return
 	}
 	rec := audit.Record{
@@ -783,7 +1112,7 @@ func emitAudit(s *cloud.Service[state], c *zip.Ctx, action string, res audit.Res
 		RequestID: c.RequestID(),
 		After:     audit.Redact(mustJSON(after)),
 	}
-	if _, err := s.State.audit.Append(c.Context(), rec); err != nil {
+	if _, err := s.State.audit.Append(ctx, rec); err != nil {
 		s.Log.Warn("compliance audit append failed", "err", err, "action", action)
 	}
 }

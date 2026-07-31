@@ -153,7 +153,21 @@ func isSentryIngestPath(method, path string) bool {
 // are the exact paths the runtime special-cases (served unstripped, no identity),
 // reached either directly or under the /v1/o11y external prefix — so we match on
 // suffix rather than exact path.
+//
+// A health endpoint answers PUBLICLY or it is not a health endpoint: a readiness
+// probe presents no principal, so gating one turns a liveness check into a 403 and
+// the pod never reports ready. Only liveness is public here; every DATA read stays
+// principal-gated.
+//
+// The generic HIP-0106 subsystem route (/v1/<name>/health, registered by the
+// module's order-70 co-entry) carries NO /api/ segment, so the runtime suffixes
+// below do not cover it — enumerating only the runtime's own paths is what
+// regressed /v1/o11y/health to 403 "no validated principal".
 func isHealthPath(p string) bool {
+	switch strings.TrimSuffix(p, "/") {
+	case "/v1/o11y/health", "/v1/sentry/health", "/health":
+		return true
+	}
 	return strings.HasSuffix(p, "/api/v1/health") ||
 		strings.HasSuffix(p, "/api/v2/healthz") ||
 		strings.HasSuffix(p, "/api/v2/readyz") ||
@@ -243,7 +257,22 @@ func mountSentry(a cloud.Router) {
 // name. Every cloud-native /v1/o11y/* route is registered here — inside this one
 // order-69 mount, hence BEFORE the hanzoai/o11y wildcard (order 70) — so Fiber's
 // in-order match gives the specific routes precedence over the runtime proxy.
-func MountO11y(a *zip.App, deps cloud.Deps) error {
+func Mount(a *zip.App, deps cloud.Deps) error {
+	// Bridge FIRST, on the subtree the typed ops live under. A typed op receives
+	// only a context, so the validated org reaches it by being parked there —
+	// never as an In field, which is caller-supplied and would be a cross-tenant
+	// read the caller asserted for itself. fiber runs middleware in registration
+	// order, so this must precede every leaf below.
+	//
+	// It has to be installed HERE, not only by cloud.Serve, because o11y runs as
+	// its OWN process (plugin/o11y/main.go builds a bare zip.App and mounts this).
+	// The host's app-wide Bridge parks the org on a context in the HOST; the
+	// request crosses to this process as headers, so without this install every
+	// typed op in the child would answer 403 for a caller the host had already
+	// validated. Nesting under Serve's own Bridge — the fused case — is harmless:
+	// the inner one is what the handler sees.
+	a.Group(o11yPrefix).Use(cloud.Bridge())
+
 	// READ/SERVE plane — specific routes before the wildcard.
 	if err := mountEventIngest(a, deps); err != nil { // POST /v1/o11y/ingestion
 		return err
@@ -298,7 +327,7 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 // connections, in REVERSE mount order — trace sink, OTLP collector, event-ingest
 // Datastore — so buffered spans/logs/rows flush before exit. Best-effort: the
 // first error is returned but every teardown still runs. Idempotent and nil-safe.
-func ShutdownO11y(ctx context.Context) error {
+func Shutdown(ctx context.Context) error {
 	stopProbes()
 	var firstErr error
 	if err := shutdownAnnotationQueues(); err != nil && firstErr == nil {

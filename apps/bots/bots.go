@@ -27,6 +27,8 @@
 //	POST /v1/bots/:runId/stop   -> {runId, status}
 package bots
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"errors"
@@ -90,27 +92,45 @@ type state struct {
 	runtime Runtime
 }
 
-// botView is one row of GET /v1/bots — the console list item. sessionUrl is
-// derived control-plane side from runId (the ONE place a session URL is built), so
-// the runtime never has to know its own public origin.
-type botView struct {
-	RunID      string `json:"runId"`
-	Task       string `json:"task"`
-	Surface    string `json:"surface"`
-	Status     string `json:"status"`
+// BotRun is one row of GET /v1/bots — the console list item.
+type BotRun struct {
+	// RunID is the run's id, which is also the VNC node id its session is
+	// addressable by.
+	RunID string `json:"runId"`
+	// Task is the task text the run was started with, as the runtime recorded it.
+	Task string `json:"task"`
+	// Surface is what the bot drives — a desktop or terminal sandbox.
+	Surface string `json:"surface"`
+	// Status is the runtime's own status for the run, defaulting to "running" when
+	// it names none.
+	Status string `json:"status"`
+	// SessionURL is the live VNC URL the console embeds to watch or attach. It is
+	// derived control-plane side from runId (the ONE place a session URL is built),
+	// so the runtime never has to know its own public origin.
 	SessionURL string `json:"sessionUrl"`
-	StartedAt  string `json:"startedAt"`
+	// StartedAt is RFC3339, as the runtime stamps it.
+	StartedAt string `json:"startedAt"`
 }
 
-// botsView is the GET /v1/bots envelope; Bots is always non-nil so an org with no
+// BotRunList is the GET /v1/bots envelope; Bots is always non-nil so an org with no
 // runs serializes as {"bots":[]}, never {"bots":null}.
-type botsView struct {
-	Bots []botView `json:"bots"`
+type BotRunList struct {
+	// Bots is the caller org's live runs. Never null.
+	Bots []BotRun `json:"bots"`
 }
 
-// stopView is the POST /v1/bots/:runId/stop response.
-type stopView struct {
-	RunID  string `json:"runId"`
+// BotRunRef addresses one run by the id in the path.
+type BotRunRef struct {
+	// RunID is the run id, as returned by list. A run belonging to another org is
+	// not among this org's runs and reads as not found.
+	RunID string `json:"runId"`
+}
+
+// BotStopped is the POST /v1/bots/:runId/stop response.
+type BotStopped struct {
+	// RunID is the run that was stopped.
+	RunID string `json:"runId"`
+	// Status is "stopped".
 	Status string `json:"status"`
 }
 
@@ -126,78 +146,91 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		Base:  cloud.NewBase(deps, "bots"),
 		State: state{gateway: gatewayBase(), runtime: wire{}},
 	}
-	routes(app, s)
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("bots.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	routes(zapp, s)
 	s.Log.Info("bots surface mounted", "gateway", s.State.gateway, "brand", deps.Brand)
 	return nil
 }
 
 // routes registers the bots surface. The static /run literal and the :runId param
 // are resolved by specificity, so /v1/bots/run can never bind as a run id.
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	// UNIFIED PAYWALL (server-side enforcement). To gate this group behind the
-	// caller's plan, prepend the middleware to the group:
-	//   g := app.Group("/v1/bots", entitlements.RequireProduct(deps.Commerce, "bot"))
+//
+// EVERY route is a typed op: the registry entry zip.<Verb> makes is the ONE thing
+// OpenAPI, MCP and the CLI project from, and it takes the ABSOLUTE path because the
+// registry keys on it.
+func routes(zapp *zip.App, s *cloud.Service[state]) {
+	// UNIFIED PAYWALL (server-side enforcement). To gate these ops behind the
+	// caller's plan, declare them through the gate:
+	//   g := zapp.With(entitlements.RequireProduct(deps.Commerce, "bot"))
 	// DEFERRED — DO NOT ENABLE YET: the "bot" product is ABSENT from @hanzo/plans
 	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
 	// once the catalog licenses "bot" to a tier. See clients/entitlements.
-	g := app.Group("/v1/bots")
-	g.Post("/run", cloud.Handle(s, run))
-	app.Get("/v1/bots", cloud.Handle(s, list))
-	g.Post("/:runId/stop", cloud.Handle(s, stop))
+	o := ops{s: s}
+	zip.Post(zapp, "/v1/bots/run", o.run, zip.WithOperationID("botRun"))
+	zip.Get(zapp, "/v1/bots", o.list, zip.WithOperationID("botList"))
+	zip.Post(zapp, "/v1/bots/:runId/stop", o.stop, zip.WithOperationID("botStop"))
 }
 
-// run reports that launching is not implemented.
+// ops binds the service to the typed handlers: a TypedHandler has no parameter for
+// the service, so it arrives as a RECEIVER and every op is a method value — the only
+// bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// run reports that launching a bot is not implemented, and answers 501. There is no
+// launch operation on the bot runtime, so nothing in cloud can start a sandbox.
 //
-// There is no launch operation on the bot runtime, so nothing in cloud can start a
-// sandbox. This endpoint used to mint a run id, charge a flat per-run fee, and hand
+// This endpoint used to mint a run id, charge a flat per-run fee, and hand
 // back a sessionUrl for a bot that never booted — an id the runtime had never heard
 // of, pointing at a VNC node that did not exist, for money that was really taken.
 // 501 is the truth, and the truth is cheaper than a plausible lie.
 //
 // Restoring it needs a runtime-side launch operation first (TS, cross-repo); the
-// gate and the meter belong in the same change that can prove a bot boots.
-func run(_ *cloud.Service[state], _ *zip.Ctx) error {
-	return zip.Errorf(http.StatusNotImplemented,
+// gate and the meter belong in the same change that can prove a bot boots. It reads
+// no body and has no success response, which is why both sides are void.
+func (o ops) run(_ context.Context, _ *struct{}) (*struct{}, error) {
+	return nil, zip.Errorf(http.StatusNotImplemented,
 		"launching a bot is not implemented: the bot runtime exposes no launch operation, so cloud cannot start one")
 }
 
-// list returns the caller org's live bot runs, read from the runtime and projected
-// into the console contract with sessionUrl derived here.
+// list returns the caller org's live bot runs. They are read from the runtime and
+// projected into the console contract, with sessionUrl derived here.
 //
-// The org is ALWAYS the validated principal's org, NEVER a request param, and it is
+// The org is ALWAYS the validated principal's org, NEVER a request field, and it is
 // what scopes the runtime's answer — so one tenant can never enumerate another's
 // runs. A runtime that cannot answer is an error, not an empty list: [] would tell
 // the caller "your org has no runs", which is a different claim from "we could not
 // ask", and the difference is the whole reason this endpoint exists.
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
+//
+// Response: {"bots":[{"runId":"run_1","task":"summarise the inbox","surface":"desktop","status":"running","sessionUrl":"https://bot.hanzo.ai/vnc?nodeId=run_1","startedAt":"2026-07-26T18:00:00Z"}]}
+func (o ops) list(ctx context.Context, _ *struct{}) (*BotRunList, error) {
 	// Org-scoping is only trustworthy behind a validated principal: a bare,
 	// forgeable X-Org-Id (the direct-to-pod path) must not enumerate a victim
-	// tenant's runs.
-	if !principal.Validated(c) {
-		return zip.ErrForbidden("a validated principal is required to list bots")
+	// tenant's runs. principal.OrgFrom composes that check.
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("X-Org-Id required")
 	}
-	runs, err := s.State.runtime.List(c.Context(), org)
+	runs, err := o.s.State.runtime.List(ctx, org)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "bots: the runtime could not list this org's runs: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "bots: the runtime could not list this org's runs: %v", err)
 	}
-	out := make([]botView, 0, len(runs))
+	out := make([]BotRun, 0, len(runs))
 	for _, r := range runs {
-		out = append(out, toBotView(s, r))
+		out = append(out, toBotRun(o.s, r))
 	}
-	return c.JSON(http.StatusOK, botsView{Bots: out})
+	return &BotRunList{Bots: out}, nil
 }
 
-// toBotView projects a run into one list row, deriving sessionUrl from the run id.
-func toBotView(s *cloud.Service[state], r Run) botView {
+// toBotRun projects a run into one list row, deriving sessionUrl from the run id.
+func toBotRun(s *cloud.Service[state], r Run) BotRun {
 	status := strings.TrimSpace(r.Status)
 	if status == "" {
 		status = statusRunning
 	}
-	return botView{
+	return BotRun{
 		RunID:      r.ID,
 		Task:       r.Task,
 		Surface:    r.Surface,
@@ -207,9 +240,9 @@ func toBotView(s *cloud.Service[state], r Run) botView {
 	}
 }
 
-// stop terminates one of the caller org's own runs.
+// stop terminates one of the caller org's own runs. The own-key guard is the org.
 //
-// The own-key guard is the org: it is the caller's validated org, never theirs to
+// It is the caller's validated org, never theirs to
 // choose, and the runtime resolves the run id UNDER it. A run belonging to another
 // tenant is not among this org's runs, so it answers absent — the same 404 a
 // nonexistent id gets, which is what keeps this from being an oracle.
@@ -217,32 +250,32 @@ func toBotView(s *cloud.Service[state], r Run) botView {
 // Absence is honoured ONLY when the runtime answers it. A runtime that does not
 // serve stop reports nothing about the run, and reporting "stopped" on that basis
 // would be a stop that cannot fail — so it is a 502.
-func stop(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+//
+// Example: {"runId":"run_1"}
+// Response: {"runId":"run_1","status":"stopped"}
+func (o ops) stop(ctx context.Context, in *BotRunRef) (*BotStopped, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return nil, zip.ErrForbidden("X-Org-Id required")
 	}
-	if !principal.Validated(c) {
-		return zip.ErrForbidden("a validated principal is required to stop a bot")
-	}
-	runID := strings.TrimSpace(c.Param("runId"))
+	runID := strings.TrimSpace(in.RunID)
 	if runID == "" {
-		return zip.ErrBadRequest("runId is required")
+		return nil, zip.ErrBadRequest("runId is required")
 	}
 	if len(runID) > maxRunID {
-		return zip.ErrNotFound("no such bot for this org")
+		return nil, zip.ErrNotFound("no such bot for this org")
 	}
-	switch err := s.State.runtime.Stop(c.Context(), org, runID); {
+	switch err := o.s.State.runtime.Stop(ctx, org, runID); {
 	case err == nil:
-		s.Log.Info("bot stopped", "org", org, "run", runID)
-		return c.JSON(http.StatusOK, stopView{RunID: runID, Status: statusStopped})
+		o.s.Log.Info("bot stopped", "org", org, "run", runID)
+		return &BotStopped{RunID: runID, Status: statusStopped}, nil
 	case errors.Is(err, runtime.ErrNotFound):
-		return zip.ErrNotFound("no such bot for this org")
+		return nil, zip.ErrNotFound("no such bot for this org")
 	case errors.Is(err, runtime.ErrNotServed):
-		return zip.Errorf(http.StatusBadGateway,
+		return nil, zip.Errorf(http.StatusBadGateway,
 			"bots: the runtime does not serve stop, so this run's state is unknown — it was NOT stopped")
 	default:
-		return zip.Errorf(http.StatusBadGateway, "bots: the runtime could not stop this run: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "bots: the runtime could not stop this run: %v", err)
 	}
 }
 

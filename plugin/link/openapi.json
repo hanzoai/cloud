@@ -19,20 +19,86 @@
     "/v1/links": {
       "get": {
         "operationId": "get_v1_links",
+        "summary": "listLinks lists the caller's own account links, flat and grouped by device.",
+        "description": "listLinks lists the caller's own account links, flat and grouped by device.\nIt answers only for the calling subject in the calling org — another user's\nlinks are never included.",
         "tags": [
           "links"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "devices": [],
+                  "links": [
+                    {
+                      "billing": "plan",
+                      "createdAt": "2026-07-29T11:00:00Z",
+                      "host": "spark",
+                      "id": "link_4c1e",
+                      "kind": "subscription",
+                      "machine": "m_7f31",
+                      "provider": "anthropic",
+                      "status": "linked",
+                      "updatedAt": "2026-07-29T11:00:00Z",
+                      "user": "z@hanzo.ai"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/linkList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_links",
+        "summary": "upsertLink registers or refreshes one machine's provider account for the caller.",
+        "description": "upsertLink registers or refreshes one machine's provider account for the caller.\nMachine and provider identify the link, so reporting the same pair again updates\nthe existing row rather than adding a second one.",
         "tags": [
           "links"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "account": "z@hanzo.ai",
+                "host": "spark",
+                "kind": "subscription",
+                "machine": "m_7f31",
+                "os": "linux",
+                "plan": "max",
+                "provider": "anthropic"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/enrollReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/linkView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/links/devices/{machine}": {
       "get": {
-        "operationId": "get_v1_links_devices_by_machine",
+        "operationId": "get_v1_links_devices_machine",
+        "summary": "deviceDetail reads one of the caller's devices: every provider account linked on",
+        "description": "deviceDetail reads one of the caller's devices: every provider account linked on\nthat machine, plus how many sessions the caller currently runs there.",
         "tags": [
           "links"
         ],
@@ -41,16 +107,32 @@
             "name": "machine",
             "in": "path",
             "required": true,
+            "description": "Machine is the machine id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "m_7f31"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deviceView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/links/devices/{machine}/revoke": {
       "post": {
-        "operationId": "post_v1_links_devices_by_machine_revoke",
+        "operationId": "post_v1_links_devices_machine_revoke",
+        "summary": "revokeDevice revokes every account the caller linked on one machine.",
+        "description": "revokeDevice revokes every account the caller linked on one machine. It stops the\nsessions they were running there and is the \"I lost this laptop\" verb, and other\nusers' links on the same machine are untouched.",
         "tags": [
           "links"
         ],
@@ -59,27 +141,137 @@
             "name": "machine",
             "in": "path",
             "required": true,
+            "description": "Machine is the machine id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "m_7f31"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "machine": "m_7f31"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/deviceRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/revokeResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/links/route": {
       "get": {
         "operationId": "get_v1_links_route",
+        "summary": "routePlan ranks the caller's linked accounts into a redundancy plan.",
+        "description": "routePlan ranks the caller's linked accounts into a redundancy plan. It says which\none to send the next request to and what to fall back to: subscription accounts\ncome before metered API keys, and within a group the most headroom wins.",
         "tags": [
           "links"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "candidates": [
+                    {
+                      "available": true,
+                      "billing": "plan",
+                      "headroomPct": 53,
+                      "kind": "subscription",
+                      "linkId": "link_4c1e",
+                      "provider": "anthropic"
+                    }
+                  ],
+                  "generatedAt": "2026-07-29T11:00:00Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/RoutePlan"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/links/usage": {
       "get": {
         "operationId": "get_v1_links_usage",
+        "summary": "usageDash reports one connected account's consumption of its OWN provider plan.",
+        "description": "usageDash reports one connected account's consumption of its OWN provider plan. It\nsays how far through the current window it is and when that resets: current is the\nlive state of each lane, windows is the history behind it, and available:false\nmeans the warehouse could not be read, which is not the same as no usage.",
         "tags": [
           "links"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "description": "Provider is the account's provider, e.g. anthropic or openai. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "anthropic"
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "description": "Account narrows to one account of that provider; empty covers them all.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "z@hanzo.ai"
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Window narrows to one window class: 6h, day, week or month.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "6h"
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the history period to read, e.g. 24h; empty means 24h.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "24h"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/planDash"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_links_usage",
@@ -91,22 +283,77 @@
     "/v1/links/usage/accounts": {
       "get": {
         "operationId": "get_v1_links_usage_accounts",
+        "summary": "usageAccounts breaks the caller's Hanzo-ROUTED usage down per linked account.",
+        "description": "usageAccounts breaks the caller's Hanzo-ROUTED usage down per linked account.\nThis is what Hanzo itself served and charged for, not what a provider's own plan\nmetered; it answers only for the calling subject.",
         "tags": [
           "links"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accounts": [],
+                  "scope": "user",
+                  "source": "routed",
+                  "total": {
+                    "accounts": 1,
+                    "completionTokens": 9800,
+                    "costCents": 316,
+                    "promptTokens": 41200,
+                    "requests": 128,
+                    "totalTokens": 51000
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsUsage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/links/usage/summary": {
       "get": {
         "operationId": "get_v1_links_usage_summary",
+        "summary": "usageSummary totals the caller's provider accounts beside their org's Hanzo usage.",
+        "description": "usageSummary totals the caller's provider accounts beside their org's Hanzo usage.\nBoth sides land on one board for one period and each reports its own availability,\nso half a warehouse never turns the other half into zeros, and both resolve the\nSAME window from one resolver.",
         "tags": [
           "links"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the period to total over, e.g. 24h; empty means 24h.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "24h"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/summaryResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/links/{id}": {
       "delete": {
-        "operationId": "delete_v1_links_by_id",
+        "operationId": "delete_v1_links_id",
+        "summary": "revokeLink revokes one account link and stops the sessions running on it.",
+        "description": "revokeLink revokes one account link and stops the sessions running on it. The row\nis kept and marked revoked so the history stays inspectable, and a link of another\nuser or org is reported not-found.",
         "tags": [
           "links"
         ],
@@ -115,14 +362,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the link id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "link_4c1e9b7a2d6f0538"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/revokeResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_links_by_id",
+        "operationId": "get_v1_links_id",
+        "summary": "getLink reads one of the caller's own account links.",
+        "description": "getLink reads one of the caller's own account links. A link belonging to another\nuser or org is reported not-found, so the id space leaks no existence.",
         "tags": [
           "links"
         ],
@@ -131,11 +394,510 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the link id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "link_4c1e9b7a2d6f0538"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/linkView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccountsTotal": {
+        "properties": {
+          "accounts": {
+            "type": "integer"
+          },
+          "completionTokens": {
+            "type": "integer"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "totalTokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AccountsUsage": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/RoutedUsage"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/AccountsTotal"
+          }
+        },
+        "type": "object"
+      },
+      "RouteCandidate": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "billing": {
+            "description": "plan | commerce (BillingMode(Kind))",
+            "type": "string"
+          },
+          "headroomPct": {
+            "description": "remaining capacity 0..100",
+            "type": "number"
+          },
+          "host": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "subscription | apikey",
+            "type": "string"
+          },
+          "linkId": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "reason": {
+            "description": "why unavailable, when Available=false",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RoutePlan": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/RouteCandidate"
+            },
+            "type": "array"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "primary": {
+            "$ref": "#/components/schemas/RouteCandidate"
+          }
+        },
+        "type": "object"
+      },
+      "RoutedUsage": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "billing": {
+            "type": "string"
+          },
+          "completionTokens": {
+            "type": "integer"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "totalTokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "deviceRef": {
+        "properties": {
+          "machine": {
+            "description": "Machine is the machine id from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deviceView": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/linkView"
+            },
+            "type": "array"
+          },
+          "activeSessions": {
+            "type": "integer"
+          },
+          "host": {
+            "type": "string"
+          },
+          "lastSeen": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "enrollReq": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "usage": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "linkList": {
+        "properties": {
+          "devices": {
+            "description": "Devices are the same links grouped by machine, one entry per device.",
+            "items": {
+              "$ref": "#/components/schemas/deviceView"
+            },
+            "type": "array"
+          },
+          "links": {
+            "description": "Links are every account link the caller has, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/linkView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "linkView": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "billing": {
+            "description": "BillingMode(Kind) — how this account's usage bills",
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lastSeen": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "usage": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "planDash": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "available": {
+            "description": "false = warehouse unavailable, NOT \"no usage\"",
+            "type": "boolean"
+          },
+          "current": {
+            "description": "the live state of each lane: the dash headline",
+            "items": {
+              "$ref": "#/components/schemas/windowView"
+            },
+            "type": "array"
+          },
+          "from": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "range": {
+            "type": "string"
+          },
+          "scope": {
+            "description": "user",
+            "type": "string"
+          },
+          "source": {
+            "description": "account — the provider's own meter",
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "windows": {
+            "description": "every instance in range, newest first",
+            "items": {
+              "$ref": "#/components/schemas/windowView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "revokeResp": {
+        "properties": {
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/linkView"
+            },
+            "type": "array"
+          },
+          "revoked": {
+            "type": "integer"
+          },
+          "sessionsStopped": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sourceState": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "source": {
+            "description": "the table of record",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "summaryResp": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/sourceState",
+            "description": "Per-source availability: a partial warehouse never fabricates the other half."
+          },
+          "from": {
+            "type": "string"
+          },
+          "hanzo": {
+            "$ref": "#/components/schemas/sourceState"
+          },
+          "range": {
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/totalView"
+            },
+            "type": "array"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "totalView": {
+        "properties": {
+          "confidence": {
+            "type": "string"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "scope": {
+            "description": "user | org",
+            "type": "string"
+          },
+          "source": {
+            "description": "account | hanzo",
+            "type": "string"
+          },
+          "tokens": {
+            "type": "integer"
+          },
+          "usedPct": {
+            "type": "number"
+          },
+          "window": {
+            "type": "string"
+          },
+          "windows": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "windowView": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "cachedInputTokens": {
+            "type": "integer"
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "costLimitCents": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "inputTokens": {
+            "type": "integer"
+          },
+          "lane": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "outputTokens": {
+            "type": "integer"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "resetsAt": {
+            "type": "string"
+          },
+          "synthetic": {
+            "type": "boolean"
+          },
+          "totalTokens": {
+            "type": "integer"
+          },
+          "usedPct": {
+            "type": "number"
+          },
+          "window": {
+            "type": "string"
+          },
+          "windowMinutes": {
+            "type": "integer"
+          },
+          "windowStart": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

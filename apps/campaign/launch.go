@@ -2,10 +2,9 @@ package campaign
 
 import (
 	"context"
-	"net/http"
+	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -17,28 +16,32 @@ import (
 // resolves ITS OWN org's connector token (integrations.TokenFor) — the fan-out
 // itself never sees a credential.
 
-// launchCampaign fans a campaign out to its channels. A campaign with no channels
-// is a 400 (nothing to launch). After the fan-out the campaign is live when at
-// least one channel launched, else failed. The channel rows carry the honest
-// per-channel status. Idempotency: a channel already live is not re-launched.
-func launchCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+// launchCampaign fans a campaign out to every channel it carries, through that
+// channel's own executor. A campaign with no channels is refused. The campaign ends
+// live when at least one channel launched, else failed, and each channel row records
+// its own outcome — live, failed, or unavailable when no executor is wired.
+// Idempotent: a channel already live is not launched again.
+//
+// Example: {"id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) launchCampaign(ctx context.Context, in *CampaignRef) (*Campaign, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, err
+	}
+	camp, err := s.State.store.GetCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "campaign not found")
 	}
 	if len(camp.Channels) == 0 {
-		return zip.ErrBadRequest("campaign has no channels to launch")
+		return nil, zip.ErrBadRequest("campaign has no channels to launch")
 	}
-	camp = fanOut(c.Context(), org, camp)
-	saved, err := s.State.store.Save(c.Context(), camp)
+	camp = fanOut(ctx, org, camp)
+	saved, err := s.State.store.Save(ctx, camp)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, mapErr(err, "campaign not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
 // fanOut is the pure orchestration core (no store, no HTTP): it launches every
@@ -92,25 +95,28 @@ func fanOut(ctx context.Context, org string, camp Campaign) Campaign {
 	return camp
 }
 
-// pauseCampaign pauses every live channel on the provider and moves the campaign
-// to paused. A channel whose executor is gone, or whose pause errors, is recorded
-// honestly; the campaign still reports paused (no live channel remains that this
-// process will meter).
-func pauseCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+// pauseCampaign pauses every live channel at its provider and moves the campaign to
+// paused. A channel whose executor is gone, or whose pause errors, is recorded
+// honestly on the channel row; the campaign still reports paused, because no live
+// channel remains that this process will meter.
+//
+// Example: {"id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) pauseCampaign(ctx context.Context, in *CampaignRef) (*Campaign, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, err
 	}
-	camp = pauseAll(c.Context(), org, camp)
-	saved, err := s.State.store.Save(c.Context(), camp)
+	camp, err := s.State.store.GetCampaign(ctx, org, strings.TrimSpace(in.ID))
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, mapErr(err, "campaign not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	camp = pauseAll(ctx, org, camp)
+	saved, err := s.State.store.Save(ctx, camp)
+	if err != nil {
+		return nil, mapErr(err, "campaign not found")
+	}
+	return &saved, nil
 }
 
 // pauseAll is the pure pause core: it pauses every live channel on the provider

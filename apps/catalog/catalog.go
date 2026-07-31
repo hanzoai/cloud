@@ -42,9 +42,12 @@
 // there is no credential that could publish into the published catalog at all.
 package catalog
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -81,31 +84,48 @@ const (
 	maxLimit = 200
 )
 
-// Entry is one thing the fleet built. The fields are deliberately the four axes
+// CatalogEntry is one thing the fleet built. The fields are deliberately the four axes
 // discovery is done along (org, archetype, language, forkable) plus the two links
 // that make a hit actionable (URL to see it, Repo to read it).
-type Entry struct {
-	ID    string `json:"id"`
-	Org   string `json:"org"` // hanzo | lux | zoo
-	Name  string `json:"name"`
+//
+// The name is the flattened `catalog.Entry`: the OpenAPI component namespace is
+// flat across every app, and a bare `Entry` there already means another app's row.
+type CatalogEntry struct {
+	// ID is "<org>/<name>", the stable key a re-publish updates in place.
+	ID string `json:"id"`
+	// Org is the account that built it: hanzo | lux | zoo.
+	Org string `json:"org"`
+	// Name is the project name within its org.
+	Name string `json:"name"`
+	// Title is the human name, when the source carried one.
 	Title string `json:"title,omitempty"`
-	Kind  string `json:"kind"` // repo | site
+	// Kind is repo | site.
+	Kind string `json:"kind"`
 	// Origin is WHAT THIS IS TO YOU: template | community | third-party | product
 	// (origin.go owns the four nouns and derives them). Not omitempty, for the
 	// same reason Forkable is not: every row has an answer, and a missing one is
 	// exactly the flattening this field exists to end.
-	Origin      string `json:"origin"`
-	Archetype   string `json:"archetype,omitempty"`
-	Language    string `json:"language,omitempty"`
+	Origin string `json:"origin"`
+	// Archetype is the shape of the thing (app, site, library, …).
+	Archetype string `json:"archetype,omitempty"`
+	// Language is the primary language, as the source reported it.
+	Language string `json:"language,omitempty"`
+	// Description is the one-line summary from the source.
 	Description string `json:"description,omitempty"`
-	URL         string `json:"url,omitempty"`      // live, if it is deployed
-	Repo        string `json:"repo,omitempty"`     // source
-	Template    string `json:"template,omitempty"` // lineage, if forked from one
+	// URL is where it is live, when it is deployed.
+	URL string `json:"url,omitempty"`
+	// Repo is where the source is read.
+	Repo string `json:"repo,omitempty"`
+	// Template is the parent entry id this was forked from, when it was.
+	Template string `json:"template,omitempty"`
 	// Forkable is NOT omitempty: false is an answer here, not a missing field.
 	// Omitted, a client could not tell "you cannot fork this" from "nobody said".
-	Forkable bool   `json:"forkable"`
-	Stars    int    `json:"stars,omitempty"`
-	Updated  string `json:"updated,omitempty"`
+	Forkable bool `json:"forkable"`
+	// Stars is the upstream star count, when the source reported one.
+	Stars int `json:"stars,omitempty"`
+	// Updated is when the source last changed, and the key the page sorts on
+	// (freshest first).
+	Updated string `json:"updated,omitempty"`
 	// Upstream/License credit the third-party work an entry was published from:
 	// the difference between "this org built it" and "somebody else built it and
 	// we are showing it to you".
@@ -130,11 +150,18 @@ type Entry struct {
 	Note string `json:"note,omitempty"`
 }
 
-// Response is the ONE result shape. Facets ship with every response because
+// CatalogView is the ONE result shape. Facets ship with every response because
 // browse and search are the same request here — a query with no q is a browse.
-type Response struct {
-	Data   []Entry           `json:"data"`
-	Total  int               `json:"total"`
+//
+// The name is the flattened `catalog.Response`, for the reason on CatalogEntry.
+type CatalogView struct {
+	// Data is ONE page of the matching set, freshest first.
+	Data []CatalogEntry `json:"data"`
+	// Total is how many entries matched, which is the whole set and not this page.
+	Total int `json:"total"`
+	// Facets counts the WHOLE matching set along every browse axis (org,
+	// archetype, language, kind, origin, template, forkable), so a rail renders
+	// the choices that actually have results behind them.
 	Facets map[string]counts `json:"facets"`
 }
 
@@ -145,6 +172,9 @@ type state struct{}
 // Mount wires the lens and starts the corpus reconcile. No store, no DataDir:
 // the corpus is the index's, and the sync is a goroutine, not an endpoint.
 func Mount(app cloud.Router, deps cloud.Deps) error {
+	if app != nil && cloud.ZipApp(app) == nil {
+		return fmt.Errorf("catalog.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
 	return cloud.Mount(app, deps, "catalog", build, routes)
 }
 
@@ -153,8 +183,14 @@ func build(b cloud.Base) (state, error) {
 	return state{}, nil
 }
 
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/catalog", cloud.Handle(s, browse))
+func routes(app cloud.Router, _ *cloud.Service[state]) {
+	// The typed-op bridge FIRST — fiber runs middleware in registration order, so
+	// one installed after the leaf would never run, and browse reads the caller's
+	// validated org off the context it parks. Bounded to this subsystem's own
+	// path. Serve installs one app-wide too; nesting is harmless, and this is what
+	// makes the surface testable on a bare app.
+	app.Group("/v1/catalog").Use(cloud.Bridge())
+	zip.Get(cloud.ZipApp(app), "/v1/catalog", browse)
 }
 
 // loop reconciles the corpus on a timer, first pass delayed so a boot never waits
@@ -174,45 +210,80 @@ func loop(b cloud.Base) {
 	}
 }
 
-// browse answers search AND browse. The lexical index does relevance over the
-// free-text q; the facet filters are applied here because they are exact-match
+// Query is the whole /v1/catalog request: the free-text q the index scores, the
+// exact-match axes the browse rails are cut on, and the page bounds. Every axis
+// is optional and an absent one is not a filter.
+type Query struct {
+	// Q is the free-text query the lexical index scores. Empty browses everything.
+	Q string `json:"q"`
+	// Org narrows to one publishing org (hanzo | lux | zoo), case-insensitive
+	// exact match. It is a browse axis over the PUBLISHED corpus, not a tenant
+	// key: which corpora are read is decided by the validated principal alone.
+	Org string `json:"org"`
+	// Kind narrows to repo or site.
+	Kind string `json:"kind"`
+	// Origin narrows to one lane: template | community | third-party | product.
+	Origin string `json:"origin"`
+	// Template narrows to one lineage — everything forked from that parent entry id.
+	Template string `json:"template"`
+	// Archetype narrows to one archetype.
+	Archetype string `json:"archetype"`
+	// Language narrows to one language.
+	Language string `json:"language"`
+	// Forkable is TRI-state: "true" keeps only forkable entries, "false" only the
+	// complement, and anything else (including absent) asks nothing.
+	Forkable string `json:"forkable"`
+	// Limit caps the page; 0 means 50 and nothing above 200 is honoured.
+	Limit int `json:"limit"`
+	// Offset skips that many rows of the result, which is sorted freshest-first.
+	Offset int `json:"offset"`
+}
+
+// browse answers search AND browse: it reads the published cross-org corpus plus
+// the caller's own private one, narrows both by the exact-match axes, and returns
+// one page together with facet counts over the WHOLE matching set. An anonymous
+// caller sees only the published corpus. The lexical index does relevance over
+// the free-text q; the axes are applied here because they are exact-match
 // dimensions, and asking a term index to express "language = Go" as a term match
 // would let "go" in a description score as a language.
-func browse(s *cloud.Service[state], c *zip.Ctx) error {
+//
+// Example: {"q": "blockchain", "language": "Go", "limit": 20}
+// CatalogView: {"data": [{"id": "lux/node", "org": "lux", "name": "node", "kind": "repo", "origin": "product", "language": "Go", "forkable": false, "scope": "public"}], "total": 1, "facets": {"language": {"Go": 1}}}
+func browse(ctx context.Context, in *Query) (*CatalogView, error) {
 	if !index.Ready() {
-		return zip.Errorf(http.StatusServiceUnavailable, "catalog: index not mounted")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "catalog: index not mounted")
 	}
-	q := strings.TrimSpace(c.Query("q"))
-	rows, err := read(c, PublicOrg, q, "public")
+	q := strings.TrimSpace(in.Q)
+	rows, err := read(ctx, PublicOrg, q, "public")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// The caller's OWN corpus, read with the validated principal and nothing else.
 	// Anonymous callers simply get the published one.
-	if org, ok := principal.Org(c); ok && org != PublicOrg {
-		own, err := read(c, org, q, "org")
+	if org, ok := principal.OrgFrom(ctx); ok && org != PublicOrg {
+		own, err := read(ctx, org, q, "org")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		rows = append(rows, own...)
 	}
 
-	rows = filter(rows, c)
+	rows = filter(rows, in)
 	facets := facet(rows)
 	total := len(rows)
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Updated > rows[j].Updated })
-	return c.JSON(http.StatusOK, Response{Data: page(rows, c), Total: total, Facets: facets})
+	return &CatalogView{Data: page(rows, in), Total: total, Facets: facets}, nil
 }
 
 // read pulls one corpus out of the index and stamps its scope.
-func read(c *zip.Ctx, org, q, scope string) ([]Entry, error) {
-	raw, err := index.Query(c.Context(), org, uid, q, scan, 0)
+func read(ctx context.Context, org, q, scope string) ([]CatalogEntry, error) {
+	raw, err := index.Query(ctx, org, uid, q, scan, 0)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "catalog: %v", err)
 	}
-	out := make([]Entry, 0, len(raw))
+	out := make([]CatalogEntry, 0, len(raw))
 	for _, r := range raw {
-		var e Entry
+		var e CatalogEntry
 		if json.Unmarshal(r, &e) != nil || e.ID == "" {
 			continue
 		}
@@ -230,14 +301,14 @@ func read(c *zip.Ctx, org, q, scope string) ([]Entry, error) {
 // narrow, never select the complement, so `?forkable=false` silently meant "no
 // filter" — a boolean axis whose negative case is unaskable is a label, not a
 // filter.
-func filter(in []Entry, c *zip.Ctx) []Entry {
-	org, arch := strings.ToLower(c.Query("org")), strings.ToLower(c.Query("archetype"))
-	lang, kind := strings.ToLower(c.Query("language")), strings.ToLower(c.Query("kind"))
+func filter(in []CatalogEntry, q *Query) []CatalogEntry {
+	org, arch := strings.ToLower(q.Org), strings.ToLower(q.Archetype)
+	lang, kind := strings.ToLower(q.Language), strings.ToLower(q.Kind)
 	// origin cuts the corpus into the lanes a person actually browses; parent
 	// narrows a lane to one lineage ("everything built from folio"), which is what
 	// turns the community lane from a pile into something you can read.
-	orig, parent := strings.ToLower(c.Query("origin")), strings.ToLower(c.Query("template"))
-	fork, forkSet := boolQuery(c, "forkable")
+	orig, parent := strings.ToLower(q.Origin), strings.ToLower(q.Template)
+	fork, forkSet := tribool(q.Forkable)
 	out := in[:0]
 	for _, e := range in {
 		switch {
@@ -255,9 +326,9 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 	return out
 }
 
-// boolQuery reads a flag that has three answers, not two: yes, no, and unasked.
-func boolQuery(c *zip.Ctx, name string) (v, ok bool) {
-	b, err := strconv.ParseBool(strings.TrimSpace(c.Query(name)))
+// tribool reads a flag that has three answers, not two: yes, no, and unasked.
+func tribool(s string) (v, ok bool) {
+	b, err := strconv.ParseBool(strings.TrimSpace(s))
 	return b, err == nil
 }
 
@@ -266,7 +337,7 @@ func boolQuery(c *zip.Ctx, name string) (v, ok bool) {
 // on BOTH sides by the same rule as every other dimension — counting only the
 // trues rendered {true: everything} and told a caller there was a choice where
 // there was none.
-func facet(in []Entry) map[string]counts {
+func facet(in []CatalogEntry) map[string]counts {
 	f := map[string]counts{"org": {}, "archetype": {}, "language": {}, "kind": {},
 		"origin": {}, "template": {}, "forkable": {}}
 	for _, e := range in {
@@ -283,13 +354,22 @@ func facet(in []Entry) map[string]counts {
 	return f
 }
 
-func page(in []Entry, c *zip.Ctx) []Entry {
-	limit, offset := intQuery(c, "limit", 50), intQuery(c, "offset", 0)
+// page cuts one window out of the sorted result. A limit that was never given
+// (or was given as something the URL could not carry as a positive number) is 50,
+// and 200 is the ceiling; an offset past the end is an empty page, not an error.
+func page(in []CatalogEntry, q *Query) []CatalogEntry {
+	limit, offset := q.Limit, q.Offset
+	if limit <= 0 {
+		limit = 50
+	}
 	if limit > maxLimit {
 		limit = maxLimit
 	}
+	if offset < 0 {
+		offset = 0
+	}
 	if offset >= len(in) {
-		return []Entry{}
+		return []CatalogEntry{}
 	}
 	if end := offset + limit; end < len(in) {
 		return in[offset:end]
@@ -297,18 +377,10 @@ func page(in []Entry, c *zip.Ctx) []Entry {
 	return in[offset:]
 }
 
-func intQuery(c *zip.Ctx, name string, def int) int {
-	n, err := strconv.Atoi(c.Query(name))
-	if err != nil || n < 0 {
-		return def
-	}
-	return n
-}
-
 // The two seams sync writes and reads through, as package vars so the reconcile
 // is testable without a live GitHub and the site source without a store.
 var (
-	reconcile = func(ctx context.Context, org string, rows []Entry) (int, int, error) {
+	reconcile = func(ctx context.Context, org string, rows []CatalogEntry) (int, int, error) {
 		docs := make([]map[string]any, 0, len(rows))
 		for _, e := range rows {
 			if e.ID == "" || e.Org == "" {

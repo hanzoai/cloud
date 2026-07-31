@@ -19,20 +19,75 @@
     "/v1/templates": {
       "get": {
         "operationId": "get_v1_templates",
+        "summary": "list returns the public starter-kit catalog plus, for a validated caller, that org's own templates.",
+        "description": "list returns the public starter-kit catalog plus, for a validated caller, that org's own templates.\nNo request field can widen the scope: the org comes from the gateway-minted,\nJWT-validated principal, so an anonymous or cross-org caller structurally sees\nthe public catalog only.",
         "tags": [
           "templates"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "framework": "next",
+                      "slug": "folio",
+                      "title": "Portfolio"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_templates",
+        "summary": "publish creates a template private to the caller's org and answers 201.",
+        "description": "publish creates a template private to the caller's org and answers 201.\nThe slug must be free in both layers — publishing over a public-catalog slug is\n409 — and the owner, tier and rating are stamped by the server, never by the body.",
         "tags": [
           "templates"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "framework": "next",
+                "slug": "acme-landing",
+                "source": "https://github.com/acme/landing",
+                "title": "Acme Landing"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Template"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Template"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/templates/{slug}": {
       "delete": {
-        "operationId": "delete_v1_templates_by_slug",
+        "operationId": "delete_v1_templates_slug",
+        "summary": "remove deletes the caller org's own template and answers 204.",
+        "description": "remove deletes the caller org's own template and answers 204.\nA slug they do not own is a 404, never a delete: the DELETE binds org.",
         "tags": [
           "templates"
         ],
@@ -41,14 +96,23 @@
             "name": "slug",
             "in": "path",
             "required": true,
+            "description": "Slug is the template's id, lowercase alphanumeric with dashes.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme-landing"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_templates_by_slug",
+        "operationId": "get_v1_templates_slug",
+        "summary": "get returns one template: the caller org's own if they have that slug, else the public one.",
+        "description": "get returns one template: the caller org's own if they have that slug, else the public one.\nAn unknown slug is a 404; an anonymous caller resolves against the public catalog only.",
         "tags": [
           "templates"
         ],
@@ -57,14 +121,30 @@
             "name": "slug",
             "in": "path",
             "required": true,
+            "description": "Slug is the template's id, lowercase alphanumeric with dashes.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "folio"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Template"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_templates_by_slug",
+        "operationId": "put_v1_templates_slug",
+        "summary": "replace overwrites the caller org's own template at :slug, keeping the path's identity.",
+        "description": "replace overwrites the caller org's own template at :slug, keeping the path's identity.\nA slug the caller does not own is a 404 — the UPDATE binds org, so a PUT can\nnever reach another org's row — and the body cannot rename the template.",
         "tags": [
           "templates"
         ],
@@ -73,11 +153,147 @@
             "name": "slug",
             "in": "path",
             "required": true,
+            "description": "Slug is the template's id: lowercase alphanumeric with dashes, max 40. On a\nreplace the path owns it and a body slug is ignored.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme-landing"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "framework": "next",
+                "slug": "acme-landing",
+                "title": "Acme Landing v2"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Template"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Template"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Template": {
+        "properties": {
+          "category": {
+            "description": "Category groups the entry in the gallery browser.",
+            "type": "string"
+          },
+          "demo": {
+            "description": "live demo (\u003cslug\u003e.hanzo.app), when deployed",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the gallery blurb, max 4096 characters.",
+            "type": "string"
+          },
+          "features": {
+            "description": "Features are the selling-point bullets, max 32.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "framework": {
+            "description": "Framework is the stack the kit is built on (\"next\", \"astro\", …).",
+            "type": "string"
+          },
+          "org": {
+            "description": "owner of a PRIVATE template; empty in the public catalog",
+            "type": "string"
+          },
+          "preview": {
+            "description": "Preview is the screenshot or preview URL, max 4096 characters.",
+            "type": "string"
+          },
+          "rating": {
+            "description": "Rating is a public-gallery curation score; server-owned, ignored on a write.",
+            "type": "number"
+          },
+          "slug": {
+            "description": "Slug is the template's id: lowercase alphanumeric with dashes, max 40. On a\nreplace the path owns it and a body slug is ignored.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the repository the fork clones from, max 4096 characters.",
+            "type": "string"
+          },
+          "tier": {
+            "description": "Tier is a public-gallery curation rank; server-owned, ignored on a write.",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Title is the display name; required, max 200 characters.",
+            "type": "string"
+          },
+          "useCase": {
+            "description": "UseCase is what the kit is for, in one phrase.",
+            "type": "string"
+          },
+          "variants": {
+            "description": "the shapes this template ships in",
+            "items": {
+              "$ref": "#/components/schemas/Variant"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "TemplateList": {
+        "properties": {
+          "data": {
+            "description": "Data is the templates, public entries first.",
+            "items": {
+              "$ref": "#/components/schemas/Template"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Variant": {
+        "properties": {
+          "framework": {
+            "description": "only when it differs from the template's",
+            "type": "string"
+          },
+          "id": {
+            "description": "selector, unique within the template (\"react\", \"grid-3-fluid\")",
+            "type": "string"
+          },
+          "kind": {
+            "description": "the axis it varies: format | page | theme",
+            "type": "string"
+          },
+          "label": {
+            "description": "human label for the picker",
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

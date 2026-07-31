@@ -19,41 +19,784 @@
     "/v1/usage": {
       "post": {
         "operationId": "post_v1_usage",
+        "summary": "record ingests account-usage samples into the caller's own warehouse series.",
+        "description": "record ingests account-usage samples into the caller's own warehouse series. The\nbody carries either a `samples` array or one bare sample at the top level. It is FAIL-SOFT: a datastore outage costs a poll of history (stored:false),\nnever a failed request. It records usage ONLY — the link registry is refreshed\nseparately via POST /v1/links, so there is one and only one way to update an\naccount row.",
         "tags": [
           "usage"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "samples": [
+                  {
+                    "confidence": "percentOnly",
+                    "lane": "five_hour",
+                    "machine": "spark",
+                    "provider": "claude",
+                    "usedPct": 47,
+                    "window": "6h"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/reportReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accepted": 1,
+                  "stored": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/reportResp"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        }
       }
     },
     "/v1/usage/analytics": {
       "get": {
         "operationId": "get_v1_usage_analytics",
+        "summary": "analytics returns the caller org's per-provider LLM breakdown, gated on plan\nentitlement.",
+        "description": "analytics returns the caller org's per-provider LLM breakdown, gated on plan\nentitlement. It reads the same hanzo.cloud_usage ledger the summary does,\nclamped to the plan's retention window; an unentitled plan is refused with 402 and\nbasic own-org usage stays ungated on the summary. A warehouse outage degrades to an\nhonest-empty breakdown rather than an error.\n\n\nINTERIM (mirrors clients/world/entitlement.go): no org→plan resolver exists in\ncloud yet — the subscription lookup is owned by the billing plane and the gateway\nprincipal carries no plan claim — so the caller passes ?plan=\u003cid\u003e and the gate\nresolves THAT plan's access. When the org→plan resolver lands, swap the ?plan=\nline below for the resolved caller-org plan; the gate + clamp logic is unchanged.",
         "tags": [
           "usage"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "description": "Plan is the plan id whose analytics entitlement gates and clamps this read.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "pro"
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the window: 24h, 7d, 30d, or custom (which needs start and end).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "30d"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the inclusive window start, RFC3339. Honoured only for range=custom.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the exclusive window end, RFC3339. Honoured only for range=custom.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/usage/analytics/access": {
       "get": {
         "operationId": "get_v1_usage_analytics_access",
+        "summary": "analyticsAccess echoes one plan's resolved analytics entitlement.",
+        "description": "analyticsAccess echoes one plan's resolved analytics entitlement. An empty plan\nresolves the free floor, so the console self-configures which analytics controls to\nshow against the LIVE catalog instead of hardcoding tiers. It always answers 200,\nfalling back to the floor on a resolution error, so a catalog blip never breaks the\nclient. Read-only public contract — no tenant data here.",
         "tags": [
           "usage"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "description": "Plan is the plan id to resolve; empty resolves the free floor.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "pro"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "access": {
+                    "datastore": true,
+                    "export": true,
+                    "retentionDays": 90
+                  },
+                  "plan": "pro"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/analyticsAccessView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/usage/samples": {
       "get": {
         "operationId": "get_v1_usage_samples",
+        "summary": "samples returns one connected provider account's own plan consumption over a window.\n`current` is the newest instance of each lane (the headline) and `windows` is the\nhistory behind it, both computed from ONE deduped read.",
+        "description": "samples returns one connected provider account's own plan consumption over a window.\n`current` is the newest instance of each lane (the headline) and `windows` is the\nhistory behind it, both computed from ONE deduped read. It is scoped to the caller's OWN linked\naccounts, and an unavailable warehouse answers available:false rather than an error.",
         "tags": [
           "usage"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": true,
+            "description": "Provider is the metered provider, e.g. claude. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "claude"
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "description": "Account narrows to one linked account of that provider; empty means all of them.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Window narrows to one window class: 6h, day, week or month.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the dash window: 1h, 24h, 7d or 30d. Empty means 24h.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "24h"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/dashResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/usage/summary": {
       "get": {
         "operationId": "get_v1_usage_summary",
+        "summary": "summary returns the caller org's own footprint roll-up over one window.",
+        "description": "summary returns the caller org's own footprint roll-up over one window. It composes\ncommerce spend, the warehouse LLM totals and the caller's own linked-account board,\neach degrading independently to honest zeros, and a source marker says which\nanswered — a partial deploy never fabricates spend or usage.",
         "tags": [
           "usage"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the window: 24h, 7d, 30d, or custom (which needs start and end).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "30d"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the inclusive window start, RFC3339. Honoured only for range=custom.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the exclusive window end, RFC3339. Honoured only for range=custom.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Summary"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Accounts": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/SourceState"
+          },
+          "hanzo": {
+            "$ref": "#/components/schemas/SourceState"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TotalView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "AnalyticsView": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "export": {
+            "type": "boolean"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "providers": {
+            "$ref": "#/components/schemas/ProviderBreakdown"
+          },
+          "range": {
+            "type": "string"
+          },
+          "retentionDays": {
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "start": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CategorySpend": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "cents": {
+            "type": "integer"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "LLM": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "completionTokens": {
+            "type": "integer"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "models": {
+            "type": "integer"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ProviderBreakdown": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderRow"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProviderRow": {
+        "properties": {
+          "costCents": {
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Scope": {
+        "properties": {
+          "org": {
+            "type": "string"
+          },
+          "user": {
+            "description": "the caller's subject; whose linked-account rows the accounts block carries",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SourceState": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "source": {
+            "description": "the table of record",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Sources": {
+        "properties": {
+          "commerce": {
+            "type": "boolean"
+          },
+          "warehouse": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Spend": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "availableCents": {
+            "type": "integer"
+          },
+          "balanceCents": {
+            "type": "integer"
+          },
+          "byCategory": {
+            "items": {
+              "$ref": "#/components/schemas/CategorySpend"
+            },
+            "type": "array"
+          },
+          "mtdCents": {
+            "type": "integer"
+          },
+          "overageCents": {
+            "type": "integer"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/SpendPoint"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          },
+          "totalCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SpendPoint": {
+        "properties": {
+          "cents": {
+            "type": "integer"
+          },
+          "t": {
+            "description": "RFC3339 bucket start (UTC)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Summary": {
+        "properties": {
+          "accounts": {
+            "$ref": "#/components/schemas/Accounts"
+          },
+          "end": {
+            "type": "string"
+          },
+          "interval": {
+            "type": "string"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/LLM"
+          },
+          "range": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/Sources"
+          },
+          "spend": {
+            "$ref": "#/components/schemas/Spend"
+          },
+          "start": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TotalView": {
+        "properties": {
+          "confidence": {
+            "type": "string"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "scope": {
+            "description": "user | org",
+            "type": "string"
+          },
+          "source": {
+            "description": "account | hanzo",
+            "type": "string"
+          },
+          "tokens": {
+            "type": "integer"
+          },
+          "usedPct": {
+            "type": "number"
+          },
+          "window": {
+            "type": "string"
+          },
+          "windows": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "analyticsAccessDetail": {
+        "properties": {
+          "datastore": {
+            "description": "Datastore is whether the rich per-org analytics read is included.",
+            "type": "boolean"
+          },
+          "export": {
+            "description": "Export is whether exporting the analytics data is included.",
+            "type": "boolean"
+          },
+          "retentionDays": {
+            "description": "RetentionDays is how far back a query window may reach.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "analyticsAccessView": {
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/analyticsAccessDetail",
+            "description": "Access is the resolved entitlement."
+          },
+          "plan": {
+            "description": "Plan echoes the requested plan id.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "dashResp": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "available": {
+            "description": "false = warehouse unavailable, NOT \"no usage\"",
+            "type": "boolean"
+          },
+          "current": {
+            "description": "the live state of each lane: the dash headline",
+            "items": {
+              "$ref": "#/components/schemas/sampleView"
+            },
+            "type": "array"
+          },
+          "from": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "range": {
+            "type": "string"
+          },
+          "scope": {
+            "description": "user",
+            "type": "string"
+          },
+          "source": {
+            "description": "account — the provider's own meter",
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "windows": {
+            "description": "every instance in range, newest first",
+            "items": {
+              "$ref": "#/components/schemas/sampleView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "reportReq": {
+        "properties": {
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/sampleReq"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "reportResp": {
+        "properties": {
+          "accepted": {
+            "type": "integer"
+          },
+          "stored": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "sampleReq": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "cachedInputTokens": {
+            "type": "integer"
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "costLimitCents": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "inputTokens": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lane": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "outputTokens": {
+            "type": "integer"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "resetsAt": {
+            "description": "RFC3339; bounded",
+            "type": "string"
+          },
+          "synthetic": {
+            "type": "boolean"
+          },
+          "totalTokens": {
+            "type": "integer"
+          },
+          "usedPct": {
+            "type": "number"
+          },
+          "window": {
+            "type": "string"
+          },
+          "windowMinutes": {
+            "type": "integer"
+          },
+          "windowStart": {
+            "description": "RFC3339; bounded",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sampleView": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "cachedInputTokens": {
+            "type": "integer"
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "costLimitCents": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "inputTokens": {
+            "type": "integer"
+          },
+          "lane": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "outputTokens": {
+            "type": "integer"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "resetsAt": {
+            "type": "string"
+          },
+          "synthetic": {
+            "type": "boolean"
+          },
+          "totalTokens": {
+            "type": "integer"
+          },
+          "usedPct": {
+            "type": "number"
+          },
+          "window": {
+            "type": "string"
+          },
+          "windowMinutes": {
+            "type": "integer"
+          },
+          "windowStart": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

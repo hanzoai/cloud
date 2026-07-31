@@ -6,19 +6,20 @@
 // Telemetry INGEST — the in-process OpenTelemetry Collector that folds the
 // standalone otel-collector Deployment into the unified cloud binary.
 //
-// cloud already embeds the o11y QUERY runtime (embed.go) over the datastore
-// datastore. This file adds the WRITE side: a real OpenTelemetry Collector,
-// constructed IN-PROCESS, that accepts the ZAP span wire (:4317) and writes
-// spans + logs into the SAME datastore the embedded query runtime reads
-// (o11y_traces / o11y_logs on the `insights` cluster). Consumers — cloud
-// itself, console-worker, and third-party OTel SDKs — point at cloud instead of
-// the standalone otel-collector Service, so the standalone Deployment can retire.
+// o11y already embeds the QUERY runtime (embed.go) over the warehouse. This file
+// adds the WRITE side: a real OpenTelemetry Collector, constructed IN-PROCESS,
+// that accepts the ZAP span and log wires and writes into the SAME warehouse the
+// embedded query runtime reads. Its producers are the host and every sibling
+// plugin on this machine (loopback, cloud/telemetry.go's same-machine rung), the
+// node-agent DaemonSet (genuinely remote, so genuinely over the network), and
+// third-party OTel SDKs — all pointed here instead of at a standalone
+// otel-collector Service, so that Deployment can retire.
 //
 // Pipeline — trimmed from the standalone collector to the components that both
 // (a) the live consumers exercise and (b) compile against cloud's UPSTREAM
 // datastore driver (datastore-go v2.44.0 / ch-go v0.71.0):
 //
-//	receivers:  zap (the ZAP span wire on 4317)
+//	receivers:  zap (the span and log wires, cloud.O11ySpanPort / O11yLogPort)
 //	processors: memory_limiter -> resource(service.namespace=hanzo, deployment.environment) -> batch
 //	exporters:  datastoretraces (traces), datastorelogsexporter (logs)
 //
@@ -44,8 +45,10 @@ package o11y
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"go.opentelemetry.io/collector/component"
@@ -85,8 +88,8 @@ const defaultEnvironment = "production"
 var embeddedIngest *otelcol.Collector
 
 // mountIngest constructs and starts the in-process ingest collector. Called by
-// mountO11y (o11y.go). It binds only the ZAP receiver socket (no /v1/o11y/*
-// Fiber route), so it is order-independent. The datastore DSN is the single
+// mountO11y (o11y.go). It binds only the ZAP receiver sockets (no /v1/o11y/*
+// Fiber route), so it is order-independent. The warehouse DSN is the single
 // precondition — it is where the collector writes, so without it there is
 // nothing to run. Fail-soft: a missing DSN or a construction error returns nil.
 func mountIngest(deps cloud.Deps) error {
@@ -113,7 +116,7 @@ func mountIngest(deps cloud.Deps) error {
 		}
 	}()
 	embeddedIngest = col
-	log.Info("OTLZ ingest collector running", "traces", ":4317", "logs", ":4318", "sink", "datastore traces+logs")
+	log.Info("ingest collector running", "spans", bindAll(cloud.O11ySpanPort), "logs", bindAll(cloud.O11yLogPort))
 	return nil
 }
 
@@ -194,15 +197,22 @@ func ingestFactories() (otelcol.Factories, error) {
 	}, nil
 }
 
+// bindAll is the LISTEN half of a receiver port, against every interface. The
+// PORT is cloud's (one name for one thing, shared with the dialling side in
+// cloud/telemetry.go); the ADDRESS differs by direction and cannot be shared: a
+// caller on this machine dials loopback, but the node-agent DaemonSet is a
+// genuinely remote producer, so the receiver has to accept from off-box too.
+func bindAll(port int) string { return net.JoinHostPort("0.0.0.0", strconv.Itoa(port)) }
+
 // writeIngestConfig renders the collector pipeline YAML to the data volume and
 // returns its path. The file contains NO secret — the DSN is a ${env:} reference.
 //
-// Collision guard: the collector binds ONLY the OTLP receiver ports (:4317,
-// :4318). service.telemetry.metrics.level=none disables the collector's own
-// self-metrics Prometheus reader (default :8888) so it can never contend with
-// cloud's health listener (:9090) — the exact class of clash embed.go documents.
-// No prometheus exporter (:8889), no health_check extension (:13133): cloud owns
-// process health and its own OTel self-telemetry.
+// Collision guard: the collector binds ONLY the span and log receiver ports.
+// service.telemetry.metrics.level=none disables the collector's own self-metrics
+// Prometheus reader (default :8888) so it can never contend with cloud's health
+// listener (:9090) — the exact class of clash embed.go documents. No prometheus
+// exporter (:8889), no health_check extension (:13133): cloud owns process health
+// and its own OTel self-telemetry.
 func writeIngestConfig(deps cloud.Deps) (string, error) {
 	dataDir := filepath.Join(firstNonEmpty(deps.DataDir, "/var/lib/cloud"), "o11y")
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
@@ -213,8 +223,8 @@ func writeIngestConfig(deps cloud.Deps) (string, error) {
 	cfg := "" +
 		"receivers:\n" +
 		"  zap:\n" +
-		"    endpoint: 0.0.0.0:4317\n" +
-		"    logs_endpoint: 0.0.0.0:4318\n" +
+		"    endpoint: " + bindAll(cloud.O11ySpanPort) + "\n" +
+		"    logs_endpoint: " + bindAll(cloud.O11yLogPort) + "\n" +
 		"processors:\n" +
 		"  memory_limiter:\n" +
 		"    check_interval: 5s\n" +

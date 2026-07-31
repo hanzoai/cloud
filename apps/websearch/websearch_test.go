@@ -39,9 +39,40 @@ func mockBing(t *testing.T, html string) *httptest.Server {
 	return srv
 }
 
-// okHandler is a trivial next-handler for exercising searchGuard in isolation
-// (the guard rejects before next runs, so it never actually fires on reject paths).
-var okHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+// mounted brings the surface up on a bare app. The gates are middleware on the
+// real router now, so every gate test drives a real request through it rather
+// than calling a handler in isolation — which is the only way to assert that the
+// gate is actually WIRED to the path it guards, not merely that it works.
+func mounted(t *testing.T) *fiber.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	return app.Fiber()
+}
+
+// probe issues one request against the mounted surface and returns the status and
+// body.
+func probe(t *testing.T, fa *fiber.App, req *http.Request) (int, []byte) {
+	t.Helper()
+	resp, err := fa.Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatalf("%s %s: %v", req.Method, req.URL.Path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
+// scrapeReq builds a firecrawl scrape request carrying key as the Bearer.
+func scrapeReq(url, key string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
+		strings.NewReader(`{"url":"`+url+`"}`))
+	req.Header.Set("Authorization", "Bearer "+key)
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
 
 // Mount() must register /v1/websearch/search + the two scrape POST paths on a real
 // Fiber router without panicking, and requests routed through the whole app must
@@ -111,18 +142,14 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 func TestScrapeReportsFetchFailure(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
 
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
-		strings.NewReader(`{"url":"http://127.0.0.1:1/"}`))
-	req.Header.Set("Authorization", "Bearer svc-key")
-	rec := httptest.NewRecorder()
-	scrapeHandler(rec, req)
+	code, body := probe(t, mounted(t), scrapeReq("http://127.0.0.1:1/", "svc-key"))
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 even when the fetch fails", rec.Code)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 even when the fetch fails", code)
 	}
 	var out firecrawlResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
-		t.Fatalf("decode: %v (%s)", err, rec.Body.String())
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if out.Success {
 		t.Fatal("success = true for a URL that cannot be fetched")
@@ -245,14 +272,11 @@ func TestMetaSearchDegradesOnEngineFailure(t *testing.T) {
 // When a key IS configured and the caller sends a WRONG X-API-Key, reject.
 func TestSearchWrongKeyRejected(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "right")
-	h := searchGuard(okHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x", nil)
 	req.Header.Set("X-API-Key", "wrong")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
+	if code, body := probe(t, mounted(t), req); code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (body %s)", code, body)
 	}
 }
 
@@ -260,52 +284,36 @@ func TestSearchWrongKeyRejected(t *testing.T) {
 // not an open surface. It fails closed exactly like the scrape sibling.
 func TestSearchMissingKeyRejected(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "configured")
-	h := searchGuard(okHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401 (missing key must be rejected — no open surface)", rec.Code)
+	if code, body := probe(t, mounted(t), req); code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (missing key must be rejected — no open surface) (body %s)", code, body)
 	}
 }
 
 // Search fails closed with no configured key (503), mirroring scrape.
 func TestSearchUnsetKeyFailsClosed(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "")
-	h := searchGuard(okHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x", nil)
 	req.Header.Set("X-API-Key", "anything")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503 (fail closed when unconfigured)", rec.Code)
+	if code, body := probe(t, mounted(t), req); code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503 (fail closed when unconfigured) (body %s)", code, body)
 	}
 }
 
 // Scrape fails closed with no configured key.
 func TestScrapeUnsetKeyFailsClosed(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "")
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
-		strings.NewReader(`{"url":"https://ex.com"}`))
-	req.Header.Set("Authorization", "Bearer anything")
-	rec := httptest.NewRecorder()
-	scrapeHandler(rec, req)
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503 (fail closed)", rec.Code)
+	if code, body := probe(t, mounted(t), scrapeReq("https://ex.com", "anything")); code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503 (fail closed) (body %s)", code, body)
 	}
 }
 
 // Scrape rejects a wrong Bearer key.
 func TestScrapeWrongKeyRejected(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "right")
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
-		strings.NewReader(`{"url":"https://ex.com"}`))
-	req.Header.Set("Authorization", "Bearer wrong")
-	rec := httptest.NewRecorder()
-	scrapeHandler(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
+	if code, body := probe(t, mounted(t), scrapeReq("https://ex.com", "wrong")); code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (body %s)", code, body)
 	}
 }

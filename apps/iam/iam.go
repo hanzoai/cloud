@@ -39,6 +39,22 @@
 //	               get-app-login + the v2 entity CRUD + the legacy verb-alias compat
 //	/login/oauth/* browser authorize surface (the /v1/iam/oauth/authorize 302 target)
 //
+// NOT ONE ROUTE HERE CAN BE A TYPED OP, so this subsystem contributes method +
+// path and nothing else to the generated document, the MCP tool list and the CLI.
+// That follows from what it mounts: safeMount registers ONE adapted net/http
+// handler — the whole embedded IAM v2 server — behind WILDCARDS at the prefixes
+// identity owns. A wildcard leaf has no Go In or Out to declare (the shapes live
+// inside github.com/hanzoai/iam, one router below), it answers whatever media
+// type and status the OIDC/OAuth2 flows require (a browser authorize is a 302),
+// and a `*` segment is not a path a typed op may carry at all — zip renders it
+// verbatim while the router's projection renders {wildcard1}, and that
+// disagreement aborts the whole app's document.
+//
+// The identity surface is specified by RFC 6749/8414 and OIDC Discovery, and it
+// PUBLISHES ITS OWN description at /v1/iam/.well-known/openid-configuration,
+// which is the document a relying party actually reads. Documenting it a second
+// time here would be a copy that drifts.
+//
 // STAGING (security-critical): activation is the standard enable-list gate — the
 // operator adds "iam" to the cloud deployment's --enable only AFTER the v2 config
 // (init_data + KMS signing keys) is present and the fold is verified

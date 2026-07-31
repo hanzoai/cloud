@@ -37,20 +37,92 @@
     "/v1/cloudflare/d1/databases": {
       "get": {
         "operationId": "get_v1_cloudflare_d1_databases",
+        "summary": "D1DatabaseList lists the D1 databases on the org's Cloudflare account.",
+        "description": "D1DatabaseList lists the D1 databases on the org's Cloudflare account. Any org\nmember may read.",
         "tags": [
           "cloudflare"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page of databases to return.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "description": "PerPage is how many databases one page holds.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "description": "Name filters to the database with this name.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_cloudflare_d1_databases",
+        "summary": "D1DatabaseCreate creates a D1 database on the org's Cloudflare account.",
+        "description": "D1DatabaseCreate creates a D1 database on the org's Cloudflare account.\nRequires org admin.",
         "tags": [
           "cloudflare"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "orders"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/databaseCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/d1/databases/{database}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_d1_databases_by_database",
+        "operationId": "delete_v1_cloudflare_d1_databases_database",
+        "summary": "D1DatabaseDelete deletes a D1 database and everything stored in it.",
+        "description": "D1DatabaseDelete deletes a D1 database and everything stored in it. Requires\norg admin.",
         "tags": [
           "cloudflare"
         ],
@@ -59,11 +131,25 @@
             "name": "database",
             "in": "path",
             "required": true,
+            "description": "Database is the Cloudflare D1 database id or name.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/d1/databases/{database}/query": {
@@ -81,65 +167,196 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/D1Query"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/v1/cloudflare/kv/namespaces": {
       "get": {
         "operationId": "get_v1_cloudflare_kv_namespaces",
-        "tags": [
-          "cloudflare"
-        ]
-      },
-      "post": {
-        "operationId": "post_v1_cloudflare_kv_namespaces",
-        "tags": [
-          "cloudflare"
-        ]
-      }
-    },
-    "/v1/cloudflare/kv/namespaces/{namespace}": {
-      "delete": {
-        "operationId": "delete_v1_cloudflare_kv_namespaces_by_namespace",
+        "summary": "KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare\naccount.",
+        "description": "KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare\naccount. Any org member may read.",
         "tags": [
           "cloudflare"
         ],
         "parameters": [
           {
-            "name": "namespace",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      }
-    },
-    "/v1/cloudflare/kv/namespaces/{namespace}/values/{key}": {
-      "delete": {
-        "operationId": "delete_v1_cloudflare_kv_namespaces_by_namespace_values_by_key",
-        "tags": [
-          "cloudflare"
-        ],
-        "parameters": [
-          {
-            "name": "namespace",
-            "in": "path",
-            "required": true,
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page of namespaces to return.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "key",
-            "in": "path",
-            "required": true,
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "description": "PerPage is how many namespaces one page holds.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "description": "Order names the field to sort by, and Direction sorts asc or desc.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_cloudflare_kv_namespaces",
+        "summary": "KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare\naccount.",
+        "description": "KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare\naccount. Requires org admin. Cloudflare mints the namespace id the value routes\naddress.",
+        "tags": [
+          "cloudflare"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "title": "sessions"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/namespaceCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/cloudflare/kv/namespaces/{namespace}": {
+      "delete": {
+        "operationId": "delete_v1_cloudflare_kv_namespaces_namespace",
+        "summary": "KVNamespaceDelete deletes a Workers KV namespace and every key in it.",
+        "description": "KVNamespaceDelete deletes a Workers KV namespace and every key in it. Requires\norg admin.",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "description": "Namespace is the Cloudflare KV namespace id.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "0123456789abcdef0123456789abcdef"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/cloudflare/kv/namespaces/{namespace}/values/{key}": {
+      "delete": {
+        "operationId": "delete_v1_cloudflare_kv_namespaces_namespace_values_key",
+        "summary": "KVValueDelete removes one key from a Workers KV namespace.",
+        "description": "KVValueDelete removes one key from a Workers KV namespace. Requires org admin.",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "description": "Namespace is the Cloudflare KV namespace id.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "0123456789abcdef0123456789abcdef"
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Key is the key within that namespace. KV keys are broad (up to 512 bytes),\nso this one is escaped rather than charset-restricted.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "session/abc"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
         "operationId": "get_v1_cloudflare_kv_namespaces_by_namespace_values_by_key",
@@ -193,20 +410,64 @@
     "/v1/cloudflare/pages/projects": {
       "get": {
         "operationId": "get_v1_cloudflare_pages_projects",
+        "summary": "PagesList lists the org's Cloudflare Pages projects.",
+        "description": "PagesList lists the org's Cloudflare Pages projects. Any org member may read.",
         "tags": [
           "cloudflare"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_cloudflare_pages_projects",
+        "summary": "PagesCreate creates a Cloudflare Pages project on the org's account.",
+        "description": "PagesCreate creates a Cloudflare Pages project on the org's account. Requires\norg admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the\nrequest is dropped rather than forwarded.",
         "tags": [
           "cloudflare"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "marketing-site",
+                "production_branch": "main"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/PagesProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/pages/projects/{project}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_pages_projects_by_project",
+        "operationId": "delete_v1_cloudflare_pages_projects_project",
+        "summary": "PagesDelete deletes a Cloudflare Pages project, and with it every deployment it\nhas ever made.",
+        "description": "PagesDelete deletes a Cloudflare Pages project, and with it every deployment it\nhas ever made. Requires org admin.",
         "tags": [
           "cloudflare"
         ],
@@ -215,14 +476,30 @@
             "name": "project",
             "in": "path",
             "required": true,
+            "description": "Project is the Pages project name.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "marketing-site"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_cloudflare_pages_projects_by_project",
+        "operationId": "get_v1_cloudflare_pages_projects_project",
+        "summary": "PagesGet reads one Cloudflare Pages project — its build config, deployment\nconfigs and latest deployment.",
+        "description": "PagesGet reads one Cloudflare Pages project — its build config, deployment\nconfigs and latest deployment. Any org member may read.",
         "tags": [
           "cloudflare"
         ],
@@ -231,11 +508,25 @@
             "name": "project",
             "in": "path",
             "required": true,
+            "description": "Project is the Pages project name.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "marketing-site"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/pages/projects/{project}/deployments": {
@@ -253,12 +544,33 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PagesDeploy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/v1/cloudflare/pages/projects/{project}/domains": {
       "post": {
-        "operationId": "post_v1_cloudflare_pages_projects_by_project_domains",
+        "operationId": "post_v1_cloudflare_pages_projects_project_domains",
+        "summary": "PagesDomainAdd attaches a custom domain to a Cloudflare Pages project.",
+        "description": "PagesDomainAdd attaches a custom domain to a Cloudflare Pages project. Requires\norg admin. Cloudflare owns validation and certificate issuance from here on.",
         "tags": [
           "cloudflare"
         ],
@@ -267,16 +579,46 @@
             "name": "project",
             "in": "path",
             "required": true,
+            "description": "Project is the Pages project name, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "marketing-site"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "www.acme.com",
+                "project": "marketing-site"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/domainAddIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/pages/projects/{project}/domains/{domain}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_pages_projects_by_project_domains_by_domain",
+        "operationId": "delete_v1_cloudflare_pages_projects_project_domains_domain",
+        "summary": "PagesDomainDelete detaches a custom domain from a Cloudflare Pages project.",
+        "description": "PagesDomainDelete detaches a custom domain from a Cloudflare Pages project.\nRequires org admin.",
         "tags": [
           "cloudflare"
         ],
@@ -285,38 +627,143 @@
             "name": "project",
             "in": "path",
             "required": true,
+            "description": "Project is the Pages project name.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "marketing-site"
           },
           {
             "name": "domain",
             "in": "path",
             "required": true,
+            "description": "Domain is the attached custom domain to detach.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "www.acme.com"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/r2/buckets": {
       "get": {
         "operationId": "get_v1_cloudflare_r2_buckets",
+        "summary": "R2BucketList lists the R2 buckets on the org's Cloudflare account.",
+        "description": "R2BucketList lists the R2 buckets on the org's Cloudflare account. Any org\nmember may read.",
         "tags": [
           "cloudflare"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "description": "PerPage is how many buckets one page holds.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor continues from the position a previous page returned.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name_contains",
+            "in": "query",
+            "required": false,
+            "description": "NameContains filters to buckets whose name contains this substring.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "description": "Order names the field to sort by, and Direction sorts asc or desc.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_cloudflare_r2_buckets",
+        "summary": "R2BucketCreate creates an R2 bucket on the org's Cloudflare account.",
+        "description": "R2BucketCreate creates an R2 bucket on the org's Cloudflare account. Requires\norg admin.",
         "tags": [
           "cloudflare"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "assets"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/bucketCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/r2/buckets/{bucket}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_r2_buckets_by_bucket",
+        "operationId": "delete_v1_cloudflare_r2_buckets_bucket",
+        "summary": "R2BucketDelete deletes an R2 bucket.",
+        "description": "R2BucketDelete deletes an R2 bucket. Requires org admin. Cloudflare refuses a\nbucket that still holds objects, and that refusal is relayed.",
         "tags": [
           "cloudflare"
         ],
@@ -325,24 +772,54 @@
             "name": "bucket",
             "in": "path",
             "required": true,
+            "description": "Bucket is the R2 bucket name.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "assets"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/workers/scripts": {
       "get": {
         "operationId": "get_v1_cloudflare_workers_scripts",
+        "summary": "WorkersScriptList lists the Worker scripts on the org's Cloudflare account.",
+        "description": "WorkersScriptList lists the Worker scripts on the org's Cloudflare account. Any\norg member may read.",
         "tags": [
           "cloudflare"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/workers/scripts/{script}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_workers_scripts_by_script",
+        "operationId": "delete_v1_cloudflare_workers_scripts_script",
+        "summary": "WorkersScriptDelete removes a Worker script from the org's Cloudflare account.\nRequires org admin.",
+        "description": "WorkersScriptDelete removes a Worker script from the org's Cloudflare account.\nRequires org admin. Routes bound to the script stop serving it.",
         "tags": [
           "cloudflare"
         ],
@@ -351,11 +828,25 @@
             "name": "script",
             "in": "path",
             "required": true,
+            "description": "Script is the Worker script name.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "edge-router"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_cloudflare_workers_scripts_by_script",
@@ -371,12 +862,33 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerScriptPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/v1/cloudflare/workers/scripts/{script}/subdomain": {
       "post": {
-        "operationId": "post_v1_cloudflare_workers_scripts_by_script_subdomain",
+        "operationId": "post_v1_cloudflare_workers_scripts_script_subdomain",
+        "summary": "WorkersScriptSubdomainSet publishes or withdraws one Worker script on the\naccount's workers.dev subdomain.",
+        "description": "WorkersScriptSubdomainSet publishes or withdraws one Worker script on the\naccount's workers.dev subdomain. Requires org admin.",
         "tags": [
           "cloudflare"
         ],
@@ -385,24 +897,68 @@
             "name": "script",
             "in": "path",
             "required": true,
+            "description": "Script is the Worker script name, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "edge-router"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "enabled": true,
+                "script": "edge-router"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/subdomainSetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/workers/subdomain": {
       "get": {
         "operationId": "get_v1_cloudflare_workers_subdomain",
+        "summary": "WorkersSubdomainGet reads the org account's workers.dev subdomain — the name\nunder which every subdomain-enabled script is served.",
+        "description": "WorkersSubdomainGet reads the org account's workers.dev subdomain — the name\nunder which every subdomain-enabled script is served. Any org member may read.",
         "tags": [
           "cloudflare"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/workers/zones/{zone}/routes": {
       "get": {
-        "operationId": "get_v1_cloudflare_workers_zones_by_zone_routes",
+        "operationId": "get_v1_cloudflare_workers_zones_zone_routes",
+        "summary": "WorkersRouteList lists the Worker routes bound within one zone — the URL\npatterns that dispatch to a script.",
+        "description": "WorkersRouteList lists the Worker routes bound within one zone — the URL\npatterns that dispatch to a script. Any org member may read. Routes are\nzone-scoped, so no account is resolved.",
         "tags": [
           "cloudflare"
         ],
@@ -411,14 +967,30 @@
             "name": "zone",
             "in": "path",
             "required": true,
+            "description": "Zone is the 32-hex Cloudflare zone id.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "0123456789abcdef0123456789abcdef"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_cloudflare_workers_zones_by_zone_routes",
+        "operationId": "post_v1_cloudflare_workers_zones_zone_routes",
+        "summary": "WorkersRouteCreate binds a URL pattern in a zone to a Worker script.",
+        "description": "WorkersRouteCreate binds a URL pattern in a zone to a Worker script. Requires\norg admin — a route is what puts a script in front of live traffic.",
         "tags": [
           "cloudflare"
         ],
@@ -427,16 +999,47 @@
             "name": "zone",
             "in": "path",
             "required": true,
+            "description": "Zone is the 32-hex Cloudflare zone id, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "0123456789abcdef0123456789abcdef"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "pattern": "acme.com/api/*",
+                "script": "edge-router",
+                "zone": "0123456789abcdef0123456789abcdef"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/routeCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/workers/zones/{zone}/routes/{route}": {
       "delete": {
-        "operationId": "delete_v1_cloudflare_workers_zones_by_zone_routes_by_route",
+        "operationId": "delete_v1_cloudflare_workers_zones_zone_routes_route",
+        "summary": "WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching to a\nscript.",
+        "description": "WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching to a\nscript. Requires org admin.",
         "tags": [
           "cloudflare"
         ],
@@ -445,32 +1048,119 @@
             "name": "zone",
             "in": "path",
             "required": true,
+            "description": "Zone is the 32-hex Cloudflare zone id.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "0123456789abcdef0123456789abcdef"
           },
           {
             "name": "route",
             "in": "path",
             "required": true,
+            "description": "Route is the 32-hex Cloudflare route id.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "fedcba9876543210fedcba9876543210"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/zones": {
       "get": {
         "operationId": "get_v1_cloudflare_zones",
+        "summary": "ZonesList lists the Cloudflare zones the org's connected API token can see,\npaged and filtered by the query parameters Cloudflare itself accepts.",
+        "description": "ZonesList lists the Cloudflare zones the org's connected API token can see,\npaged and filtered by the query parameters Cloudflare itself accepts. Zones are\ntoken-scoped by Cloudflare, so no account is resolved. Any org member may read.\n\nZone and DNS-record MANAGEMENT is not here: it stays on the Hanzo DNS plane\n(/v1/dns). This only surfaces the Cloudflare zone objects the asset plane needs\n— a zone id is what addresses a Worker route or an analytics read.",
         "tags": [
           "cloudflare"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page of zones to return.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "description": "PerPage is how many zones one page holds.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "description": "Name filters to the zone with this domain name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status filters by zone status (active, pending, initializing, …).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "description": "Order names the field to sort by, and Direction sorts asc or desc.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/zones/{zone}": {
       "get": {
-        "operationId": "get_v1_cloudflare_zones_by_zone",
+        "operationId": "get_v1_cloudflare_zones_zone",
+        "summary": "ZoneGet reads one Cloudflare zone the org's token can see.",
+        "description": "ZoneGet reads one Cloudflare zone the org's token can see. Any org member may\nread. A zone id the token cannot see is Cloudflare's own not-found, relayed.",
         "tags": [
           "cloudflare"
         ],
@@ -479,16 +1169,32 @@
             "name": "zone",
             "in": "path",
             "required": true,
+            "description": "Zone is the 32-hex Cloudflare zone id.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "0123456789abcdef0123456789abcdef"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/zones/{zone}/analytics": {
       "get": {
-        "operationId": "get_v1_cloudflare_zones_by_zone_analytics",
+        "operationId": "get_v1_cloudflare_zones_zone_analytics",
+        "summary": "ZoneAnalytics reads a zone's Cloudflare traffic dashboard — requests, bandwidth,\nthreats and pageviews over the since/until window.",
+        "description": "ZoneAnalytics reads a zone's Cloudflare traffic dashboard — requests, bandwidth,\nthreats and pageviews over the since/until window. Any org member may read.\n\nA zone whose Cloudflare plan does not serve this endpoint yields Cloudflare's\nOWN error, never a fabricated success.",
         "tags": [
           "cloudflare"
         ],
@@ -497,16 +1203,60 @@
             "name": "zone",
             "in": "path",
             "required": true,
+            "description": "Zone is the 32-hex Cloudflare zone id.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "0123456789abcdef0123456789abcdef"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Since and Until bound the window, in the form Cloudflare accepts — an RFC 3339\ntime or a negative number of minutes from now (\"-1440\" is the last day).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "-1440"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "0"
+          },
+          {
+            "name": "continuous",
+            "in": "query",
+            "required": false,
+            "description": "Continuous asks Cloudflare for only fully-aggregated buckets.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloudflare/zones/{zone}/purge": {
       "post": {
-        "operationId": "post_v1_cloudflare_zones_by_zone_purge",
+        "operationId": "post_v1_cloudflare_zones_zone_purge",
+        "summary": "ZonePurge drops a zone's Cloudflare edge cache — either the whole zone\n(purge_everything) or exactly the listed file URLs.",
+        "description": "ZonePurge drops a zone's Cloudflare edge cache — either the whole zone\n(purge_everything) or exactly the listed file URLs. Requires org admin.\n\nPurging is the one zone-scoped WRITE this plane owns. It is not DNS — no record\nchanges — so it does not belong on /v1/dns, and it is not a connection, so it does\nnot belong on the integrations plane. It is a cache operation on a zone, which is\nwhat this asset plane is for. It takes the admin gate because dropping a zone's\ncache sends every subsequent request to the origin: on a site fronting a small\norigin that is a self-inflicted load spike, so it is a change, not a look.\n\nExactly one selector is required. Cloudflare treats a body with neither as a\nno-op and answers 200, which reads as \"purged\" to a caller that never purged\nanything — the failure we refuse to pass through.",
         "tags": [
           "cloudflare"
         ],
@@ -515,11 +1265,295 @@
             "name": "zone",
             "in": "path",
             "required": true,
+            "description": "Zone is the 32-hex Cloudflare zone id, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "0123456789abcdef0123456789abcdef"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "purge_everything": true,
+                "zone": "0123456789abcdef0123456789abcdef"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/purgeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cfResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "D1Query": {
+        "type": "object",
+        "properties": {
+          "params": {
+            "type": "array",
+            "items": {}
+          },
+          "sql": {
+            "type": "string"
+          }
+        }
+      },
+      "PagesBuildConfig": {
+        "properties": {
+          "build_command": {
+            "type": "string"
+          },
+          "destination_dir": {
+            "type": "string"
+          },
+          "root_dir": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PagesD1Binding": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PagesDeploy": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          }
+        }
+      },
+      "PagesDeploymentConfig": {
+        "properties": {
+          "compatibility_date": {
+            "type": "string"
+          },
+          "compatibility_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "d1_databases": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PagesD1Binding"
+            },
+            "type": "object"
+          },
+          "env_vars": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PagesEnvVar"
+            },
+            "type": "object"
+          },
+          "kv_namespaces": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PagesKVBinding"
+            },
+            "type": "object"
+          },
+          "r2_buckets": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PagesR2Binding"
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "PagesDeploymentConfigs": {
+        "properties": {
+          "preview": {
+            "$ref": "#/components/schemas/PagesDeploymentConfig"
+          },
+          "production": {
+            "$ref": "#/components/schemas/PagesDeploymentConfig"
+          }
+        },
+        "type": "object"
+      },
+      "PagesEnvVar": {
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PagesKVBinding": {
+        "properties": {
+          "namespace_id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PagesProjectCreate": {
+        "properties": {
+          "build_config": {
+            "$ref": "#/components/schemas/PagesBuildConfig"
+          },
+          "deployment_configs": {
+            "$ref": "#/components/schemas/PagesDeploymentConfigs"
+          },
+          "name": {
+            "type": "string"
+          },
+          "production_branch": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PagesR2Binding": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "WorkerScriptPut": {
+        "type": "object",
+        "properties": {
+          "bindings": {
+            "type": "string"
+          },
+          "compatibilityDate": {
+            "type": "string"
+          },
+          "compatibilityFlags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mainModule": {
+            "type": "string"
+          },
+          "script": {
+            "type": "string"
+          }
+        }
+      },
+      "bucketCreateIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the bucket name to create.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cfResult": {
+        "properties": {},
+        "type": "object"
+      },
+      "databaseCreateIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the database name to create.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "domainAddIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the custom domain to attach, e.g. \"www.acme.com\".",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the Pages project name, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "namespaceCreateIn": {
+        "properties": {
+          "title": {
+            "description": "Title is the namespace's display title. Cloudflare mints the id.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "purgeIn": {
+        "properties": {
+          "files": {
+            "description": "Files purges exactly the listed URLs — at most 30, Cloudflare's per-request cap.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "purge_everything": {
+            "description": "Everything drops the zone's entire edge cache.",
+            "type": "boolean"
+          },
+          "zone": {
+            "description": "Zone is the 32-hex Cloudflare zone id, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "routeCreateIn": {
+        "properties": {
+          "pattern": {
+            "description": "Pattern is the URL pattern to bind, e.g. \"acme.com/api/*\".",
+            "type": "string"
+          },
+          "script": {
+            "description": "Script is the Worker script to dispatch to. Omit it to leave the pattern\nbound to no script, which is how Cloudflare expresses \"bypass the Worker here\".",
+            "type": "string"
+          },
+          "zone": {
+            "description": "Zone is the 32-hex Cloudflare zone id, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "subdomainSetIn": {
+        "properties": {
+          "enabled": {
+            "description": "Enabled publishes the script on \u003cscript\u003e.\u003csubdomain\u003e.workers.dev when true,\nand withdraws it when false.",
+            "type": "boolean"
+          },
+          "script": {
+            "description": "Script is the Worker script name, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

@@ -10,7 +10,7 @@ import (
 )
 
 // templates.go is the PURE generation engine plus the built-in standardized library.
-// Render is deterministic — it takes a Template and a merge-field map and returns the
+// Render is deterministic — it takes a DocumentTemplate and a merge-field map and returns the
 // exact same bytes every time (no clock, no I/O, no randomness). Any date is a merge
 // FIELD supplied by the caller, never time.Now, so a rendered contract is reproducible
 // and its production is auditable.
@@ -18,7 +18,7 @@ import (
 // MissingFields returns the declared fields absent (or blank) in data, sorted. The
 // engine fails closed on any missing field rather than rendering a blank into a legal
 // document — a silent blank in a contract is a defect, not a convenience.
-func MissingFields(t Template, data map[string]string) []string {
+func MissingFields(t DocumentTemplate, data map[string]string) []string {
 	var missing []string
 	for _, f := range t.Fields {
 		if strings.TrimSpace(data[f.Key]) == "" {
@@ -35,7 +35,7 @@ func MissingFields(t Template, data map[string]string) []string {
 // CounselReview OR its category REQUIRES counsel review (formation/equity securities),
 // so the boundary rides on the document itself — the engine cannot emit a
 // securities-class document without it, regardless of how the flag was set.
-func Render(t Template, data map[string]string) ([]byte, error) {
+func Render(t DocumentTemplate, data map[string]string) ([]byte, error) {
 	if missing := MissingFields(t, data); len(missing) > 0 {
 		return nil, fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
 	}
@@ -59,7 +59,7 @@ func Render(t Template, data map[string]string) ([]byte, error) {
 // DECLARED fields and missingkey=error only catches ABSENT keys — so an undeclared
 // field passed as an empty string would otherwise render a silent blank into a legal
 // document. Requiring body refs ⊆ declared fields makes MissingFields authoritative.
-func ValidateOverride(t Template) error {
+func ValidateOverride(t DocumentTemplate) error {
 	refs, err := bodyFieldRefs(t.Body)
 	if err != nil {
 		return fmt.Errorf("template does not parse: %w", err)
@@ -193,18 +193,18 @@ func indexRootKey(args []parse.Node) (string, bool) {
 }
 
 // field is a terse constructor for the library below.
-func field(key, label string) Field { return Field{Key: key, Label: label} }
+func field(key, label string) MergeField { return MergeField{Key: key, Label: label} }
 
 // builtins is the standardized template library. Each is Version 1, Origin "builtin".
 // The set spans every category; an org overrides any of them with its own body
 // (store.go), and the resolved catalog is override-or-builtin. Formation and equity
 // instruments are CounselReview. This is a representative production set; new
 // templates are DATA added here, not engine changes.
-var builtins = []Template{
+var builtins = []DocumentTemplate{
 	// ---- ops ----
 	{
 		ID: "nda", Category: CategoryOps, Title: "Mutual Non-Disclosure Agreement", Version: 1, Origin: "builtin",
-		Fields: []Field{field("effective_date", "Effective date"), field("company_name", "Company"), field("counterparty_name", "Counterparty"), field("governing_law", "Governing law (state)")},
+		Fields: []MergeField{field("effective_date", "Effective date"), field("company_name", "Company"), field("counterparty_name", "Counterparty"), field("governing_law", "Governing law (state)")},
 		Body: `# Mutual Non-Disclosure Agreement
 
 This Mutual Non-Disclosure Agreement is entered into as of {{.effective_date}} between **{{.company_name}}** and **{{.counterparty_name}}** (each a "Party").
@@ -227,7 +227,7 @@ This Agreement is governed by the laws of the State of {{.governing_law}}.
 	},
 	{
 		ID: "msa", Category: CategoryOps, Title: "Master Services Agreement", Version: 1, Origin: "builtin",
-		Fields: []Field{field("effective_date", "Effective date"), field("company_name", "Company"), field("client_name", "Client"), field("payment_terms", "Payment terms"), field("governing_law", "Governing law (state)")},
+		Fields: []MergeField{field("effective_date", "Effective date"), field("company_name", "Company"), field("client_name", "Client"), field("payment_terms", "Payment terms"), field("governing_law", "Governing law (state)")},
 		Body: `# Master Services Agreement
 
 This Master Services Agreement is effective {{.effective_date}} between **{{.company_name}}** ("Provider") and **{{.client_name}}** ("Client").
@@ -253,7 +253,7 @@ This Agreement is governed by the laws of the State of {{.governing_law}}.
 	},
 	{
 		ID: "offer-letter", Category: CategoryOps, Title: "Employment Offer Letter", Version: 1, Origin: "builtin",
-		Fields: []Field{field("date", "Date"), field("company_name", "Company"), field("candidate_name", "Candidate"), field("role_title", "Role"), field("annual_salary", "Annual salary"), field("start_date", "Start date"), field("equity_grant", "Equity grant")},
+		Fields: []MergeField{field("date", "Date"), field("company_name", "Company"), field("candidate_name", "Candidate"), field("role_title", "Role"), field("annual_salary", "Annual salary"), field("start_date", "Start date"), field("equity_grant", "Equity grant")},
 		Body: `# Offer of Employment — {{.company_name}}
 
 {{.date}}
@@ -275,7 +275,7 @@ Sincerely,
 	// ---- equity ----
 	{
 		ID: "safe", Category: CategoryEquity, Title: "SAFE (Simple Agreement for Future Equity)", Version: 1, Origin: "builtin", CounselReview: true,
-		Fields: []Field{field("date", "Date"), field("company_name", "Company"), field("investor_name", "Investor"), field("purchase_amount", "Purchase amount"), field("valuation_cap", "Valuation cap"), field("discount_rate", "Discount rate"), field("governing_law", "Governing law (state)")},
+		Fields: []MergeField{field("date", "Date"), field("company_name", "Company"), field("investor_name", "Investor"), field("purchase_amount", "Purchase amount"), field("valuation_cap", "Valuation cap"), field("discount_rate", "Discount rate"), field("governing_law", "Governing law (state)")},
 		Body: `# Simple Agreement for Future Equity
 
 **{{.company_name}}** (the "Company") and **{{.investor_name}}** (the "Investor"), dated {{.date}}.
@@ -294,7 +294,7 @@ This instrument is governed by the laws of the State of {{.governing_law}}. It i
 	},
 	{
 		ID: "subscription-agreement", Category: CategoryEquity, Title: "Securities Subscription Agreement", Version: 1, Origin: "builtin", CounselReview: true,
-		Fields: []Field{field("date", "Date"), field("company_name", "Company"), field("investor_name", "Investor"), field("security_type", "Security"), field("subscription_amount", "Subscription amount"), field("share_count", "Number of shares"), field("governing_law", "Governing law (state)")},
+		Fields: []MergeField{field("date", "Date"), field("company_name", "Company"), field("investor_name", "Investor"), field("security_type", "Security"), field("subscription_amount", "Subscription amount"), field("share_count", "Number of shares"), field("governing_law", "Governing law (state)")},
 		Body: `# Subscription Agreement
 
 Dated {{.date}}, between **{{.company_name}}** (the "Company") and **{{.investor_name}}** (the "Investor").
@@ -314,7 +314,7 @@ This Agreement is governed by the laws of the State of {{.governing_law}}.
 	},
 	{
 		ID: "option-grant", Category: CategoryEquity, Title: "Stock Option Grant Notice", Version: 1, Origin: "builtin", CounselReview: true,
-		Fields: []Field{field("date", "Date"), field("company_name", "Company"), field("optionholder_name", "Optionholder"), field("shares", "Shares"), field("exercise_price", "Exercise price per share"), field("vesting_schedule", "Vesting schedule")},
+		Fields: []MergeField{field("date", "Date"), field("company_name", "Company"), field("optionholder_name", "Optionholder"), field("shares", "Shares"), field("exercise_price", "Exercise price per share"), field("vesting_schedule", "Vesting schedule")},
 		Body: `# Stock Option Grant Notice — {{.company_name}}
 
 Dated {{.date}}. Granted to **{{.optionholder_name}}** (the "Optionholder") under the Company's Equity Incentive Plan.
@@ -329,7 +329,7 @@ This option is subject to the terms of the Plan and the Company's standard Stock
 	// ---- formation-adjacent ----
 	{
 		ID: "ip-assignment", Category: CategoryFormation, Title: "Confidential Information and Invention Assignment Agreement", Version: 1, Origin: "builtin", CounselReview: true,
-		Fields: []Field{field("date", "Date"), field("company_name", "Company"), field("assignor_name", "Assignor"), field("governing_law", "Governing law (state)")},
+		Fields: []MergeField{field("date", "Date"), field("company_name", "Company"), field("assignor_name", "Assignor"), field("governing_law", "Governing law (state)")},
 		Body: `# Confidential Information and Invention Assignment Agreement
 
 Dated {{.date}}, between **{{.company_name}}** (the "Company") and **{{.assignor_name}}** (the "Assignor").
@@ -349,7 +349,7 @@ This Agreement is governed by the laws of the State of {{.governing_law}}.
 	},
 	{
 		ID: "83b-election", Category: CategoryFormation, Title: "Section 83(b) Election", Version: 1, Origin: "builtin", CounselReview: true,
-		Fields: []Field{field("taxpayer_name", "Taxpayer"), field("taxpayer_address", "Address"), field("taxpayer_tin", "Taxpayer ID"), field("property_description", "Property"), field("transfer_date", "Date of transfer"), field("fair_market_value", "Fair market value"), field("amount_paid", "Amount paid"), field("taxable_year", "Taxable year")},
+		Fields: []MergeField{field("taxpayer_name", "Taxpayer"), field("taxpayer_address", "Address"), field("taxpayer_tin", "Taxpayer ID"), field("property_description", "Property"), field("transfer_date", "Date of transfer"), field("fair_market_value", "Fair market value"), field("amount_paid", "Amount paid"), field("taxable_year", "Taxable year")},
 		Body: `# Election Under Section 83(b) of the Internal Revenue Code
 
 The undersigned taxpayer elects, under Section 83(b) of the Internal Revenue Code, to include in gross income the excess (if any) of the fair market value of the property described below over the amount paid for it.
@@ -366,7 +366,7 @@ This election must be filed within 30 days of the transfer; the 30-day deadline 
 	// ---- sales ----
 	{
 		ID: "tos", Category: CategorySales, Title: "Terms of Service", Version: 1, Origin: "builtin",
-		Fields: []Field{field("effective_date", "Effective date"), field("company_name", "Company"), field("service_name", "Service"), field("governing_law", "Governing law (state)"), field("contact_email", "Contact email")},
+		Fields: []MergeField{field("effective_date", "Effective date"), field("company_name", "Company"), field("service_name", "Service"), field("governing_law", "Governing law (state)"), field("contact_email", "Contact email")},
 		Body: `# Terms of Service
 
 Effective {{.effective_date}}. These Terms govern your use of **{{.service_name}}**, operated by **{{.company_name}}**.
@@ -389,7 +389,7 @@ These Terms are governed by the laws of the State of {{.governing_law}}. Contact
 	},
 	{
 		ID: "dpa", Category: CategorySales, Title: "Data Processing Addendum", Version: 1, Origin: "builtin",
-		Fields: []Field{field("effective_date", "Effective date"), field("company_name", "Processor"), field("customer_name", "Controller"), field("processing_purpose", "Purpose of processing"), field("governing_law", "Governing law (state)")},
+		Fields: []MergeField{field("effective_date", "Effective date"), field("company_name", "Processor"), field("customer_name", "Controller"), field("processing_purpose", "Purpose of processing"), field("governing_law", "Governing law (state)")},
 		Body: `# Data Processing Addendum
 
 Effective {{.effective_date}}, between **{{.customer_name}}** ("Controller") and **{{.company_name}}** ("Processor").
@@ -413,8 +413,8 @@ This Addendum is governed by the laws of the State of {{.governing_law}}.
 }
 
 // builtinByID indexes the library for O(1) resolution.
-var builtinByID = func() map[string]Template {
-	m := make(map[string]Template, len(builtins))
+var builtinByID = func() map[string]DocumentTemplate {
+	m := make(map[string]DocumentTemplate, len(builtins))
 	for _, t := range builtins {
 		m[t.ID] = t
 	}
@@ -422,15 +422,15 @@ var builtinByID = func() map[string]Template {
 }()
 
 // Builtins returns a copy of the standardized library (stable order by id).
-func Builtins() []Template {
-	out := make([]Template, len(builtins))
+func Builtins() []DocumentTemplate {
+	out := make([]DocumentTemplate, len(builtins))
 	copy(out, builtins)
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
 // builtin returns the built-in template by id, or false.
-func builtin(id string) (Template, bool) {
+func builtin(id string) (DocumentTemplate, bool) {
 	t, ok := builtinByID[id]
 	return t, ok
 }

@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/admin/audit", zip.Doc{
-		Description: "Records reads cloud's tamper-evident audit trail, newest first, with the chain's live\nintegrity attached so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list. Those rows carry no integrity of ours, so the field is\nnull there.",
+		Description: "Records reads cloud's tamper-evident audit trail, newest first. The chain's live\nintegrity is attached, so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list. Those rows carry no integrity of ours, so the field is\nnull there.",
 		Fields: map[string]string{
 			"RecordsIn.action":     "Action restricts it to one action name, e.g. \"admin.waitlist.grant\".",
 			"RecordsIn.org":        "Org restricts the trail to one tenant.",
@@ -27,7 +27,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"seq":41,"ts":"2026-07-26T18:00:00Z","org":"acme","sub":"z@hanzo.ai","action":"admin.waitlist.grant","resource":"waitlist","result":"success"}],"data2":1,"integrity":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}`),
 	})
 	zip.Describe("GET /v1/admin/audit/verify", zip.Doc{
-		Description: "Verify walks the WHOLE hash chain and reports whether it is intact: how many records\nwere checked, the head hash to pin externally against tail-truncation, and — when the\nchain is broken — the seq of the first bad record and why.\n\nbrokenAt is -1 exactly when ok is true. An unconfigured store is an honest failure\nhere rather than a fabricated pass.",
+		Description: "Verify walks the WHOLE hash chain and reports whether it is intact. It returns how\nmany records were checked, the head hash to pin externally against tail-truncation,\nand — when the chain is broken — the seq of the first bad record and why.\n\nbrokenAt is -1 exactly when ok is true. An unconfigured store is an honest failure\nhere rather than a fabricated pass.",
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}`),
 	})
 }

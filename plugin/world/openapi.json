@@ -19,31 +19,174 @@
     "/v1/world/limits": {
       "get": {
         "operationId": "get_v1_world_limits",
+        "summary": "getLimits echoes the World limits a plan grants, straight from the @hanzo/plans\ncatalog, so agents and dashboards configure themselves against the live catalog\ninstead of hardcoding tier numbers.",
+        "description": "getLimits echoes the World limits a plan grants, straight from the @hanzo/plans\ncatalog, so agents and dashboards configure themselves against the live catalog\ninstead of hardcoding tier numbers. It reports the requested plan, not the\ncaller's: it is a contract lookup, not an entitlement check. A catalog that\ncannot be read yields the free-tier floor rather than an error.",
         "tags": [
           "world"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "description": "Plan is a World plan id (world-free, world-pro, world-team,\nworld-enterprise). Empty resolves world-free.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "world-pro"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "limits": {
+                    "apiRateLimit": 6000,
+                    "maxAlerts": -1,
+                    "mcpRateLimit": 3000,
+                    "modelApi": true
+                  },
+                  "plan": "world-pro",
+                  "unit": "requests/minute"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/limitsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/world/news": {
       "get": {
         "operationId": "get_v1_world_news",
+        "summary": "getNews serves the merged, filtered, freshest-first news feed for the caller's\n(org, project).",
+        "description": "getNews serves the merged, filtered, freshest-first news feed for the caller's\n(org, project). It loads the pipeline (or the default), fans out to GDELT (per\nkeyword) + RSS (per feed) concurrently, applies the project filters, dedupes,\nsorts by recency, caps the result at 50, and publishes a live refresh to the\nSSE stream. A source that fails is skipped, so the feed degrades to honest\npartial results rather than an error.",
         "tags": [
           "world"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project, when given, must equal the caller's authenticated project scope;\na mismatch is refused. Omit it to read the authenticated project.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "items": [
+                    {
+                      "link": "https://example.com/a",
+                      "pubDate": "2026-07-07T12:00:00Z",
+                      "source": "BBC News",
+                      "title": "Border conflict escalates"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/newsResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/world/pipeline": {
       "get": {
         "operationId": "get_v1_world_pipeline",
+        "summary": "getPipeline reads the feed + filter configuration for the caller's (org,\nproject).",
+        "description": "getPipeline reads the feed + filter configuration for the caller's (org,\nproject). A project that has saved none gets the built-in world-news feeds\nwith default:true, so a first read is never empty.",
         "tags": [
           "world"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project, when given, must equal the caller's authenticated project scope;\na mismatch is refused. Omit it to read the authenticated project.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "default": true,
+                  "feeds": [
+                    "https://feeds.bbci.co.uk/news/world/rss.xml"
+                  ],
+                  "filters": {
+                    "keywords": [],
+                    "regions": [],
+                    "sources": []
+                  },
+                  "org": "acme",
+                  "project": "default"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/pipelineView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_world_pipeline",
+        "summary": "putPipeline replaces the feed + filter configuration for the caller's (org,\nproject).",
+        "description": "putPipeline replaces the feed + filter configuration for the caller's (org,\nproject). Feed hosts are checked against the allowlist at this write boundary,\nso a stored pipeline can never carry an unfetchable or hostile feed. The\nstored pipeline is returned.",
         "tags": [
           "world"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "feeds": [
+                  "https://feeds.bbci.co.uk/news/world/rss.xml"
+                ],
+                "filters": {
+                  "keywords": [
+                    "conflict"
+                  ]
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/pipelineReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pipelineView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/world/stream": {
@@ -52,6 +195,166 @@
         "tags": [
           "world"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Filters": {
+        "properties": {
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "regions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "NewsItem": {
+        "properties": {
+          "image": {
+            "description": "Image is a lead-image URL, when the upstream carried one.",
+            "type": "string"
+          },
+          "lang": {
+            "description": "Lang is the upstream's language name, when it named one.",
+            "type": "string"
+          },
+          "link": {
+            "description": "Link is the article URL.",
+            "type": "string"
+          },
+          "pubDate": {
+            "description": "PubDate is RFC3339 UTC, or \"\" when the upstream gave no parseable date.\nItems sort freshest-first and a dateless item sorts last.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source names the upstream the item came from: the RSS channel title, or\nthe GDELT article's domain.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the headline; it is also the text keyword and region filters match on.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "Tone is GDELT's sentiment score as text; absent for RSS/Atom items.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitsBlock": {
+        "properties": {
+          "apiRateLimit": {
+            "description": "APIRateLimit bounds REST /v1/world/* calls per minute.",
+            "type": "integer"
+          },
+          "maxAlerts": {
+            "description": "MaxAlerts bounds saved OSINT alert rules.",
+            "type": "integer"
+          },
+          "mcpRateLimit": {
+            "description": "MCPRateLimit bounds MCP calls per minute.",
+            "type": "integer"
+          },
+          "modelApi": {
+            "description": "ModelAPI reports whether the plan grants /v1/world/model and the SSE stream.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "limitsView": {
+        "properties": {
+          "limits": {
+            "$ref": "#/components/schemas/limitsBlock",
+            "description": "Limits is the resolved contract; -1 on a rate limit or count means unlimited."
+          },
+          "plan": {
+            "description": "Plan is the plan id the limits were resolved for.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit is the unit both rate limits are expressed in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "newsResponse": {
+        "properties": {
+          "items": {
+            "description": "Items is the merged, filtered, deduped feed, freshest first, capped at 50.\nEmpty (never null) when no upstream answered.",
+            "items": {
+              "$ref": "#/components/schemas/NewsItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "pipelineReq": {
+        "properties": {
+          "feeds": {
+            "description": "Feeds are the RSS/Atom feed URLs to pull. Each must be an http(s) URL whose\nhost is on the server's allowlist; max 64. An empty list clears the feeds.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/Filters",
+            "description": "Filters narrow the merged feed. Each axis is AND'd, terms within an axis are\nOR'd, matching is case-insensitive substring; max 64 terms per axis."
+          }
+        },
+        "type": "object"
+      },
+      "pipelineView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt and UpdatedAt are RFC3339 UTC, absent on a default pipeline.",
+            "type": "string"
+          },
+          "default": {
+            "description": "Default is true when no pipeline is stored and these are the built-in feeds.",
+            "type": "boolean"
+          },
+          "feeds": {
+            "description": "Feeds are the RSS/Atom feed URLs this project pulls, all allowlisted hosts.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/Filters",
+            "description": "Filters are the keyword/region/source narrowings applied to the merged feed."
+          },
+          "org": {
+            "description": "Org and Project are the tenant scope the pipeline belongs to, echoed from\nthe validated principal — never from the request.",
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

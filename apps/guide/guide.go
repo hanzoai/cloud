@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,9 +15,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/automations"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
@@ -55,6 +56,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("guide.Mount: empty DataDir")
+	}
+	// guide registers TYPED ops, which live on the *zip.App's registry. Checked
+	// before anything is built, so a Router that cannot carry them fails the
+	// mount rather than serving a surface no projection knows about.
+	if cloud.ZipApp(app) == nil {
+		return fmt.Errorf("guide.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 	stores := cloud.NewOrgStore(deps.DataDir, "guide", openStore)
 
@@ -131,46 +138,122 @@ func seedBlueprints(ctx context.Context, store *BlueprintStore) (int, error) {
 	return count, nil
 }
 
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Overview stays flat: Group("/v1/guide").Get("") would register "/v1/guide/",
-	// not the bare surface path.
-	app.Get("/v1/guide", cloud.Handle(s, overview))
+// ops binds the service to the typed guide ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — there is no parameter for the
+// service — so it arrives as a RECEIVER and every op is a method value
+// (o.overview), which is also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
 
-	g := app.Group("/v1/guide")
-	g.Get("/analytics", cloud.Handle(s, gtmAnalytics))
+// noInput is the In of an op addressed entirely by the caller's principal: it
+// takes nothing off the wire.
+type noInput struct{}
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+func routes(app cloud.Router, s *cloud.Service[state]) {
+	// The bridge FIRST, and on guide's OWN subtree — the shape apps/admin and
+	// apps/marketing already use. A TYPED op receives only a context, so the
+	// validated org has to be parked there; it is never taken from an In field,
+	// which is caller-supplied and would be a cross-tenant read the caller
+	// asserted for itself. fiber runs middleware in registration order, so this
+	// must precede every leaf below. Serve installs one app-wide too; nesting is
+	// harmless — the inner one is what the handler sees — and this one is what
+	// makes guide's own tests (which mount only guide) carry an org at all.
+	app.Group("/v1/guide").Use(cloud.Bridge())
+
+	// TYPED ops are declared on the REGISTRY with the WHOLE path spelled: that
+	// path is the identity every projection (the document, the MCP tool, the CLI
+	// command, the SDK method) keys on AND the key cmd/zipdoc files the handler's
+	// prose under. The router composes a group's prefix into an op's path; the
+	// extractor reads the literal it was handed, so a group-relative op is
+	// documented at a path nothing asks for. The UNTYPED routes keep the groups
+	// below, whose prefix the router composes for them.
+	v1 := app.Group("/v1")
+	g := v1.Group("/guide")
+	o := ops{s: s}
+	// The typed-op registry those groups resolve to. A Router that cannot reach
+	// one has nowhere to declare an op, so the mount fails rather than serving a
+	// surface no projection knows.
+	z := cloud.ZipApp(app)
+
+	// Overview is the surface path itself: /v1/guide, with no leaf. Spelling the
+	// whole path makes that unremarkable — a group with an empty leaf would name
+	// /v1/guide/, which this API never served.
+	zip.Get(z, "/v1/guide", o.overview)
+
+	zip.Get(z, "/v1/guide/analytics", o.analytics)
 	// The OBSERVE surface: the org's real-time growth profile — observed signals, the
 	// classified growth stage, and the org's own key metrics. READ-ONLY (see profile).
-	g.Get("/profile", cloud.Handle(s, profile))
+	zip.Get(z, "/v1/guide/profile", o.profile)
 	// The STRATEGIES corpus: the tactics library, org-scoped and filtered by
 	// category/workload + the caller's observed stage/signals. READ-ONLY — the corpus
 	// the recommendation-surface engine consumes. Content is SHARED (no org records).
-	g.Get("/strategies", cloud.Handle(s, strategies))
+	zip.Get(z, "/v1/guide/strategies", o.strategies)
 	// The Business AI's dynamic "what to do next": the ranked next-best quests + a
 	// grounded narrative (suggest), and a grounded founder chat (chat). Both are
 	// READ-ONLY — they advise, never run an action (the only executing path is
 	// /steps/:id/do). See suggest.go.
-	g.Get("/suggest", cloud.Handle(s, suggest))
-	g.Post("/chat", cloud.Handle(s, chat))
+	zip.Get(z, "/v1/guide/suggest", o.suggest)
+	zip.Post(z, "/v1/guide/chat", o.chat)
 	// The per-org OVERRIDE tier (tier 1): a customer sets/clears its OWN curriculum.
 	// Org-scoped, per-customer — NOT the shared brand blueprint.
-	g.Get("/curriculum", cloud.Handle(s, getCurriculum))
+	zip.Get(z, "/v1/guide/curriculum", o.getCurriculum)
+	// PUT stays UNTYPED: the body is a raw curriculum DOCUMENT that Parse accepts as
+	// YAML or JSON (sigs.k8s.io/yaml). A typed In is decoded as JSON before the
+	// handler sees it, so typing this route would answer 400 to every YAML PUT the
+	// route accepts today. It converts when the input is a declared document type,
+	// not before.
 	g.Put("/curriculum", cloud.Handle(s, putCurriculum))
-	g.Delete("/curriculum", cloud.Handle(s, deleteCurriculum))
-	g.Get("/actions", cloud.Handle(s, listActions))
+	zip.Delete(z, "/v1/guide/curriculum", o.deleteCurriculum)
+	zip.Get(z, "/v1/guide/actions", o.listActions)
+	// The two ids these ops carry MOVE — post_v1_guide_steps_by_id_skip becomes
+	// post_v1_guide_steps_id_skip — because the untyped projection derives the id
+	// from the route pattern and a typed op from zip's defaultOpID. That is the
+	// house rule, not an accident: take the rename, never pin it back with
+	// WithOperationID, which would make one app's ids a special case (LLM.md,
+	// failure mode 6). It is not the wire — no status, body or field name moves.
+	//
+	// The step transitions split on ONE fact: whether the route is dependency-GATED.
+	// start and done are, and a blocked step answers 409 with a STRUCTURED body
+	// ({error, step, blockedBy}) written in-band — a shape a typed op cannot
+	// produce, because its only non-2xx is the error it returns and that error's
+	// envelope is {status, code, error}. So those two stay UNTYPED until zip lands
+	// multi-status responses (LLM.md). skip and reset are NOT gated — the 409 branch
+	// is unreachable for them — so their whole answer set is expressible and they
+	// are ops.
 	g.Post("/steps/:id/start", cloud.Handle(s, markStart))
 	g.Post("/steps/:id/done", cloud.Handle(s, markDone))
-	g.Post("/steps/:id/skip", cloud.Handle(s, markSkip))
-	g.Post("/steps/:id/reset", cloud.Handle(s, markReset))
+	zip.Post(z, "/v1/guide/steps/:id/skip", o.skipStep)
+	zip.Post(z, "/v1/guide/steps/:id/reset", o.resetStep)
+	// /do stays UNTYPED for a second reason on top of the 409: it STREAMS the
+	// agent's actions as SSE when the caller asks for them, and a typed op answers
+	// exactly one JSON value.
 	g.Post("/steps/:id/do", cloud.Handle(s, doStep))
 
 	// The SuperAdmin BLUEPRINT plane (tier 2 authoring): the platform/brand blueprint,
 	// authored LIVE on admin.hanzo.ai. Gated on IsSuperAdmin (owner=="admin") — a normal
 	// org member/admin gets 403; the brand blueprint is SHARED platform content, not a
 	// per-customer surface. See admin.go.
-	b := app.Group("/v1/guide/blueprint")
-	b.Get("", superAdmin(s, getBlueprint))
-	b.Put("", superAdmin(s, putBlueprint))
-	b.Get("/versions", superAdmin(s, listBlueprintVersions))
+	//
+	// The plane's ROOT is the plane's own path, /v1/guide/blueprint, with no leaf
+	// — the same shape as overview above, and the reason both are spelled whole:
+	// an empty leaf on a /blueprint group would compose to /v1/guide/blueprint/,
+	// a path this API has never served and one that reaches every projection
+	// (operationId get_v1_guide_blueprint_, the MCP tool of that name, the path a
+	// generated SDK calls).
+	zip.Get(z, "/v1/guide/blueprint", o.getBlueprint)
+	// PUT and PATCH stay UNTYPED, for the same reason as PUT /curriculum: the PUT
+	// body is a YAML-or-JSON blueprint document, and the PATCH body is an opaque
+	// JSON merge-patch whose keys are the item's own (and whose explicit nulls DELETE
+	// a key, which a pointer field cannot distinguish from absent) — neither is a
+	// declarable In.
+	g.Put("/blueprint", superAdmin(s, putBlueprint))
+	b := g.Group("/blueprint")
+	zip.Get(z, "/v1/guide/blueprint/versions", o.listBlueprintVersions)
 	b.Patch("/:collection/:id", superAdmin(s, patchBlueprintItem))
 }
 
@@ -196,6 +279,41 @@ func Shutdown() error {
 // ONE org accessor (validated IAM owner, never a raw header). A missing validated
 // principal is refused 403.
 func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+
+// tenantOf is tenant() for a TYPED op: the same validated org, resolved off the
+// context cloud.Bridge parked it on because a typed handler receives only a
+// context. It is never an In field — an In field is caller-supplied, so a tenant
+// key read from one is a cross-tenant read the caller asserted for itself. Fails
+// closed off the HTTP path, where nothing parked an org.
+func tenantOf(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
+}
+
+// ledgerOf is principal.Ledger for a typed op — the payer ONE grounded AI
+// completion is billed to. It needs the REQUEST rather than the tenant because
+// the payer is a validated identity beyond the org (the billing org / wallet
+// claim) that principal.OrgFrom does not carry. Empty off the HTTP path, which
+// no op reaches: every caller has already refused through tenantOf.
+func ledgerOf(ctx context.Context) string {
+	if c, ok := cloud.Request(ctx); ok {
+		return principal.Ledger(c)
+	}
+	return ""
+}
+
+// superAdminOK is the SuperAdmin gate for a typed op — the same predicate the
+// superAdmin wrapper applies to the untyped blueprint writes. It needs the
+// REQUEST because platform admin-ness lives in a validated header
+// (X-User-IsAdmin) that principal.OrgFrom does not carry. False off the HTTP
+// path: no request, no attested caller, no platform rights.
+func superAdminOK(ctx context.Context) bool {
+	c, ok := cloud.Request(ctx)
+	return ok && principal.IsSuperAdmin(c)
+}
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 
@@ -284,7 +402,7 @@ func snapshotFor(s *cloud.Service[state], ctx context.Context, org string) (stor
 // ── views ─────────────────────────────────────────────────────────────────────
 
 type stepView struct {
-	Step
+	JourneyStep
 	State       State    `json:"state"`
 	Source      string   `json:"source,omitempty"`
 	Available   bool     `json:"available"`
@@ -316,7 +434,7 @@ func buildOverview(cur Curriculum, custom bool, rows map[string]StateRow) overvi
 		row := rows[s.ID]
 		st := stateOf(states, s.ID)
 		steps = append(steps, stepView{
-			Step:        s,
+			JourneyStep: s,
 			State:       st,
 			Source:      row.Source,
 			Available:   cur.Available(states, s.ID),
@@ -333,37 +451,51 @@ func buildOverview(cur Curriculum, custom bool, rows map[string]StateRow) overvi
 
 // ── handlers ────────────────────────────────────────────────────────────────
 
-func overview(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	_, cur, custom, rows, err := snapshotFor(s, c.Context(), org)
+// Overview returns the caller org's launch journey: the active curriculum's
+// version and title, every step with its state, whether it is available, what
+// blocks it and whether the Business AI can run it, the done/total/percent
+// progress with the next step to take, and the org's analytics funnel folded in.
+// Auto-detect runs first, so a step the org has already completed elsewhere reads
+// done without anyone marking it.
+func (o ops) overview(ctx context.Context, _ *noInput) (*overviewView, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		return nil, err
+	}
+	_, cur, custom, rows, err := snapshotFor(o.s, ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
 	ov := buildOverview(cur, custom, rows)
 	// Fold the analytics lens in so the overview shows the real funnel alongside the
 	// checklist — the AI-GTM read. Best-effort: a degraded warehouse yields an
 	// unavailable Funnel, never a failed overview.
-	f := analyticsFunnel(c.Context(), org)
+	f := analyticsFunnel(ctx, org)
 	ov.Funnel = &f
-	return c.JSON(http.StatusOK, ov)
+	return &ov, nil
 }
 
-// gtmAnalytics answers GET /v1/guide/analytics: the org's funnel from the analytics
-// lens plus the derived GTM recommendations. It is the Business AI's data-grounded
-// read — what the funnel is doing and the next-best action to move the weakest stage.
-func gtmAnalytics(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// analyticsView is the GET /v1/guide/analytics body.
+type analyticsView struct {
+	// Funnel is the org's trailing-30-day traffic → signups → orders from the
+	// shared analytics warehouse; available is false when it has emitted nothing.
+	Funnel Funnel `json:"funnel"`
+	// Recommendations are the next-best GTM actions derived from that funnel.
+	Recommendations []string `json:"recommendations"`
+}
+
+// Analytics returns the caller org's funnel from the analytics lens plus the GTM
+// recommendations derived from it. It is the Business AI's data-grounded read —
+// what the funnel is doing, and the next-best action to move its weakest stage. An
+// unreachable or silent warehouse answers available=false, never a fabricated
+// number.
+func (o ops) analytics(ctx context.Context, _ *noInput) (*analyticsView, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	f := analyticsFunnel(c.Context(), org)
-	return c.JSON(http.StatusOK, map[string]any{
-		"funnel":          f,
-		"recommendations": f.recommend(),
-	})
+	f := analyticsFunnel(ctx, org)
+	return &analyticsView{Funnel: f, Recommendations: f.recommend()}, nil
 }
 
 // profileResponse is the GET /v1/guide/profile body: the observed growth signals,
@@ -375,47 +507,59 @@ type profileResponse struct {
 	KeyMetrics profileMetrics `json:"keyMetrics"`
 }
 
-// profile answers GET /v1/guide/profile: the org's OBSERVED growth profile — the
-// signal set, the classified growth stage, and the org's own key metrics. It is a
-// pure READ, recomputed from the org's CURRENT state each request (real-time by
-// pull): it reuses the reconcile path (snapshotFor runs the detectors) for launch
-// progress and runs the growth probes (observe) for the signals — it never caches,
-// never runs a billable effect, never targets another org. Org-scoped on the
-// validated principal; fail-closed without one. It PRODUCES the profile and
-// classifies the stage; it decides NO recommendation (that is a later surface).
-func profile(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	ctx := c.Context()
-	_, cur, _, rows, err := snapshotFor(s, ctx, org)
+// Profile returns the caller org's OBSERVED growth profile — the signal set, the
+// classified growth stage, and the org's own key metrics. It is a pure READ,
+// recomputed from the org's CURRENT state each request (real-time by pull): it
+// reuses the reconcile path (snapshotFor runs the detectors) for launch progress
+// and runs the growth probes (observe) for the signals — it never caches, never
+// runs a billable effect, never targets another org. Org-scoped on the validated
+// principal; fail-closed without one. It PRODUCES the profile and classifies the
+// stage; it decides NO recommendation (that is a later surface).
+func (o ops) profile(ctx context.Context, _ *noInput) (*profileResponse, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		return nil, err
+	}
+	_, cur, _, rows, err := snapshotFor(o.s, ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
 	funnel := analyticsFunnel(ctx, org)
-	set, metrics := observe(ctx, org, s.State.signals, funnel)
+	set, metrics := observe(ctx, org, o.s.State.signals, funnel)
 	states := stateMap(rows)
 	done, total, percent := cur.Counts(states)
 	metrics.LaunchProgress = progressView{Done: done, Total: total, Percent: percent, Next: cur.Next(states)}
-	return c.JSON(http.StatusOK, profileResponse{
+	return &profileResponse{
 		Stage:      classifyStage(set),
 		Signals:    set,
 		KeyMetrics: metrics,
-	})
+	}, nil
 }
 
-func getCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := s.State.stores.For(org, "")
+// curriculumView is the org's EFFECTIVE curriculum — the enabled journey the
+// engine runs — plus whether an org override is what produced it.
+type curriculumView struct {
+	// Custom is true when the org's OWN curriculum override is active; false when
+	// the journey comes from the brand blueprint or the embedded fixture.
+	Custom bool `json:"custom"`
+	// Curriculum is the enabled journey: its version, title and ordered steps.
+	Curriculum Curriculum `json:"curriculum"`
+}
+
+// GetCurriculum returns the journey the caller's org is actually running, and
+// whether it comes from the org's OWN override (custom) or from the platform
+// default — the brand blueprint, else the embedded fixture.
+func (o ops) getCurriculum(ctx context.Context, _ *noInput) (*curriculumView, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		return nil, err
 	}
-	cur, custom := s.State.activeCurriculum(c.Context(), store)
-	return c.JSON(http.StatusOK, map[string]any{"custom": custom, "curriculum": cur})
+	store, err := o.s.State.stores.For(org, "")
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+	}
+	cur, custom := o.s.State.activeCurriculum(ctx, store)
+	return &curriculumView{Custom: custom, Curriculum: cur}, nil
 }
 
 func putCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
@@ -450,89 +594,160 @@ func putCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"custom": true, "curriculum": bp.Curriculum()})
 }
 
-func deleteCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := s.State.stores.For(org, "")
+// DeleteCurriculum clears the caller org's curriculum override and returns the
+// journey it falls back to — the brand blueprint, else the embedded fixture.
+// Clearing an org that never set one is a no-op that answers the same default.
+func (o ops) deleteCurriculum(ctx context.Context, _ *noInput) (*curriculumView, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		return nil, err
 	}
-	if err := store.ClearCurriculum(c.Context()); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+	store, err := o.s.State.stores.For(org, "")
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+	}
+	if err := store.ClearCurriculum(ctx); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
 	// Re-resolve: with the override cleared the caller falls through to the brand
 	// blueprint (or the fixture) — the effective default they now see.
-	cur, custom := s.State.activeCurriculum(c.Context(), store)
-	return c.JSON(http.StatusOK, map[string]any{"custom": custom, "curriculum": cur})
+	cur, custom := o.s.State.activeCurriculum(ctx, store)
+	return &curriculumView{Custom: custom, Curriculum: cur}, nil
 }
 
-func listActions(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := s.State.stores.For(org, "")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
-	}
-	acts, err := store.ListActions(c.Context(), listActionsLimit)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": acts})
+// actionsView is a page of the caller org's Business AI action ledger.
+type actionsView struct {
+	// Data is the most-recent actions first, capped at listActionsLimit.
+	Data []ActionRecord `json:"data"`
 }
 
-// transition is the shared body of the state-write handlers. gate reports whether
-// dependency gating applies (start/done gate on availability; skip/reset never do).
-func transition(s *cloud.Service[state], c *zip.Ctx, target State, gate bool) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	id := idParam(c)
-	store, cur, custom, rows, err := snapshotFor(s, c.Context(), org)
+// ListActions returns the caller org's Business AI action ledger, most recent
+// first: every "do it for me" tool call, the arguments it ran with, its result and
+// whether it succeeded. It is the audit-visible record of what the agent did on
+// the org's behalf, and the backing state for the "acted" auto-detect signal.
+func (o ops) listActions(ctx context.Context, _ *noInput) (*actionsView, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		return nil, err
+	}
+	store, err := o.s.State.stores.For(org, "")
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+	}
+	acts, err := store.ListActions(ctx, listActionsLimit)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+	}
+	return &actionsView{Data: acts}, nil
+}
+
+// stepRef names ONE step of the caller's journey. It binds from the URL — the
+// route matched on it — so a body can never redirect the write to another step.
+type stepRef struct {
+	// ID is the step's id, as it appears in the journey (e.g. "gsuite").
+	ID string `json:"id"`
+}
+
+// blockedErr reports that a GATED transition was refused because the step still
+// has unfinished dependencies. It is a value, not a zip error, because the two
+// gated routes answer it as a structured 409 body ({error, step, blockedBy}) that
+// a zip error envelope ({status, code, error}) cannot express — the one reason
+// start and done are still untyped handlers. The ungated routes pass gate=false
+// and can never receive it.
+type blockedErr struct {
+	step      string
+	blockedBy []string
+}
+
+func (e blockedErr) Error() string { return "step is blocked by unfinished dependencies" }
+
+// applyStep is the ONE body of every step transition: reconcile the caller's
+// journey, refuse an id it does not contain, write the new state, and answer the
+// refreshed journey. gate reports whether dependency gating applies (start/done
+// gate on availability; skip/reset never do) — a gated, blocked step comes back as
+// blockedErr for the caller to render.
+func applyStep(s *cloud.Service[state], ctx context.Context, org, id string, target State, gate bool) (*overviewView, error) {
+	store, cur, custom, rows, err := snapshotFor(s, ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
 	if _, exists := cur.stepByID(id); !exists {
-		return zip.ErrNotFound("unknown step: " + id)
+		return nil, zip.ErrNotFound("unknown step: " + id)
 	}
 	if gate {
 		if blocked := cur.BlockedBy(stateMap(rows), id); len(blocked) > 0 {
-			return c.JSON(http.StatusConflict, map[string]any{
-				"error":     "step is blocked by unfinished dependencies",
-				"step":      id,
-				"blockedBy": blocked,
-			})
+			return nil, blockedErr{step: id, blockedBy: blocked}
 		}
 	}
 	if target == StateTodo {
-		if err := store.ResetState(c.Context(), id); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		if err := store.ResetState(ctx, id); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 		}
 		rows[id] = StateRow{State: StateTodo}
 	} else {
-		if err := store.SetState(c.Context(), id, target, "manual", "", time.Now().Unix()); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		if err := store.SetState(ctx, id, target, "manual", "", time.Now().Unix()); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 		}
 		rows[id] = StateRow{State: target, Source: "manual", UpdatedAt: time.Now().Unix()}
 	}
-	return c.JSON(http.StatusOK, buildOverview(cur, custom, rows))
+	ov := buildOverview(cur, custom, rows)
+	return &ov, nil
+}
+
+// transition is the untyped half of the split: the GATED pair, whose blocked
+// answer is a structured 409 written in-band.
+func transition(s *cloud.Service[state], c *zip.Ctx, target State) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	ov, err := applyStep(s, c.Context(), org, idParam(c), target, true)
+	var blocked blockedErr
+	if errors.As(err, &blocked) {
+		return c.JSON(http.StatusConflict, map[string]any{
+			"error":     blocked.Error(),
+			"step":      blocked.step,
+			"blockedBy": blocked.blockedBy,
+		})
+	}
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, ov)
 }
 
 func markStart(s *cloud.Service[state], c *zip.Ctx) error {
-	return transition(s, c, StateInProgress, true)
+	return transition(s, c, StateInProgress)
 }
 func markDone(s *cloud.Service[state], c *zip.Ctx) error {
-	return transition(s, c, StateDone, true)
+	return transition(s, c, StateDone)
 }
-func markSkip(s *cloud.Service[state], c *zip.Ctx) error {
-	return transition(s, c, StateSkipped, false)
+
+// SkipStep marks one step of the caller org's journey skipped and returns the
+// refreshed journey. Skipping is never dependency-gated — the founder is
+// declaring the step does not apply to them — so a step whose dependencies are
+// unfinished can still be skipped, and a skipped step counts as terminal for
+// everything downstream of it.
+func (o ops) skipStep(ctx context.Context, in *stepRef) (*overviewView, error) {
+	return o.setStep(ctx, in, StateSkipped)
 }
-func markReset(s *cloud.Service[state], c *zip.Ctx) error {
-	return transition(s, c, StateTodo, false)
+
+// ResetStep returns one step of the caller org's journey to todo — clearing a
+// manual mark or a skip — and returns the refreshed journey. Reset is never
+// dependency-gated. Auto-detect runs on the next read, so a step the org has in
+// fact completed elsewhere goes straight back to done.
+func (o ops) resetStep(ctx context.Context, in *stepRef) (*overviewView, error) {
+	return o.setStep(ctx, in, StateTodo)
+}
+
+// setStep is the ungated transition an op performs: resolve the tenant, then the
+// shared body. Never gated, so applyStep can never hand it a blockedErr.
+func (o ops) setStep(ctx context.Context, in *stepRef, target State) (*overviewView, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return applyStep(o.s, ctx, org, strings.TrimSpace(in.ID), target, false)
 }
 
 // doStep is "do it for me": the Business AI executes the step through the

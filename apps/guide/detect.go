@@ -13,7 +13,7 @@ import (
 // detector up by that name and runs it. A detector MUST be honest — a data source
 // it cannot reach returns an error (treated as "not present"), never a spurious
 // true.
-type Detector func(ctx context.Context, org string, step Step) (bool, error)
+type Detector func(ctx context.Context, org string, step JourneyStep) (bool, error)
 
 // newDetectors wires the auto-detect signals. storeFor resolves the caller's per-org
 // store for the self-ledger "acted" signal; sig is the injected cross-subsystem read
@@ -43,7 +43,7 @@ type Detector func(ctx context.Context, org string, step Step) (bool, error)
 // day its detector is registered here.
 func newDetectors(storeFor func(ctx context.Context, org string) (*Store, error), sig Signals) map[string]Detector {
 	return map[string]Detector{
-		"acted": func(ctx context.Context, org string, step Step) (bool, error) {
+		"acted": func(ctx context.Context, org string, step JourneyStep) (bool, error) {
 			if step.Tool == "" {
 				return false, nil
 			}
@@ -55,31 +55,31 @@ func newDetectors(storeFor func(ctx context.Context, org string) (*Store, error)
 		},
 		"analytics": detectAnalyticsEmitting,
 
-		kindModule: func(ctx context.Context, org string, step Step) (bool, error) {
+		kindModule: func(ctx context.Context, org string, step JourneyStep) (bool, error) {
 			_, name, _ := strings.Cut(step.Signal, ":")
 			if sig.ModuleInstalled == nil || name == "" {
 				return false, nil
 			}
 			return sig.ModuleInstalled(ctx, org, name), nil
 		},
-		kindConnected: func(ctx context.Context, org string, step Step) (bool, error) {
+		kindConnected: func(ctx context.Context, org string, step JourneyStep) (bool, error) {
 			_, provider, _ := strings.Cut(step.Signal, ":")
 			if sig.ConnectorPresent == nil || provider == "" {
 				return false, nil
 			}
 			return sig.ConnectorPresent(ctx, org, provider), nil
 		},
-		kindFunnel: func(ctx context.Context, org string, step Step) (bool, error) {
+		kindFunnel: func(ctx context.Context, org string, step JourneyStep) (bool, error) {
 			_, stage, _ := strings.Cut(step.Signal, ":")
 			return funnelStagePresent(analyticsFunnel(ctx, org), stage), nil
 		},
-		SignalDeployed: func(ctx context.Context, org string, _ Step) (bool, error) {
+		SignalDeployed: func(ctx context.Context, org string, _ JourneyStep) (bool, error) {
 			if sig.HasDeployment == nil {
 				return false, nil
 			}
 			return sig.HasDeployment(ctx, org)
 		},
-		SignalRevenue: func(ctx context.Context, org string, _ Step) (bool, error) {
+		SignalRevenue: func(ctx context.Context, org string, _ JourneyStep) (bool, error) {
 			if sig.RevenueCents == nil {
 				return false, nil
 			}
@@ -89,7 +89,7 @@ func newDetectors(storeFor func(ctx context.Context, org string) (*Store, error)
 			}
 			return cents > 0, nil
 		},
-		kindCustomers: func(ctx context.Context, org string, step Step) (bool, error) {
+		kindCustomers: func(ctx context.Context, org string, step JourneyStep) (bool, error) {
 			if sig.RecordCount == nil {
 				return false, nil
 			}
@@ -121,18 +121,19 @@ func lookupDetector(dets map[string]Detector, signal string) (Detector, bool) {
 	return nil, false
 }
 
-// eventsTable is the shared analytics warehouse's insights-event table, keyed on
-// tenant_id (== the IAM org slug) — the SAME table + tenancy column clients/analytics
-// reads (query.go eventsWhere).
-const eventsTable = "hanzo.events"
+// eventsTable is the event plane's fact table, named once in apps/datastore so a
+// rename cannot leave this read pointed at a table that no longer takes writes.
+// org is the tenancy column and it leads the sort key, so a single-org read is a
+// primary-key seek.
+const eventsTable = datastore.Event
 
 // detectAnalyticsEmitting reports whether insights events exist for the org. It
 // binds the org POSITIONALLY (nothing user-derived is interpolated) against the
 // shared datastore the analytics subsystem already opens. An error (warehouse down,
 // datastore not initialised in this deployment) is returned so the reconcile loop
 // leaves the step untouched — auto-detect is best-effort and never a false done.
-func detectAnalyticsEmitting(ctx context.Context, org string, _ Step) (bool, error) {
-	rows, err := datastore.Query(ctx, "SELECT count() AS n FROM "+eventsTable+" WHERE tenant_id = ?", org)
+func detectAnalyticsEmitting(ctx context.Context, org string, _ JourneyStep) (bool, error) {
+	rows, err := datastore.Query(ctx, "SELECT count() AS n FROM "+eventsTable+" WHERE org = ?", org)
 	if err != nil {
 		return false, err
 	}

@@ -1,6 +1,9 @@
 package share
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
+	"context"
 	"net/http"
 
 	"github.com/hanzoai/cloud"
@@ -31,92 +34,127 @@ func build(b cloud.Base) (state, error) {
 	return state{cl: cl}, nil
 }
 
-// routes — the ONE registration point, Express-ish .Group. Static before :param.
+// routes — the ONE registration point. Both ops are zip TYPED ops, so the REST
+// route, the OpenAPI document, the MCP tool and the CLI command all come from the
+// one declaration; the bridge goes on FIRST because a typed op is handed only a
+// context, so the validated principal is parked there.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/share")
-	g.Post("/enable", cloud.Handle(s, enable)) // provision + hand the CLI its credential
-	g.Get("", cloud.Handle(s, listShares))     // the org's active shares (CLI + console)
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	app.Group("/v1/share").Use(cloud.Bridge())
+
+	zip.Post(z, "/v1/share/enable", o.enable, zip.WithOperationID("enableShare")) // provision + hand the CLI its credential
+	zip.Get(z, "/v1/share", o.listShares, zip.WithOperationID("listShares"))      // the org's active shares (CLI + console)
 }
+
+// ops binds the service to share's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, the only bound form
+// cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
 
 // gate resolves the org and enforces the fail-closed 503 in ONE place before any
 // handler touches the controller.
-func gate(s *cloud.Service[state], c *zip.Ctx) (string, error) {
+func gate(ctx context.Context, s *cloud.Service[state]) (string, error) {
 	if !s.State.cl.configured() {
 		return "", zip.Errorf(http.StatusServiceUnavailable, "share is not configured on this deployment")
 	}
-	org, ok := principal.Org(c)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return "", zip.ErrForbidden("X-Org-Id required")
 	}
 	return org, nil
 }
 
-// enableResp is what `hanzo share` needs to run the tunnel: the org's zrok
+// Credential is what `hanzo share` needs to run the tunnel: the org's zrok
 // account token, the controller endpoint to enable against, the namespace the
 // public frontend lives in, and the URL shape for a friendly hint.
-type enableResp struct {
+type Credential struct {
+	// AccountToken is the org's zrok account token the CLI enables with.
 	AccountToken string `json:"accountToken"`
-	Controller   string `json:"controller"`
-	Namespace    string `json:"namespace,omitempty"`
-	URLTemplate  string `json:"urlTemplate"`
+	// Controller is the public zrok controller endpoint to enable against.
+	Controller string `json:"controller"`
+	// Namespace is the public frontend the share is published under.
+	Namespace string `json:"namespace,omitempty"`
+	// URLTemplate is the share URL shape, with the token placeholder left in.
+	URLTemplate string `json:"urlTemplate"`
 }
 
-// enable provisions (idempotently) the caller org's zrok account and returns the
-// credential. The account is keyed deterministically off the org, so this is a
-// pure function of the validated identity — a caller can only ever provision
-// their OWN org's account.
-func enable(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := gate(s, c)
+// enable provisions the caller org's share account and returns its credential.
+//
+// Provisioning is idempotent and the account is keyed deterministically off the
+// org, so this is a pure function of the validated identity — a caller can only
+// ever provision their OWN org's account.
+//
+// Response: {"accountToken": "tok_live", "controller": "https://share.hanzo.ai", "namespace": "public", "urlTemplate": "https://{token}.share.hanzo.ai"}
+func (o ops) enable(ctx context.Context, _ *struct{}) (*Credential, error) {
+	org, err := gate(ctx, o.s)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	tok, err := s.State.cl.token(c.Context(), org, true)
+	tok, err := o.s.State.cl.token(ctx, org, true)
 	if err != nil {
-		s.Log.Warn("share provision failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "share controller unavailable")
+		o.s.Log.Warn("share provision failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "share controller unavailable")
 	}
-	return c.JSON(http.StatusOK, enableResp{
+	return &Credential{
 		AccountToken: tok,
 		Controller:   publicController(),
 		Namespace:    namespaceToken(),
 		URLTemplate:  urlTemplate(),
-	})
+	}, nil
 }
 
-// shareView is one active share, projected for the CLI + console.
-type shareView struct {
-	Token       string `json:"token"`
-	URL         string `json:"url"`
+// Share is one active share, projected for the CLI + console.
+type Share struct {
+	// Token is the share's zrok token, the key in its public URL.
+	Token string `json:"token"`
+	// URL is the share's public URL.
+	URL string `json:"url"`
+	// BackendMode is how the share serves its backend, e.g. proxy or web.
 	BackendMode string `json:"backendMode,omitempty"`
-	Backend     string `json:"backend,omitempty"`
-	CreatedAt   int64  `json:"createdAt,omitempty"`
+	// Backend is the local endpoint the share proxies to.
+	Backend string `json:"backend,omitempty"`
+	// CreatedAt is the share's creation time, unix seconds.
+	CreatedAt int64 `json:"createdAt,omitempty"`
 }
 
-// listShares returns the org's active shares. A READ degrades to an honest-empty
-// list when the controller is unreachable, so the console never error-toasts.
-func listShares(s *cloud.Service[state], c *zip.Ctx) error {
+// ShareList is the caller org's active-share roster.
+type ShareList struct {
+	// Shares is one row per active share across the org's environments.
+	Shares []Share `json:"shares"`
+}
+
+// listShares returns the caller org's active shares.
+//
+// A READ degrades to an honest-empty list when the org has no share account yet
+// or the controller is unreachable, so the console never error-toasts on load.
+//
+// Response: {"shares": [{"token": "abc123", "url": "https://abc123.share.hanzo.ai", "backendMode": "proxy", "backend": "http://localhost:3000", "createdAt": 1780000000}]}
+func (o ops) listShares(ctx context.Context, _ *struct{}) (*ShareList, error) {
+	s := o.s
 	if !s.State.cl.configured() {
-		return c.JSON(http.StatusOK, map[string]any{"shares": []shareView{}})
+		return &ShareList{Shares: []Share{}}, nil
 	}
-	org, err := gate(s, c)
+	org, err := gate(ctx, s)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	tok, err := s.State.cl.token(c.Context(), org, false)
+	tok, err := s.State.cl.token(ctx, org, false)
 	if err != nil {
 		// Not provisioned yet (errNoAccount) or controller down → no shares.
 		// Honest empty, not 500 — the console never error-toasts on load.
-		return c.JSON(http.StatusOK, map[string]any{"shares": []shareView{}})
+		return &ShareList{Shares: []Share{}}, nil
 	}
-	ov, err := s.State.cl.overview(c.Context(), tok)
+	ov, err := s.State.cl.overview(ctx, tok)
 	if err != nil {
 		s.Log.Warn("share overview failed", "org", org, "err", err)
-		return c.JSON(http.StatusOK, map[string]any{"shares": []shareView{}})
+		return &ShareList{Shares: []Share{}}, nil
 	}
-	out := make([]shareView, 0, 8)
+	out := make([]Share, 0, 8)
 	for _, env := range ov.Environments {
 		for _, sh := range env.Shares {
-			out = append(out, shareView{
+			out = append(out, Share{
 				Token:       sh.Token,
 				URL:         shareURL(sh.Token),
 				BackendMode: sh.BackendMode,
@@ -125,7 +163,7 @@ func listShares(s *cloud.Service[state], c *zip.Ctx) error {
 			})
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"shares": out})
+	return &ShareList{Shares: out}, nil
 }
 
 // shareURL renders a share token into its public URL via SHARE_URL_TEMPLATE.

@@ -32,8 +32,11 @@
 // See view.go for the naming/anonymization policy.
 package leaderboard
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +72,15 @@ var mountedStore *optinStore
 // Mount wires the leaderboard surface onto app per HIP-0106 — one line over the
 // generic subsystem entrypoint.
 func Mount(app cloud.Router, deps cloud.Deps) error {
+	if app == nil {
+		return fmt.Errorf("leaderboard.Mount: nil app")
+	}
+	// Every route is a TYPED op, which lives on the *zip.App's registry — the one value
+	// OpenAPI, MCP and the CLI are projected from. A Router not backed by one must fail
+	// the mount rather than serve routes no projection knows.
+	if cloud.ZipApp(app) == nil {
+		return fmt.Errorf("leaderboard.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
 	return cloud.Mount(app, deps, "leaderboard", build, routes)
 }
 
@@ -97,15 +109,35 @@ func Shutdown(_ context.Context) error {
 	return err
 }
 
-// routes registers the surface.
+// routes registers the surface. Every route is a TYPED op: zip.<Verb> registers the
+// route AND the registry entry OpenAPI / MCP / the CLI are projected from, and it
+// takes the ABSOLUTE path because the registry keys on it.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/usage/leaderboard", cloud.Handle(s, leaderboardHandler))
-	app.Get("/v1/usage/activity", cloud.Handle(s, activityHandler))
-	app.Get("/v1/usage/leaderboard/optin", cloud.Handle(s, getOptin))
-	app.Put("/v1/usage/leaderboard/optin", cloud.Handle(s, putUserOptin))
-	app.Put("/v1/usage/leaderboard/optin/org", cloud.Handle(s, putOrgOptin))
-	app.Post("/v1/usage/rollup/backfill", cloud.Handle(s, backfillHandler))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: fiber runs middleware in registration order, so one installed
+	// after these leaves would never run — and every op below reads the validated
+	// principal (and sets Cache-Control) off the request it parks.
+	app.Group("/v1/usage").Use(cloud.Bridge())
+
+	zip.Get(z, "/v1/usage/leaderboard", o.leaderboard)
+	zip.Get(z, "/v1/usage/activity", o.activity)
+	zip.Get(z, "/v1/usage/leaderboard/optin", o.getOptin)
+	zip.Put(z, "/v1/usage/leaderboard/optin", o.putUserOptin)
+	zip.Put(z, "/v1/usage/leaderboard/optin/org", o.putOrgOptin)
+	zip.Post(z, "/v1/usage/rollup/backfill", o.backfill)
 }
+
+// ops binds the service to the leaderboard's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value (o.leaderboard), which is also
+// the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// request recovers the request a typed op is serving — the one place the validated
+// principal (org, user name, admin tier) and the response headers live. Absent off
+// the HTTP path, where a tenant-scoped read has no identity and must refuse.
+func (o ops) request(ctx context.Context) (*zip.Ctx, bool) { return cloud.Request(ctx) }
 
 // ── identity helpers ──────────────────────────────────────────────────────────
 

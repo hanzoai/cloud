@@ -183,6 +183,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // tests can mount the same routes over a Service with an injected (fake/nil) k8s
 // client — hermetic, never touching a real cluster.
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	// The registry the typed console reads below are declared on. A Router that is
+	// not backed by an App has no registry, and a subsystem that cannot reach it
+	// must not serve routes no projection knows about.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		panic("platform.routes: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+
 	// projects
 	// A project is IAM's resource, created and deleted at /v1/iam/projects. The
 	// platform makes APPS under one, never the project itself, so it exposes no
@@ -238,10 +246,19 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// (console.go). GET-only projections: the ONE write path stays POST .../apps
 	// and .../deploy. Registered here (order 124) so they bind before the /v1/*
 	// AI catch-all; every handler is org-scoped through s.tenant like the rest.
-	app.Get("/v1/environments", cloud.Handle(s, listEnvironments))
-	app.Get("/v1/pipelines", cloud.Handle(s, listPipelines))
-	app.Get("/v1/builds", cloud.Handle(s, listBuilds))
-	app.Get("/v1/releases", cloud.Handle(s, listReleases))
+	// TYPED ops, on the ABSOLUTE path: the registry keys on it, and cmd/zipdoc at
+	// the pinned zip reads the path argument literally. The bridge goes on each
+	// one's own prefix FIRST — fiber runs middleware in registration order, so one
+	// installed after its leaf never runs — and these four are the prefixes
+	// platform declares in the manifest, so a scoped Router accepts them.
+	co := consoleOps{s: s}
+	for _, prefix := range []string{"/v1/environments", "/v1/pipelines", "/v1/builds", "/v1/releases"} {
+		app.Group(prefix).Use(cloud.Bridge())
+	}
+	zip.Get(zapp, "/v1/environments", co.listEnvironments)
+	zip.Get(zapp, "/v1/pipelines", co.listPipelines)
+	zip.Get(zapp, "/v1/builds", co.listBuilds)
+	zip.Get(zapp, "/v1/releases", co.listReleases)
 
 	// Native build API (the no-GitHub-builders trigger, ex-/v1/arcd). Privileged:
 	// token-gated + image-ref allowlisted (runner.go). `hanzo build`, the
@@ -262,6 +279,34 @@ func init() {
 	openapi.Register("/v1/platform/projects/:project/apps/:app", "GET", nil, appView{})
 	openapi.Register("/v1/platform/projects/:project/apps/:app/env", "PUT", setEnvReq{}, appView{})
 	openapi.Register("/v1/run", "POST", runReq{}, runView{})
+
+	// The lifecycle verbs. deploy and rollback read an OPTIONAL body (the handler
+	// binds only when one is present), so the declared schema is what a caller may
+	// send, not what it must. stop and start take none.
+	openapi.Register("/v1/platform/projects/:project/apps/:app/deploy", "POST", deployReq{}, deploymentView{})
+	openapi.Register("/v1/platform/projects/:project/apps/:app/stop", "POST", nil, appView{})
+	openapi.Register("/v1/platform/projects/:project/apps/:app/start", "POST", nil, appView{})
+	openapi.Register("/v1/platform/projects/:project/apps/:app/deployments", "GET", nil, []deploymentView{})
+	openapi.Register("/v1/platform/projects/:project/apps/:app/deployments/:id", "GET", nil, deploymentView{})
+
+	// Preview / promote / rollback. promote and rollback both answer the
+	// deployment they created, which is what redeploy serves.
+	openapi.Register("/v1/platform/projects/:project/apps/:app/preview", "POST", previewReq{}, previewView{})
+	openapi.Register("/v1/platform/projects/:project/apps/:app/promote", "POST", promoteReq{}, deploymentView{})
+	openapi.Register("/v1/platform/projects/:project/apps/:app/rollback", "POST", rollbackReq{}, deploymentView{})
+
+	// Custom domains. verify answers the same row the add did, re-read.
+	openapi.Register("/v1/platform/projects/:project/apps/:app/domains", "GET", nil, []domainView{})
+	openapi.Register("/v1/platform/projects/:project/apps/:app/domains", "POST", addDomainReq{}, domainView{})
+	openapi.Register("/v1/platform/projects/:project/apps/:app/domains/:host/verify", "POST", nil, domainView{})
+
+	// The build runner's own lane.
+	openapi.Register("/v1/runner", "POST", runnerBuildReq{}, runnerBuildResp{})
+
+	// The fleet board's per-app read. The list and the deploy beside it answer
+	// composed objects with no named type, so neither is declared here — a name
+	// this file invented would be a schema no handler builds.
+	openapi.Register("/v1/platform/fleet/:app", "GET", nil, AppView{})
 }
 
 // ── tenancy ──────────────────────────────────────────────────────────────────

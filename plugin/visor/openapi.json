@@ -391,7 +391,16 @@
         "operationId": "post_v1_compute_bots_launch",
         "tags": [
           "compute"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/botLaunchReq"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/compute/bots/{id}": {
@@ -1106,7 +1115,16 @@
         "operationId": "post_v1_machines",
         "tags": [
           "machines"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/launchReq"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/machines/{id}": {
@@ -1362,6 +1380,38 @@
           }
         },
         "type": "object"
+      },
+      "botLaunchReq": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "botVersion": {
+            "type": "string"
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "instanceType": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string"
+          }
+        }
       },
       "botList": {
         "properties": {
@@ -1877,6 +1927,26 @@
           }
         },
         "type": "object"
+      },
+      "launchReq": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "instanceType": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string"
+          }
+        }
       },
       "machineList": {
         "properties": {

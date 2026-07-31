@@ -71,6 +71,13 @@ openapi-apps: ## Regenerate EVERY app's own spec subset (one binary per app; slo
 # It checks with `git status --porcelain`, not `git diff`: a NEW app produces a
 # NEW subset, which is untracked and therefore invisible to a diff — the failure
 # that matters most is exactly the one a diff would miss.
+#
+# The weave step below is NOT silenced. `go test` prints a refusal on stdout, so
+# `>/dev/null` reduced "two apps mean different things by schema X" — the message
+# that names WHICH two — to a bare `Error 1` at a line number. A gate whose
+# failure cannot be read is a gate that gets ignored; the cost of keeping it is
+# one `ok` line on success. (The per-app loop above still redirects stdout, and
+# loses nothing by it: an app's own mount error goes to stderr and survives.)
 openapi-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail on any diff. The drift gate.
 	@set -e; \
 	for d in $(APPDIRS); do \
@@ -85,7 +92,7 @@ openapi-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail 
 	  $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a openapi >/dev/null \
 	    || { echo "!! $$a cannot project its own document"; exit 1; }; \
 	done
-	@$(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi-weave OUT=$(ROOT)/openapi.yaml >/dev/null
+	@$(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi-weave OUT=$(ROOT)/openapi.yaml
 	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml plugin/); \
 	if [ -n "$$stale" ]; then \
 	  echo "$$stale"; \

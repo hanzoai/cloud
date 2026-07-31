@@ -55,33 +55,201 @@
     "/v1/analytics/overview": {
       "get": {
         "operationId": "get_v1_analytics_overview",
+        "summary": "overview reports the caller org's headline analytics for a window: the LLM lens\n(requests, tokens, spend, distinct models and providers, errors) from the usage\nledger, plus the web and commerce lenses (pageviews, visitors, sessions, orders,\nrevenue) from the events warehouse.",
+        "description": "overview reports the caller org's headline analytics for a window: the LLM lens\n(requests, tokens, spend, distinct models and providers, errors) from the usage\nledger, plus the web and commerce lenses (pageviews, visitors, sessions, orders,\nrevenue) from the events warehouse. A lens whose table is not yet provisioned\nreports available:false rather than fabricated zeros; an unreachable warehouse is\na 503, never invented numbers.",
         "tags": [
           "analytics"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is 24h, 7d or 30d; empty means 24h. Ignored when start and end are given.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7d"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the RFC3339 window start; honoured only together with end.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the RFC3339 window end; honoured only together with start.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/analytics/timeseries": {
       "get": {
         "operationId": "get_v1_analytics_timeseries",
+        "summary": "timeseries reports the caller org's LLM usage bucketed over a window — requests,\ntokens and spend per hour or per day, with empty buckets filled in so the series\nis continuous.",
+        "description": "timeseries reports the caller org's LLM usage bucketed over a window — requests,\ntokens and spend per hour or per day, with empty buckets filled in so the series\nis continuous. The bucket size follows the window; an unreachable warehouse is a\n503, never fabricated points.",
         "tags": [
           "analytics"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is 24h, 7d or 30d; empty means 24h. Ignored when start and end are given.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "30d"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the RFC3339 window start; honoured only together with end.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the RFC3339 window end; honoured only together with start.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeseries"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/analytics/top": {
       "get": {
         "operationId": "get_v1_analytics_top",
+        "summary": "top reports the caller org's leaderboards for a window: the models it spent the\nmost on (from the usage ledger), and — from the events warehouse — its best\nselling products, most visited pages, and the referrers and campaign sources that\nbrought people in.",
+        "description": "top reports the caller org's leaderboards for a window: the models it spent the\nmost on (from the usage ledger), and — from the events warehouse — its best\nselling products, most visited pages, and the referrers and campaign sources that\nbrought people in. Each events-backed lens reports available:false when its table\nis not provisioned rather than an empty answer that looks like real zero traffic.",
         "tags": [
           "analytics"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is 24h, 7d or 30d; empty means 24h. Ignored when start and end are given.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7d"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the RFC3339 window start; honoured only together with end.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the RFC3339 window end; honoured only together with start.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows each breakdown returns; 0 means 10, capped at 100.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Top"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/errors": {
       "get": {
         "operationId": "get_v1_errors",
+        "summary": "errors returns the caller org's most recent captured exceptions, newest first,\nwith each event's $exception object lifted out of its properties.",
+        "description": "errors returns the caller org's most recent captured exceptions, newest first,\nwith each event's $exception object lifted out of its properties. It reads the\nsame event rows the capture doors write, narrowed to the error kind — a read\nalways needs a validated principal, never the write-only publishable key.",
         "tags": [
           "errors"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many events to return, newest first; 0 means 50, capped at 200.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventFeed"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/event": {
@@ -111,17 +279,62 @@
     "/v1/insights/events": {
       "get": {
         "operationId": "get_v1_insights_events",
+        "summary": "insightsEvents returns the caller org's most recent captured events of every",
+        "description": "insightsEvents returns the caller org's most recent captured events of every\nkind, newest first — the console's live event feed.",
         "tags": [
           "insights"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many events to return, newest first; 0 means 50, capped at 200.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventFeed"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/insights/health": {
       "get": {
         "operationId": "get_v1_insights_health",
+        "summary": "insightsHealth reports that the unified insights surface is serving.",
+        "description": "insightsHealth reports that the unified insights surface is serving. It reads no\ntenant data and touches no warehouse, so it is safe as a liveness probe.",
         "tags": [
           "insights"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "engine": "hanzo-analytics",
+                  "ok": true,
+                  "surface": "/v1/insights"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/InsightsHealth"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/tracker": {
@@ -130,6 +343,415 @@
         "tags": [
           "tracker"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Breakdown": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownRow"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BreakdownRow": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "pageviews": {
+            "type": "integer"
+          },
+          "pct": {
+            "description": "share of total pageviews in-window, 0..100",
+            "type": "number"
+          },
+          "visitors": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CommerceOverview": {
+        "properties": {
+          "aov": {
+            "description": "revenue/orders",
+            "type": "number"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "orders": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "number"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "EventFeed": {
+        "properties": {
+          "data": {
+            "description": "Data is the page; an empty array when the org has captured nothing in range.",
+            "items": {
+              "$ref": "#/components/schemas/RawEvent"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "InsightsHealth": {
+        "properties": {
+          "engine": {
+            "description": "Engine names the analytics engine behind it.",
+            "type": "string"
+          },
+          "ok": {
+            "description": "OK is true whenever the surface is serving.",
+            "type": "boolean"
+          },
+          "surface": {
+            "description": "Surface is the path prefix this health answer covers.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "LLMOverview": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "completionTokens": {
+            "type": "integer"
+          },
+          "errorRate": {
+            "description": "0..1, errors/requests",
+            "type": "number"
+          },
+          "errors": {
+            "type": "integer"
+          },
+          "models": {
+            "type": "integer"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "providers": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ModelRow": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "pct": {
+            "description": "share of total spend, 0..100",
+            "type": "number"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Overview": {
+        "properties": {
+          "commerce": {
+            "$ref": "#/components/schemas/CommerceOverview"
+          },
+          "end": {
+            "type": "string"
+          },
+          "interval": {
+            "type": "string"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/LLMOverview"
+          },
+          "range": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "start": {
+            "type": "string"
+          },
+          "web": {
+            "$ref": "#/components/schemas/WebOverview"
+          }
+        },
+        "type": "object"
+      },
+      "ProductRow": {
+        "properties": {
+          "orders": {
+            "type": "integer"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "number"
+          },
+          "units": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RawEvent": {
+        "properties": {
+          "distinctId": {
+            "description": "DistinctID is the client-side identity the event was captured under.",
+            "type": "string"
+          },
+          "event": {
+            "description": "Event is the event name ($pageview, $exception, a product event).",
+            "type": "string"
+          },
+          "exception": {
+            "description": "Exception is the $exception object, lifted out of properties for the error lens.",
+            "type": "object"
+          },
+          "id": {
+            "description": "ID is the event id.",
+            "type": "string"
+          },
+          "library": {
+            "description": "Library is the SDK that sent the event.",
+            "type": "string"
+          },
+          "libraryVersion": {
+            "description": "LibraryVer is that SDK's version.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the URL path alone.",
+            "type": "string"
+          },
+          "product": {
+            "description": "Product names the product surface the event came from.",
+            "type": "string"
+          },
+          "properties": {
+            "description": "Properties is the event's full property bag, already scrubbed at capture.",
+            "type": "object"
+          },
+          "sessionId": {
+            "description": "SessionID groups events from one browsing session.",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Timestamp is when the event happened, RFC3339 UTC.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the event kind (pageview, event, error).",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the full page address the event was captured on.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Scope": {
+        "properties": {
+          "org": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SeriesPoint": {
+        "properties": {
+          "requests": {
+            "type": "integer"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "t": {
+            "description": "RFC3339 bucket start (UTC)",
+            "type": "string"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Timeseries": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "interval": {
+            "type": "string"
+          },
+          "range": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Top": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "models": {
+            "$ref": "#/components/schemas/TopModels"
+          },
+          "products": {
+            "$ref": "#/components/schemas/TopProducts"
+          },
+          "range": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "start": {
+            "type": "string"
+          },
+          "topPages": {
+            "$ref": "#/components/schemas/Breakdown",
+            "description": "Behavior lenses (events lens): WHERE people go / WHAT they look at\n(topPages) and where they come FROM (topReferrers organic/referral,\ntopSources campaigns). Honest-empty until the beacon fills hanzo.events."
+          },
+          "topReferrers": {
+            "$ref": "#/components/schemas/Breakdown"
+          },
+          "topSources": {
+            "$ref": "#/components/schemas/Breakdown"
+          }
+        },
+        "type": "object"
+      },
+      "TopModels": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelRow"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TopProducts": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductRow"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "WebOverview": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "pageviews": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "sessions": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "visitors": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

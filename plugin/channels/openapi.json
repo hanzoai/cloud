@@ -19,47 +19,272 @@
     "/v1/channels": {
       "get": {
         "operationId": "get_v1_channels",
+        "summary": "list returns every chat transport with the caller org's facts attached.",
+        "description": "list returns every chat transport with the caller org's facts attached.\n\nThe registry is closed and the order is fixed, so an unconnected transport is\nstill listed — with connected:false, its default policy, and no account.\nEach row carries the org's connection, its DM and group policy, and how many\npairing requests are waiting for an admin.",
         "tags": [
           "channels"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "channels": [
+                    {
+                      "account": "t01abc",
+                      "accountLabel": "Acme",
+                      "capabilities": {
+                        "actions": false,
+                        "dm": true,
+                        "group": true,
+                        "media": false,
+                        "thread": true
+                      },
+                      "connected": true,
+                      "dmPolicy": "pairing",
+                      "groupPolicy": "open",
+                      "id": "slack",
+                      "pendingPairing": 2
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/channelList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/channels/allowlist": {
       "get": {
         "operationId": "get_v1_channels_allowlist",
+        "summary": "allowlist returns one channel's access policy for the caller's org.",
+        "description": "allowlist returns one channel's access policy for the caller's org.\n\nIt answers with both allow sources: the config-source entries this surface\nowns, and the pairing-source entries approving a pairing minted, which are\nread-only here.\nA channel outside the closed transport registry is not found.",
         "tags": [
           "channels"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "required": false,
+            "description": "Channel is the transport id: discord, slack, teams or telegram.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "slack"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accessGroups": {},
+                  "dm": [
+                    "u01"
+                  ],
+                  "dmPolicy": "pairing",
+                  "group": [],
+                  "groupPolicy": "open",
+                  "paired": [
+                    "u07"
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/allowlistView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_channels_allowlist",
+        "summary": "setAllowlist edits one channel's access policy and returns it as it now stands.",
+        "description": "setAllowlist edits one channel's access policy and returns it as it now stands.\n\nIt is admin-gated: a SuperAdmin, or an admin of the caller's own org.\nThe edit is partial — an omitted policy or a null list is left exactly as it\nwas — and it owns the CONFIG source only, so a policy write can never revoke\nan approved pairing.\nThe answer is the same shape the read returns, so both verbs speak one shape.",
         "tags": [
           "channels"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "channel": "slack",
+                "dm": [
+                  "u01",
+                  "u02"
+                ],
+                "dmPolicy": "allowlist"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/allowlistUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accessGroups": {},
+                  "dm": [
+                    "u01",
+                    "u02"
+                  ],
+                  "dmPolicy": "allowlist",
+                  "group": [],
+                  "groupPolicy": "open",
+                  "paired": [
+                    "u07"
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/allowlistView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/channels/inbox": {
       "get": {
         "operationId": "get_v1_channels_inbox",
+        "summary": "inbox returns the org's stored inbound messages, oldest first.",
+        "description": "inbox returns the org's stored inbound messages, oldest first.\n\nIt is a cursor read: pass the cursor a page returns back as since to get the\nnext one, and an empty page returns the cursor it was given.\nOnly the caller's own org's messages are ever visible.",
         "tags": [
           "channels"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Since is the exclusive row-id cursor to resume from; 0 starts at the oldest.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 4210
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 takes the store's own default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cursor": 4211,
+                  "messages": [
+                    {
+                      "account": "t01abc",
+                      "channel": "slack",
+                      "createdAt": 1780000000,
+                      "id": 4211,
+                      "roomId": "D01",
+                      "roomKind": "dm",
+                      "sender": "u01",
+                      "text": "ship it"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/inboxPage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/channels/pairing": {
       "get": {
         "operationId": "get_v1_channels_pairing",
+        "summary": "pairing returns the org's pending, unexpired pairing requests.",
+        "description": "pairing returns the org's pending, unexpired pairing requests.\n\nA code is a capability string an org member shows an admin to be approved, so\nit is returned here and never logged.\nExpired requests are not listed.",
         "tags": [
           "channels"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "pending": [
+                    {
+                      "channel": "telegram",
+                      "code": "pair-7f3a",
+                      "createdAt": 1780000000,
+                      "lastSeen": 1780000600,
+                      "sender": "5551234"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/pairingPending"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/channels/pairing/approve": {
       "post": {
         "operationId": "post_v1_channels_pairing_approve",
+        "summary": "approve turns a pending pairing code into a standing allow entry.",
+        "description": "approve turns a pending pairing code into a standing allow entry.\n\nIt is admin-gated: a SuperAdmin, or an admin of the caller's own org.\nThe first approval an org ever makes also seats its owner, reported as\nownerBootstrapped; every later one does not.\nAn unknown or expired code is not found, and nothing is written.",
         "tags": [
           "channels"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "channel": "telegram",
+                "code": "pair-7f3a"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/pairingApproval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ownerBootstrapped": false,
+                  "sender": "5551234"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/pairingApproved"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/channels/{channel}/send": {
@@ -78,6 +303,294 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "allowlistUpdate": {
+        "properties": {
+          "accessGroups": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "object"
+            },
+            "description": "AccessGroups REPLACES the org's named access groups, keyed group then\nchannel. Null leaves them unchanged.",
+            "type": "object"
+          },
+          "channel": {
+            "description": "Channel is the transport id to edit: discord, slack, teams or telegram.",
+            "type": "string"
+          },
+          "dm": {
+            "description": "DM REPLACES the config-source DM allowlist.\nNull leaves it unchanged; approved pairings are a different source and are\nnever revoked by this edit.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "dmPolicy": {
+            "description": "DMPolicy sets who may DM the org: pairing, allowlist or open.\nEmpty leaves it unchanged.",
+            "type": "string"
+          },
+          "group": {
+            "description": "Group REPLACES the config-source group allowlist. Null leaves it unchanged.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "groupPolicy": {
+            "description": "GroupPolicy sets group and thread access: open, allowlist or disabled.\nEmpty leaves it unchanged.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "allowlistView": {
+        "properties": {
+          "accessGroups": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "object"
+            },
+            "description": "AccessGroups is the org's named access groups, keyed group then channel.",
+            "type": "object"
+          },
+          "dm": {
+            "description": "DM is the config-source DM allowlist — the entries this endpoint owns.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "dmPolicy": {
+            "description": "DMPolicy is who may DM the org on this channel.",
+            "type": "string"
+          },
+          "group": {
+            "description": "Group is the config-source group allowlist.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "groupPolicy": {
+            "description": "GroupPolicy governs group and thread surfaces on this channel.",
+            "type": "string"
+          },
+          "paired": {
+            "description": "Paired is the pairing-source entries, read-only here: they are minted by\napproving a pairing and cannot be edited away by a policy write.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "capabilities": {
+        "properties": {
+          "actions": {
+            "type": "boolean"
+          },
+          "dm": {
+            "type": "boolean"
+          },
+          "group": {
+            "type": "boolean"
+          },
+          "media": {
+            "type": "boolean"
+          },
+          "thread": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "channelList": {
+        "properties": {
+          "channels": {
+            "description": "Channels is every transport in the closed registry, in fixed order —\npresent whether or not the org has connected it.",
+            "items": {
+              "$ref": "#/components/schemas/channelView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "channelView": {
+        "properties": {
+          "account": {
+            "description": "Account is the connected account's external id, lower-cased.",
+            "type": "string"
+          },
+          "accountLabel": {
+            "description": "AccountLabel is that account's human label — never swapped with Account.",
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/capabilities",
+            "description": "Capabilities is what the transport renders natively."
+          },
+          "connected": {
+            "description": "Connected reports whether this org has an authenticated connection to it.",
+            "type": "boolean"
+          },
+          "dmPolicy": {
+            "description": "DMPolicy is who may DM the org on this channel: pairing, allowlist or open.",
+            "type": "string"
+          },
+          "groupPolicy": {
+            "description": "GroupPolicy governs group and thread surfaces: open, allowlist or disabled.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the transport id: discord, slack, teams or telegram.",
+            "type": "string"
+          },
+          "pendingPairing": {
+            "description": "PendingPairing is how many unexpired pairing requests await approval here.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "inboxPage": {
+        "properties": {
+          "cursor": {
+            "description": "Cursor is the last row id in this page — pass it back as since.\nAn empty page returns the cursor it was given.",
+            "type": "integer"
+          },
+          "messages": {
+            "description": "Messages is the page, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/inboxView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "inboxView": {
+        "properties": {
+          "account": {
+            "description": "Account is the connected account that received it.",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Channel is the transport the message arrived on.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is unix seconds.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the row id, and the cursor to resume from.",
+            "type": "integer"
+          },
+          "replyTo": {
+            "description": "ReplyTo is the message this one replied to, when any.",
+            "type": "string"
+          },
+          "roomId": {
+            "description": "RoomID is the transport's room identifier.",
+            "type": "string"
+          },
+          "roomKind": {
+            "description": "RoomKind is dm, group or thread.",
+            "type": "string"
+          },
+          "sender": {
+            "description": "Sender is the transport-side sender identity.",
+            "type": "string"
+          },
+          "senderUser": {
+            "description": "SenderUser is the Hanzo user it maps to, when one is known.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is the message body, downgraded to text.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pairingApproval": {
+        "properties": {
+          "channel": {
+            "description": "Channel is the transport the request arrived on.",
+            "type": "string"
+          },
+          "code": {
+            "description": "Code is the pairing code shown to the org, exactly as issued.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pairingApproved": {
+        "properties": {
+          "ownerBootstrapped": {
+            "description": "OwnerBootstrapped reports that this approval also seated the org's first\nowner — the one-time bootstrap, false on every later approval.",
+            "type": "boolean"
+          },
+          "sender": {
+            "description": "Sender is the transport-side identity now allowed to DM the org.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pairingPending": {
+        "properties": {
+          "pending": {
+            "description": "Pending is every unexpired request awaiting an admin decision.",
+            "items": {
+              "$ref": "#/components/schemas/pairingView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "pairingView": {
+        "properties": {
+          "channel": {
+            "description": "Channel is the transport the request arrived on.",
+            "type": "string"
+          },
+          "code": {
+            "description": "Code is the capability string shown to org members for approval.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is unix seconds of the first sighting.",
+            "type": "integer"
+          },
+          "lastSeen": {
+            "description": "LastSeen is unix seconds of the most recent sighting.",
+            "type": "integer"
+          },
+          "sender": {
+            "description": "Sender is the transport-side identity asking to be paired.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

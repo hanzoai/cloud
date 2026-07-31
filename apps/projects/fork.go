@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"context"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -9,10 +10,10 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// forkReq is the body of POST /v1/projects/fork: which parent to fork and,
+// siteFork is the body of POST /v1/projects/fork: which parent to fork and,
 // optionally, the target project name/slug. Both target fields default from the
 // parent (name = its title, slug = the parent slug) when omitted.
-type forkReq struct {
+type siteFork struct {
 	Slug string `json:"slug"` // parent slug to fork — catalog template or published project (required)
 	Name string `json:"name"` // target project name (optional; defaults to the parent's title)
 	// Variant picks a template's format/page/theme (optional; defaults to the
@@ -24,33 +25,30 @@ type forkReq struct {
 	Target string `json:"target"`
 }
 
-// fork creates a real Project seeded from a PUBLISHED EXAMPLE — either a
-// starter-kit template from the ONE embedded gallery catalog, or any live project
-// on the platform (an example a seeded creator published, or another org's app
-// serving at <slug>.hanzo.app). It funnels through the SAME createProject path
-// POST /v1/projects uses — so slug validation, org scoping, ID minting, and
-// conflict handling are not duplicated — and stamps the parent it actually
-// resolved onto the child as ForkedFrom, so attribution is a fact recorded at
-// fork time rather than a claim reconstructed later. Returns 201.
-func fork(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// fork creates a real project seeded from a published example. The parent is a
+// starter-kit template from the embedded gallery catalog or any live project on
+// the platform, it funnels through the SAME create path so slug validation and
+// conflict handling are not duplicated, and the parent it actually resolved is
+// stamped on the child, so attribution is recorded at fork time rather than
+// reconstructed later.
+// Example: {"slug": "portfolio", "name": "My Portfolio", "variant": "dark", "target": "my-portfolio"}
+func (o ops) fork(ctx context.Context, in *siteFork) (*siteProject, error) {
+	c, org, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body forkReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	s := o.s
+	body := *in
 	slug := strings.TrimSpace(body.Slug)
 	if slug == "" {
-		return zip.ErrBadRequest("slug is required")
+		return nil, zip.ErrBadRequest("slug is required")
 	}
 	req, err := seedFrom(s, c, org, slug, strings.TrimSpace(body.Variant))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// Caller overrides land on top of the parent's defaults; lineage is not one of
-	// them (createReq.ForkedFrom is json:"-", set by seedFrom).
+	// them (siteCreate.ForkedFrom is json:"-", set by seedFrom).
 	if n := strings.TrimSpace(body.Name); n != "" {
 		req.Name = n
 	}
@@ -60,7 +58,7 @@ func fork(s *cloud.Service[state], c *zip.Ctx) error {
 	return createProject(s, c, org, req)
 }
 
-// seedFrom resolves the fork parent and returns the createReq it seeds. Templates
+// seedFrom resolves the fork parent and returns the siteCreate it seeds. Templates
 // FIRST, through the ONE catalog door (templates.Lookup), which resolves the
 // CALLER ORG's own private templates ahead of the public gallery: a curated
 // template slug is a stable public name and must keep meaning the same thing even
@@ -71,13 +69,13 @@ func fork(s *cloud.Service[state], c *zip.Ctx) error {
 // "what you can browse is what you can fork". A live parent contributes its repo,
 // so the child builds from the same source; the parent's deployed BYTES are never
 // copied — releases are per-tenant by design, so the fork publishes its own.
-func seedFrom(s *cloud.Service[state], c *zip.Ctx, org, slug, variant string) (createReq, error) {
+func seedFrom(s *cloud.Service[state], c *zip.Ctx, org, slug, variant string) (siteCreate, error) {
 	if t, found := templates.Lookup(c.Context(), org, slug); found {
 		// One template, one slug: the format/page/theme it ships in is chosen
 		// here, from the catalog's own options.
 		v, ok := t.Variant(variant)
 		if !ok {
-			return createReq{}, zip.ErrNotFound("template variant not found")
+			return siteCreate{}, zip.ErrNotFound("template variant not found")
 		}
 		// Lineage is owner-qualified for a private template (the same shape a live
 		// project parent gets) and a bare slug for the public catalog, whose slug IS
@@ -86,7 +84,7 @@ func seedFrom(s *cloud.Service[state], c *zip.Ctx, org, slug, variant string) (c
 		if t.Org != "" {
 			from = t.Org + "/" + t.Slug
 		}
-		req := createReq{
+		req := siteCreate{
 			Name: t.Title, Slug: t.Slug, Description: t.Description,
 			Framework: mapFramework(v.Framework), ForkedFrom: from,
 		}
@@ -106,13 +104,13 @@ func seedFrom(s *cloud.Service[state], c *zip.Ctx, org, slug, variant string) (c
 		return req, nil
 	}
 	if variant != "" {
-		return createReq{}, zip.ErrNotFound("template variant not found")
+		return siteCreate{}, zip.ErrNotFound("template variant not found")
 	}
 	p, err := s.State.store.ResolveUniqueLiveSlug(c.Context(), slug)
 	if err != nil {
-		return createReq{}, zip.ErrNotFound("no template or published project with that slug")
+		return siteCreate{}, zip.ErrNotFound("no template or published project with that slug")
 	}
-	req := createReq{
+	req := siteCreate{
 		Name: p.Name, Slug: p.Slug, Description: p.Description,
 		Framework: p.Framework, ForkedFrom: p.Org + "/" + p.Slug,
 	}

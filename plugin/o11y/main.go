@@ -6,7 +6,7 @@
 // The same binary therefore covers both deployments without a second code path.
 //
 // It mounts EXACTLY what the fused binary used to mount in-process, by calling
-// the same o11y.MountO11y. The subsystem's code did not move and did not fork;
+// the same o11y.Mount. The subsystem's code did not move and did not fork;
 // only the process it runs in changed, which is the point — where a subsystem
 // runs is a deployment decision, not a property of the source.
 //
@@ -75,7 +75,7 @@ func run() error {
 
 	app := zip.New(zip.Config{AppName: "o11y", Logger: deps.Logger})
 
-	if err := o11y.MountO11y(app, deps); err != nil {
+	if err := o11y.Mount(app, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}
 
@@ -90,7 +90,7 @@ func run() error {
 	// collector, the trace sink and the event-ingest Datastore all live HERE
 	// now, so their flush-and-close runs here on our own shutdown rather than
 	// in the host's MountAll teardown.
-	app.OnShutdown(o11y.ShutdownO11y)
+	app.OnShutdown(o11y.Shutdown)
 
 	addr := os.Getenv(listenEnv)
 	if addr == "" {

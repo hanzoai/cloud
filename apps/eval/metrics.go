@@ -26,9 +26,9 @@ import (
 //     table ListObservations reads). Every production generation lands here, so it
 //     is the AUTHORITATIVE source for counts, tokens, cost, errors, model & user
 //     cardinality. count()/sum()/uniqExact() GROUP BY model / time bucket.
-//   - o11y_traces GenAI spans — the OTel gen_ai.* spans ai/object emits carry
-//     duration_nano + gen_ai.request.model + gen_ai.hanzo.org_id, so per-model and
-//     overall latency percentiles come from here. This read is BEST-EFFORT: if the
+//   - event.span gen_ai spans — the OTel gen_ai.* spans ai/object emits carry a
+//     duration + gen_ai.request.model, and land under the org that made the call, so
+//     per-model and overall latency percentiles come from here. BEST-EFFORT: if the
 //     span store is unreachable or holds no GenAI spans, latency is honestly absent
 //     (Latency.Available=false, nil percentiles) while every ledger metric still
 //     renders — a latency miss never fails the board (the ledger is the core).
@@ -187,22 +187,33 @@ func scopeOrg(org string, allOrgs bool) string {
 
 // ── HTTP handler ──────────────────────────────────────────────────────────────
 
-// metricsBoard serves GET /v1/evals/metrics — the AI observability dashboard for
-// the caller's org (a validated SuperAdmin, c.IsAdmin(), sees every org). It
-// resolves the window from a fixed range preset (?range, default 24h), optionally
-// overrides the bucket (?interval=hour|day), and threads ?project. Tenant isolation
-// is the principal gate: no validated principal ⇒ 403. When telemetry is disabled
-// (no datastore) or the project is non-default (no ledger attribution yet), the
-// board is honest-empty — a valid, all-zero board, never a 503 or a fabricated
-// number.
-func (s *service) metricsBoard(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// BoardQuery selects the window the metrics board aggregates over.
+type BoardQuery struct {
+	// Range is a fixed window preset: 24h, 7d or 30d. Anything else means 24h.
+	Range string `json:"range"`
+	// Interval overrides the bucket: hour or day. Anything else keeps the
+	// preset's own bucket.
+	Interval string `json:"interval"`
+}
+
+// metricsBoard serves the AI observability dashboard for the caller's org. It
+// reports request counts, cost, tokens, error and success rate, and latency
+// percentiles over a window, bucketed and broken down by model. A validated
+// SuperAdmin sees every org. Tenant
+// isolation is the principal gate: no validated principal is a 403. When telemetry is
+// disabled, or the caller's project is a named sub-scope the ledger does not yet
+// attribute, the board is honest-empty — a valid all-zero board, never a fabricated
+// number and never a 503.
+//
+// Example: {"range": "7d", "interval": "day"}
+func (s *service) metricsBoard(ctx context.Context, in *BoardQuery) (*Board, error) {
+	c, org, err := caller(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	label, since, until, interval := resolveRange(strings.TrimSpace(c.Query("range")))
-	if iv := strings.TrimSpace(c.Query("interval")); iv == "hour" || iv == "day" {
+	label, since, until, interval := resolveRange(strings.TrimSpace(in.Range))
+	if iv := strings.TrimSpace(in.Interval); iv == "hour" || iv == "day" {
 		interval = iv
 	}
 	// Project is the server-minted sub-scope ("" for the org's default project ==
@@ -228,15 +239,15 @@ func (s *service) metricsBoard(c *zip.Ctx) error {
 	// once the ledger carries project; the query plumbing (usageWhere) is already
 	// project-aware and tested.
 	if s.tel != nil && f.Project == "" {
-		b, err := s.tel.Metrics(c.Context(), f)
+		b, err := s.tel.Metrics(ctx, f)
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
 		}
 		board = b
 	}
 	board.Range.Range = label
 	board.Scope.Project = project
-	return c.JSON(http.StatusOK, board)
+	return &board, nil
 }
 
 // resolveRange maps a range preset to its echoed label, the closed window
@@ -325,30 +336,34 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 	}, nil
 }
 
-// latency reads per-model + overall latency percentiles from the GenAI spans in
-// o11y_traces. Best-effort: an error (span store unreachable, table absent)
-// returns an empty per-model map and an unavailable overall — never an error —
-// so a latency miss cannot fail the dashboard. The org gate mirrors the ledger:
-// non-admin is pinned to gen_ai.hanzo.org_id; a SuperAdmin sees every org.
+// latency reads per-model + overall latency percentiles from the gen_ai spans in
+// event.span. Best-effort: an error (span store unreachable, table absent) returns
+// an empty per-model map and an unavailable overall — never an error — so a latency
+// miss cannot fail the dashboard. The org gate mirrors the ledger: a non-admin is
+// pinned to its own org; a SuperAdmin sees every org.
 func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]latPercentiles, LatencyStat) {
-	const spanTable = "o11y_traces.distributed_o11y_index_v3"
-	where := "attributes_string['gen_ai.system'] = 'hanzo' AND timestamp >= ? AND timestamp < ?"
+	spanTable := datastore.Span
+	where := "attributes['gen_ai.system'] = 'hanzo' AND time >= ? AND time < ?"
 	args := []any{chTime(f.Since), chTime(f.Until)}
 	if !f.AllOrgs {
-		where += " AND attributes_string['gen_ai.hanzo.org_id'] = ?"
+		// org is an ENVELOPE column and leads the sort key, so the tenant gate is a
+		// primary-key predicate rather than a map lookup — the same gate, one index
+		// level cheaper.
+		where += " AND org = ?"
 		args = append(args, f.Org)
 	}
 	if f.Project != "" {
-		// The ai emit path tags gen_ai.hanzo.project on the span; narrowing here
-		// keeps per-project latency consistent with the per-project ledger board.
-		where += " AND attributes_string['gen_ai.hanzo.project'] = ?"
+		// A project is not a tenant, so it has no envelope column: the ai emit path
+		// tags gen_ai.hanzo.project on the span and narrowing here keeps per-project
+		// latency consistent with the per-project ledger board.
+		where += " AND attributes['gen_ai.hanzo.project'] = ?"
 		args = append(args, f.Project)
 	}
 
 	perModel := map[string]latPercentiles{}
-	modelSQL := "SELECT attributes_string['gen_ai.request.model'] AS model, " +
-		"quantile(0.5)(duration_nano) AS p50, quantile(0.95)(duration_nano) AS p95, " +
-		"quantile(0.99)(duration_nano) AS p99, count() AS n " +
+	modelSQL := "SELECT attributes['gen_ai.request.model'] AS model, " +
+		"quantile(0.5)(duration) AS p50, quantile(0.95)(duration) AS p95, " +
+		"quantile(0.99)(duration) AS p99, count() AS n " +
 		"FROM " + spanTable + " WHERE " + where + " GROUP BY model"
 	if rows, err := datastore.Query(ctx, modelSQL, args...); err == nil {
 		for _, r := range rows {
@@ -365,8 +380,8 @@ func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]
 	}
 
 	overall := LatencyStat{Available: false}
-	overallSQL := "SELECT quantile(0.5)(duration_nano) AS p50, quantile(0.95)(duration_nano) AS p95, " +
-		"quantile(0.99)(duration_nano) AS p99, count() AS n " +
+	overallSQL := "SELECT quantile(0.5)(duration) AS p50, quantile(0.95)(duration) AS p95, " +
+		"quantile(0.99)(duration) AS p99, count() AS n " +
 		"FROM " + spanTable + " WHERE " + where
 	if rows, err := datastore.Query(ctx, overallSQL, args...); err == nil {
 		if r := firstRow(rows); asInt64(r["n"]) > 0 {

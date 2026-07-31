@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -20,25 +21,58 @@ const (
 
 // ── GET /v1/tools — discovery (all sources, activated flags) ────────────────────
 
-func listTools(s *cloud.Service[state], c *zip.Ctx) error {
-	p, ok := PrincipalFrom(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// ToolFilter narrows discovery to one source and/or to the activated set.
+type ToolFilter struct {
+	// Source keeps only tools from that source (builtin, mcp, connector, ...).
+	Source string `json:"source"`
+	// Activated keeps only the tools activated for the caller's (org, project).
+	Activated bool `json:"activated"`
+}
+
+// ToolList is the discovery answer.
+type ToolList struct {
+	// Tools is every tool matching the filter, from every source.
+	Tools []Tool `json:"tools"`
+}
+
+// listTools returns every tool resolvable in the caller's (org, project) — from
+// every source — each carrying whether it is activated, optionally narrowed to
+// one source and/or to the activated set.
+//
+// Example: {"source": "mcp", "activated": true}
+func (o ops) listTools(ctx context.Context, in *ToolFilter) (*ToolList, error) {
+	p, err := principalOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	tools := Default().List(c.Context(), Scope{Org: p.Org, Project: p.Project})
-	srcFilter := Source(strings.TrimSpace(c.Query("source")))
-	activatedOnly := c.Query("activated") == "true"
+	tools := Default().List(ctx, Scope{Org: p.Org, Project: p.Project})
+	srcFilter := Source(strings.TrimSpace(in.Source))
 	out := make([]Tool, 0, len(tools))
 	for _, t := range tools {
 		if srcFilter != "" && t.Source != srcFilter {
 			continue
 		}
-		if activatedOnly && !t.Activated {
+		if in.Activated && !t.Activated {
 			continue
 		}
 		out = append(out, t)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"tools": out})
+	return &ToolList{Tools: out}, nil
+}
+
+// principalOf resolves the VALIDATED caller for a typed op off the request
+// cloud.Bridge parked. It fails closed off the HTTP path, where there is no
+// request and so no identity to run a tool as.
+func principalOf(ctx context.Context) (Principal, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return Principal{}, zip.ErrForbidden("a validated principal is required")
+	}
+	p, ok := PrincipalFrom(c)
+	if !ok {
+		return Principal{}, zip.ErrForbidden("a validated principal is required")
+	}
+	return p, nil
 }
 
 // ── POST /v1/tools/mcp — the unified MCP JSON-RPC surface ───────────────────────
@@ -146,148 +180,196 @@ func mcpToolCall(s *cloud.Service[state], c *zip.Ctx, p Principal, req mcpReques
 
 // ── activation API (task 5) ─────────────────────────────────────────────────────
 
-func getActivation(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	enabled, err := s.State.activation.List(c.Context(), org, principal.Project(c))
+// Activation is the set of tools switched on for a (org, project).
+type Activation struct {
+	// Enabled is every activated tool name; empty, never null, when none are.
+	Enabled []string `json:"enabled"`
+}
+
+// getActivation returns the tool names activated for the caller's (org, project).
+func (o ops) getActivation(ctx context.Context, _ *None) (*Activation, error) {
+	s := o.s
+	p, err := principalOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list activation: %v", err)
+		return nil, err
+	}
+	enabled, err := s.State.activation.List(ctx, p.Org, p.Project)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list activation: %v", err)
 	}
 	if enabled == nil {
 		enabled = []string{}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"enabled": enabled})
+	return &Activation{Enabled: enabled}, nil
 }
 
-type activationReq struct {
-	Activate   []string `json:"activate"`
+// ActivationRequest is a batch of activation toggles.
+type ActivationRequest struct {
+	// Activate names the tools to switch on for the caller's (org, project).
+	Activate []string `json:"activate"`
+	// Deactivate names the tools to switch off.
 	Deactivate []string `json:"deactivate"`
 }
 
-// putActivation applies a batch of toggles for (org, project) — the ONE write path
-// hanzo.chat / hanzo.app calls to turn skills/plugins/connectors on and off.
-func putActivation(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	project := principal.Project(c)
-	var body activationReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if len(body.Activate)+len(body.Deactivate) > maxBatch {
-		return zip.Errorf(http.StatusRequestEntityTooLarge, "too many toggles (max %d)", maxBatch)
-	}
-	for _, name := range body.Activate {
-		if !validToolName(name) {
-			return zip.ErrBadRequest("invalid tool name: " + name)
-		}
-		if err := s.State.activation.Activate(c.Context(), org, project, name, "", c.User()); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "activate: %v", err)
-		}
-	}
-	for _, name := range body.Deactivate {
-		if err := s.State.activation.Deactivate(c.Context(), org, project, name); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "deactivate: %v", err)
-		}
-	}
-	enabled, err := s.State.activation.List(c.Context(), org, project)
+// putActivation applies a batch of toggles for the caller's (org, project) — the
+// ONE write path that turns skills, plugins and connectors on and off — and
+// returns the resulting activated set. At most 256 toggles per call.
+//
+// Example: {"activate": ["search"], "deactivate": ["shell"]}
+// Response: {"enabled": ["search"]}
+func (o ops) putActivation(ctx context.Context, in *ActivationRequest) (*Activation, error) {
+	s := o.s
+	p, err := principalOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list activation: %v", err)
+		return nil, err
+	}
+	org, project := p.Org, p.Project
+	if len(in.Activate)+len(in.Deactivate) > maxBatch {
+		return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "too many toggles (max %d)", maxBatch)
+	}
+	for _, name := range in.Activate {
+		if !validToolName(name) {
+			return nil, zip.ErrBadRequest("invalid tool name: " + name)
+		}
+		if err := s.State.activation.Activate(ctx, org, project, name, "", p.User); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "activate: %v", err)
+		}
+	}
+	for _, name := range in.Deactivate {
+		if err := s.State.activation.Deactivate(ctx, org, project, name); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "deactivate: %v", err)
+		}
+	}
+	enabled, err := s.State.activation.List(ctx, org, project)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list activation: %v", err)
 	}
 	if enabled == nil {
 		enabled = []string{}
 	}
-	audrecord(s, c, org, "activation", "ok", http.StatusOK)
-	return c.JSON(http.StatusOK, map[string]any{"enabled": enabled})
+	audctx(s, ctx, org, "activation", "ok", http.StatusOK)
+	return &Activation{Enabled: enabled}, nil
 }
 
 // ── external MCP servers (task 2) ───────────────────────────────────────────────
 
-func listServers(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	servers, err := s.State.servers.List(c.Context(), org)
+// ServerList is the org's registered external MCP servers.
+type ServerList struct {
+	// Servers is every server the caller's org registered; empty, never null.
+	Servers []MCPServer `json:"servers"`
+}
+
+// listServers returns the external MCP servers the caller's org has registered.
+// The auth secret is never returned — only whether one is sealed.
+func (o ops) listServers(ctx context.Context, _ *None) (*ServerList, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list servers: %v", err)
+		return nil, err
+	}
+	servers, err := s.State.servers.List(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list servers: %v", err)
 	}
 	if servers == nil {
 		servers = []MCPServer{}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"servers": servers})
+	return &ServerList{Servers: servers}, nil
 }
 
-type createServerReq struct {
-	Name       string `json:"name"`
-	URL        string `json:"url"`
+// CreateServerRequest registers one external MCP server for the caller's org.
+type CreateServerRequest struct {
+	// Name identifies the server, required, at most 128 characters.
+	Name string `json:"name"`
+	// URL is the server endpoint; it is SSRF-validated here and again at connect.
+	URL string `json:"url"`
+	// AuthHeader is the header name the secret is sent in.
 	AuthHeader string `json:"authHeader"`
-	Secret     string `json:"secret"`
+	// Secret is the auth secret VALUE. It is sealed in KMS and never stored in
+	// SQLite nor returned by any read.
+	Secret string `json:"secret"`
 }
 
 // createServer registers an org's external MCP server. The auth secret VALUE is
 // sealed in KMS (per-org ref); SQLite keeps only the URL + header name + a
 // has-secret flag. The URL is SSRF-validated at the boundary; the dialer re-checks
 // at connect time (DNS-rebinding defense).
-func createServer(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+//
+// Example: {"name": "acme-mcp", "url": "https://mcp.acme.com/v1", "authHeader": "Authorization", "secret": "Bearer s3cr3t"}
+func (o ops) createServer(ctx context.Context, in *CreateServerRequest) (*MCPServer, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body createServerReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	name := strings.TrimSpace(in.Name)
+	url := strings.TrimSpace(in.URL)
+	if name == "" || len(name) > maxName {
+		return nil, zip.ErrBadRequest("name is required (<=128 chars)")
 	}
-	body.Name = strings.TrimSpace(body.Name)
-	body.URL = strings.TrimSpace(body.URL)
-	if body.Name == "" || len(body.Name) > maxName {
-		return zip.ErrBadRequest("name is required (<=128 chars)")
+	if len(url) > maxURL {
+		return nil, zip.ErrBadRequest("url too long")
 	}
-	if len(body.URL) > maxURL {
-		return zip.ErrBadRequest("url too long")
+	if err := validateServerURL(url); err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
 	}
-	if err := validateServerURL(body.URL); err != nil {
-		return zip.ErrBadRequest(err.Error())
-	}
-	hasSecret := body.Secret != ""
+	hasSecret := in.Secret != ""
 	if hasSecret && s.State.kms == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "KMS not configured; refusing to store an MCP server secret")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "KMS not configured; refusing to store an MCP server secret")
 	}
-	created, err := s.State.servers.Create(c.Context(), MCPServer{
-		Org: org, Name: body.Name, URL: body.URL, AuthHeader: strings.TrimSpace(body.AuthHeader), HasSecret: hasSecret,
+	created, err := s.State.servers.Create(ctx, MCPServer{
+		Org: org, Name: name, URL: url, AuthHeader: strings.TrimSpace(in.AuthHeader), HasSecret: hasSecret,
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "create server: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "create server: %v", err)
 	}
 	if hasSecret {
-		if err := s.State.kms.PutSecret(c.Context(), authRef(org, created.ID), []byte(body.Secret)); err != nil {
-			_, _ = s.State.servers.Delete(c.Context(), org, created.ID)
-			return zip.Errorf(http.StatusInternalServerError, "seal server secret: %v", err)
+		if err := s.State.kms.PutSecret(ctx, authRef(org, created.ID), []byte(in.Secret)); err != nil {
+			_, _ = s.State.servers.Delete(ctx, org, created.ID)
+			return nil, zip.Errorf(http.StatusInternalServerError, "seal server secret: %v", err)
 		}
 	}
-	audrecord(s, c, org, "server:"+created.ID, "created", http.StatusCreated)
-	return c.JSON(http.StatusCreated, created)
+	audctx(s, ctx, org, "server:"+created.ID, "created", http.StatusCreated)
+	return &created, nil
 }
 
-func deleteServer(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	id := strings.TrimSpace(c.Param("id"))
-	removed, err := s.State.servers.Delete(c.Context(), org, id)
+// ServerRef addresses one of the caller org's registered MCP servers.
+type ServerRef struct {
+	// ID is the server id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// deleteServer removes one of the caller org's external MCP servers and answers
+// 204. A server belonging to another org reads as not found.
+//
+// Example: {"id": "srv_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) deleteServer(ctx context.Context, in *ServerRef) (*struct{}, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete server: %v", err)
+		return nil, err
+	}
+	id := strings.TrimSpace(in.ID)
+	removed, err := s.State.servers.Delete(ctx, org, id)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete server: %v", err)
 	}
 	if !removed {
-		return zip.ErrNotFound("server not found")
+		return nil, zip.ErrNotFound("server not found")
 	}
-	audrecord(s, c, org, "server:"+id, "deleted", http.StatusOK)
-	return c.NoContent(http.StatusNoContent)
+	audctx(s, ctx, org, "server:"+id, "deleted", http.StatusOK)
+	return nil, nil
+}
+
+// tenant resolves the org — the tenant-isolation KEY — that cloud.Bridge carried
+// across the typed seam from the validated IAM owner claim. Never an In field: an
+// In field is what the caller says about itself.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("a validated principal is required")
+	}
+	return org, nil
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────────
@@ -320,6 +402,14 @@ func validToolName(name string) bool {
 func meterUnit(s *cloud.Service[state], c *zip.Ctx) {
 	s.Bill.Meter(principal.Ledger(c), principal.Project(c), meterKind,
 		cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
+}
+
+// audctx is audrecord for a typed op: it takes the request back off the context
+// cloud.Bridge parked it in, and is a no-op off the HTTP path.
+func audctx(s *cloud.Service[state], ctx context.Context, org, resourceID, result string, status int) {
+	if c, ok := cloud.Request(ctx); ok {
+		audrecord(s, c, org, resourceID, result, status)
+	}
 }
 
 // audrecord appends one audit record. Nil recorder → no-op.

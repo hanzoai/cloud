@@ -26,10 +26,41 @@
     },
     "/v1/bot/nodes": {
       "get": {
-        "operationId": "get_v1_bot_nodes",
+        "operationId": "botNodes",
+        "summary": "listNodes returns the caller org's connected nodes.",
+        "description": "listNodes returns the caller org's connected nodes. Only that org's — the org is\nhalf of every key in the table it reads.",
         "tags": [
           "bot"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "nodes": [
+                    {
+                      "caps": [
+                        "system.run"
+                      ],
+                      "commands": [
+                        "system.run"
+                      ],
+                      "connectedAt": "2026-07-26T18:00:00Z",
+                      "displayName": "studio",
+                      "id": "n-1",
+                      "platform": "darwin",
+                      "version": "1.4.0"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BotNodeList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/bot/nodes/{id}/invoke": {
@@ -56,6 +87,61 @@
         "tags": [
           "bot"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BotNode": {
+        "properties": {
+          "caps": {
+            "description": "Caps are the capabilities the node declared at handshake. Never null.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "commands": {
+            "description": "Commands are the command names the node declared it serves. Never null.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "connectedAt": {
+            "description": "ConnectedAt is RFC3339 UTC, when the socket was accepted.",
+            "type": "string"
+          },
+          "displayName": {
+            "description": "DisplayName is the node's self-reported friendly name.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the node id the socket registered under, unique within the org.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is the node's self-reported operating system.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the node agent's self-reported version.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BotNodeList": {
+        "properties": {
+          "nodes": {
+            "description": "Nodes are this org's connected nodes, sorted by id.",
+            "items": {
+              "$ref": "#/components/schemas/BotNode"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

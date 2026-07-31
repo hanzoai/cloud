@@ -3,7 +3,6 @@ package o11y
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -11,22 +10,26 @@ import (
 )
 
 // The scoped logs read serves GET /v1/o11y/logs — a live, org-scoped log stream for
-// a product. Application/infra logs live in the o11y datastore on the SAME
-// datastore datastore server the shared ai/object client already owns, so this
-// reuses datastore.Query (ONE datastore client, ONE KMS-injected cred
-// namespace) rather than opening a second connection.
+// a product. Logs and spans live in the event plane on the SAME warehouse server
+// the shared ai/object client already owns, so this reuses datastore.Query (ONE
+// client, ONE KMS-injected cred namespace) rather than opening a second
+// connection.
 //
 // TWO honest tenant views over ONE store:
 //
 //   - ADMIN (validated SuperAdmin, c.IsAdmin()): the product's raw infra log stream
-//     from o11y_logs.distributed_logs_v2, filtered resources_string['app']=<workload>.
-//     These stdout lines carry NO org label, so ONLY the platform operator may see
-//     them — the Hanzo-staff infra view.
+//     from event.log, filtered service=<workload>. These stdout lines carry no
+//     tenant attribution, so ONLY the platform operator may see them — the
+//     Hanzo-staff infra view.
 //   - EVERY OTHER org: its OWN request log stream, derived from org-tagged spans in
-//     o11y_traces (attributes_string['hanzo.org']=<org>), scoped to the product's
-//     routes/service. A tenant can NEVER see another tenant's rows (org bound as a
-//     positional parameter, never interpolated) and can NEVER see the unattributed
-//     infra stream (that path is gated on admin).
+//     event.span (org=<org>), scoped to the product's routes/service. A tenant can
+//     NEVER see another tenant's rows (org bound as a positional parameter, never
+//     interpolated) and can NEVER see the unattributed infra stream (that path is
+//     gated on admin).
+//
+// org and service are ENVELOPE COLUMNS on both tables and lead both sort keys, so
+// each view is a primary-key seek rather than the map lookup over an untagged
+// index the old schema forced.
 //
 // Every value (app, org, since, cursor, limit) is a BOUND positional parameter —
 // never string-interpolated — so a crafted product/org cannot inject datastore
@@ -100,20 +103,25 @@ func viewFor(admin bool) string {
 	return "request"
 }
 
-// infraLogs reads the product's raw stdout stream from o11y_logs. Admin-only:
+// infraLogs reads the product's raw stdout stream from event.log. Admin-only:
 // these lines are unattributed to any tenant, so the caller has already been gated
 // on admin. app is bound as a positional parameter.
+//
+// `time` is a DateTime64(9), not a raw nanosecond integer, so the cursor is
+// compared through fromUnixTimestamp64Nano and returned through
+// toUnixTimestamp64Nano — the tail contract (a nanosecond cursor in, a nanosecond
+// cursor out) is unchanged; only the column's type is.
 func infraLogs(ctx context.Context, app string, sinceNs int64, windowSec, limit int) ([]logLine, error) {
-	q := "SELECT timestamp, severity_text, body FROM o11y_logs.distributed_logs_v2 WHERE resources_string['app'] = ?"
+	q := "SELECT toUnixTimestamp64Nano(time) AS ts_nano, severity_text, body FROM " + datastore.Log + " WHERE service = ?"
 	args := []any{app}
 	if sinceNs > 0 {
-		q += " AND timestamp > ?"
-		args = append(args, uint64(sinceNs))
+		q += " AND time > fromUnixTimestamp64Nano(?)"
+		args = append(args, sinceNs)
 	} else {
-		q += " AND timestamp > toUnixTimestamp64Nano(now64() - toIntervalSecond(?))"
+		q += " AND time > now64() - toIntervalSecond(?)"
 		args = append(args, windowSec)
 	}
-	q += " ORDER BY timestamp DESC LIMIT ?"
+	q += " ORDER BY time DESC LIMIT ?"
 	args = append(args, uint64(limit))
 
 	rows, err := datastore.Query(ctx, q, args...)
@@ -122,7 +130,7 @@ func infraLogs(ctx context.Context, app string, sinceNs int64, windowSec, limit 
 	}
 	out := make([]logLine, 0, len(rows))
 	for _, r := range rows {
-		ns := asInt64(r["timestamp"])
+		ns := asInt64(r["ts_nano"])
 		out = append(out, logLine{
 			TS:       nsToRFC3339(ns),
 			TSNano:   ns,
@@ -134,27 +142,30 @@ func infraLogs(ctx context.Context, app string, sinceNs int64, windowSec, limit 
 	return out, nil
 }
 
-// requestLogs derives a per-org request log from org-tagged spans in o11y_traces.
+// requestLogs derives a per-org request log from org-tagged spans in event.span.
 // org is bound as a positional parameter (never interpolated) and is the FIRST,
 // mandatory predicate — a tenant sees only its own requests. The product scope is a
-// route prefix (/v1/<product>/…) OR the product's own serviceName (separately
-// deployed products), so it works for both cloud-fused and standalone products.
+// route prefix (/v1/<product>/…) OR the product's own service (separately deployed
+// products), so it works for both cloud-fused and standalone products.
+//
+// path and service are envelope columns; the HTTP status is not, so it stays an
+// attribute lookup, coerced to Int in SQL so the row read gets a number (asInt64
+// on a string yields 0). status is the span's own outcome, a string ('error'),
+// not the numeric status_code of the old index.
 func requestLogs(ctx context.Context, org string, svc service, sinceNs int64, windowSec, limit int) ([]logLine, error) {
 	routePrefix := "/v1/" + svc.ID
-	// response_status_code is LowCardinality(String) in o11y — coerce to Int in SQL
-	// so the row read gets a number (asInt64 on a string yields 0).
-	q := "SELECT timestamp, name, httpRoute, toInt32OrZero(response_status_code) AS http_status, status_code, duration_nano " +
-		"FROM o11y_traces.distributed_o11y_index_v3 WHERE attributes_string['hanzo.org'] = ? " +
-		"AND (httpRoute = ? OR startsWith(httpRoute, ?) OR serviceName = ?)"
+	q := "SELECT time, name, path, toInt32OrZero(attributes['http.response.status_code']) AS http_status, status, duration " +
+		"FROM " + datastore.Span + " WHERE org = ? " +
+		"AND (path = ? OR startsWith(path, ?) OR service = ?)"
 	args := []any{org, routePrefix, routePrefix + "/", svc.App}
 	if sinceNs > 0 {
-		q += " AND toUnixTimestamp64Nano(timestamp) > ?"
-		args = append(args, uint64(sinceNs))
+		q += " AND time > fromUnixTimestamp64Nano(?)"
+		args = append(args, sinceNs)
 	} else {
-		q += " AND timestamp > now64() - toIntervalSecond(?)"
+		q += " AND time > now64() - toIntervalSecond(?)"
 		args = append(args, windowSec)
 	}
-	q += " ORDER BY timestamp DESC LIMIT ?"
+	q += " ORDER BY time DESC LIMIT ?"
 	args = append(args, uint64(limit))
 
 	rows, err := datastore.Query(ctx, q, args...)
@@ -163,18 +174,18 @@ func requestLogs(ctx context.Context, org string, svc service, sinceNs int64, wi
 	}
 	out := make([]logLine, 0, len(rows))
 	for _, r := range rows {
-		ts := asTime(r["timestamp"])
+		ts := asTime(r["time"])
 		httpStatus := asInt64(r["http_status"])
-		spanStatus := asInt64(r["status_code"])
-		durMs := float64(asInt64(r["duration_nano"])) / 1e6
-		route := asString(r["httpRoute"])
+		spanFailed := asString(r["status"]) == datastore.SpanError
+		durMs := float64(asInt64(r["duration"])) / 1e6
+		route := asString(r["path"])
 		if route == "" {
 			route = asString(r["name"])
 		}
 		out = append(out, logLine{
 			TS:       ts.UTC().Format(time.RFC3339),
 			TSNano:   ts.UnixNano(),
-			Severity: severityForStatus(httpStatus, spanStatus),
+			Severity: severityForStatus(httpStatus, spanFailed),
 			Body:     fmt.Sprintf("%s status=%d dur=%.1fms", route, httpStatus, durMs),
 			Source:   "request",
 		})
@@ -184,20 +195,24 @@ func requestLogs(ctx context.Context, org string, svc service, sinceNs int64, wi
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-// boundSinceNs parses the `sinceNs` tail cursor (nanosecond epoch). A malformed or
+// The three bounds below take the DECODED query value. An unparseable query
+// value binds as 0 (zip's typed URL binder leaves a field it cannot convert at
+// its zero value), which lands on exactly the same branch a malformed string
+// took when these parsed the raw query themselves — so `?limit=abc` still reads
+// as "no limit given" and takes the default.
+
+// boundSinceNs bounds the `sinceNs` tail cursor (nanosecond epoch). A missing or
 // negative value is ignored (0) — a fresh tail restarts.
-func boundSinceNs(raw string) int64 {
-	n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
-	if err != nil || n < 0 {
+func boundSinceNs(n int64) int64 {
+	if n < 0 {
 		return 0
 	}
 	return n
 }
 
 // boundWindowSec clamps the client `window` (seconds) to [1, maxLogWindowSec].
-func boundWindowSec(raw string) int {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n <= 0 {
+func boundWindowSec(n int) int {
+	if n <= 0 {
 		return defaultLogWindowSec
 	}
 	if n > maxLogWindowSec {
@@ -207,9 +222,8 @@ func boundWindowSec(raw string) int {
 }
 
 // boundLogLimit clamps the client `limit` to [1, maxLogLimit].
-func boundLogLimit(raw string) int {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n <= 0 {
+func boundLogLimit(n int) int {
+	if n <= 0 {
 		return defaultLogLimit
 	}
 	if n > maxLogLimit {
@@ -226,7 +240,7 @@ func nsToRFC3339(ns int64) string {
 	return time.Unix(0, ns).UTC().Format(time.RFC3339)
 }
 
-// normalizeSeverity uppercases an o11y severity_text, defaulting empty to INFO.
+// normalizeSeverity uppercases a severity_text, defaulting empty to INFO.
 func normalizeSeverity(s string) string {
 	s = strings.ToUpper(strings.TrimSpace(s))
 	if s == "" {
@@ -235,9 +249,10 @@ func normalizeSeverity(s string) string {
 	return s
 }
 
-// severityForStatus maps an HTTP/span status onto a log severity for the request view.
-func severityForStatus(httpStatus, spanStatus int64) string {
-	if httpStatus >= 500 || spanStatus == 2 {
+// severityForStatus maps an HTTP status + the span's own outcome onto a log
+// severity for the request view.
+func severityForStatus(httpStatus int64, spanFailed bool) string {
+	if httpStatus >= 500 || spanFailed {
 		return "ERROR"
 	}
 	if httpStatus >= 400 {

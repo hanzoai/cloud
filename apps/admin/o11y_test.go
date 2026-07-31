@@ -17,6 +17,8 @@ package admin
 import (
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud/apps/datastore"
 )
 
 // TestO11yRange normalizes the enum and defaults to 30d.
@@ -47,14 +49,14 @@ func TestO11ySQL_ReadsCanonicalTables(t *testing.T) {
 		wantQMarks       int
 	}{
 		{"usageTotals", o11yUsageTotalsSQL(), "hanzo.cloud_usage", 1},
-		{"traceTotals", o11yTraceTotalsSQL(), "o11y_traces.distributed_o11y_index_v3", 1},
-		{"logVolume", o11yLogVolumeSQL(), "o11y_logs.distributed_logs_v2", 1},
+		{"traceTotals", o11yTraceTotalsSQL(), datastore.Span, 1},
+		{"logVolume", o11yLogVolumeSQL(), datastore.Log, 1},
 		{"usageSeries", o11yUsageSeriesSQL("1 HOUR"), "hanzo.cloud_usage", 1},
-		{"logSeries", o11yLogSeriesSQL("1 HOUR"), "o11y_logs.distributed_logs_v2", 1},
+		{"logSeries", o11yLogSeriesSQL("1 HOUR"), datastore.Log, 1},
 		{"topOrgs", o11yTopOrgsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", o11yTopModelsSQL(), "hanzo.cloud_usage", 1},
-		{"topServices", o11yTopServicesSQL(), "o11y_traces.distributed_o11y_index_v3", 1},
-		{"llm", o11yLLMSQL(), "o11y_ai.observations", 1},
+		{"topServices", o11yTopServicesSQL(), datastore.Span, 1},
+		{"llm", o11yLLMSQL(), datastore.Span, 1},
 	}
 	for _, c := range cases {
 		if !strings.Contains(c.sql, "FROM "+c.table) {
@@ -89,9 +91,11 @@ func TestO11yTop_LimitAndOrder(t *testing.T) {
 	if !strings.Contains(o11yTopServicesSQL(), "LIMIT 12") {
 		t.Errorf("topServices must limit %d", o11yServiceLimit)
 	}
-	// The LLM lens is scoped to generations only (not spans/events).
-	if !strings.Contains(o11yLLMSQL(), "type = 'GENERATION'") {
-		t.Errorf("llm lens must scope to GENERATION observations; got %q", o11yLLMSQL())
+	// The LLM lens reads the span plane, so it MUST narrow to gen_ai spans — every
+	// other span in the fleet shares that table, and without the predicate the
+	// "generations" count would be the fleet's whole request volume.
+	if !strings.Contains(o11yLLMSQL(), "attributes['"+genAISystem+"'] != ''") {
+		t.Errorf("llm lens must narrow to gen_ai spans; got %q", o11yLLMSQL())
 	}
 }
 

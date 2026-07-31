@@ -46,6 +46,8 @@
 // standalone base pod had with its own PVC.
 package base
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"fmt"
@@ -114,9 +116,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// embed gate AND before the /v1/base/* wildcard, so the liveness probe never
 	// depends on CLOUD_BASE_EMBED and the wildcard never shadows it (same pattern
 	// as clients/plan + clients/pricing).
-	app.Get("/v1/base/health", func(c *zip.Ctx) error {
-		return c.JSON(200, map[string]string{"service": "base", "status": "ok"})
-	})
+	//
+	// It is the ONE route of this subsystem that can be a typed op, and therefore
+	// the only one that reaches the OpenAPI document, the MCP tool list and the
+	// CLI with a shape and a description. Everything else base mounts is a
+	// wildcard forward into another server's router — the waitlist plugin's mux,
+	// a per-org Base engine, the managed orchestrator's collections API — which
+	// has no Go In or Out to declare and a path shape (`*`) a typed op may not
+	// carry at all.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("base.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	zip.Get(zapp, "/v1/base/health", health)
 
 	// Base data-plane forward /v1/collections[/*] → the managed Base orchestrator
 	// (collections.go). Always on, BEFORE the embed gate: the console's Base product
@@ -191,6 +203,24 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		"waitlist", "/v1/waitlist/*", "hosting", "/v1/base/*",
 		"prefix", os.Getenv("BASE_API_PREFIX"), "brand", deps.Brand, "env", deps.Env)
 	return nil
+}
+
+// baseStatus is the base subsystem's liveness answer.
+type baseStatus struct {
+	// Service names the subsystem answering.
+	Service string `json:"service"`
+	// Status is "ok" whenever this route answers.
+	Status string `json:"status"`
+}
+
+// health reports that the base subsystem is mounted and answering. It opens no
+// Base app and reads no store, so it stays true whether or not the per-org
+// hosting lane is switched on — which is what makes it a liveness probe for the
+// binary rather than a readiness probe for the embed.
+//
+// Response: {"service": "base", "status": "ok"}
+func health(ctx context.Context, _ *struct{}) (*baseStatus, error) {
+	return &baseStatus{Service: "base", Status: "ok"}, nil
 }
 
 // publicHostEnv gates host-as-project-ref Base routing (default OFF).

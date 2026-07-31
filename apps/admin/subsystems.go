@@ -22,8 +22,8 @@ package admin
 // needs a label, and there is exactly one: cloud.TracingMiddleware stamps
 // hanzo.subsystem onto the request span it already emits, resolved through
 // cloud.SubsystemOf against the boot-time mount index. Sixty packages stay
-// uninstrumented and NO second metrics path exists — this reads the SAME
-// o11y_traces table, over the SAME datastore client, as the o11y board next door.
+// uninstrumented and NO second metrics path exists — this reads the SAME event
+// plane, over the SAME datastore client, as the o11y board next door.
 //
 // Two halves, deliberately different in kind:
 //
@@ -59,7 +59,7 @@ var errTracesUnconfigured = errors.New("trace warehouse not connected")
 // subsystemAttr is the span attribute cloud.TracingMiddleware stamps — the ONE label
 // that separates the co-resident subsystems. Spelled once here and reused by every
 // query below, so the reader and the writer cannot drift apart on the key.
-const subsystemAttr = "attributes_string['hanzo.subsystem']"
+const subsystemAttr = "attributes['hanzo.subsystem']"
 
 // subsystemBoard is the whole per-subsystem board payload.
 type subsystemBoard struct {
@@ -260,28 +260,35 @@ func round2(f float64) float64 { return float64(int64(f*100+0.5)) / 100 }
 
 // ── SQL builders (static SQL + one positional time bound; unit-tested) ──
 
-// subsystemREDSQL is the per-subsystem rate/errors/duration aggregate.
+// subsystemREDSQL is the per-subsystem rate/errors/duration aggregate, off the
+// span plane — what each subsystem DID and how long it took.
 func subsystemREDSQL() string {
 	return "SELECT " + subsystemAttr + " AS subsystem, " +
 		"count() AS requests, " +
-		"countIf(has_error) AS errors, " +
-		"round(100 * countIf(has_error) / greatest(count(), 1), 3) AS error_rate, " +
-		"round(quantile(0.5)(" + o11yDurationCol + ") / 1e6, 2) AS p50, " +
-		"round(quantile(0.95)(" + o11yDurationCol + ") / 1e6, 2) AS p95, " +
-		"round(quantile(0.99)(" + o11yDurationCol + ") / 1e6, 2) AS p99 " +
-		"FROM " + o11yTraceTable + " WHERE timestamp >= ? AND " + subsystemAttr + " != '' " +
+		"countIf(status = '" + datastore.SpanError + "') AS errors, " +
+		"round(100 * countIf(status = '" + datastore.SpanError + "') / greatest(count(), 1), 3) AS error_rate, " +
+		"round(quantile(0.5)(duration) / 1e6, 2) AS p50, " +
+		"round(quantile(0.95)(duration) / 1e6, 2) AS p95, " +
+		"round(quantile(0.99)(duration) / 1e6, 2) AS p99 " +
+		"FROM " + datastore.Span + " WHERE time >= ? AND " + subsystemAttr + " != '' " +
 		"GROUP BY subsystem"
 }
 
-// subsystemLastErrorSQL is the most recent errored span per subsystem: when, on which
-// route, with what status and message. argMax(…, timestamp) picks the newest row's
-// value in the same pass that max(timestamp) dates it.
+// subsystemLastErrorSQL is the most recent failure per subsystem: when, on which
+// route, with what status and message. argMax(…, time) picks the newest row's
+// value in the same pass that max(time) dates it.
+//
+// It reads the ERROR plane, not the span plane, because what it asks for is what
+// BROKE: a span records that a request failed and how long it took, and event.error
+// records the failure itself — message included. Deriving the message from a span
+// meant carrying a status_message column on every span ever recorded so that a
+// handful of them could be read.
 func subsystemLastErrorSQL() string {
 	return "SELECT " + subsystemAttr + " AS subsystem, " +
-		"max(timestamp) AS at, " +
-		"argMax(attributes_string['http.route'], timestamp) AS route, " +
-		"argMax(response_status_code, timestamp) AS status, " +
-		"argMax(status_message, timestamp) AS message " +
-		"FROM " + o11yTraceTable + " WHERE timestamp >= ? AND has_error AND " + subsystemAttr + " != '' " +
+		"max(time) AS at, " +
+		"argMax(path, time) AS route, " +
+		"argMax(attributes['http.response.status_code'], time) AS status, " +
+		"argMax(message, time) AS message " +
+		"FROM " + datastore.Error + " WHERE time >= ? AND " + subsystemAttr + " != '' " +
 		"GROUP BY subsystem"
 }

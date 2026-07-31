@@ -99,8 +99,8 @@ type CustomersOut struct {
 
 // ── GET /v1/admin/customers — the fleet customer list ────────────────────────
 
-// Customers lists every customer org at a glance, sorted by slug: owner email, plan,
-// suspend status, member count, balance, month-to-date spend and MRR.
+// Customers lists every customer org at a glance, sorted by slug. Each row carries owner
+// email, plan, suspend status, member count, balance, month-to-date spend and MRR.
 //
 // Each row costs one IAM read plus the org's money reads, fanned out under a fixed
 // concurrency ceiling so a large fleet cannot stampede the upstreams. Every read is
@@ -243,10 +243,10 @@ func (o ops) CustomerDetail(ctx context.Context, in *OrgIn) (*CustomerDetailOut,
 
 // ── POST /v1/admin/customers/:org/credit — grant credit ──────────────────────
 
-// GrantCredit issues a staff credit grant to the org named in the path — a comp, refund
-// or promo — through the ONE credit-write path core.ApplyGrant, which validates the
-// amount against the per-grant cap, checks the org exists, moves the money and records
-// the tamper-evident audit row.
+// GrantCredit issues a staff credit grant to the org named in the path. The grant is a
+// comp, refund or promo, written through the ONE credit-write path core.ApplyGrant, which
+// validates the amount against the per-grant cap, checks the org exists, moves the money
+// and records the tamper-evident audit row.
 //
 // The credit lands on the account account.Payer resolves, NOT necessarily the org: name
 // a member of a pooled org and the pool is credited. The receipt echoes the subject so
@@ -306,7 +306,7 @@ type AccessOut struct {
 
 // ── POST /v1/admin/customers/:org/{suspend,reactivate} — access control ──────
 
-// SuspendCustomer cuts off every member of the org: IAM refuses a forbidden user at
+// SuspendCustomer cuts off every member of the org. IAM refuses a forbidden user at
 // login AND at token issuance, so a suspended customer can neither sign in nor mint a
 // fresh token. Fully reversible with ReactivateCustomer.
 //

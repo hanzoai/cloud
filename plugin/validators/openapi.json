@@ -19,28 +19,111 @@
     "/v1/validators": {
       "get": {
         "operationId": "get_v1_validators",
+        "summary": "listValidators returns the caller org's claimed validator slots, each with its",
+        "description": "listValidators returns the caller org's claimed validator slots, each with its\nnode status and its queued registration.",
         "tags": [
           "validators"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlotList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_validators",
+        "summary": "provisionValidator claims a slot: it verifies the signature and on-chain NFT\nownership, generates a luxd staking identity into KMS, writes the node CR and\nENQUEUES an owner-gated registration.",
+        "description": "provisionValidator claims a slot: it verifies the signature and on-chain NFT\nownership, generates a luxd staking identity into KMS, writes the node CR and\nENQUEUES an owner-gated registration. It fails CLOSED at every gate — bad\nsignature, non-owner, non-tier, KMS unavailable — none of which persist a claim\nor leak key material. Re-claiming a slot this org already holds re-applies the\nCR without regenerating keys.",
         "tags": [
           "validators"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "nonce": "deadbeefcafef00d",
+                "signature": "0x1c…",
+                "tokenId": 42
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlotView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/validators/challenge": {
       "get": {
         "operationId": "get_v1_validators_challenge",
+        "summary": "issueChallenge issues a single-use, org-bound nonce and the EXACT message the\ncaller must personal_sign.",
+        "description": "issueChallenge issues a single-use, org-bound nonce and the EXACT message the\ncaller must personal_sign. Binding the nonce to (org, slot) here means a\nsignature can never be replayed for a different org, slot, or session.",
         "tags": [
           "validators"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "tokenId",
+            "in": "query",
+            "required": false,
+            "description": "TokenID is the GenesisNFT id of the slot; it IS the validator slot number.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 42
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Challenge"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/validators/{tokenId}": {
       "get": {
-        "operationId": "get_v1_validators_by_tokenid",
+        "operationId": "get_v1_validators_tokenId",
+        "summary": "getValidator returns one of the caller org's claimed slots.",
+        "description": "getValidator returns one of the caller org's claimed slots. A slot held by\nanother org reads as not found.",
         "tags": [
           "validators"
         ],
@@ -49,11 +132,157 @@
             "name": "tokenId",
             "in": "path",
             "required": true,
+            "description": "TokenID is the GenesisNFT id of the slot; it IS the validator slot number.",
             "schema": {
-              "type": "string"
-            }
+              "type": "integer"
+            },
+            "example": 42
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlotView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Challenge": {
+        "properties": {
+          "expiresAt": {
+            "description": "ExpiresAt is the unix second after which the nonce is refused.",
+            "type": "integer"
+          },
+          "message": {
+            "description": "Message is the exact text the wallet must personal_sign, byte for byte.",
+            "type": "string"
+          },
+          "nonce": {
+            "description": "Nonce is the single-use value bound to (org, slot); claiming burns it.",
+            "type": "string"
+          },
+          "tokenId": {
+            "description": "TokenID echoes the slot the challenge is bound to.",
+            "type": "integer"
+          },
+          "ttlSeconds": {
+            "description": "TTLSeconds is the lifetime the nonce was issued with.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ProvisionRequest": {
+        "properties": {
+          "nonce": {
+            "description": "Nonce is the value issued by GET /v1/validators/challenge. Required.",
+            "type": "string"
+          },
+          "signature": {
+            "description": "Signature is the wallet's personal_sign over the challenge message. Required.",
+            "type": "string"
+          },
+          "tokenId": {
+            "description": "TokenID is the Validator-tier GenesisNFT id being claimed. Required.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RegistrationView": {
+        "properties": {
+          "id": {
+            "description": "ID is the registration id.",
+            "type": "string"
+          },
+          "nodeID": {
+            "description": "NodeID is the node the registration would add.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the queue state; new registrations are pending_owner_approval.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SlotList": {
+        "properties": {
+          "data": {
+            "description": "Data is the page of claimed slots; empty when the org has claimed none.",
+            "items": {
+              "$ref": "#/components/schemas/SlotView"
+            },
+            "type": "array"
+          },
+          "network": {
+            "description": "Network is the network slug new nodes join (mainnet/testnet/devnet/localnet).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SlotView": {
+        "properties": {
+          "blsPubkey": {
+            "description": "BLSPubkey is the node's BLS public key, hex-encoded.",
+            "type": "string"
+          },
+          "crName": {
+            "description": "CRName is the LuxNetwork custom resource written for the node.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is unix seconds, server-assigned at claim time.",
+            "type": "integer"
+          },
+          "namespace": {
+            "description": "Namespace is the cluster namespace the node CR lives in.",
+            "type": "string"
+          },
+          "network": {
+            "description": "Network is the network slug the node syncs.",
+            "type": "string"
+          },
+          "nodeID": {
+            "description": "NodeID is the luxd node identity generated for the slot.",
+            "type": "string"
+          },
+          "nodeStatus": {
+            "description": "NodeStatus is provisioning, node_created or node_pending (no cluster reached).",
+            "type": "string"
+          },
+          "registration": {
+            "$ref": "#/components/schemas/RegistrationView",
+            "description": "Registration is the queued, owner-gated P-Chain registration; absent until enqueued."
+          },
+          "slot": {
+            "description": "Slot is the validator slot number (the same value as tokenId).",
+            "type": "integer"
+          },
+          "tokenId": {
+            "description": "TokenID is the GenesisNFT id that entitles the slot.",
+            "type": "integer"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is unix seconds of the last status change.",
+            "type": "integer"
+          },
+          "wallet": {
+            "description": "Wallet is the lower-cased address that proved ownership of the NFT.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

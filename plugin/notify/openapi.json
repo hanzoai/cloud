@@ -19,9 +19,27 @@
     "/v1/notify/health": {
       "get": {
         "operationId": "get_v1_notify_health",
+        "summary": "health reports that the notify send surface is alive.",
+        "description": "health reports that the notify send surface is alive.\n\nIt is a pure liveness probe, taking no credential and reading no provider.\nThe body mirrors notifyd's own verbatim, so probes that keyed on it keep\nworking unchanged.",
         "tags": [
           "notify"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "service": "notify",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/notifyHealth"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/notify/send": {
@@ -46,6 +64,23 @@
         "tags": [
           "notify"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "notifyHealth": {
+        "properties": {
+          "service": {
+            "description": "Service is always \"notify\" — which subsystem answered.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is always \"ok\": the route answers 200 whenever the process is alive.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

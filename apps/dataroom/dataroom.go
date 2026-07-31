@@ -39,6 +39,8 @@
 // to migrate.
 package dataroom
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"crypto/rand"
@@ -101,9 +103,13 @@ func Mount(app hcloud.Router, deps hcloud.Deps) error {
 
 	// Native /v1/dataroom/health — always answers (HealthOwner), no auth, BEFORE
 	// any fallible setup, so liveness never depends on the bundle/index/storage.
-	app.Get("/v1/dataroom/health", func(c *zip.Ctx) error {
-		return c.JSON(http.StatusOK, map[string]string{"service": "dataroom", "status": "ok"})
-	})
+	// It is the ONE route on this surface whose answer is a Go value, so it is the
+	// one that can be a typed op (see routes for why the rest cannot).
+	z := hcloud.ZipApp(app)
+	if z == nil {
+		return fmt.Errorf("dataroom.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	zip.Get(z, "/v1/dataroom/health", health, zip.WithOperationID("dataroomHealth"))
 
 	host, err := goja.NewBase(goja.BaseConfig{
 		Name:    "dataroom",
@@ -135,7 +141,37 @@ func Mount(app hcloud.Router, deps hcloud.Deps) error {
 	return nil
 }
 
+// Health is the liveness answer: it names the subsystem so a probe that reaches
+// the wrong binary is obvious.
+type Health struct {
+	// Service is always "dataroom".
+	Service string `json:"service"`
+	// Status is always "ok" — the route answers before any fallible setup, so
+	// reaching it IS the liveness signal.
+	Status string `json:"status"`
+}
+
+// health reports that the dataroom surface is serving.
+//
+// It answers before the bundle, the link index and object storage are wired, so
+// liveness never depends on them and a degraded mount still probes green.
+//
+// Response: {"service": "dataroom", "status": "ok"}
+func health(ctx context.Context, _ *struct{}) (*Health, error) {
+	return &Health{Service: "dataroom", Status: "ok"}, nil
+}
+
 // routes wires the /v1/dataroom/* surface onto app.
+//
+// Every route below is a RAW handler and stays one. The domain logic lives in the
+// goja bundle (bundle.js): a handler hands the bundle a route name plus untyped
+// JSON and writes back the bundle's OWN bytes at the bundle's OWN status, which is
+// how a 404 "link not found" or a 400 validation error reaches the caller with the
+// bundle's error body intact. There is no Go type for either side of that — the
+// request body decodes to `any` and the response is never a Go value — so a typed
+// declaration could only be invented, and an invented shape poisons every SDK and
+// MCP client generated from it. The two download routes and the upload route are
+// further out of reach: they carry raw bytes, not JSON.
 func routes(app hcloud.Router, s *hcloud.Service[state]) {
 	g := app.Group("/v1/dataroom")
 	// --- admin surface (validated principal → org) ---------------------------

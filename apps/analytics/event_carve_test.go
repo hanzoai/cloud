@@ -49,7 +49,7 @@ func TestMount_HostCarve_EventDoorIngestsForSiteOrg(t *testing.T) {
 	}
 
 	// The BARE canonical Event wire ({event,distinctId,time,properties}) carries no
-	// `type` field at all, so canonicalType folds it to "event" — a kind the anonymous
+	// `type` field at all, so routeOf folds it to a tracked event — a kind the anonymous
 	// allowlist does not admit. On a site host, where nothing can be vouched for, the
 	// bare wire is therefore always dropped; a beacon that wants to record a pageview
 	// sends the {batch:[…]} envelope, which is exactly what the app's wired injection
@@ -79,7 +79,7 @@ func TestMount_HostCarve_AppBeaconExactBody(t *testing.T) {
 
 // TestMount_HostCarve_EventEmptyBatchOK: an empty beacon batch on the canonical door
 // is an honest 200 (zero counts) BEFORE the datastore is consulted — proving the
-// carve decodes and funnels through the ONE write core with the host-forced org.
+// carve decodes and funnels through the ONE ingest core with the host-forced org.
 func TestMount_HostCarve_EventEmptyBatchOK(t *testing.T) {
 	app := carveApp(t, "hanzo")
 	if code := postHost(t, app, "yadota.hanzo.app", "/v1/event", `{"batch":[]}`, nil); code != http.StatusOK {

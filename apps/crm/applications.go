@@ -75,10 +75,20 @@ func intakeOrg(s *cloud.Service[state]) string {
 	return "hanzo"
 }
 
-// actor returns the validated staff user id for event attribution, or "staff".
-func actor(c *zip.Ctx) string {
-	if u := strings.TrimSpace(c.User()); u != "" {
-		return u
+// actor returns the validated staff user id a stage event is attributed to, or
+// "staff".
+//
+// It is the ONE place crm reaches for the raw request from a typed op, and the
+// reason is that the attributed identity is the USER, not the tenant: the user
+// id lives in the X-User-Id header the identity middleware mints, and
+// principal.OrgFrom carries only the org. Off the HTTP path there is no request
+// and therefore no attested caller, which degrades to the same "staff"
+// attribution an unnamed principal already gets — never to an invented one.
+func actor(ctx context.Context) string {
+	if c, ok := cloud.Request(ctx); ok {
+		if u := strings.TrimSpace(c.User()); u != "" {
+			return u
+		}
 	}
 	return "staff"
 }
@@ -147,8 +157,8 @@ func apply(s *cloud.Service[state], c *zip.Ctx) error {
 		ID: id, Org: org, Company: company, Website: clip(req.Website),
 		ContactName: name, Email: email, Role: clip(req.Role),
 		Stage: StageApplied, Tier1: tier1, Metadata: meta,
-		Screen: ScreenResult{Status: "pending"},
-		Events: []StageEvent{{To: StageApplied, At: now, By: "system", Note: "application received"}},
+		Screen:    ScreenResult{Status: "pending"},
+		Events:    []StageEvent{{To: StageApplied, At: now, By: "system", Note: "application received"}},
 		CreatedAt: now, UpdatedAt: now,
 	}
 	// Best-effort CRM projection so the lead also shows in the standard CRM tabs.
@@ -227,84 +237,118 @@ func buildMetadata(req applyRequest, tier1Matched []string) map[string]any {
 
 // ---- staff read/write ----
 
-func listApplications(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// applicationPage asks for a page of the org's applications, optionally only
+// those at one pipeline stage.
+type applicationPage struct {
+	// Stage returns only the applications at that pipeline stage when set:
+	// applied, screened, qualified, credits-offered, onboarded or rejected.
+	Stage string `json:"stage"`
+	// Limit caps the rows returned: 200 by default, 1000 at most.
+	Limit int `json:"limit"`
+}
+
+// applicationList is a page of the org's Startup Program applications.
+type applicationList struct {
+	// Data is the page of applications, newest first.
+	Data []Application `json:"data"`
+}
+
+// ListApplications returns the org's Startup Program applications, newest first.
+// Each carries its AI screen and its stage history; a stage narrows the page to
+// one pipeline stage.
+func (o ops) listApplications(ctx context.Context, in *applicationPage) (*applicationList, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	stage := strings.TrimSpace(c.Query("stage"))
+	stage := strings.TrimSpace(in.Stage)
 	if stage != "" && !validStages[stage] {
-		return zip.ErrBadRequest("unknown stage")
+		return nil, zip.ErrBadRequest("unknown stage")
 	}
-	rows, err := s.State.store.ListApplications(c.Context(), org, stage, limitOf(c))
+	rows, err := o.s.State.store.ListApplications(ctx, org, stage, limitOf(in.Limit))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	return &applicationList{Data: rows}, nil
 }
 
-func getApplication(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	app, err := s.State.store.GetApplication(c.Context(), org, idParam(c))
+// GetApplication returns one Startup Program application with its AI screen and stage history.
+// An id belonging to another org reads as not found.
+//
+// Example: {"id": "appl_1"}
+func (o ops) getApplication(ctx context.Context, in *ref) (*Application, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "application not found")
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, app)
+	app, err := o.s.State.store.GetApplication(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "application not found")
+	}
+	return &app, nil
 }
 
-// patchApplicationReq is the staff mutation: advance the pipeline stage (with a
+// patchApplicationIn is the staff mutation: advance the pipeline stage (with a
 // required reason when rejecting) and/or attach a note.
-type patchApplicationReq struct {
-	Stage  string `json:"stage"`
+type patchApplicationIn struct {
+	// ID is the application to move, from the path.
+	ID string `json:"id"`
+	// Stage is the stage to move to: applied, screened, qualified,
+	// credits-offered, onboarded or rejected. Omit to leave the stage alone.
+	Stage string `json:"stage"`
+	// Reason records WHY, and is required to reject.
 	Reason string `json:"reason"`
-	Note   string `json:"note"`
+	// Note is a free-text comment recorded on the timeline, with or without a
+	// stage change.
+	Note string `json:"note"`
 }
 
-func patchApplication(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var req patchApplicationReq
-	if err := c.Bind(&req); err != nil {
-		return zip.ErrBadRequest("invalid JSON")
-	}
-	app, err := s.State.store.GetApplication(c.Context(), org, idParam(c))
+// PatchApplication moves one Startup Program application through the pipeline. The
+// move is recorded on the application's timeline, attributed to the calling
+// staff user: it may advance exactly one stage, go back to any earlier stage,
+// reject from any non-rejected stage, or reopen a rejected application to
+// `applied`; anything else is refused. Rejecting requires a reason. A note with
+// no stage change is still recorded.
+//
+// Example: {"id": "appl_1", "stage": "rejected", "reason": "not a fit this round"}
+func (o ops) patchApplication(ctx context.Context, in *patchApplicationIn) (*Application, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "application not found")
+		return nil, err
+	}
+	app, err := o.s.State.store.GetApplication(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "application not found")
 	}
 
-	target := strings.TrimSpace(req.Stage)
+	target := strings.TrimSpace(in.Stage)
 	if target != "" && target != app.Stage {
 		if ok, why := canTransition(app.Stage, target); !ok {
-			return zip.ErrBadRequest("invalid stage transition: " + why)
+			return nil, zip.ErrBadRequest("invalid stage transition: " + why)
 		}
-		if target == StageRejected && strings.TrimSpace(req.Reason) == "" {
-			return zip.ErrBadRequest("reason is required to reject")
+		if target == StageRejected && strings.TrimSpace(in.Reason) == "" {
+			return nil, zip.ErrBadRequest("reason is required to reject")
 		}
 		app.Events = append(app.Events, StageEvent{
 			From: app.Stage, To: target, At: time.Now().Unix(),
-			By: actor(c), Note: clip(req.Note),
+			By: actor(ctx), Note: clip(in.Note),
 		})
 		app.Stage = target
 		if target == StageRejected {
-			app.Reason = clip(req.Reason)
+			app.Reason = clip(in.Reason)
 		}
-	} else if note := clip(req.Note); note != "" {
+	} else if note := clip(in.Note); note != "" {
 		// A note without a stage change is still recorded on the timeline.
 		app.Events = append(app.Events, StageEvent{
-			From: app.Stage, To: app.Stage, At: time.Now().Unix(), By: actor(c), Note: note,
+			From: app.Stage, To: app.Stage, At: time.Now().Unix(), By: actor(ctx), Note: note,
 		})
 	}
 	app.UpdatedAt = time.Now().Unix()
-	saved, uerr := s.State.store.UpdateApplication(c.Context(), app)
+	saved, uerr := o.s.State.store.UpdateApplication(ctx, app)
 	if uerr != nil {
-		return mapErr(uerr, "application not found")
+		return nil, mapErr(uerr, "application not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
 // ---- stage machine ----

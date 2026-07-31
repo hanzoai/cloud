@@ -16,30 +16,33 @@ package billing
 // find it where they already read /v1/billing/usage.
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/link"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
-// usageAccounts serves the caller's per-account routed-usage breakdown.
-func usageAccounts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view billing")
+// usageAccounts breaks the caller's own routed spend down per linked account —
+// requests, tokens and cost cents for each, plus their total. It reports only the
+// caller's own accounts; a deployment without the linked-account plane answers 501
+// rather than a fabricated empty breakdown.
+//
+// Response: {"scope": "user", "source": "routed", "total": {"accounts": 1, "requests": 42, "costCents": 130}, "accounts": [{"account": "anthropic", "requests": 42, "costCents": 130}]}
+func (o ops) usageAccounts(ctx context.Context, _ *noArgs) (*link.AccountsUsage, error) {
+	c, org, err := caller(ctx, "billing")
+	if err != nil {
+		return nil, err
 	}
 	// c.User() is guaranteed non-empty once principal.Org returned ok (Org composes
 	// Validated, which is c.User() != ""). It is the account-scope subject, taken from
 	// the validated principal — never a request field.
-	view, ok := link.RoutedBreakdown(c.Context(), org, c.User())
+	view, ok := link.RoutedBreakdown(ctx, org, c.User())
 	if !ok {
 		// The linked-account plane is not co-resident (a split deploy). Honest
 		// "unavailable" — never a fabricated empty breakdown that reads as "no usage".
-		return zip.Errorf(http.StatusNotImplemented, "per-account usage is not available on this deployment")
+		return nil, zip.Errorf(http.StatusNotImplemented, "per-account usage is not available on this deployment")
 	}
-	c.SetHeader("Content-Type", "application/json")
 	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, view)
+	return &view, nil
 }

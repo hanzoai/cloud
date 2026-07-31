@@ -87,32 +87,28 @@ func purgeEdge(s *cloud.Service[state], ctx context.Context, org string, p *Proj
 	p.LastPurgeAt = time.Now().Unix()
 }
 
-// purge is POST /v1/projects/:slug/purge: a first-class edge cache purge with NO
-// redeploy. It flushes the project's edge cache-tag site-<org>-<slug> and stamps
-// LastPurgeAt, but NEVER writes or deletes the S3 origin — the live build keeps
-// serving from S3; only stale edge copies drop. Org-scoped exactly like deploy: the
-// tenant is the gateway-minted X-Org-Id (403 without one); an unknown (org,slug) is
-// 404. An edge purge miss (unconfigured/failing CF token) is non-fatal — LastPurgeAt
-// is still stamped and the response is 200. Returns the updated Project view so the
-// caller sees the new lastPurgeAt.
-func purge(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+// purge flushes a project's edge cache without redeploying it. The object-store
+// origin is never written or deleted, so the live build keeps serving and only
+// stale edge copies drop; an edge miss is non-fatal and the updated project is
+// returned either way, so the caller sees the new lastPurgeAt.
+// Example: {"slug": "spring-launch"}
+func (o ops) purge(ctx context.Context, in *projectRef) (*siteProject, error) {
+	c, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	purgeEdge(s, c.Context(), org, &p)
+	s := o.s
+	p, err := o.project(ctx, c, org, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+	purgeEdge(s, ctx, org, &p)
 	p.UpdatedAt = time.Now().Unix()
-	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+	if err := s.State.store.UpdateProject(ctx, p); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
-	return c.JSON(http.StatusOK, toProjectView(p))
+	out := toProjectView(p)
+	return &out, nil
 }
 
 // siteURL is the canonical public URL of a deployed site: the pretty bare host
@@ -381,6 +377,10 @@ func readArtifactBody(c *zip.Ctx) ([]byte, error) {
 }
 
 type completeReq struct {
+	// Slug is the project slug from the path.
+	Slug string `json:"slug"`
+	// ID is the queued deployment id from the path.
+	ID      string `json:"id"`
 	Status  string `json:"status"` // live | error
 	Commit  string `json:"commit"`
 	LiveURL string `json:"liveUrl"`
@@ -395,36 +395,33 @@ type completeReq struct {
 	Keys []string `json:"keys,omitempty"`
 }
 
-// completeDeployment is the CI completion hook for the git path: after CI syncs
-// the built site to S3 it flips the queued deployment to live (or error). It is
-// org-scoped like every other route; CI authenticates with an org-scoped token
-// through the gateway, so the X-Org-Id binds the call to the right tenant.
-func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// completeDeployment is the CI completion hook for the git path. After CI syncs the
+// built site to object storage this flips the queued deployment to live or error,
+// and only a live completion is billed; keys is the manifest CI uploaded, and
+// supplying it lets cloud delete what CI replaced.
+//
+// Example: {"slug": "spring-launch", "id": "dep_2f9c1a", "status": "live", "commit": "9f2c1ab", "files": 42, "bytes": 1048576}
+func (o ops) completeDeployment(ctx context.Context, in *completeReq) (*siteDeployment, error) {
+	c, org, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
+	s := o.s
+	p, err := o.project(ctx, c, org, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+	d, err := s.State.store.GetDeployment(ctx, org, p.ID, strings.TrimSpace(in.ID))
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
+		return nil, zip.ErrNotFound("deployment not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
 	}
-	d, err := s.State.store.GetDeployment(c.Context(), org, p.ID, strings.TrimSpace(c.Param("id")))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("deployment not found")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
-	}
-	var body completeReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	status := strings.ToLower(strings.TrimSpace(body.Status))
 	if status != "live" && status != "error" {
-		return zip.ErrBadRequest("status must be live or error")
+		return nil, zip.ErrBadRequest("status must be live or error")
 	}
 	now := time.Now().Unix()
 	d.Status = status
@@ -438,7 +435,7 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 		// Claim the host first, so the git/CI path reports the URL it OWNS — the
 		// same rule publishSite follows. A CI-supplied LiveURL is a hint only: it
 		// cannot assert a subdomain another tenant holds.
-		live, note := onPublish(s, c.Context(), org, &p)
+		live, note := onPublish(s, ctx, org, &p)
 		if live != "" {
 			if hint := strings.TrimSpace(body.LiveURL); hint != "" {
 				live = hint
@@ -448,8 +445,8 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		d.LiveURL = live
 	}
-	if err := s.State.store.UpdateDeployment(c.Context(), d); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "update deployment: %v", err)
+	if err := s.State.store.UpdateDeployment(ctx, d); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "update deployment: %v", err)
 	}
 
 	// Reconcile the prefix against what CI says it uploaded, so a deleted page
@@ -466,7 +463,7 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		if cli, cErr := s.State.blob.client(); cErr != nil {
 			s.Log.Warn("reconcile skipped (no s3 client)", "slug", p.Slug, "err", cErr)
-		} else if removed, rErr := reconcilePrefix(c.Context(), cli, d.Bucket, d.Prefix, keep); rErr != nil {
+		} else if removed, rErr := reconcilePrefix(ctx, cli, d.Bucket, d.Prefix, keep); rErr != nil {
 			s.Log.Warn("reconcile failed (new content is live; stale files remain)", "slug", p.Slug, "err", rErr)
 		} else if removed > 0 {
 			s.Log.Info("reconciled site prefix", "slug", p.Slug, "prefix", d.Prefix, "removed", removed)
@@ -483,19 +480,20 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	} else {
 		p.Status = "error"
 	}
-	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "update project: %v", err)
+	if err := s.State.store.UpdateProject(ctx, p); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "update project: %v", err)
 	}
 	if status == "live" {
-		emitProjectLifecycle(c.Context(), cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+d.LiveURL+")")
+		emitProjectLifecycle(ctx, cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+d.LiveURL+")")
 		// Bill the git/CI path HERE — this is where the deploy actually goes live. The
 		// enqueue (deployGit, via deploy's gate) already passed the gate; a "live"
 		// completion is the one billable success, an "error" completion bills nothing.
 		meterDeploy(s, c, cloud.ResourceFeeCents(deployFeeEnvPrefix, deployKind))
 	} else {
-		emitProjectLifecycle(c.Context(), cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+nonEmptyStr(d.Message, "deploy failed"))
+		emitProjectLifecycle(ctx, cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+nonEmptyStr(d.Message, "deploy failed"))
 	}
-	return c.JSON(http.StatusOK, toDeploymentView(d))
+	out := toDeploymentView(d)
+	return &out, nil
 }
 
 // nonEmptyStr returns s trimmed, or fallback when blank.
@@ -506,49 +504,63 @@ func nonEmptyStr(s, fallback string) string {
 	return s
 }
 
-func listDeployments(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+// deploymentList is a project's deployment history — a bare array, newest first.
+type deploymentList = []siteDeployment
+
+// listDeployments lists one project's deployments, newest first. Each row carries
+// the version, status, source and the live URL that deployment produced.
+//
+// Example: {"slug": "spring-launch"}
+func (o ops) listDeployments(ctx context.Context, in *projectRef) (*deploymentList, error) {
+	c, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	rows, err := s.State.store.ListDeployments(c.Context(), org, p.ID)
+	p, err := o.project(ctx, c, org, in.Slug)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
+		return nil, err
 	}
-	out := make([]deploymentView, 0, len(rows))
+	rows, err := o.s.State.store.ListDeployments(ctx, org, p.ID)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
+	}
+	out := make(deploymentList, 0, len(rows))
 	for _, d := range rows {
 		out = append(out, toDeploymentView(d))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
-func getDeployment(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// deploymentRef addresses one deployment of one project.
+type deploymentRef struct {
+	// Slug is the project slug from the path.
+	Slug string `json:"slug"`
+	// ID is the deployment id from the path.
+	ID string `json:"id"`
+}
+
+// getDeployment reads one deployment of one project: its version, status, source
+// commit, byte and file counts, and the URL it went live at.
+//
+// Example: {"slug": "spring-launch", "id": "dep_2f9c1a"}
+func (o ops) getDeployment(ctx context.Context, in *deploymentRef) (*siteDeployment, error) {
+	c, org, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
+	p, err := o.project(ctx, c, org, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+	d, err := o.s.State.store.GetDeployment(ctx, org, p.ID, strings.TrimSpace(in.ID))
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
+		return nil, zip.ErrNotFound("deployment not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
 	}
-	d, err := s.State.store.GetDeployment(c.Context(), org, p.ID, strings.TrimSpace(c.Param("id")))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("deployment not found")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
-	}
-	return c.JSON(http.StatusOK, toDeploymentView(d))
+	out := toDeploymentView(d)
+	return &out, nil
 }
 
 // genID returns "<prefix>_<22-char-url-safe-token>" (96 bits of entropy).

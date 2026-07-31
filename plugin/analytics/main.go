@@ -20,6 +20,7 @@ func main() {
 		Name:       "analytics",
 		Price:      cloud.Free,
 		Mount:      analytics.Mount,
+		Shutdown:   analytics.Shutdown,
 		OwnsHealth: true,
 	}}, []string{"analytics"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

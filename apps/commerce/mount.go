@@ -146,6 +146,33 @@ func commerceMasterKey(master []byte, lg log.Logger) []byte {
 	return nil
 }
 
+// noArgs is the input of an op that takes nothing.
+type noArgs struct{}
+
+// healthView is the GET /_/commerce/healthz response.
+type healthView struct {
+	// Status is "ok" whenever the route answers; it is registered before the embed
+	// boots, so it stays true while the money plane is still coming up.
+	Status string `json:"status"`
+	// Service names which subsystem answered, so a shadowing route is visible.
+	Service string `json:"service"`
+}
+
+// health reports that the commerce surface is mounted and answering. It is
+// registered before the embed boots and touches no store, so a probe still gets
+// an answer while the money plane is degraded — read /v1/health for that verdict.
+//
+// Response: {"status": "ok", "service": "commerce"}
+func health(context.Context, *noArgs) (*healthView, error) {
+	return &healthView{Status: "ok", Service: "commerce"}, nil
+}
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, the ONLY way prose reaches the published document, the MCP tool
+// list and the CLI help — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // Mount boots commerce ON the shared zip app (native co-residence).
 // commerce's own setupRoutes registers /v1/commerce/* and /_/commerce/*
 // directly; the standalone-only surfaces (bare /healthz, legacy /admin SPA,
@@ -177,9 +204,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	// Native zip health endpoint — registered FIRST so probes answer even when
 	// the embed fails below.
-	app.Get("/_/commerce/healthz", func(c *zip.Ctx) error {
-		return c.JSON(http.StatusOK, map[string]string{"status": "ok", "service": "commerce"})
-	})
+	//
+	// It is the ONE op on this surface this repo can describe. Every other route
+	// under Prefixes is registered by the hanzoai/commerce module itself (its
+	// setupRoutes, store.Route, catalogapi/planapi.AdminRoute and the
+	// commercebilling handlers below), so its request and response shapes are that
+	// module's to declare — naming them from here would be guessing at another
+	// module's wire, which is worse than leaving them undeclared.
+	zip.Get(app, "/_/commerce/healthz", health)
 
 	// commerce persists its per-org SQLite + `base` tree under <DataDir>/commerce,
 	// NEVER at DataDir directly: cloud already owns DataDir/orgs and DataDir/base,

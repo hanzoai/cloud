@@ -17,8 +17,8 @@
 //
 // A logged-out visitor on a marketing surface, and a visitor on a customer's published
 // site, carry no bearer and no key, so eventTenant resolves nothing. This file is the
-// lane such a request falls through to, so a pageview or a browser error from a
-// logged-out page lands in the warehouse instead of being refused.
+// lane such a request falls through to, so a page view or a browser error from a
+// logged-out page lands on the plane instead of being refused.
 //
 // Anonymous input is attested by nobody. It is therefore admitted under a policy the
 // vouched-for lane never applies, and the two lanes are SEPARATE FUNCTIONS rather
@@ -29,7 +29,7 @@
 // and the pure decision (admitPublic).
 //
 //   - CAPABILITY is decided by TRUST LEVEL, not by door. There is exactly one caller
-//     shape for this lane and no way to reach the write core at full capability
+//     shape for this lane and no way to reach the ingest core at full capability
 //     without a credential: the functions that used to take an org and write
 //     unprojected (ingestBody / eventWithOrg / captureWithOrg / insightsWithOrg) are
 //     gone, so a door that resolved a tenant from a request Host has nowhere else to
@@ -41,26 +41,26 @@
 //     publicTenant (the compile-time constant every /v1 door passes) and the resolved
 //     Site's org on a published-site host, which is the SAME host-derived tenant the
 //     file plane and the Base carve already serve that host's bytes under.
-//   - KIND is an ALLOWLIST of two — pageview and error, what a marketing surface and a
-//     published site emit. `identify` and `group` (which name a person and a group)
-//     and every custom event — the whole commerce/billing/metering surface — are
-//     dropped, counted in the honest receipt, never stored.
-//   - NAME is server-chosen FROM the kind ($pageview | $error), so the anonymous name
-//     space is closed to two values: an anonymous caller can introduce neither a new
-//     name into the read lenses nor unbounded cardinality into the table's ORDER BY
-//     key.
+//   - ROUTE is an ALLOWLIST of two — a page view and an error, what a marketing surface
+//     and a published site emit. `identify` and `group` (which name a person and a
+//     group), every custom event — the whole commerce/billing/metering surface — and a
+//     service's own log/span/metric telemetry are dropped, counted in the honest
+//     receipt, never stored.
+//   - NAME is server-chosen FROM the route (page_viewed | the exception class), so the
+//     anonymous name space is closed: an anonymous caller can introduce neither a new
+//     name into the read lenses nor unbounded cardinality into a table's ORDER BY key.
 //   - FIELDS are a PROJECTION, not a filter: admitPublic builds a fresh CaptureEvent
 //     from the fields it names, so a field it does not name — personId, groupId,
 //     revenue, productId, quantity, currency, refCode, channel, signupWeek, and the
-//     entire client property bag — cannot reach the row. The only properties an
-//     anonymous row carries are the server-folded $exception and the write core's
-//     $source.
+//     entire client property bag — cannot reach the fact. The only properties an
+//     anonymous fact carries is the ingest core's `source` attribute; a typed error
+//     becomes event.error's own columns, which the caller cannot influence either.
 //   - BYTES and COUNT are bounded first, and REFUSED rather than truncated.
 //   - RATE is capped per client IP and, independently, per socket peer.
 //   - DNT / Sec-GPC on the wire is honored: nothing is stored and the receipt says so.
 //
-// Everything admitted here flows through the SAME ONE write core (ingestEvents) into
-// the SAME hanzo.events table. One write path; this file only decides what a caller
+// Everything admitted here flows through the SAME ONE ingest core (ingestEvents) into
+// the SAME event plane. One write path; this file only decides what a caller
 // nobody vouched for may put on it.
 package analytics
 
@@ -79,7 +79,7 @@ import (
 // The '$' prefix is load-bearing: an IAM org slug is lowercase ASCII alphanumerics and
 // '-' (the IAM slugifier emits nothing else), so this value lies outside the org
 // namespace and cannot collide with a real tenant. It is also the reason the anonymous
-// stream is legible: on an API host a row's tenant_id alone says whether IAM vouched
+// stream is legible: on an API host a row's org alone says whether IAM vouched
 // for it.
 //
 // It is a CONSTANT and not a fallback: nothing derives it from the request. The one
@@ -98,12 +98,22 @@ const (
 	maxPublicBatch = 50
 )
 
-// publicKinds is the ALLOWLIST of canonical kinds (canonicalType's closed set) an
-// anonymous caller may store. A kind absent here is dropped: `identify` and `group`
-// bind an event to a named person and a named group, and a bare `event` is the whole
-// custom product/billing/metering surface — none of which a caller nobody vouched for
-// may write. Adding a kind here is the ONLY way to widen the anonymous surface.
-var publicKinds = map[string]bool{"pageview": true, "error": true}
+// publicRoutes is the ALLOWLIST of ROUTES (routeOf's closed set, fact.go) an anonymous
+// caller may store — a page view and an error, which is what a marketing surface and a
+// published site emit. A route absent here is dropped:
+//
+//   - identify and group bind an event to a NAMED person and a NAMED group;
+//   - a tracked event is the whole custom product/billing/metering surface;
+//   - log, span and metric are a service's own internal telemetry, and an unattested
+//     caller may not inject into a tenant's traces or its metric series.
+//
+// Adding an entry here is the ONLY way to widen the anonymous surface. It is keyed on
+// the ROUTE and not on a bare kind so widening it cannot accidentally admit a whole
+// signal: {signalEvent, kindPage} is one cell, not "anything called page".
+var publicRoutes = map[route]bool{
+	{signal: signalEvent, kind: kindPage}: true,
+	{signal: signalError}:                 true,
+}
 
 // publicRateWindow, publicRateLimit and publicPeerRateLimit cap anonymous ingest.
 // TWO independent buckets, because neither key alone suffices:
@@ -235,23 +245,29 @@ func optedOut(c *zip.Ctx) bool {
 // returned for the request's host.
 //
 // Each admitted event is REBUILT from the allowlisted fields rather than edited, so a
-// field this function does not name cannot reach the row. The stored name comes from
-// the kind (resolveEventName maps the empty name to $pageview / $error). Properties are
-// left nil: the shared tail (ingestDecoded) folds the typed error into
-// properties.$exception and the write core stamps $source, so an anonymous row's
-// properties hold exactly what the SERVER put there and nothing the caller sent.
+// field this function does not name cannot reach the fact. The stored name comes from
+// the ROUTE (resolveName maps the empty name to page_viewed, or to the exception's own
+// class). Properties are left nil, so an anonymous fact's attributes hold exactly what
+// the SERVER put there — the ingest core's `source` — and nothing the caller sent. The
+// typed error survives, but only as event.error's own columns, which the projection
+// controls just as tightly.
 func admitPublic(evs []CaptureEvent) ([]CaptureEvent, int) {
 	out := make([]CaptureEvent, 0, len(evs))
 	dropped := 0
 	for _, e := range evs {
-		kind := canonicalType(e.Type)
-		if !publicKinds[kind] {
+		r := routeOf(e)
+		if !publicRoutes[r] {
 			dropped++
 			continue
 		}
+		// Rebuilt from the route, NOT from e.Type: the projection restates the wire in
+		// the closed vocabulary the allowlist just approved, so a spelling that routed
+		// to an admitted cell cannot carry anything else along with it. Kind is left to
+		// the route's own default for the same reason — e.Kind is a caller field, and
+		// an anonymous caller does not get to set a column.
 		out = append(out, CaptureEvent{
 			MessageID:   e.MessageID,
-			Type:        kind,
+			Type:        r.spell(),
 			Timestamp:   e.Timestamp,
 			DistinctID:  e.DistinctID,
 			AnonymousID: e.AnonymousID,
@@ -293,7 +309,7 @@ func attribute(evs []CaptureEvent, subject string) []CaptureEvent {
 
 // publicIngest answers a CREDENTIAL-LESS POST on any door: the request-scoped gates
 // (capture flag, rate, size, opt-out) then the pure decision (admitPublic) then the ONE
-// write core. dec is the door's wire; source stays the door's origin tag.
+// ingest core. dec is the door's wire; source stays the door's origin tag.
 //
 // org is where this lane's PROJECTED rows land, and it is the caller's ONLY influence
 // over the outcome. It is always a server-side value — publicTenant from handle, or a

@@ -19,38 +19,175 @@
     "/v1/flags": {
       "post": {
         "operationId": "post_v1_flags",
+        "summary": "evaluate resolves every one of the caller's flags for one identity and returns\neach flag's value plus its payload.",
+        "description": "evaluate resolves every one of the caller's flags for one identity and returns\neach flag's value plus its payload. Evaluation is in-process over the org's own\nstored definitions — no flag is fetched and nothing is recorded.",
         "tags": [
           "flags"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "distinct_id": "u_1",
+                "person_properties": {
+                  "plan": "pro"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/flagContext"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "errorsWhileComputingFlags": false,
+                  "featureFlagPayloads": {
+                    "checkout-exp": {
+                      "cta": "buy"
+                    }
+                  },
+                  "featureFlags": {
+                    "checkout-exp": "treatment"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/flagVerdicts"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/flags/activity": {
       "get": {
         "operationId": "get_v1_flags_activity",
+        "summary": "listActivity returns the definition change log for the caller's org and",
+        "description": "listActivity returns the definition change log for the caller's org and\nproject — who created, updated or deleted which flag, and when.",
         "tags": [
           "flags"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the entries returned; 0 or out of range means 100, and nothing\nabove 500 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "action": "deleted",
+                      "actor": "z@hanzo.ai",
+                      "at": "2026-01-01T00:00:00Z",
+                      "id": 3,
+                      "key": "checkout-exp"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/flagActivity"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/flags/decide": {
       "post": {
         "operationId": "post_v1_flags_decide",
+        "summary": "decide is the PostHog /decide spelling of evaluate.",
+        "description": "decide is the PostHog /decide spelling of evaluate. Same input, same answer —\nit exists so an SDK pointed at PostHog's path keeps working unchanged.",
         "tags": [
           "flags"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "distinct_id": "u_1",
+                "person_properties": {
+                  "plan": "pro"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/flagContext"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/flagVerdicts"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/flags/defs": {
       "get": {
         "operationId": "get_v1_flags_defs",
+        "summary": "listDefs returns every flag definition stored for the caller's org and",
+        "description": "listDefs returns every flag definition stored for the caller's org and\nproject, each with its version and who last changed it.",
         "tags": [
           "flags"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "definition": {
+                        "active": true
+                      },
+                      "key": "checkout-exp",
+                      "updated_at": "2026-01-01T00:00:00Z",
+                      "updated_by": "z@hanzo.ai",
+                      "version": 2
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/flagDefs"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/flags/defs/{key}": {
       "delete": {
-        "operationId": "delete_v1_flags_defs_by_key",
+        "operationId": "delete_v1_flags_defs_key",
+        "summary": "deleteDef removes one flag definition.",
+        "description": "deleteDef removes one flag definition. The flag stops being evaluated; nothing\nthat already read it is rolled back, and the removal is recorded in the\nactivity log.",
         "tags": [
           "flags"
         ],
@@ -59,14 +196,33 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the flag key from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "checkout-exp"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "deleted": "checkout-exp"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/flagDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_flags_defs_by_key",
+        "operationId": "get_v1_flags_defs_key",
+        "summary": "getDef returns one flag's stored definition, its version and who last changed\nit.",
+        "description": "getDef returns one flag's stored definition, its version and who last changed\nit. A key with no definition is a 404, not an empty flag.",
         "tags": [
           "flags"
         ],
@@ -75,11 +231,25 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the flag key from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "checkout-exp"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefRow"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_flags_defs_by_key",
@@ -101,9 +271,178 @@
     "/v1/flags/health": {
       "get": {
         "operationId": "get_v1_flags_health",
+        "summary": "health reports that the flag plane is serving and names the evaluator behind\nit.",
+        "description": "health reports that the flag plane is serving and names the evaluator behind\nit. It opens no store, so it answers whether or not the caller's definitions\ncan be read.",
         "tags": [
           "flags"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "engine": "hanzo-flags",
+                  "ok": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/flagHealth"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActivityRow": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DefRow": {
+        "properties": {
+          "definition": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "key": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "flagActivity": {
+        "properties": {
+          "data": {
+            "description": "Data is the change entries, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/ActivityRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "flagContext": {
+        "properties": {
+          "distinct_id": {
+            "description": "DistinctID is the identity the flags are evaluated for. Required.",
+            "type": "string"
+          },
+          "groups": {
+            "description": "Groups are the group-level contexts keyed by group-type index, each\n{\"key\": ..., \"properties\": {...}}.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "person_properties": {
+            "description": "PersonProperties are the person-level properties the filters read, as an\narbitrary JSON object.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "distinct_id"
+        ],
+        "type": "object"
+      },
+      "flagDefs": {
+        "properties": {
+          "data": {
+            "description": "Data is every definition in the caller's project, ordered by key.",
+            "items": {
+              "$ref": "#/components/schemas/DefRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "flagDeleted": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is the key that no longer has a definition.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "flagHealth": {
+        "properties": {
+          "engine": {
+            "description": "Engine names the evaluator this binary resolves flags with.",
+            "type": "string"
+          },
+          "ok": {
+            "description": "OK is true whenever this route answers.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "flagVerdicts": {
+        "properties": {
+          "errorsWhileComputingFlags": {
+            "description": "ErrorsWhileComputingFlags is true when a definition could not be evaluated.",
+            "type": "boolean"
+          },
+          "featureFlagPayloads": {
+            "additionalProperties": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "description": "FeatureFlagPayloads maps flag key to the payload attached to the value it\nresolved to.",
+            "type": "object"
+          },
+          "featureFlags": {
+            "additionalProperties": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "description": "FeatureFlags maps flag key to its value — true, false, or a variant name.",
+            "type": "object"
+          }
+        },
+        "type": "object"
       }
     }
   }

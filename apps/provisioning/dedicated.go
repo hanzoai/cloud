@@ -327,12 +327,12 @@ func dedicatedSize(kind string) string {
 // name validated, billing gated, (org,kind,name) dedup checked). When instance
 // is non-empty the assembled DSN is also projected as <KIND>_URL into that app
 // instance's addons Secret, switching it off Base onto this backend.
-func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, kind, org, name string, e engine, fee int64, instance string) error {
+func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, kind, org, name string, e engine, fee int64, instance string) (*createResp, error) {
 	if s.State.orch == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "dedicated provisioning unavailable: no cluster client")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "dedicated provisioning unavailable: no cluster client")
 	}
 	if err := s.State.orch.Ready(); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "dedicated provisioning unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "dedicated provisioning unavailable: %v", err)
 	}
 
 	ns := tenantNamespace(org)
@@ -342,28 +342,28 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 	// Global (cross-org) uniqueness guard on the instance identity — fail closed
 	// BEFORE touching the cluster (mirrors the shared path's PhysicalExists).
 	if exists, err := s.State.store.PhysicalExists(ctx, inst); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	} else if exists {
-		return zip.ErrConflict("resource already exists")
+		return nil, zip.ErrConflict("resource already exists")
 	}
 
 	// Ensure the tenant namespace + wait for the operator to grant cloud-api
 	// create access in it. Honest retryable 503 while the grant is still landing.
 	if err := s.State.orch.EnsureTenant(ctx, ns, org); err != nil {
 		if errors.Is(err, errTenantProvisioning) {
-			return zip.Errorf(http.StatusServiceUnavailable, "tenant still provisioning, retry")
+			return nil, zip.Errorf(http.StatusServiceUnavailable, "tenant still provisioning, retry")
 		}
 		s.Log.Error("ensure tenant failed", "kind", kind, "org", org, "ns", ns, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "ensure tenant: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "ensure tenant: %v", err)
 	}
 
 	pw, err := genToken(24)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	id, err := genID()
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	user := e.adminUser
 	if user == "" {
@@ -379,7 +379,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 	if s.State.sec.Enabled() {
 		if err := s.State.sec.Put(secretRef, []byte(pw)); err != nil {
 			s.Log.Error("kms put failed", "kind", kind, "err", err)
-			return zip.Errorf(http.StatusInternalServerError, "store secret failed")
+			return nil, zip.Errorf(http.StatusInternalServerError, "store secret failed")
 		}
 		storedRef = secretRef
 	} else {
@@ -394,7 +394,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 			_ = s.State.sec.Delete(storedRef)
 		}
 		s.Log.Error("project admin secret failed", "kind", kind, "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "project admin secret: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "project admin secret: %v", err)
 	}
 	size := dedicatedSize(kind)
 	crObj := datastoreCR(ns, org, inst, id, kind, e, size, os.Getenv("CLOUD_DEDICATED_STORAGE_CLASS"), secretName, env("CLOUD_DEDICATED_PULL_SECRET", "ghcr-pull"))
@@ -404,7 +404,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 			_ = s.State.sec.Delete(storedRef)
 		}
 		s.Log.Error("launch instance failed", "kind", kind, "org", org, "inst", inst, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "launch instance: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "launch instance: %v", err)
 	}
 
 	host := fmt.Sprintf("%s.%s.svc", inst, ns)
@@ -423,9 +423,9 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 			_ = s.State.sec.Delete(storedRef)
 		}
 		if errors.Is(err, errConflict) {
-			return zip.ErrConflict("resource already exists")
+			return nil, zip.ErrConflict("resource already exists")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
 
 	// Instance binding (no-op when not instance-bound): project the DSN as
@@ -450,7 +450,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 			_ = s.State.sec.Delete(storedRef)
 		}
 		s.Log.Error("inject addon url failed; rolled back provision", "kind", kind, "org", org, "instance", instance, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "wire instance: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "wire instance: %v", err)
 	}
 
 	// The instance is launching + persisted + wired — attribute the provision to
@@ -458,11 +458,11 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 	// the instance. The recurring footprint meter charges ongoing GB-time.
 	meterProvision(s, org, kind, size, fee, c.RequestID(), cloud.ClientIP(c))
 
-	return c.JSON(http.StatusCreated, createResp{
+	return &createResp{
 		ID: id, Kind: kind, Name: name, Status: statusProvisioning,
 		Host: host, Port: e.clientPort, Username: user, Database: db,
 		ConnectionString: dsn, Password: pw,
-	})
+	}, nil
 }
 
 // reconcileDedicated advances a "provisioning" row to "ready" when the operator

@@ -19,36 +19,161 @@
     "/v1/prompts": {
       "get": {
         "operationId": "get_v1_prompts",
+        "summary": "list lists the caller's org's prompts as metadata.",
+        "description": "list lists the caller's org's prompts as metadata. Name, type, taxonomy and the\nversion numbers on record are returned; content is not returned in bulk, so read\none prompt for that.",
         "tags": [
           "prompts"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "labels": [
+                        "production"
+                      ],
+                      "lastUpdatedAt": "2026-07-29T11:00:00Z",
+                      "name": "triage",
+                      "tags": [
+                        "support"
+                      ],
+                      "type": "chat",
+                      "versions": [
+                        1,
+                        2
+                      ]
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/promptList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_prompts",
+        "summary": "create saves a prompt in the caller's org and returns it with its full history.",
+        "description": "create saves a prompt in the caller's org and returns it with its full history.\nA name that already exists appends a new version and advances the current one,\nso create is the ONE write verb — there is no separate update.",
         "tags": [
           "prompts"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "labels": [
+                  "production"
+                ],
+                "name": "triage",
+                "prompt": "Classify the ticket: {{body}}",
+                "tags": [
+                  "support"
+                ],
+                "type": "chat"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createPromptReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/promptDetail"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/prompts/catalog": {
       "get": {
         "operationId": "get_v1_prompts_catalog",
+        "summary": "catalog lists the vendored Hanzo starter prompt library.",
+        "description": "catalog lists the vendored Hanzo starter prompt library. It is READ-ONLY\nreference content, identical for every caller and never an org's own data;\nimporting a starter is an ordinary create.",
         "tags": [
           "prompts"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "labels": [
+                        "starter"
+                      ],
+                      "name": "summarize",
+                      "prompt": "Summarize the following: {{input}}",
+                      "tags": [
+                        "writing"
+                      ],
+                      "type": "text"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/catalogOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/prompts/metrics": {
       "get": {
         "operationId": "get_v1_prompts_metrics",
+        "summary": "metrics reports one real statistics row per prompt in the caller's org.",
+        "description": "metrics reports one real statistics row per prompt in the caller's org. Version\ncount, current version and timestamps are all read from the store — nothing here\nis fabricated, and a prompt with no history reports the history it has.",
         "tags": [
           "prompts"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "createdAt": "2026-07-01T09:00:00Z",
+                      "currentVersion": 2,
+                      "lastUpdatedAt": "2026-07-29T11:00:00Z",
+                      "name": "triage",
+                      "type": "chat",
+                      "versions": 2
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/metricsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/prompts/{name}": {
       "delete": {
-        "operationId": "delete_v1_prompts_by_name",
+        "operationId": "delete_v1_prompts_name",
+        "summary": "del deletes one prompt of the caller's org, with its whole version history.",
+        "description": "del deletes one prompt of the caller's org, with its whole version history.\nA name in another org is reported not-found, never deleted.",
         "tags": [
           "prompts"
         ],
@@ -57,14 +182,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the prompt name from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "triage"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_prompts_by_name",
+        "operationId": "get_v1_prompts_name",
+        "summary": "get reads one prompt of the caller's org.",
+        "description": "get reads one prompt of the caller's org. It returns the current content plus the\nmetadata of every revision on record, and a name in another org is not-found.",
         "tags": [
           "prompts"
         ],
@@ -73,11 +207,232 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the prompt name from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "triage"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/promptDetail"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "catalogOut": {
+        "properties": {
+          "data": {
+            "description": "Data is the vendored starter prompts, each importable verbatim via create.",
+            "items": {
+              "$ref": "#/components/schemas/starterPrompt"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "createPromptReq": {
+        "properties": {
+          "labels": {
+            "description": "Labels are free-form taxonomy strings; trimmed, de-duplicated, capped at 32.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the org-unique handle AND the URL segment a later GET addresses.\nMust match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ and not be a reserved name.",
+            "type": "string"
+          },
+          "prompt": {
+            "description": "Prompt is the template content, at most 64KiB.",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Tags are free-form taxonomy strings; trimmed, de-duplicated, capped at 32.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "description": "Type is the prompt kind, e.g. text or chat; empty defaults to text.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "metricRow": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "currentVersion": {
+            "type": "integer"
+          },
+          "lastUpdatedAt": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "versions": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "metricsOut": {
+        "properties": {
+          "data": {
+            "description": "Data is one statistics row per prompt in the caller's org.",
+            "items": {
+              "$ref": "#/components/schemas/metricRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "promptDetail": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "lastUpdatedAt": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "versionHistory": {
+            "items": {
+              "$ref": "#/components/schemas/promptVersion"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "promptList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per prompt in the caller's org, with its version numbers.",
+            "items": {
+              "$ref": "#/components/schemas/promptMeta"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "promptMeta": {
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "lastUpdatedAt": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "promptVersion": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "starterPrompt": {
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

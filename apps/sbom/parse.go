@@ -51,12 +51,22 @@ type SbomComponent struct {
 // SbomIngest is the POST /v1/sbom body from CI: the image identity + a raw
 // CycloneDX document whose components[] we flatten and persist.
 type SbomIngest struct {
-	ImageDigest string          `json:"imageDigest"`
-	ImageRef    string          `json:"imageRef"`
-	SourceRepo  string          `json:"sourceRepo"`
-	GitSha      string          `json:"gitSha"`
-	Format      string          `json:"format"`
-	Document    json.RawMessage `json:"document"`
+	// ImageDigest is the content-addressed image key, sha256:… — REQUIRED, and
+	// the key everything is filed and resolved under.
+	ImageDigest string `json:"imageDigest"`
+	// ImageRef is the human image reference the digest was published as, so a
+	// console can resolve by tag as well as by digest.
+	ImageRef string `json:"imageRef"`
+	// SourceRepo is the repo the image was built from, recorded for provenance.
+	SourceRepo string `json:"sourceRepo"`
+	// GitSha is the commit the image was built from, recorded for provenance.
+	GitSha string `json:"gitSha"`
+	// Format names the document dialect. Only cyclonedx is parsed.
+	Format string `json:"format"`
+	// Document is the raw CycloneDX document.
+	// Its components[] are flattened and persisted; the document itself is not
+	// stored, and a malformed one is refused rather than half-ingested.
+	Document json.RawMessage `json:"document"`
 }
 
 // SbomView is the GET /v1/sbom/{ref} response the console renders.

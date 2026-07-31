@@ -53,12 +53,16 @@ func (s *Store) migrateRouted() error {
 }
 
 // RoutedUsage is one account's summed server-routed usage — a row of the per-account
-// breakdown the dashboard reads.
+// breakdown the dashboard reads. Billing is BillingMode(Kind): plan | commerce.
+//
+// The fields carry NO per-field doc comments on purpose: clients/billing serves this
+// same Go type, and a description generated here but not there makes ONE schema name
+// describe two shapes, which the fleet weave refuses.
 type RoutedUsage struct {
 	Provider         string `json:"provider"`
 	Account          string `json:"account,omitempty"`
 	Kind             string `json:"kind"`
-	Billing          string `json:"billing"` // BillingMode(Kind): plan | commerce
+	Billing          string `json:"billing"`
 	Requests         int64  `json:"requests"`
 	PromptTokens     int64  `json:"promptTokens"`
 	CompletionTokens int64  `json:"completionTokens"`

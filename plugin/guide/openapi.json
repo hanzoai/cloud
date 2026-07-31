@@ -19,33 +19,89 @@
     "/v1/guide": {
       "get": {
         "operationId": "get_v1_guide",
+        "summary": "Overview returns the caller org's launch journey: the active curriculum's",
+        "description": "Overview returns the caller org's launch journey: the active curriculum's\nversion and title, every step with its state, whether it is available, what\nblocks it and whether the Business AI can run it, the done/total/percent\nprogress with the next step to take, and the org's analytics funnel folded in.\nAuto-detect runs first, so a step the org has already completed elsewhere reads\ndone without anyone marking it.",
         "tags": [
           "guide"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/overviewView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/guide/actions": {
       "get": {
         "operationId": "get_v1_guide_actions",
+        "summary": "ListActions returns the caller org's Business AI action ledger, most recent\nfirst: every \"do it for me\" tool call, the arguments it ran with, its result and\nwhether it succeeded.",
+        "description": "ListActions returns the caller org's Business AI action ledger, most recent\nfirst: every \"do it for me\" tool call, the arguments it ran with, its result and\nwhether it succeeded. It is the audit-visible record of what the agent did on\nthe org's behalf, and the backing state for the \"acted\" auto-detect signal.",
         "tags": [
           "guide"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/actionsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/guide/analytics": {
       "get": {
         "operationId": "get_v1_guide_analytics",
+        "summary": "Analytics returns the caller org's funnel from the analytics lens plus the GTM\nrecommendations derived from it.",
+        "description": "Analytics returns the caller org's funnel from the analytics lens plus the GTM\nrecommendations derived from it. It is the Business AI's data-grounded read —\nwhat the funnel is doing, and the next-best action to move its weakest stage. An\nunreachable or silent warehouse answers available=false, never a fabricated\nnumber.",
         "tags": [
           "guide"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analyticsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
-    "/v1/guide/blueprint/": {
+    "/v1/guide/blueprint": {
       "get": {
         "operationId": "get_v1_guide_blueprint",
+        "summary": "GetBlueprint returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts.",
+        "description": "GetBlueprint returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts. It is the\nSuperAdmin authoring view of the platform blueprint, so it is refused 403 for\nanyone else, including a per-org admin: the brand blueprint is shared platform\ncontent, not a per-customer surface.",
         "tags": [
           "guide"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/blueprintView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_guide_blueprint",
@@ -57,9 +113,23 @@
     "/v1/guide/blueprint/versions": {
       "get": {
         "operationId": "get_v1_guide_blueprint_versions",
+        "summary": "ListBlueprintVersions returns the brand blueprint's version history — every\nstored version's number and edit time, newest first — which is the\npoint-in-time-recovery and audit trail behind the authoring plane.",
+        "description": "ListBlueprintVersions returns the brand blueprint's version history — every\nstored version's number and edit time, newest first — which is the\npoint-in-time-recovery and audit trail behind the authoring plane. Metadata\nonly: the documents are not returned. SuperAdmin only, like the rest of this\nplane. The history is listable even when the current stored document no longer\nparses, so a schema-drifted row can still be diagnosed.",
         "tags": [
           "guide"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/blueprintVersionsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/guide/blueprint/{collection}/{id}": {
@@ -91,23 +161,78 @@
     "/v1/guide/chat": {
       "post": {
         "operationId": "post_v1_guide_chat",
+        "summary": "Chat answers a founder's question about their launch journey as the Business AI\ncoach: it grounds the reply in the org's REAL progress, its ranked available\nquests and its analytics funnel, and returns those candidate quests alongside so\nthe caller can act on one.",
+        "description": "Chat answers a founder's question about their launch journey as the Business AI\ncoach: it grounds the reply in the org's REAL progress, its ranked available\nquests and its analytics funnel, and returns those candidate quests alongside so\nthe caller can act on one. READ-ONLY — it advises and never runs a step, so it\ncannot be talked into performing an action; the only executing path is POST\n/v1/guide/steps/{id}/do. One AI completion per call, billed to the caller's own\npayer.",
         "tags": [
           "guide"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "message": "what should I do next to get my first customers?"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/chatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/chatResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/guide/curriculum": {
       "delete": {
         "operationId": "delete_v1_guide_curriculum",
+        "summary": "DeleteCurriculum clears the caller org's curriculum override and returns the",
+        "description": "DeleteCurriculum clears the caller org's curriculum override and returns the\njourney it falls back to — the brand blueprint, else the embedded fixture.\nClearing an org that never set one is a no-op that answers the same default.",
         "tags": [
           "guide"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/curriculumView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
         "operationId": "get_v1_guide_curriculum",
+        "summary": "GetCurriculum returns the journey the caller's org is actually running, and",
+        "description": "GetCurriculum returns the journey the caller's org is actually running, and\nwhether it comes from the org's OWN override (custom) or from the platform\ndefault — the brand blueprint, else the embedded fixture.",
         "tags": [
           "guide"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/curriculumView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_guide_curriculum",
@@ -119,9 +244,23 @@
     "/v1/guide/profile": {
       "get": {
         "operationId": "get_v1_guide_profile",
+        "summary": "Profile returns the caller org's OBSERVED growth profile — the signal set, the\nclassified growth stage, and the org's own key metrics.",
+        "description": "Profile returns the caller org's OBSERVED growth profile — the signal set, the\nclassified growth stage, and the org's own key metrics. It is a pure READ,\nrecomputed from the org's CURRENT state each request (real-time by pull): it\nreuses the reconcile path (snapshotFor runs the detectors) for launch progress\nand runs the growth probes (observe) for the signals — it never caches, never\nruns a billable effect, never targets another org. Org-scoped on the validated\nprincipal; fail-closed without one. It PRODUCES the profile and classifies the\nstage; it decides NO recommendation (that is a later surface).",
         "tags": [
           "guide"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/profileResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/guide/steps/{id}/do": {
@@ -162,7 +301,9 @@
     },
     "/v1/guide/steps/{id}/reset": {
       "post": {
-        "operationId": "post_v1_guide_steps_by_id_reset",
+        "operationId": "post_v1_guide_steps_id_reset",
+        "summary": "ResetStep returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey.",
+        "description": "ResetStep returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done.",
         "tags": [
           "guide"
         ],
@@ -171,16 +312,41 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stepRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/overviewView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/guide/steps/{id}/skip": {
       "post": {
-        "operationId": "post_v1_guide_steps_by_id_skip",
+        "operationId": "post_v1_guide_steps_id_skip",
+        "summary": "SkipStep marks one step of the caller org's journey skipped and returns the\nrefreshed journey.",
+        "description": "SkipStep marks one step of the caller org's journey skipped and returns the\nrefreshed journey. Skipping is never dependency-gated — the founder is\ndeclaring the step does not apply to them — so a step whose dependencies are\nunfinished can still be skipped, and a skipped step counts as terminal for\neverything downstream of it.",
         "tags": [
           "guide"
         ],
@@ -189,11 +355,34 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stepRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/overviewView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/guide/steps/{id}/start": {
@@ -217,17 +406,737 @@
     "/v1/guide/strategies": {
       "get": {
         "operationId": "get_v1_guide_strategies",
+        "summary": "Strategies returns the ENABLED tactics corpus for the caller's org: the tactics\nlibrary narrowed by the explicit category/workload filters AND by the org's\nOBSERVED growth stage and capability signals (a tactic's tags are\npreconditions, so it surfaces only once the org can act on it).",
+        "description": "Strategies returns the ENABLED tactics corpus for the caller's org: the tactics\nlibrary narrowed by the explicit category/workload filters AND by the org's\nOBSERVED growth stage and capability signals (a tactic's tags are\npreconditions, so it surfaces only once the org can act on it). Passing stage\nPREVIEWS the corpus at that stage instead of the observed one. The content is\nshared platform data — no org's records — and the read is never a billable\neffect.",
         "tags": [
           "guide"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Category filters to tactics in exactly this category.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "viral-coefficient"
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "description": "Stage previews the corpus at a chosen growth stage\n(research|formed|launched|activated|scaling), overriding the org's observed\none. An unknown value is ignored and the observed stage stands.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "scaling"
+          },
+          {
+            "name": "workload",
+            "in": "query",
+            "required": false,
+            "description": "Workload filters to tactics with exactly this workload.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/corpusView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/guide/suggest": {
       "get": {
         "operationId": "get_v1_guide_suggest",
+        "summary": "Suggest returns the caller org's next-best quests: the available, non-terminal\nsteps of its journey ranked by how much downstream work each unblocks, each with\nthe grounded reason it is a good next move and whether the Business AI can run\nit, plus the org's funnel and the GTM recommendations derived from it.",
+        "description": "Suggest returns the caller org's next-best quests: the available, non-terminal\nsteps of its journey ranked by how much downstream work each unblocks, each with\nthe grounded reason it is a good next move and whether the Business AI can run\nit, plus the org's funnel and the GTM recommendations derived from it. A\nbest-effort AI narrative over exactly those quests and numbers is included when\nan AI plane is wired. READ-ONLY: it advises and never runs a step — the only\nexecuting path is POST /v1/guide/steps/{id}/do.",
         "tags": [
           "guide"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/suggestResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActionRecord": {
+        "properties": {
+          "args": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "err": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "result": {
+            "type": "string"
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Blog": {
+        "properties": {
+          "caseStudy": {
+            "type": "string"
+          },
+          "how": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Blueprint": {
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "principles": {
+            "description": "the 64-principle spine (Zen of Hanzo archetypes)",
+            "items": {
+              "$ref": "#/components/schemas/Principle"
+            },
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/Section"
+            },
+            "type": "array"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/JourneyStep"
+            },
+            "type": "array"
+          },
+          "strategies": {
+            "items": {
+              "$ref": "#/components/schemas/Strategy"
+            },
+            "type": "array"
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/Template"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Curriculum": {
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/JourneyStep"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Funnel": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "orders": {
+            "type": "integer"
+          },
+          "pageviews": {
+            "type": "integer"
+          },
+          "revenue": {
+            "type": "number"
+          },
+          "signups": {
+            "type": "integer"
+          },
+          "visitors": {
+            "type": "integer"
+          },
+          "windowDays": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "JourneyStep": {
+        "properties": {
+          "args": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "type": "object"
+          },
+          "deps": {
+            "description": "Dependencies are step ids that must be done/skipped before this step is\navailable. The wire key is `deps` (the blueprint contract); the Go field keeps\nits descriptive name.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "detail": {
+            "description": "the prose/juncture — what the Guide asks/explains here",
+            "type": "string"
+          },
+          "draft": {
+            "type": "string"
+          },
+          "draftInto": {
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Enabled is the admin on/off lever. A NIL pointer reads as ENABLED (absence ==\non): a legacy/org curriculum that omits the field keeps every step, and only an\nexplicit `enabled: false` (an admin disable) drops a step from the journey. See\non() in blueprint.go and the Blueprint.Curriculum() projection.",
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "section": {
+            "description": "the phase (section id) this step groups under",
+            "type": "string"
+          },
+          "signal": {
+            "description": "Signal, when set, names a machine detector (detect.go). When the detector\nreports the org's real state present, the step auto-marks done.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool, when set, is the MCP tool the Business AI runs for \"do it for me\". Args\nare its default arguments; Draft is an optional AI prompt whose output fills the\nDraftInto arg (default \"brief\").",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Principle": {
+        "properties": {
+          "change": {
+            "description": "the Book of Changes reading",
+            "type": "string"
+          },
+          "domain": {
+            "description": "the growth / go-to-market domain it governs",
+            "type": "string"
+          },
+          "hexagram": {
+            "description": "the I-Ching hexagram (pinyin + gloss)",
+            "type": "string"
+          },
+          "n": {
+            "description": "1..64, the hexagram number + canonical order",
+            "type": "integer"
+          },
+          "name": {
+            "description": "the principle's short name",
+            "type": "string"
+          },
+          "principle": {
+            "description": "the actionable growth law",
+            "type": "string"
+          },
+          "slug": {
+            "description": "stable identifier a tactic files under",
+            "type": "string"
+          },
+          "sunTzu": {
+            "description": "the Art of War teaching",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Section": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "order": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Strategy": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "blog": {
+            "$ref": "#/components/schemas/Blog",
+            "description": "long-form explainer (nil for un-blogged tactics)"
+          },
+          "category": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "era": {
+            "description": "modern | heritage",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "principle": {
+            "description": "the spine slug this tactic files under",
+            "type": "string"
+          },
+          "source": {
+            "description": "provenance / attribution",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workload": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Template": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "VersionMeta": {
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "actionsView": {
+        "properties": {
+          "data": {
+            "description": "Data is the most-recent actions first, capped at listActionsLimit.",
+            "items": {
+              "$ref": "#/components/schemas/ActionRecord"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "analyticsView": {
+        "properties": {
+          "funnel": {
+            "$ref": "#/components/schemas/Funnel",
+            "description": "Funnel is the org's trailing-30-day traffic → signups → orders from the\nshared analytics warehouse; available is false when it has emitted nothing."
+          },
+          "recommendations": {
+            "description": "Recommendations are the next-best GTM actions derived from that funnel.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "blueprintCounts": {
+        "properties": {
+          "principles": {
+            "type": "integer"
+          },
+          "sections": {
+            "type": "integer"
+          },
+          "steps": {
+            "type": "integer"
+          },
+          "strategies": {
+            "type": "integer"
+          },
+          "templates": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "blueprintVersionsView": {
+        "properties": {
+          "brand": {
+            "description": "Brand is the blueprint key the history belongs to — this deployment's brand,\nor \"\" (the base blueprint) when the brand has no row of its own.",
+            "type": "string"
+          },
+          "versions": {
+            "description": "Versions are the stored versions, newest first: metadata only, never the\ndocuments.",
+            "items": {
+              "$ref": "#/components/schemas/VersionMeta"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "blueprintView": {
+        "properties": {
+          "blueprint": {
+            "$ref": "#/components/schemas/Blueprint",
+            "description": "Blueprint is the whole authored document, including items disabled for the\norg-facing reads, with every enabled flag written out explicitly."
+          },
+          "brand": {
+            "description": "Brand is the key this blueprint is stored under — the deployment's brand, or\n\"\" for the shared base blueprint it falls back to.",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/blueprintCounts",
+            "description": "Counts summarises how many items each collection holds."
+          },
+          "version": {
+            "description": "Version is the active stored version number (1 is the seed). Each edit\nappends a new one; nothing is ever overwritten.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "chatRequest": {
+        "properties": {
+          "message": {
+            "description": "Message is the founder's question for the Business AI. Required; trimmed,\nand clipped to 4 KiB so a caller cannot amplify the AI prompt.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "chatResponse": {
+        "properties": {
+          "funnel": {
+            "$ref": "#/components/schemas/Funnel",
+            "description": "Funnel is the org's trailing-window traffic → signups → orders."
+          },
+          "reply": {
+            "description": "Reply is the coach's answer, grounded only in the quests and funnel below.\nWhen no AI plane is reachable it is the deterministic reply naming the top\nreal quest — never silence, never invention.",
+            "type": "string"
+          },
+          "suggestions": {
+            "description": "Suggestions are the current candidate quests, ranked best-first.",
+            "items": {
+              "$ref": "#/components/schemas/suggestion"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "corpusView": {
+        "properties": {
+          "count": {
+            "description": "Count is how many tactics survived every filter.",
+            "type": "integer"
+          },
+          "stage": {
+            "description": "Stage is the growth stage the tag join ran at — the org's observed stage, or\nthe one ?stage= previewed.",
+            "type": "string"
+          },
+          "strategies": {
+            "description": "Strategies are the surviving tactics, in corpus authoring order.",
+            "items": {
+              "$ref": "#/components/schemas/strategyView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "curriculumView": {
+        "properties": {
+          "curriculum": {
+            "$ref": "#/components/schemas/Curriculum",
+            "description": "Curriculum is the enabled journey: its version, title and ordered steps."
+          },
+          "custom": {
+            "description": "Custom is true when the org's OWN curriculum override is active; false when\nthe journey comes from the brand blueprint or the embedded fixture.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "overviewView": {
+        "properties": {
+          "custom": {
+            "type": "boolean"
+          },
+          "funnel": {
+            "$ref": "#/components/schemas/Funnel"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/progressView"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/stepView"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "profileMetrics": {
+        "properties": {
+          "funnel": {
+            "$ref": "#/components/schemas/Funnel"
+          },
+          "launchProgress": {
+            "$ref": "#/components/schemas/progressView"
+          },
+          "records": {
+            "type": "integer"
+          },
+          "revenueCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "profileResponse": {
+        "properties": {
+          "keyMetrics": {
+            "$ref": "#/components/schemas/profileMetrics"
+          },
+          "signals": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object"
+          },
+          "stage": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "progressView": {
+        "properties": {
+          "done": {
+            "type": "integer"
+          },
+          "next": {
+            "type": "string"
+          },
+          "percent": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "stepRef": {
+        "properties": {
+          "id": {
+            "description": "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "stepView": {
+        "properties": {
+          "JourneyStep": {
+            "$ref": "#/components/schemas/JourneyStep"
+          },
+          "automatable": {
+            "type": "boolean"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "blockedBy": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "strategyView": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workload": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "suggestResponse": {
+        "properties": {
+          "funnel": {
+            "$ref": "#/components/schemas/Funnel",
+            "description": "Funnel is the org's trailing-window traffic → signups → orders."
+          },
+          "narrative": {
+            "description": "Narrative is the AI's grounded prose over those quests and numbers. Absent\nwhen no AI plane is wired or the completion failed — never fabricated.",
+            "type": "string"
+          },
+          "next": {
+            "description": "Next is the id of the single next step the static journey names — the\nlinear answer the ranked Suggestions refine.",
+            "type": "string"
+          },
+          "recommendations": {
+            "description": "Recommendations are the next-best GTM actions derived from that funnel.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "suggestions": {
+            "description": "Suggestions are the available, non-terminal quests ranked best-first by how\nmuch downstream work each unblocks.",
+            "items": {
+              "$ref": "#/components/schemas/suggestion"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "suggestion": {
+        "properties": {
+          "automatable": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unlocks": {
+            "description": "Unlocks is how many downstream steps completing this one immediately makes\navailable (its leverage) — the primary ranking key.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

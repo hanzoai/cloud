@@ -18,21 +18,86 @@
   "paths": {
     "/v1/webhooks/": {
       "get": {
-        "operationId": "get_v1_webhooks",
+        "operationId": "get_v1_webhooks_",
+        "summary": "listEndpoints returns the caller org's registered webhook endpoints.",
+        "description": "listEndpoints returns the caller org's registered webhook endpoints. Each carries its\ntrailing-7-day delivery and failure counts, and signing secrets are never included — a\nsecret leaves the server only on create and on rotate.",
         "tags": [
           "webhooks"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "created": "2026-01-01T00:00:00Z",
+                      "deliveries7d": 412,
+                      "events": [
+                        "commerce.\u003e"
+                      ],
+                      "failures7d": 3,
+                      "id": "wh_4c1e9b7a",
+                      "org": "acme",
+                      "status": "active",
+                      "updated": "2026-01-01T00:00:00Z",
+                      "url": "https://acme.example/hooks"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/endpointList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_webhooks",
+        "operationId": "post_v1_webhooks_",
+        "summary": "createEndpoint registers a webhook endpoint and reveals its signing secret.",
+        "description": "createEndpoint registers a webhook endpoint and reveals its signing secret. This is one of only two responses that ever carry the secret (the\nother is rotate), so a caller that does not store it here must rotate to get another.",
         "tags": [
           "webhooks"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "billing events",
+                "events": [
+                  "commerce.\u003e"
+                ],
+                "status": "active",
+                "url": "https://acme.example/hooks"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/endpointInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/webhooks/{id}": {
       "delete": {
-        "operationId": "delete_v1_webhooks_by_id",
+        "operationId": "delete_v1_webhooks_id",
+        "summary": "deleteEndpoint unregisters one endpoint and answers 204.",
+        "description": "deleteEndpoint unregisters one endpoint and answers 204. Delivery stops immediately;\nthe recorded delivery log goes with it.",
         "tags": [
           "webhooks"
         ],
@@ -41,14 +106,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the endpoint id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "wh_4c1e9b7a2d6f0538"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_webhooks_by_id",
+        "operationId": "get_v1_webhooks_id",
+        "summary": "getEndpoint returns one of the caller org's endpoints with its 7-day counters.",
+        "description": "getEndpoint returns one of the caller org's endpoints with its 7-day counters. The\nsigning secret is never included, and another org's id is a 404.",
         "tags": [
           "webhooks"
         ],
@@ -57,14 +131,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the endpoint id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "wh_4c1e9b7a2d6f0538"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_webhooks_by_id",
+        "operationId": "put_v1_webhooks_id",
+        "summary": "updateEndpoint replaces one endpoint's url, events, status and description.",
+        "description": "updateEndpoint replaces one endpoint's url, events, status and description. It is a\nfull write, not a patch: an omitted field is cleared. The signing secret and the\ncreation time are immutable, and the endpoint updated is the one the PATH names.",
         "tags": [
           "webhooks"
         ],
@@ -73,16 +163,50 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the endpoint id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "wh_4c1e9b7a2d6f0538"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "events": [
+                  "commerce.invoice.\u003e"
+                ],
+                "id": "wh_4c1e9b7a2d6f0538",
+                "status": "disabled",
+                "url": "https://acme.example/hooks/v2"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/endpointUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/webhooks/{id}/deliveries": {
       "get": {
-        "operationId": "get_v1_webhooks_by_id_deliveries",
+        "operationId": "get_v1_webhooks_id_deliveries",
+        "summary": "listDeliveries returns one endpoint's per-attempt delivery log, newest first.",
+        "description": "listDeliveries returns one endpoint's per-attempt delivery log, newest first. It is\norg-scoped like every other read — another org's id is a 404, never a window onto its\nlogs — and each row carries the attempt number, HTTP status, duration and any error.",
         "tags": [
           "webhooks"
         ],
@@ -91,16 +215,52 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the endpoint id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "wh_4c1e9b7a2d6f0538"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows the log to one outcome: ok, retrying or failed.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "failed"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the attempts returned; 0 means 50 and nothing above 200 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deliveryList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/webhooks/{id}/rotate-secret": {
       "post": {
-        "operationId": "post_v1_webhooks_by_id_rotate-secret",
+        "operationId": "post_v1_webhooks_id_rotate-secret",
+        "summary": "rotateSecret mints a new signing secret and reveals it once.",
+        "description": "rotateSecret mints a new signing secret and reveals it once. The old secret is invalid\nthe instant this returns — every subsequent delivery and test signs with the new one,\nwith no overlap window — so a subscriber should call this only when it is ready to\nswap the secret on its own side.",
         "tags": [
           "webhooks"
         ],
@@ -109,16 +269,45 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the endpoint id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "wh_4c1e9b7a2d6f0538"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "wh_4c1e9b7a2d6f0538"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/endpointRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/webhooks/{id}/test": {
       "post": {
-        "operationId": "post_v1_webhooks_by_id_test",
+        "operationId": "post_v1_webhooks_id_test",
+        "summary": "testEndpoint sends one signed test event and reports the outcome inline.",
+        "description": "testEndpoint sends one signed test event and reports the outcome inline. It runs the\nsame attempt path the dispatcher uses — single attempt, 10s timeout, no retry ladder —\nand records the delivery row, so the result is exactly what a real event would see. It\nworks on a DISABLED endpoint too, since validating an endpoint you have paused is the\nwhole point.",
         "tags": [
           "webhooks"
         ],
@@ -127,11 +316,229 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the endpoint id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "wh_4c1e9b7a2d6f0538"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "wh_4c1e9b7a2d6f0538"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/endpointRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "delivered": true,
+                  "durationMs": 84,
+                  "httpStatus": 200
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/testResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DeliveryRow": {
+        "properties": {
+          "attempt": {
+            "type": "integer"
+          },
+          "created": {
+            "type": "string"
+          },
+          "delivery": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "integer"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "httpStatus": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Endpoint": {
+        "properties": {
+          "created": {
+            "type": "string"
+          },
+          "deliveries7d": {
+            "description": "Deliveries7d / Failures7d are cheap usage counters computed from the delivery log\nover usageWindow (not stored columns) and populated ONLY on list/get. They are 0\nwhen there is no delivery history — never omitempty, so the console always sees them.",
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failures7d": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deliveryList": {
+        "properties": {
+          "data": {
+            "description": "Data is the attempts, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "endpointInput": {
+        "properties": {
+          "description": {
+            "description": "Description is a free-text label for the endpoint.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Events is the subject patterns to subscribe to, NATS wildcard syntax. Empty means every event.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "description": "Status is active or disabled. Empty means active.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the https:// address deliveries are POSTed to. Required; cleartext http is refused.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "endpointList": {
+        "properties": {
+          "data": {
+            "description": "Data is the endpoints, each with its trailing-7-day delivery counters and no secret.",
+            "items": {
+              "$ref": "#/components/schemas/Endpoint"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "endpointRef": {
+        "properties": {
+          "id": {
+            "description": "ID is the endpoint id from the path, as returned by create.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "endpointUpdate": {
+        "properties": {
+          "description": {
+            "description": "Description is a free-text label for the endpoint.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Events is the subject patterns to subscribe to, NATS wildcard syntax. Empty means every event.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the endpoint id from the path.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is active or disabled. Empty means active.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the https:// address deliveries are POSTed to. Required; cleartext http is refused.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "testResult": {
+        "properties": {
+          "delivered": {
+            "type": "boolean"
+          },
+          "durationMs": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "httpStatus": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

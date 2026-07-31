@@ -18,10 +18,46 @@
   "paths": {
     "/v1/websearch/scrape": {
       "post": {
-        "operationId": "post_v1_websearch_scrape",
+        "operationId": "websearchScrape",
+        "summary": "scrape fetches ONE url and returns it as markdown in the firecrawl envelope,\nserved in-process by the native crawler — there is no crawler pod and no\nthird-party scrape API.",
+        "description": "scrape fetches ONE url and returns it as markdown in the firecrawl envelope,\nserved in-process by the native crawler — there is no crawler pod and no\nthird-party scrape API. The page lands in the SAME corpus /v1/crawl fills, so\none crawl and one archive whichever door was used. A url that cannot be read is\na 200 with success:false and the reason: the firecrawl client treats a non-2xx\nas a broken provider and can disable the tool.",
         "tags": [
           "websearch"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "url": "https://hanzo.ai/about"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/firecrawlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "markdown": "# About Hanzo\n…",
+                    "metadata": {
+                      "title": "About Hanzo"
+                    }
+                  },
+                  "success": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/firecrawlResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/websearch/search": {
@@ -33,9 +69,57 @@
       },
       "get": {
         "operationId": "get_v1_websearch_search",
+        "summary": "search runs the enabled keyless engines concurrently and merges their results,\ndeduped by normalized URL and capped, in the exact SearXNG /search?format=json\nenvelope — so a SearXNG client decodes it verbatim.",
+        "description": "search runs the enabled keyless engines concurrently and merges their results,\ndeduped by normalized URL and capped, in the exact SearXNG /search?format=json\nenvelope — so a SearXNG client decodes it verbatim. It runs in-process: there\nis no SearXNG pod and no third-party search API. An engine that fails or is\nbot-challenged contributes nothing and the request still answers.",
         "tags": [
           "websearch"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q is the search terms. An empty q returns an empty result set.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "post-quantum signatures"
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Language is a BCP-47-ish hint (en, en-US, de) passed to the engines; empty\nleaves the engine's own default.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "en"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "number_of_results": 1,
+                  "query": "post-quantum signatures",
+                  "results": [
+                    {
+                      "content": "…",
+                      "engine": "bing",
+                      "title": "Example",
+                      "url": "https://example.com/page"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/searchResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "options": {
         "operationId": "options_v1_websearch_search",
@@ -70,10 +154,126 @@
     },
     "/v1/websearch/v1/scrape": {
       "post": {
-        "operationId": "post_v1_websearch_v1_scrape",
+        "operationId": "websearchScrapeV1",
+        "summary": "scrape fetches ONE url and returns it as markdown in the firecrawl envelope,\nserved in-process by the native crawler — there is no crawler pod and no\nthird-party scrape API.",
+        "description": "scrape fetches ONE url and returns it as markdown in the firecrawl envelope,\nserved in-process by the native crawler — there is no crawler pod and no\nthird-party scrape API. The page lands in the SAME corpus /v1/crawl fills, so\none crawl and one archive whichever door was used. A url that cannot be read is\na 200 with success:false and the reason: the firecrawl client treats a non-2xx\nas a broken provider and can disable the tool.",
         "tags": [
           "websearch"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "url": "https://hanzo.ai/about"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/firecrawlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "markdown": "# About Hanzo\n…",
+                    "metadata": {
+                      "title": "About Hanzo"
+                    }
+                  },
+                  "success": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/firecrawlResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "firecrawlData": {
+        "properties": {
+          "markdown": {
+            "description": "Markdown is the readable content of the page.",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Metadata is what the page declared about itself (og:*, description, …).",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "firecrawlRequest": {
+        "properties": {
+          "url": {
+            "description": "URL is the page to fetch. An empty url is answered with success:false, not\nwith an HTTP error — see scrape.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "firecrawlResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/firecrawlData",
+            "description": "Data is the extracted page, present only on success."
+          },
+          "error": {
+            "description": "Error says why the scrape failed, verbatim.",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is false when the page could not be read; the status is 200 either\nway, because the firecrawl client treats a non-2xx as a broken provider and\ncan disable the tool.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "searchResponse": {
+        "properties": {
+          "number_of_results": {
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/searchResult"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "searchResult": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

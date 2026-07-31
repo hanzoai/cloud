@@ -77,9 +77,27 @@
     "/v1/plans/health": {
       "get": {
         "operationId": "get_v1_plans_health",
+        "summary": "health reports that the plans subsystem is mounted and answering.",
+        "description": "health reports that the plans subsystem is mounted and answering. It runs no JS\nand reads no catalog, so it stays true when the bundle cannot resolve a plan.",
         "tags": [
           "plans"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "service": "plans",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/healthView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/plans/policy": {
@@ -154,6 +172,23 @@
         "tags": [
           "plans"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "healthView": {
+        "properties": {
+          "service": {
+            "description": "Service names which subsystem answered, so a shadowing route is visible.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" whenever the route answers — the probe is native, so it needs\nneither the bundle nor a catalog to reply.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

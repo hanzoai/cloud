@@ -37,10 +37,13 @@ import (
 	"github.com/hanzoai/types"
 )
 
-// Warehouse + tables (the ONE analytics warehouse per unified-analytics.md §1).
-const (
+// The tables these lenses read. eventsTable is DERIVED from the signal, so the read
+// side cannot name a table the writer does not write — one name, one definition
+// (fact.go), reached from both directions.
+var (
 	llmTable    = "hanzo.cloud_usage" // live LLM usage ledger (real data today)
-	eventsTable = "hanzo.events"      // web/commerce/UI wide event table (honest-empty until the collector emits)
+	eventsTable = signalEvent.table() // event.event — product events
+	errorsTable = signalError.table() // event.error — failures
 )
 
 // ── Tenancy predicates (the isolation boundary) ─────────────────────────────
@@ -48,7 +51,7 @@ const (
 // Both builders bind the org POSITIONALLY. The time bounds are bound too (as
 // datastore DateTime string literals, the proven cloud_usage.go transport), so
 // NOTHING user-derived is ever interpolated. cloud_usage keys the tenant on
-// `organization`; hanzo.events keys it on `tenant_id` (== the IAM org slug).
+// `organization`; the event plane keys it on `org` (== the IAM org slug).
 
 // llmWhere is the org-scoped time predicate for hanzo.cloud_usage. org is the
 // validated IAM owner slug, passed EXACTLY (the ledger stored it verbatim); it is
@@ -58,10 +61,13 @@ func llmWhere(org string, start, end time.Time) (string, []any) {
 		[]any{tsLiteral(start), tsLiteral(end), org}
 }
 
-// eventsWhere is the org-scoped time predicate for hanzo.events. Same shape as
-// llmWhere but keyed on `tenant_id` (the events table's canonical org column).
+// eventsWhere is the org-scoped time predicate for the event plane. Same shape as
+// llmWhere, keyed on `org` and `time` — the envelope's own names, which every table in
+// the plane shares, so this ONE predicate is correct against event.event, event.error,
+// event.log and event.span alike. That is what the identical envelope buys: a
+// cross-signal query is a UNION ALL, not a translation layer.
 func eventsWhere(org string, start, end time.Time) (string, []any) {
-	return "timestamp >= ? AND timestamp < ? AND tenant_id = ?",
+	return "time >= ? AND time < ? AND org = ?",
 		[]any{tsLiteral(start), tsLiteral(end), org}
 }
 
@@ -71,16 +77,20 @@ func eventsWhere(org string, start, end time.Time) (string, []any) {
 //   - pageKeyExpr: the requested path ("where people go / what they look at").
 //   - referrerKeyExpr: the external referrer domain, falling back to the raw
 //     referrer when the domain didn't parse; a missing referrer OR a same-origin
-//     one (referrer_domain == domain(url), i.e. a self-referral) buckets to
-//     "(direct)" — the origin/referral split callers expect.
-//   - sourceKeyExpr: utm_source, with empty campaigns bucketed to "(none)".
+//     one (a self-referral) buckets to "(direct)" — the origin/referral split
+//     callers expect.
+//   - sourceKeyExpr: the campaign source, with empty campaigns bucketed to "(none)".
+//
+// Attribution lives in `attributes` now rather than in its own columns. Reading a
+// missing Map key yields the value type's default — the empty string — so these read
+// exactly as the old column expressions did, with no COALESCE and no null handling.
 const (
 	pageKeyExpr     = "path"
-	referrerKeyExpr = "multiIf(referrer_domain != '' AND referrer_domain != domain(url), referrer_domain, referrer_domain = '' AND referrer != '', referrer, '(direct)')"
-	sourceKeyExpr   = "if(utm_source != '', utm_source, '(none)')"
+	referrerKeyExpr = "multiIf(attributes['referrer_domain'] != '' AND attributes['referrer_domain'] != domain(url), attributes['referrer_domain'], attributes['referrer_domain'] = '' AND attributes['referrer'] != '', attributes['referrer'], '(direct)')"
+	sourceKeyExpr   = "if(attributes['utm_source'] != '', attributes['utm_source'], '(none)')"
 )
 
-// breakdownSQL builds ONE pageview breakdown over hanzo.events grouped by keyExpr
+// breakdownSQL builds ONE pageview breakdown over event.event grouped by keyExpr
 // — the read core of the behavior lenses (topPages/topReferrers/topSources). Each
 // returned bucket carries its pageviews (count of $pageview rows) and visitors
 // (uniqExact distinct_id), plus the in-window pageview grand total via
@@ -94,12 +104,15 @@ const (
 // other query this package builds.
 func breakdownSQL(keyExpr, org string, start, end time.Time, limit int) (string, []any) {
 	where, args := eventsWhere(org, start, end)
+	// `kind = 'page'` is the discriminator the schema now carries, so counting page
+	// views no longer needs a magic event NAME. The old sentinel ($pageview) was
+	// standing in for exactly this column.
 	sql := fmt.Sprintf(
 		"SELECT k, pageviews, visitors, sum(pageviews) OVER () AS total FROM ("+
 			"SELECT %s AS k, count() AS pageviews, uniqExact(distinct_id) AS visitors "+
-			"FROM %s WHERE %s AND event = '$pageview' GROUP BY k"+
+			"FROM %s WHERE %s AND kind = '%s' GROUP BY k"+
 			") ORDER BY pageviews DESC, visitors DESC LIMIT %d",
-		keyExpr, eventsTable, where, limit)
+		keyExpr, eventsTable, where, kindPage, limit)
 	return sql, args
 }
 
@@ -128,7 +141,7 @@ type LLMOverview struct {
 	Source           string  `json:"source"`
 }
 
-// WebOverview is the web lens over hanzo.events. Honest-empty (Available=false)
+// WebOverview is the web lens over event.event. Honest-empty (Available=false)
 // until the collector emits web events.
 type WebOverview struct {
 	Available bool   `json:"available"`
@@ -139,7 +152,7 @@ type WebOverview struct {
 	Source    string `json:"source"`
 }
 
-// CommerceOverview is the commerce lens over hanzo.events. Honest-empty until
+// CommerceOverview is the commerce lens over event.event. Honest-empty until
 // commerce emits order events.
 type CommerceOverview struct {
 	Available bool    `json:"available"`
@@ -218,7 +231,7 @@ type BreakdownRow struct {
 	Pct       float64 `json:"pct"` // share of total pageviews in-window, 0..100
 }
 
-// Breakdown is a ranked behavior lens over hanzo.events. Honest-empty
+// Breakdown is a ranked behavior lens over event.event. Honest-empty
 // (Available=false) when the events table is absent/errored — never fabricated.
 type Breakdown struct {
 	Available bool           `json:"available"`
@@ -236,7 +249,7 @@ type Top struct {
 	Products TopProducts `json:"products"`
 	// Behavior lenses (events lens): WHERE people go / WHAT they look at
 	// (topPages) and where they come FROM (topReferrers organic/referral,
-	// topSources campaigns). Honest-empty until the beacon fills hanzo.events.
+	// topSources campaigns). Honest-empty until the beacon fills event.event.
 	Pages     Breakdown `json:"topPages"`
 	Referrers Breakdown `json:"topReferrers"`
 	Sources   Breakdown `json:"topSources"`
@@ -357,7 +370,7 @@ func buildTopModels(rows []map[string]any) TopModels {
 	return TopModels{Available: true, Items: items, Source: llmTable}
 }
 
-// buildTopProducts assembles the top-products table from hanzo.events. ok=false
+// buildTopProducts assembles the top-products table from event.event. ok=false
 // (events table absent) → honest-empty. Pure.
 func buildTopProducts(rows []map[string]any, ok bool) TopProducts {
 	if !ok {
@@ -503,6 +516,107 @@ func aTime(v any) time.Time {
 		return time.Unix(n, 0).UTC()
 	}
 	return time.Time{}
+}
+
+// attributes returns a row's `attributes` map as plain strings. The driver decodes a
+// Map(LowCardinality(String), String) to map[string]string, and the JSON-transport
+// fallback (map[string]any) is accepted for the same reason the scalar coercers accept
+// theirs — a transport change must not crash a read.
+func attributes(r map[string]any) map[string]string {
+	switch m := r["attributes"].(type) {
+	case map[string]string:
+		return m
+	case map[string]any:
+		out := make(map[string]string, len(m))
+		for k, v := range m {
+			out[k] = aString(v)
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// attrOf reads ONE attribute off a row. An absent key is "" — the same answer the
+// store gives for a missing Map key, so a caller cannot tell a row that omitted the
+// attribute from one that stored it blank, and does not have to.
+func attrOf(r map[string]any, key string) string { return attributes(r)[key] }
+
+// exceptionOf assembles the error columns back into the exception object the console
+// renders. The frames arrive as PARALLEL ARRAYS (the store's Nested layout) and are
+// zipped back into a list here — which is the read side of the reason they are columns
+// at all: "which file throws most" is a GROUP BY on frames.file, not a JSON scan of an
+// opaque blob.
+func exceptionOf(r map[string]any) map[string]any {
+	ex := map[string]any{
+		"type":    aString(r["class"]),
+		"message": aString(r["message"]),
+		"level":   aString(r["level"]),
+		"handled": aInt64(r["handled"]) != 0,
+	}
+	fn, file := strs(r["fn"]), strs(r["file"])
+	line, own := r["line"], r["own"]
+	frames := make([]map[string]any, 0, len(fn))
+	for i := range fn {
+		f := map[string]any{"function": fn[i]}
+		if i < len(file) {
+			f["file"] = file[i]
+		}
+		f["line"] = nth(line, i)
+		f["own"] = nth(own, i) != 0
+		frames = append(frames, f)
+	}
+	if len(frames) > 0 {
+		ex["frames"] = frames
+	}
+	return ex
+}
+
+// strs coerces one of the store's Array(String) columns to a Go slice.
+func strs(v any) []string {
+	switch a := v.(type) {
+	case []string:
+		return a
+	case []any:
+		out := make([]string, 0, len(a))
+		for _, e := range a {
+			out = append(out, aString(e))
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// nth reads element i of one of the store's numeric/bool arrays as an int64, 0 when
+// the arrays are ragged. They should never be — the writer builds them in lockstep —
+// but a read must not panic on a row some other writer produced.
+func nth(v any, i int) int64 {
+	switch a := v.(type) {
+	case []uint32:
+		if i < len(a) {
+			return int64(a[i])
+		}
+	case []int64:
+		if i < len(a) {
+			return a[i]
+		}
+	case []bool:
+		if i < len(a) && a[i] {
+			return 1
+		}
+	case []any:
+		if i < len(a) {
+			if b, ok := a[i].(bool); ok {
+				if b {
+					return 1
+				}
+				return 0
+			}
+			return aInt64(a[i])
+		}
+	}
+	return 0
 }
 
 func pctOf(part, total int64) float64 {

@@ -26,7 +26,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"deleted":true,"name":"ingress-lb","ip":"1.2.3.4","freedMonthlyCents":1200}}`),
 	})
 	zip.Describe("DELETE /v1/admin/infra/volumes/:id", zip.Doc{
-		Description: "deleteVolume destroys a volume the board has just proven no PersistentVolume in any\ncluster references. Irreversible, so it snapshots first unless explicitly waived —\nthe snapshot IS the undo.",
+		Description: "deleteVolume destroys a volume no cluster PersistentVolume references. The board has\njust proven that. Irreversible, so it snapshots first unless explicitly waived — the\nsnapshot IS the undo.",
 		Fields: map[string]string{
 			"VolumeIn.id":       "ID is the DO volume id, from the path.",
 			"VolumeIn.name":     "Name is the snapshot name on the snapshot action. Blank gets a deterministic\n\"<volume>-predelete-<unix>\" so the undo is findable in the DO console.",
@@ -36,7 +36,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"deleted":true,"name":"acme-data","sizeGiB":200,"freedMonthlyCents":2000,"snapshotId":"snap-01J"}}`),
 	})
 	zip.Describe("GET /v1/admin/infra", zip.Doc{
-		Description: "read serves the whole DigitalOcean infrastructure board: droplets, volumes, DOKS\nclusters and load balancers, each cross-referenced against every cluster's live\nKubernetes state so the board can say what is safe to destroy and what is not.\n\nIt is cached for up to a minute because one read is a fan-out over the DO API plus a\nfull pod/PV listing per cluster. Staleness is never load-bearing: every MUTATION\nre-scans from scratch and ignores this cache.\n\nOnly an unusable DO account is a hard failure. A partial read still produces a board,\nwith the failing source named in sources[] — except for clusters and volumes, which\nthe safety verdict depends on; without those the analysis degrades rather than\nclassifying anything it cannot prove.",
+		Description: "read serves the whole DigitalOcean infrastructure board. It covers droplets, volumes,\nDOKS clusters and load balancers, each cross-referenced against every cluster's live\nKubernetes state so the board can say what is safe to destroy and what is not.\n\nIt is cached for up to a minute because one read is a fan-out over the DO API plus a\nfull pod/PV listing per cluster. Staleness is never load-bearing: every MUTATION\nre-scans from scratch and ignores this cache.\n\nOnly an unusable DO account is a hard failure. A partial read still produces a board,\nwith the failing source named in sources[] — except for clusters and volumes, which\nthe safety verdict depends on; without those the analysis degrades rather than\nclassifying anything it cannot prove.",
 		Fields: map[string]string{
 			"Cost.wastedMonthly":     "WastedMonthly is what the fleet pays every month for provisioned-but-empty space on\nthe volumes a kubelet actually measured.\n\nIt is NOT ReclaimableMonthly and must never be added to it. Reclaimable is money a\nbutton on this board collects, by deleting volumes proven to belong to no one.\nWasted is money locked inside volumes that are IN USE and holding live data:\nDigitalOcean can only ever grow a volume, so collecting it means copying a database\nonto a smaller one. See shrinkRecipe.\n\nIt is also a LOWER BOUND — unmeasured volumes contribute nothing.",
 			"LoadBalancer.service":   "Service is the `namespace/name` of the live type=LoadBalancer Service that claims\nthis load balancer, proven from the cluster scan. Non-empty means IN USE.",
@@ -55,7 +55,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"volumes":[],"nodes":[],"clusters":[],"loadBalancers":[],"sources":[{"name":"do.volumes","ok":true,"rows":2,"lastSync":"2026-07-27T00:00:00Z"}]}}`),
 	})
 	zip.Describe("POST /v1/admin/infra/clusters/:id/nodepools/:pool/scale", zip.Doc{
-		Description: "scaleNodePool sets a node pool's node count — the ONE correct way to change how many\nnodes a DOKS cluster has.\n\nThe response states what the board could NOT prove: DOKS picks which nodes a shrink\nremoves, so no particular pod is shown to survive one. See NodePool.ScaleTo.",
+		Description: "scaleNodePool sets a node pool's node count. It is the ONE correct way to change how\nmany nodes a DOKS cluster has.\n\nThe response states what the board could NOT prove: DOKS picks which nodes a shrink\nremoves, so no particular pod is shown to survive one. See NodePool.ScaleTo.",
 		Fields: map[string]string{
 			"ScaleIn.count": "Count is the node count to set.",
 			"ScaleIn.id":    "ID is the DOKS cluster id, from the path.",
@@ -75,7 +75,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"name":"worker-3","from":"s-2vcpu-4gb","to":"s-4vcpu-8gb","permanent":false,"actionId":1234567,"actionStatus":"in-progress"}}`),
 	})
 	zip.Describe("POST /v1/admin/infra/nodes/:id/cordon", zip.Doc{
-		Description: "cordonNode marks one cluster node unschedulable — or schedulable again — and can drain\nthe pods already on it.\n\nIt is the ONE infra change that does not go through the run discipline, because there\nis no destructive verdict to check: cordoning is reversible and evicting respects the\ncluster's own PodDisruptionBudgets. It reads the cached board for the same reason.\nThe outcome is audited either way, and the result reports how many pods were evicted.",
+		Description: "cordonNode marks one cluster node unschedulable, or schedulable again. It can also\ndrain the pods already on it.\n\nIt is the ONE infra change that does not go through the run discipline, because there\nis no destructive verdict to check: cordoning is reversible and evicting respects the\ncluster's own PodDisruptionBudgets. It reads the cached board for the same reason.\nThe outcome is audited either way, and the result reports how many pods were evicted.",
 		Fields: map[string]string{
 			"CordonIn.cordon": "Cordon true marks the node unschedulable; false restores it.",
 			"CordonIn.drain":  "Drain additionally evicts the pods already running there.",

@@ -97,8 +97,8 @@ type storageSnapshot struct {
 	Alerts    []storageAlert   `json:"alerts"`
 }
 
-// blockStorage is the realtime block-storage board: the DigitalOcean volume fleet
-// (count, capacity, monthly list cost, per-volume region and attachment) plus the
+// blockStorage is the realtime block-storage board. It carries the DigitalOcean volume
+// fleet (count, capacity, monthly list cost, per-volume region and attachment) plus the
 // analytics datastore's OWN fill, read from its system.disks.
 //
 // A volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no

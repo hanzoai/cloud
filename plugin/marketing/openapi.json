@@ -192,8 +192,8 @@
     "/v1/marketing/calendar": {
       "get": {
         "operationId": "get_v1_marketing_calendar",
-        "summary": "listCalendarPosts returns the org's calendar, soonest scheduled first,",
-        "description": "listCalendarPosts returns the org's calendar, soonest scheduled first,\noptionally narrowed to one status.",
+        "summary": "listCalendarPosts returns the org's calendar, soonest scheduled first.",
+        "description": "listCalendarPosts returns the org's calendar, soonest scheduled first.\nIt is optionally narrowed to one status.",
         "tags": [
           "marketing"
         ],
@@ -425,8 +425,8 @@
     "/v1/marketing/campaigns": {
       "get": {
         "operationId": "get_v1_marketing_campaigns",
-        "summary": "listCampaigns returns the org's campaigns, most recently updated first,",
-        "description": "listCampaigns returns the org's campaigns, most recently updated first,\noptionally narrowed to one lifecycle status.",
+        "summary": "listCampaigns returns the org's campaigns, most recently updated first.",
+        "description": "listCampaigns returns the org's campaigns, most recently updated first.\nIt is optionally narrowed to one lifecycle status.",
         "tags": [
           "marketing"
         ],
@@ -662,8 +662,8 @@
     "/v1/marketing/promos": {
       "get": {
         "operationId": "get_v1_marketing_promos",
-        "summary": "listPromos returns every promo the deployment offers with its live counters:",
-        "description": "listPromos returns every promo the deployment offers with its live counters:\nhow many orgs have redeemed it and how many redemptions remain under the cap.\nThe promos are fleet-wide, not per-org — only the counters move.",
+        "summary": "listPromos returns every promo the deployment offers, with its live counters.\nThe counters are how many orgs have redeemed it and how many redemptions remain\nunder the cap.",
+        "description": "listPromos returns every promo the deployment offers, with its live counters.\nThe counters are how many orgs have redeemed it and how many redemptions remain\nunder the cap. The promos are fleet-wide, not per-org — only the counters move.",
         "tags": [
           "marketing"
         ],
@@ -1000,8 +1000,8 @@
     "/v1/marketing/sequences/{id}/enrollments": {
       "get": {
         "operationId": "get_v1_marketing_sequences_id_enrollments",
-        "summary": "listEnrollments returns who is walking one sequence, most recently enrolled",
-        "description": "listEnrollments returns who is walking one sequence, most recently enrolled\nfirst, with each walk's current step and next due time.",
+        "summary": "listEnrollments returns who is walking one sequence, most recently enrolled first.",
+        "description": "listEnrollments returns who is walking one sequence, most recently enrolled first.\nEach walk carries its current step and next due time.",
         "tags": [
           "marketing"
         ],
@@ -1223,8 +1223,8 @@
     "/v1/marketing/summary": {
       "get": {
         "operationId": "get_v1_marketing_summary",
-        "summary": "summary rolls up the caller org's campaigns: how many there are, how many are",
-        "description": "summary rolls up the caller org's campaigns: how many there are, how many are\nactive, and the summed budget and spend in cents.",
+        "summary": "summary rolls up the caller org's campaigns.",
+        "description": "summary rolls up the caller org's campaigns.\nIt counts them, counts the active ones, and sums budget and spend in cents.",
         "tags": [
           "marketing"
         ],
@@ -1304,8 +1304,8 @@
       },
       "get": {
         "operationId": "get_v1_marketing_suppressions",
-        "summary": "listSuppressions returns the org's opt-out list, newest first — everyone the",
-        "description": "listSuppressions returns the org's opt-out list, newest first — everyone the\nsend gate will refuse to deliver to.",
+        "summary": "listSuppressions returns the org's opt-out list, newest first.",
+        "description": "listSuppressions returns the org's opt-out list, newest first.\nIt is everyone the send gate will refuse to deliver to.",
         "tags": [
           "marketing"
         ],

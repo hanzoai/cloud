@@ -24,31 +24,105 @@
   "paths": {
     "/v1/edge/nodes": {
       "get": {
-        "operationId": "get_v1_edge_nodes",
+        "operationId": "listEdgeNodes",
+        "summary": "listEdgeNodes returns the caller org's Hanzo Zero Trust edge routers and health.",
+        "description": "listEdgeNodes returns the caller org's Hanzo Zero Trust edge routers and health.\n\nThe controller's edge-router list is filtered to the \"org-\u003corg\u003e\" role attribute,\nand status is the controller's REAL online/disabled/offline signal.\nA deployment with no ZT credential, or an unreachable controller, degrades this\nREAD to an honest-EMPTY list (200) rather than 503-ing the Edge page.",
         "tags": [
           "edge"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "nodes": [
+                    {
+                      "id": "er1",
+                      "name": "edge-us-east",
+                      "region": "us-east",
+                      "status": "online"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeNodeList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/mesh/services": {
       "get": {
-        "operationId": "get_v1_mesh_services",
+        "operationId": "listMeshServices",
+        "summary": "listMeshServices returns the caller org's Hanzo Zero Trust edge services.",
+        "description": "listMeshServices returns the caller org's Hanzo Zero Trust edge services.\n\nThe controller's service list is filtered to the \"org-\u003corg\u003e\" role attribute, so\nan untagged service belongs to no org and is invisible to every tenant.",
         "tags": [
           "mesh"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "services": [
+                    {
+                      "id": "svc1",
+                      "mtls": "enabled",
+                      "service": "api",
+                      "status": "active"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/MeshServiceList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/networks": {
       "get": {
-        "operationId": "get_v1_networks",
+        "operationId": "listNetworks",
+        "summary": "listNetworks returns the caller org's Hanzo Zero Trust overlay network(s).",
+        "description": "listNetworks returns the caller org's Hanzo Zero Trust overlay network(s).\n\nThe org's overlay is projected from the edge-routers carrying its \"org-\u003corg\u003e\"\nrole attribute, so an org with no routers on the fabric has no network.\nA deployment with no ZT credential, or an unreachable controller, degrades this\nREAD to an honest-EMPTY list (200) rather than 503-ing the Networks page.",
         "tags": [
           "networks"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "networks": [
+                    {
+                      "id": "org-acme",
+                      "name": "acme overlay",
+                      "nodes": 2,
+                      "status": "active"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/networks/{id}": {
       "get": {
-        "operationId": "get_v1_networks_by_id",
+        "operationId": "getNetwork",
+        "summary": "getNetwork returns one overlay network by id, 404 when it is not the caller's.",
+        "description": "getNetwork returns one overlay network by id, 404 when it is not the caller's.\n\nAn org has exactly one overlay network, keyed by its own org role attribute, so\nany other id is another tenant's (or a non-existent) network and answers 404.",
         "tags": [
           "networks"
         ],
@@ -57,11 +131,134 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the overlay network id, \"org-\u003corg\u003e\" for the caller's own org.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "org-acme"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "org-acme",
+                  "name": "acme overlay",
+                  "nodes": 2,
+                  "status": "active"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Network"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EdgeNode": {
+        "properties": {
+          "id": {
+            "description": "ID is the ZT edge-router id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the edge-router's name.",
+            "type": "string"
+          },
+          "region": {
+            "description": "Region comes from a \"region-\u003cslug\u003e\" role attribute; absent when the router\ncarries none, never invented.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the controller's real signal: online, offline or disabled.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "EdgeNodeList": {
+        "properties": {
+          "nodes": {
+            "description": "Nodes is one row per ZT edge-router tagged for the caller's org.",
+            "items": {
+              "$ref": "#/components/schemas/EdgeNode"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MeshService": {
+        "properties": {
+          "id": {
+            "description": "ID is the ZT edge-service id.",
+            "type": "string"
+          },
+          "mtls": {
+            "description": "Mtls is enabled when the service requires end-to-end encryption, else disabled.",
+            "type": "string"
+          },
+          "service": {
+            "description": "Service is the edge service's name.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is active for any listed service.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MeshServiceList": {
+        "properties": {
+          "services": {
+            "description": "Services is one row per ZT edge service tagged for the caller's org.",
+            "items": {
+              "$ref": "#/components/schemas/MeshService"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Network": {
+        "properties": {
+          "id": {
+            "description": "ID is the overlay network id, \"org-\u003corg\u003e\" for the caller's org.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the display label for the org's overlay.",
+            "type": "string"
+          },
+          "nodes": {
+            "description": "Nodes counts the org's edge-routers on the fabric.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is active when any of the org's edge-routers is online, else degraded.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "NetworkList": {
+        "properties": {
+          "networks": {
+            "description": "Networks holds the org's overlay network, or is empty when the org has no\nedge-routers on the fabric.",
+            "items": {
+              "$ref": "#/components/schemas/Network"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

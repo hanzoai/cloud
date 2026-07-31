@@ -41,6 +41,8 @@
 // with the real init error (never a fake success).
 package ml
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"bytes"
 	"context"
@@ -58,6 +60,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/fleet"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -178,26 +181,38 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// /v1/clusters; ml only READS it to federate serving onto the org's cluster).
 	s.State.fleet = fleet.New(deps.Brand, s.Log)
 
-	// Models (kserve InferenceService).
-	app.Get("/v1/ml/models", list(s, modelKind))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	if z == nil {
+		return fmt.Errorf("ml.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	// The bridge FIRST: fiber runs middleware in registration order, so one installed
+	// after these leaves would never run — and every typed op below resolves its tenant
+	// namespace through the request it parks. Two subtrees, so two installs.
+	app.Group("/v1/ml").Use(cloud.Bridge())
+	app.Group("/v1/train").Use(cloud.Bridge())
+
+	// Models (kserve InferenceService). create/patch/predict stay raw handlers — see
+	// the openapi.Register block below for why.
+	zip.Get(z, "/v1/ml/models", o.listModels)
 	app.Post("/v1/ml/models", create(s, modelKind))
-	app.Get("/v1/ml/models/:name", get(s, modelKind))
+	zip.Get(z, "/v1/ml/models/:name", o.getModel)
 	app.Patch("/v1/ml/models/:name", patch(s, modelKind))
-	app.Delete("/v1/ml/models/:name", del(s, modelKind))
+	zip.Delete(z, "/v1/ml/models/:name", o.deleteModel)
 	app.Post("/v1/ml/models/:name/predict", cloud.Handle(s, predict))
 
 	// Training jobs (trainer TrainJob).
-	app.Get("/v1/train/jobs", list(s, jobKind))
+	zip.Get(z, "/v1/train/jobs", o.listJobs)
 	app.Post("/v1/train/jobs", create(s, jobKind))
-	app.Get("/v1/train/jobs/:name", get(s, jobKind))
-	app.Delete("/v1/train/jobs/:name", del(s, jobKind))
+	zip.Get(z, "/v1/train/jobs/:name", o.getJob)
+	zip.Delete(z, "/v1/train/jobs/:name", o.deleteJob)
 
 	// Experiments + trials (katib).
-	app.Get("/v1/train/experiments", list(s, expKind))
+	zip.Get(z, "/v1/train/experiments", o.listExperiments)
 	app.Post("/v1/train/experiments", create(s, expKind))
-	app.Get("/v1/train/experiments/:name", get(s, expKind))
-	app.Delete("/v1/train/experiments/:name", del(s, expKind))
-	app.Get("/v1/train/experiments/:name/trials", cloud.Handle(s, trials))
+	zip.Get(z, "/v1/train/experiments/:name", o.getExperiment)
+	zip.Delete(z, "/v1/train/experiments/:name", o.deleteExperiment)
+	zip.Get(z, "/v1/train/experiments/:name/trials", o.trials)
 
 	// Real-probe health. The subsystem registers with cloud.HealthOwner, so
 	// serve.go skips its generic auto-health and these two own the probes,
@@ -209,26 +224,178 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// The four routes that cannot be typed ops declare what they can through the
+// schema-only bridge instead, so an SDK still gets their types even though no prose,
+// MCP tool or CLI command can be projected from them.
+//
+//   - The three creates answer a caller who is out of funds or over a spend cap with
+//     the shared `{error:{code,message}}` envelope written straight onto the response
+//     (cloud.DenyResource); a typed handler returns (*Out, error) and lets zip render
+//     the error, so it cannot reproduce that wire shape. Body and reply are still
+//     exactly these two types.
+//   - PATCH takes a RAW JSON merge patch — arbitrary bytes by definition, with no
+//     schema to state — so only its reply is declared.
+//
+// POST /v1/ml/models/{name}/predict declares nothing: it forwards an opaque kserve v2
+// inference body and returns the predictor's own status, headers and bytes verbatim.
+// The two health probes declare nothing either: they answer 503 with a diagnostic body
+// when the cluster is unreachable, which is a success shape no typed op can express.
+func init() {
+	openapi.Register("/v1/ml/models", "POST", ResourceCreate{}, Resource{})
+	openapi.Register("/v1/train/jobs", "POST", ResourceCreate{}, Resource{})
+	openapi.Register("/v1/train/experiments", "POST", ResourceCreate{}, Resource{})
+	openapi.Register("/v1/ml/models/:name", "PATCH", nil, Resource{})
+}
+
 // ── CRUD (generic across the three kinds) ────────────────────────────────────
 
-func list(s *cloud.Service[state], k resourceKind) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if err := ready(s); err != nil {
-			return err
-		}
-		ns, _, _, err := tenant(s, c)
-		if err != nil {
-			return err
-		}
-		ul, err := s.State.dyn.Resource(k.gvr).Namespace(ns).List(c.Context(), metav1.ListOptions{})
-		if err != nil {
-			if apierrors.IsNotFound(err) { // tenant namespace not created yet
-				return c.JSON(http.StatusOK, map[string]any{"items": []any{}})
-			}
-			return k8sErr(s, c, k, "list", err)
-		}
-		return c.JSON(http.StatusOK, map[string]any{"items": viewList(ul.Items)})
+// ops binds the service to ml's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER, and each of the nine CRUD ops is a NAMED method delegating to
+// the one generic implementation below. Named because a closure returned by a helper
+// has no declaration for cmd/zipdoc to lift prose from, so the shared generic could
+// never carry per-kind documentation.
+type ops struct{ s *cloud.Service[state] }
+
+// scope resolves the caller's tenant NAMESPACE for a typed op, through the request
+// cloud.Bridge parked. Off the HTTP path there is no validated principal at all, which
+// is the same refusal a forged one gets.
+func (o ops) scope(ctx context.Context) (ns, org, project string, err error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return "", "", "", zip.ErrForbidden("no validated principal")
 	}
+	return tenant(o.s, c)
+}
+
+// listKind is the ONE list implementation the three typed list ops delegate to.
+func (o ops) listKind(ctx context.Context, k resourceKind) (*ResourceList, error) {
+	s := o.s
+	if err := ready(s); err != nil {
+		return nil, err
+	}
+	ns, _, _, err := o.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ul, err := s.State.dyn.Resource(k.gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) { // tenant namespace not created yet
+			return &ResourceList{Items: []Resource{}}, nil
+		}
+		return nil, o.k8sErr(ctx, k, "list", err)
+	}
+	return &ResourceList{Items: viewList(ul.Items)}, nil
+}
+
+// getKind is the ONE read implementation the three typed get ops delegate to.
+func (o ops) getKind(ctx context.Context, k resourceKind, rawName string) (*Resource, error) {
+	s := o.s
+	if err := ready(s); err != nil {
+		return nil, err
+	}
+	ns, _, _, err := o.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out, err := s.State.dyn.Resource(k.gvr).Namespace(ns).Get(ctx, normName(rawName), metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, zip.ErrNotFound(k.kind + " not found")
+		}
+		return nil, o.k8sErr(ctx, k, "get", err)
+	}
+	v := view(out, true)
+	return &v, nil
+}
+
+// delKind is the ONE delete implementation the three typed delete ops delegate to.
+func (o ops) delKind(ctx context.Context, k resourceKind, rawName string) (*struct{}, error) {
+	s := o.s
+	if err := ready(s); err != nil {
+		return nil, err
+	}
+	ns, _, _, err := o.scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.State.dyn.Resource(k.gvr).Namespace(ns).Delete(ctx, normName(rawName), metav1.DeleteOptions{}); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, zip.ErrNotFound(k.kind + " not found")
+		}
+		return nil, o.k8sErr(ctx, k, "delete", err)
+	}
+	return nil, nil
+}
+
+// k8sErr is the typed-op face of the shared k8s error mapper; the request is only used
+// for logging context, which a typed op reaches through the bridge.
+func (o ops) k8sErr(ctx context.Context, k resourceKind, op string, err error) error {
+	c, _ := cloud.Request(ctx)
+	return k8sErr(o.s, c, k, op, err)
+}
+
+// listModels returns the caller's deployed inference models. A tenant namespace that
+// does not exist yet is an empty list, not an error.
+func (o ops) listModels(ctx context.Context, _ *struct{}) (*ResourceList, error) {
+	return o.listKind(ctx, modelKind)
+}
+
+// getModel returns one deployed model with its spec and live serving status.
+//
+// Example: {"name": "sentiment"}
+func (o ops) getModel(ctx context.Context, in *ResourceRef) (*Resource, error) {
+	return o.getKind(ctx, modelKind, in.Name)
+}
+
+// deleteModel undeploys one model and answers 204. The serving endpoint stops as the
+// operator tears the InferenceService down.
+//
+// Example: {"name": "sentiment"}
+func (o ops) deleteModel(ctx context.Context, in *ResourceRef) (*struct{}, error) {
+	return o.delKind(ctx, modelKind, in.Name)
+}
+
+// listJobs returns the caller's training jobs. A tenant namespace that does not exist
+// yet is an empty list, not an error.
+func (o ops) listJobs(ctx context.Context, _ *struct{}) (*ResourceList, error) {
+	return o.listKind(ctx, jobKind)
+}
+
+// getJob returns one training job with its spec and live run status.
+//
+// Example: {"name": "finetune-7b"}
+func (o ops) getJob(ctx context.Context, in *ResourceRef) (*Resource, error) {
+	return o.getKind(ctx, jobKind, in.Name)
+}
+
+// deleteJob cancels one training job and answers 204. Compute stops as the operator
+// tears the job down; anything already written to storage is kept.
+//
+// Example: {"name": "finetune-7b"}
+func (o ops) deleteJob(ctx context.Context, in *ResourceRef) (*struct{}, error) {
+	return o.delKind(ctx, jobKind, in.Name)
+}
+
+// listExperiments returns the caller's hyperparameter-search experiments. A tenant
+// namespace that does not exist yet is an empty list, not an error.
+func (o ops) listExperiments(ctx context.Context, _ *struct{}) (*ResourceList, error) {
+	return o.listKind(ctx, expKind)
+}
+
+// getExperiment returns one experiment with its search spec and best-trial status.
+//
+// Example: {"name": "lr-sweep"}
+func (o ops) getExperiment(ctx context.Context, in *ResourceRef) (*Resource, error) {
+	return o.getKind(ctx, expKind, in.Name)
+}
+
+// deleteExperiment cancels one experiment and answers 204. Its trials are torn down
+// with it.
+//
+// Example: {"name": "lr-sweep"}
+func (o ops) deleteExperiment(ctx context.Context, in *ResourceRef) (*struct{}, error) {
+	return o.delKind(ctx, expKind, in.Name)
 }
 
 func create(s *cloud.Service[state], k resourceKind) zip.Handler {
@@ -240,11 +407,7 @@ func create(s *cloud.Service[state], k resourceKind) zip.Handler {
 		if err != nil {
 			return err
 		}
-		var req struct {
-			Name   string            `json:"name"`
-			Spec   json.RawMessage   `json:"spec"`
-			Labels map[string]string `json:"labels"`
-		}
+		var req ResourceCreate
 		if err := json.Unmarshal(c.Body(), &req); err != nil {
 			return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
 		}
@@ -305,26 +468,6 @@ func create(s *cloud.Service[state], k resourceKind) zip.Handler {
 	}
 }
 
-func get(s *cloud.Service[state], k resourceKind) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if err := ready(s); err != nil {
-			return err
-		}
-		ns, _, _, err := tenant(s, c)
-		if err != nil {
-			return err
-		}
-		out, err := s.State.dyn.Resource(k.gvr).Namespace(ns).Get(c.Context(), reqName(c), metav1.GetOptions{})
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return zip.ErrNotFound(k.kind + " not found")
-			}
-			return k8sErr(s, c, k, "get", err)
-		}
-		return c.JSON(http.StatusOK, view(out, true))
-	}
-}
-
 func patch(s *cloud.Service[state], k resourceKind) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if err := ready(s); err != nil {
@@ -350,25 +493,6 @@ func patch(s *cloud.Service[state], k resourceKind) zip.Handler {
 			}
 		}
 		return c.JSON(http.StatusOK, view(out, true))
-	}
-}
-
-func del(s *cloud.Service[state], k resourceKind) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if err := ready(s); err != nil {
-			return err
-		}
-		ns, _, _, err := tenant(s, c)
-		if err != nil {
-			return err
-		}
-		if err := s.State.dyn.Resource(k.gvr).Namespace(ns).Delete(c.Context(), reqName(c), metav1.DeleteOptions{}); err != nil {
-			if apierrors.IsNotFound(err) {
-				return zip.ErrNotFound(k.kind + " not found")
-			}
-			return k8sErr(s, c, k, "delete", err)
-		}
-		return c.NoContent(http.StatusNoContent)
 	}
 }
 
@@ -425,31 +549,34 @@ func predict(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.Bytes(resp.StatusCode, rb)
 }
 
-// trials lists the katib Trials owned by an experiment in the caller's tenant
-// namespace. The experiment is fetched first so a cross-tenant or missing name
-// is a clean 404 rather than an empty list.
-func trials(s *cloud.Service[state], c *zip.Ctx) error {
+// trials lists the individual runs a hyperparameter experiment has spawned. The
+// experiment is read first, so a name that does not exist — or belongs to another
+// tenant — is a clean 404 rather than a silently empty list.
+//
+// Example: {"name": "lr-sweep"}
+func (o ops) trials(ctx context.Context, in *ResourceRef) (*TrialList, error) {
+	s := o.s
 	if err := ready(s); err != nil {
-		return err
+		return nil, err
 	}
-	ns, _, _, err := tenant(s, c)
+	ns, _, _, err := o.scope(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	name := reqName(c)
-	if _, err := s.State.dyn.Resource(experimentGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{}); err != nil {
+	name := normName(in.Name)
+	if _, err := s.State.dyn.Resource(experimentGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err != nil {
 		if apierrors.IsNotFound(err) {
-			return zip.ErrNotFound("experiment not found")
+			return nil, zip.ErrNotFound("experiment not found")
 		}
-		return k8sErr(s, c, expKind, "get", err)
+		return nil, o.k8sErr(ctx, expKind, "get", err)
 	}
-	ul, err := s.State.dyn.Resource(trialGVR).Namespace(ns).List(c.Context(), metav1.ListOptions{
+	ul, err := s.State.dyn.Resource(trialGVR).Namespace(ns).List(ctx, metav1.ListOptions{
 		LabelSelector: katibExpLabel + "=" + name,
 	})
 	if err != nil {
-		return k8sErr(s, c, resourceKind{trialGVR, "kubeflow.org/v1beta1", "Trial"}, "list", err)
+		return nil, o.k8sErr(ctx, resourceKind{trialGVR, "kubeflow.org/v1beta1", "Trial"}, "list", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"experiment": name, "items": viewList(ul.Items)})
+	return &TrialList{Experiment: name, Items: viewList(ul.Items)}, nil
 }
 
 // health is a REAL probe: it verifies the API server is reachable and that the
@@ -631,7 +758,11 @@ func newDynamic() (dynamic.Interface, error) {
 
 // ── pure helpers ─────────────────────────────────────────────────────────────
 
-func reqName(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Param("name"))) }
+func reqName(c *zip.Ctx) string { return normName(c.Param("name")) }
+
+// normName is the ONE resource-name normalisation — lower-cased and trimmed — applied
+// wherever a name arrives, whether off a raw request or a typed op's input.
+func normName(raw string) string { return strings.ToLower(strings.TrimSpace(raw)) }
 
 // labelsFor stamps the managed-by + tenant-org(+project) labels onto a create. The
 // org label is set LAST (after any user labels) so a caller can never override the
@@ -650,27 +781,71 @@ func labelsFor(org, project string, user map[string]string) map[string]any {
 	return m
 }
 
-// view trims a CR to an honest, non-bloated shape: name + creation time + live
-// status, plus the spec on single-object reads. Namespace is intentionally
-// omitted (internal tenant detail).
-func view(obj *unstructured.Unstructured, withSpec bool) map[string]any {
-	m := map[string]any{
-		"name":      obj.GetName(),
-		"createdAt": obj.GetCreationTimestamp().UTC().Format(time.RFC3339),
+// Resource is one ML custom resource trimmed to an honest, non-bloated shape: name +
+// creation time + live status, plus the spec on single-object reads. Namespace is
+// intentionally omitted (internal tenant detail). Status and Spec are the operator's
+// own CRD-defined objects and are passed through unshaped — they are pointers so a
+// present-but-empty object stays `{}` on the wire and an absent one stays absent.
+type Resource struct {
+	// Name is the resource name, unique within the caller's tenant namespace.
+	Name string `json:"name"`
+	// CreatedAt is when the resource was created, RFC3339.
+	CreatedAt string `json:"createdAt"`
+	// Status is the operator-reported live status, absent until the operator writes one.
+	Status *map[string]any `json:"status,omitempty"`
+	// Spec is the resource spec as submitted; sent on single-object reads only.
+	Spec *map[string]any `json:"spec,omitempty"`
+}
+
+// ResourceList is a kind's resources in the caller's tenant namespace.
+type ResourceList struct {
+	// Items is the resources, without their specs.
+	Items []Resource `json:"items"`
+}
+
+// ResourceRef addresses one resource by name.
+type ResourceRef struct {
+	// Name is the resource name from the path, lower-cased.
+	Name string `json:"name"`
+}
+
+// ResourceCreate is the create body shared by all three kinds.
+type ResourceCreate struct {
+	// Name is the resource name: a DNS-1123 label, lower-cased. Required.
+	Name string `json:"name" validate:"required"`
+	// Spec is the kind's own CRD spec, passed to Kubernetes verbatim. Required.
+	Spec json.RawMessage `json:"spec" validate:"required"`
+	// Labels are extra labels to stamp on the resource; the tenant-boundary labels are
+	// set last and cannot be overridden.
+	Labels map[string]string `json:"labels"`
+}
+
+// TrialList is an experiment's katib Trials.
+type TrialList struct {
+	// Experiment is the owning experiment's name.
+	Experiment string `json:"experiment"`
+	// Items is the trials, without their specs.
+	Items []Resource `json:"items"`
+}
+
+func view(obj *unstructured.Unstructured, withSpec bool) Resource {
+	r := Resource{
+		Name:      obj.GetName(),
+		CreatedAt: obj.GetCreationTimestamp().UTC().Format(time.RFC3339),
 	}
 	if st, ok, _ := unstructured.NestedMap(obj.Object, "status"); ok {
-		m["status"] = st
+		r.Status = &st
 	}
 	if withSpec {
 		if sp, ok, _ := unstructured.NestedMap(obj.Object, "spec"); ok {
-			m["spec"] = sp
+			r.Spec = &sp
 		}
 	}
-	return m
+	return r
 }
 
-func viewList(items []unstructured.Unstructured) []map[string]any {
-	out := make([]map[string]any, 0, len(items))
+func viewList(items []unstructured.Unstructured) []Resource {
+	out := make([]Resource, 0, len(items))
 	for i := range items {
 		out = append(out, view(&items[i], false))
 	}

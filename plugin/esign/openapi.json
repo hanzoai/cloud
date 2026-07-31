@@ -140,10 +140,28 @@
     },
     "/v1/esign/health": {
       "get": {
-        "operationId": "get_v1_esign_health",
+        "operationId": "esignHealth",
+        "summary": "health reports that the e-signature subsystem is serving.",
+        "description": "health reports that the e-signature subsystem is serving. It takes no tenant and\ntouches no store, so it answers for an unauthenticated probe too.",
         "tags": [
           "esign"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "service": "esign",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/EsignHealth"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/esign/o/{org}/sign/{token}": {
@@ -256,6 +274,23 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EsignHealth": {
+        "properties": {
+          "service": {
+            "description": "Service is \"esign\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" — the route answers whenever the process is up.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

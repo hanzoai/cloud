@@ -28,7 +28,10 @@
 // (150). serve.go auto-registers GET /v1/tracker/health.
 package tracker
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -141,20 +144,97 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // routes registers the tracker surface. Literal routes register before their
 // :param siblings so Fiber's first-match scan resolves the collection endpoints
 // before the detail ones.
+//
+// Every read and mutation is a TYPED op — registered on the App with its
+// ABSOLUTE path, because the op registry (the one value OpenAPI, MCP and the CLI
+// are projected from) keys on it — except the two METERED creates. Those answer
+// a billing denial with the fleet-wide contract (cloud.DenyResource: 402
+// insufficient_balance / spend_cap_exceeded, 503 balance_unavailable, each a
+// {"error":{"code","message"}} body), which zip's error type cannot express, so
+// typing them would reshape that error for every metered client.
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	z := cloud.ZipApp(app)
+	o := ops{s: s}
 	g := app.Group("/v1/tracker")
-	g.Post("/projects", cloud.Handle(s, createProject))
-	g.Get("/projects", cloud.Handle(s, listProjects))
-	g.Get("/projects/:key", cloud.Handle(s, getProject))
-	g.Patch("/projects/:key", cloud.Handle(s, updateProject))
-	g.Delete("/projects/:key", cloud.Handle(s, deleteProject))
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every op below reaches
+	// its request (org, project, billing identity) through it.
+	g.Use(cloud.Bridge())
+	g.Post("/projects", cloud.Handle(s, createProject)) // metered — see above
+	zip.Get(z, "/v1/tracker/projects", o.listProjects)
+	zip.Get(z, "/v1/tracker/projects/:key", o.getProject)
+	zip.Patch(z, "/v1/tracker/projects/:key", o.updateProject)
+	zip.Delete(z, "/v1/tracker/projects/:key", o.deleteProject)
 
-	g.Post("/projects/:key/issues", cloud.Handle(s, createIssue))
-	g.Get("/projects/:key/issues", cloud.Handle(s, listIssues))
-	g.Get("/projects/:key/issues/:num", cloud.Handle(s, getIssue))
-	g.Patch("/projects/:key/issues/:num", cloud.Handle(s, updateIssue))
-	g.Delete("/projects/:key/issues/:num", cloud.Handle(s, deleteIssue))
+	g.Post("/projects/:key/issues", cloud.Handle(s, createIssue)) // metered — see above
+	zip.Get(z, "/v1/tracker/projects/:key/issues", o.listIssues)
+	zip.Get(z, "/v1/tracker/projects/:key/issues/:num", o.getIssue)
+	zip.Patch(z, "/v1/tracker/projects/:key/issues/:num", o.updateIssue)
+	zip.Delete(z, "/v1/tracker/projects/:key/issues/:num", o.deleteIssue)
 }
+
+// ops binds the service to tracker's typed handlers: a typed handler takes only a
+// context and its decoded In, so the service arrives as a RECEIVER.
+type ops struct{ s *cloud.Service[state] }
+
+// scope is the ONE gate every typed op opens with: the request the bridge parked
+// plus the VALIDATED org, and the per-(org,project) store both address. Off the
+// HTTP path there is no request and no validated org, so the op refuses rather
+// than reading across tenants.
+func (o ops) scope(ctx context.Context) (*zip.Ctx, string, *Store, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, "", nil, zip.ErrForbidden("X-Org-Id required")
+	}
+	orgID, ok := org(c)
+	if !ok {
+		return nil, "", nil, zip.ErrForbidden("X-Org-Id required")
+	}
+	store, err := storeFor(o.s, c, orgID)
+	if err != nil {
+		return nil, "", nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	return c, orgID, store, nil
+}
+
+// ---- declared shapes (the published contract) ----
+
+// projectRef addresses one project.
+type projectRef struct {
+	// Key is the project key from the path (e.g. "ENG"), matched case-insensitively.
+	Key string `json:"key"`
+}
+
+// issueRef addresses one issue inside a project.
+type issueRef struct {
+	// Key is the project key from the path.
+	Key string `json:"key"`
+	// Number is the issue number from the path — the N in KEY-N.
+	Number int `json:"num"`
+}
+
+// issueQuery is the issue list read: the project from the path, narrowed by the
+// closed-set filters. This is the ONE place a surface's slice of the shared issue
+// table is expressed: hanzo.team passes none or status, a git repo's Issues tab
+// kind=issue&repo=<r>, its PRs tab kind=pr&repo=<r>.
+type issueQuery struct {
+	// Key is the project key from the path.
+	Key string `json:"key"`
+	// Status narrows to one lifecycle state (backlog|todo|in_progress|done|canceled).
+	Status string `json:"status"`
+	// Kind narrows to one work-item kind (issue|pr|epic).
+	Kind string `json:"kind"`
+	// Repo narrows to issues bound to one git repo.
+	Repo string `json:"repo"`
+	// Source narrows to one origin (team|git|crm|helpdesk|cms|agent).
+	Source string `json:"source"`
+}
+
+// projectList is the bare array the project list answers with.
+type projectList []projectView
+
+// issueList is the bare array the issue list answers with.
+type issueList []issueView
 
 // ---- HTTP response shapes (the published contract) ----
 
@@ -268,111 +348,107 @@ func createProject(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toProjectView(p))
 }
 
-func listProjects(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, c, org)
+// listProjects lists the caller org's tracker projects, newest first.
+// Only the caller's own org is ever read: every store query binds org.
+//
+// Response: [{"id": "prj_1", "org": "acme", "key": "ENG", "name": "Engineering", "createdAt": 1780000000, "updatedAt": 1780000000}]
+func (o ops) listProjects(ctx context.Context, _ *struct{}) (*projectList, error) {
+	_, orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	rows, err := store.ListProjects(c.Context(), org)
+	rows, err := store.ListProjects(ctx, orgID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
-	out := make([]projectView, 0, len(rows))
+	out := make(projectList, 0, len(rows))
 	for _, p := range rows {
 		out = append(out, toProjectView(p))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
-func getProject(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, c, org)
+// getProject returns one project of the caller org by key.
+// A key another org owns reads as not found — the query binds org.
+//
+// Example: {"key": "ENG"}
+func (o ops) getProject(ctx context.Context, in *projectRef) (*projectView, error) {
+	_, orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	p, err := store.GetProject(c.Context(), org, keyParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+	p, err := projectByKey(ctx, store, orgID, normKey(in.Key))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, toProjectView(p))
+	v := toProjectView(p)
+	return &v, nil
 }
 
 type updateProjectReq struct {
-	Name        *string `json:"name"`
+	// Key is the project to update, taken from the path — a body key is ignored.
+	Key string `json:"key"`
+	// Name replaces the display name when present; must be 1..256 characters.
+	Name *string `json:"name"`
+	// Description replaces the description when present; max 8192 characters.
 	Description *string `json:"description"`
 }
 
-func updateProject(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, c, org)
+// updateProject edits a project's name or description; an absent field is left alone.
+// A key another org owns reads as not found — the query binds org.
+//
+// Example: {"key": "ENG", "name": "Engineering"}
+func (o ops) updateProject(ctx context.Context, in *updateProjectReq) (*projectView, error) {
+	_, orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	p, err := store.GetProject(c.Context(), org, keyParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+	p, err := projectByKey(ctx, store, orgID, normKey(in.Key))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	var body updateProjectReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if body.Name != nil {
-		n := strings.TrimSpace(*body.Name)
+	if in.Name != nil {
+		n := strings.TrimSpace(*in.Name)
 		if n == "" || len(n) > maxField {
-			return zip.ErrBadRequest("name cannot be empty (<=256 chars)")
+			return nil, zip.ErrBadRequest("name cannot be empty (<=256 chars)")
 		}
 		p.Name = n
 	}
-	if body.Description != nil {
-		d := strings.TrimSpace(*body.Description)
+	if in.Description != nil {
+		d := strings.TrimSpace(*in.Description)
 		if len(d) > maxDesc {
-			return zip.ErrBadRequest("description too long")
+			return nil, zip.ErrBadRequest("description too long")
 		}
 		p.Description = d
 	}
 	p.UpdatedAt = time.Now().Unix()
-	if err := store.UpdateProject(c.Context(), p); err != nil {
+	if err := store.UpdateProject(ctx, p); err != nil {
 		if errors.Is(err, errNotFound) {
-			return zip.ErrNotFound("project not found")
+			return nil, zip.ErrNotFound("project not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
-	return c.JSON(http.StatusOK, toProjectView(p))
+	v := toProjectView(p)
+	return &v, nil
 }
 
-func deleteProject(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, c, org)
+// deleteProject deletes a project and every issue in it, and answers 204.
+// A key another org owns is a 404, never a delete — the DELETE binds org.
+//
+// Example: {"key": "ENG"}
+func (o ops) deleteProject(ctx context.Context, in *projectRef) (*struct{}, error) {
+	_, orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	deleted, err := store.DeleteProject(c.Context(), org, keyParam(c))
+	deleted, err := store.DeleteProject(ctx, orgID, normKey(in.Key))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("project not found")
+		return nil, zip.ErrNotFound("project not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ---- issue handlers ----
@@ -380,7 +456,13 @@ func deleteProject(s *cloud.Service[state], c *zip.Ctx) error {
 // project resolves the caller's project by :key from the given per-org store,
 // or answers the right HTTP error.
 func project(s *cloud.Service[state], c *zip.Ctx, store *Store, org string) (Project, error) {
-	p, err := store.GetProject(c.Context(), org, keyParam(c))
+	return projectByKey(c.Context(), store, org, keyParam(c))
+}
+
+// projectByKey is the ONE project lookup both the raw handlers and the typed ops
+// run: the key is already normalized, the store already bound to (org, project).
+func projectByKey(ctx context.Context, store *Store, org, key string) (Project, error) {
+	p, err := store.GetProject(ctx, org, key)
 	if errors.Is(err, errNotFound) {
 		return Project{}, zip.ErrNotFound("project not found")
 	}
@@ -490,175 +572,185 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toIssueView(p.Key, created))
 }
 
-func listIssues(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, c, org)
+// listIssues lists a project's issues, optionally narrowed by status, kind, repo or source.
+// A filter value outside its closed set is a 400; a project another org owns
+// reads as not found.
+//
+// Example: {"key": "ENG", "kind": "pr", "repo": "hanzoai/cloud"}
+func (o ops) listIssues(ctx context.Context, in *issueQuery) (*issueList, error) {
+	_, orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	p, err := project(s, c, store, org)
+	p, err := projectByKey(ctx, store, orgID, normKey(in.Key))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	filter, err := issueFilter(c)
+	filter, err := filterOf(in)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	rows, err := store.ListIssues(c.Context(), org, p.ID, filter)
+	rows, err := store.ListIssues(ctx, orgID, p.ID, filter)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
-	out := make([]issueView, 0, len(rows))
+	out := make(issueList, 0, len(rows))
 	for _, i := range rows {
 		out = append(out, toIssueView(p.Key, i))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
-func getIssue(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, c, org)
+// getIssue returns one issue of a project by its number.
+// An issue in another org's project reads as not found — every query binds org.
+//
+// Example: {"key": "ENG", "num": 42}
+func (o ops) getIssue(ctx context.Context, in *issueRef) (*issueView, error) {
+	_, orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	p, err := project(s, c, store, org)
+	p, err := projectByKey(ctx, store, orgID, normKey(in.Key))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	num, err := numParam(c)
+	num, err := issueNumber(in.Number)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	i, err := store.GetIssue(c.Context(), org, p.ID, num)
+	i, err := store.GetIssue(ctx, orgID, p.ID, num)
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("issue not found")
+		return nil, zip.ErrNotFound("issue not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	return c.JSON(http.StatusOK, toIssueView(p.Key, i))
+	v := toIssueView(p.Key, i)
+	return &v, nil
 }
 
 type updateIssueReq struct {
-	Title       *string   `json:"title"`
-	Description *string   `json:"description"`
-	Status      *string   `json:"status"`
-	Priority    *string   `json:"priority"`
-	Assignee    *string   `json:"assignee"`
-	Labels      *[]string `json:"labels"`
+	// Key is the project the issue belongs to, taken from the path.
+	Key string `json:"key"`
+	// Number is the issue number, taken from the path.
+	Number int `json:"num"`
+	// Title replaces the title when present; must be 1..512 characters.
+	Title *string `json:"title"`
+	// Description replaces the description when present; max 8192 characters.
+	Description *string `json:"description"`
+	// Status moves the issue in the lifecycle (backlog|todo|in_progress|done|canceled).
+	Status *string `json:"status"`
+	// Priority sets the priority (none|low|medium|high|urgent).
+	Priority *string `json:"priority"`
+	// Assignee sets the assignee handle; max 256 characters.
+	Assignee *string `json:"assignee"`
+	// Labels replaces the whole label set; a label may not contain a comma.
+	Labels *[]string `json:"labels"`
 }
 
-func updateIssue(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, c, org)
+// updateIssue edits an issue's fields; an absent field is left alone.
+// An unknown status, priority or label is a 400; an issue in another org's
+// project reads as not found.
+//
+// Example: {"key": "ENG", "num": 42, "status": "in_progress", "assignee": "z"}
+func (o ops) updateIssue(ctx context.Context, in *updateIssueReq) (*issueView, error) {
+	_, orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	p, err := project(s, c, store, org)
+	p, err := projectByKey(ctx, store, orgID, normKey(in.Key))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	num, err := numParam(c)
+	num, err := issueNumber(in.Number)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	i, err := store.GetIssue(c.Context(), org, p.ID, num)
+	i, err := store.GetIssue(ctx, orgID, p.ID, num)
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("issue not found")
+		return nil, zip.ErrNotFound("issue not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	var body updateIssueReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if body.Title != nil {
-		t := strings.TrimSpace(*body.Title)
+	if in.Title != nil {
+		t := strings.TrimSpace(*in.Title)
 		if t == "" || len(t) > maxTitle {
-			return zip.ErrBadRequest("title cannot be empty (<=512 chars)")
+			return nil, zip.ErrBadRequest("title cannot be empty (<=512 chars)")
 		}
 		i.Title = t
 	}
-	if body.Description != nil {
-		d := strings.TrimSpace(*body.Description)
+	if in.Description != nil {
+		d := strings.TrimSpace(*in.Description)
 		if len(d) > maxDesc {
-			return zip.ErrBadRequest("description too long")
+			return nil, zip.ErrBadRequest("description too long")
 		}
 		i.Description = d
 	}
-	if body.Status != nil {
-		st, err := normStatus(*body.Status)
+	if in.Status != nil {
+		st, err := normStatus(*in.Status)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		i.Status = st
 	}
-	if body.Priority != nil {
-		pr, err := normPriority(*body.Priority)
+	if in.Priority != nil {
+		pr, err := normPriority(*in.Priority)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		i.Priority = pr
 	}
-	if body.Assignee != nil {
-		a := strings.TrimSpace(*body.Assignee)
+	if in.Assignee != nil {
+		a := strings.TrimSpace(*in.Assignee)
 		if len(a) > maxField {
-			return zip.ErrBadRequest("assignee too long")
+			return nil, zip.ErrBadRequest("assignee too long")
 		}
 		i.Assignee = a
 	}
-	if body.Labels != nil {
-		lb, err := normLabels(*body.Labels)
+	if in.Labels != nil {
+		lb, err := normLabels(*in.Labels)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		i.Labels = lb
 	}
 	i.UpdatedAt = time.Now().Unix()
-	if err := store.UpdateIssue(c.Context(), i); err != nil {
+	if err := store.UpdateIssue(ctx, i); err != nil {
 		if errors.Is(err, errNotFound) {
-			return zip.ErrNotFound("issue not found")
+			return nil, zip.ErrNotFound("issue not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
-	return c.JSON(http.StatusOK, toIssueView(p.Key, i))
+	v := toIssueView(p.Key, i)
+	return &v, nil
 }
 
-func deleteIssue(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, c, org)
+// deleteIssue deletes one issue of a project and answers 204.
+// An issue in another org's project is a 404, never a delete — the query binds org.
+//
+// Example: {"key": "ENG", "num": 42}
+func (o ops) deleteIssue(ctx context.Context, in *issueRef) (*struct{}, error) {
+	_, orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	p, err := project(s, c, store, org)
+	p, err := projectByKey(ctx, store, orgID, normKey(in.Key))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	num, err := numParam(c)
+	num, err := issueNumber(in.Number)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	deleted, err := store.DeleteIssue(c.Context(), org, p.ID, num)
+	deleted, err := store.DeleteIssue(ctx, orgID, p.ID, num)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("issue not found")
+		return nil, zip.ErrNotFound("issue not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ---- helpers ----
@@ -670,12 +762,25 @@ func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // keyParam returns the uppercased :key path segment (project keys are stored
 // uppercase; the URL is matched case-insensitively).
-func keyParam(c *zip.Ctx) string { return strings.ToUpper(strings.TrimSpace(c.Param("key"))) }
+func keyParam(c *zip.Ctx) string { return normKey(c.Param("key")) }
+
+// normKey is the ONE project-key normalization both the raw handlers and the
+// typed ops run on whatever the URL carried.
+func normKey(s string) string { return strings.ToUpper(strings.TrimSpace(s)) }
 
 // numParam parses the :num path segment into a positive issue number.
 func numParam(c *zip.Ctx) (int, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(c.Param("num")))
 	if err != nil || n <= 0 {
+		return 0, zip.ErrBadRequest("issue number must be a positive integer")
+	}
+	return n, nil
+}
+
+// issueNumber bounds an issue number a typed op already decoded. A value the URL
+// could not parse arrives as 0, which is the same rejection numParam raises.
+func issueNumber(n int) (int, error) {
+	if n <= 0 {
 		return 0, zip.ErrBadRequest("issue number must be a positive integer")
 	}
 	return n, nil
@@ -725,25 +830,24 @@ func normSource(s string) (string, error) {
 	return s, nil
 }
 
-// issueFilter builds an IssueFilter from the ?status=&kind=&repo=&source= query,
-// rejecting any value outside a closed set (repo is a free-form binding, only
-// length-bounded). This is the ONE place a surface's slice of the shared issue
-// table is expressed: hanzo.team passes none/status, a git repo's Issues tab
-// ?kind=issue&repo=<r>, its PRs tab ?kind=pr&repo=<r>.
-func issueFilter(c *zip.Ctx) (IssueFilter, error) {
-	status := strings.TrimSpace(c.Query("status"))
+// filterOf builds an IssueFilter from the decoded issueQuery, rejecting any value
+// outside a closed set (repo is a free-form binding, only length-bounded). The
+// filters ride the URL as ?status=&kind=&repo=&source=, which is what issueQuery
+// declares them as.
+func filterOf(in *issueQuery) (IssueFilter, error) {
+	status := strings.TrimSpace(in.Status)
 	if status != "" && !statuses[status] {
 		return IssueFilter{}, zip.ErrBadRequest("unknown status filter")
 	}
-	kind := strings.TrimSpace(c.Query("kind"))
+	kind := strings.TrimSpace(in.Kind)
 	if kind != "" && !kinds[kind] {
 		return IssueFilter{}, zip.ErrBadRequest("unknown kind filter")
 	}
-	source := strings.TrimSpace(c.Query("source"))
+	source := strings.TrimSpace(in.Source)
 	if source != "" && !sources[source] {
 		return IssueFilter{}, zip.ErrBadRequest("unknown source filter")
 	}
-	repo := strings.TrimSpace(c.Query("repo"))
+	repo := strings.TrimSpace(in.Repo)
 	if len(repo) > maxField {
 		return IssueFilter{}, zip.ErrBadRequest("repo filter too long")
 	}

@@ -19,7 +19,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"ok":true}}`),
 	})
 	zip.Describe("GET /v1/admin/aimetrics", zip.Doc{
-		Description: "aimetrics is the fleet AI board: O11yAI generations (count, cost, avg/p95 latency,\nper-model), per-model usage from the live cloud_usage ledger, and the eval plane\n(traces, scores, score names, runs, and the average-score trend).\n\nEvery signal degrades INDEPENDENTLY — a table that is absent or errors contributes its\nzero value and the read still succeeds. O11yAI latency is a SEPARATE query from\ngenerations and cost on purpose: a Nullable end_time or a column mismatch there must\nnot zero the two numbers that did read.",
+		Description: "aimetrics is the fleet AI board. It carries O11yAI generations (count, cost, avg/p95\nlatency, per-model), per-model usage from the live cloud_usage ledger, and the eval\nplane (traces, scores, score names, runs, and the average-score trend).\n\nEvery signal degrades INDEPENDENTLY — a table that is absent or errors contributes its\nzero value and the read still succeeds. O11yAI latency is a SEPARATE query from\ngenerations and cost on purpose: a Nullable end_time or a column mismatch there must\nnot zero the two numbers that did read.",
 		Fields: map[string]string{
 			"aiMetrics.evalRuns":     "recent eval runs (progress)",
 			"aiMetrics.o11yAiModels": "o11y_ai per-model (honest-empty today)",
@@ -50,7 +50,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"range":"30d","interval":"day","generatedAt":"2026-07-27T00:00:00Z","sources":[{"name":"iam","ok":true,"rows":2,"lastSync":"2026-07-27T00:00:00Z"}]}}`),
 	})
 	zip.Describe("GET /v1/admin/applications", zip.Doc{
-		Description: "applications lists IAM applications for one owner org, forwarded VERBATIM from IAM's\nget-applications. These are the platform's OIDC clients — the console reads clientId\noff each row.",
+		Description: "applications lists IAM applications for one owner org. The rows are forwarded VERBATIM\nfrom IAM's get-applications — these are the platform's OIDC clients, and the console\nreads clientId off each row.",
 		Fields: map[string]string{
 			"iamPageIn.owner":    "Owner is the org whose rows to read. Defaults to the admin org, which owns the\nplatform's roles and applications.",
 			"iamPageIn.p":        "Page is the 1-based page number. Forwarded only when set — IAM applies its own\ndefault otherwise.",
@@ -60,15 +60,15 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"data2":1}`),
 	})
 	zip.Describe("GET /v1/admin/bases", zip.Doc{
-		Description: "bases lists the tenant Base instances in the caller's window — a SuperAdmin sees every\ntenant's, anyone else only their own subtree's.\n\nThe scope is enforced TWICE: the upstream is asked for the caller's org, AND every row\nit returns is re-checked against the resolved scope. An upstream that ignored the\nfilter therefore degrades to empty, never to a cross-tenant leak.\n\nThe Base engine is being embedded into cloud; until it lands this proxies\nBASE_ADMIN_URL and, when that is unset, answers 200 with an empty list and msg saying\nso — the honest not-yet state, never fabricated instances.",
+		Description: "bases lists the tenant Base instances in the caller's window. A SuperAdmin sees every\ntenant's, anyone else only their own subtree's.\n\nThe scope is enforced TWICE: the upstream is asked for the caller's org, AND every row\nit returns is re-checked against the resolved scope. An upstream that ignored the\nfilter therefore degrades to empty, never to a cross-tenant leak.\n\nThe Base engine is being embedded into cloud; until it lands this proxies\nBASE_ADMIN_URL and, when that is unset, answers 200 with an empty list and msg saying\nso — the honest not-yet state, never fabricated instances.",
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":[{"name":"acme-base","org":"acme","url":"https://acme.base.hanzo.ai","status":"running","plan":"pro","region":"nyc3","created":"2026-03-01T00:00:00Z"}],"data2":1}`),
 	})
 	zip.Describe("GET /v1/admin/block-storage", zip.Doc{
-		Description: "blockStorage is the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
+		Description: "blockStorage is the realtime block-storage board. It carries the DigitalOcean volume\nfleet (count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"fleet":{"count":2,"totalGiB":300,"usedGiB":null,"pct":null,"monthlyUsd":30},"datastore":{"name":"default","mount":"/var/lib/datastore","sizeGiB":200,"usedGiB":81.4,"pct":40.7},"volumes":[{"id":"v1","name":"datastore-data","region":"nyc3","sizeGiB":200,"usedGiB":null,"pct":null,"attached":true,"service":""}],"alerts":[]}}`),
 	})
 	zip.Describe("GET /v1/admin/compute", zip.Doc{
-		Description: "compute rolls the fleet's compute usage up to one row per (org, app, project, kind):\nhow many distinct machines ran in the window, how many are still active, what they\nbilled, and when each group last emitted an event. The console folds these into its\norg → app → project tree.\n\nA machine counts as ACTIVE when its LATEST lifecycle event is not a terminal one\n(stop/destroy/terminate/delete/off/shutdown/expire and their past tenses) — the same\nfold the console applies, done in the warehouse so the count is over every machine and\nnot just the page.\n\nHonest-empty when the warehouse is not connected or hanzo.compute_usage is not\nprovisioned yet: an empty list, never a fabricated fleet.",
+		Description: "compute rolls the fleet's compute usage up to one row per workload group. The group is\n(org, app, project, kind), and each row reports how many distinct machines ran in the\nwindow, how many are still active, what they billed, and when the group last emitted an\nevent. The console folds these into its org → app → project tree.\n\nA machine counts as ACTIVE when its LATEST lifecycle event is not a terminal one\n(stop/destroy/terminate/delete/off/shutdown/expire and their past tenses) — the same\nfold the console applies, done in the warehouse so the count is over every machine and\nnot just the page.\n\nHonest-empty when the warehouse is not connected or hanzo.compute_usage is not\nprovisioned yet: an empty list, never a fabricated fleet.",
 		Fields: map[string]string{
 			"computeIn.kind":  "Kind narrows to one workload class (bot | machine | cluster | nodepool |\ncontainer | function | …). An OPEN spectrum matched as a plain string, lowercased\nto the warehouse's convention; empty means every kind.",
 			"computeIn.org":   "Org narrows to one tenant. Empty means every tenant — this board is\ncross-tenant by nature.",
@@ -82,7 +82,7 @@ func init() {
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"switches":[{"key":"waitlist.chat","category":"launch","label":"Chat waitlist","description":"Gate chat behind the waitlist","value":true,"source":"default"}]}}`),
 	})
 	zip.Describe("GET /v1/admin/me", zip.Doc{
-		Description: "me answers with the validated operator identity — who the console is signed in as,\nwhich tier they are, and how wide their tenant window is. The fields come from the\nsanitized identity headers the gate just read, so they are authoritative and never\nclient-forgeable; nothing is looked up.",
+		Description: "me answers with the validated operator identity. It reports who the console is signed\nin as, which tier they are, and how wide their tenant window is. The fields come from\nthe sanitized identity headers the gate just read, so they are authoritative and never\nclient-forgeable; nothing is looked up.",
 		Fields: map[string]string{
 			"adminMe.isWhiteLabel": "IsWhiteLabel marks the admitted NON-super tier: an admin of an enabled\nwhite-label tenant org. Mutually exclusive with IsSuperAdmin (the gate lets\nexactly one tier through). The operator SPA reads it to render the SUBTREE\ncockpit — the fleet god-view nav (finance/revenue/metrics/o11y/providers) is\nhidden — while a super sees the whole fleet.",
 			"adminMe.scopeOrgs":    "ScopeOrgs is the caller's visible tenant window: empty for a SuperAdmin (means\nALL orgs), or the WL tenant's own subtree (today the singleton {org}). The SPA\nthreads it through the faceting/drill-down layer so a WL tenant can never widen\na filter past their subtree.",
@@ -98,12 +98,12 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/admin/o11y", zip.Doc{
-		Description: "o11y is the fleet-wide observability board: LLM usage (requests, tokens, cost,\nerrors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in ms,\nerror rate, top services), fleet log volume, and the O11yAI generation rollup — all\naggregated across EVERY tenant, with no org filter applied.\n\nEvery signal degrades INDEPENDENTLY. A table that is absent or errors contributes its\nzero value and the read still succeeds, so the board renders exactly what the\nwarehouse holds rather than failing whole because one of four sources is missing.\nSame when the warehouse is not connected at all: the zero board, never a fabricated\nfleet.",
+		Description: "o11y is the fleet-wide observability board. It carries LLM usage (requests, tokens,\ncost, errors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in\nms, error rate, top services), fleet log volume, and the O11yAI generation rollup — all\naggregated across EVERY tenant, with no org filter applied.\n\nEvery signal degrades INDEPENDENTLY. A table that is absent or errors contributes its\nzero value and the read still succeeds, so the board renders exactly what the\nwarehouse holds rather than failing whole because one of four sources is missing.\nSame when the warehouse is not connected at all: the zero board, never a fabricated\nfleet.",
 		Fields: map[string]string{
 			"o11ySvcStat.errorRate":     "percent (0..100)",
-			"o11yTotals.logVolume":      "Logs (distributed_logs_v2), fleet volume over the window.",
+			"o11yTotals.logVolume":      "Logs (event.log), fleet volume over the window.",
 			"o11yTotals.requests":       "LLM usage (hanzo.cloud_usage), all orgs.",
-			"o11yTotals.traceCount":     "Traces (o11y_index_v3), all services.",
+			"o11yTotals.traceCount":     "Spans (event.span), all services.",
 			"o11yTotals.traceErrorRate": "percent (0..100)",
 			"rangeIn.range":             "Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the\nboard's own default.",
 		},
@@ -111,15 +111,15 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"range":"7d","start":"2026-07-20T00:00:00Z","end":"2026-07-27T00:00:00Z","totals":{"requests":10420,"tokens":8100000,"costCents":41200,"errors":37},"series":[],"logSeries":[],"topOrgs":[],"topModels":[],"topServices":[],"llm":{"generations":0,"costUsd":0}}}`),
 	})
 	zip.Describe("GET /v1/admin/orgs", zip.Doc{
-		Description: "orgs lists the tenant directory one row per org, sorted by slug: member count and the\norg's month-to-date spend and credit balance, read live from IAM and commerce.\n\nThe rows are the caller's tenant window, not the fleet: a SuperAdmin gets every org, a\nwhite-label admin only their own subtree. A per-org read that fails degrades THAT row\nto an honest zero — this panel carries no sources[] channel to report freshness on, so\nthe alternative would be a fleet total that silently reads healthy.",
+		Description: "orgs lists the tenant directory, one row per org, sorted by slug. Each row carries the\nmember count and the org's month-to-date spend and credit balance, read live from IAM\nand commerce.\n\nThe rows are the caller's tenant window, not the fleet: a SuperAdmin gets every org, a\nwhite-label admin only their own subtree. A per-org read that fails degrades THAT row\nto an honest zero — this panel carries no sources[] channel to report freshness on, so\nthe alternative would be a fleet total that silently reads healthy.",
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","users":7,"products":0,"spendCents":12500,"creditsCents":5000,"tokens":0,"created":"2026-01-04T00:00:00Z"}],"data2":1}`),
 	})
 	zip.Describe("GET /v1/admin/overview", zip.Doc{
-		Description: "overview is the Platform Overview tiles: how many orgs and users are in the caller's\ntenant window, the fleet workload counts, and month-to-date spend and credits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless. Instead every upstream reports itself in sources[]: ok, degraded, or\nnot-configured. A commerce read that failed for ANY org marks that source degraded,\nbecause the spend/credits totals are then an undercount and must not read healthy.\n\ntokens30d is 0 for the same reason /usage has no series: there is no fleet token\ncounter to read yet.",
+		Description: "overview is the Platform Overview tiles. They report how many orgs and users are in\nthe caller's tenant window, the fleet workload counts, and month-to-date spend and\ncredits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless. Instead every upstream reports itself in sources[]: ok, degraded, or\nnot-configured. A commerce read that failed for ANY org marks that source degraded,\nbecause the spend/credits totals are then an undercount and must not read healthy.\n\ntokens30d is 0 for the same reason /usage has no series: there is no fleet token\ncounter to read yet.",
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"orgs":2,"users":14,"products":31,"activeProducts":29,"drift":1,"spendCents30d":250000,"tokens30d":0,"creditsCents":10000,"lastSync":"2026-07-27T00:00:00Z","sources":[{"name":"iam","ok":true,"rows":2,"lastSync":"2026-07-27T00:00:00Z"}]}}`),
 	})
 	zip.Describe("GET /v1/admin/products", zip.Doc{
-		Description: "products lists the fleet workload registry: every operator App CR across the platform\nnamespaces with its declared vs running image tag, reconciled health/phase and drift\nverdict. Optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/platform/fleet renders — read through the in-process\nplatform seam, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
+		Description: "products lists the fleet workload registry. It reports every operator App CR across\nthe platform namespaces with its declared vs running image tag, reconciled health/phase\nand drift verdict, optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/platform/fleet renders — read through the in-process\nplatform seam, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
 		Fields: map[string]string{
 			"productRow.cluster":       "hanzo-k8s",
 			"productRow.declaredTag":   "spec.image.tag on the App CR (declared truth)",
@@ -143,7 +143,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"name":"sql","kind":"sql","tier":"data","org":"hanzoai","cluster":"hanzo-k8s","env":"main","namespace":"hanzo","repo":"hanzoai/sql","phase":"Running","declaredTag":"v1.4.2","runningTag":"v1.4.2","latestTag":"","health":"green","drift":false,"driftSeverity":"ok","updated":""}],"data2":1}`),
 	})
 	zip.Describe("GET /v1/admin/promos", zip.Doc{
-		Description: "getPromo reads the current platform plan promo — the singleton discount offer, e.g.\nthe 50%-off launch promo. Commerce stores it in the reserved platform namespace, so\nthe org sent with the read is the admin org and the service token is what passes\ncommerce's own platform-admin gate.",
+		Description: "getPromo reads the current platform plan promo. The promo is the singleton discount\noffer, e.g. the 50%-off launch promo. Commerce stores it in the reserved platform\nnamespace, so the org sent with the read is the admin org and the service token is\nwhat passes commerce's own platform-admin gate.",
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z","end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"data2":0}`),
 	})
 	zip.Describe("GET /v1/admin/roles", zip.Doc{
@@ -157,7 +157,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"data2":1}`),
 	})
 	zip.Describe("GET /v1/admin/services", zip.Doc{
-		Description: "services reads the launch board: every hosted service in the registry with its LIVE\nwaitlist mode, evaluated through the flag engine. This is the \"remove the waitlist one\nservice at a time\" view.",
+		Description: "services reads the launch board. It lists every hosted service in the registry with\nits LIVE waitlist mode, evaluated through the flag engine. This is the \"remove the\nwaitlist one service at a time\" view.",
 		Fields: map[string]string{
 			"serviceList.services": "Services is every registered service with its live waitlist mode.",
 		},
@@ -182,7 +182,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/admin/usage", zip.Doc{
-		Description: "usage returns the month-to-date money totals: one org's when org names one, else the\nfleet sum across every org a SuperAdmin can see.\n\nseries and byProduct are ALWAYS empty. A daily trend and a per-product split are not\nderivable from the commerce billing API — they live in insights/datastore — so this\nanswers with the honest empty arrays rather than fabricating a shape the console would\nthen chart. Same reason tokens and requests are 0: there is no fleet counter to read.",
+		Description: "usage returns the month-to-date money totals. It answers for one org when org names\none, else the fleet sum across every org a SuperAdmin can see.\n\nseries and byProduct are ALWAYS empty. A daily trend and a per-product split are not\nderivable from the commerce billing API — they live in insights/datastore — so this\nanswers with the honest empty arrays rather than fabricating a shape the console would\nthen chart. Same reason tokens and requests are 0: there is no fleet counter to read.",
 		Fields: map[string]string{
 			"usageIn.org": "Org reads ONE tenant's month-to-date total instead of the fleet sum. Honoured\nfor a SuperAdmin only — a white-label admin always reads their own org.",
 		},
@@ -201,7 +201,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"acme","name":"ada","email":"ada@acme.com","displayName":"Ada","isAdmin":true,"isSuperAdmin":false,"tag":"","created":"2026-01-04T00:00:00Z","lastSignin":"2026-07-01T09:12:00Z","forbidden":false}],"data2":222}`),
 	})
 	zip.Describe("GET /v1/admin/waitlist", zip.Doc{
-		Description: "waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine — position,\npoints and referral standing per entry — proxied server-authed with the engine secret,\nnever a client credential.\n\nThe engine's payload is forwarded VERBATIM as data; the console normalizes it. When\nthe engine is not configured on this deployment the read still succeeds, with an empty\nobject and a msg saying so, so the panel shows an honest not-wired state instead of an\nerror the operator would chase.",
+		Description: "waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine. Each entry\ncarries its position, points and referral standing, proxied server-authed with the\nengine secret, never a client credential.\n\nThe engine's payload is forwarded VERBATIM as data; the console normalizes it. When\nthe engine is not configured on this deployment the read still succeeds, with an empty\nobject and a msg saying so, so the panel shows an honest not-wired state instead of an\nerror the operator would chase.",
 		Fields: map[string]string{
 			"waitlistIn.page":     "Page is the 1-based page number.",
 			"waitlistIn.pageSize": "PageSize is entries per page.",
@@ -225,7 +225,7 @@ func init() {
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cg_01J","org":"acme","amountCents":50000,"remainingCents":50000}}`),
 	})
 	zip.Describe("POST /v1/admin/services", zip.Doc{
-		Description: "upsertService onboards a hosted service, or edits one, so a new host comes under the\nlaunch gate WITHOUT a redeploy. Re-registering an existing service PRESERVES its live\nswitch — editing the hosts of a service that is already open must not silently close\nit again.",
+		Description: "upsertService onboards a hosted service, or edits one. A new host comes under the\nlaunch gate WITHOUT a redeploy. Re-registering an existing service PRESERVES its live\nswitch — editing the hosts of a service that is already open must not silently close\nit again.",
 		Fields: map[string]string{
 			"serviceOne.service": "Service is the row as it stands after the write, live mode included.",
 		},
@@ -243,7 +243,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"service":{"service":"chat","displayName":"Chat","description":"Hanzo Chat","hosts":["chat.hanzo.ai"],"waitlistMode":false}}}`),
 	})
 	zip.Describe("POST /v1/admin/spend-caps", zip.Doc{
-		Description: "createSpendCap sets a usage cap on one org — a platform override of a customer budget,\nwritten to the customer's own spend-alert rows. The body is commerce's spend-alert\ncontract, forwarded byte-for-byte.",
+		Description: "createSpendCap sets a usage cap on one org. It is a platform override of a customer\nbudget, written to the customer's own spend-alert rows. The body is commerce's\nspend-alert contract, forwarded byte-for-byte.",
 		Fields: map[string]string{
 			"capIn.id":  "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
 			"capIn.org": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
@@ -256,7 +256,7 @@ func init() {
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"started":true}}`),
 	})
 	zip.Describe("POST /v1/admin/waitlist/boost", zip.Doc{
-		Description: "waitlistBoost grants a user waitlist points, moving them up toward the access cutoff.\nThis is the access lever: the cutoff itself does not move, the person does.\n\nIt funnels through the engine's verified grant seam (POST /v1/waitlist/award with\nsource=\"grant\" — the ONE path that honours an explicit points amount) and writes a\ntamper-evident audit row either way, so a FAILED grant is recorded too. The reason\nfield goes only to that row.",
+		Description: "waitlistBoost grants a user waitlist points, moving them toward the cutoff. It is the\naccess lever: the cutoff itself does not move, the person does.\n\nIt funnels through the engine's verified grant seam (POST /v1/waitlist/award with\nsource=\"grant\" — the ONE path that honours an explicit points amount) and writes a\ntamper-evident audit row either way, so a FAILED grant is recorded too. The reason\nfield goes only to that row.",
 		Fields: map[string]string{
 			"waitlistBoostRequest.email":    "Email identifies the entry to boost. Either this or RefCode is required.",
 			"waitlistBoostRequest.points":   "Points is how many points to award. Must be positive — this seam exists to move\nsomeone UP toward the cutoff.",
@@ -268,7 +268,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"email":"ada@acme.com","points":170,"position":3}}`),
 	})
 	zip.Describe("PUT /v1/admin/flags/:key", zip.Doc{
-		Description: "setFlag stores or overwrites ONE platform switch's definition and answers with the\nwhole board as it now stands. The flip is hot: this pod applies it immediately and\npeers converge within one evaluation TTL (15s by default), with no redeploy.\n\nThe body reaches the flag engine BYTE-FOR-BYTE — it is the engine's definition\nformat, not this layer's, so a field the engine understands and admin does not must\nstill arrive intact. setFlagIn names the two fields that matter for documentation; it\nis not a filter.\n\nThe write is recorded in the store's activity log against the caller's email.",
+		Description: "setFlag stores or overwrites ONE platform switch's definition. It answers with the\nwhole board as it now stands. The flip is hot: this pod applies it immediately and\npeers converge within one evaluation TTL (15s by default), with no redeploy.\n\nThe body reaches the flag engine BYTE-FOR-BYTE — it is the engine's definition\nformat, not this layer's, so a field the engine understands and admin does not must\nstill arrive intact. setFlagIn names the two fields that matter for documentation; it\nis not a filter.\n\nThe write is recorded in the store's activity log against the caller's email.",
 		Fields: map[string]string{
 			"setFlagIn.active":  "Active is the switch itself: true enables the flag for every evaluation.",
 			"setFlagIn.filters": "Filters is the optional rollout/payload block of a VALUED switch, e.g.\n{\"groups\":[{\"properties\":[],\"rollout_percentage\":100}],\"payloads\":{\"true\":250}}.",
@@ -278,7 +278,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"switches":[{"key":"waitlist.chat","category":"launch","label":"Chat waitlist","description":"Gate chat behind the waitlist","value":true,"source":"stored"}]}}`),
 	})
 	zip.Describe("PUT /v1/admin/promos", zip.Doc{
-		Description: "putPromo upserts the platform plan promo — the ONE place the offer is configured.\n\nThe body is commerce's own promo contract and is forwarded BYTE-FOR-BYTE, so no field\ncommerce accepts is dropped in transit. promoIn names its documented fields.",
+		Description: "putPromo upserts the platform plan promo. It is the ONE place the offer is configured.\n\nThe body is commerce's own promo contract and is forwarded BYTE-FOR-BYTE, so no field\ncommerce accepts is dropped in transit. promoIn names its documented fields.",
 		Fields: map[string]string{
 			"promoIn.active":     "Active is the master switch: false parks the offer without deleting it.",
 			"promoIn.end":        "End is when the offer closes (RFC3339).",
