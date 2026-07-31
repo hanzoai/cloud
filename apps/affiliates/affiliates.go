@@ -1,10 +1,15 @@
-// Package affiliates mounts the Hanzo Cloud /v1/affiliates/* partner-commission
-// surface: a native-Go, per-org affiliate program on Base/SQLite that pays partners
-// an ONGOING COMMISSION on the metered spend of the customers they refer. It sits
-// next to clients/referrals (a one-time credit for both sides) as the OTHER growth
-// loop — the recurring, partner-revenue one — and mirrors its structure exactly:
-// one SQLite store, server-side tenant isolation, one Mount, HIP-0106, and the SAME
-// commerce ledger path (a credits payout is a grant, tag grant:affiliate).
+// Package affiliates is the partner program: partners apply, get approved with a
+// commission rate and a share link, and earn an ONGOING COMMISSION on the metered
+// spend of every customer they refer, accrued per period and paid out in credits
+// or cash.
+//
+// It is one of THREE programs in this repo built on the same shape — apply/connect,
+// approve, attribute, accrue at-most-once per (party, counterparty, period), pay
+// out against pending = accrued − paid. apps/referrals is the one-time bonus for
+// both sides; apps/authors is the royalty for OSS authors on deploy spend. All
+// three share the commerce ledger path (a credits payout is a grant, tag
+// grant:affiliate) and each carries a byte-identical copy of commerce.go over
+// apps/payout.
 //
 // The loop, end to end:
 //
@@ -56,12 +61,12 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/authors"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/treasury"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 

@@ -12,17 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package analytics mounts the Hanzo Cloud /v1/analytics/* surface: a native-Go,
-// per-org analytics read API over the `hanzo` datastore warehouse (the
-// `datastore` cluster). It is the backend for the console Native Analytics module
-// (unified-analytics.md §5) — two read lenses over one warehouse:
+// Package analytics is the product-event plane: it owns the ingest door every
+// Hanzo client posts to, lands each event in the `hanzo` warehouse, and serves the
+// per-org read lenses — KPIs, time series, rankings, captured errors — over what it
+// wrote.
+//
+// It is BOTH halves, and that is deliberate: one write core (ingestEvents) behind
+// N doors (event.go), and the read lenses over the same warehouse, so a fact is
+// admitted, stamped with the SERVER-resolved tenant, and read back through one
+// vocabulary. Two lenses share one warehouse:
 //
 //   - LLM lens (REAL today): hanzo.cloud_usage, the live per-org usage ledger the
 //     cloud o11y path already writes (requests, tokens, spend, models, errors).
-//   - Web/commerce lens (honest-empty until the collector emits): hanzo.events.
+//   - Web/commerce lens: hanzo.events, what this package's own doors ingest.
+//
+// The accepted batch is also handed to registered SINKS (forward.go) — apps/
+// destinations forwards it to the org's connected ad platforms. analytics never
+// imports a consumer; the seam is one-way and fail-soft.
 //
 // ONE datastore client. This package does NOT open its own connection: it reads
-// through clients/datastore, the leaf that holds the warehouse connection for the
+// through apps/datastore, the leaf that holds the warehouse connection for the
 // whole binary and opens it from the environment on first use. DRY: one transport,
 // one pool, one set of KMS-injected DATASTORE_* creds — never hard-coded, never a
 // second design. (It used to reach the connection through ai/object's Bootstrap;
@@ -34,23 +43,31 @@
 // VALIDATED bearer owner claim (HIP-0026), never a client header — AND every
 // request must carry a validated principal (c.User() set, which SanitizeIdentity
 // sets ONLY for a verified bearer). This closes the Phase-1 "no-bearer + forged
-// X-Org-Id direct-to-pod" cross-tenant read exactly as clients/s3 does. Every
+// X-Org-Id direct-to-pod" cross-tenant read exactly as apps/s3 does. Every
 // datastore query binds the org POSITIONALLY (query.go llmWhere/eventsWhere), so
 // a maxpower token can NEVER read another org's analytics.
 //
-// Surface (all org-scoped; /v1 only; read-only):
+// Surface (all org-scoped; /v1 only):
 //
-//	GET /v1/analytics/overview     per-org KPIs (llm real; web/commerce honest-empty)
-//	GET /v1/analytics/timeseries   requests/tokens/spend over time (hour|day buckets)
-//	GET /v1/analytics/top          top models (real) + products + behavior lenses
-//	                               (topPages/topReferrers/topSources over the events lens)
-//	GET /v1/analytics/health       subsystem health (datastore connectivity + lens tables)
+//	READ
+//	GET  /v1/analytics/overview     per-org KPIs (llm real; web/commerce honest-empty)
+//	GET  /v1/analytics/timeseries   requests/tokens/spend over time (hour|day buckets)
+//	GET  /v1/analytics/top          top models (real) + products + behavior lenses
+//	                                (topPages/topReferrers/topSources over the events lens)
+//	GET  /v1/errors                 the caller org's most recently captured errors
+//	GET  /v1/insights/events        the caller org's most recent product events
+//	GET  /v1/insights/health        the insights surface is serving
+//	GET  /v1/analytics/health       subsystem health (datastore connectivity + lens tables)
 //
-// Those first three are TYPED ops, as are /v1/errors and /v1/insights/{events,health}
-// — six in all, so each one publishes its prose, its In/Out schema, an MCP tool and a
-// CLI command. /v1/analytics/health and the six ingest doors are untyped and cannot be
-// typed without moving their wire; routes (below) names each one's blocker where it is
-// registered.
+//	WRITE (the ingest doors — see doors, event.go)
+//	POST /v1/event                  the canonical wire (object | array | {batch:[…]})
+//	POST /v1/insights/e             the PostHog wire — a second WIRE, not a second name
+//	POST /v1/event/:project/envelope|store   the Sentry error wire, same door
+//
+// The six reads above /v1/analytics/health are TYPED ops, so each publishes its
+// prose, its In/Out schema, an MCP tool and a CLI command. /v1/analytics/health and
+// the ingest doors are untyped and cannot be typed without moving their wire;
+// routes (below) names each one's blocker where it is registered.
 //
 // Registered as id "analytics" with cloud.HealthOwner + order 132: it serves its
 // OWN /v1/analytics/health (below), and cloud.HealthOwner makes serve.go skip the
@@ -213,9 +230,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// and the socket peer the anonymous rate caps key on, the DNT/Sec-GPC headers,
 	// and the RAW body — whose LENGTH is the anonymous lane's 64 KiB → 413 bound
 	// (public.go maxPublicBytes) and whose first non-space BYTE selects the wire.
-	// Four of the six also accept a bare JSON ARRAY body, which cannot decode into
-	// any struct In: zip's op.invoke answers 400 on a body it cannot unmarshal, and
-	// these answer 200 with a receipt. See LLM.md; each door names its own blocker.
+	// The canonical door also accepts a bare JSON ARRAY body, which cannot decode
+	// into any struct In: zip's op.invoke answers 400 on a body it cannot unmarshal,
+	// and it answers 200 with a receipt. See LLM.md; each door names its own blocker.
 	for _, d := range doors {
 		app.Post(d.path, cloud.Handle(s, d.ingest))
 	}
