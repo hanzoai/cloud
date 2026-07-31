@@ -40,8 +40,11 @@ var (
 //
 // Charge returns nil once the call is paid for, ErrPaymentRequired when it is not
 // (the x402 challenge is on the response headers), or another error on an
-// unavailable rail. A nil Charger makes a tool with a DECLARED price fail closed
-// (ErrChargerUnset) — a paid tool is never served free.
+// unavailable rail. A nil Charger falls back to the internal plane
+// (charge_peer.go), which is how the shipped fleet — one binary per app — reaches a
+// rail that is never in this process; only when there is no rail ANYWHERE does a
+// tool with a DECLARED price fail closed (ErrChargerUnset), and a paid tool is never
+// served free either way.
 type Charger interface {
 	Charge(ctx context.Context, tool string) error
 }
@@ -215,10 +218,10 @@ func (r *Registry) resolve(ctx context.Context, scope Scope, name string) (Tool,
 //
 //  1. resolve the winning tool (precedence) — ErrUnknownTool if none.
 //  2. ACTIVATION gate — the tool MUST be activated for (org,project) or ErrNotActivated (403).
-//  3. PAYMENT gate — every call is offered to the x402 Charger seam, which owns the
-//     price table: a free tool settles for nothing, a priced one settles or the call
-//     fails closed (ErrPaymentRequired). With NO Charger wired, a tool that DECLARES
-//     a price fails closed (ErrChargerUnset) — a paid tool is never served free.
+//  3. PAYMENT gate — every call is offered to the x402 seam, which owns the price
+//     table: a free tool settles for nothing, a priced one settles or the call fails
+//     closed (ErrPaymentRequired). With NO rail REACHABLE, a tool that DECLARES a
+//     price fails closed (ErrChargerUnset) — a paid tool is never served free.
 //  4. dispatch to the winning source's provider, bound to the principal.
 //
 // The scope is the principal's own (org, project) — a caller can only ever dispatch
@@ -233,17 +236,34 @@ func (r *Registry) Dispatch(ctx context.Context, p Principal, name string, args 
 	if !act.IsActivated(ctx, p.Org, p.Project, name) {
 		return nil, ErrNotActivated
 	}
-	if charger == nil {
-		// No payment rail in this process. A tool that declares a price is refused;
-		// one that declares none is free by its own statement, not by our silence.
+	switch err := charge(ctx, charger, name); {
+	case err == nil:
+	case errors.Is(err, ErrPaymentRequired):
+		return nil, ErrPaymentRequired
+	case errors.Is(err, ErrChargerUnset):
+		// No payment rail anywhere this deployment can reach. A tool that declares a
+		// price is refused; one that declares none is free by its own statement, not
+		// by our silence.
 		if tool.Price != nil && tool.Price.Amount.Sign() > 0 {
 			return nil, ErrChargerUnset
 		}
-	} else if err := charger.Charge(ctx, name); err != nil {
-		if errors.Is(err, ErrPaymentRequired) {
-			return nil, ErrPaymentRequired
-		}
+	default:
 		return nil, err
 	}
 	return provider.Dispatch(ctx, p, name, args)
+}
+
+// charge settles one call through the payment seam: the installed Charger when the
+// subsystem that owns the price table is in this process, the internal plane when it
+// is not (charge_peer.go). ONE policy, two transports — which one answers is a
+// deployment fact, never a difference in what is enforced.
+//
+// A registry with neither — the bare one a unit test builds — answers ErrChargerUnset
+// directly, which is the same fact chargePeer reports for a fleet with no x402 in it,
+// so Dispatch has ONE case for "there is no rail" rather than one per reason.
+func charge(ctx context.Context, c Charger, tool string) error {
+	if c != nil {
+		return c.Charge(ctx, tool)
+	}
+	return chargePeer(ctx, tool)
 }

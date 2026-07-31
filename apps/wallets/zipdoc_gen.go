@@ -88,4 +88,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"treasury"}`),
 	})
+	zip.Describe("POST /wallets/payee", zip.Doc{
+		Description: "Payee resolves one payout wallet to the two things a settlement needs: the\nADDRESS a payment challenge names, and the LEDGER SUBJECT the earnings credit is\nwritten to.\n\nThe wallet is looked up ONLY within the org the caller is acting for, exactly as\nevery other read of this store is, so a settlement can only ever be paid into a\nwallet of the org that published the listing. Not-found is an ANSWER rather than\nan error — a listing naming somebody else's wallet must produce it, and the caller\nrefuses on it — because an error would read as an outage and invite a retry\nagainst a fact that will not change.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+	})
 }

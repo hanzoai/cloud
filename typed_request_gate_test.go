@@ -201,6 +201,18 @@ var allowedRequestUses = map[string]string{
 		"no org\". The org itself still comes from principal.Org, never from an In field, which is " +
 		"what makes a foreign repository inexpressible. ONE function, asked by every op through " +
 		"owned(); fails closed off the HTTP path.",
+	"apps/tools/charge_peer.go": "chargePeer — the tool plane's payment seam reaching the x402 " +
+		"process, which is a PROXY that forwards the caller's identity and carries two facts of the " +
+		"request across the boundary with it. The payer is principal.Ledger, which folds in the " +
+		"SuperAdmin masquerade (X-User-IsAdmin plus the X-User-Owner home claim) that " +
+		"principal.OrgFrom cannot carry — reading the tenant through OrgFrom would charge the " +
+		"INSPECTED org's ledger for a platform admin's call. The client's signed authorization rides " +
+		"the X-Payment header, and the 402 challenge the rail answers with has to be written back onto " +
+		"THIS process's response, because the rail has no response to write it to. Neither is nameable " +
+		"as an In field: the tool call's body names a tool, and a payer a caller could state is a " +
+		"caller that could spend another tenant's ledger. ONE function, asked by the one dispatch " +
+		"path; off the HTTP path there is no payer and no proof, and the rail refuses a priced " +
+		"resource on those terms rather than serving it.",
 	"apps/x402/x402.go": "payerOf — the receipt lookup is scoped to the org whose LEDGER was " +
 		"DEBITED, which is what every settlement row is keyed on and what the Enforce middleware " +
 		"beside it charges. principal.Ledger folds in the SuperAdmin masquerade rule (X-User-IsAdmin " +
