@@ -1,5 +1,8 @@
-// Package exec exposes the Code Interpreter ("Run Code") surface on the
-// unified cloud-api /v1 plane, per HIP-0106.
+// Package exec is the Code Interpreter: run a snippet in a sandbox, and move the
+// session's files in and out. It owns FOUR top-level /v1 segments — /v1/exec,
+// /v1/upload, /v1/download and /v1/files — because the upstream client's contract
+// fixes them as siblings (below), so it publishes under four OpenAPI product tags
+// rather than one.
 //
 // hanzo.chat (LibreChat fork) drives its execute_code agent tool against a
 // code-interpreter API whose contract is fixed by the upstream client
@@ -9,7 +12,7 @@
 // is {session_id, stdout, stderr, files:[{name}]}. cloud-api is the single edge
 // that owns api.hanzo.ai/v1, so this subsystem mounts those paths and forwards
 // each request UNCHANGED to a sandboxed executor upstream. No code runs here —
-// this is a reverse proxy identical in shape to clients/o11y, so there is zero
+// this is a reverse proxy identical in shape to apps/o11y, so there is zero
 // request/response drift from the contract.
 //
 // SANDBOX: the upstream MUST be an isolated executor (Hanzo Runtime / a

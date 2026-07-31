@@ -1,12 +1,14 @@
-// Package automations mounts the Hanzo Cloud /v1/automations/* surface: the
-// Connectors+Automations engine (HIP-0106, task #51). It composes THREE existing
-// seams rather than reinventing them:
+// Package automations is /v1/automations: an org authors flows — a trigger and a
+// tree of connector actions — and this runs them durably, on a schedule or a
+// webhook, and keeps their run history.
 //
-//   - clients/integrations — per-org connector credentials (KMS-sealed). Connectors
+// It composes THREE existing seams rather than reinventing them:
+//
+//   - apps/integrations — per-org connector credentials (KMS-sealed). Connectors
 //     reach a token ONLY through integrations.TokenFor, never KMS directly.
-//   - cloud.EmbeddedTasks   — the ONE shared in-process durable engine. A flow runs
+//   - cloud.EmbeddedTasks — the ONE shared in-process durable engine. A flow runs
 //     as a durable workflow in the OWNER's namespace (engine.go).
-//   - clients/principal     — the ONE tenant gate. Every data handler resolves the
+//   - apps/principal     — the ONE tenant gate. Every data handler resolves the
 //     org from principal.Org; a client-forged X-Org-Id with no bearer is refused.
 //
 // Surface (all under /v1/automations/*, all org-gated except the compose-root
