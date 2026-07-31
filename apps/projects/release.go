@@ -476,9 +476,9 @@ func activate(s *cloud.Service[state], ctx context.Context, org string, p Projec
 
 // ---- HTTP ----
 
-// releaseView is the published shape of a release, used by every release route
+// projectsRelease is the published shape of a release, used by every release route
 // so create, activate, and list describe the resource identically.
-type releaseView struct {
+type projectsRelease struct {
 	ReleaseID string `json:"releaseId"`
 	Slug      string `json:"slug"`
 	Objects   int    `json:"objects"`
@@ -489,8 +489,8 @@ type releaseView struct {
 	CreatedAt int64  `json:"createdAt"`
 }
 
-func toReleaseView(s *cloud.Service[state], r Release, active bool) releaseView {
-	v := releaseView{
+func toRelease(s *cloud.Service[state], r Release, active bool) projectsRelease {
+	v := projectsRelease{
 		ReleaseID: r.ID, Slug: r.Slug, Objects: r.Objects, Bytes: r.Bytes,
 		Source: r.Source, Active: active, CreatedAt: r.CreatedAt,
 	}
@@ -500,11 +500,24 @@ func toReleaseView(s *cloud.Service[state], r Release, active bool) releaseView 
 	return v
 }
 
-type releaseReq struct {
+// projectsPublish is the body of a publish/promote: which build output to
+// promote into a release.
+type projectsPublish struct {
+	// Slug is the site to publish, from the path.
+	Slug string `json:"slug"`
+	// Source is the build output to promote, as a path RELATIVE to your org's own
+	// storage space — never a URL and never a bucket. The org segment is prepended
+	// server-side from the validated principal, so the worst a hostile source can
+	// address is something your own org already owns.
 	Source string `json:"source"`
 }
 
-// releaseSite resolves the target site for a release route: the tenant from the
+// projectsReleases is a site's rollback menu, newest first. A defined slice
+// type, so the list has a NAME in the document and a generated SDK returns a
+// list of the same Release it returns singly.
+type projectsReleases []projectsRelease
+
+// releaseSite resolves the target site for a release op: the tenant from the
 // validated principal, then the project keyed by (org, slug).
 //
 // Cross-tenant reach dies here, once, for every release route. The org is never
@@ -515,23 +528,23 @@ type releaseReq struct {
 // A reserved label is refused with that same 404 before any lookup. It is
 // belt-and-braces (createProject already refuses to mint a reserved slug, so no
 // row can exist) but it means the guarantee does not rest on create-time history.
-func releaseSite(s *cloud.Service[state], c *zip.Ctx) (string, Project, error) {
-	org, ok := org(c)
-	if !ok {
-		return "", Project{}, zip.ErrForbidden("X-Org-Id required")
+func (o ops) releaseSite(ctx context.Context, slug string) (*zip.Ctx, string, Project, error) {
+	c, org, err := o.callerOf(ctx)
+	if err != nil {
+		return nil, "", Project{}, err
 	}
-	slug := slugParam(c)
+	slug = slugOf(slug)
 	if slug == "" || !slugRE.MatchString(slug) || sites.IsReserved(slug) {
-		return "", Project{}, zip.ErrNotFound("site not found")
+		return nil, "", Project{}, zip.ErrNotFound("site not found")
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, slug)
+	p, err := o.s.State.store.GetProject(ctx, org, slug)
 	if errors.Is(err, errNotFound) {
-		return "", Project{}, zip.ErrNotFound("site not found")
+		return nil, "", Project{}, zip.ErrNotFound("site not found")
 	}
 	if err != nil {
-		return "", Project{}, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, "", Project{}, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	return org, p, nil
+	return c, org, p, nil
 }
 
 // releaseErr maps a promote failure to its honest status. Guard rejections are
@@ -567,99 +580,150 @@ func activateErr(err error) error {
 	}
 }
 
-// createRelease promotes a build output into a new immutable release WITHOUT
-// serving it. This is the staged half of publishing: create now, activate after
-// whatever check you want to run against the release first.
-func createRelease(s *cloud.Service[state], c *zip.Ctx) error {
-	org, p, err := releaseSite(s, c)
+// CreateRelease promotes a build output into a new immutable release WITHOUT
+// serving it — the staged half of publishing, for when you want to check a
+// release before it goes live. Answers 201.
+//
+// `source` is a path RELATIVE to your org's own storage space: the org segment
+// is prepended server-side from the validated principal and the bucket is never
+// in the request at all, so a server-side copy can only ever reach bytes your
+// org already owns. The prefix is listed, content-addressed (SHA-256 over the
+// sorted manifest of key/size/etag), and copied into an immutable
+// `<org>/.releases/<slug>/<id>/` prefix; the row is written LAST, so a partial
+// copy is unreachable rather than merely unlikely. Re-publishing an unchanged
+// source is idempotent BY CONSTRUCTION — same bytes, same id, no copy at all.
+//
+// The source must contain index.html at its root and stay under the same file
+// and byte caps an artifact deploy does (413 past them); a source that changes
+// mid-copy is a 409 and the release is abandoned. Each publish also reclaims
+// releases past the retention depth, so a site's release space stays bounded.
+// This is the billable half — the hosting gate runs before any copy, and the
+// debit lands once the release exists.
+//
+// Scope: a validated principal is required (403 without one) and the site is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) createRelease(ctx context.Context, in *projectsPublish) (*projectsRelease, error) {
+	c, org, p, err := o.releaseSite(ctx, in.Slug)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	s := o.s
 	if !s.State.blob.configured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
 	}
-	var body releaseReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	if err := requireBody(c); err != nil {
+		return nil, err
 	}
 	// Same fail-closed hosting gate as a deploy, BEFORE any copy: promoting bytes
 	// is the billable work, so this path can never become a way to deploy for free.
 	fee, gErr := gateHosting(s, c)
 	if gErr != nil {
-		return cloud.DenyResource(c, gErr)
+		return nil, cloud.Denied(gErr)
 	}
-	r, err := promote(s, c.Context(), org, p, body.Source)
+	r, err := promote(s, ctx, org, p, in.Source)
 	if err != nil {
-		return releaseErr(err)
+		return nil, releaseErr(err)
 	}
 	meterDeploy(s, c, fee)
-	return c.JSON(http.StatusCreated, toReleaseView(s, r, p.CurrentRelease == r.ID))
+	out := toRelease(s, r, p.CurrentRelease == r.ID)
+	return &out, nil
 }
 
-// activateRelease flips the site's pointer to an existing release — the go-live,
-// and equally the ROLLBACK (aim it at an older release; releases are immutable
-// and RETAINED to the retention depth, so nothing is rebuilt or re-copied). Not
-// billed: no new content is produced, only a pointer moved.
-func activateRelease(s *cloud.Service[state], c *zip.Ctx) error {
-	org, p, err := releaseSite(s, c)
+// ActivateRelease points the site at an existing release — the go-live, and
+// equally the ROLLBACK.
+//
+// Aim it at an older release and the site serves that one again: releases are
+// immutable and retained to the retention depth, so nothing is rebuilt or
+// re-copied and the flip is one atomic statement. Before the flip, two
+// conditions run in the order that gives each its own honest answer — the ROW
+// says whether this release exists for this tenant at all (404, with no signal
+// about a foreign id), and only then do the BYTES say whether it can still serve
+// (410 GONE when retention has reclaimed them; that rollback target is not
+// coming back, so publish again). Going live also claims the public host and
+// purges the edge, so the release is reachable and no cached predecessor is
+// served. NOT billed: no new content is produced, only a pointer moved.
+//
+// Scope: a validated principal is required (403 without one) and the site is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) activateRelease(ctx context.Context, in *projectsReleaseRef) (*projectsRelease, error) {
+	_, org, p, err := o.releaseSite(ctx, in.Slug)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("release"))
+	id := strings.TrimSpace(in.Release)
 	if !releaseIDRE.MatchString(id) {
-		return zip.ErrNotFound("release not found")
+		return nil, zip.ErrNotFound("release not found")
 	}
-	r, err := activate(s, c.Context(), org, p, id)
+	r, err := activate(o.s, ctx, org, p, id)
 	if err != nil {
-		return activateErr(err)
+		return nil, activateErr(err)
 	}
-	return c.JSON(http.StatusOK, toReleaseView(s, r, true))
+	out := toRelease(o.s, r, true)
+	return &out, nil
 }
 
-// publishSiteRelease is create+activate: the 99% path, one call. It is exactly
-// the two halves in sequence with no extra semantics, so the staged flow and the
-// one-shot flow can never drift apart.
-func publishSiteRelease(s *cloud.Service[state], c *zip.Ctx) error {
-	org, p, err := releaseSite(s, c)
+// PublishSite promotes a build output into a new release AND goes live with it —
+// create+activate in one call, which is the 99% path.
+//
+// It is exactly the two halves in sequence with no extra semantics, so the
+// staged flow and the one-shot flow can never drift apart: `source` is promoted
+// under the same org-relative rule and the same guards CreateRelease applies,
+// then the site's pointer is flipped to it, the public host is claimed and the
+// edge is purged. Idempotent on unchanged bytes — same manifest, same release id,
+// no copy — and billed once, after the release exists.
+//
+// Scope: a validated principal is required (403 without one) and the site is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) publishSiteRelease(ctx context.Context, in *projectsPublish) (*projectsRelease, error) {
+	c, org, p, err := o.releaseSite(ctx, in.Slug)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	s := o.s
 	if !s.State.blob.configured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
 	}
-	var body releaseReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	if err := requireBody(c); err != nil {
+		return nil, err
 	}
 	fee, gErr := gateHosting(s, c)
 	if gErr != nil {
-		return cloud.DenyResource(c, gErr)
+		return nil, cloud.Denied(gErr)
 	}
-	r, err := promote(s, c.Context(), org, p, body.Source)
+	r, err := promote(s, ctx, org, p, in.Source)
 	if err != nil {
-		return releaseErr(err)
+		return nil, releaseErr(err)
 	}
-	if _, err := activate(s, c.Context(), org, p, r.ID); err != nil {
-		return activateErr(err)
+	if _, err := activate(s, ctx, org, p, r.ID); err != nil {
+		return nil, activateErr(err)
 	}
 	meterDeploy(s, c, fee)
-	return c.JSON(http.StatusOK, toReleaseView(s, r, true))
+	out := toRelease(s, r, true)
+	return &out, nil
 }
 
-// listReleases returns a site's releases newest-first, marking the active one —
+// ListReleases returns a site's releases newest-first, marking the active one —
 // the rollback menu.
-func listReleases(s *cloud.Service[state], c *zip.Ctx) error {
-	org, p, err := releaseSite(s, c)
+//
+// Each row carries the release id to activate, the source it was promoted from,
+// its object and byte counts, and the URL if it is the one serving. Retention
+// bounds the list, so it is the set that can actually still be rolled back to,
+// not a full history.
+//
+// Scope: a validated principal is required (403 without one) and the site is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) listReleases(ctx context.Context, in *projectsRef) (*projectsReleases, error) {
+	_, org, p, err := o.releaseSite(ctx, in.Slug)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	rows, err := s.State.store.ListReleases(c.Context(), org, p.Slug, maxReleaseList)
+	rows, err := o.s.State.store.ListReleases(ctx, org, p.Slug, maxReleaseList)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list releases: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list releases: %v", err)
 	}
-	out := make([]releaseView, 0, len(rows))
+	out := make(projectsReleases, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, toReleaseView(s, r, r.ID == p.CurrentRelease))
+		out = append(out, toRelease(o.s, r, r.ID == p.CurrentRelease))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }

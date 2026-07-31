@@ -182,7 +182,7 @@ func TestGenerateParseRobustness(t *testing.T) {
 // TestSiteFromFiles: the shared validator applied to a raw file manifest — index
 // required, viewport injected into html, non-html untouched, guards enforced.
 func TestSiteFromFiles(t *testing.T) {
-	st, err := siteFromFiles([]genFile{
+	st, err := siteFromFiles([]projectsFile{
 		{Path: "index.html", Content: htmlNoViewport},
 		{Path: "app.js", Content: "1"},
 	})
@@ -202,10 +202,10 @@ func TestSiteFromFiles(t *testing.T) {
 	if _, err := siteFromFiles(nil); err == nil {
 		t.Fatal("empty file list must error")
 	}
-	if _, err := siteFromFiles([]genFile{{Path: "about.html", Content: "x"}}); err == nil {
+	if _, err := siteFromFiles([]projectsFile{{Path: "about.html", Content: "x"}}); err == nil {
 		t.Fatal("missing index.html must error")
 	}
-	if _, err := siteFromFiles([]genFile{{Path: "index.html", Content: "x"}, {Path: "/etc/passwd", Content: "y"}}); err == nil {
+	if _, err := siteFromFiles([]projectsFile{{Path: "index.html", Content: "x"}, {Path: "/etc/passwd", Content: "y"}}); err == nil {
 		t.Fatal("absolute path must error")
 	}
 }

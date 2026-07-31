@@ -91,9 +91,9 @@ func TestOperatorVouchIsVerbatimEndToEnd(t *testing.T) {
 	if err := store.CreateProject(ctx, mkProject("acme", "tenant-site", "Tenant")); err != nil {
 		t.Fatalf("create tenant project: %v", err)
 	}
-	bind := func(org, slug, host string) (int, domainView) {
+	bind := func(org, slug, host string) (int, projectsDomain) {
 		t.Helper()
-		body, _ := json.Marshal(setDomainsReq{Domains: []string{host}})
+		body, _ := json.Marshal(projectsDomainsBind{Domains: []string{host}})
 		req := httptest.NewRequest(http.MethodPost, "/v1/projects/"+slug+"/domains", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Org-Id", org)
@@ -104,11 +104,11 @@ func TestOperatorVouchIsVerbatimEndToEnd(t *testing.T) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 		var out struct {
-			Bound []domainView `json:"bound"`
+			Bound []projectsDomain `json:"bound"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&out)
 		if len(out.Bound) == 0 {
-			return resp.StatusCode, domainView{}
+			return resp.StatusCode, projectsDomain{}
 		}
 		return resp.StatusCode, out.Bound[0]
 	}

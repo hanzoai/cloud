@@ -266,6 +266,20 @@ var allowedRequestUses = map[string]string{
 		"it), never the request. Empty off the HTTP path, where there is no request and so no identity " +
 		"to forward — the upstream read then goes out unauthenticated, which is what a public ledger " +
 		"read already is.",
+	"apps/projects/typed.go": "callerOf — the projects plane's ONE identity seam, asked by every typed " +
+		"op through siteOf/releaseSite. It reads the request because THREE facts the ops turn on are not " +
+		"the org principal.OrgFrom carries. The TENANT itself: an org-less platform SuperAdmin is " +
+		"bucketed under the literal \"admin\" org (org(), projects.go), which OrgFrom cannot express — it " +
+		"refuses an empty org outright, so reading the tenant through it alone would turn that live admin " +
+		"bucket into a 403. PLATFORM SUDO (X-User-IsAdmin), which the moderation field on a project " +
+		"update and the platform-operator DNS vouch both branch on. And the PAYER: every deploy path " +
+		"gates and debits through principal.Ledger — the SELECTED billing org, which a SuperAdmin " +
+		"masquerade deliberately moves off the effective org — plus the validated project sub-scope, the " +
+		"request id and the client IP the meter attributes spend by. None may be an In field: a tenant " +
+		"key or a payer a caller states is a cross-tenant read, or a cross-tenant SPEND, it asserted for " +
+		"itself. ONE function, so all 37 typed ops share one seam, delegating to the same org() the " +
+		"untyped deploy handler beside them uses; it fails closed off the HTTP path, where there is no " +
+		"attested caller and therefore no tenant.",
 	"apps/prefs/prefs.go": "subjectFrom — the preference OWNER, and it is not the org. The isolation " +
 		"key is the canonical `<owner>/<name>` identity, so it needs the validated USER claim " +
 		"(X-User-Id) and validated-ness itself alongside the org; principal.OrgFrom carries only the " +

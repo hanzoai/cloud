@@ -20,7 +20,7 @@ import (
 // adminPatchProject PATCHes a project as a SuperAdmin. Moderation is the only
 // admin-gated field on the project body, and asserting it needs a caller the
 // ordinary `do` helper cannot make — so this is the ONE place that builds one.
-func adminPatchProject(t *testing.T, app *zip.App, org, slug string, in map[string]any) projectView {
+func adminPatchProject(t *testing.T, app *zip.App, org, slug string, in map[string]any) projectsProject {
 	t.Helper()
 	b, _ := json.Marshal(in)
 	req := httptest.NewRequest(http.MethodPatch, "/v1/projects/"+slug, bytes.NewReader(b))
@@ -37,7 +37,7 @@ func adminPatchProject(t *testing.T, app *zip.App, org, slug string, in map[stri
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("admin patch want 200, got %d (%s)", resp.StatusCode, rb)
 	}
-	var out projectView
+	var out projectsProject
 	_ = json.Unmarshal(rb, &out)
 	return out
 }
@@ -184,7 +184,7 @@ func TestRetractionReachesTheCanonicalRepo(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("go private want 200, got %d (%s)", code, body)
 		}
-		var p projectView
+		var p projectsProject
 		_ = json.Unmarshal(body, &p)
 		if p.Visibility != Private {
 			t.Fatalf("visibility = %q, want private", p.Visibility)
