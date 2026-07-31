@@ -63,7 +63,9 @@ func IsDefaultProject(project string) bool {
 // predicate that separates a gateway-minted identity from a client-forged
 // X-Org-Id on the bearer-less path.
 //
-// Subsystems that resolve the plain org key use Org (which composes this).
+// Subsystems that resolve the plain org key use Org (which composes this). A
+// TYPED op cannot call this at all — it holds a context, not a request — so it
+// reads ValidatedFrom, the same answer parked by WithValidated.
 // Subsystems that derive their own PHYSICAL namespace from a route param or a
 // normalized slug — KMS (route :org), S3 / provisioning / projects (DNS slug
 // + admin bucket), ML (k8s namespace) — call Validated FIRST, then apply their
@@ -163,6 +165,40 @@ func WithOrg(ctx context.Context, c *zip.Ctx) context.Context {
 func OrgFrom(ctx context.Context) (string, bool) {
 	org, ok := ctx.Value(orgKey{}).(string)
 	return org, ok && org != ""
+}
+
+// validatedKey names the slot the WEAKER fact crosses the same seam in.
+// Unexported zero-size type, exactly like orgKey.
+type validatedKey struct{}
+
+// WithValidated parks whether the request carried a validated principal AT ALL —
+// the fact a gate turns on when there is no tenant to scope by. It IS Validated,
+// carried to the one seam that cannot call it, exactly as WithOrg is Org.
+//
+// Two facts, TWO slots, because they are not the same question: OrgFrom composes
+// this one AND an org, so it refuses a validated caller whose token names no home
+// org (a machine token, or one minted before IAM's `orgs` claim — SanitizeIdentity
+// mints X-User-Id for it and no X-Org-Id). A plane with per-org rows must refuse
+// that caller; a plane whose reads are deployment-global platform facts (engine's
+// shared runtime, o11y's infra health) gates on AUTHENTICATION and serves it. Both
+// planes now answer from the context, so neither reaches for the request.
+//
+// An unvalidated request parks NOTHING, so the reader sees false rather than a
+// fact it has to invert.
+func WithValidated(ctx context.Context, c *zip.Ctx) context.Context {
+	if !Validated(c) {
+		return ctx
+	}
+	return context.WithValue(ctx, validatedKey{}, true)
+}
+
+// ValidatedFrom reports what WithValidated parked — the typed-op counterpart of
+// Validated, and the same answer. FALSE off the HTTP path, where there is no
+// request and so no attested caller: an op that gates on it refuses rather than
+// serving an unauthenticated one.
+func ValidatedFrom(ctx context.Context) bool {
+	ok, _ := ctx.Value(validatedKey{}).(bool)
+	return ok
 }
 
 // Owner resolves the caller's HOME org — the identity + BILLING anchor: the
