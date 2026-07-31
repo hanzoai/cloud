@@ -16,7 +16,7 @@ import "testing"
 // plugin/<app>/main.go with the composition root; a change to one of those is now a
 // one-line diff in that app's own file, where it is reviewed in context.
 var frozen = []string{
-	"pubsub", "kafka", "agentskills", "flags", "kms", "metrics",
+	"pubsub", "kafka", "mq", "agentskills", "flags", "kms", "metrics",
 	"ingress", "account", "iam", "base", "o11y", "authz",
 	"commerce", "licensing", "plan", "pricing", "storage", "provisioning",
 	"billing", "rollingcap", "account-bridge", "do", "platform", "projects",
