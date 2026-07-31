@@ -1,5 +1,8 @@
-// Package flow is Hanzo Flow: visual AI workflow orchestration — build, manage,
-// and run agent workflows on the unified /v1 plane.
+// Package flow is Hanzo Flow: build an agent workflow on a visual canvas, run it,
+// and read every run.
+//
+// It is visual AI workflow orchestration — build, manage, and run agent workflows
+// on the unified /v1 plane.
 //
 // PRODUCT-REPO MODEL. The product lives in github.com/hanzoai/flow (Python/
 // FastAPI — the visual builder, the graph engine, the component library). This

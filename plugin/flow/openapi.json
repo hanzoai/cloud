@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package flow is Hanzo Flow: visual AI workflow orchestration — build, manage, and run agent workflows on the unified /v1 plane.",
+    "description": "Package flow is Hanzo Flow: build an agent workflow on a visual canvas, run it, and read every run.",
     "version": "v1"
   },
   "servers": [

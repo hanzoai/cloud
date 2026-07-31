@@ -1,7 +1,10 @@
 // Copyright 2026 Hanzo AI Inc. All Rights Reserved.
 
-// Package engine is Hanzo Engine: the serving runtime behind Hanzo's models —
-// what it serves and what it runs on, read through /v1/engine.
+// Package engine is Hanzo Engine: which models the serving runtime has loaded,
+// and the GPUs under it.
+//
+// It is the serving runtime behind Hanzo's models — what it serves and what it
+// runs on, read through /v1/engine.
 //
 // PRODUCT-REPO MODEL. The product lives in github.com/hanzoai/engine (Rust —
 // the LLM inference engine: `hanzo serve`, the OpenAI- and Anthropic-

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package engine is Hanzo Engine: the serving runtime behind Hanzo's models — what it serves and what it runs on, read through /v1/engine.",
+    "description": "Package engine is Hanzo Engine: which models the serving runtime has loaded, and the GPUs under it.",
     "version": "v1"
   },
   "servers": [
