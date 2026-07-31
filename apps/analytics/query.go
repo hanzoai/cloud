@@ -38,10 +38,16 @@ import (
 	"github.com/hanzoai/types"
 )
 
-// Warehouse + tables (the ONE analytics warehouse per unified-analytics.md §1).
-const (
-	llmTable    = "hanzo.cloud_usage" // live LLM usage ledger (real data today)
-	eventsTable = "hanzo.events"      // web/commerce/UI wide event table (honest-empty until the collector emits)
+// Warehouse + tables. The LLM ledger stays cloud's own; the product-event lenses
+// read the EVENT PLANE — the same tables the write core's facts land in, their
+// names derived from the one signal constant (fact.go) so transport, storage and
+// lens cannot drift. The plane's DDL owner is hanzoai/o11y: cloud reads and writes
+// rows, never creates tables, and answers honest-empty where the plane is absent.
+const llmTable = "hanzo.cloud_usage" // live LLM usage ledger (real data today)
+
+var (
+	eventsTable = signalEvent.table() // event.event — the product-event envelope
+	errorsTable = signalError.table() // event.error — captured failures (never on event.event)
 )
 
 // ── Tenancy predicates (the isolation boundary) ─────────────────────────────
@@ -49,7 +55,7 @@ const (
 // Both builders bind the org POSITIONALLY. The time bounds are bound too (as
 // datastore DateTime string literals, the proven cloud_usage.go transport), so
 // NOTHING user-derived is ever interpolated. cloud_usage keys the tenant on
-// `organization`; hanzo.events keys it on `tenant_id` (== the IAM org slug).
+// `organization`; the event plane keys it on `org` (== the IAM org slug).
 
 // llmWhere is the org-scoped time predicate for hanzo.cloud_usage. org is the
 // validated IAM owner slug, passed EXACTLY (the ledger stored it verbatim); it is
@@ -59,16 +65,20 @@ func llmWhere(org string, start, end time.Time) (string, []any) {
 		[]any{tsLiteral(start), tsLiteral(end), org}
 }
 
-// eventsWhere is the org-scoped time predicate for hanzo.events. Same shape as
-// llmWhere but keyed on `tenant_id` (the events table's canonical org column).
+// eventsWhere is the org-scoped time predicate for the event plane. Same shape as
+// llmWhere but keyed on the plane's envelope columns: `time` (DateTime64) and
+// `org` (the IAM org slug, stamped server-side by normalize).
 func eventsWhere(org string, start, end time.Time) (string, []any) {
-	return "timestamp >= ? AND timestamp < ? AND tenant_id = ?",
+	return "time >= ? AND time < ? AND org = ?",
 		[]any{tsLiteral(start), tsLiteral(end), org}
 }
 
 // Behavior-lens group-key expressions. Each is a SERVER-CHOSEN constant SQL
 // expression (never user input), so interpolating it into breakdownSQL is
 // injection-safe — the org + time bounds stay bound parameters via eventsWhere.
+// referrer/utm_* live in the envelope's attributes Map — same facts, same names,
+// one map access instead of a dedicated column (the plane's shape; see fact.go
+// attributesOf).
 //   - pageKeyExpr: the requested path ("where people go / what they look at").
 //   - referrerKeyExpr: the external referrer domain, falling back to the raw
 //     referrer when the domain didn't parse; a missing referrer OR a same-origin
@@ -77,13 +87,14 @@ func eventsWhere(org string, start, end time.Time) (string, []any) {
 //   - sourceKeyExpr: utm_source, with empty campaigns bucketed to "(none)".
 const (
 	pageKeyExpr     = "path"
-	referrerKeyExpr = "multiIf(referrer_domain != '' AND referrer_domain != domain(url), referrer_domain, referrer_domain = '' AND referrer != '', referrer, '(direct)')"
-	sourceKeyExpr   = "if(utm_source != '', utm_source, '(none)')"
+	referrerKeyExpr = "multiIf(attributes['referrer_domain'] != '' AND attributes['referrer_domain'] != domain(url), attributes['referrer_domain'], attributes['referrer_domain'] = '' AND attributes['referrer'] != '', attributes['referrer'], '(direct)')"
+	sourceKeyExpr   = "if(attributes['utm_source'] != '', attributes['utm_source'], '(none)')"
 )
 
-// breakdownSQL builds ONE pageview breakdown over hanzo.events grouped by keyExpr
+// breakdownSQL builds ONE pageview breakdown over event.event grouped by keyExpr
 // — the read core of the behavior lenses (topPages/topReferrers/topSources). Each
-// returned bucket carries its pageviews (count of $pageview rows) and visitors
+// returned bucket carries its pageviews (count of kind='page' rows — the plane's
+// discriminator, which replaced the magic '$pageview' name) and visitors
 // (uniqExact distinct_id), plus the in-window pageview grand total via
 // `sum(pageviews) OVER ()`: because every pageview maps to exactly one bucket, that
 // window total is the TRUE total pageviews in-window, so buildBreakdown's pct is an
@@ -98,7 +109,7 @@ func breakdownSQL(keyExpr, org string, start, end time.Time, limit int) (string,
 	sql := fmt.Sprintf(
 		"SELECT k, pageviews, visitors, sum(pageviews) OVER () AS total FROM ("+
 			"SELECT %s AS k, count() AS pageviews, uniqExact(distinct_id) AS visitors "+
-			"FROM %s WHERE %s AND event = '$pageview' GROUP BY k"+
+			"FROM %s WHERE %s AND kind = 'page' GROUP BY k"+
 			") ORDER BY pageviews DESC, visitors DESC LIMIT %d",
 		keyExpr, eventsTable, where, limit)
 	return sql, args
@@ -146,7 +157,7 @@ type LLMOverview struct {
 	Source string `json:"source"`
 }
 
-// WebOverview is the web lens over hanzo.events. Honest-empty (Available=false)
+// WebOverview is the web lens over event.event. Honest-empty (Available=false)
 // until the collector emits web events.
 type WebOverview struct {
 	// Available is false when the product-event table could not be read — the lens is
@@ -164,7 +175,7 @@ type WebOverview struct {
 	Source string `json:"source"`
 }
 
-// CommerceOverview is the commerce lens over hanzo.events. Honest-empty until
+// CommerceOverview is the commerce lens over event.event. Honest-empty until
 // commerce emits order events.
 type CommerceOverview struct {
 	// Available is false when the product-event table could not be read — the lens is
@@ -306,7 +317,7 @@ type BreakdownRow struct {
 	Pct float64 `json:"pct"`
 }
 
-// Breakdown is a ranked behavior lens over hanzo.events. Honest-empty
+// Breakdown is a ranked behavior lens over event.event. Honest-empty
 // (Available=false) when the events table is absent/errored — never fabricated.
 type Breakdown struct {
 	// Available is false when the product-event table could not be read.
@@ -457,7 +468,7 @@ func buildTopModels(rows []map[string]any) TopModels {
 	return TopModels{Available: true, Items: items, Source: llmTable}
 }
 
-// buildTopProducts assembles the top-products table from hanzo.events. ok=false
+// buildTopProducts assembles the top-products table from event.event. ok=false
 // (events table absent) → honest-empty. Pure.
 func buildTopProducts(rows []map[string]any, ok bool) TopProducts {
 	if !ok {
@@ -603,6 +614,33 @@ func aTime(v any) time.Time {
 		return time.Unix(n, 0).UTC()
 	}
 	return time.Time{}
+}
+
+// aStrMap coerces an attributes Map column across the shapes the transports
+// surface: the native driver's map[string]string, a JSON-transport map[string]any,
+// or a JSON object serialized to text. nil for anything else — the lenses treat
+// that as "no attributes", never an error.
+func aStrMap(v any) map[string]string {
+	switch m := v.(type) {
+	case nil:
+		return nil
+	case map[string]string:
+		return m
+	case map[string]any:
+		out := make(map[string]string, len(m))
+		for k, e := range m {
+			out[k] = asStr(e)
+		}
+		return out
+	case string:
+		var out map[string]string
+		if json.Unmarshal([]byte(m), &out) == nil {
+			return out
+		}
+		return nil
+	default:
+		return nil
+	}
 }
 
 func pctOf(part, total int64) float64 {
