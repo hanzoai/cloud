@@ -267,15 +267,15 @@ type Secret struct {
 // reaching them takes. Handing over the whole identity record would put the
 // credential columns on the wire to answer an audience count.
 type Recipient struct {
-	ID    string `json:"id"`
-	Owner string `json:"owner"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	ID    string `json:"id"`    // the person's identity id, stable across a rename
+	Owner string `json:"owner"` // the org that owns the record — the tenancy key
+	Name  string `json:"name"`  // the person's name within that org, unique there
+	Email string `json:"email"` // the address to reach them at
 }
 
 // Roster is who an org may mail.
 type Roster struct {
-	Recipients []Recipient `json:"recipients"`
+	Recipients []Recipient `json:"recipients"` // everyone in the org who may be mailed; empty is a real answer, not an error
 }
 
 // ---- git -------------------------------------------------------------------

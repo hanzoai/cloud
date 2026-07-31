@@ -63,6 +63,8 @@
     "/v1/blueprint/sbom": {
       "get": {
         "operationId": "get_v1_blueprint_sbom",
+        "summary": "A blueprint's bill of images and what running it costs",
+        "description": "Answers a blueprint's SBOM — the container images its compose stack runs, each with the CPU/memory footprint that was applied to it — together with the compute cost that footprint prices out to on the active rate card.\n\nONE address, TWO shapes at 200: `?template=\u003cid\u003e` returns that blueprint's Estimate alone (404 on an id no embedded blueprint carries), and no `template` returns `{data:[Estimate]}` for every blueprint — the batch the console's template gallery reads in one round-trip.\n\nThe blueprints are reference content embedded in the binary and validated at mount, so this read is the same for every caller and is scoped to no tenant. The per-hour figure it returns is the one the deploy path meters the deploying org on and the 20% author royalty is taken from; GET /v1/blueprint/health echoes the rate card it was priced from.",
         "tags": [
           "blueprint"
         ]

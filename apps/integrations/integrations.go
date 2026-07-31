@@ -56,6 +56,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -567,6 +568,225 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // request/response shape is a typed op, and each of the 19 above is refused by one
 // of the three wire facts, not by an unfinished pass. Re-check before converting.
 //
+// vendorCall is the sentence every inbound webhook shares: who is actually
+// calling. A reader who assumes these are tenant-facing API calls will look for a
+// bearer that is never there and miss the verification that replaces it.
+const vendorCall = "\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and " +
+	"no principal. The signature check IS the authentication, and it fails closed. The " +
+	"tenant is never read from the payload either: it is resolved from the verified " +
+	"platform identifier through the connection map, so an event from a workspace nobody " +
+	"connected does nothing. Refusals are written with their own status rather than being " +
+	"flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400."
+
+// asyncTurn is the delivery contract the four chat bridges share: ack fast, work
+// later, never twice. Each of the three properties is one a platform integrator
+// has to know to reason about retries.
+const asyncTurn = "\n\nThe answer is acknowledged immediately and the work happens afterwards, because " +
+	"every one of these platforms times out a slow webhook. Duplicate deliveries are " +
+	"absorbed durably, so a platform retry of an event that already ran never runs it a " +
+	"second time or bills for it twice. When the agent pool is full nothing at all is " +
+	"recorded and the delivery is refused as retriable, so the message is re-delivered " +
+	"later rather than being lost or half-processed."
+
+// linkFlow is the shape all four account-link flows share. Each leg's own
+// description says which leg it is; this says why the flow is built the way it is,
+// which is the part a reader would otherwise get wrong.
+const linkFlow = "\n\nThis is one leg of a three-leg flow, and the legs are not interchangeable: a " +
+	"browser is expected to arrive here only from the leg before it. The link URL's state " +
+	"proves the prompt was server-minted and carries the CHAT it started from — it is " +
+	"provenance only, and it never decides which account gets linked. The account identity " +
+	"always comes from the platform's own verified sign-in and a host-bound cookie, so " +
+	"forwarding a link to someone else cannot bind their account, and a session lifted into " +
+	"another browser is refused rather than completed. Each link is single-use, and a " +
+	"deployment without linking configured answers 503."
+
+// The prose for the nineteen untyped operations on this surface. The typed ops
+// beside them carry theirs in a doc comment zipdoc lifts; these cannot, because
+// each is refused typing by its own wire — a vendor-signed raw body, an HTML page,
+// a 302 back to the console — so the prose is declared beside the route table.
+//
+// Every sentence below is about what the operation DOES and what it refuses. None
+// of them names a secret, and none implies a token appears in a response: the link
+// flows seal what they obtain into the org's KMS namespace, and the callback seals
+// before it writes anything at all.
+func init() {
+	// ── inbound platform webhooks ────────────────────────────────────────────
+	openapi.Describe("/v1/integrations/slack/events", http.MethodPost,
+		"Slack Events API webhook",
+		"The address a Slack app posts workspace events to. It answers Slack's "+
+			"url_verification handshake with the challenge, and routes an @mention or a "+
+			"direct message to an agent turn that replies in the same thread. A prompt "+
+			"beginning with `code:` is routed to the coding flow instead, which runs under "+
+			"its own pool.\n\n"+
+			"The raw body and its timestamp are verified against the app's signing secret "+
+			"before anything is read from them. Hanzo's own bot messages are dropped, so a "+
+			"reply cannot trigger another reply."+vendorCall+asyncTurn)
+	openapi.Describe("/v1/integrations/slack/commands", http.MethodPost,
+		"Slack slash command webhook",
+		"The address Slack posts a slash command to, form-encoded. It acknowledges inside "+
+			"Slack's three-second budget and posts the answer afterwards to the command's "+
+			"own response URL, which is why the immediate reply is empty.\n\n"+
+			"The body is verified against the same app signing secret as the events "+
+			"webhook, and a repeat of the same command invocation is absorbed rather than "+
+			"answered twice."+vendorCall+asyncTurn)
+	openapi.Describe("/v1/integrations/discord/interactions", http.MethodPost,
+		"Discord interactions endpoint",
+		"The Interactions Endpoint URL for the Discord app. It answers Discord's PING with "+
+			"a PONG, and handles the `/hanzo` slash command by acknowledging with a deferred "+
+			"ephemeral reply and editing that reply with the answer once the agent has run. "+
+			"Any other interaction is acknowledged and ignored.\n\n"+
+			"Requests are verified by ED25519 SIGNATURE over the timestamp and body against "+
+			"the app's public key — not by HMAC, unlike the Slack webhooks. Interactions "+
+			"work over plain HTTP, so no gateway connection and no message-content intent is "+
+			"involved.\n\n"+
+			"Discord does not retry, so this is the one bridge where being at capacity is "+
+			"shown to the user as an ephemeral ask-to-run-it-again rather than answered as a "+
+			"retriable failure — nothing is recorded either way, so the next attempt is "+
+			"clean."+vendorCall)
+	openapi.Describe("/v1/integrations/teams/events", http.MethodPost,
+		"Microsoft Teams Bot Framework webhook",
+		"The messaging endpoint for the Teams bot. A message activity is routed to an agent "+
+			"turn and answered proactively through the Bot Connector; anything that is not a "+
+			"message with text is acknowledged and ignored.\n\n"+
+			"Authentication is the Bot Framework's RS256 JWT, verified against its published "+
+			"keys and bound BOTH to this deployment's app id and to the activity's own "+
+			"service URL. The service-URL binding is the part that matters: without it a "+
+			"token valid for one activity could point the outbound reply somewhere else."+
+			vendorCall+asyncTurn)
+	openapi.Describe("/v1/integrations/telegram/webhook", http.MethodPost,
+		"Telegram Bot API webhook",
+		"The update webhook for the Telegram bot. It does two jobs: `/start <code>` or "+
+			"`/connect <code>` binds the chat it was sent from to an org, idempotently; "+
+			"anything else is treated as a possible agent trigger.\n\n"+
+			"What counts as a trigger differs by chat type, and it is easy to get wrong: in "+
+			"a private chat every message is a trigger, while in a group the message must "+
+			"mention the bot or use the `/hanzo` command. Non-triggers and non-message "+
+			"updates are acknowledged and dropped.\n\n"+
+			"Authentication is the secret token Telegram echoes on every update, compared in "+
+			"constant time. A message in a chat that has never been bound is dropped, which "+
+			"is why the bind command exists."+vendorCall+asyncTurn)
+	openapi.Describe("/v1/connector/github/webhook", http.MethodPost,
+		"GitHub App webhook",
+		"The address the GitHub App delivers events to. A push is handed to the repository "+
+			"sync engine, and an issue or issue-comment event is mirrored into the native "+
+			"tracker — idempotently, so the same issue re-syncs to one row however many "+
+			"times it is edited, closed or reopened.\n\n"+
+			"It answers a benign 200 for everything it does not act on — the ping, other "+
+			"event types, an unknown installation — deliberately, so GitHub does not enter a "+
+			"retry storm over events that were never going to do anything. Only a bad "+
+			"signature and a genuine sync failure are non-200, and an oversized payload is "+
+			"refused outright.\n\n"+
+			"Two sync rules are worth stating because neither is guessable. EVERY ref syncs, "+
+			"tags as well as branches, because releases are cut by tag and filtering them "+
+			"would stop publishing with nothing reporting a failure. And a delete is NEVER "+
+			"propagated: the native side is canonical, so an inbound delete never removes a "+
+			"native ref.\n\n"+
+			"The payload is verified by HMAC against the webhook secret before it is parsed."+
+			vendorCall)
+
+	// ── account-link flows (three legs each) ─────────────────────────────────
+	openapi.Describe("/v1/integrations/slack/link", http.MethodGet,
+		"Begin linking a Hanzo account from Slack",
+		"The entry point behind the connect prompt Hanzo posts in Slack. It starts a link "+
+			"session in the browser and redirects to Slack's own sign-in, which is what "+
+			"proves which Slack user is asking."+linkFlow)
+	openapi.Describe("/v1/integrations/slack/link/slack", http.MethodGet,
+		"Slack sign-in return leg",
+		"Where Slack returns the user after they sign in. It establishes the verified Slack "+
+			"workspace and user, confirms that workspace is connected to an org, and hands "+
+			"the browser on to the Hanzo sign-in that completes the link.\n\n"+
+			"The verified pair is carried onward in a host-bound cookie rather than in the "+
+			"URL, so the identity being linked cannot be edited in transit."+linkFlow)
+	openapi.Describe("/v1/integrations/slack/link/callback", http.MethodGet,
+		"Complete the Slack account link",
+		"The final leg: the user has proved both who they are in Slack and who they are in "+
+			"Hanzo, and this binds the two. It answers a short confirmation page telling "+
+			"them to return to Slack.\n\n"+
+			"The Hanzo credential obtained here is sealed into the connected workspace's own "+
+			"KMS namespace; it is never written to a database column and never logged. A "+
+			"deployment whose secret store is unavailable refuses the link rather than "+
+			"completing it without custody of the credential."+linkFlow)
+	openapi.Describe("/v1/integrations/discord/link", http.MethodGet,
+		"Begin linking a Hanzo account from Discord",
+		"The entry point behind the connect prompt Hanzo shows in a Discord server. It "+
+			"starts a link session and redirects to Discord's OAuth `identify` consent — the "+
+			"narrowest scope that establishes which Discord user is asking, and nothing "+
+			"more."+linkFlow)
+	openapi.Describe("/v1/integrations/discord/link/discord", http.MethodGet,
+		"Discord sign-in return leg",
+		"Where Discord returns the user after the identify consent. It resolves the verified "+
+			"Discord user, confirms the server is connected to an org, and hands the browser "+
+			"to the Hanzo sign-in that completes the link."+linkFlow)
+	openapi.Describe("/v1/integrations/discord/link/callback", http.MethodGet,
+		"Complete the Discord account link",
+		"The final leg: it binds the verified Discord user to the Hanzo account that just "+
+			"signed in, and answers a short confirmation page telling them to return to "+
+			"Discord. The Hanzo credential is sealed into the connected org's KMS namespace "+
+			"rather than stored beside the link."+linkFlow)
+	openapi.Describe("/v1/integrations/teams/link", http.MethodGet,
+		"Begin linking a Hanzo account from Teams",
+		"The entry point behind the connect prompt Hanzo shows in Teams. It starts a link "+
+			"session and redirects to Microsoft sign-in addressed to the CHAT'S OWN tenant, "+
+			"not the common endpoint, so only a member of that tenant can complete it."+
+			linkFlow)
+	openapi.Describe("/v1/integrations/teams/link/aad", http.MethodGet,
+		"Microsoft sign-in return leg",
+		"Where Microsoft returns the user after sign-in. It resolves the verified directory "+
+			"identity and then re-checks the tenant: the signed-in user's tenant must equal "+
+			"the tenant of the chat the link started from, so a valid Microsoft sign-in from "+
+			"a different organization is refused here rather than accepted.\n\n"+
+			"This is the leg Teams has and the other platforms do not, which is why the "+
+			"Teams flow has an extra address."+linkFlow)
+	openapi.Describe("/v1/integrations/teams/link/callback", http.MethodGet,
+		"Complete the Teams account link",
+		"The final leg: it binds the verified directory identity to the Hanzo account that "+
+			"just signed in, and answers a short confirmation page telling them to return to "+
+			"Teams. The Hanzo credential is sealed into the connected org's KMS namespace."+
+			linkFlow)
+	openapi.Describe("/v1/integrations/telegram/link", http.MethodGet,
+		"Begin linking a Hanzo account from Telegram",
+		"The entry point behind the connect prompt Hanzo sends in Telegram. Unlike the other "+
+			"platforms it answers an HTML PAGE rather than a redirect: Telegram has no OAuth "+
+			"flow, so the page hosts Telegram's Login Widget, and the browser is sent onward "+
+			"only after the user signs in through it.\n\n"+
+			"The widget only appears on the domain registered for the bot, so a deployment "+
+			"whose bot domain is unset renders a page with nothing on it."+linkFlow)
+	openapi.Describe("/v1/integrations/telegram/link/auth", http.MethodGet,
+		"Telegram Login Widget return leg",
+		"Where Telegram's Login Widget sends the user with its signed authentication data. "+
+			"That data is verified against the bot token — this is the identity source, and "+
+			"it is the widget's signature rather than a code exchange — and the chat is "+
+			"confirmed to be bound to an org before the browser is handed to the Hanzo "+
+			"sign-in.\n\n"+
+			"Widget data is only accepted while it is fresh, so a captured sign-in blob "+
+			"cannot be replayed later even though its signature stays valid."+linkFlow)
+	openapi.Describe("/v1/integrations/telegram/link/callback", http.MethodGet,
+		"Complete the Telegram account link",
+		"The final leg: it binds the verified Telegram user to the Hanzo account that just "+
+			"signed in, and answers a short confirmation page telling them to return to "+
+			"Telegram. The Hanzo credential is sealed into the connected org's KMS "+
+			"namespace."+linkFlow)
+
+	// ── the generic OAuth return ─────────────────────────────────────────────
+	openapi.Describe("/v1/integrations/:provider/callback", http.MethodGet,
+		"OAuth return for any connector",
+		"The single address every connector's OAuth flow returns to. It exchanges the "+
+			"authorization the provider granted, records the connection, and ALWAYS "+
+			"redirects the browser back to the console — on success and on every labeled "+
+			"failure alike, so a user never lands on a raw JSON dead end.\n\n"+
+			"It is public and carries no principal, so the org is taken ONLY from the signed "+
+			"state minted when the flow began; no header is trusted here. That state is "+
+			"single-use and is burned BEFORE the exchange, so one authorization is one "+
+			"attempt and a replayed return fails instead of exchanging twice.\n\n"+
+			"Tokens are sealed into the org's KMS namespace BEFORE the connection row is "+
+			"written, so a failure of the secret store leaves no half-connected integration "+
+			"advertising a credential that was never stored. Token values never appear in "+
+			"the redirect, in a log line or in an error.\n\n"+
+			"One generalization is worth knowing: a GitHub App installation returns an "+
+			"installation identifier instead of an OAuth code, and it is accepted in the "+
+			"code's place so the App model needs no second address.")
+}
+
 // The two are interleaved in the ORIGINAL order because fiber resolves by
 // registration order, and that order is load-bearing here (literals before the
 // /:provider wildcards).

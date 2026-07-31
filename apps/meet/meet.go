@@ -57,6 +57,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 	"gopkg.in/yaml.v3"
 )
@@ -187,6 +188,42 @@ func readKeys(path string) (string, string, error) {
 		return "", "", fmt.Errorf("the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) has an empty api key or secret", path)
 	}
 	return key, apiSecret, nil
+}
+
+// Both routes here are UNTYPED BY DESIGN — one answers text/plain, the other
+// answers the same body under two statuses, and each comment below says why zip
+// cannot declare that. zipdoc lifts prose from typed ops and there are none to
+// lift from, so the prose is declared beside the route table instead and reaches
+// the document, the generated SDKs and the spec-derived CLI unchanged.
+func init() {
+	openapi.Describe("/v1/meet/getToken", http.MethodPost,
+		"Mint a join token for one video room",
+		"Answers with a LiveKit join token for exactly the room named in the body. The body "+
+			"is the RAW token as text/plain — one opaque string, not JSON and not wrapped in "+
+			"an envelope, which is what the office client reads.\n\n"+
+			"The caller presents its workspace session as a Bearer. Every clause is a "+
+			"refusal: the session must verify, its SIGNED workspace claim must equal the "+
+			"room's leading name segment — rooms are named `<workspace>_<room>_<id>`, and "+
+			"that prefix is the only thing binding a room to a tenant — and the session must "+
+			"carry a privileged workspace role, so a guest is refused rather than seated.\n\n"+
+			"The participant identity is the SESSION'S, never the body's. `_id` is accepted "+
+			"for compatibility with the published client bundle and deliberately ignored: "+
+			"LiveKit treats the identity as unique and ejects a duplicate, so honouring a "+
+			"caller-chosen one would let anyone in a workspace kick out a colleague and "+
+			"impersonate them. `participantName` is a display name only.\n\n"+
+			"An unconfigured deployment answers 503 under its own name rather than 404, and "+
+			"the refusal states only that the office is unconfigured — the reason names key "+
+			"material and stays in the boot log.")
+	openapi.Describe("/v1/meet/health", http.MethodGet,
+		"Whether the office can mint join tokens",
+		"Reports whether this deployment holds the LiveKit key pair it needs. `ready:true` "+
+			"with 200 when tokens can be minted; the SAME body with `ready:false`, "+
+			"`status:\"degraded\"` and 503 when they cannot, so a probe and a dashboard "+
+			"both read the degraded state instead of someone grepping a boot log.\n\n"+
+			"It takes no credential and is reachable on every public host, so it withholds "+
+			"both the reason and the signing key's name on purpose: `ready` is the whole "+
+			"dashboard fact, and the reason — which names the key file and the Secret — is "+
+			"written to the boot log where an operator already is.")
 }
 
 // Mount wires /v1/meet/* onto app. The route is registered even when unconfigured so

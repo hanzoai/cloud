@@ -73,6 +73,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -116,6 +117,96 @@ const opFeeEnvPrefix = "CLOUD_S3_FEE_CENTS"
 type state struct {
 	admin s3admin.Admin
 	bill  *cloud.ResourceMeter
+}
+
+// metered is the sentence the seven data-plane operations share. Each is read
+// alone in the document, so the gate that refuses before anything is touched has
+// to appear on each of them rather than once at the top of a file no consumer sees.
+const metered = "\n\nA validated principal is required, and every bucket and key is resolved inside the " +
+	"caller's own org: physical bucket names are derived from the org, so a tenant cannot " +
+	"name another's storage. The operation is billed per call — the balance is checked " +
+	"BEFORE anything is touched, so an unfunded org is refused with nothing done, and the " +
+	"debit happens only after the work succeeds. Object storage that is not configured " +
+	"answers 503 under this subsystem's own name rather than falling through to another."
+
+// The prose for this subsystem's eight operations. Every route here is untyped —
+// the seven metered ones because a refused balance answers the fleet's nested
+// error contract in band, which a typed op cannot write, and health because it
+// answers one object under two statuses (see each note above). So there is no doc
+// comment for zipdoc to lift, and the prose is declared beside the route table.
+func init() {
+	openapi.Describe("/v1/s3/buckets", http.MethodGet,
+		"List your org's buckets",
+		"Returns the caller's own buckets under the friendly names they were created with, "+
+			"each with its creation time.\n\n"+
+			"Another tenant's bucket is not refused, it is INVISIBLE — a bucket outside the "+
+			"caller's namespace is skipped during the listing rather than reported, so the "+
+			"operation cannot be used to discover that a name is taken elsewhere."+metered)
+	openapi.Describe("/v1/s3/buckets", http.MethodPost,
+		"Create a bucket in your org",
+		"Creates a new bucket in the caller's own namespace and answers 201 with its "+
+			"friendly name and creation time.\n\n"+
+			"The name is validated exactly as sent and never quietly normalised: it must "+
+			"match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, so a mixed-case name is a clean "+
+			"400 rather than a bucket created as `photos` that the caller keeps asking for "+
+			"as `Photos`. A name already in use in the caller's own namespace is 409."+metered)
+	openapi.Describe("/v1/s3/buckets/:bucket", http.MethodDelete,
+		"Delete an empty bucket",
+		"Removes one of the caller's buckets, and only when it is already EMPTY — a bucket "+
+			"with objects in it answers 409 instead.\n\n"+
+			"That refusal is deliberate rather than a limitation: this API does not cascade "+
+			"a delete of a tenant's objects behind a single bucket call, so emptying the "+
+			"bucket stays an explicit act. A bucket that does not exist is 404, and a "+
+			"successful delete answers 204 with no body."+metered)
+	openapi.Describe("/v1/s3/buckets/:bucket/objects", http.MethodGet,
+		"Browse one level of a bucket",
+		"Lists one folder level of a bucket: each entry's key, whether it is a folder, its "+
+			"size, last-modified time and ETag. `prefix` scopes the read to a sub-folder.\n\n"+
+			"Keys come back RELATIVE to the requested prefix, not absolute, which is what "+
+			"lets a client render a breadcrumb without re-deriving it. The default is the "+
+			"folder view — sub-prefixes are returned as directory entries — and "+
+			"`recursive=true` flattens it to every key beneath the prefix instead.\n\n"+
+			"The listing is bounded at 1000 entries so a large bucket cannot exhaust memory; "+
+			"treat a full page as \"there may be more\" rather than as the whole bucket."+metered)
+	openapi.Describe("/v1/s3/buckets/:bucket/objects", http.MethodPost,
+		"Get a URL to upload one object directly",
+		"Returns a short-lived presigned PUT URL, with the method, the cleaned key and the "+
+			"seconds until it expires. The client uploads to that URL DIRECTLY — the bytes "+
+			"never pass through this API, and the storage credential never leaves the "+
+			"server.\n\n"+
+			"The URL is signed against the public storage host and scoped to exactly one "+
+			"bucket and key, and it expires five minutes after it is issued. The key is "+
+			"path-cleaned before signing, so a traversal cannot escape the bucket. A "+
+			"deployment with no public storage endpoint answers 503, because there is no "+
+			"host to sign a browser-followable URL against."+metered)
+	openapi.Describe("/v1/s3/buckets/:bucket/objects/*", http.MethodGet,
+		"Get a URL to download one object directly",
+		"Returns a short-lived presigned GET URL for the object at the trailing path, with "+
+			"the method, the key and its remaining lifetime. As with upload, the client "+
+			"fetches from that URL directly and the storage credential stays on the "+
+			"server.\n\n"+
+			"The URL carries a content disposition of attachment with the object's file "+
+			"name, so a browser following it downloads the object rather than rendering it "+
+			"in place. Signed against the public host, scoped to the one bucket and key, and "+
+			"good for five minutes; a deployment with no public storage endpoint answers "+
+			"503."+metered)
+	openapi.Describe("/v1/s3/buckets/:bucket/objects/*", http.MethodDelete,
+		"Delete one object",
+		"Removes the single object at the trailing path from one of the caller's buckets "+
+			"and answers 204 with no body. The key is path-cleaned first, so the delete "+
+			"cannot reach outside the bucket it names.\n\n"+
+			"It removes one object and never a prefix: a trailing path that looks like a "+
+			"folder deletes the placeholder at that key, not the objects beneath it."+metered)
+	openapi.Describe("/v1/s3/health", http.MethodGet,
+		"Whether object storage is usable here",
+		"A real readiness probe rather than a liveness stub: 200 only when the storage "+
+			"credentials are present, and it additionally reports whether presigning is "+
+			"available — the capability the two URL-issuing operations need and refuse "+
+			"without.\n\n"+
+			"An unconfigured deployment answers 503 with `ready:false` and the reason, which "+
+			"is the same state in which every data-plane operation here refuses. Not "+
+			"token-gated, so the platform can probe it without a credential, and it carries "+
+			"no credential, bucket or tenant detail.")
 }
 
 // Mount wires /v1/s3/* onto app. The "s3"-product meter and the guard-wrapped,

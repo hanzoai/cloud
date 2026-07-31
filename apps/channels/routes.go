@@ -21,6 +21,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/integrations"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -616,6 +617,37 @@ func listAccessGroups(ctx context.Context, st *store, org string) (map[string]ma
 		out[name][channel] = append(out[name][channel], entry)
 	}
 	return out, rows.Err()
+}
+
+// The prose for the one operation here that cannot be a typed op. The six ops
+// above carry theirs in a doc comment zipdoc lifts; send is pinned untyped by
+// two wire facts (routes says which), so there is no comment for anything to
+// lift and the published document would carry an operationId and nothing else —
+// an SDK method and a CLI command that cannot explain themselves. Declared
+// through the same registry Register uses, so it renders only while the router
+// actually serves the route.
+func init() {
+	openapi.Describe("/v1/channels/:channel/send", http.MethodPost,
+		"Send a message from your org's bot to one chat room",
+		"Delivers text, attachments and actions to one room on a connected chat transport — "+
+			"discord, slack, teams or telegram — and answers that transport's own receipt, the "+
+			"`messageId` it assigned and the Unix second it landed. An unknown channel is a 404.\n\n"+
+			"The body is the envelope's NARROW outbound projection: `room`, `text`, `attachments`, "+
+			"`actions`, `replyTo` and `idempotency`, and nothing else. Identity is not a field — the "+
+			"channel is the path segment and the sender is the caller's validated org — so a body "+
+			"carrying `sender`, `account` or `channel` is refused with 400 rather than having it "+
+			"silently dropped. `room.id` is required, and so is something to say: text, or at least "+
+			"one attachment.\n\n"+
+			"Requires a validated principal; 403 without one. The room must already belong to the "+
+			"caller's org — each transport verifies the binding itself, so a room this org has not "+
+			"bound is 403 and a room whose route the bot has never learned is 409, meaning someone "+
+			"has to message the bot there first. A transport that fails answers 502 carrying status "+
+			"and shape only, never a token.\n\n"+
+			"Sending is at-most-once only if you ask for it: pass an `idempotency` string and a "+
+			"replay answers 200 with the PRIOR receipt instead of sending twice, while a send that "+
+			"fails releases the key so the caller can re-attempt. Bodies over 1 MiB are refused. All "+
+			"four transports currently render text only, so attachments and actions are flattened "+
+			"deterministically to one line each after the text rather than dropped.")
 }
 
 // send is POST /v1/channels/:channel/send — the ONE egress door. The body is

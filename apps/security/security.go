@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,6 +21,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/security/detect"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -103,6 +105,82 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Get("/findings", cloud.Handle(s, listFindings))
 	g.Get("/scans/:id", cloud.Handle(s, getScan))
 	g.Get("/findings/:id", cloud.Handle(s, getFinding))
+}
+
+// The surface's prose, declared beside the route table it describes.
+//
+// Every handler here is a cloud.Handle relay rather than a typed op, so zipdoc has
+// no doc comment to lift and the document would otherwise publish seven
+// operationIds and nothing else — seven SDK methods that cannot explain themselves
+// and seven CLI commands with no help text. openapi.Describe is the seam for
+// exactly that, and it stays drift-proof the same way Register does: a description
+// whose route is not in the router simply never renders.
+func init() {
+	openapi.Describe("/v1/security/health", http.MethodGet,
+		"Liveness, and how many detection rules are loaded",
+		"Reports that the scanning subsystem is serving and how many secret-detection rules "+
+			"the engine holds. It has no external dependency — the answer is ok whenever the "+
+			"findings store opened — so it measures this process rather than anything "+
+			"downstream. Reads no tenant: a prober that sends no principal is answered, not "+
+			"refused.")
+
+	openapi.Describe("/v1/security/rules", http.MethodGet,
+		"The secret-detection catalog the engine scans with",
+		"Returns every rule a scan can fire — the id, name and severity a finding cites — so "+
+			"a caller can render or triage results without hard-coding the catalog. It is the "+
+			"same for everyone and discloses nothing tenant-specific, so it carries no org "+
+			"scope.")
+
+	openapi.Describe("/v1/security/scans", http.MethodPost,
+		"Scan submitted source for hardcoded secrets",
+		"Runs the detection engine over a batch of {path, content} files and answers 201 with "+
+			"the scan summary: how many files were read, how many findings fired, and the tally "+
+			"by severity.\n\n"+
+			"THE SUBMITTED CONTENT IS NEVER STORED. It is scanned in memory; what persists is "+
+			"the finding — its rule, its path and line, a MASKED preview (first and last "+
+			"characters kept, the middle starred) and the SHA-256 fingerprint of the raw secret. "+
+			"The fingerprint is what makes the same secret recognisable across scans and after "+
+			"rotation without the secret ever being written down.\n\n"+
+			"Requires a validated org, which scopes the stored scan and every finding on it; a "+
+			"caller with no org is refused. `project` in the body names the sub-scope and is "+
+			"refused with 400 if it is not a valid slug; omit it and the caller's project header "+
+			"is used instead, where an unusable value is simply ignored. Bounded at 500 files "+
+			"and 8 MiB of total "+
+			"content per submission — split a larger tree across scans. One scan is one metered "+
+			"unit, and the scan is recorded in the audit log with its tally, never with its "+
+			"findings.")
+
+	openapi.Describe("/v1/security/scans", http.MethodGet,
+		"The org's scan history",
+		"Lists the caller org's scans, newest first, each as the same summary the submission "+
+			"answered — files read, findings fired, tally by severity. `limit` caps the page. "+
+			"Strictly org-scoped: a caller only ever sees its own scans, and one with no "+
+			"validated org is refused.")
+
+	openapi.Describe("/v1/security/scans/:id", http.MethodGet,
+		"One scan and every finding on it",
+		"Returns the scan summary together with all of its findings, so the detail view is one "+
+			"round-trip rather than a list call per scan. The findings carry masked previews and "+
+			"fingerprints, never secrets.\n\n"+
+			"Scoped to the caller's org: a scan id belonging to another org is the same 404 as "+
+			"an id that never existed, so a probe learns nothing about what exists elsewhere. No "+
+			"validated org is refused.")
+
+	openapi.Describe("/v1/security/findings", http.MethodGet,
+		"The org's findings, across scans or within one",
+		"Lists the caller org's findings — rule, severity, path, line, masked preview and "+
+			"fingerprint — newest first. `scanId` narrows to a single scan, `minSeverity` "+
+			"(critical | high | medium | low) drops everything below that rank, and `limit` caps "+
+			"the page; a minSeverity outside that set is refused with 400 rather than quietly "+
+			"ignored, so a filter typo cannot read as \"no findings\". Strictly org-scoped, and "+
+			"a caller with no validated org is refused.")
+
+	openapi.Describe("/v1/security/findings/:id", http.MethodGet,
+		"One finding",
+		"Returns a single finding: which rule fired, where (path and line), the masked preview "+
+			"and the SHA-256 fingerprint of the secret — the raw secret is not stored and cannot "+
+			"be read back. Scoped to the caller's org, and a finding belonging to another org is "+
+			"the same 404 as one that never existed.")
 }
 
 // Shutdown closes the findings store. Idempotent; safe if Mount never ran.

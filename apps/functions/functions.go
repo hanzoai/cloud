@@ -41,6 +41,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -212,6 +213,164 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Get("/:name/invocations", cloud.Handle(s, invocations))
 	g.Get("/:name/logs", cloud.Handle(s, logs))
 	g.Post("/:name/invoke", cloud.Handle(s, invoke))
+}
+
+// The prose for this surface, declared beside the route table it describes.
+//
+// None of these handlers is a typed op — they bind and answer through zip.Ctx
+// (c.Bind, c.Query, c.Param, map bodies), so zipdoc has no doc comment to lift
+// and the document would otherwise publish an operationId and nothing else:
+// eleven SDK methods that cannot explain themselves and eleven CLI commands with
+// no help text. Describe is the seam for exactly that, keyed by the fiber pattern
+// verbatim, so a route that leaves the table takes its prose with it.
+func init() {
+	openapi.Describe("/v1/functions", http.MethodGet,
+		"Every serverless function the caller's org has published, with its real 7-day rollup",
+		"A row carries the function's runtime, resource limits, deployment target and its "+
+			"invoke endpoint, plus envCount — how many secrets it mounts. The registry holds "+
+			"secret NAMES only; a value never enters this store and is never returned.\n\n"+
+			"The rollup (invocations7d, errors7d, successRate, avgDurationMs) is counted from "+
+			"real invocation rows over the trailing 7 days and is OMITTED for a function with "+
+			"no calls in that window rather than sent as zero, so a consumer must render "+
+			"absence as unknown, not as an idle function. Ordered most-recently-deployed first.\n\n"+
+			"Scoped to the caller's own org — one store per org, with the org column on every "+
+			"query. Requires a validated principal: an org claim with no verified credential "+
+			"behind it is refused, never answered with an empty list.")
+
+	openapi.Describe("/v1/functions", http.MethodPost,
+		"Publish a function, or redeploy an existing one under the same name",
+		"Org and name together identify a function, so a second call for a name the org "+
+			"already owns is a REDEPLOY: the spec is replaced, the deploy version advances, "+
+			"and the original creation time is kept. There is no separate update call, and no "+
+			"way to take over a name another org owns.\n\n"+
+			"What is accepted is a closed set. runtime is one of node, python, go, deno, bash "+
+			"or container; name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ and may not be one "+
+			"of the reserved static names (metrics, triggers, deployments, secrets); source is "+
+			"capped at 256 KiB. timeoutSec is CLAMPED to the 900s ceiling rather than rejected, "+
+			"and an absent one defaults to 30s with 256Mi of memory. target=fleet runs the "+
+			"function on the org's own linked GPU fleet and is accepted for runtime=python "+
+			"only; everything else runs on the shared sandbox.\n\n"+
+			"envNames declares which secrets the function mounts BY NAME — values live in KMS "+
+			"and are resolved sandbox-side at run time, so no secret value is sent here or "+
+			"stored here. Scoped to the caller's org; requires a validated principal.")
+
+	openapi.Describe("/v1/functions/metrics", http.MethodGet,
+		"Invocation chart and status breakdown across every function in the caller's org",
+		"One series per function that actually ran in the window, bucketed, plus a "+
+			"success/timeout/error donut over the same rows. Every point is a COUNT of real "+
+			"invocation rows that fell in that bucket — nothing is interpolated, and a function "+
+			"with no invocations in the window has no series at all.\n\n"+
+			"The `range` query selects the window and its bucket count: 1H, 6H, 24H, 7D or 30D. "+
+			"An absent or unrecognized value falls back to 24H rather than failing. At most the "+
+			"5000 newest rows are read, so a very busy org's oldest buckets in a wide range can "+
+			"undercount.\n\n"+
+			"costCents is always null: this view has no per-invocation cost source, and reports "+
+			"nothing rather than a fabricated figure. Scoped to the caller's org; requires a "+
+			"validated principal.")
+
+	openapi.Describe("/v1/functions/triggers", http.MethodGet,
+		"Every trigger attached to the caller's org's functions",
+		"A function has exactly ONE trigger today and it is derived, not stored: an "+
+			"always-enabled HTTP trigger whose target is that function's own invoke endpoint, "+
+			"listed once per function.\n\n"+
+			"There is no trigger table behind this and no call that creates, disables or "+
+			"deletes one. The list is a projection of the function registry, so it changes only "+
+			"when a function is published or deleted.\n\n"+
+			"Scoped to the caller's org; requires a validated principal.")
+
+	openapi.Describe("/v1/functions/deployments", http.MethodGet,
+		"The live deployment of every function in the caller's org",
+		"A function's current record IS its deployment, so this answers in the same shape the "+
+			"function list does — runtime, resource limits, target, endpoint, and when it was "+
+			"last deployed.\n\n"+
+			"Two things not to assume. The invocation rollup is never populated here, even for "+
+			"a function that has run: those fields are omitted unconditionally, and the function "+
+			"list is where they are filled in. And this is an inventory of what is live, not a "+
+			"history — there is exactly one entry per function, and a redeploy replaces it "+
+			"rather than appending to it.\n\n"+
+			"Scoped to the caller's org; requires a validated principal.")
+
+	openapi.Describe("/v1/functions/secrets", http.MethodGet,
+		"The names of the secrets mounted by the caller's org's functions",
+		"NAMES only. A secret's value is not held by this subsystem and is not read on this "+
+			"path — values live in KMS and are resolved sandbox-side when a function runs — so "+
+			"nothing in this answer is a credential.\n\n"+
+			"The list is derived from the mount declarations on the function records and "+
+			"deduplicated by namespace and name, so a name mounted by several functions appears "+
+			"ONCE: mountedBy names the first function that claimed it in deploy order, not every "+
+			"function that mounts it. Read it as a hint about origin, not as a complete usage "+
+			"map.\n\n"+
+			"Scoped to the caller's org; requires a validated principal.")
+
+	openapi.Describe("/v1/functions/:name", http.MethodGet,
+		"One function in full: spec, trailing-7-day rollup, trigger, latest runs and mounted secret names",
+		"Extends the list row with the function's single derived HTTP trigger, its 20 most "+
+			"recent invocations (newest first, metadata only — no captured output), and "+
+			"`secrets`, the NAMES of the secrets it mounts. No secret value is stored or "+
+			"returned.\n\n"+
+			"Lookup is keyed on (org, name), so a function that exists but belongs to another "+
+			"org answers exactly as one that never existed — not found, never a signal that the "+
+			"name is taken elsewhere. The 7-day rollup fields are omitted rather than zeroed "+
+			"when the function has not run in the window.\n\n"+
+			"Requires a validated principal.")
+
+	openapi.Describe("/v1/functions/:name", http.MethodDelete,
+		"Delete a function and its entire invocation history",
+		"One transaction removes the function record and every invocation row recorded "+
+			"against its name, so that history also leaves the metrics chart and the invocation "+
+			"list. This is not a soft delete and there is no restore.\n\n"+
+			"Deletion is keyed on (org, name): a name owned by another org is not found here, "+
+			"exactly like a name that never existed, so the call cannot be used to probe for or "+
+			"destroy another tenant's function. A successful delete answers with no body.\n\n"+
+			"Requires a validated principal.")
+
+	openapi.Describe("/v1/functions/:name/invocations", http.MethodGet,
+		"Recent invocation history for one function, newest first",
+		"Each entry is invocation METADATA — id, status, HTTP status code, wall-clock "+
+			"duration and when it ran. The captured stdout/stderr is not on this path; the logs "+
+			"call returns it, for the latest run only.\n\n"+
+			"`limit` defaults to 100 and is clamped: at or below zero, above 500, or not a "+
+			"number at all, it falls back to 100. An unknown function name is NOT an error here "+
+			"— nothing has ever run under it, so the answer is an empty list rather than a not-"+
+			"found, and a caller testing existence must ask for the function itself.\n\n"+
+			"Scoped to the caller's org, so it can only ever return the calling tenant's own "+
+			"runs. Requires a validated principal.")
+
+	openapi.Describe("/v1/functions/:name/logs", http.MethodGet,
+		"The captured output of a function's most recent invocation",
+		"One string, from the LATEST invocation only. This is not a log stream and carries no "+
+			"history; the invocations list is where earlier runs are enumerated.\n\n"+
+			"When that run failed, the string is its ERROR text rather than its stdout — the two "+
+			"share one field, so success cannot be told from failure by this value alone and the "+
+			"invocation's status is what answers that. Output was truncated to 64 KiB when the "+
+			"run was recorded, error text to 16 KiB.\n\n"+
+			"A function that has never run — or a name that does not exist in the caller's org — "+
+			"answers with an empty string, not a not-found. Scoped to the caller's org; requires "+
+			"a validated principal.")
+
+	openapi.Describe("/v1/functions/:name/invoke", http.MethodPost,
+		"Run a function and get back the recorded invocation",
+		"The body's `input` is handed to the function on stdin. Execution NEVER happens in "+
+			"this process: the runtime and source go to the sandboxed code executor, or, for a "+
+			"function published with target=fleet, to the org's own linked GPU fleet as an "+
+			"fn.run job this call blocks on until it finishes. Either way it is bounded by the "+
+			"function's own timeout, itself capped at 900s.\n\n"+
+			"The answer is the invocation record — id, status, duration — and its HTTP status is "+
+			"about the RUN, not about this API: a function whose own code fails answers 502 "+
+			"with a recorded `error` invocation, which is a successful invocation of a failing "+
+			"program. The captured output is not in this reply; the logs call returns it.\n\n"+
+			"MONEY. The caller's org ledger is gated BEFORE any compute runs, so an org out of "+
+			"credit or over its spend cap is refused 402 and nothing executes, and a billing "+
+			"plane that cannot answer refuses rather than granting free compute. A run that "+
+			"actually executed is then debited twice — a flat per-invocation fee, and GB-seconds "+
+			"of compute derived from the measured duration and the function's configured memory. "+
+			"A run that never reached its executor (unreachable, or timed out in transport) "+
+			"consumed nothing and is not charged; a run whose code exited non-zero DID consume "+
+			"compute and is. An operator who prices either half at zero makes it a no-op, and a "+
+			"zero request fee removes the balance gate with it.\n\n"+
+			"When the sandbox is not configured on this deployment, a non-fleet function fails "+
+			"closed before anything is recorded — no execution and no fabricated output. Scoped "+
+			"to the caller's org; requires a validated principal.")
 }
 
 // ---- handlers ----

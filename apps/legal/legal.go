@@ -14,6 +14,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -134,6 +135,32 @@ func toTemplateView(t Template) templateView {
 }
 
 // ---- documents ----
+
+// The prose for the one operation here that cannot be a typed op. Every other route
+// in legal is typed and zipdoc lifts its doc comment into zipdoc_gen.go; the
+// signature completion stays a raw handler (routes says why — it discards its decode
+// error on purpose, and typing it would turn today's 200 into a 400), so there is no
+// comment for anything to lift and the published document would carry an operationId
+// and nothing else — an SDK method and a CLI command that cannot explain themselves.
+// Declared through the same registry Register uses, so it renders only while the
+// router actually serves the route.
+func init() {
+	openapi.Describe("/v1/legal/documents/:id/sign/complete", http.MethodPost,
+		"Record that a generated document's signature request completed",
+		"Records completion of the signature request opened over a generated document and "+
+			"answers the document with a `signed` flag.\n\n"+
+			"The e-sign provider's own status is consulted FIRST and is the default answer; an "+
+			"explicit `signed` field in the body overrides it. That override is the whole point: "+
+			"the default `manual` provider never self-completes, so a reviewer (or a real "+
+			"provider's webhook) is what moves the document. A completion flips the document to "+
+			"`signed`, stamps `signedAt`, and writes a `legal.document.signed` audit event; a "+
+			"provider still reporting incomplete answers 200 with the document unchanged, so the "+
+			"call is safe to repeat and never fabricates a signature.\n\n"+
+			"Org-scoped and fails closed: a validated principal is required (403 without one), the "+
+			"document is read under the caller's OWN org so another tenant's id is a 404, a "+
+			"document with no open signature request is a 400, and a provider whose status call "+
+			"errors is a 502.")
+}
 
 // completeSign records signature completion — a provider webhook or a reviewer signal.
 // The stub never self-completes; this authenticated, audited endpoint is the signal.

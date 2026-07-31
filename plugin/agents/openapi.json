@@ -315,6 +315,8 @@
     "/v1/agents/sessions/stream": {
       "get": {
         "operationId": "get_v1_agents_sessions_stream",
+        "summary": "Live session and event updates for the caller's org, as Server-Sent Events.",
+        "description": "Holds the connection open as text/event-stream and pushes a frame each time the org's registry moves: an `event: session` frame carrying the same session shape the list and detail reads answer with (a registration, an update, or a login-manager revoke tearing a session down), and an `event: event` frame carrying one appended turn. Optional ?root=\u003csession id\u003e narrows the feed to a single subagent tree.\n\nRequires a validated principal carrying an org; 403 without one. Org-scoped fail-closed: the bus filters on tenant before it fans out, so a subscriber only ever receives its own org's updates, and ?root= narrows that further but can never widen it.\n\nDelivery is best-effort and the GET reads remain the source of truth. A subscriber that falls more than 256 frames behind is DROPPED — its channel is closed and the stream ends — so one stuck dashboard can never back-pressure a session write; the client reconnects and re-reads the session endpoints to resynchronise. A `: ping` comment every 25 seconds holds the connection open through proxies and is how a departed client is noticed.",
         "tags": [
           "agents"
         ]
@@ -447,6 +449,8 @@
     "/v1/agents/sessions/{id}/events": {
       "post": {
         "operationId": "post_v1_agents_sessions_by_id_events",
+        "summary": "Append one turn to a session's ordered log.",
+        "description": "Records a message, tool-call, spawn, log, status or control turn against the session and answers 201 with the stored event, including the monotonic `seq` the store assigned — the cursor every reader pages from. The same turn is fanned out live to every stream subscriber watching that session's tree.\n\nRequires a validated principal carrying an org, and the session must already exist IN THAT ORG: an id belonging to another tenant is a 404 exactly like one that does not exist, so the log can never be written across a tenant boundary. `actor` defaults to the calling principal when the body names none. `kind` must be one of the six above, and `payload` must be valid JSON of at most 64 KiB.\n\nThe payload is scanned for credentials BEFORE it is stored, and a hit REFUSES the write with 422 rather than redacting it: {status, code: \"secret_in_transcript\", error, findings:[…]}, each finding naming the rule, severity, line, a masked preview and a SHA-256 fingerprint the author can match against the value they rotate. The detected value itself appears nowhere in that body, because it was never stored. That in-band findings array is the reason this operation cannot be typed.",
         "tags": [
           "agents"
         ],
@@ -465,6 +469,8 @@
     "/v1/agents/sessions/{id}/message": {
       "post": {
         "operationId": "post_v1_agents_sessions_by_id_message",
+        "summary": "Send text into a running session.",
+        "description": "Records `message` as a durable control event carrying the caller's text and answers 200 with {command, event, forwarded} — this is how a dashboard steers an agent mid-run. It is the one command with a required body: a `message` (up to 16 KiB) or a `payload`, and 400 with neither. The credential scan that guards an appended turn covers `payload` here; `message` is bounded but not scanned. \n\nRequires a validated principal carrying an org, and the session must exist IN THAT ORG — a foreign id is a 404, so no tenant can steer another's agents. A FINISHED session (done or error) refuses every command with 409: a run that has ended cannot be steered.\n\nTHE COMMAND IS AN INTENT, NOT A STATE CHANGE. Nothing here writes the session's status. A 200 means the command was durably recorded and delivered, never that the agent has actually paused, resumed or stopped; the status becomes paused, done or error only when the surface running the agent reports it back through a session update. That surface learns of the command in one of two ways: a task-backed session (one carrying a workflow id, with a tasks backend wired) has it forwarded to the durable-execution engine, and `forwarded` says so; everything else is record-only, and the running surface — a locally started `hanzo code` session, for one — drains it by polling the session's control endpoint. Today that is every session: the only controller wired forwards nothing, so `forwarded` is false and polling is how a command arrives. If a forward is attempted and fails, the answer is 502 stating that the command was recorded but not forwarded: the intent is never lost.",
         "tags": [
           "agents"
         ],
@@ -483,6 +489,8 @@
     "/v1/agents/sessions/{id}/pause": {
       "post": {
         "operationId": "post_v1_agents_sessions_by_id_pause",
+        "summary": "Ask a running session to pause.",
+        "description": "Records `pause` as a durable control event on the session and answers 200 with {command, event, forwarded} — the stored event carries the `seq` that orders it against every other turn. \n\nRequires a validated principal carrying an org, and the session must exist IN THAT ORG — a foreign id is a 404, so no tenant can steer another's agents. A FINISHED session (done or error) refuses every command with 409: a run that has ended cannot be steered.\n\nTHE COMMAND IS AN INTENT, NOT A STATE CHANGE. Nothing here writes the session's status. A 200 means the command was durably recorded and delivered, never that the agent has actually paused, resumed or stopped; the status becomes paused, done or error only when the surface running the agent reports it back through a session update. That surface learns of the command in one of two ways: a task-backed session (one carrying a workflow id, with a tasks backend wired) has it forwarded to the durable-execution engine, and `forwarded` says so; everything else is record-only, and the running surface — a locally started `hanzo code` session, for one — drains it by polling the session's control endpoint. Today that is every session: the only controller wired forwards nothing, so `forwarded` is false and polling is how a command arrives. If a forward is attempted and fails, the answer is 502 stating that the command was recorded but not forwarded: the intent is never lost.",
         "tags": [
           "agents"
         ],
@@ -501,6 +509,8 @@
     "/v1/agents/sessions/{id}/resume": {
       "post": {
         "operationId": "post_v1_agents_sessions_by_id_resume",
+        "summary": "Ask a paused session to carry on.",
+        "description": "Records `resume` as a durable control event on the session and answers 200 with {command, event, forwarded}. The session is NOT required to be paused first: the only status this refuses is a finished one, because the live status is the running surface's to report rather than this endpoint's to enforce. \n\nRequires a validated principal carrying an org, and the session must exist IN THAT ORG — a foreign id is a 404, so no tenant can steer another's agents. A FINISHED session (done or error) refuses every command with 409: a run that has ended cannot be steered.\n\nTHE COMMAND IS AN INTENT, NOT A STATE CHANGE. Nothing here writes the session's status. A 200 means the command was durably recorded and delivered, never that the agent has actually paused, resumed or stopped; the status becomes paused, done or error only when the surface running the agent reports it back through a session update. That surface learns of the command in one of two ways: a task-backed session (one carrying a workflow id, with a tasks backend wired) has it forwarded to the durable-execution engine, and `forwarded` says so; everything else is record-only, and the running surface — a locally started `hanzo code` session, for one — drains it by polling the session's control endpoint. Today that is every session: the only controller wired forwards nothing, so `forwarded` is false and polling is how a command arrives. If a forward is attempted and fails, the answer is 502 stating that the command was recorded but not forwarded: the intent is never lost.",
         "tags": [
           "agents"
         ],
@@ -519,6 +529,8 @@
     "/v1/agents/sessions/{id}/stop": {
       "post": {
         "operationId": "post_v1_agents_sessions_by_id_stop",
+        "summary": "Ask a session to stop for good.",
+        "description": "Records `stop` as a durable control event on the session and answers 200 with {command, event, forwarded}. Stop is the one command that CANCELS a task-backed session's durable workflow instead of signalling it — pause, resume and message are cooperative signals the workflow decides how to act on, while this tears it down, with the request's `message` recorded as the cancellation reason (a default stands in when none is given). \n\nRequires a validated principal carrying an org, and the session must exist IN THAT ORG — a foreign id is a 404, so no tenant can steer another's agents. A FINISHED session (done or error) refuses every command with 409: a run that has ended cannot be steered.\n\nTHE COMMAND IS AN INTENT, NOT A STATE CHANGE. Nothing here writes the session's status. A 200 means the command was durably recorded and delivered, never that the agent has actually paused, resumed or stopped; the status becomes paused, done or error only when the surface running the agent reports it back through a session update. That surface learns of the command in one of two ways: a task-backed session (one carrying a workflow id, with a tasks backend wired) has it forwarded to the durable-execution engine, and `forwarded` says so; everything else is record-only, and the running surface — a locally started `hanzo code` session, for one — drains it by polling the session's control endpoint. Today that is every session: the only controller wired forwards nothing, so `forwarded` is false and polling is how a command arrives. If a forward is attempted and fails, the answer is 502 stating that the command was recorded but not forwarded: the intent is never lost.",
         "tags": [
           "agents"
         ],
@@ -974,6 +986,8 @@
     "/v1/agents/{ref}/run": {
       "post": {
         "operationId": "post_v1_agents_by_ref_run",
+        "summary": "Run one of your org's agents and get the recorded run back.",
+        "description": "Composes the agent's stored instructions with the caller's `input`, executes one real chat completion through the same in-process AI client the rest of the console uses, and answers with the run that was recorded: its id, status, model, output, duration and error. Every run this returns reflects an execution that actually happened — a model failure is recorded and reported, never hidden and never fabricated. A transient upstream failure (429, 5xx, empty choices) is retried up to three times with jittered backoff, and a configured failover model is tried before the run is called an error.\n\n`ref` is the agent's public `agent_…` id or its org-unique name; either resolves the same agent, and it must belong to the caller's org, so an agent in another tenant is a 404 exactly like one that does not exist. A validated principal is required and the check is made twice on purpose: this route MOVES MONEY, so the debit's principal requirement is asserted where the money moves rather than inherited from the tenant lookup.\n\nThe org's balance is authorized BEFORE any inference, so an unfunded tenant gets 402 and no free compute, and a billing plane that cannot answer gets 503 rather than a free run. The flat per-run fee is an operator knob; setting it to zero makes runs free and removes the balance gate with them. Only a SUCCESSFUL run is billed, attributed to the model actually used — a failover run bills the model it fell over to, not the one it started on. A deployment with no inference wired answers 503 before any of this.\n\nTHE RULE A READER GETS WRONG: a failed run is a 502 whose body is the RUN, not an error envelope. The execution happened, the run was persisted to this agent's history, and its `error` field is the product — so a client that treats every non-2xx as an opaque failure throws away the only account of what went wrong. Each run also opens a root session in the live session registry, best-effort: a bookkeeping failure there never fails the run, because the run and its billing already happened.",
         "tags": [
           "agents"
         ],

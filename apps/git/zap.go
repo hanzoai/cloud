@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -49,6 +50,56 @@ import (
 // The next service (e.g. crm, prompts) copies this file's shape: one mountZAP
 // registering /v1/<service>/zap/<proc> envelope adapters over its own core funcs.
 // Nothing else — the /zap plane does the rest.
+
+// zapProcedure is what every one of the five shares, because they are five thin
+// adapters over one core each with one identical preamble. Stated once.
+const zapProcedure = "\n\nA ZAP PROCEDURE, not a REST resource. It answers the " +
+	"bridge's {status, msg, data} envelope rather than the raw view the /v1 route " +
+	"returns — which is a wire shape a typed op cannot produce, and the reason this " +
+	"stays a raw handler — and it calls the SAME core function the REST route " +
+	"calls, so the two transports cannot diverge in behaviour. Org and project " +
+	"scope come from the request identity and NEVER from the body: the body cannot " +
+	"widen the caller's scope. Without a validated org the answer is a 403 envelope."
+
+// The prose for git's five ZAP procedures. Three of them state the body they read
+// through openapi.Register (webhook.go); none can state what it DOES that way,
+// because reflection reads Go types and not comments, so all five published a
+// name and nothing a caller could act on. Kept together here, beside the
+// registration that creates them, rather than split by which ones happen to have
+// a body worth declaring — the family is one thing and reads as one.
+func init() {
+	openapi.Describe("/v1/git/zap/createRepo", http.MethodPost,
+		"Create a repository over the ZAP transport",
+		"Creates a repository in the caller's org and project scope and answers with "+
+			"its record. `name` is required and `description` is optional; `project` "+
+			"narrows the scope within the org. A name already taken in that scope is a "+
+			"409 envelope and an invalid name a 400."+zapProcedure)
+
+	openapi.Describe("/v1/git/zap/listRepos", http.MethodPost,
+		"List your repositories over the ZAP transport",
+		"Answers every repository in the caller's org and project scope. It reads NO "+
+			"body — the scope is entirely the caller's identity — so a request with an "+
+			"empty object is correct."+zapProcedure)
+
+	openapi.Describe("/v1/git/zap/getRepo", http.MethodPost,
+		"Read one repository over the ZAP transport",
+		"Answers a single repository's record, named by `name`. A repository outside "+
+			"the caller's org and project scope is a 404 envelope, the same answer one "+
+			"that does not exist gets."+zapProcedure)
+
+	openapi.Describe("/v1/git/zap/deleteRepo", http.MethodPost,
+		"Delete a repository over the ZAP transport",
+		"Deletes the repository named by `name` and answers with the deleted name. "+
+			"A repository outside the caller's org and project scope is a 404 envelope, "+
+			"so a delete can never reach another tenant's repository."+zapProcedure)
+
+	openapi.Describe("/v1/git/zap/usage", http.MethodPost,
+		"Report your org's git storage footprint over the ZAP transport",
+		"Answers every repository in the caller's org with its size in bytes, plus the "+
+			"org's total — what git storage is actually being used, and by which "+
+			"repository. It reads NO body, and it is scoped to the caller's own org, so "+
+			"it is that org's footprint and never the fleet's."+zapProcedure)
+}
 
 // mountZAP registers git's ZAP procedure adapters. Called from routes(). The
 // procedures are ordinary /v1 routes; the shared /zap plane turns them into ZAP

@@ -45,6 +45,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -141,6 +142,61 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// The PROSE for the two creates. Every other operation on this surface is a typed
+// op whose description zipdoc lifts from its doc comment; these two are raw by
+// construction (typed.go names the blocker), so they have no comment to lift and
+// were reaching the document — and every SDK and CLI generated from it — as an
+// operationId and nothing else. That left the tracker able to explain reading,
+// updating and deleting a board, and unable to explain making one.
+//
+// Written as the missing half of the SAME story the typed siblings tell: the KEY is
+// what listProjects and getProject address a board by, and the identifier
+// getIssue answers with is the number assigned HERE. Keyed on the fiber pattern the
+// routes below register, so a description whose route moved stops rendering rather
+// than drifting.
+func init() {
+	openapi.Describe("/v1/tracker/projects", http.MethodPost,
+		"Open a tracker board in your org",
+		"Creates a board and returns it, including the KEY that will prefix every issue "+
+			"identifier filed under it — the same key GET, PATCH and DELETE address the board by, and "+
+			"the ENG in ENG-14.\n\n"+
+			"`name` is required. `key` is optional and is UPPERCASED: omit it and one is derived from "+
+			"the name — its first four letters and digits, or PRJ when that yields nothing usable. A "+
+			"key that is not 2-8 characters starting with a letter is 400.\n\n"+
+			"THE KEY IS UNIQUE PER ORG AND A COLLISION IS REFUSED, NOT MERGED: a second board on a key "+
+			"already taken is 409, and the derived key is not made unique for you, so two similarly "+
+			"named boards collide and the second caller must name a key. Re-POSTing is therefore not "+
+			"idempotent — it fails rather than returning the existing board.\n\n"+
+			"The org is the validated bearer's own, never a client header, and the board is stored "+
+			"under the caller's selected IAM PROJECT: the same key in two IAM projects is two "+
+			"unrelated boards. 403 without a validated org.\n\n"+
+			"Free by default. The create runs the shared per-org balance gate at a fee of zero unless "+
+			"a deployment prices it, and a priced deployment out of balance refuses with the nested "+
+			"{\"error\":{\"code\",\"message\"}} body at 402/503 rather than a flat error.")
+
+	openapi.Describe("/v1/tracker/projects/:key/issues", http.MethodPost,
+		"File an issue on a tracker board",
+		"Files a work item on one board and returns it, carrying the `identifier` — KEY-<number> — "+
+			"it will be known by everywhere else.\n\n"+
+			"THE NUMBER IS THE SERVER'S TO ASSIGN and is not accepted from the caller: it is the "+
+			"board's highest plus one, taken inside the insert's own transaction, and it counts PER "+
+			"BOARD — ENG-1 and OPS-1 are different issues.\n\n"+
+			"`title` is required; everything else is optional and defaults. `kind` (issue, pr, epic) "+
+			"says what the item IS, `source` (team, git, crm, helpdesk, cms, agent) says which surface "+
+			"OPENED it, and the two are orthogonal — an issue escalated from support is "+
+			"kind=issue&source=helpdesk. `status` defaults to backlog, `priority` to none. A value "+
+			"outside one of these closed sets is 400, never silently defaulted. `labels` may not "+
+			"contain a comma, the storage separator.\n\n"+
+			"`repo` and `extRef` RECORD an external binding; they do not create one. Filing here "+
+			"writes to your tracker and reaches no external system — nothing is pushed to GitHub. The "+
+			"GitHub integration runs the other way, mirroring upstream issues INTO this tracker.\n\n"+
+			"404 when the caller's org has no board under that key. The org is the validated bearer's "+
+			"own and the board is resolved within the caller's selected IAM project; 403 without a "+
+			"validated org. Free by default, on the same balance gate as the board create — an epic, "+
+			"a pull request and an issue are priced identically, since the fee is per work item rather "+
+			"than per kind.")
+}
+
 // routes registers the tracker surface. Literal routes register before their
 // :param siblings so Fiber's first-match scan resolves the collection endpoints
 // before the detail ones.
@@ -148,7 +204,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // Everything but the two creates is a TYPED op (typed.go) — one registry entry
 // carrying the schema, the prose, an MCP tool, a CLI command and an SDK method.
 // The creates stay raw because their balance denial is a body zip's error type
-// cannot express; typed.go states that refusal in full.
+// cannot express; typed.go states that refusal in full. Their prose is declared
+// above instead, through the registry openapi.Register shares.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
 	g := app.Group("/v1/tracker")

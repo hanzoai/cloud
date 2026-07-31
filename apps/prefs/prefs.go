@@ -47,6 +47,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -112,6 +113,28 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // and the MCP tool list — Go drops comments at compile time.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// The prose for the one operation here that cannot be a typed op. GetPrefs is a
+// typed op and zipdoc lifts its doc comment; PATCH stays an untyped handler (see
+// routes for why), so there is no comment for anything to lift and the published
+// document would carry an operationId and nothing else — an SDK method and a CLI
+// command that cannot explain themselves. Declared through the same registry
+// Register uses, so it renders only while the router actually serves the route.
+func init() {
+	openapi.Describe("/v1/prefs", http.MethodPatch,
+		"Save the preference keys your surface owns, leaving every other key alone",
+		"Merges a JSON object key-wise into the signed-in caller's OWN preference "+
+			"document and answers with the whole document after the merge, so a surface "+
+			"saves `theme` without having to send back the `density` another surface owns. "+
+			"The merge is SHALLOW and the key space is open: an unnamed key is left "+
+			"untouched, a named key is replaced whole, and a key sent with a `null` value "+
+			"is DELETED. The subject is the `<owner>/<name>` identity built from the "+
+			"validated credential and is the mandatory predicate on the write, so there is "+
+			"no path to another user's preferences — not for an org admin, not for a "+
+			"platform SuperAdmin. Fails closed: no validated principal is 403; an empty "+
+			"body or a literal `null` is 400; and a patch or a resulting document over "+
+			"16 KiB or 128 keys is 413.")
+}
 
 // routes is the ONE place the surface is wired, so a test drives the same router
 // the binary serves rather than a reconstruction of it.

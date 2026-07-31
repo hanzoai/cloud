@@ -34,8 +34,52 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 )
+
+// The prose for the two UNTYPED routes of this plane. upload's request is a
+// multipart form and download's response is the blob's raw bytes, so neither is
+// a shape a typed In/Out can carry and zipdoc has nothing to lift — without
+// this they publish an operationId and nothing else. The typed sibling
+// (deleteBlob) documents itself from its own doc comment.
+//
+// The path keys are the FIBER patterns exactly as registered above.
+func init() {
+	openapi.Describe("/v1/team/files/:workspace", http.MethodPost,
+		"Upload a file into a workspace",
+		"Stores one file in a workspace's blob store and answers the blob id it is "+
+			"addressable by, as plain text — the front discards that body, it is there for a "+
+			"caller driving this by hand.\n\n"+
+			"The body is a multipart form with a `file` part, and THAT PART'S FILENAME IS THE "+
+			"BLOB ID: the client mints it (a uuid v4) and the server stores under it, so a part "+
+			"whose filename is not a uuid is refused rather than assigned one. A file over 100 "+
+			"MiB is 413 and an empty one is 400.\n\n"+
+			"The caller must hold a verified session or workspace token AND be a member of the "+
+			"workspace; an unknown workspace, another tenant's workspace and a workspace the "+
+			"caller is not in all answer the same 404, so a probe learns nothing about what "+
+			"exists. The stored key embeds the verified org and the workspace, so an upload "+
+			"cannot land in another tenant's box whatever id it names. A storage backend that "+
+			"is unavailable fails closed with 502 rather than reporting a write it never made.")
+	openapi.Describe("/v1/team/files/:workspace/:filename", http.MethodGet,
+		"Download a workspace file",
+		"Streams one blob's raw BYTES back — this is the read side of the workspace file "+
+			"store, not a JSON envelope around it.\n\n"+
+			"THE BLOB IS NAMED BY THE `file` QUERY PARAMETER, NOT BY :filename. The path segment "+
+			"is only the name a browser saves the download under; a request without ?file= is a "+
+			"400 no matter what the path says.\n\n"+
+			"The Content-Type is derived from the STORED BYTES, never from the name: only png, "+
+			"jpeg, gif and webp, recognized by their magic bytes, are served inline under their "+
+			"true type, and everything else is served inert as application/octet-stream with an "+
+			"attachment disposition. Every response carries nosniff, so a file uploaded under an "+
+			".svg or .html name cannot be talked into executing in a viewer's origin. Blobs are "+
+			"immutable, so a hit caches privately for a year.\n\n"+
+			"Same gate as the upload: verified token, membership of the workspace. A genuine "+
+			"miss, another tenant's workspace, a workspace the caller is not in, and a blob id "+
+			"belonging to a different workspace are ONE answer — 404 — because the physical key "+
+			"is org- and workspace-scoped and a foreign id is simply a key that does not exist. "+
+			"An unavailable backend is a 502, never an empty 200.")
+}
 
 // maxBlobSize caps a single upload so an unbounded body can't exhaust the blob
 // backend or memory. 100 MiB matches the attachment ceiling.

@@ -19,9 +19,11 @@ import (
 
 // This subsystem serves 56 operations and NOT ONE of them is a typed op, which
 // is the whole cost of being a transparent edge: an operation outside zip's
-// typed registry has no schema, no prose, no MCP tool, no CLI command and no
-// generated SDK method. The refusal is deliberate and it is measured here rather
-// than promised in prose, because prose cannot go red.
+// typed registry has no schema, no MCP tool, no CLI command and no generated SDK
+// method. (Its PROSE is recoverable — openapi.Describe declares that beside the
+// wire fact, and exec.go does, for all 56. What follows is the cost that is NOT
+// recoverable.) The refusal is deliberate and it is measured here rather than
+// promised in prose, because prose cannot go red.
 //
 // The reason is one fact repeated eight times: cloud does not IMPLEMENT any of
 // these endpoints. Mount hands each path to httputil.NewSingleHostReverseProxy
@@ -39,6 +41,12 @@ import (
 // bridge for the SCHEMA half and it is refused here too, for reasons stated at
 // each path below: on this surface it could only publish a guess about a contract
 // this repo does not own, or a content type the route does not accept.
+//
+// `openapi.Describe` is the bridge for the PROSE half and it is TAKEN, for all 56
+// (exec.go's `surfaces` + init). Prose is a statement ABOUT the route rather than
+// a declaration of what the route carries, so it can be true of a wire this repo
+// does not own — which is exactly why the schema half stays refused while this
+// half does not.
 
 // untypedPaths is the CLOSED list of the document paths this subsystem serves,
 // each with the wire fact that keeps every operation on it out of the typed
@@ -181,9 +189,10 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	if len(unexplained) > 0 {
 		sort.Strings(unexplained)
 		t.Errorf("operation(s) with no registry entry and no reason: %s\n"+
-			"A route that is not a typed op has no schema, no prose, no MCP tool, no CLI command "+
-			"and no SDK method. Convert it (zip.Get/Post/... ), or name its path in untypedPaths "+
-			"with the wire fact that typing it would move.", strings.Join(unexplained, ", "))
+			"A route that is not a typed op has no schema, no MCP tool, no CLI command and no "+
+			"SDK method. Convert it (zip.Get/Post/... ), or name its path in untypedPaths with "+
+			"the wire fact that typing it would move — and give it prose in exec.go's `surfaces` "+
+			"either way.", strings.Join(unexplained, ", "))
 	}
 	for key := range named {
 		if !served[key] {
@@ -192,15 +201,16 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	}
 }
 
-// TestTheSurfaceIsWhollyUndescribed measures the COST of the refusal instead of
-// asserting it, so the day one of these operations becomes describable this goes
-// red and the ledger above, the note at the registration site and the LLM.md
-// entry get updated together rather than drifting apart.
+// TestTheSurfaceIsWhollyUntyped measures the COST of the refusal instead of
+// asserting it, so the day one of these operations becomes typeable this goes red
+// and the ledger above, the note at the registration site and the LLM.md entry get
+// updated together rather than drifting apart.
 //
 // 56 is 8 paths (4 prefixes, each exact and wildcard) x 7 published methods, and
-// it is the same 56 `bin/exec openapi` writes into plugin/exec/openapi.json with
-// neither a description nor a summary on any of them.
-func TestTheSurfaceIsWhollyUndescribed(t *testing.T) {
+// it is the same 56 `bin/exec openapi` writes into plugin/exec/openapi.json. Every
+// one of them CARRIES PROSE (TestEveryOperationIsDescribed); none of them carries
+// a schema, a tool or an SDK method, which is the part that stays a cost.
+func TestTheSurfaceIsWhollyUntyped(t *testing.T) {
 	served, typed := execOps(t)
 	if len(served) != 56 {
 		t.Errorf("serves %d operations, want 56 — the surface moved; re-derive untypedPaths "+
@@ -216,6 +226,35 @@ func TestTheSurfaceIsWhollyUndescribed(t *testing.T) {
 			"decision on a verbatim proxy: drop its path from untypedPaths, run "+
 			"`make -C apps/exec openapi`, and update the apps/exec entry in LLM.md with what "+
 			"the new wire is.", keys)
+	}
+}
+
+// TestEveryOperationIsDescribed holds the prose to the same bar the typed apps
+// hold theirs to, because on THIS surface prose is the entire product surface: a
+// proxied operation has no schema and no tool, so its description is the only
+// thing an SDK user or a CLI reader ever gets. exec.go's init is what carries it,
+// and it reads the same `prefixes` the mount does — so a prefix added there
+// without an entry in `surfaces` panics at init, and one whose prose went missing
+// shows up here as an operation that publishes an operationId and nothing else.
+func TestEveryOperationIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(surfaceApp(t), openapi.Info{Title: "exec", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	var bare []string
+	for path, item := range doc.Paths {
+		for method, op := range item {
+			if strings.TrimSpace(op.Summary) == "" || strings.TrimSpace(op.Description) == "" {
+				bare = append(bare, strings.ToUpper(method)+" "+path)
+			}
+		}
+	}
+	if len(bare) > 0 {
+		sort.Strings(bare)
+		t.Errorf("operation(s) publishing an operationId and nothing else: %s\n"+
+			"Add the path to exec.go's `surfaces` — an SDK method that cannot explain itself "+
+			"and a CLI command with no help text is what a bare operation ships as.",
+			strings.Join(bare, ", "))
 	}
 }
 

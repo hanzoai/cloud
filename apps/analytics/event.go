@@ -418,11 +418,21 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 // the half that runs; wire is the half that is PUBLISHED, and it sits here rather
 // than in a table of its own so a door cannot be routed with one wire and documented
 // with another — the drift that put /v1/tracker in the router and not in the carve.
+//
+// summary and description are the PROSE half of that same fact, and they live here
+// for the same reason: a door is untyped by construction (typed_wire_test.go names
+// the blocker), so zipdoc has no doc comment to lift and declare below is the only
+// place its prose can be stated. Keeping it on the row means a door added tomorrow
+// carries its own account of what it accepts and from whom, rather than inheriting
+// one blurb written about a different door.
 type door struct {
 	path   string
 	decode decode
 	wire   any // openapi.Register's request declaration; see declare below
 	source string
+
+	summary     string
+	description string
 }
 
 // doors is THE ingest surface: the ONE place a door is declared, and the ONE list
@@ -540,7 +550,42 @@ func decodeEvent(body []byte) ([]CaptureEvent, error) {
 }
 
 var doors = []door{
-	{path: "/v1/event", decode: decodeEvent, wire: canonicalWire, source: sourceEvent},
+	{
+		path: "/v1/event", decode: decodeEvent, wire: canonicalWire, source: sourceEvent,
+		summary: "Capture product events into your org's warehouse",
+		description: "Stores pageviews, browser errors, identifies and custom commerce events as rows " +
+			"in the caller's own tenant, and answers a receipt {accepted, dropped} that always totals " +
+			"what was sent — a beacon is never silently discarded.\n\n" +
+			"ONE door for every wire a Hanzo surface emits, dispatched by the SHAPE of the body and " +
+			"never by a second path: a bare event object, a bare array of them, the {batch:[…]} / " +
+			"{events:[…]} envelope, the team console's snake_case array, and the PostHog wire (spelled " +
+			"`distinct_id`/`api_key`, which the canonical wire never uses). BATCH IS A BODY, NOT A " +
+			"PATH — there is no /v1/event/batch, because an array already is one.\n\n" +
+			"WHAT THE CALLER PRESENTS DECIDES WHAT IT MAY WRITE, and the door itself grants nothing. A " +
+			"validated bearer or an org API key writes the full event at full fidelity. A PUBLISHABLE " +
+			"key (pk-, on Authorization: Bearer, x-hanzo-ingest-key, or ?ingest_key= for " +
+			"navigator.sendBeacon, which cannot set headers) does the same, and is the credential a " +
+			"browser bundle ships: it is deliberately NOT a secret, it resolves WHICH tenant a beacon " +
+			"belongs to and nothing more. A pk- never authenticates and can READ NOTHING — not this " +
+			"org's errors, not a lens, not any other route on this API — so a leaked one lets a " +
+			"stranger write into your stream, and never lets one read out of it. Reading these rows " +
+			"back always takes a real bearer. A Hanzo Team workspace token resolves its org at " +
+			"REDUCED capability: the signed " +
+			"account names the person, so a `distinctId` in the body cannot pin events on a colleague.\n\n" +
+			"NO CREDENTIAL IS ALSO ADMITTED, and that is the point — a logged-out visitor has none. " +
+			"Such a write is PROJECTED: filed under the reserved `$public` tenant, narrowed to " +
+			"pageview and error, renamed server-side to $pageview/$error, and stripped to the fields " +
+			"the projection names, so revenue, personId, groupId and the whole client property bag " +
+			"cannot reach a row. Everything refused is counted in `dropped`. On a published-site host " +
+			"the same projection applies with that site's org as the tenant. But a credential that IS " +
+			"presented and does NOT resolve is 403, never quietly downgraded: filing a misconfigured " +
+			"key's events under $public would hide them in a partition their owner cannot read.\n\n" +
+			"The anonymous lane alone is bounded: 413 over 64 KiB, 400 over 50 events, 429 on the " +
+			"per-client-IP and per-peer caps, and a DNT:1 or Sec-GPC:1 request stores nothing and says " +
+			"so in the receipt. Where a deployment switches anonymous capture off, a credential-less " +
+			"write is 403 instead. Authenticated bodies are offered to the observability plane first, " +
+			"which claims LLM-observability ingestion batches and declines everything else.",
+	},
 }
 
 // canonicalWire is what decodeIngest accepts, said in the document's own vocabulary:
@@ -552,17 +597,18 @@ var doors = []door{
 // it out would publish an ingest API that silently accepts a wire it does not document.
 var canonicalWire = openapi.OneOf{Event{}, []Event{}, CaptureBatch{}, insightsBody{}}
 
-// declare publishes what every ingest door ACCEPTS and RETURNS. These doors cannot be
-// typed ops (typed_wire_test.go names each one's wire fact), and an untyped route with
-// no declaration publishes an operationId and NOTHING else — indistinguishable, to
-// every SDK generator reading the document, from a route that takes no body and
-// returns none. That is how the platform's primary ingest door came to offer, in every
-// generated SDK, a call with nowhere to put the event.
+// declare publishes what every ingest door ACCEPTS, RETURNS and MEANS. These doors
+// cannot be typed ops (typed_wire_test.go names each one's wire fact), and an untyped
+// route with no declaration publishes an operationId and NOTHING else —
+// indistinguishable, to every SDK generator reading the document, from a route that
+// takes no body and returns none. That is how the platform's primary ingest door came
+// to offer, in every generated SDK, a call with nowhere to put the event.
 //
-// It buys schema and only schema: prose, an MCP tool and a CLI command come from zip's
-// typed registry, which is exactly what these doors cannot enter. And it derives from
-// the doors table, so a door added tomorrow declares itself or fails the gate in
-// doors_test.go rather than silently publishing nothing.
+// Schema alone was only half of that: a call with somewhere to put the event and no
+// word about what a publishable key may do with it is a door a reader has to guess at.
+// Describe is the seam for the other half, and it derives from the SAME rows — a door
+// added tomorrow declares its schema and its prose together, or fails the gate in
+// doors_test.go rather than silently publishing neither.
 //
 // The receipt is the SAME for every door and every lane — the anonymous projection,
 // the reduced team principal, the full credential and the o11y plane's claim all
@@ -571,18 +617,81 @@ var canonicalWire = openapi.OneOf{Event{}, []Event{}, CaptureBatch{}, insightsBo
 func init() {
 	for _, d := range doors {
 		openapi.Register(d.path, http.MethodPost, d.wire, CaptureResult{})
+		openapi.Describe(d.path, http.MethodPost, d.summary, d.description)
 	}
 	openapi.Register("/v1/analytics/health", http.MethodGet, nil, healthReport{})
+	// What "healthy" ASSERTS, stated exactly, because a probe whose prose overclaims
+	// is worse than one with none: an operator wires a readiness gate to it and gets a
+	// green pod in front of a warehouse that cannot answer a query.
+	openapi.Describe("/v1/analytics/health", http.MethodGet,
+		"Whether the analytics warehouse is reachable, and which lens tables exist",
+		"Reports the analytics subsystem's own liveness: whether the shared warehouse "+
+			"connection is up, and — when it is — whether each read lens's table has been "+
+			"provisioned yet (the LLM usage ledger and the product-event table, each named in the "+
+			"report).\n\n"+
+			"IT DOES NOT PROBE THE WAREHOUSE TO EARN ITS 200. `datastore` here is the state of the "+
+			"process's own shared client — established, and not since closed — not the result of a "+
+			"query, so a warehouse that is accepting connections and failing reads still reports "+
+			"healthy. Degraded means only that the client never came up: 503, CARRYING the report "+
+			"(status, datastore:false, reason) as its body rather than an error envelope, so a "+
+			"readiness gate can read the cause off the same object it got at 200.\n\n"+
+			"A MISSING LENS TABLE IS NOT A FAILURE and never moves the status. The per-lens probe "+
+			"runs only once connected, and a lens reported available:false answers honest-empty "+
+			"rather than erroring — a fresh deployment whose collector has not emitted yet is "+
+			"legitimately 200 with the product-event lens unavailable. The lens block is absent "+
+			"entirely from a degraded report, which has nothing to say about tables it could not "+
+			"reach.\n\n"+
+			"Unauthenticated on purpose — liveness has to be probe-able — and it reads NO tenant "+
+			"data: table existence only, never a row.")
 	// The Sentry error wire (registered in analytics.go's routes, on the same
 	// /v1/event door). Its body is an opaque envelope stream the o11y consumer reads
 	// itself, so openapi.Binary is the whole truth — no struct describes it, exactly
 	// as none describes an upload. Its RESPONSE is deliberately undeclared: the
 	// handler relays cloud.ObsErrorIngest verbatim, so this package does not know
 	// what comes back and publishing a shape would be inventing one.
-	for _, path := range []string{"/v1/event/:project/envelope", "/v1/event/:project/store"} {
-		openapi.Register(path, http.MethodPost, openapi.Binary{}, nil)
+	//
+	// The prose is PER ROW, not one blurb over both: these are two different Sentry
+	// protocol endpoints — the current framed envelope and the legacy single-event
+	// store — and a shared description would tell an SDK author the two are aliases,
+	// which is the one thing about this pair worth knowing and getting right.
+	for _, d := range []struct{ path, summary, description string }{
+		{"/v1/event/:project/envelope",
+			"Sentry SDK envelope ingest — errors and traces from an unmodified Sentry client",
+			"Accepts the CURRENT Sentry wire — the framed envelope a modern SDK posts, carrying its " +
+				"items in one request — so an application already instrumented with Sentry reports into " +
+				"Hanzo's error tracking by pointing its DSN here and changing nothing else."},
+		{"/v1/event/:project/store",
+			"Sentry SDK store ingest — the legacy single-event wire",
+			"Accepts the LEGACY Sentry wire: one event per request, what an SDK predating envelopes " +
+				"sends. Same door, same credential, same destination as the envelope endpoint — kept " +
+				"open so an old client reports without being upgraded first. New instrumentation has " +
+				"no reason to choose it."},
+	} {
+		openapi.Register(d.path, http.MethodPost, openapi.Binary{}, nil)
+		openapi.Describe(d.path, http.MethodPost, d.summary, d.description+sentryWire)
 	}
 }
+
+// sentryWire is the half of both Sentry doors' prose that is identical because the
+// HANDLER is identical: one relay, one credential, one tenant rule. Stated once so two
+// descriptions cannot drift into two accounts of one forward.
+//
+// The DSN paragraph is the load-bearing one. Every other write in this package is
+// reached with a Hanzo credential, so a reader arrives expecting one here too — and
+// sending a bearer to this door accomplishes exactly nothing.
+const sentryWire = "\n\nCLOUD ROUTES IT AND READS NONE OF IT. The body is relayed byte-for-byte to the " +
+	"observability plane, which parses the wire, verifies the credential and answers; this door " +
+	"declares no response shape because it does not know one. A deployment with no observability " +
+	"plane mounted answers 503.\n\n" +
+	"THE CREDENTIAL IS A SENTRY DSN KEY, NOT A HANZO PRINCIPAL. This is one of the few writes on " +
+	"the platform that carries no bearer and no org header by design — a Sentry SDK has neither — " +
+	"and it is exempt from the principal gate for that reason. The observability plane verifies the " +
+	"DSN key itself, fail-closed: a request without a valid one is refused there, never admitted " +
+	"here. Presenting a Hanzo bearer instead does nothing.\n\n" +
+	"`project` IS THE DSN'S PROJECT ID — the identifier in the DSN the SDK was configured with, and " +
+	"what the tenant is derived from. It is NOT a Hanzo IAM project and NOT a tracker project key. " +
+	"Only these two ingest paths map through: no observability READ API is reachable by any other " +
+	"suffix under this prefix."
 
 // ingest is the door's API-host handler: admission (handle) over the door's wire.
 // Capability is resolved fail-closed there — bearer | pk- | access key ⇒ full;

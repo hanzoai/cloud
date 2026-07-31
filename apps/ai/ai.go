@@ -19,12 +19,89 @@ package ai
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	aimod "github.com/hanzoai/ai"
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// fallback is the sentence every operation below shares, because each is read
+// alone: the document publishes five operations at one address, and a consumer
+// meeting `PATCH /v1/{wildcard1}` has no sibling to infer the rule from.
+const fallback = "\n\nThis address is a FALLBACK, not a front door. It is registered last, so every " +
+	"subsystem that claims a specific path under /v1 — billing, plans, pricing, the per-app " +
+	"health routes — still serves its own, and this catches the rest. The wildcard is the " +
+	"remainder of the path, and the answer is relayed with the model API's own status, " +
+	"headers and content type, so a streamed response streams and an upstream refusal " +
+	"arrives as itself."
+
+// The prose for the five operations this package publishes. It is declared here
+// rather than lifted from a doc comment because there is no handler in this
+// repository to lift it from: aimod.Mount registers one greedy `app.All("/v1/*")`
+// and the real routes live in github.com/hanzoai/ai. Describe is keyed on (method,
+// path) and renders only while the router serves that route, so it states what is
+// BEHIND the wildcard without pretending the operations have been typed — the
+// document stops publishing five addresses and nothing else, and the typing work
+// named above is unaffected.
+func init() {
+	openapi.Describe("/v1/*", http.MethodPost,
+		"The Hanzo AI model API",
+		"Carries every generating call in the model API: chat completions and responses "+
+			"(streamed when the body asks for it), embeddings, reranking, image, video and "+
+			"speech generation, speech-to-text, RAG ingest, and fine-tune jobs — plus the "+
+			"creates on the managed collections behind /v1.\n\n"+
+			"This is the billed half of the surface. A call is metered per org against the "+
+			"balance the commerce subsystem holds, and the balance gate is FAIL-CLOSED: when "+
+			"no native balance reader is wired into the process the call is refused rather "+
+			"than guessed at, and an insufficient balance answers 402 with its own message "+
+			"intact."+fallback)
+	openapi.Describe("/v1/*", http.MethodGet,
+		"Read the model catalogue and the AI subsystem's own resources",
+		"Covers the reads: the model catalogue and a model's access status, connected "+
+			"providers and their usage, fine-tune jobs and presets, Hugging Face model, "+
+			"dataset and repository search, the subsystem's health and metrics, and the "+
+			"collection and member reads on the managed resources behind /v1.\n\n"+
+			"Reads are scoped to the calling org by the identity the gateway validated; the "+
+			"catalogue a caller sees is the one its own org has access to, not the whole "+
+			"provider list."+fallback)
+	openapi.Describe("/v1/*", http.MethodPut,
+		"Replace one AI resource in full",
+		"Replaces a member of one of the AI subsystem's managed collections with the body "+
+			"given. PUT and PATCH reach the SAME update — a full replacement and a partial "+
+			"one are accepted at one address so a client need not know which verb a given "+
+			"collection prefers — so the difference is in what the caller sends, not in what "+
+			"the server does with it."+fallback)
+	openapi.Describe("/v1/*", http.MethodPatch,
+		"Update one AI resource in place",
+		"Updates a member of one of the AI subsystem's managed collections with the fields "+
+			"given, leaving the rest as they were. It is the same update PUT reaches, so "+
+			"either verb is accepted on these resources.\n\n"+
+			"Nothing under this method reaches the generating model API; that is the POST "+
+			"surface."+fallback)
+	openapi.Describe("/v1/*", http.MethodDelete,
+		"Remove an AI resource, connection or indexed document",
+		"Removes a member of one of the AI subsystem's managed collections, a connected "+
+			"provider (which revokes the stored connection for the caller's org), or "+
+			"documents from the RAG index.\n\n"+
+			"Deleting a provider connection is the one a reader most easily "+
+			"underestimates: it does not merely hide the provider, it drops the org's stored "+
+			"authorization for it, and every later call routed to that provider fails until "+
+			"it is connected again."+fallback)
+	// The methods left over. This address is bound with All(), so it publishes every
+	// method this generator knows and the ones above are only the ones that DO
+	// something. DescribeRest covers the remainder from the generator's own set, so a
+	// method added there is covered the day it appears rather than published bare —
+	// which is what a hand-copied list here had already produced for OPTIONS and TRACE.
+	openapi.DescribeRest("/v1/*",
+		"Not served by the inference surface",
+		"Published because this catch-all accepts every method, but the inference surface "+
+			"answers none of them here — the request falls through to whatever owns the path, "+
+			"and reaches no model.")
+
+}
 
 // Mount installs the money, ingest and telemetry wiring, then mounts ai. A nil
 // callback is left alone — cloud leaves one nil exactly when that subsystem
@@ -113,5 +190,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// it is the largest hole in the fleet document: plugin/ai/openapi.json publishes
 	// seven operations at /v1/{wildcard1} and NONE of the AI API, so no generated
 	// SDK and no MCP tool list carries chat completions today.
+	//
+	// The prose half of that hole is closed — see the Describe block above, which
+	// says what each method behind the wildcard actually reaches — but prose is all
+	// it closes. A typed op is still what an SDK method and an MCP tool come from.
 	return aimod.Mount(app, deps)
 }
