@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/tools"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
@@ -29,17 +30,6 @@ func (f *fakeProvider) Dispatch(context.Context, tools.Principal, string, map[st
 	return map[string]any{"ran": true}, nil
 }
 
-// fakeCharger records x402 settlements.
-type fakeCharger struct {
-	err     error
-	charged []tools.Charge
-}
-
-func (f *fakeCharger) Charge(_ context.Context, ch tools.Charge) error {
-	f.charged = append(f.charged, ch)
-	return f.err
-}
-
 // setup wires a fresh activation store + a fake tool provider into the shared
 // registry and mounts the marketplace (which installs its Pricer).
 func setup(t *testing.T, offered ...string) *zip.App {
@@ -50,7 +40,6 @@ func setup(t *testing.T, offered ...string) *zip.App {
 	}
 	t.Cleanup(func() { _ = act.Close() })
 	tools.Default().SetActivation(act)
-	tools.Default().SetCharger(nil) // reset any prior test's charger.
 
 	var offer []tools.Tool
 	for _, name := range offered {
@@ -139,7 +128,7 @@ func TestPublishValidation(t *testing.T) {
 
 	// Monetized with no recipient → 400.
 	code, _ := do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", publishReq{
-		Tool: "conn_gamma", Title: "Gamma", PriceCents: 500,
+		Tool: "conn_gamma", Title: "Gamma", Price: "5.00",
 	})
 	if code != 400 {
 		t.Fatalf("monetized listing without recipient want 400, got %d", code)
@@ -160,49 +149,38 @@ func TestPublishValidation(t *testing.T) {
 	}
 }
 
-// TestMonetizedDispatchCharges: the full chain — publish a MONETIZED public listing,
-// install it, then dispatch the tool. The registry consults the marketplace Pricer,
-// settles through the x402 Charger seam with the seller's price + recipient wallet,
-// and only then runs the tool.
-func TestMonetizedDispatchCharges(t *testing.T) {
+// TestMonetizedListingIsPriced: publishing a monetized listing puts a real price
+// into the x402 table under the tool's own resource id, with the payee taken from
+// the ROW — the publisher org and the wallet it named. This is the price every
+// enforcement path reads; that it settles is proved end to end in payments_test.go.
+func TestMonetizedListingIsPriced(t *testing.T) {
 	app := setup(t, "conn_premium")
 
-	// Publish a monetized public listing.
 	code, body := do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", publishReq{
-		Tool: "conn_premium", Title: "Premium", PriceCents: 750, Currency: "USD",
-		Recipient: "0xSELLERWALLET", Public: true,
+		Tool: "conn_premium", Title: "Premium", Price: "0.0025", Currency: "USD",
+		Recipient: "wal_seller", Public: true,
 	})
 	if code != 201 {
 		t.Fatalf("publish monetized want 201, got %d (%s)", code, body)
 	}
 
-	// A BUYER org installs it.
-	if code, _ := do(t, app, http.MethodPost, "/v1/marketplace/install", "buyer", map[string]any{"tool": "conn_premium"}); code != 200 {
-		t.Fatalf("install want 200, got %d", code)
+	terms, priced, err := (&registry{store: mounted.State.store}).Price(context.Background(), resourceOf("conn_premium"))
+	if err != nil || !priced {
+		t.Fatalf("published listing must be priced: priced=%v err=%v", priced, err)
+	}
+	want, _ := money.ParseUSD("0.0025")
+	if terms.Amount.Cmp(want) != 0 {
+		t.Fatalf("price = %s, want exactly 0.0025 (a sub-cent price is a price)", terms.Amount.String())
+	}
+	if terms.RecipientOrg != "acme" || terms.RecipientWalletID != "wal_seller" {
+		t.Fatalf("payee must come from the row: %+v", terms)
 	}
 
-	// With NO charger wired, a priced dispatch fails closed.
-	_, err := tools.Default().Dispatch(context.Background(), tools.Principal{Org: "buyer", Owner: "buyer"}, "conn_premium", nil)
-	if err == nil {
-		t.Fatal("priced dispatch with no charger must fail closed")
-	}
-
-	// Wire the x402 charger; dispatch now settles to the seller, then runs.
-	charger := &fakeCharger{}
-	tools.Default().SetCharger(charger)
-	out, err := tools.Default().Dispatch(context.Background(), tools.Principal{Org: "buyer", Owner: "buyer"}, "conn_premium", nil)
-	if err != nil {
-		t.Fatalf("settled dispatch must run, got %v", err)
-	}
-	if m, _ := out.(map[string]any); m["ran"] != true {
-		t.Fatalf("tool must run after settlement, got %v", out)
-	}
-	if len(charger.charged) != 1 {
-		t.Fatalf("expected exactly one x402 settlement, got %d", len(charger.charged))
-	}
-	c := charger.charged[0]
-	if c.Cents != 750 || c.Recipient != "0xSELLERWALLET" || c.Currency != "USD" || c.Payer != "buyer" {
-		t.Fatalf("x402 charge mismatch: %+v", c)
+	// A tool nobody listed, and any resource that is not a tool id, are free.
+	for _, resource := range []string{resourceOf("conn_unlisted"), "/v1/marketplace"} {
+		if _, priced, err := (&registry{store: mounted.State.store}).Price(context.Background(), resource); priced || err != nil {
+			t.Fatalf("%s must be unpriced, got priced=%v err=%v", resource, priced, err)
+		}
 	}
 }
 

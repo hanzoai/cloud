@@ -851,9 +851,8 @@
       },
       "Price": {
         "properties": {
-          "amountCents": {
-            "description": "AmountCents is what ONE call costs, in minor units of Currency.",
-            "type": "integer"
+          "amount": {
+            "description": "Amount is what ONE call costs, EXACTLY: an 18-decimal USD value, so a\nper-call price of $0.0025 is $0.0025 and not a cent-floored zero. Cents\ncannot hold a per-token price, and a tool plane is where per-token prices\nlive."
           },
           "currency": {
             "description": "Currency is the ISO 4217 code, e.g. \"USD\". Empty means USD.",
