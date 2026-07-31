@@ -193,14 +193,6 @@ var allowedRequestUses = map[string]string{
 		"by, and OrgFrom answers with an org or refuses. What the gate needs is the one bit beside " +
 		"it — principal.Validated — so an org-less but signed-in operator is admitted and an " +
 		"anonymous caller is not. ONE function, which every op asks; fails closed off the HTTP path.",
-	"apps/registry/registry.go": "caller — the tenancy input for every op, and it separates two " +
-		"refusals principal.OrgFrom folds into one. Not signed in (\"sign in to use Registry\") and " +
-		"signed in with no org (\"no validated org\") have different remedies, and OrgFrom's single " +
-		"ok bit cannot tell an operator which one they hit — on a plane where the org is a path " +
-		"SEGMENT of every repository name, that is the difference between \"log in\" and \"you are in " +
-		"no org\". The org itself still comes from principal.Org, never from an In field, which is " +
-		"what makes a foreign repository inexpressible. ONE function, asked by every op through " +
-		"owned(); fails closed off the HTTP path.",
 	"apps/tools/charge_peer.go": "chargePeer — the tool plane's payment seam reaching the x402 " +
 		"process, which is a PROXY that forwards the caller's identity and carries two facts of the " +
 		"request across the boundary with it. The payer is principal.Ledger, which folds in the " +
