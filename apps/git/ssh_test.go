@@ -214,27 +214,34 @@ func TestSSHCrossTenantRejected(t *testing.T) {
 }
 
 // TestSSHParseRepoPath covers the path parser's accept/reject cases directly.
+// The middle segment is the optional project sub-scope, so an org-level path
+// still yields an empty project and every segment stays traversal-safe.
 func TestSSHParseRepoPath(t *testing.T) {
 	cases := []struct {
-		in, org, repo string
-		ok            bool
+		in, org, project, repo string
+		ok                     bool
 	}{
-		{"acme/code.git", "acme", "code", true},
-		{"/acme/code.git", "acme", "code", true},
-		{"acme/code", "acme", "code", true},
-		{"../etc/passwd", "", "", false},
-		{"acme/../beta/x.git", "", "", false},
-		{"acme", "", "", false},
-		{"a/b/c.git", "", "", false},
+		{"acme/code.git", "acme", "", "code", true},
+		{"/acme/code.git", "acme", "", "code", true},
+		{"acme/code", "acme", "", "code", true},
+		{"acme/site/code.git", "acme", "site", "code", true},
+		{"/acme/site/code.git", "acme", "site", "code", true},
+		{"hanzo/hanzo-apps/ai.git", "hanzo", "hanzo-apps", "ai", true},
+		{"../etc/passwd", "", "", "", false},
+		{"acme/../beta/x.git", "", "", "", false},
+		{"acme/./x.git", "", "", "", false},
+		{"acme", "", "", "", false},
+		{"a/b/c/d.git", "", "", "", false}, // four segments is not a repo path
 	}
 	for _, tc := range cases {
-		org, repo, err := parseRepoPath(tc.in)
+		org, project, repo, err := parseRepoPath(tc.in)
 		if tc.ok {
-			if err != nil || org != tc.org || repo != tc.repo {
-				t.Fatalf("parseRepoPath(%q) = (%q,%q,%v), want (%q,%q,nil)", tc.in, org, repo, err, tc.org, tc.repo)
+			if err != nil || org != tc.org || project != tc.project || repo != tc.repo {
+				t.Fatalf("parseRepoPath(%q) = (%q,%q,%q,%v), want (%q,%q,%q,nil)",
+					tc.in, org, project, repo, err, tc.org, tc.project, tc.repo)
 			}
 		} else if err == nil {
-			t.Fatalf("parseRepoPath(%q) should have failed, got (%q,%q)", tc.in, org, repo)
+			t.Fatalf("parseRepoPath(%q) should have failed, got (%q,%q,%q)", tc.in, org, project, repo)
 		}
 	}
 }
