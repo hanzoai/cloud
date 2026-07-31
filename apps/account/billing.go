@@ -120,6 +120,7 @@ var billingForwardable = map[string][]string{
 		"payment-methods",
 		"spend-alerts",
 		"topup/token",
+		"subscribe/card", // the card-on-file monthly subscribe; 2 segments need their own entry
 	},
 }
 
