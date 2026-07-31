@@ -1,15 +1,24 @@
 package x402
 
 // x402.go owns the subsystem: Mount + the settlement store, the marketplace
-// Registry SEAM (Publish/Terms), the Enforce middleware that runs the
-// challenge→verify→settle→serve flow, the settle-once settlement, and the receipt
-// lookup surface (/v1/x402/settlements/:id).
+// Registry SEAM (Publish/Terms), the challenge→verify→settle→serve flow, the
+// settle-once settlement, and the receipt lookup surface
+// (/v1/x402/settlements/:id).
 //
-// The middleware is a zip.Handler a priced route group applies (app.Use). It is a
-// NO-OP passthrough until a Registry is Published, so x402 links into the binary
-// harmlessly and the marketplace subsystem plugs its price/recipient table in
-// later — the clean seam: x402 enforces payment; the marketplace declares what is
-// priced and who is paid.
+// The flow is written ONCE (run) and reached two ways, because a price attaches to
+// two different kinds of thing:
+//
+//   - Enforce — a zip.Handler a priced ROUTE group applies (app.Use). The resource
+//     is the request path, which is all a middleware knows.
+//   - Settle — the same flow for an explicit resource id, reached from inside a
+//     typed op where the priced thing is named in the BODY and no path identifies
+//     it (the tool plane's per-tool price). It answers with an error instead of a
+//     response, and the caller refuses.
+//
+// Both are inert until a Registry is Published: x402 links into a binary harmlessly
+// and the marketplace subsystem plugs its price/recipient table in — the clean
+// seam: x402 enforces payment; the marketplace declares what is priced and who is
+// paid.
 
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
@@ -17,6 +26,8 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math/big"
 	"net/http"
 	"os"
@@ -184,47 +195,146 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/settlements/:id", o.settlement)
 }
 
-// Enforce is the pay-per-use middleware a priced route group applies. It is a
-// passthrough until Mount runs AND a Registry is Published — so linking x402 never
-// gates traffic on its own.
+// Sentinel outcomes of Settle — the typed half of the same flow Enforce renders as
+// an HTTP response. BOTH are fail-closed: a caller that gets either must refuse the
+// call, never serve it. A price that cannot be enforced is not a free price.
+var (
+	// ErrPaymentRequired — the caller has not paid: no proof, an authorization that
+	// does not verify, or a replayed nonce. The CHALLENGE is on the response's
+	// X-Payment-Required header, so a client can pay and retry.
+	ErrPaymentRequired = errors.New("x402: payment required")
+	// ErrUnavailable — payment could not be enforced at all: x402 is not mounted in
+	// this process, the price table or the recipient wallet did not resolve, the
+	// caller has no billable identity, or settlement failed.
+	ErrUnavailable = errors.New("x402: payment enforcement unavailable")
+)
+
+// Enforce is the pay-per-use middleware a priced route group applies, keyed on the
+// request PATH. It is a passthrough until Mount runs AND a Registry is Published —
+// so linking x402 never gates traffic on its own.
 func Enforce() zip.Handler {
 	return func(c *zip.Ctx) error {
 		s := mounted
 		if s == nil {
 			return c.Next()
 		}
-		return enforce(s, c)
+		terms, priced, err := priceOf(c.Context(), c.Path())
+		if err != nil {
+			return refuse(c, unavailable()) // price lookup blip → never serve a priced route free
+		}
+		if !priced {
+			return c.Next()
+		}
+		g := run(s, c.Context(), c, c.Path(), terms)
+		if g.receipt != nil {
+			served(s, c.Context(), c, g.receipt)
+			return c.Next()
+		}
+		return refuse(c, g)
 	}
 }
 
-// enforce runs the x402 flow for one request: no registry / free resource →
-// passthrough; unpaid → 402 + requirements; paid → verify, settle once, serve.
-func enforce(s *cloud.Service[state], c *zip.Ctx) error {
+// Settle enforces payment for one resource against the REQUEST bound to ctx — the
+// same flow Enforce runs, for a caller that identifies the priced thing itself
+// rather than by path (the tool plane prices a TOOL, and every tool call arrives on
+// the one /v1/tools/call route).
+//
+// Free resource → nil, and no request is needed: an unpriced call off the HTTP path
+// (the CLI's LocalInvoke) still runs. A PRICED one always needs the request, because
+// the payer is the attested principal on it and the proof rides its headers.
+//
+// Unpaid → the challenge is written to the response's X-Payment-Required header and
+// ErrPaymentRequired is returned, so the caller refuses 402 and the client can pay
+// and retry. Paid → settled exactly once, the receipt is on X-Payment-Receipt, nil.
+func Settle(ctx context.Context, resource string) error {
+	// FREE FIRST, before anything is required of the world. A caller that offers
+	// every call to this seam — which is the only way a gate and a settlement cannot
+	// disagree — must not have its free calls broken by a payment rail that is
+	// merely absent. Nothing unpriced needs x402 mounted, a request, or a payer.
+	terms, priced, err := priceOf(ctx, resource)
+	if err != nil {
+		return fmt.Errorf("%w: price lookup failed: %v", ErrUnavailable, err)
+	}
+	if !priced {
+		return nil
+	}
+	s := mounted
+	if s == nil {
+		return fmt.Errorf("%w: x402 is not mounted in this process", ErrUnavailable)
+	}
+	c, _ := cloud.Request(ctx) // nil off the HTTP path; run refuses a PRICED resource there
+	g := run(s, ctx, c, resource, terms)
+	if g.receipt != nil {
+		served(s, ctx, c, g.receipt)
+		return nil
+	}
+	if c != nil && g.req != nil {
+		c.SetHeader(HeaderRequirements, marshalHeader(*g.req))
+	}
+	if g.status == http.StatusPaymentRequired {
+		return fmt.Errorf("%w: %s (%s)", ErrPaymentRequired, g.msg, g.code)
+	}
+	return fmt.Errorf("%w: %s (%s)", ErrUnavailable, g.msg, g.code)
+}
+
+// priceOf is THE free/priced decision, asked of the published price table. ok=false
+// means the resource costs nothing — no table published, no entry, or an entry whose
+// price is not positive, which are the same fact and answer the same way.
+//
+// It is deliberately separate from run and takes no service: whether something is
+// free must be answerable with nothing mounted and no request in hand, or a caller
+// that offers EVERY call to the payment seam cannot exist.
+func priceOf(ctx context.Context, resource string) (Terms, bool, error) {
 	r := currentRegistry()
 	if r == nil {
-		return c.Next()
+		return Terms{}, false, nil // no price table ⇒ nothing is priced
 	}
-	resource := c.Path()
-	terms, priced, err := r.Price(c.Context(), resource)
+	terms, priced, err := r.Price(ctx, resource)
 	if err != nil {
-		return denyUnavailable(c) // registry blip → fail closed, don't serve a priced resource free
+		return Terms{}, false, err
 	}
-	if !priced || terms.Amount.IsZero() || terms.Amount.IsNeg() {
-		return c.Next() // free
+	if !priced || terms.Amount.Sign() <= 0 {
+		return Terms{}, false, nil
+	}
+	return terms, true, nil
+}
+
+// gate is the OUTCOME of one x402 enforcement: either settled (receipt) or refused
+// (status + code + msg, carrying req when there is a challenge to advertise). It
+// exists so the flow is decided once and rendered twice — as a response by Enforce,
+// as an error by Settle — with no second copy of the policy.
+type gate struct {
+	receipt *Receipt
+	req     *PaymentRequirements
+	status  int
+	code    string
+	msg     string
+}
+
+// run is THE x402 enforcement for one PRICED resource: unpaid → challenge; paid →
+// verify, settle once, receipt. c carries the payer and the proof and is nil off the
+// HTTP path, where a priced resource has no attested payer and is refused rather
+// than served.
+func run(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, resource string, terms Terms) gate {
+	if c == nil {
+		return gate{status: http.StatusServiceUnavailable, code: "no_request",
+			msg: "a priced resource requires an attested request"}
 	}
 
 	// Ledger settlement debits an ORG ledger, so a validated payer is required.
 	payer := principal.Ledger(c)
 	if payer == "" {
-		return zip.ErrForbidden("sign in")
+		return gate{status: http.StatusForbidden, code: "unbillable", msg: "sign in"}
 	}
 
-	// Resolve the recipient wallet the marketplace named (org-scoped in wallets).
-	target, ok := wallets.ResolvePaymentTarget(c.Context(), terms.RecipientOrg, terms.RecipientWalletID)
+	// Resolve the recipient wallet the marketplace named (org-scoped in wallets, so
+	// a listing can only ever be paid into a wallet of its OWN publisher org).
+	target, ok := wallets.ResolvePaymentTarget(ctx, terms.RecipientOrg, terms.RecipientWalletID)
 	if !ok {
 		s.Log.Error("x402: recipient wallet unresolved",
 			"resource", resource, "recipientOrg", terms.RecipientOrg, "wallet", terms.RecipientWalletID)
-		return c.JSON(http.StatusServiceUnavailable, payErr("payee_unavailable", "resource recipient wallet is not resolvable"))
+		return gate{status: http.StatusServiceUnavailable, code: "payee_unavailable",
+			msg: "resource recipient wallet is not resolvable"}
 	}
 
 	req := requirements(s.State.cfg, resource, terms, target.Address)
@@ -232,34 +342,60 @@ func enforce(s *cloud.Service[state], c *zip.Ctx) error {
 	// CHALLENGE: no proof yet → 402 with the payment requirements.
 	proofHdr := strings.TrimSpace(c.Header(HeaderProof))
 	if proofHdr == "" {
-		c.SetHeader(HeaderRequirements, marshalHeader(req))
-		return c.JSON(http.StatusPaymentRequired, map[string]any{
-			"error":   payErrBody("payment_required", "payment required for "+resource),
-			"accepts": req,
-		})
+		return challenge(req, "payment_required", "payment required for "+resource)
 	}
 
 	// VERIFY the submitted proof against the requirements.
 	proof, err := ParseProof(proofHdr)
 	if err != nil {
-		return c.JSON(http.StatusPaymentRequired, payErr("invalid_payment", err.Error()))
+		return challenge(req, "invalid_payment", err.Error())
 	}
 	if err := Verify(req, *proof, s.State.cfg.tokenName(), s.State.cfg.tokenVersion(), nowUnix()); err != nil {
-		return c.JSON(http.StatusPaymentRequired, payErr("payment_invalid", err.Error()))
+		return challenge(req, "payment_invalid", err.Error())
 	}
 
-	// SETTLE once (replay-safe), then SERVE.
-	receipt, replay, err := settle(s, c.Context(), req, *proof, terms, target, payer)
+	// SETTLE once (replay-safe).
+	receipt, replay, err := settle(s, ctx, req, *proof, terms, target, payer)
 	if err != nil {
 		s.Log.Error("x402: settlement failed", "resource", resource, "payer", payer, "err", err)
-		return denyUnavailable(c) // settlement backend down → 503, never serve unpaid
+		return unavailable() // settlement backend down → never serve unpaid
 	}
 	if replay {
-		return c.JSON(http.StatusPaymentRequired, payErr("nonce_replayed", "payment nonce already used"))
+		return challenge(req, "nonce_replayed", "payment nonce already used")
 	}
-	emitAudit(s, c.Context(), receipt)
-	c.SetHeader(HeaderReceipt, marshalHeader(receipt))
-	return c.Next()
+	return gate{receipt: receipt}
+}
+
+// challenge is a 402 that tells the client exactly what to pay. Every 402 carries
+// the requirements, not just the first: a client whose authorization expired or
+// replayed can re-sign from the refusal alone.
+func challenge(req PaymentRequirements, code, msg string) gate {
+	return gate{req: &req, status: http.StatusPaymentRequired, code: code, msg: msg}
+}
+
+func unavailable() gate {
+	return gate{status: http.StatusServiceUnavailable, code: "x402_unavailable",
+		msg: "payment settlement temporarily unavailable"}
+}
+
+// served records a settled payment: the audit row and the receipt header the
+// response carries back. One place, so Enforce and Settle cannot drift on it.
+func served(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, r *Receipt) {
+	emitAudit(s, ctx, r)
+	if c != nil {
+		c.SetHeader(HeaderReceipt, marshalHeader(r))
+	}
+}
+
+// refuse writes the x402 refusal: the challenge on the X-Payment-Required header AND
+// in the body's `accepts`, so a client reading either can pay and retry.
+func refuse(c *zip.Ctx, g gate) error {
+	body := payErr(g.code, g.msg)
+	if g.req != nil {
+		c.SetHeader(HeaderRequirements, marshalHeader(*g.req))
+		body["accepts"] = *g.req
+	}
+	return c.JSON(g.status, body)
 }
 
 // settle enforces settle-once and performs the ledger settlement.
@@ -311,23 +447,35 @@ func settle(s *cloud.Service[state], ctx context.Context, req PaymentRequirement
 // the settlement id (metering RequestID / finance Ref), so a retried settle never
 // double-moves money. On-chain broadcast of the authorization is a SEPARATE seam
 // (not wired) — this path is ledger-only.
+//
+// BOTH SIDES ARE MANDATORY. Each write used to be skipped when its backend was
+// absent, which is the one thing a settlement may never do: with no meter the buyer
+// was served and never charged while the seller was credited — money minted out of a
+// missing dependency — and with no ledger the buyer paid into nothing. A settlement
+// that cannot move both sides does not happen at all; the caller answers 503 and the
+// resource is never served, so the worst case is an outage rather than a silent
+// half-transfer nobody can reconcile.
 func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, payeeSubject string, amount money.Amount) error {
-	if m := s.State.meter; m != nil && m.Enabled() {
-		if _, err := m.Record(ctx, metering.Usage{
-			User: st.PayerOrg, Org: st.PayerOrg, Amount: amount, Currency: "usd",
-			Provider: providerLabel, Service: providerLabel, Model: st.Resource,
-			RequestID: st.ID, Status: "success",
-		}); err != nil {
-			return err
-		}
+	m := s.State.meter
+	if m == nil || !m.Enabled() {
+		return errors.New("x402: no metering spine to debit the payer")
 	}
-	if fin := finance.Current(); fin != nil && st.PayeeOrg != "" {
-		if _, err := fin.Deposit(ctx, types.DepositInput{
-			Org: st.PayeeOrg, Subject: payeeSubject, Amount: amount, Currency: "usd",
-			Ref: st.ID, Notes: "x402:" + st.Resource, Tags: "x402",
-		}); err != nil {
-			return err
-		}
+	if _, err := m.Record(ctx, metering.Usage{
+		User: st.PayerOrg, Org: st.PayerOrg, Amount: amount, Currency: "usd",
+		Provider: providerLabel, Service: providerLabel, Model: st.Resource,
+		RequestID: st.ID, Status: "success",
+	}); err != nil {
+		return err
+	}
+	fin := finance.Current()
+	if fin == nil || st.PayeeOrg == "" {
+		return errors.New("x402: no ledger to credit the payee")
+	}
+	if _, err := fin.Deposit(ctx, types.DepositInput{
+		Org: st.PayeeOrg, Subject: payeeSubject, Amount: amount, Currency: "usd",
+		Ref: st.ID, Notes: "x402:" + st.Resource, Tags: "x402",
+	}); err != nil {
+		return err
 	}
 	return nil
 }
@@ -456,10 +604,8 @@ func emitAudit(s *cloud.Service[state], ctx context.Context, r *Receipt) {
 	}
 }
 
-func payErr(code, msg string) map[string]any     { return map[string]any{"error": payErrBody(code, msg)} }
-func payErrBody(code, msg string) map[string]any { return map[string]any{"code": code, "message": msg} }
-func denyUnavailable(c *zip.Ctx) error {
-	return c.JSON(http.StatusServiceUnavailable, payErr("x402_unavailable", "payment settlement temporarily unavailable"))
+func payErr(code, msg string) map[string]any {
+	return map[string]any{"error": map[string]any{"code": code, "message": msg}}
 }
 
 func firstNonEmpty(vs ...string) string {
