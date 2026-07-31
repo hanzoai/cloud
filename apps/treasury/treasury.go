@@ -37,8 +37,8 @@
 //	POST /v1/admin/treasury/policy     (SuperAdmin) set the revenue-share %
 //	POST /v1/admin/treasury/sweep      (SuperAdmin) accrue the revenue-share into the fund for a period
 //	POST /v1/admin/treasury/seed       (SuperAdmin) inject bootstrap capital into the fund
-//	POST /v1/admin/treasury/anchor       (SuperAdmin) anchor the ledger root on Hanzo L1
-//	POST /v1/admin/treasury/bind-anchor  (SuperAdmin) bind the deployed L1 anchor contract
+//	POST /v1/admin/treasury/anchor        (SuperAdmin) anchor the ledger root on Hanzo L1
+//	PUT  /v1/admin/treasury/anchor/signer (SuperAdmin) the reserve MPC wallet that signs anchors
 //
 // The three surfaces (admin.hanzo.ai SuperAdmin, console.hanzo.ai per-org customer,
 // finance.hanzo.ai per-org operator) are the SAME engine projected by IAM scope. A
@@ -178,7 +178,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zip.Post(zapp, "/v1/admin/treasury/sweep", o.adminSweep)         // SuperAdmin: accrue revenue-share
 	zip.Post(zapp, "/v1/admin/treasury/seed", o.adminSeed)           // SuperAdmin: inject reserve capital
 	zip.Post(zapp, "/v1/admin/treasury/anchor", o.adminAnchor)       // SuperAdmin: anchor ledger root on Hanzo L1
-	zip.Post(zapp, "/v1/admin/treasury/bind-anchor", o.adminBindAnchor) // SuperAdmin: bind the reserve MPC wallet as the anchor signer
+	// The anchor's SIGNER is a sub-resource of the anchor, not a second verb on
+	// the treasury: binding it is idempotent, so it is a PUT on the thing it sets.
+	zip.Put(zapp, "/v1/admin/treasury/anchor/signer", o.adminSetAnchorSigner) // SuperAdmin: the reserve MPC wallet that signs anchors
 
 	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.State.anchor.configured())
 	return nil
