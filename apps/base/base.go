@@ -1,11 +1,14 @@
 // Copyright (C) 2020-2026, Hanzo AI Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-// Package base embeds the Hanzo Base app engine in-process in the unified cloud
-// binary (the HIP-0106 base fold) — the in-binary replacement for the standalone
-// `ghcr.io/hanzoai/superbase` pod, whose whole job was `base.New()` + serve.
-// cloud already links github.com/hanzoai/base, so it runs the SAME engine
-// in-process across TWO orthogonal lanes:
+// Package base is managed Hanzo Base (/v1/base, /v1/collections): a hosted app
+// engine per org — collections, records, rules, IAM-validated auth — plus the
+// platform's public waitlist at /v1/waitlist.
+//
+// It is the in-binary replacement for the standalone `ghcr.io/hanzoai/superbase`
+// pod, whose whole job was `base.New()` + serve. cloud already links
+// github.com/hanzoai/base, so it runs the SAME engine in-process across TWO
+// orthogonal lanes:
 //
 //	LANE 1 — the viral waitlist (GTM launch surface). ONE platform Base app
 //	carries the waitlist plugin; its /v1/waitlist/* routes are PUBLIC (a signup
@@ -22,6 +25,13 @@
 //
 // The two lanes are deliberately NOT one app: the waitlist is a public, single,
 // brand-level instance; hosted Bases are private, per-org, and many.
+//
+// A THIRD prefix, /v1/collections, is served by neither engine above: it is a
+// principal-gated forward to the SEPARATE managed Base deployment that owns the
+// cross-instance `tenants` registry (collections.go). It answers the same
+// question the embed lane does — an org's collections and their records — from a
+// different store, so the two are not interchangeable and one of them is
+// eventually redundant.
 //
 // MOUNT PREFIX. Base's REST router honours BASE_API_PREFIX (default /v1); this
 // package pins it to /v1/base so the per-org engine serves its collections API
@@ -110,13 +120,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	log := deps.Logger.New("subsystem", "base")
 
+	// A typed op is a route PLUS a registry entry, and the registry lives on the
+	// App. A router that cannot reach it would serve the health route with no
+	// schema, no prose, no MCP tool and no SDK method — so the mount FAILS rather
+	// than quietly publishing a surface no projection knows about.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("base.Mount: router is not a zip app, so the typed ops have no registry")
+	}
+
 	// Native /v1/base/health — always answers (OwnsHealth), no auth, BEFORE the
 	// embed gate AND before the /v1/base/* wildcard, so the liveness probe never
 	// depends on CLOUD_BASE_EMBED and the wildcard never shadows it (same pattern
 	// as clients/plan + clients/pricing).
-	app.Get("/v1/base/health", func(c *zip.Ctx) error {
-		return c.JSON(200, map[string]string{"service": "base", "status": "ok"})
-	})
+	zip.Get(zapp, "/v1/base/health", health)
 
 	// Base data-plane forward /v1/collections[/*] → the managed Base orchestrator
 	// (collections.go). Always on, BEFORE the embed gate: the console's Base product
@@ -304,4 +321,32 @@ func Shutdown(context.Context) error {
 		}
 	}
 	return firstErr
+}
+
+// zipdoc lifts the doc comment off each typed op and each In/Out field into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// noInput is the In of an op that takes nothing off the wire.
+type noInput struct{}
+
+// baseHealth is the base subsystem's own liveness answer.
+type baseHealth struct {
+	// Service is "base" — which subsystem answered.
+	Service string `json:"service"`
+	// Status is "ok" when the subsystem is serving.
+	Status string `json:"status"`
+}
+
+// BaseHealth reports that the base subsystem is serving.
+//
+// It is deliberately INDEPENDENT of whether this deployment actually embeds the
+// Base engine: the route answers before the CLOUD_BASE_EMBED gate and before the
+// /v1/base/* wildcard, so a liveness probe measures the process rather than an
+// optional feature, and the wildcard can never shadow it. It reads no tenant, so a
+// prober that sends no principal is answered rather than refused.
+func health(context.Context, *noInput) (*baseHealth, error) {
+	return &baseHealth{Service: "base", Status: "ok"}, nil
 }

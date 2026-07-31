@@ -1,0 +1,15 @@
+[
+  {
+    "description": "WaitlistMode reports whether ONE host is currently gated by the launch waitlist.\nIt resolves the host to the service that governs it and reads that service's\nwaitlist switch, so a guard sitting in front of a hosted surface can decide in one\ncall whether to show the waitlist or the product. It answers for the ONE host\nasked about and never enumerates the registry, which is why it needs no\ncredential. It FAILS OPEN: an unregistered host, an unmounted registry and a store\nfault all answer known=false with mode=false, so a request is never gated pre-boot\nor on a registry fault.",
+    "inputSchema": {
+      "properties": {
+        "host": {
+          "description": "Host is the host to resolve, e.g. \"chat.hanzo.ai\". Defaults to the request's\nown Host header when omitted, which is what lets a guard running on the\ngoverned host ask about itself with no argument.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_flags_waitlist"
+  }
+]

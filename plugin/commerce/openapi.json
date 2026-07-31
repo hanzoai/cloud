@@ -28,11 +28,6 @@
     }
   ],
   "paths": {
-    "/_/commerce": {
-      "get": {
-        "operationId": "get___commerce"
-      }
-    },
     "/_/commerce/healthz": {
       "get": {
         "operationId": "get___commerce_healthz"
@@ -46,26 +41,6 @@
     "/_/commerce/tenants": {
       "post": {
         "operationId": "post___commerce_tenants"
-      }
-    },
-    "/_/commerce/ui": {
-      "get": {
-        "operationId": "get___commerce_ui"
-      }
-    },
-    "/_/commerce/ui/{wildcard1}": {
-      "get": {
-        "operationId": "get___commerce_ui_by_wildcard1",
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
       }
     },
     "/v1/billing/auto-recharge/run-all": {
@@ -190,6 +165,14 @@
         ]
       }
     },
+    "/v1/billing/subscribe/card": {
+      "post": {
+        "operationId": "post_v1_billing_subscribe_card",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/v1/billing/subscriptions": {
       "get": {
         "operationId": "get_v1_billing_subscriptions",
@@ -234,6 +217,14 @@
         ]
       }
     },
+    "/v1/billing/test-mode": {
+      "post": {
+        "operationId": "post_v1_billing_test-mode",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/v1/billing/topup/token": {
       "post": {
         "operationId": "post_v1_billing_topup_token",
@@ -274,15 +265,15 @@
         ]
       }
     },
-    "/v1/catalog/entries/{slug}": {
+    "/v1/catalog/entries/{wildcard1}": {
       "delete": {
-        "operationId": "delete_v1_catalog_entries_by_slug",
+        "operationId": "delete_v1_catalog_entries_by_wildcard1",
         "tags": [
           "catalog"
         ],
         "parameters": [
           {
-            "name": "slug",
+            "name": "wildcard1",
             "in": "path",
             "required": true,
             "schema": {
@@ -292,13 +283,13 @@
         ]
       },
       "put": {
-        "operationId": "put_v1_catalog_entries_by_slug",
+        "operationId": "put_v1_catalog_entries_by_wildcard1",
         "tags": [
           "catalog"
         ],
         "parameters": [
           {
-            "name": "slug",
+            "name": "wildcard1",
             "in": "path",
             "required": true,
             "schema": {
@@ -311,6 +302,14 @@
     "/v1/catalog/models": {
       "post": {
         "operationId": "post_v1_catalog_models",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/models/refresh": {
+      "post": {
+        "operationId": "post_v1_catalog_models_refresh",
         "tags": [
           "catalog"
         ]

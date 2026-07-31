@@ -4,8 +4,13 @@ package flags
 // (HIP-0026) and project-scoped through the principal's project. Evaluation is
 // the embedded evaluator over the caller's own SQLite definitions; responses
 // are PostHog-shaped so existing SDK consumers port 1:1.
+//
+// Every route here is a TYPED op: ONE registry entry that is at once the REST
+// route, the OpenAPI operation with its schemas, the MCP tool, the CLI command
+// and the generated SDK method. An untyped route is a route and nothing else.
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -16,16 +21,46 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// zipdoc lifts the doc comment off each typed op — and off each field of its In
+// and Out — into zipdoc_gen.go, which hands them to zip.Describe at init. Go
+// drops comments at compile time, so this build-time pass is the ONLY way that
+// prose reaches the published document, the MCP tool list and the generated
+// SDKs. Run by `make -C apps/flags generate` (a prerequisite of build).
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// ops carries the subsystem's state onto every typed op. A typed handler takes a
+// context and its decoded In and nothing else, so the state rides on the receiver.
+type ops struct{ s *cloud.Service[state] }
+
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	// cloud.Bridge carries into a typed op the request its signature drops. This
+	// surface needs more than the org key: the PROJECT scope that narrows within
+	// it, and the actor an audited write is recorded under. On the scoped Router
+	// this installs once per DECLARED prefix (/v1/flags) and nowhere else, and it
+	// must precede the leaves below — fiber runs middleware in registration order.
+	// Serve installs one app-wide too; nesting is harmless (the inner one is what
+	// the handler sees) and the tests mount this subsystem on a bare app with no
+	// Serve, so this install is what makes them pass.
+	app.Use(cloud.Bridge())
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		s.Log.Error("flags: router exposes no op registry; the flag surface would serve routes no projection knows")
+		return
+	}
+	o := ops{s: s}
 	g := app.Group("/v1/flags")
-	g.Get("/health", cloud.Handle(s, health))
-	app.Post("/v1/flags", cloud.Handle(s, evaluateFlags))
-	g.Post("/decide", cloud.Handle(s, evaluateFlags)) // PostHog /decide alias
-	g.Get("/defs", cloud.Handle(s, listDefs))
-	g.Get("/defs/:key", cloud.Handle(s, getDef))
-	g.Put("/defs/:key", cloud.Handle(s, putDef))
-	g.Delete("/defs/:key", cloud.Handle(s, deleteDef))
-	g.Get("/activity", cloud.Handle(s, listActivity))
+	zip.Get(g, "/health", o.health)
+	// The root of the surface, declared on the App with its WHOLE path: joining
+	// "/v1/flags" with an empty leaf yields "/v1/flags/", a different path from the
+	// one this route has always served.
+	zip.Post(zapp, "/v1/flags", o.evaluate)
+	zip.Post(g, "/decide", o.evaluate) // PostHog /decide alias
+	zip.Get(g, "/defs", o.listDefs)
+	zip.Get(g, "/defs/:key", o.getDef)
+	zip.Put(g, "/defs/:key", o.putDef)
+	zip.Delete(g, "/defs/:key", o.deleteDef)
+	zip.Get(g, "/activity", o.listActivity)
 }
 
 // tenant resolves the org — the tenant-isolation KEY — from the validated
@@ -35,158 +70,297 @@ func tenant(c *zip.Ctx) (org, project string, ok bool) {
 	return org, principal.ProjectScope(c), ok
 }
 
-func keyParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("key")) }
-
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]any{
-		"ok":     true,
-		"engine": "hanzo-flags",
-	})
+// caller is everything a flags op needs off the request: the validated tenant,
+// the project scope that narrows within it, and the actor an audited write is
+// recorded under.
+type caller struct {
+	org     string
+	project string
+	actor   string
 }
 
-// evaluateFlags runs the caller's flags for one identity. Body:
-//
-//	{"distinct_id": "u1", "person_properties": {...}, "groups": {"0": {"key": "acme", "properties": {...}}}}
-//
-// Response: {"featureFlags": {...}, "featureFlagPayloads": {...}, "errorsWhileComputingFlags": bool}
-func evaluateFlags(s *cloud.Service[state], c *zip.Ctx) error {
+// callerOf resolves the caller for a TYPED op, which receives a context and its
+// decoded In and nothing else. The three facts here are all REQUEST facts and
+// never In fields: an In field is caller-supplied, so a tenant key read from one
+// is a cross-tenant read the caller asserted for itself. cloud.Bridge parks the
+// request; off the HTTP path there is none, and the honest answer is a refusal.
+func callerOf(ctx context.Context) (caller, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return caller{}, zip.ErrForbidden("X-Org-Id required")
+	}
 	org, project, ok := tenant(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return caller{}, zip.ErrForbidden("X-Org-Id required")
 	}
-	var body struct {
-		DistinctID       string          `json:"distinct_id"`
-		PersonProperties json.RawMessage `json:"person_properties"`
-		Groups           json.RawMessage `json:"groups"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if strings.TrimSpace(body.DistinctID) == "" {
-		return zip.ErrBadRequest("distinct_id is required")
-	}
-	ctx := map[string]json.RawMessage{
-		"distinct_id": json.RawMessage(strconv.Quote(body.DistinctID)),
-	}
-	if len(body.PersonProperties) > 0 {
-		ctx["person_properties"] = body.PersonProperties
-	}
-	if len(body.Groups) > 0 {
-		ctx["groups"] = body.Groups
-	}
-	ctxJSON, err := json.Marshal(ctx)
-	if err != nil {
-		return err
-	}
-	res, err := s.State.client.evaluateProject(org, project, ctxJSON)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "evaluate: %v", err)
-	}
-	return c.JSON(http.StatusOK, json.RawMessage(res))
+	return caller{org: org, project: project, actor: c.UserEmail()}, nil
 }
 
-func listDefs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// ── inputs and outputs ──────────────────────────────────────────────────────
+
+// noInput is the In of an op that takes nothing off the wire. ONE of these for
+// the whole package.
+type noInput struct{}
+
+// healthOut is the engine's liveness answer.
+type healthOut struct {
+	// OK is true whenever the flag engine is serving.
+	OK bool `json:"ok"`
+	// Engine names the evaluator this deployment runs.
+	Engine string `json:"engine"`
+}
+
+// evaluateIn is one evaluation request: which identity to evaluate for, and the
+// properties the definitions' conditions read.
+type evaluateIn struct {
+	// DistinctID is the identity the flags are evaluated for. Required.
+	DistinctID string `json:"distinct_id"`
+	// PersonProperties are the person-level properties conditions match against.
+	PersonProperties json.RawMessage `json:"person_properties"`
+	// Groups are the group-level properties, keyed by group type index.
+	Groups json.RawMessage `json:"groups"`
+}
+
+// keyIn addresses ONE flag definition by its key. A GET and a DELETE take their
+// input from the URL and carry no request body, so this is the whole input.
+type keyIn struct {
+	// Key is the flag key to act on, from the path.
+	Key string `json:"key"`
+}
+
+// defsOut is the definition listing.
+type defsOut struct {
+	// Data is every definition in the caller's (org, project) store, by key.
+	Data []DefRow `json:"data"`
+}
+
+// activityOut is the change log.
+type activityOut struct {
+	// Data is the change log newest-first: who created, updated or deleted which key, when.
+	Data []ActivityRow `json:"data"`
+}
+
+// activityIn bounds one page of the change log.
+type activityIn struct {
+	// Limit caps the rows returned. 1–500; anything else takes the default 100.
+	Limit int `json:"limit"`
+}
+
+// deletedOut names what was removed.
+type deletedOut struct {
+	// Deleted is the key that no longer exists.
+	Deleted string `json:"deleted"`
+}
+
+// putDefIn is the PUT /v1/flags/defs/:key input, and it is the one input here
+// that is not a plain struct: the request body IS the flag definition document
+// and it is stored VERBATIM (modulo the key the server forces), so no named
+// field set can carry it — a struct In would silently drop every field of the
+// PostHog definition the store persists, which is data loss no status-code test
+// would ever see.
+//
+// So it states its own wire form. UnmarshalJSON keeps the body byte-for-byte and
+// MarshalJSON hands it back, which makes zip publish "any JSON" for the request
+// body — schemaOf reads the marshaler first — rather than inventing a field list
+// that is not the contract. The path parameter still binds, because bindURL walks
+// the STRUCT and binds the path LAST: PUT /v1/flags/defs/abc keys "abc" whatever
+// the document's own "key" field says, exactly as the untyped handler did.
+type putDefIn struct {
+	// Key is the flag key to write, from the path.
+	Key string `json:"key"`
+	// Definition is the flag definition document, carried verbatim.
+	Definition json.RawMessage `json:"definition"`
+}
+
+// UnmarshalJSON keeps the whole body as the definition. It also reads the
+// document's OWN "key" as a fallback, for the projections addressed by NAME — an
+// MCP tools/call and a CLI command have no URL to carry a path segment in, so
+// there the document's key is the only key there is. Over HTTP bindURL overwrites
+// it from the path, which is the addressing authority.
+func (in *putDefIn) UnmarshalJSON(b []byte) error {
+	in.Definition = append(in.Definition[:0], b...)
+	var probe struct {
+		Key string `json:"key"`
 	}
-	st, err := s.State.client.stores.For(org, project)
+	if err := json.Unmarshal(b, &probe); err == nil {
+		in.Key = probe.Key
+	}
+	return nil
+}
+
+// MarshalJSON gives the definition back unchanged — the round trip that makes
+// this type's schema honestly "any JSON" instead of a fabricated object.
+func (in putDefIn) MarshalJSON() ([]byte, error) {
+	if len(in.Definition) == 0 {
+		return []byte("null"), nil
+	}
+	return in.Definition, nil
+}
+
+// ── handlers ────────────────────────────────────────────────────────────────
+
+// Health reports that the flag engine is serving. It is not gated: liveness must
+// be probe-able without a token.
+//
+// Response: {"ok": true, "engine": "hanzo-flags"}
+func (o ops) health(context.Context, *noInput) (*healthOut, error) {
+	return &healthOut{OK: true, Engine: "hanzo-flags"}, nil
+}
+
+// Evaluate runs the caller's flag definitions for one identity and returns the
+// PostHog-shaped verdict: which flags are on (or which variant), their payloads,
+// and whether any definition failed to compute. Evaluation is in-process over the
+// caller's own (org, project) definitions — no network hop, no shared KV — so a
+// tenant can only ever evaluate its own flags.
+//
+// Example: {"distinct_id": "u1", "person_properties": {"plan": "pro"}, "groups": {"0": {"key": "acme"}}}
+// Response: {"featureFlags": {"new-editor": true}, "featureFlagPayloads": {}, "errorsWhileComputingFlags": false}
+func (o ops) evaluate(ctx context.Context, in *evaluateIn) (*json.RawMessage, error) {
+	cl, err := callerOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	if strings.TrimSpace(in.DistinctID) == "" {
+		return nil, zip.ErrBadRequest("distinct_id is required")
+	}
+	args := map[string]json.RawMessage{
+		"distinct_id": json.RawMessage(strconv.Quote(in.DistinctID)),
+	}
+	if len(in.PersonProperties) > 0 {
+		args["person_properties"] = in.PersonProperties
+	}
+	if len(in.Groups) > 0 {
+		args["groups"] = in.Groups
+	}
+	argsJSON, err := json.Marshal(args)
+	if err != nil {
+		return nil, err
+	}
+	res, err := o.s.State.client.evaluateProject(cl.org, cl.project, argsJSON)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "evaluate: %v", err)
+	}
+	out := json.RawMessage(res)
+	return &out, nil
+}
+
+// ListFlagDefinitions returns every flag definition in the caller's (org,
+// project) store, by key, with its version and who last changed it.
+func (o ops) listDefs(ctx context.Context, _ *noInput) (*defsOut, error) {
+	cl, err := callerOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	st, err := o.s.State.client.stores.For(cl.org, cl.project)
+	if err != nil {
+		return nil, err
 	}
 	rows, err := st.List()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	return &defsOut{Data: rows}, nil
 }
 
-func getDef(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	key := keyParam(c)
-	if key == "" {
-		return zip.ErrBadRequest("key is required")
-	}
-	st, err := s.State.client.stores.For(org, project)
+// GetFlagDefinition returns one flag definition by key, or 404 when the caller's
+// store has none under that key.
+func (o ops) getDef(ctx context.Context, in *keyIn) (*DefRow, error) {
+	cl, err := callerOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	key := strings.TrimSpace(in.Key)
+	if key == "" {
+		return nil, zip.ErrBadRequest("key is required")
+	}
+	st, err := o.s.State.client.stores.For(cl.org, cl.project)
+	if err != nil {
+		return nil, err
 	}
 	row, found, err := st.Get(key)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !found {
-		return zip.ErrNotFound("flag not found")
+		return nil, zip.ErrNotFound("flag not found")
 	}
-	return c.JSON(http.StatusOK, row)
+	return &row, nil
 }
 
-func putDef(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	key := keyParam(c)
-	if key == "" {
-		return zip.ErrBadRequest("key is required")
-	}
-	body := c.Body()
-	if len(body) == 0 || !json.Valid(body) {
-		return zip.ErrBadRequest("body must be the flag definition JSON")
-	}
-	st, err := s.State.client.stores.For(org, project)
+// PutFlagDefinition creates or replaces the flag definition at the path's key and
+// returns the stored row. The BODY IS THE DEFINITION DOCUMENT — the PostHog-shaped
+// JSON object the evaluator consumes — and it is stored verbatim except that its
+// "key" is forced to the key in the URL, so a document can never be filed under a
+// name other than the one it was addressed by. Every write bumps the version and
+// appends to the change log under the caller's identity.
+//
+// Example: {"key": "new-editor", "active": true, "filters": {"groups": [{"rollout_percentage": 25}]}}
+func (o ops) putDef(ctx context.Context, in *putDefIn) (*DefRow, error) {
+	cl, err := callerOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := st.Upsert(key, json.RawMessage(body), c.UserEmail()); err != nil {
-		return zip.ErrBadRequest(err.Error())
+	key := strings.TrimSpace(in.Key)
+	if key == "" {
+		return nil, zip.ErrBadRequest("key is required")
+	}
+	body := in.Definition
+	if len(body) == 0 || !json.Valid(body) {
+		return nil, zip.ErrBadRequest("body must be the flag definition JSON")
+	}
+	st, err := o.s.State.client.stores.For(cl.org, cl.project)
+	if err != nil {
+		return nil, err
+	}
+	if err := st.Upsert(key, json.RawMessage(body), cl.actor); err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	row, _, err := st.Get(key)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, row)
+	return &row, nil
 }
 
-func deleteDef(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// DeleteFlagDefinition removes one flag definition by key and records the
+// deletion in the change log. A key the caller's store does not hold is a 404.
+func (o ops) deleteDef(ctx context.Context, in *keyIn) (*deletedOut, error) {
+	cl, err := callerOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	key := keyParam(c)
+	key := strings.TrimSpace(in.Key)
 	if key == "" {
-		return zip.ErrBadRequest("key is required")
+		return nil, zip.ErrBadRequest("key is required")
 	}
-	st, err := s.State.client.stores.For(org, project)
+	st, err := o.s.State.client.stores.For(cl.org, cl.project)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	deleted, err := st.Delete(key, c.UserEmail())
+	deleted, err := st.Delete(key, cl.actor)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !deleted {
-		return zip.ErrNotFound("flag not found")
+		return nil, zip.ErrNotFound("flag not found")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"deleted": key})
+	return &deletedOut{Deleted: key}, nil
 }
 
-func listActivity(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	limit, _ := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	st, err := s.State.client.stores.For(org, project)
+// ListFlagActivity returns the caller's flag change log newest-first: every
+// create, update and delete, with the actor and the time.
+func (o ops) listActivity(ctx context.Context, in *activityIn) (*activityOut, error) {
+	cl, err := callerOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	rows, err := st.Activity(limit)
+	st, err := o.s.State.client.stores.For(cl.org, cl.project)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	rows, err := st.Activity(in.Limit)
+	if err != nil {
+		return nil, err
+	}
+	return &activityOut{Data: rows}, nil
 }

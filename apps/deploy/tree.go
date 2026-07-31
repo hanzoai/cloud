@@ -9,6 +9,7 @@
 // P2b swaps buildTree's cluster walk for github.com/argoproj/gitops-engine
 // pkg/cache (ClusterCache.GetManagedLiveObjs / hierarchy) for a watch-backed tree;
 // the Node shape the console consumes does not change.
+
 package deploy
 
 import (

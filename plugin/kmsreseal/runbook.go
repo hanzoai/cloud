@@ -58,19 +58,25 @@ PRE-REQ (already true / verify):
        kmsreseal verify --crs <live-crs.json> \
          --src http://kms.hanzo.svc --cloud http://cloud.hanzo.svc
      Asserts every (org,path,env,key) resolves on cloud byte-identical to the
-     standalone (SHA-256 compare, never values), the per-audience auth matrix
-     (own-org 200 / cross-org 403 / no-principal 403), and org-isolation. GREEN gate.
+     standalone (SHA-256 compare, never values), and that no folder-sync CR is
+     UNSEEDED at source. GREEN gate.
 
   6. CUT cloud's own dependency (G5). Confirm cloud's boot-critical secrets do NOT
      require a live standalone: master key is a DIRECT Secret; cloud-api-secrets +
      commerce-secrets are Orphan (persist across KMS downtime). No boot cycle.
 
-  7. REPOINT the operator. Set kms-operator KMS_API_BASE:
-       http://kms.hanzo.svc  →  http://cloud.hanzo.svc   (cloud's /v1/kms)
-     Roll kms-operator. It now brokers login + reads secrets from cloud.
+  7. REPOINT the operator — base URL AND client grammar. The two faces address a
+     tenant differently, and only the base URL is a config knob:
+       standalone  GET /v1/kms/orgs/{org}/secrets/{path}/{key}   org named in the path
+       cloud       GET /v1/kms/secrets/{path}/{key}              org from the principal
+     cloud serves NO /v1/kms/orgs/… route, so a consumer still speaking the
+     tenant-naming grammar gets 404 on every read after the repoint. Set
+     KMS_API_BASE http://kms.hanzo.svc → http://cloud.hanzo.svc AND ship the
+     operator's client on cloud's grammar; roll them together.
 
   8. REPOINT ingress. Move kms.hanzo.ai (all 4 hostnames/paths) to the cloud
-     Service. External KMS console + SDK now terminate at cloud.
+     Service. External KMS console + SDK now terminate at cloud — and, per step 7,
+     each of those clients needs cloud's grammar too, not just the new address.
 
   9. SOAK (standalone still HOT). Watch the operator reconcile all 125 CRs GREEN
      against cloud; watch cloud /v1/kms audit + health. Hold for a full resync

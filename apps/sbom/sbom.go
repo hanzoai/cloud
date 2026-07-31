@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package sbom mounts the Hanzo Cloud /v1/sbom/* surface: the backend half of
-// "SBOM visible in console on deployments + tracked in the datastore globally".
-// CI POSTs a CycloneDX SBOM keyed by image digest; the console GETs it back by
-// digest or image ref.
+// Package sbom is the software bill of materials for container images: CI posts a
+// CycloneDX SBOM keyed by image digest, and /v1/sbom resolves an image's component
+// set back by digest or image ref.
 //
 // GLOBAL BY DESIGN. Unlike the analytics lens (which is strictly per-org), an SBOM
 // belongs to an image DIGEST, not a tenant — the digest is content-addressed, so
@@ -53,6 +52,13 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/sbom openapi` and by the Dockerfile before every build.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 // ddlTimeout bounds the best-effort table bootstrap on Mount.
 const ddlTimeout = 10 * time.Second
@@ -106,14 +112,33 @@ func build(b cloud.Base) (state, error) {
 	return state{}, nil
 }
 
+// ops binds the mounted Service so each op can be a method value — the only bound
+// form cmd/zipdoc can lift prose from. It carries STATE and no logic.
+type ops struct{ s *cloud.Service[state] }
+
 // routes registers the SBOM surface. Health is a static route registered BEFORE the
 // greedy resolve wildcard so it is never captured by it. Health is not JWT-gated
 // (liveness must be probe-able).
+//
+// Two of the three are TYPED ops — one registry entry from which the REST route, the
+// OpenAPI operation, the MCP tool, the CLI command and every generated SDK method
+// follow. `GET /v1/sbom/*` stays a raw handler; see resolve for why.
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	// Bridge FIRST: a typed op receives only a context, so the request it still needs
+	// (ingest's SuperAdmin gate reads X-User-IsAdmin) reaches it by being parked there.
+	// fiber runs middleware in registration order, so one installed after its leaves
+	// never runs. Installed through the SUBSYSTEM's router, which scopes it to the
+	// prefixes this app declares (/v1/sbom) rather than the whole binary.
+	app.Use(cloud.Bridge())
+
+	o := ops{s: s}
 	g := app.Group("/v1/sbom")
-	g.Get("/health", cloud.Handle(s, health))
-	// Root route stays flat: Group("/v1/sbom").Post("") would register "/v1/sbom/".
-	app.Post("/v1/sbom", cloud.Handle(s, ingest))
+	zip.Get(g, "/health", o.health)
+	// Root route is declared on the /v1 PARENT with a non-empty leaf: zip.Post(g, "")
+	// would normalise to "/v1/sbom/", and op.Path is the identity every projection
+	// keys on, so the document, the operationId, the MCP tool and every generated SDK
+	// would carry a trailing slash for a path this API has never served.
+	zip.Post(app.Group("/v1"), "/sbom", o.ingest, zip.WithStatus(http.StatusCreated))
 	g.Get("/*", cloud.Handle(s, resolve))
 }
 
@@ -163,44 +188,56 @@ func ensureTable(ctx context.Context) error {
 
 // ── POST /v1/sbom — ingest (CI) ──────────────────────────────────────────────
 
-// ingest persists a CycloneDX SBOM's components keyed by image digest. Gated to a
+// SbomIngested is the POST /v1/sbom receipt: which image was ingested and how many
+// components were flattened out of its CycloneDX document.
+//
+// Field order is the order encoding/json emits a map's sorted keys in, which is what
+// this response was before it had a type — so the receipt's BYTES did not move.
+type SbomIngested struct {
+	// ComponentCount is how many components the CycloneDX document yielded and this
+	// call persisted.
+	ComponentCount int `json:"componentCount"`
+	// ImageDigest is the content-addressed digest the components were keyed under.
+	ImageDigest string `json:"imageDigest"`
+}
+
+// Ingest persists a CycloneDX SBOM's components keyed by image digest. Gated to a
 // validated SuperAdmin (owner == AdminOrg) — the canonical cloud super-admin
 // check, which the build fleet / CI carries. Re-ingest is idempotent: rows share
 // the (digest, name, version, purl) ORDER BY, so ReplacingMergeTree keeps the
 // latest by ingested_at (and resolve reads FINAL).
-func ingest(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
-	}
-	var in SbomIngest
-	if err := c.Bind(&in); err != nil {
-		return err
+//
+// Example: {"imageDigest": "sha256:abc", "imageRef": "registry.hanzo.ai/hanzo/cloud:v1", "format": "cyclonedx", "document": {"components": []}}
+func (o ops) ingest(ctx context.Context, in *SbomIngest) (*SbomIngested, error) {
+	// The SuperAdmin gate needs more of the validated principal than the org — the
+	// X-User-IsAdmin claim — which principal.OrgFrom does not carry. Fails closed off
+	// the HTTP path: no request, no attested admin, no ingest.
+	c, ok := cloud.Request(ctx)
+	if !ok || !c.IsAdmin() {
+		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
 	in.ImageDigest = strings.TrimSpace(in.ImageDigest)
 	if in.ImageDigest == "" {
-		return zip.ErrBadRequest("imageDigest is required")
+		return nil, zip.ErrBadRequest("imageDigest is required")
 	}
 	comps, err := parseComponents(in.Document)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	if err := requireDatastore(); err != nil {
-		return err
+		return nil, err
 	}
-	if err := ensureTable(c.Context()); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "sbom store initializing: %v", err)
+	if err := ensureTable(ctx); err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "sbom store initializing: %v", err)
 	}
 
-	if stmt, args := insertBatch(in, comps); stmt != "" {
-		if err := datastore.Exec(c.Context(), stmt, args...); err != nil {
-			return zip.Errorf(http.StatusBadGateway, "sbom insert: %v", err)
+	if stmt, args := insertBatch(*in, comps); stmt != "" {
+		if err := datastore.Exec(ctx, stmt, args...); err != nil {
+			return nil, zip.Errorf(http.StatusBadGateway, "sbom insert: %v", err)
 		}
 	}
-	s.Log.Info("sbom ingested", "imageDigest", in.ImageDigest, "components", len(comps), "sourceRepo", in.SourceRepo)
-	return c.JSON(http.StatusCreated, map[string]any{
-		"imageDigest":    in.ImageDigest,
-		"componentCount": len(comps),
-	})
+	o.s.Log.Info("sbom ingested", "imageDigest", in.ImageDigest, "components", len(comps), "sourceRepo", in.SourceRepo)
+	return &SbomIngested{ComponentCount: len(comps), ImageDigest: in.ImageDigest}, nil
 }
 
 // ── GET /v1/sbom/{ref} — resolve (console) ───────────────────────────────────
@@ -209,6 +246,17 @@ func ingest(s *cloud.Service[state], c *zip.Ctx) error {
 // carries the (possibly slash-bearing, possibly percent-encoded) ref; we decode it
 // and bind it to BOTH columns. FINAL collapses ReplacingMergeTree duplicates from
 // repeated ingests. 404 when nothing matches (honest empty, never fabricated).
+//
+// UNTYPED BY DESIGN — the greedy wildcard, and it is the apps/pricing refusal one
+// subsystem over. The BOUND name and the PUBLISHED name cannot agree: fiber names
+// this capture `*1` (zip's bindURL matches c.Route().Params, so an input field must
+// carry `url:"*1"`), while the untyped projection publishes the address as
+// `/v1/sbom/{wildcard1}` with a PATH parameter of that name. A typed op publishes
+// op.Path VERBATIM — measured against zip v1.18.12 — so the address would become
+// `/v1/sbom/*` and `*1` would be declared as a QUERY parameter, which it is not:
+// three published facts changed (path, parameter name, parameter location) for a
+// route whose wire did not. Typing this needs a zip capability that does not exist —
+// a wildcard capture declared as the path parameter it is.
 func resolve(s *cloud.Service[state], c *zip.Ctx) error {
 	ref := strings.Trim(strings.TrimSpace(c.Fiber().Params("*")), "/")
 	if dec, err := url.PathUnescape(ref); err == nil {
@@ -330,14 +378,34 @@ func Prefetch(ctx context.Context, log luxlog.Logger, ref string) {
 
 // ── GET /v1/sbom/health — liveness ───────────────────────────────────────────
 
-// health is a pure liveness probe: the service is up; datastore reflects whether
+// SbomHealth is the GET /v1/sbom/health probe result.
+//
+// Field order is the order encoding/json emits a map's sorted keys in, which is what
+// this response was before it had a type — so the probe's BYTES did not move.
+type SbomHealth struct {
+	// Datastore reports whether the shared datastore connection this subsystem reads
+	// and writes through is established. False means the data endpoints answer 503.
+	Datastore bool `json:"datastore"`
+	// Service names the subsystem answering: always "sbom".
+	Service string `json:"service"`
+	// Status is the liveness verdict: always "ok" here, because the process answering
+	// at all IS the liveness fact.
+	Status string `json:"status"`
+	// Table is the fully-qualified datastore table the components live in.
+	Table string `json:"table"`
+}
+
+// Health is a pure liveness probe: the service is up; datastore reflects whether
 // the datastore store is connected. Not JWT-gated, always 200 (a disconnected
 // datastore is degraded-but-alive; the data endpoints report that as 503).
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]any{
-		"service":   "sbom",
-		"status":    "ok",
-		"datastore": datastore.Ready(),
-		"table":     sbomTable,
-	})
+func (o ops) health(_ context.Context, _ *noArgs) (*SbomHealth, error) {
+	return &SbomHealth{
+		Datastore: datastore.Ready(),
+		Service:   "sbom",
+		Status:    "ok",
+		Table:     sbomTable,
+	}, nil
 }
+
+// noArgs is the input of an op that takes none: no body, no query, no path param.
+type noArgs struct{}

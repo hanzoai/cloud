@@ -57,11 +57,11 @@ func init() {
 			"iamPageIn.pageSize": "PageSize is rows per page. Forwarded only when set.",
 		},
 		Example:  json.RawMessage(`{"owner":"admin","p":"1","pageSize":"50"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"data2":1}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"total":1}`),
 	})
 	zip.Describe("GET /v1/admin/bases", zip.Doc{
 		Description: "bases lists the tenant Base instances in the caller's window — a SuperAdmin sees every\ntenant's, anyone else only their own subtree's.\n\nThe scope is enforced TWICE: the upstream is asked for the caller's org, AND every row\nit returns is re-checked against the resolved scope. An upstream that ignored the\nfilter therefore degrades to empty, never to a cross-tenant leak.\n\nThe Base engine is being embedded into cloud; until it lands this proxies\nBASE_ADMIN_URL and, when that is unset, answers 200 with an empty list and msg saying\nso — the honest not-yet state, never fabricated instances.",
-		Response:    json.RawMessage(`{"status":"ok","msg":"","data":[{"name":"acme-base","org":"acme","url":"https://acme.base.hanzo.ai","status":"running","plan":"pro","region":"nyc3","created":"2026-03-01T00:00:00Z"}],"data2":1}`),
+		Response:    json.RawMessage(`{"status":"ok","msg":"","data":[{"name":"acme-base","org":"acme","url":"https://acme.base.hanzo.ai","status":"running","plan":"pro","region":"nyc3","created":"2026-03-01T00:00:00Z"}],"total":1}`),
 	})
 	zip.Describe("GET /v1/admin/block-storage", zip.Doc{
 		Description: "blockStorage is the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
@@ -75,7 +75,7 @@ func init() {
 			"computeIn.range": "Range is the lower time bound: 24h, 7d or 30d. Anything else reads as 30d.",
 		},
 		Example:  json.RawMessage(`{"kind":"bot","org":"acme","range":"7d"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","app":"support","project":"default","kind":"bot","machines":4,"active":2,"spendCents":900,"lastTs":"2026-07-26T18:00:00Z"}],"data2":1}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","app":"support","project":"default","kind":"bot","machines":4,"active":2,"spendCents":900,"lastTs":"2026-07-26T18:00:00Z"}],"total":1}`),
 	})
 	zip.Describe("GET /v1/admin/flags", zip.Doc{
 		Description: "flagsBoard reads the platform control-plane board: every runtime launch/release\nswitch (waitlist, public signup, subsystem activation, gateway limits, network ids)\nwith its LIVE value and where that value came from — a stored definition or the\ncompiled-in default.",
@@ -92,6 +92,7 @@ func init() {
 	zip.Describe("GET /v1/admin/money", zip.Doc{
 		Description: "moneyBoardHandler answers GET /v1/admin/money.",
 		Fields: map[string]string{
+			"Vendor.source":                    "\"actual\" | \"estimated\"",
 			"moneyCredits.grantedPrepaidCents": "real money added",
 			"moneyCredits.grantedTrialCents":   "non-cash comps/promos",
 			"moneyRevenue.realizedCents":       "consumed spend, fleet-wide",
@@ -112,7 +113,7 @@ func init() {
 	})
 	zip.Describe("GET /v1/admin/orgs", zip.Doc{
 		Description: "orgs lists the tenant directory one row per org, sorted by slug: member count and the\norg's month-to-date spend and credit balance, read live from IAM and commerce.\n\nThe rows are the caller's tenant window, not the fleet: a SuperAdmin gets every org, a\nwhite-label admin only their own subtree. A per-org read that fails degrades THAT row\nto an honest zero — this panel carries no sources[] channel to report freshness on, so\nthe alternative would be a fleet total that silently reads healthy.",
-		Response:    json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","users":7,"products":0,"spendCents":12500,"creditsCents":5000,"tokens":0,"created":"2026-01-04T00:00:00Z"}],"data2":1}`),
+		Response:    json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","users":7,"products":0,"spendCents":12500,"creditsCents":5000,"tokens":0,"created":"2026-01-04T00:00:00Z"}],"total":1}`),
 	})
 	zip.Describe("GET /v1/admin/overview", zip.Doc{
 		Description: "overview is the Platform Overview tiles: how many orgs and users are in the caller's\ntenant window, the fleet workload counts, and month-to-date spend and credits.\n\nIt ALWAYS answers 200 — a tile board that fails as a whole because one upstream is\ndown is useless. Instead every upstream reports itself in sources[]: ok, degraded, or\nnot-configured. A commerce read that failed for ANY org marks that source degraded,\nbecause the spend/credits totals are then an undercount and must not read healthy.\n\ntokens30d is 0 for the same reason /usage has no series: there is no fleet token\ncounter to read yet.",
@@ -140,11 +141,11 @@ func init() {
 			"productsIn.tier":          "Tier matches the derived infra grouping (cloud|data|edge|daemon|paas|app).",
 		},
 		Example:  json.RawMessage(`{"tier":"data","env":"main"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"name":"sql","kind":"sql","tier":"data","org":"hanzoai","cluster":"hanzo-k8s","env":"main","namespace":"hanzo","repo":"hanzoai/sql","phase":"Running","declaredTag":"v1.4.2","runningTag":"v1.4.2","latestTag":"","health":"green","drift":false,"driftSeverity":"ok","updated":""}],"data2":1}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"name":"sql","kind":"sql","tier":"data","org":"hanzoai","cluster":"hanzo-k8s","env":"main","namespace":"hanzo","repo":"hanzoai/sql","phase":"Running","declaredTag":"v1.4.2","runningTag":"v1.4.2","latestTag":"","health":"green","drift":false,"driftSeverity":"ok","updated":""}],"total":1}`),
 	})
 	zip.Describe("GET /v1/admin/promos", zip.Doc{
 		Description: "getPromo reads the current platform plan promo — the singleton discount offer, e.g.\nthe 50%-off launch promo. Commerce stores it in the reserved platform namespace, so\nthe org sent with the read is the admin org and the service token is what passes\ncommerce's own platform-admin gate.",
-		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z","end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"data2":0}`),
+		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z","end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"total":0}`),
 	})
 	zip.Describe("GET /v1/admin/roles", zip.Doc{
 		Description: "roles lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles.",
@@ -154,7 +155,7 @@ func init() {
 			"iamPageIn.pageSize": "PageSize is rows per page. Forwarded only when set.",
 		},
 		Example:  json.RawMessage(`{"owner":"admin","p":"1","pageSize":"50"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"data2":1}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"total":1}`),
 	})
 	zip.Describe("GET /v1/admin/services", zip.Doc{
 		Description: "services reads the launch board: every hosted service in the registry with its LIVE\nwaitlist mode, evaluated through the flag engine. This is the \"remove the waitlist one\nservice at a time\" view.",
@@ -170,7 +171,7 @@ func init() {
 			"capIn.org": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
 		},
 		Example:  json.RawMessage(`{"org":"acme"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"id":"cap_1","limitCents":100000,"enforce":true,"periodSpendCents":42000,"over":false,"warn":false,"resetsAt":"2026-08-01T00:00:00Z"}],"data2":0}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"id":"cap_1","limitCents":100000,"enforce":true,"periodSpendCents":42000,"over":false,"warn":false,"resetsAt":"2026-08-01T00:00:00Z"}],"total":0}`),
 	})
 	zip.Describe("GET /v1/admin/subsystems", zip.Doc{
 		Description: "subsystems answers GET /v1/admin/subsystems. ?range=24h|7d|30d bounds the telemetry\nwindow (default 30d) — the same enum, and the same helpers, as the o11y board.",
@@ -190,7 +191,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"totals":{"spendCents":12500,"tokens":0,"requests":0},"series":[],"byProduct":[]}}`),
 	})
 	zip.Describe("GET /v1/admin/users", zip.Doc{
-		Description: "users lists the user directory across the caller's tenant window, one page at a time.\ndata2 is IAM's REAL total, so the console can page through it.\n\nA SuperAdmin may aim the read at one tenant with org; a white-label admin cannot — for\nthem the owner is hard-pinned to their own org and org is ignored, which is what keeps\nthe directory from becoming a cross-tenant read.",
+		Description: "users lists the user directory across the caller's tenant window, one page at a time.\ntotal is IAM's REAL total, so the console can page through it.\n\nA SuperAdmin may aim the read at one tenant with org; a white-label admin cannot — for\nthem the owner is hard-pinned to their own org and org is ignored, which is what keeps\nthe directory from becoming a cross-tenant read.",
 		Fields: map[string]string{
 			"usersIn.org":      "Org narrows the directory to ONE tenant. Honoured for a SuperAdmin only — a\nwhite-label admin is pinned to their own org and this is ignored.",
 			"usersIn.p":        "Page is the 1-based page number. Defaults to \"1\"; IAM returns zero rows AND a\nzero total when it is unset, so this layer never leaves it empty.",
@@ -198,7 +199,7 @@ func init() {
 			"usersIn.q":        "Query is a free-text filter, matched by IAM as a \"contains\" over the user name.",
 		},
 		Example:  json.RawMessage(`{"org":"acme","q":"ada","p":"1","pageSize":"50"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"acme","name":"ada","email":"ada@acme.com","displayName":"Ada","isAdmin":true,"isSuperAdmin":false,"tag":"","created":"2026-01-04T00:00:00Z","lastSignin":"2026-07-01T09:12:00Z","forbidden":false}],"data2":222}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"acme","name":"ada","email":"ada@acme.com","displayName":"Ada","isAdmin":true,"isSuperAdmin":false,"tag":"","created":"2026-01-04T00:00:00Z","lastSignin":"2026-07-01T09:12:00Z","forbidden":false}],"total":222}`),
 	})
 	zip.Describe("GET /v1/admin/waitlist", zip.Doc{
 		Description: "waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine — position,\npoints and referral standing per entry — proxied server-authed with the engine secret,\nnever a client credential.\n\nThe engine's payload is forwarded VERBATIM as data; the console normalizes it. When\nthe engine is not configured on this deployment the read still succeeds, with an empty\nobject and a msg saying so, so the panel shows an honest not-wired state instead of an\nerror the operator would chase.",
@@ -217,7 +218,7 @@ func init() {
 			"capIn.org": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
 		},
 		Example:  json.RawMessage(`{"org":"acme","limitCents":250000,"enforce":false}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cap_1","limitCents":250000,"enforce":false},"data2":0}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cap_1","limitCents":250000,"enforce":false},"total":0}`),
 	})
 	zip.Describe("POST /v1/admin/credit-grants", zip.Doc{
 		Description: "createCreditGrant mints credit for one org. It is the ONE admin mint surface, and it\ndoes NOT mint in-process: it forwards the request to commerce's already-mint-gated\nPOST /v1/billing/credit-grants, authenticated by the service token and scoped to the\ntarget org, then writes one tamper-evident compliance record. Commerce stays the sole\ncredit ledger; this is a thin, audited relay so there is exactly one place credit is\ncreated.\n\nThe body is commerce's OWN CreateCreditGrant contract, forwarded whole — every field\nit carries reaches commerce. The only two this layer reads are the target org (`org`,\nor `user` as the org-pool alias), which selects the namespace commerce's EdgeAuth\ntrusts, and `idempotencyKey`, which makes a double-clicked grant credit once.\n\nA FAILED grant is audited too, with the request body attached: an attempted mint is\nexactly as interesting to a compliance auditor as a successful one.",
@@ -249,7 +250,7 @@ func init() {
 			"capIn.org": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
 		},
 		Example:  json.RawMessage(`{"org":"acme","limitCents":100000,"enforce":true}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cap_1","limitCents":100000,"enforce":true},"data2":0}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cap_1","limitCents":100000,"enforce":true},"total":0}`),
 	})
 	zip.Describe("POST /v1/admin/sync", zip.Doc{
 		Description: "syncNow answers the operator's \"Sync now\" button. There is nothing to kick: admin\naggregates LIVE on every read, so the button is just a re-read. It acknowledges\nhonestly with started:true rather than pretending a batch job was queued.",
@@ -287,6 +288,6 @@ func init() {
 			"promoIn.start":      "Start is when the offer opens (RFC3339).",
 		},
 		Example:  json.RawMessage(`{"percentOff":50,"start":"2026-07-01T00:00:00Z","end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z","end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"data2":0}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z","end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"total":0}`),
 	})
 }

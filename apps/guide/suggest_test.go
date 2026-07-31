@@ -11,7 +11,7 @@ import (
 //
 //	a → {b, c} → d      (a unblocks 2; b and c each unblock d only when the other is done)
 func diamond() Curriculum {
-	return Curriculum{Version: "t", Steps: []Step{
+	return Curriculum{Version: "t", Steps: []JourneyStep{
 		{ID: "a", Title: "A", Tool: "content_generate"}, // AI-ready
 		{ID: "b", Title: "B", Dependencies: []string{"a"}},
 		{ID: "c", Title: "C", Dependencies: []string{"a"}},

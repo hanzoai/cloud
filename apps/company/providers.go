@@ -44,7 +44,9 @@ type DocumentSink interface {
 
 // Signer is one e-signature recipient.
 type Signer struct {
-	Name  string `json:"name"`
+	// Name is the recipient's name, as it appears on the signature request.
+	Name string `json:"name"`
+	// Email is the address the signature request is sent to.
 	Email string `json:"email"`
 }
 
@@ -69,12 +71,19 @@ type Stakeholder struct {
 
 // RoundInput is a fundraising round the CapTable seam records.
 type RoundInput struct {
-	Name              string  `json:"name"`
-	RoundType         string  `json:"roundType"` // PRICED | SAFE | CONVERTIBLE_NOTE
-	TargetAmount      float64 `json:"targetAmount"`
+	// Name is the round's name on the cap table, e.g. "Seed". Required.
+	Name string `json:"name"`
+	// RoundType is PRICED, SAFE or CONVERTIBLE_NOTE. Defaults to PRICED.
+	RoundType string `json:"roundType"`
+	// TargetAmount is the amount the round is raising, recorded verbatim on the
+	// canonical cap table's rounds.create contract.
+	TargetAmount float64 `json:"targetAmount"`
+	// PreMoneyValuation is the valuation the round prices off, before the new money.
 	PreMoneyValuation float64 `json:"preMoneyValuation,omitempty"`
-	PricePerShare     float64 `json:"pricePerShare,omitempty"`
-	ShareClassID      string  `json:"shareClassId,omitempty"`
+	// PricePerShare is the per-share price of a priced round.
+	PricePerShare float64 `json:"pricePerShare,omitempty"`
+	// ShareClassID is the cap table's share class the round issues into.
+	ShareClassID string `json:"shareClassId,omitempty"`
 }
 
 // CapTable is the cap-table seam. SetIncorporation records the entity kind on the

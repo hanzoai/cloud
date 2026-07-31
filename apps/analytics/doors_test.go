@@ -9,12 +9,15 @@ package analytics
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/openapi"
 )
 
 // doors_test.go — the ingest SURFACE is one set, and these are its proofs.
@@ -40,23 +43,21 @@ import (
 // edit here to do it.
 //
 // It pins the whole TRIPLE, not just the path. A door is a path bound to a wire, and
-// rebinding one is as much a surface change as adding a path: swap /v1/analytics onto
-// decodeInsights and every canonical-wire beacon silently decodes to nothing, or
-// relabel a door's source and the $source column — which is the sunset signal, and
-// the only per-row record of which door a write came through — starts lying.
-// /v1/insights/e was REMOVED as a door on 2026-07-31: a wire is a shape, and a shape
-// does not earn a path. Its wire did not go away — decodeEvent tries the canonical
-// decoder and falls back to decodeInsights when canonical yields nothing — and the
-// ingress rewrite that fed it (insights-cloud-ingest-rewrite: insights.hanzo.ai
-// /e,/batch,/capture) now replacePaths onto /v1/event, so every PostHog-wire caller
-// keeps working through the one door. sourcePostHog therefore no longer appears here;
-// its 1 lifetime row is a probe, not traffic.
+// rebinding one is as much a surface change as adding a path: swap /v1/insights/e onto
+// decodeIngest and every PostHog beacon silently decodes to nothing, or relabel a
+// door's source and the $source property — the only per-row record of which wire a
+// write came in on — starts lying.
+//
+// TWO ENTRIES IS THE POINT: one door per WIRE. A path that merely renames a wire
+// already served here is an alias, and the set below is what makes adding one an
+// explicit act rather than a quiet convenience.
+// ONE ENTRY IS THE POINT, and it is a stronger statement than the two that preceded
+// it: a path per WIRE was still a path per SHAPE. /v1/insights/e was removed on
+// 2026-07-31 and its wire kept — decodeEvent sniffs `distinct_id`/`api_key` and hands
+// the PostHog body to decodeInsights — so the surface shrank without dropping a
+// caller. sourcePostHog survives as a $source value on rows the old door wrote.
 var wantDoors = []door{
 	{path: "/v1/event", decode: decodeEvent, source: sourceEvent},
-	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
-	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
-	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
-	{path: "/v1/event/collect", decode: decodeTeam, source: sourceTeam},
 }
 
 // samePtr reports whether two func values are the SAME function, by code pointer.
@@ -73,11 +74,29 @@ func samePtr(a, b any) bool {
 func sameWire(a, b decode) bool { return samePtr(a, b) }
 
 // retiredDoors are paths that WERE ingest doors and must now be gone from every
-// surface — not routed, and not carved on a site host either. /v1/ingest was the
-// publishable-key door; @hanzo/event 0.3.0 moved pk- onto /v1/event and a fleet sweep
-// found no remaining caller, so it was deleted. A door is not retired until it is
-// absent from BOTH surfaces, which is the half that used to be forgotten.
-var retiredDoors = []string{"/v1/ingest"}
+// surface — not routed, and not carved on a site host either. A door is not retired
+// until it is absent from BOTH surfaces, which is the half that used to be forgotten.
+//
+//   - /v1/ingest was the publishable-key door; @hanzo/event 0.3.0 moved pk- onto
+//     /v1/event and a fleet sweep found no remaining caller.
+//   - /v1/analytics, /v1/analytics/batch and /v1/tracker were name-aliases of the
+//     canonical wire /v1/event already serves. @hanzo/capture, the one SDK that
+//     named them, has no importer left in the fleet.
+//
+// /v1/tracker is retired FROM THIS PACKAGE only, and this list is scoped to this
+// package's two surfaces (its own router and the carve it hands sites). The path
+// itself belongs to the tracker product, which owns the prefix in the app manifest
+// and keeps serving /v1/tracker/projects/… — analytics squatting the bare path is
+// precisely what ends here. mountApp mounts analytics alone, so a 404 in this
+// harness is the honest statement that ANALYTICS no longer answers there.
+var retiredDoors = []string{
+	"/v1/ingest",
+	// /v1/insights/e — the PostHog WIRE's own path. The wire is still served, on
+	// /v1/event; only the second path is gone. insights.hanzo.ai's /e, /batch and
+	// /capture reach it through the ingress rewrite, so no caller moved.
+	"/v1/insights/e",
+	"/v1/analytics", "/v1/analytics/batch", "/v1/tracker",
+}
 
 // notDoors are paths that must never ingest: the read lenses, near-miss spellings, and
 // the neighbouring subsystem's route. They are the paired negative for every positive
@@ -493,14 +512,25 @@ func TestApiHostAnonymousLaneWritesThePublicTenant(t *testing.T) {
 func TestRoutedPostSetIsExactlyTheDoors(t *testing.T) {
 	app := mountApp(t)
 	var posts []string
-	for _, r := range app.Fiber().GetRoutes() {
+	// GetRoutes(true) drops the `use` entries — middleware, which fiber keeps in the
+	// same stack as routes and reports under every method at the prefix it gates.
+	// cloud.Bridge is one of those (routes installs it so a typed op can read the
+	// validated org), and so is every middleware Serve installs app-wide, so an
+	// unfiltered read has never been "the POST surface" in the real binary either. A
+	// middleware is a passthrough, not a door: it dispatches nothing.
+	for _, r := range app.Fiber().GetRoutes(true) {
 		if r.Method == http.MethodPost {
 			posts = append(posts, r.Path)
 		}
 	}
-	if !sameSet(posts, doorPaths()) {
-		t.Fatalf("registered POST routes = %v, declared doors = %v — every ingest route must\n"+
-			"come from doors, and nothing else may be registered as a POST here", posts, doorPaths())
+	// The POST surface is the doors PLUS the obs error wire the door carries:
+	// /v1/event/{project}/envelope|store forwards to the o11y plane's installed
+	// consumer (cloud.ObsErrorIngest) and is DSN-authenticated there — a wire on
+	// the one event door, not a new door for handle to admit.
+	want := append(doorPaths(), "/v1/event/:project/envelope", "/v1/event/:project/store")
+	if !sameSet(posts, want) {
+		t.Fatalf("registered POST routes = %v, want doors + the obs error wire = %v — every other\n"+
+			"ingest route must come from doors, and nothing else may be registered as a POST here", posts, want)
 	}
 }
 
@@ -662,6 +692,126 @@ func TestEveryDoorAdmitsAResolvedKey(t *testing.T) {
 			if code := postKeyed(t, app, d.path, "", commerceFor(t, d), hdr); code != http.StatusServiceUnavailable {
 				t.Errorf("door %s with resolvable %v = %d, want 503 (admitted at full capability)", d.path, hdr, code)
 			}
+		}
+	}
+}
+
+// TestEveryUntypedRouteDeclaresItsBodies is the projection half of the untyped
+// ledger. A route that cannot be a typed op still owes the document its SHAPE: an
+// untyped route with no declaration publishes an operationId and nothing else, which
+// no SDK generator can tell apart from a route that takes no body and returns none —
+// so `POST /v1/event`, the door every Hanzo product beacons to, shipped in every
+// generated SDK as a call with nowhere to put the event.
+//
+// It quantifies over untypedByDesign, not over doors, because that ledger IS the set
+// of operations zip's registry cannot describe — so a refusal added there tomorrow
+// owes its bodies by construction rather than by someone remembering. And it reads
+// the DOCUMENT, not the registry, because the document is what ships.
+func TestEveryUntypedRouteDeclaresItsBodies(t *testing.T) {
+	published := publishedOps(t)
+	for key := range untypedByDesign {
+		method, path, _ := strings.Cut(key, " ")
+		op, ok := published[key]
+		if !ok {
+			t.Errorf("%s is not in the published document at all", key)
+			continue
+		}
+		if method == http.MethodPost && op.RequestBody == nil {
+			t.Errorf("%s publishes no requestBody — an SDK generated from this offers a write "+
+				"with nowhere to put the payload", key)
+		}
+		if relayed[key] {
+			if op.Responses != nil {
+				t.Errorf("%s declares a response, but it relays another plane's handler verbatim "+
+					"— publishing a shape here would be inventing one", key)
+			}
+			continue
+		}
+		resp, ok := op.Responses["2XX"]
+		if !ok || len(resp.Content["application/json"].Schema) == 0 {
+			t.Errorf("%s publishes no 2XX body schema", key)
+		}
+		_ = path
+	}
+}
+
+// relayed names the untyped operations whose RESPONSE this package cannot state
+// because it does not produce one: both Sentry doors hand the request to whatever
+// cloud.ObsErrorIngest installed and copy that handler's answer back verbatim. Their
+// REQUEST is still declarable — an opaque envelope stream, openapi.Binary — so the
+// silence is exactly one half, and it is named rather than left to look like an
+// oversight.
+var relayed = map[string]bool{
+	"POST /v1/event/{project}/envelope": true,
+	"POST /v1/event/{project}/store":    true,
+}
+
+// publishedOp is the sliver of an operation the declaration gates read.
+type publishedOp struct {
+	RequestBody *struct {
+		Content map[string]struct {
+			Schema map[string]any `json:"schema"`
+		} `json:"content"`
+	} `json:"requestBody"`
+	Responses map[string]struct {
+		Content map[string]struct {
+			Schema map[string]any `json:"schema"`
+		} `json:"content"`
+	} `json:"responses"`
+}
+
+// publishedOps projects the live router the way every consumer reads it — through
+// JSON, keyed "METHOD /path" exactly as untypedByDesign writes an address.
+func publishedOps(t *testing.T) map[string]publishedOp {
+	t.Helper()
+	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "analytics", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal doc: %v", err)
+	}
+	var published struct {
+		Paths map[string]map[string]publishedOp `json:"paths"`
+	}
+	if err := json.Unmarshal(raw, &published); err != nil {
+		t.Fatalf("unmarshal doc: %v", err)
+	}
+	ops := map[string]publishedOp{}
+	for path, item := range published.Paths {
+		for method, op := range item {
+			ops[strings.ToUpper(method)+" "+path] = op
+		}
+	}
+	return ops
+}
+
+// TestEveryDoorDeclaresItsPolymorphicWire is the doors-specific half: the canonical
+// four accept three shapes on one path, and naming ONE of them would publish an
+// ingest API that cannot batch — which is most of what @hanzo/event does.
+func TestEveryDoorDeclaresItsPolymorphicWire(t *testing.T) {
+	published := publishedOps(t)
+	for _, d := range doors {
+		op := published["POST "+d.path]
+		if op.RequestBody == nil {
+			t.Errorf("POST %s publishes no requestBody", d.path)
+			continue
+		}
+		schema := op.RequestBody.Content["application/json"].Schema
+		if _, poly := d.wire.(openapi.OneOf); !poly {
+			if len(schema) == 0 {
+				t.Errorf("POST %s declares an empty request schema", d.path)
+			}
+			continue
+		}
+		alts, _ := schema["oneOf"].([]any)
+		// FOUR since /v1/insights/e was folded in: decodeEvent sniffs the wire, so the
+		// one door accepts the three canonical shapes AND the PostHog body. Declaring
+		// three would publish an ingest API that silently accepts a fourth.
+		if len(alts) != 4 {
+			t.Errorf("POST %s declares %d alternatives, want the 4 decodeEvent accepts "+
+				"(Event, []Event, CaptureBatch, insightsBody)", d.path, len(alts))
 		}
 	}
 }

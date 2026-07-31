@@ -11,12 +11,13 @@ package storage_test
 // those are stripped from client input and re-issued only for a JWT-validated
 // principal, so the org gate is real; here we drive it directly.
 //
-// The handlers that touch S3 (list/create/delete/presign) cannot reach a real
-// backend here, so these tests assert the SECURITY GATES that run BEFORE any S3
-// call — fail-closed 503, org 403, name/key 400, and (the load-bearing one) that
-// /v1/s3/buckets + /v1/s3/health reach the s3 subsystem's handlers and NOT
-// provisioning's /v1/s3/:name. The live S3 round-trips are covered by the pure
-// mapping tests (s3_internal_test.go) + live e2e post-deploy.
+// The handlers that touch S3 (list/create/delete/presign) never reach a live
+// store here — S3_ADMIN_ENDPOINT points at store(), which refuses in-process — so
+// the whole file runs offline and in milliseconds. What it asserts is the gates
+// that run BEFORE any S3 call — fail-closed 503, org 403, name/key 400, and (the
+// load-bearing one) that /v1/s3/buckets + /v1/s3/health reach the s3 subsystem's
+// handlers and NOT provisioning's /v1/s3/:name. The live S3 round-trips are
+// covered by the pure mapping tests (s3_internal_test.go) + live e2e post-deploy.
 
 import (
 	"encoding/json"
@@ -25,9 +26,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/zap-proto/fiber/v3"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -40,10 +38,39 @@ import (
 	"github.com/hanzoai/cloud/apps/storage"
 )
 
+// store is the object store this harness points S3_ADMIN_ENDPOINT at: an
+// in-process endpoint that refuses every S3 call, immediately.
+//
+// The subsystem needs a REACHABLE endpoint at construction, not just credentials:
+// BuildDeps ensures the blob and durability buckets and probes the store's
+// conditional-PUT atomicity before it returns. Against an address nothing listens
+// on, each of those three probes burns the S3 client's retry budget (s3.MaxRetry
+// with backoff) — ~12s per app, on a machine with no object store, for three
+// answers the harness already knows. Refusing in-process reaches the same posture
+// (no store; durability local-only) in microseconds, and 501 is not in
+// s3.retryableHTTPStatusCodes so the client asks exactly once.
+func store(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotImplemented)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.Listener.Addr().String()
+}
+
 // newApp wires BuildDeps + canonical middleware + MountAll, like main()'s path.
 // `creds` toggles whether S3 admin credentials are present (fail-closed testing).
 func newApp(t *testing.T, creds bool) *zip.App {
 	t.Helper()
+	// This file's subject is the TENANT and VALIDATION gates, so the MONEY gate must
+	// not stand in front of them. A priced op whose biller is unreachable is refused
+	// 503 before the handler runs — correct (see billing_test.go), and it masks every
+	// assertion here, since nothing in this harness answers as commerce. Free ops are
+	// the documented un-gated posture (cloud.ResourceFeeCents: "Set it to 0 to make S3
+	// data-plane ops free (and therefore un-gated)"), and the priced posture is
+	// billing_test.go's subject — unfunded → 402, unreachable biller → refused, the
+	// handler running ZERO times in both.
+	t.Setenv("CLOUD_S3_FEE_CENTS", "0")
 	// Clear any ambient S3 env; set creds only when requested.
 	for _, k := range []string{"S3_ADMIN_ACCESS_KEY", "S3_ADMIN_SECRET_KEY", "S3_ADMIN_ENDPOINT", "S3_PUBLIC_ENDPOINT"} {
 		t.Setenv(k, "")
@@ -51,9 +78,7 @@ func newApp(t *testing.T, creds bool) *zip.App {
 	if creds {
 		t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIATEST")
 		t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
-		// Point the internal endpoint at an unroutable host so any accidental live
-		// call fails fast (the gates we assert run before it anyway).
-		t.Setenv("S3_ADMIN_ENDPOINT", "127.0.0.1:1")
+		t.Setenv("S3_ADMIN_ENDPOINT", store(t))
 	}
 	cfg := &cloud.Config{
 		Brand:     "hanzo",
@@ -77,21 +102,11 @@ func newApp(t *testing.T, creds bool) *zip.App {
 	return app
 }
 
+// do issues one request through the mounted stack. Every route answers promptly —
+// the gates short-circuit before S3, and store() refuses the calls that reach it —
+// so this needs no timeout tolerance.
 func do(t *testing.T, app *zip.App, method, path, org, body string, admin bool) *http.Response {
 	t.Helper()
-	resp, _, err := doOrTimeout(app, method, path, org, body, admin)
-	if err != nil {
-		t.Fatalf("%s %s: %v", method, path, err)
-	}
-	return resp
-}
-
-// doOrTimeout issues a request and reports whether the handler timed out reaching
-// the (deliberately unroutable) S3 backend. A timeout means the s3 handler RAN and
-// attempted an S3 call — which is itself proof the route reached the s3 subsystem
-// (provisioning's store-only :name handler never dials S3). `FailOnTimeout:false`
-// so a slow S3 dial returns (nil, timedOut=true) instead of erroring the test.
-func doOrTimeout(app *zip.App, method, path, org, body string, admin bool) (resp *http.Response, timedOut bool, err error) {
 	var rdr io.Reader
 	if body != "" {
 		rdr = strings.NewReader(body)
@@ -107,13 +122,11 @@ func doOrTimeout(app *zip.App, method, path, org, body string, admin bool) (resp
 	if admin {
 		req.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err = app.Fiber().Test(req, fiber.TestConfig{Timeout: 750 * time.Millisecond, FailOnTimeout: false})
-	if err != nil && (strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "empty response")) {
-		// The handler ran but the deliberately-unroutable S3 backend did not answer
-		// within the window — from the router's view the s3 handler owned the route.
-		return nil, true, nil
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
 	}
-	return resp, false, err
+	return resp
 }
 
 func decode(t *testing.T, r io.Reader) map[string]any {
@@ -177,8 +190,8 @@ func TestHealthOwnedByS3NotGenericLiveness(t *testing.T) {
 // :name GET with a valid org would 404 "resource not found" for name "buckets".
 // We assert the s3 path wins by checking the WITHOUT-org 403 (s3's guard fires
 // first) — provisioning's GET /v1/s3/:name also 403s without org, so to
-// disambiguate we ALSO assert that WITH an org the request does NOT return
-// provisioning's "resource not found" 404 shape.
+// disambiguate we ALSO assert that WITH an org the request reaches the s3
+// listBuckets handler and dials the store.
 func TestBucketsRouteReachesS3NotProvisioning(t *testing.T) {
 	app := newApp(t, true)
 
@@ -189,20 +202,14 @@ func TestBucketsRouteReachesS3NotProvisioning(t *testing.T) {
 	}
 
 	// With org: the request reaches the s3 listBuckets handler, which dials the
-	// (unroutable) S3 endpoint. Either it times out (proof: the s3 handler RAN and
-	// tried an S3 call — provisioning's store-only :name never dials S3) or it
-	// returns a 502/503. A 404 "resource not found" would mean provisioning's
-	// :name won the route (broken ordering) — that is the failure we guard against.
-	resp2, timedOut, err := doOrTimeout(app, "GET", "/v1/s3/buckets", "acme", "", false)
-	if err != nil {
-		t.Fatalf("GET /v1/s3/buckets (org): %v", err)
-	}
-	if timedOut {
-		return // s3 handler reached S3 → route correctly owned by s3, not provisioning
-	}
-	if resp2.StatusCode == http.StatusNotFound {
+	// (refusing) store and maps its error to 502 — proof the s3 handler RAN and
+	// tried an S3 call, which provisioning's store-only :name handler never does.
+	// A 404 "resource not found" would mean provisioning's :name won the route
+	// (broken ordering) — that is the failure we guard against.
+	resp2 := do(t, app, "GET", "/v1/s3/buckets", "acme", "", false)
+	if resp2.StatusCode != http.StatusBadGateway {
 		body := decode(t, resp2.Body)
-		t.Fatalf("GET /v1/s3/buckets (org) = 404 %v — provisioning's :name shadowed the s3 route (ordering broken)", body)
+		t.Fatalf("GET /v1/s3/buckets (org) = %d %v, want 502 from the s3 listBuckets handler; a 404 means provisioning's :name shadowed the s3 route (ordering broken)", resp2.StatusCode, body)
 	}
 }
 

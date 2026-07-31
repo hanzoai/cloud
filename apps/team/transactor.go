@@ -14,7 +14,6 @@ package team
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -70,6 +69,12 @@ type transServer struct {
 	sem       chan struct{} // hard concurrency cap on in-flight agent turns (nil = uncapped, tests)
 	inflight  sync.Map      // single-flight: (workspace|space|bot) currently answering → drop duplicates
 	breaker   sync.Map      // per-agent circuit breaker: agentID → *agentBreaker (backoff on repeated failure)
+
+	// degraded is the fail-closed posture Mount resolved (no HS256 secret). The
+	// untyped WebSocket route gets it through Mount's guard wrapper; the typed
+	// statistics op is not a zip.Handler and cannot be wrapped, so it reads this
+	// instead (typed.go).
+	degraded bool
 }
 
 // live is the process-singleton transactor server, published in Mount so the
@@ -140,26 +145,86 @@ func originAllowed(origin, host string) bool {
 	}
 }
 
-// statistics answers GET /v1/team/transactor/api/v1/statistics — the endpoint
-// the front's workspace switcher (SelectWorkspaceMenu) and server panel poll on
-// the transactor base. Token-authed exactly like the upgrade; the shape is the
-// upstream front service's ({metrics, statistics:{activeSessions}, admin}), and
-// activeSessions carries ONLY the token's own workspace — never another
-// tenant's sessions.
-func (srv *transServer) statistics(c *zip.Ctx) error {
-	t, err := token.Decode(c.Query("token"), srv.secret, true)
-	if err != nil || t.Account == "" {
-		return zip.ErrUnauthorized("invalid token")
+// statsIn is the statistics read's whole input: the workspace token, which the
+// front carries as a query param on the transactor base. It is a CREDENTIAL,
+// not a tenant assertion — the workspace it names is the one its HS256 signature
+// proves, verified below, so a caller cannot name a workspace it does not hold a
+// token for.
+type statsIn struct {
+	// Token is the workspace token minted by selectWorkspace.
+	Token string `json:"token"`
+}
+
+// statsSessions is the live-session block of the statistics body.
+type statsSessions struct {
+	// ActiveSessions maps a workspace uuid to its connected sessions. It carries
+	// only the token's OWN workspace, and is empty for a token that names none.
+	ActiveSessions map[string][]statsUser `json:"activeSessions"`
+}
+
+// statsUser is one connected session in the front's statistics shape.
+type statsUser struct {
+	// UserID is the account the session is authenticated as.
+	UserID string `json:"userId"`
+}
+
+// statsOut is the front's statistics shape ({metrics, statistics, admin}).
+//
+// Metrics is an ANONYMOUS EMPTY STRUCT because that is what the wire is —
+// `"metrics":{}` on every response, pinned byte-for-byte by
+// TestTypedStatisticsServesBothPaths. A `map[string]any` marshals to the same
+// `{}` and PROJECTS A FALSE SCHEMA: zip's schemaOf has no reflect.Interface
+// case, so the element type falls to the default and the document asserted
+// `additionalProperties: {"type": "object"}` — that every value here is a JSON
+// object — for a map that can never hold one, which an SDK generates as a
+// `Dict[str, Dict]` field carrying only `{}`. Empty-struct publishes the honest
+// shape instead, and ANONYMOUS keeps it out of the fleet's flat schema
+// namespace, since there is no value to name.
+//
+// The class is zip-side and wider than this field. MEASURED over the golden with
+// this instance already removed: 15 remain, spread across owners that share
+// nothing but the Go type — guide (JourneyStep.args, stepView.args), pricing
+// (seven list envelopes), admin (adminCatalogOut), framework (documentList.data),
+// Application.metadata, StepSettings.input and runIn.props. Count it, never tally
+// it from prose: LLM.md recorded 15 BEFORE this fix, so the figure was already
+// stale — the class grows every time an app is typed, because an untyped route
+// contributes no schema and therefore cannot state anything false yet. The
+// one-line cure is a reflect.Interface case in schemaOf projecting the OPEN
+// schema `true`: an unconstrained element is open, not an object.
+type statsOut struct {
+	// Metrics is the upstream transactor's metrics block. This server does not
+	// populate it, so it is always the empty object — the front reads the key,
+	// not its contents.
+	Metrics struct{} `json:"metrics"`
+	// Statistics carries the live sessions.
+	Statistics statsSessions `json:"statistics"`
+	// Admin is the upstream service's server-panel flag, always false here.
+	Admin bool `json:"admin"`
+}
+
+// Statistics returns the transactor's live sessions for the workspace the
+// caller's token names — the endpoint the front's workspace switcher and server
+// panel poll on the transactor base. The token is verified exactly like the
+// WebSocket upgrade is, and activeSessions carries ONLY that token's own
+// workspace, never another tenant's sessions. An invalid or expired token is
+// 401.
+//
+// Example: {"token": "eyJhbGciOiJIUzI1NiJ9…"}
+func (srv *transServer) statistics(ctx context.Context, in *statsIn) (*statsOut, error) {
+	if srv.degraded {
+		return nil, unavailable()
 	}
-	active := map[string]any{}
+	t, err := token.Decode(in.Token, srv.secret, true)
+	if err != nil || t.Account == "" {
+		return nil, zip.ErrUnauthorized("invalid token")
+	}
+	active := map[string][]statsUser{}
 	if t.Workspace != "" {
 		active[t.Workspace] = srv.hub.users(t.Workspace)
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"metrics":    map[string]any{},
-		"statistics": map[string]any{"activeSessions": active},
-		"admin":      false,
-	})
+	// Metrics needs no initialiser: the zero value of an empty struct already
+	// marshals to the `{}` the front reads, so there is nothing to allocate.
+	return &statsOut{Statistics: statsSessions{ActiveSessions: active}}, nil
 }
 
 // session is one live transactor connection, scoped to a (workspace, account).
@@ -686,12 +751,12 @@ func (h *hub) remove(s *session) {
 }
 
 // users lists a workspace's live sessions in the front's statistics shape.
-func (h *hub) users(workspace string) []map[string]any {
+func (h *hub) users(workspace string) []statsUser {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	out := []map[string]any{}
+	out := []statsUser{}
 	for s := range h.ws[workspace] {
-		out = append(out, map[string]any{"userId": s.account})
+		out = append(out, statsUser{UserID: s.account})
 	}
 	return out
 }

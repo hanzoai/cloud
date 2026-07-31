@@ -16,20 +16,110 @@
     }
   ],
   "paths": {
-    "/v1/share/": {
+    "/v1/share": {
       "get": {
         "operationId": "get_v1_share",
+        "summary": "ListShares returns the tunnel shares the caller's org currently has open, across every environment that org has enabled.",
+        "description": "ListShares returns the tunnel shares the caller's org currently has open, across\nevery environment that org has enabled. It is a READ and it degrades honestly: an\nunconfigured deployment, an org that has not provisioned yet, and an unreachable\ncontroller all answer an EMPTY list at 200 rather than an error, so the console\nnever error-toasts on load.",
         "tags": [
           "share"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sharesOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/share/enable": {
       "post": {
         "operationId": "post_v1_share_enable",
+        "summary": "Enable provisions the caller org's tunnel account and returns the credential the `hanzo share` CLI needs to run a tunnel.",
+        "description": "Enable provisions the caller org's tunnel account and returns the credential the\n`hanzo share` CLI needs to run a tunnel. It is idempotent: the account is keyed\ndeterministically off the VALIDATED org, so a repeat call hands back the same\naccount rather than creating a second one, and a caller can only ever provision\ntheir OWN org's account. 503 when the deployment has no share controller\nconfigured; 502 when that controller is unreachable.",
         "tags": [
           "share"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/enableResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "enableResp": {
+        "properties": {
+          "accountToken": {
+            "description": "AccountToken is the org's own tunnel-account credential. Treat it as a secret:\nit is what the CLI enables an environment with.",
+            "type": "string"
+          },
+          "controller": {
+            "description": "Controller is the public controller endpoint the CLI enables against.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is the public frontend a share is published into, when the\ndeployment names one.",
+            "type": "string"
+          },
+          "urlTemplate": {
+            "description": "URLTemplate is the shape a share token expands to, so the CLI can print the\nresulting URL without asking again.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "shareView": {
+        "properties": {
+          "backend": {
+            "description": "Backend is the local endpoint the share proxies to.",
+            "type": "string"
+          },
+          "backendMode": {
+            "description": "BackendMode is how the tunnel serves the backend, e.g. proxy or web.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the share was opened, unix seconds.",
+            "type": "integer"
+          },
+          "token": {
+            "description": "Token is the share's own identifier, the leaf of its public URL.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the share's public address, rendered from the deployment's URL template.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sharesOut": {
+        "properties": {
+          "shares": {
+            "description": "Shares is the org's active shares — empty rather than absent when there are\nnone, or when the controller cannot be reached.",
+            "items": {
+              "$ref": "#/components/schemas/shareView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

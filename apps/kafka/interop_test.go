@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	psembed "github.com/hanzoai/pubsub/embed"
 	"github.com/hanzoai/kafka/protocol"
 	"github.com/hanzoai/kafka/types"
+	psembed "github.com/hanzoai/pubsub/embed"
 	natsio "github.com/nats-io/nats.go"
 )
 

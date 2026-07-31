@@ -7,6 +7,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -94,11 +95,12 @@ func (p Project) listed() bool {
 // git plane that is down (or simply not co-resident in this binary) must not
 // fail a publish. The next update reconciles it.
 func share(s *cloud.Service[state], ctx context.Context, p Project) {
-	ev := cloud.Visibility{
-		Org: p.Org, Slug: p.Slug, Name: p.Name, Description: p.Description,
+	ev := plane.Visibility{
+		Slug: p.Slug, Name: p.Name, Description: p.Description,
 		Listed: p.listed(),
 	}
-	if _, err := cloud.Dial("git").For(p.Org).Call(ctx, "git.publish", cloud.PutVisibility(ev)); err != nil {
+	if _, err := cloud.Ask[plane.Visibility, struct{}](cloud.For(ctx, p.Org), "git",
+		plane.GitPublish, &ev); err != nil {
 		s.Log.Warn("publish visibility", "org", p.Org, "slug", p.Slug,
 			"listed", ev.Listed, "err", err)
 	}

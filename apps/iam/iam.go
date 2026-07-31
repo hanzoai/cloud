@@ -1,18 +1,27 @@
-// Package iam folds Hanzo IAM into the unified hanzoai/cloud binary as an
-// in-process subsystem (HIP-0106) — the LAST binary-consolidation piece:
-// "one Go binary (hanzoai/cloud) embeds IAM + KMS + o11y".
+// Package iam is Hanzo's identity provider: users, organizations, applications,
+// and the OIDC/OAuth2 endpoints every Hanzo service authenticates against.
+//
+// It folds Hanzo IAM into the unified hanzoai/cloud binary as an in-process
+// subsystem (HIP-0106) — the LAST binary-consolidation piece: "one Go binary
+// (hanzoai/cloud) embeds IAM + KMS + o11y".
 //
 // CLEAN IAM (v2). This subsystem embeds github.com/hanzoai/iam —
 // the clean-room identity rewrite on the native Hanzo stack (zip + hanzoai/orm +
 // hanzoai/sqlite). The retired Beego fork (github.com/hanzoai/iam-v1) is
 // GONE from cloud's graph: there is no beego process-global to corrupt, no
 // InitEmbed, no session-manager hook, no shared-AppConfig co-residence hazard with
-// the sibling `ai` legacy fork. iamserver.Route registers the whole IAM v2 surface
-// (OIDC discovery/JWKS, oauth authorize/token/userinfo/introspect/revoke,
-// get-app-login, signin, the v2 entity CRUD, and the legacy verb-alias compat
-// layer) ZIP-NATIVELY onto cloud's shared app — no net/http adaptor round-trip. The
-// specific self-service routes layered in front (account, agentskills) still win by
-// Fiber's in-order match, so the fold is collision-free.
+// the sibling `ai` legacy fork. The whole IAM v2 surface (OIDC discovery/JWKS, oauth
+// authorize/token/userinfo/introspect/revoke, get-app-login, signin, the v2 entity
+// CRUD, and the legacy verb-alias compat layer) is served by iamserver.Handler — that
+// standalone app adapted to net/http and hung on the wildcards this file registers
+// (safeMount, which says why Handler and not iamserver.Route). The specific
+// self-service routes layered in front (account, agentskills) still win, because zip
+// matches the most specific pattern, so the fold is collision-free.
+//
+// It is therefore OPAQUE to cloud's document: the nested app holds 94 typed ops and
+// cloud's route table holds five wildcards, so none of the 35 operations the iam
+// subset publishes can become a typed op. apps/iam/typed_wire_test.go gates that,
+// and cloud's LLM.md ("apps/iam (0 of 25, and why)") records what closing it needs.
 //
 // The store is embedded SQLite under {DataDir}/iam (server.OpenSQLite, WAL) — this
 // embed owns its OWN orm.DB outright, so the old fork's "ai bootstrap unable to
@@ -63,11 +72,18 @@ import (
 	"github.com/hanzoai/cloud/cek"
 )
 
-// Prefixes are the canonical absolute prefixes the IAM identity surface owns —
-// the ONE list. It registers the real routes (safeMount), serves the fail-closed 503
-// when IAM cannot boot, and is the App.Prefixes apps.Wire() hands MountAll, so
-// IAM's middleware can only ever land on identity's own subtrees. Everything outside
-// them belongs to cloud, so the console catch-all keeps serving the SPA.
+// Prefixes are the canonical absolute prefixes the IAM identity surface owns — this
+// subsystem's own list, from which patterns() derives every address it registers, both
+// the real routes (safeMount) and the fail-closed 503 (mountFailClosed). Everything
+// outside them belongs to cloud, so the console catch-all keeps serving the SPA.
+//
+// The host has a SECOND list and that is deliberate, the same split apps/commerce
+// documents: manifest.Apps' iam row states what the light host's ROUTER may hand this
+// binary (manifest/apps.go), while this states what the binary itself serves and
+// fail-closes. Importing one into the other would re-fatten the host, which links
+// manifest and zip and nothing else. They are not required to be equal, and today are
+// not: the router does not name /.well-known, which manifest/router_test.go records in
+// its `unreachable` ledger.
 //
 // The bare /healthz is deliberately excluded — it is a shared-liveness path, not an
 // auth surface, so 503-ing it would mask the binary's own health rather than an
@@ -233,6 +249,35 @@ func paths(deps cloud.Deps) (dbPath, initDataPath string) {
 	return dbPath, initDataPath
 }
 
+// patterns is the ONE list of route patterns the identity surface occupies — every
+// address IAM answers, spelled once. Both registrations read it: safeMount hangs the
+// real handler on them and mountFailClosed hangs the 503 on the SAME set, so the
+// degraded surface is exactly the mounted surface and neither can drift from the
+// other.
+//
+// It is derived from Prefixes rather than restating them, plus the one address that is
+// not under any of them: OIDC discovery + JWKS live at the ROOT by spec (RFC 8414 /
+// OIDC Discovery 1.0), because a relying party reads
+// /.well-known/openid-configuration off the ISSUER host, not off an API subtree. That
+// wildcard is part of the identity contract, not a catch-all, and it is narrow by
+// construction — it cannot shadow the console, and the deeper static routes under it
+// (agentskills' /.well-known/agent-skills/*, cloud's own /.well-known/openapi.json)
+// still win, because zip's matcher takes the most specific pattern regardless of
+// registration order.
+//
+// The bare prefix is NOT listed separately: fiber's greedy `/*` matches the empty
+// remainder, so `/v1/iam/*` already answers `/v1/iam`. safeMount registers the bare
+// form too — the document then publishes /v1/iam as its own path rather than only
+// /v1/iam/{wildcard1} — but the FAIL-CLOSED half needs no such entry, and adding one
+// would be a second way to say the same thing.
+func patterns() []string {
+	out := make([]string, 0, len(Prefixes)+1)
+	for _, p := range Prefixes {
+		out = append(out, p+"/*")
+	}
+	return append(out, "/.well-known/*")
+}
+
 // safeMount registers the IAM v2 surface behind WILDCARDS at the prefixes it owns,
 // under a recover so its only panic path — a registered enterprise feature failing to
 // mount — becomes an error the caller fail-closes on, never a crash of the shared
@@ -247,6 +292,9 @@ func paths(deps cloud.Deps) (dbPath, initDataPath string) {
 // documents for exactly this host ("registered at the /v1/iam/* and root
 // /.well-known/* wildcards"), and it confines iam2 to the prefixes below, so cloud's
 // console catch-all keeps serving everything else.
+//
+// Every one of these is a RELAY of a whole nested app and can never become a typed op;
+// apps/iam/typed_wire_test.go holds that refusal as a gate rather than a comment.
 func safeMount(app cloud.Router, db orm.DB) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -254,31 +302,40 @@ func safeMount(app cloud.Router, db orm.DB) (err error) {
 		}
 	}()
 	h := zip.AdaptNetHTTP(iamserver.Handler(db))
+	// The bare prefix as well as its subtree: `/v1/iam/*` already MATCHES `/v1/iam`,
+	// but the published document derives its paths from the route table, so without
+	// the bare form the resource's own address appears nowhere in it.
 	for _, prefix := range Prefixes {
 		app.All(prefix, h)
-		app.All(prefix+"/*", h)
 	}
-	// OIDC discovery + JWKS live at the ROOT by spec (RFC 8414 / OIDC Discovery
-	// 1.0): a relying party reads /.well-known/openid-configuration off the issuer
-	// host, so this one root wildcard is part of the identity contract, not a
-	// catch-all. Narrow by construction — it cannot shadow the console.
-	app.All("/.well-known/*", h)
+	for _, p := range patterns() {
+		app.All(p, h)
+	}
 	return nil
 }
 
-// mountFailClosed serves an honest JSON 503 on every identity prefix when IAM cannot
-// boot, so /v1/iam/* answers "iam unavailable" instead of falling through to the
-// console SPA catch-all (which would 200 an auth path). cloud and every other subsystem
-// stay up — the fold's blast-radius isolation. During staged rollout hanzo.id is still
+// mountFailClosed serves an honest JSON 503 on every address IAM answers when IAM
+// cannot boot, so an identity path says "iam unavailable" instead of falling through to
+// the console SPA catch-all (webui.Mount's `/*`, registered last in every plugin
+// binary), which would 200 HTML on an auth path. cloud and every other subsystem stay
+// up — the fold's blast-radius isolation. During staged rollout hanzo.id is still
 // served by the standalone iam pod via ingress, so clients never see this path until
 // cutover.
+//
+// It covers patterns(), the same set safeMount hangs the real handler on, because a
+// degraded surface SMALLER than the mounted one is the exact hole this function exists
+// to close. It used to iterate Prefixes alone, which left /.well-known/* uncovered:
+// with IAM down, `GET /.well-known/openid-configuration` — the FIRST call every relying
+// party makes, and the one path here that is not under /v1 — reached the console and
+// answered 200 with the SPA's HTML, so an OIDC client parsed a web page as its
+// discovery document instead of seeing an outage.
 func mountFailClosed(app cloud.Router) {
 	failed := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"error":"iam unavailable","code":503}`))
 	}))
-	for _, p := range Prefixes {
-		app.All(p+"/*", failed)
+	for _, p := range patterns() {
+		app.All(p, failed)
 	}
 }

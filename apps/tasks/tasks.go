@@ -23,10 +23,11 @@
 //	/tasks/*                            embedded React UI (console.hanzo.ai/tasks)
 //
 // Identity: cloud's gateway validates the IAM JWT and mints X-Org-Id / X-User-Id
-// (HIP-0026); clients/principal treats a credential-minted X-User-Id as the ONE
-// trust signal. gate refuses data requests lacking it (403, never the unscoped
-// store) and threads the validated org into the engine via
-// tasks/pkg/auth.WithIdentity, so per-(org,ns) shard scoping applies.
+// (HIP-0026). gate resolves those two through apps/principal — the ONE place the
+// cloud data plane turns a request into an org — and refuses (403, never the
+// unscoped store) anything that decision refuses, then threads the validated org
+// into the engine via tasks/pkg/auth.WithIdentity, so per-(org,ns) shard scoping
+// applies.
 package tasks
 
 import (
@@ -36,6 +37,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/cron"
+	"github.com/hanzoai/cloud/apps/principal"
 	tasksui "github.com/hanzoai/cloud/apps/tasks/ui"
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
@@ -52,12 +54,49 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("tasks.Mount: nil deps.Logger")
 	}
 
+	// NOT TYPED OPS, and the reason is the wire rather than the want of an edit.
+	// A typed op (zip.Get[In, Out]) is the ONE registry entry every projection
+	// reads, so what stays out of it publishes no schema, no prose, no MCP tool,
+	// no CLI command and no SDK method. The four mounts below are 28 published
+	// operations (plugin/tasks/openapi.json) with nothing said about any of them.
+	// Each address is refused for a fact typed_wire_test.go MEASURES, so a refusal
+	// here cannot outlive its reason:
+	//
+	// /v1/tasks answers 307 to /v1/tasks/ on every method — the engine's own
+	// ServeMux decides it from its subtree pattern, before a handler runs. A typed
+	// op answers 200, 204 or a 2xx it DECLARED; 307 and Location are not in its
+	// vocabulary. TestBareNounIsARedirect.
+	//
+	// /v1/tasks/* is ONE route over 64 engine operations this router never sees.
+	// They are matched by path SEGMENT inside hanzoai/tasks' own ServeMux
+	// (pkg/tasks/embed.go, HTTPHandler) rather than by patterns, so there is no
+	// route here to type; their inputs are anonymous structs local to that
+	// module's handlers, so there is no named type to type it with; and the engine
+	// hands cloud its surface only as http.Handler (HTTPHandler / ClusterHandler /
+	// MCPHandler / EventsHandler), its programmatic seam — View plus the three
+	// *ForOrg helpers — reaching 13 of the 64, so there is no value to answer
+	// with either. The one route also carries four content types at once (the JSON
+	// API, two text/plain refusals, an event STREAM), 12 of its verbs run on a
+	// malformed body a typed op would 400, and its errors carry `code` as a number
+	// where zip's carry `status`. TestOneWildcardCarriesFourContentTypes,
+	// TestCancelIgnoresAMalformedBody, TestEngineErrorEnvelopeIsNotZips.
+	//
+	// /tasks and /tasks/* are the SPA: HTML and hashed assets under their own
+	// content types and cache hints, index.html for every unknown path. A typed op
+	// publishes JSON. ui/embed_test.go's TestHandlerServesIndexAndAssets pins the
+	// bytes.
+	//
+	// The place these operations CAN become typed is hanzoai/tasks, which OWNS the
+	// surface. Typing them here would put a second copy of that module's route
+	// table in cloud, free to drift from the one that answers the requests — and
+	// re-shaping a relayed answer to fit a local struct is the wire break this
+	// migration exists to avoid.
 	h := zip.AdaptNetHTTP(&surface{})
 	app.All("/v1/tasks", h)
 	app.All("/v1/tasks/*", h)
 
 	// The UI is a static asset bundle embedded in THIS binary
-	// (clients/tasks/ui) — engine-independent, mount directly. Serving it
+	// (apps/tasks/ui) — engine-independent, mount directly. Serving it
 	// here is what lets cloud front tasks.hanzo.ai + console.hanzo.ai/tasks
 	// and retire the standalone tasks-ui pod. Mounted at /tasks (no /_/):
 	// subsystem routes register before the console SPA catch-all, so this
@@ -129,23 +168,38 @@ func httpMux(srv *tasks.Embedded) http.Handler {
 // the validated tenant into the handler context. The gateway (HIP-0026) mints
 // X-User-Id ONLY from a verified credential, X-Org-Id from the validated owner
 // claim, and X-Project-Id from the validated project claim; the fiber adaptor
-// forwards those request headers verbatim, so a non-empty X-User-Id is the SAME
-// trust signal clients/principal.Validated uses. Absent it, the request is the
+// forwards those request headers verbatim, so the pair is the SAME two facts
+// clients/principal decides on. A request that fails that decision is the
 // anonymous-forge path and is refused (403) — never served another tenant's data
-// nor the unscoped store. Present, the full org/project/user identity is threaded
+// nor the unscoped store. Admitted, the full org/project/user identity is threaded
 // into the engine via tasks/pkg/auth.WithIdentity so per-(org,ns) shard scoping
 // (and the project↔namespace convention) applies.
+//
+// The decision is principal.OrgOf and NOT a local copy of it. principal is the
+// ONE place the cloud data plane turns a request into an org, and OrgOf is that
+// decision over the only two facts it turns on — the validated user claim and the
+// org claim — taken as plain strings precisely so a reader that holds headers
+// rather than a *zip.Ctx (this one; the internal plane's capability envelope) asks
+// the same function. A local `user != ""` check is not the same rule: it admits a
+// validated principal carrying NO org, which the engine reads as the ZERO
+// Principal — the shared unscoped store (hanzoai/tasks store/principal.go:31,
+// <root>/_/_/_), not that caller's shard. cloud's identity boundary produces that
+// exact request on purpose: SanitizeIdentity mints X-User-Id from the claims but
+// leaves X-Org-Id unset whenever homeOrg() is empty (auth_identity.go:289 — a
+// token with no `orgs` claim), so it fails closed everywhere principal is asked
+// and, until this call, open here. TestOrglessValidatedPrincipalIsRefused.
 func gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get(tasksauth.HeaderUserID)
-		if user == "" {
+		org, ok := principal.OrgOf(user, r.Header.Get(tasksauth.HeaderOrgID))
+		if !ok {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`{"error":"identity required","code":403}`))
 			return
 		}
 		ctx := tasksauth.WithIdentity(r.Context(),
-			r.Header.Get(tasksauth.HeaderOrgID),
+			org,
 			r.Header.Get(tasksauth.HeaderProjectID),
 			user,
 			r.Header.Get(tasksauth.HeaderUserEmail))

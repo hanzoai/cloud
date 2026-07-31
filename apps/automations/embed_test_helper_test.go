@@ -2,44 +2,30 @@ package automations
 
 import (
 	"context"
-	"net"
+	"path/filepath"
 	"testing"
 
 	tasksengine "github.com/hanzoai/tasks/pkg/tasks"
 )
 
-// embedEngine starts an embedded tasks engine on a free port, RETRYING when the
-// port is taken between picking it and binding it.
+// embedEngine starts an embedded tasks engine on its own unix socket.
 //
-// Picking a port with Listen(":0"), closing the listener and handing the bare
-// number to Embed is a time-of-check/time-of-use race: the port is free when we
-// look and can be gone when Embed binds it. It is rare serially and reproducible
-// under `go test ./...`, where several packages play the same trick at once — it
-// is what made TestTriggerPayloadThreadsThroughDurableRun fail in a parallel run
-// and pass in isolation.
-//
-// The race cannot be closed by holding the listener, because Embed binds the port
-// itself. Retrying is what actually converges: a second draw lands on a different
-// ephemeral port, so a collision costs a retry instead of a red build.
-func embedEngine(ctx context.Context, t *testing.T, namespace string) (*tasksengine.Embedded, int) {
+// It used to pick a free TCP port with Listen(":0"), close the listener and hand
+// the bare number to Embed — a time-of-check/time-of-use race, because the port
+// was free when we looked and could be gone when Embed bound it. Rare serially
+// and reproducible under `go test ./...`, where several packages played the same
+// trick at once; it is what made TestTriggerPayloadThreadsThroughDurableRun fail
+// in a parallel run and pass in isolation. The retry loop that hid it is gone
+// with the port: a path in this test's own directory cannot be taken by anyone.
+func embedEngine(ctx context.Context, t *testing.T, namespace string) (*tasksengine.Embedded, string) {
 	t.Helper()
-	var lastErr error
-	for attempt := 0; attempt < 5; attempt++ {
-		l, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatalf("listen: %v", err)
-		}
-		port := l.Addr().(*net.TCPAddr).Port
-		_ = l.Close()
-
-		srv, err := tasksengine.Embed(ctx, tasksengine.EmbedConfig{
-			ZAPPort: port, Namespace: namespace, DataDir: t.TempDir(),
-		})
-		if err == nil {
-			return srv, port
-		}
-		lastErr = err
+	dir := t.TempDir()
+	addr := filepath.Join(dir, "tasks.sock")
+	srv, err := tasksengine.Embed(ctx, tasksengine.EmbedConfig{
+		Address: addr, Namespace: namespace, DataDir: dir,
+	})
+	if err != nil {
+		t.Fatalf("embed: %v", err)
 	}
-	t.Fatalf("embed: no free port after 5 attempts: %v", lastErr)
-	return nil, 0
+	return srv, addr
 }

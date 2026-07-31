@@ -113,10 +113,18 @@ func (s *Store) Get(key string) (DefRow, bool, error) {
 
 // Upsert stores a definition under key (the definition's own "key" field is
 // forced to match) and logs the change.
+//
+// A JSON `null` body unmarshals into a NIL map without error, and the next line
+// assigns into it — which panicked, on a request any caller could send. `null` is
+// not an object, so it is refused exactly like `[1,2]` or `"x"`: one predicate,
+// not two, and no reachable crash.
 func (s *Store) Upsert(key string, definition json.RawMessage, actor string) error {
 	var def map[string]any
 	if err := json.Unmarshal(definition, &def); err != nil {
 		return fmt.Errorf("flags: definition not an object: %w", err)
+	}
+	if def == nil {
+		return fmt.Errorf("flags: definition not an object: null")
 	}
 	def["key"] = key
 	norm, err := json.Marshal(def)

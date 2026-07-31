@@ -596,12 +596,12 @@ func TestFanOut_PublicTenantNeverReachesDestinations(t *testing.T) {
 		defer mu.Unlock()
 		return append([]string(nil), gotOrgs...)
 	}
-	SetSink(func(org string, _ []SinkEvent) {
+	remove := AddSink(func(org string, _ []SinkEvent) {
 		mu.Lock()
 		gotOrgs = append(gotOrgs, org)
 		mu.Unlock()
 	})
-	t.Cleanup(func() { SetSink(nil) })
+	t.Cleanup(remove)
 
 	fanOut(publicTenant, []CaptureEvent{{Type: "pageview", Event: "$pageview"}})
 	// Give a real fan-out time to land.

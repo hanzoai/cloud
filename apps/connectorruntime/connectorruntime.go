@@ -1,6 +1,7 @@
 package connectorruntime
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -9,10 +10,16 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// zipdoc lifts the doc comment off the typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // Mount wires the native single-connector execution surface onto the cloud
 // binary, per HIP-0126 / HIP-0106:
 //
-//	POST /v1/automations/connectors/:id/run   run one connector action in-process
+//	✓ POST /v1/automations/connectors/:id/run   run one connector action in-process
 //
 // This is the native replacement for the standalone ActivePieces Node engine's
 // /v1/auto/pieces/{piece}/run — same {action,auth,props} -> {ok,output,error}
@@ -20,13 +27,23 @@ import (
 // a validated principal may run a connector, and the caller's resolved
 // credential travels in the request `auth`. The route is DISTINCT from
 // automations' GET /v1/automations/connectors (the catalogue), so the two
-// subsystems compose without collision.
+// subsystems compose without collision. It is a TYPED op — one registry entry
+// from which the REST route, the OpenAPI operation, the MCP tool, the CLI
+// command and every generated SDK method follow.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("connectorruntime.Mount: nil app")
 	}
 	log := deps.Logger
-	app.Post("/v1/automations/connectors/:id/run", runHandler)
+	g := app.Group("/v1/automations/connectors")
+	// Bridge FIRST: a typed op receives only a context, so the validated org
+	// reaches it by being parked there — never as an In field, which is
+	// caller-supplied. When this package is mounted through automations.Mount the
+	// automations group's Bridge already covers the path; this one is what makes
+	// the SUBSYSTEM self-contained when mounted alone. Nesting is harmless — the
+	// inner one is what the handler sees.
+	g.Use(cloud.Bridge())
+	zip.Post(g, "/:id/run", run)
 	if log != nil {
 		log.New("subsystem", "connectorruntime").Info(
 			"connector runtime mounted", "connectors", len(Connectors()))
@@ -34,43 +51,57 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// runReq mirrors the ActivePieces piece-run body.
-type runReq struct {
-	Action string         `json:"action"`
-	Auth   any            `json:"auth"`
-	Props  map[string]any `json:"props"`
+// runIn is one connector-action invocation: the connector from the path, the
+// ActivePieces-shaped {action, auth, props} piece-run body.
+type runIn struct {
+	// ID is the connector to run, from the path.
+	ID string `json:"id"`
+	// Action is the name of the connector action to invoke.
+	Action string `json:"action"`
+	// Auth is the caller's resolved credential for the connector, handed to the
+	// action verbatim. Its shape is whatever the connector's auth descriptor
+	// declares (a token string, an object), so it is opaque here.
+	Auth any `json:"auth"`
+	// Props are the action's input properties, keyed by property name.
+	Props map[string]any `json:"props"`
 }
 
 // runResp mirrors the ActivePieces piece-run response. A connector-level
 // failure is ok:false with a message (HTTP 200) — an unknown connector or a
 // missing action is a 4xx, matching the old engine's infra-vs-piece split.
 type runResp struct {
-	Ok     bool   `json:"ok"`
-	Output any    `json:"output,omitempty"`
-	Error  string `json:"error,omitempty"`
+	// Ok reports whether the action ran to completion.
+	Ok bool `json:"ok"`
+	// Output is the action's result when ok. Its shape is the action's own.
+	Output any `json:"output,omitempty"`
+	// Error is the connector-level failure message when not ok.
+	Error string `json:"error,omitempty"`
 }
 
-func runHandler(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// Run executes one connector action in-process and answers the outcome. The
+// caller's resolved credential travels in `auth`, delivered to the action
+// verbatim — the runtime resolves no credential itself. An action that ran and
+// failed (or an action name the connector does not have) answers ok:false with
+// the failure message, not an HTTP error; an unknown connector is 404 and a
+// missing action 422.
+//
+// Example: {"id": "notion", "action": "create_page", "auth": "secret-token", "props": {"title": "Hello"}}
+func run(ctx context.Context, in *runIn) (*runResp, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return nil, zip.ErrForbidden("a validated principal is required")
 	}
-	id := c.Param("id")
-	if !Has(id) {
-		return zip.Errorf(http.StatusNotFound, "unknown connector %q", id)
+	if !Has(in.ID) {
+		return nil, zip.Errorf(http.StatusNotFound, "unknown connector %q", in.ID)
 	}
-	var body runReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	if in.Action == "" {
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "action is required")
 	}
-	if body.Action == "" {
-		return zip.Errorf(http.StatusUnprocessableEntity, "action is required")
-	}
-	out, err := Run(c.Context(), org, id, body.Action, body.Auth, body.Props)
+	out, err := Run(ctx, org, in.ID, in.Action, in.Auth, in.Props)
 	if err != nil {
 		// The action ran but failed (or the action name is unknown): surface as
 		// a piece-level failure, not an infra 5xx — the caller inspects ok.
-		return c.JSON(http.StatusOK, runResp{Ok: false, Error: err.Error()})
+		return &runResp{Ok: false, Error: err.Error()}, nil
 	}
-	return c.JSON(http.StatusOK, runResp{Ok: true, Output: out})
+	return &runResp{Ok: true, Output: out}, nil
 }

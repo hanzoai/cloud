@@ -67,6 +67,7 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -252,6 +253,9 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 			return batch.events(), nil
 		}
 	}
+	if isTeamArray(body, i) {
+		return decodeTeam(body)
+	}
 	evs, err := decodeEvents(body)
 	if err != nil {
 		return nil, err
@@ -261,6 +265,28 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 		caps[j] = e.toCapture()
 	}
 	return caps, nil
+}
+
+// isTeamArray reports whether a bare-array body speaks the team SPA's wire, so
+// the ONE canonical decode can carry it: its elements spell snake_case
+// `distinct_id` and a NUMERIC epoch-millis `timestamp`, keys the canonical
+// Event wire (`distinctId`, `time`) never uses. Probing only element 0's
+// top-level keys keeps the dispatch positive-signal-only: a canonical array can
+// never be mis-read as team, and a probe miss just falls through to the
+// canonical decode exactly as before.
+func isTeamArray(body []byte, i int) bool {
+	if i >= len(body) || body[i] != '[' {
+		return false
+	}
+	var probe []map[string]json.RawMessage
+	if err := json.Unmarshal(body, &probe); err != nil || len(probe) == 0 {
+		return false
+	}
+	if _, ok := probe[0]["distinct_id"]; ok {
+		return true
+	}
+	ts, ok := probe[0]["timestamp"]
+	return ok && len(ts) > 0 && ts[0] >= '0' && ts[0] <= '9'
 }
 
 // decode is a WIRE's decoder: raw request bytes → the canonical []CaptureEvent the ONE
@@ -357,6 +383,21 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 			// principal does not name the person; its token does.
 			return publicIngest(c, dec, a.org, source, a.subject)
 		}
+		// ONE door, every event kind: the observability plane gets first refusal
+		// on the canonical door's authenticated bodies (cloud.ObsEventIngest —
+		// the o11y subsystem claims LLM-obs ingestion batches and declines all
+		// else). Only the FULL lane offers: obs events are tenant data, so the
+		// anonymous and reduced projections never reach that plane.
+		if source == sourceEvent {
+			if obs := cloud.ObsEventIngest(); obs != nil {
+				if accepted, dropped, claimed, err := obs(c.Context(), a.org, c.Body()); claimed {
+					if err != nil {
+						return zip.ErrInternal("event ingest failed")
+					}
+					return c.JSON(http.StatusOK, CaptureResult{Accepted: accepted, Dropped: dropped})
+				}
+			}
+		}
 		evs, err := dec(c.Body())
 		if err != nil {
 			return zip.ErrBadRequest("malformed event payload")
@@ -371,9 +412,15 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 
 // door is one ingest door: a PATH bound to the WIRE it speaks. Capability is not a
 // field and cannot become one — handle decides it, once, for every door.
+//
+// decode and wire are the two halves of ONE fact: what this door accepts. decode is
+// the half that runs; wire is the half that is PUBLISHED, and it sits here rather
+// than in a table of its own so a door cannot be routed with one wire and documented
+// with another — the drift that put /v1/tracker in the router and not in the carve.
 type door struct {
 	path   string
 	decode decode
+	wire   any // openapi.Register's request declaration; see declare below
 	source string
 }
 
@@ -392,7 +439,12 @@ type door struct {
 // TWO WIRES, and no more — the canonical one and PostHog's:
 //
 //   - /v1/event — the canonical door and the canonical wire (Event | [Event] |
-//     {batch:[…]}), which every current Hanzo client emits.
+//     {batch:[…]} | the team SPA's bare snake_case array, dispatched by shape —
+//     isTeamArray), which every current Hanzo client emits. The SAME door also
+//     carries LLM-observability ingestion batches: handle offers each
+//     authenticated body to the o11y plane's claim first (cloud.ObsEventIngest),
+//     which takes only {"batch":[{"type":"trace-create"|…}]} shapes — consumers
+//     and shapes behind ONE door, not more doors.
 //
 //   - /v1/insights/e — the PostHog wire. A second WIRE, not a second name for the
 //     first: PostHog SDKs emit this shape and no canonical-wire door can serve them.
@@ -411,47 +463,52 @@ type door struct {
 //     (which tolerates a trailing slash) and never the site-host carve — the carve's
 //     byte-exact matching is not what holds this door open.
 //
-// The last three are SUNSETTING: they speak the canonical wire under an older name,
-// so they are aliases and the target is /v1/event. They are still here because they
-// still carry traffic, which is a caller fact and not a design opinion:
+// A door is a WIRE, never a NAME. /v1/analytics, /v1/analytics/batch and /v1/tracker
+// were three more spellings of the canonical wire already served above, and the ONE
+// thing that made them alternatives rather than duplicates — a caller that named them
+// — is gone:
 //
-//   - @hanzo/capture (the SDK @hanzo/event replaced) POSTs /v1/analytics and beacons
-//     /v1/tracker on unload. It is a PUBLISHED npm package, so retiring it in our
-//     repos does not retire the bundles already serving it.
-//   - /v1/analytics/batch is a published contract: openapi analytics_batch, the
-//     generated python SDK, and `hanzo analytics batch` in the CLI.
+//   - @hanzo/event (0.3.x) is the client every Hanzo surface now ships, and it posts
+//     the canonical door. The SDK it replaced, @hanzo/capture 0.1.1, POSTed
+//     /v1/analytics and beaconed /v1/tracker on unload; the fleet holds no importer
+//     of it, and its unload beacon had ALREADY stopped landing anywhere — apps/tracker
+//     owns /v1/tracker in the app manifest and registers only /v1/tracker/projects/…,
+//     so this package's entry for that path sat behind the tracker product's prefix
+//     and answered 405 in the fleet while passing its own single-app tests.
+//   - the batch alias was kept for "openapi analytics_batch, the generated python SDK,
+//     and `hanzo analytics batch`". Those name analytics.hanzo.ai — the standalone
+//     collector, whose batch takes an array of SendPayload and answers
+//     {size,processed,errors,details}. This package answers CaptureResult, and cloud
+//     serves none of that collector's routes (/v1/analytics/heartbeat is 404 here).
+//     They were never a contract on THIS door.
 //
-// $source is what closes THOSE THREE. Every row this package writes carries the door
-// it arrived through, so "has the alias stopped being used" is a warehouse query
-// (properties.$source = 'capture') rather than a guess — and when that count is zero
-// the three entries are deleted, which by construction also drops them from the routes
-// and from the site-host carve.
+// BATCH IS A BODY, NOT A PATH — the same reason there is no /v1/event/batch: a JSON
+// array, or a {batch:[…]} envelope, IS the batch, and decodeIngest takes both at the
+// one door. A second path for a second body shape is a second way to say one thing.
 //
-// The rule holds only because those callers name those paths themselves. It does NOT
-// generalize to /v1/insights/e, whose callers arrive through an ingress rewrite — see
-// its entry below before applying a $source count to any door.
-// decodeEvent is the ONE door's decoder: the canonical wire, falling back to the
-// PostHog wire only when canonical yields NOTHING from a non-empty body.
+// The prefixes stay in the app manifest, because /v1/analytics still carries the READ
+// lenses (overview, timeseries, top, health) and /v1/tracker belongs to the tracker
+// product. What ends here is this package's claim on them as WRITE paths.
+// decodeEvent is the ONE door's decoder. It picks the wire by SNIFFING THE KEYS,
+// never by "did the first decoder return anything".
 //
-// /v1/insights/e used to be a second door for the second wire. A wire is a SHAPE,
-// and a shape has never earned a path — decodeIngest already sniffs object-vs-array
-// and bare-vs-envelope on the same route, so sniffing one more encoding is the
-// mechanism it already is, not a new one. The two wires even share the `batch`
-// envelope key and differ only in per-event field names.
+// /v1/insights/e used to be a second door for the second wire. A wire is a SHAPE, and
+// a shape has never earned a path — decodeIngest already sniffs object-vs-array and
+// bare-vs-envelope on this route, so sniffing one more encoding is the mechanism that
+// is already here, not a new one. The wire did not go away: the ingress rewrite that
+// fed the old door (insights-cloud-ingest-rewrite: insights.hanzo.ai /e,/batch,
+// /capture) now replacePaths onto /v1/event.
 //
-// The wire is chosen by SNIFFING THE KEYS, never by "did the first decoder return
-// anything". Trying canonical first and falling back on an empty result is WRONG and
-// the host-carve test proves it: decodeIngest ACCEPTS a PostHog body as a bare
-// canonical Event and returns ONE event, which is then dropped whole downstream
-// (canonicalType("") is "event", not in publicKinds). A count of 1 therefore does not
-// mean the body was understood, so a count-based fallback never fires and the event
-// silently vanishes with a 200 receipt.
+// Trying canonical first and falling back on an empty result is WRONG, and
+// TestMount_HostCarve_IngestsForSiteOrg refutes it: decodeIngest ACCEPTS a PostHog
+// body as a bare canonical Event and returns ONE event, which is then dropped whole
+// downstream (canonicalType("") is "event", not in publicKinds). The caller gets 200
+// and the event vanishes. A count of 1 is not evidence the body was understood.
 //
-// The two wires are distinguishable exactly, with no heuristic: canonical spells the
-// field `distinctId` (camel) and carries `type`; the PostHog wire spells it
-// `distinct_id` (snake) and carries `api_key`. Neither key exists in the other wire,
-// so presence is proof rather than a guess. Batches are probed on their elements
-// because the envelope key `batch` is shared by both.
+// The wires are distinguishable exactly, with no heuristic: canonical spells the field
+// `distinctId` (camel) and carries `type`; the PostHog wire spells it `distinct_id`
+// (snake) and carries `api_key`. Neither key exists in the other wire, so presence is
+// proof. Batches are probed on their elements because `batch` is shared by both.
 func isPostHogWire(body []byte) bool {
 	var probe struct {
 		DistinctID json.RawMessage `json:"distinct_id"`
@@ -482,17 +539,48 @@ func decodeEvent(body []byte) ([]CaptureEvent, error) {
 }
 
 var doors = []door{
-	{path: "/v1/event", decode: decodeEvent, source: sourceEvent},
-	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
-	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
-	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
-	// The Hanzo Team SPA's wire. A THIRD wire, in the same sense /v1/insights/e is a
-	// second one: the SPA is a published bundle that POSTs a bare array of
-	// {event, properties, timestamp(ms), distinct_id}, which decodeIngest ACCEPTS and
-	// then drops whole (canonicalType("") is "event", not in publicKinds). The
-	// /collect suffix is the caller's — it appends it to ANALYTICS_COLLECTOR_URL.
-	// This retired the standalone team-analytics pod.
-	{path: "/v1/event/collect", decode: decodeTeam, source: sourceTeam},
+	{path: "/v1/event", decode: decodeEvent, wire: canonicalWire, source: sourceEvent},
+}
+
+// canonicalWire is what decodeIngest accepts, said in the document's own vocabulary:
+// three shapes on one path, so an SDK generated from it can send any of the three a
+// real client sends. Declaring only the bare object — the one shape a lone Go type
+// could state — would document an ingest API that cannot batch, which is most of
+// what @hanzo/event does.
+// insightsBody rides here because the door accepts it: one path, four shapes. Leaving
+// it out would publish an ingest API that silently accepts a wire it does not document.
+var canonicalWire = openapi.OneOf{Event{}, []Event{}, CaptureBatch{}, insightsBody{}}
+
+// declare publishes what every ingest door ACCEPTS and RETURNS. These doors cannot be
+// typed ops (typed_wire_test.go names each one's wire fact), and an untyped route with
+// no declaration publishes an operationId and NOTHING else — indistinguishable, to
+// every SDK generator reading the document, from a route that takes no body and
+// returns none. That is how the platform's primary ingest door came to offer, in every
+// generated SDK, a call with nowhere to put the event.
+//
+// It buys schema and only schema: prose, an MCP tool and a CLI command come from zip's
+// typed registry, which is exactly what these doors cannot enter. And it derives from
+// the doors table, so a door added tomorrow declares itself or fails the gate in
+// doors_test.go rather than silently publishing nothing.
+//
+// The receipt is the SAME for every door and every lane — the anonymous projection,
+// the reduced team principal, the full credential and the o11y plane's claim all
+// answer CaptureResult (handle/publicIngest/ingestDecoded, above), so one response
+// declaration is the whole truth rather than the common case.
+func init() {
+	for _, d := range doors {
+		openapi.Register(d.path, http.MethodPost, d.wire, CaptureResult{})
+	}
+	openapi.Register("/v1/analytics/health", http.MethodGet, nil, healthReport{})
+	// The Sentry error wire (registered in analytics.go's routes, on the same
+	// /v1/event door). Its body is an opaque envelope stream the o11y consumer reads
+	// itself, so openapi.Binary is the whole truth — no struct describes it, exactly
+	// as none describes an upload. Its RESPONSE is deliberately undeclared: the
+	// handler relays cloud.ObsErrorIngest verbatim, so this package does not know
+	// what comes back and publishing a shape would be inventing one.
+	for _, path := range []string{"/v1/event/:project/envelope", "/v1/event/:project/store"} {
+		openapi.Register(path, http.MethodPost, openapi.Binary{}, nil)
+	}
 }
 
 // ingest is the door's API-host handler: admission (handle) over the door's wire.

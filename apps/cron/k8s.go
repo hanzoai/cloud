@@ -103,8 +103,8 @@ var currentEngine = func() *tasksengine.Embedded { return cloud.EmbeddedTasks() 
 
 type errKube struct{ err error }
 
-func (e errKube) listEnabled(context.Context) ([]entry, error)      { return nil, e.err }
-func (e errKube) getEntry(context.Context, string) (entry, error)   { return entry{}, e.err }
+func (e errKube) listEnabled(context.Context) ([]entry, error)       { return nil, e.err }
+func (e errKube) getEntry(context.Context, string) (entry, error)    { return entry{}, e.err }
 func (e errKube) hasActiveJob(context.Context, string) (bool, error) { return false, e.err }
 func (e errKube) createJob(context.Context, string, []byte) (string, error) {
 	return "", e.err

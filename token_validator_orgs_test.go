@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/authz"
 	model "github.com/hanzoai/iam/pkg/model"
 )
 
@@ -25,7 +26,7 @@ func TestVerifiedIdentityCarriesOrgs(t *testing.T) {
 	v := &TokenValidator{v: newIdentityValidator(testIssuer, jwks.URL, 0)}
 
 	claims := tokenClaims("hanzo-team", "maxpower", "dave@example.com", false, time.Now().Add(time.Hour))
-	claims.Orgs = []model.OrgRef{
+	claims.Orgs = []authz.Membership{
 		{Org: "maxpower", Role: "admin"},
 		{Org: "acme", Role: "member"},
 	}
@@ -36,6 +37,8 @@ func TestVerifiedIdentityCarriesOrgs(t *testing.T) {
 	if id.Owner != "maxpower" {
 		t.Fatalf("owner = %q, want maxpower", id.Owner)
 	}
+	// VerifiedIdentity publishes []model.OrgRef — clients/team copies it verbatim into
+	// a session — so the conversion at that surface is asserted here, order preserved.
 	if len(id.Orgs) != 2 ||
 		id.Orgs[0] != (model.OrgRef{Org: "maxpower", Role: "admin"}) ||
 		id.Orgs[1] != (model.OrgRef{Org: "acme", Role: "member"}) {

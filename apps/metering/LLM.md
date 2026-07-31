@@ -16,7 +16,7 @@ renderer. No product reimplements billing; no second balance gate exists.
                                     | Authorize  | Record (per-org debit)
                     ┌───────────────┴────────────┴───────────────┐
                     │   metering.Client  (leaf, stdlib-only)      │   ← the core
-                    │   X-Hanzo-Org=<org>  Bearer <KMS token>     │
+                    │   X-Org-Id=<org>  Bearer <KMS token>        │
                     │   fail-closed gate · per-ORG billing key    │
                     └───────────────┬────────────┬───────────────┘
         net/http adapter            │ in-process │            non-Go adapter
@@ -32,9 +32,21 @@ renderer. No product reimplements billing; no second balance gate exists.
   `resolveBillingKey` -> `user.Owner`). `IdentityFromGatewayHeaders` sets
   `User=<org>` (billing) and `Actor=<org/sub>` (audit). Keying per-user checks
   an empty ledger and denies a funded org — the bug this design prevents.
-- **Org routing header is `X-Hanzo-Org`** (commerce's service-token path:
-  `middleware/accesstoken.go` `c.GetHeader("X-Hanzo-Org")`). NOT `X-IAM-Org-Id`
-  (commerce honors that nowhere). Wrong header -> debits the default `hanzo` ns.
+- **Org routing header is `X-Org-Id`**, one name on both sides of the wire.
+  Commerce's service-token path reads it at `middleware/accesstoken.go:110,167`
+  (`c.Header("X-Org-Id")`), and `metering.go:77` sends that same name. NOT
+  `X-IAM-Org-Id`, and NOT `X-Hanzo-Org` — commerce reads neither, anywhere.
+  **This is the header to get right, because getting it wrong is SILENT.**
+  Commerce's selector falls back stashed-org -> `X-Org-Id` ->
+  `COMMERCE_SERVICE_ORG` -> `"hanzo"` (`accesstoken.go:165-174`) and never
+  refuses, so an unrecognized name does not error — it debits the house org for
+  every tenant.
+  `X-Hanzo-Org` is a real header but a DIFFERENT one, travelling the other way:
+  cloud STAMPS it on served `/v1/cloudflare` responses as the acting org
+  (`apps/cloudflare/cloudflare.go:461`) so a per-org caller can prove no tenant
+  comingling (platform asserts it at `services/cloudflare-pages.ts:84` and
+  refuses when it mismatches or is absent). Request header in, guardrail out —
+  do not swap one for the other.
 - **Fail-closed.** Balance unknown -> deny (503); out-of-funds -> 402. Set
   `METERING_FAIL_OPEN=true` only where availability outranks revenue.
 - **Test ledger.** `METERING_TEST=true` sends `X-Hanzo-Test: true` so balances

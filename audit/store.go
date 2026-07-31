@@ -196,7 +196,7 @@ CREATE INDEX IF NOT EXISTS ix_audit_ts         ON audit_log(ts);
 	return nil
 }
 
-// addColumn adds a TEXT NOT NULL DEFAULT '' column to audit_log if it is not
+// addColumn adds a TEXT NOT NULL DEFAULT ” column to audit_log if it is not
 // already present. Idempotent by inspection (PRAGMA table_info) rather than by
 // swallowing the duplicate-column error, so a REAL migration failure still
 // surfaces instead of being mistaken for "already applied".

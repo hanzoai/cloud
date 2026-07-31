@@ -1,8 +1,10 @@
-// Package s3 is the Fiber-facing subsystem that exposes an org-scoped S3
-// object-storage file manager as /v1/s3/* on the unified Hanzo Cloud binary
-// (HIP-0106). It is the DATA plane over the shared object store (SeaweedFS S3
-// gateway) — the companion to clients/provisioning, which is the CONTROL plane
-// (allocate/list/drop the s3 RESOURCE at /v1/s3 and /v1/s3/:name).
+// Package storage is object storage (/v1/s3): an org's buckets and the objects
+// inside them — list, create, delete, and presigned upload/download URLs — over
+// the shared SeaweedFS S3 gateway.
+//
+// It is the DATA plane over that store — the companion to apps/provisioning,
+// which is the CONTROL plane (allocate/list/drop the s3 RESOURCE at /v1/s3 and
+// /v1/s3/:name).
 //
 //	GET    /v1/s3/health                              — real probe (503 fail-closed); public
 //	GET    /v1/s3/buckets                             — list the caller's buckets;       JWT, org-scoped
@@ -44,8 +46,8 @@
 //     org-prefixed naming + the guard. The correct hardening is per-request
 //     STS/session-policy or per-identity bucket-prefix restriction so the store
 //     independently enforces the org boundary (defense in depth). Until then,
-//     tenant() requiring a validated principal + the by-construction naming is
-//     the sole boundary — kept minimal and auditable for that reason.
+//     the guard's cloud.Member gate + the by-construction naming is the sole
+//     boundary — kept minimal and auditable for that reason.
 //   - Presign has no rate limit: minting is unthrottled (zip/middleware/ratelimit
 //     is unwired in serve.go, platform-wide). The 5-minute TTL bounds a minted
 //     capability's post-revocation lifetime; a per-route limiter is the platform
@@ -133,6 +135,31 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// /v1/s3/objects to provisioning's GET /v1/s3/:name (a 404 "resource not
 	// found") instead of the honest 503 — the file-manager surface must fail closed
 	// under its own name, never fall through to a different subsystem's handler.
+	// EVERY ROUTE ON THIS SURFACE STAYS UNTYPED, and none of it is for want of
+	// effort — each refusal is a wire this stack cannot yet describe. Recorded here
+	// so the next engineer re-checks the blocker instead of re-deriving it:
+	//
+	//  1. THE MONEY WIRE (the seven data-plane ops). Every one runs through guard →
+	//     ResourceMeter.Gate, and a refused balance answers through
+	//     cloud.DenyResource, which writes the fleet's NESTED
+	//     {"error":{"code","message"}} 402/503 contract IN BAND on the response
+	//     (resource_billing.go:224). A typed op's only refusal channel is a returned
+	//     error, which zip renders as the FLAT {"status","code","error"} HTTPError —
+	//     a different body for the same denial, silently reshaped for every metered
+	//     client that reads error.code across Hanzo. Writing in band from inside a
+	//     typed op does not help either: zip stamps 204 over the status after a nil
+	//     Out (zip typed.go), so the client would get a 204 carrying a 402 body.
+	//     Same refusal apps/ml (ml.go:218) and apps/company (company.go:200) file.
+	//
+	//  2. THE WILDCARD (the two /objects/* ops, refused twice over). fiber's `*` has
+	//     no typed-op spelling: zip's closeColonParams leaves the `*` in the op path
+	//     while cloud's openapi.translate renders the ROUTE as {wildcard1}, so
+	//     openapi.Fold would fail with "typed op has no live route".
+	//
+	//  3. TWO STATUSES, ONE OBJECT (/health). See the handler's own note.
+	//
+	// All three clear on the same zip change: an error that can carry a body, and a
+	// second declarable success status.
 	g := app.Group("/v1/s3")
 	g.Get("/health", cloud.Handle(s, health))
 	g.Get("/buckets", guard(s, cloud.Handle(s, listBuckets)))
@@ -170,10 +197,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // response). A handler error is surfaced and NOT billed — mirrors the edge gate
 // ("do not bill failed work"). fee==0 or unconfigured billing makes both no-ops.
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
-	return func(ctx *zip.Ctx) error {
-		if !s.State.admin.Configured() {
-			return zip.Errorf(http.StatusServiceUnavailable, "object storage is not configured")
-		}
+	// The platform gate (cloud.Member — a validated principal, HIP-0519's one
+	// predicate set) wraps the org resolution and the meter, and is built once:
+	// only the readiness check precedes it, because a subsystem that cannot serve
+	// anyone says so before it says who it serves.
+	gated := cloud.Guard(cloud.Member, func(ctx *zip.Ctx) error {
 		org, ok := tenant(ctx)
 		if !ok {
 			return zip.ErrForbidden("X-Org-Id required")
@@ -190,6 +218,12 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 		}
 		s.State.bill.Meter(principal.Ledger(ctx), principal.Project(ctx), "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
 		return nil
+	})
+	return func(ctx *zip.Ctx) error {
+		if !s.State.admin.Configured() {
+			return zip.Errorf(http.StatusServiceUnavailable, "object storage is not configured")
+		}
+		return gated(ctx)
 	}
 }
 
@@ -209,37 +243,35 @@ func reqOrg(ctx *zip.Ctx) string {
 // SAME sanitized slug the control plane keys on, so buckets allocated there and
 // operated on here share one org tag.
 //
-// REQUIRES A VALIDATED PRINCIPAL (RED HIGH). SanitizeIdentity sets X-User-Id ONLY
-// when it validated a bearer/cookie; on the no-principal "Phase-1 data" path it
-// RESTORES the client's raw X-Org-Id but leaves X-User-Id empty. A pure data
-// plane that trusted X-Org-Id alone would let an in-cluster caller (a co-namespace
-// pod within the cloud-api NetworkPolicy) forge `X-Org-Id: victim` with NO bearer
-// and get cross-tenant object CRUD. So we gate on ctx.User() (X-User-Id) being
-// present: every legitimate caller reaches this through the console BFF /cloud
-// proxy, which mints a user-bound bearer (→ X-User-Id is set), so this refuses
-// ONLY the anonymous-forge path and breaks no real client. Object storage is a
-// data plane; it never serves an unauthenticated principal.
+// A VALIDATED PRINCIPAL IS ALREADY ESTABLISHED (RED HIGH): guard runs this behind
+// cloud.Guard(cloud.Member), so the forgeable data path is closed before the org
+// is read. SanitizeIdentity sets X-User-Id ONLY when it validated a bearer/cookie;
+// on the no-principal "Phase-1 data" path it RESTORES the client's raw X-Org-Id
+// but leaves X-User-Id empty. A pure data plane that trusted X-Org-Id alone would
+// let an in-cluster caller (a co-namespace pod within the cloud-api NetworkPolicy)
+// forge `X-Org-Id: victim` with NO bearer and get cross-tenant object CRUD. Every
+// legitimate caller reaches this through the console BFF /cloud proxy, which mints
+// a user-bound bearer, so the gate refuses ONLY the anonymous-forge path and
+// breaks no real client. Object storage is a data plane; it never serves an
+// unauthenticated principal.
 //
-// Empty org is allowed only for a validated admin, bucketed under the literal
-// "admin" org (a forged X-User-IsAdmin cannot exist without a validated principal
-// either — SanitizeIdentity sets it only for a JWT-verified SuperAdmin, HIP-0026
-// — and even then reaches only the admin bucket, never a real tenant's).
+// Empty org falls back to the literal "admin" bucket for a SuperAdmin, and only
+// for one: SanitizeIdentity mints X-User-IsAdmin solely for a JWT-verified
+// SuperAdmin (HIP-0026), and that fallback reaches the admin bucket, never a real
+// tenant's.
 //
 // NORMALIZATION — this uses provisioning.SanitizeOrg (case-folds to a DNS slug),
 // NOT KMS's exact-match, ON PURPOSE: the S3 bucket name is derived through
 // provisioning's SAME sanitized slug (BucketName), so a bucket provisioned via
 // POST /v1/s3 is findable here — exact-match would break that lockstep. A real
 // IAM owner claim is already a lowercase DNS label, so the fold is a no-op on
-// validated input (and, post the principal gate above, only a validated principal
-// reaches it). The divergence from KMS is intentional per-subsystem, not drift.
+// validated input (and, post the gate, only a validated principal reaches it).
+// The divergence from KMS is intentional per-subsystem, not drift.
 func tenant(ctx *zip.Ctx) (string, bool) {
-	if !principal.Validated(ctx) {
-		return "", false // no validated principal — refuse the forgeable data path
-	}
 	if org := provisioning.SanitizeOrg(ctx.Org()); org != "" {
 		return org, true
 	}
-	if ctx.IsAdmin() {
+	if principal.IsSuperAdmin(ctx) {
 		return "admin", true
 	}
 	return "", false
@@ -285,6 +317,18 @@ func friendlyBucket(org, physical string) (string, bool) {
 // health is a REAL probe: 200 only when admin credentials are present (the store
 // is reachable in principle); 503 + honest reason in health-only mode. Not
 // JWT-gated — liveness must be probe-able without a token.
+//
+// UNTYPED BY DESIGN, and the only route here refused for a reason other than the
+// money wire: it answers ONE JSON object under TWO statuses — 200 with
+// {service,status:"ok",ready,presign} and 503 with
+// {service,status:"degraded",ready:false,error}. A typed op declares exactly one
+// success status (zip.WithStatus), and its only other channel is a returned
+// error, which zip's errorHandler renders as the flat {"status","code","error"}
+// HTTPError (zip ctx.go:224) — a different body under a different key set. A
+// custom error type does not help: errorHandler matches *zip.HTTPError and
+// *fiber.Error and answers 500 for everything else, so the 503 would become a
+// 500. Typing this would change both the status and the body of every degraded
+// probe. It clears with the same zip change the metered routes above wait on.
 func health(s *cloud.Service[state], ctx *zip.Ctx) error {
 	res := map[string]any{"service": "s3", "status": "ok"}
 	if !s.State.admin.Configured() {

@@ -20,7 +20,7 @@ import (
 // mock IAM endpoint directly into the api's config.
 func newTestApp(g *api) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	g.register(app.Group("/v1/team"), func(h zip.Handler) zip.Handler { return h })
+	g.register(app, func(h zip.Handler) zip.Handler { return h })
 	return app
 }
 

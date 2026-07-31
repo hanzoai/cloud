@@ -24,24 +24,40 @@ import (
 // deliberately absent from the output (the indexer REST exposes the indexed height
 // but not the chain HEAD, so lag is not derivable — omitted, never invented).
 type indexerView struct {
-	ID        string `json:"id"`
-	Chain     string `json:"chain,omitempty"`
-	Network   string `json:"network,omitempty"`
-	Height    string `json:"height,omitempty"`
-	Lag       string `json:"lag,omitempty"`
-	Status    string `json:"status"`
+	// ID identifies the indexer: its chain name, else its chain id, else the brand.
+	ID string `json:"id"`
+	// Chain is the chain this indexer indexes, as the indexer names it.
+	Chain string `json:"chain,omitempty"`
+	// Network is the deployment's network tier: mainnet, testnet or devnet.
+	Network string `json:"network,omitempty"`
+	// Height is the latest INDEXED block height, as a decimal string. Absent when
+	// nothing has been indexed yet.
+	Height string `json:"height,omitempty"`
+	// Lag is how far behind the chain HEAD this indexer is. The indexer REST does not
+	// expose the head, so it is always absent rather than a fabricated zero.
+	Lag string `json:"lag,omitempty"`
+	// Status is "degraded" when /health explicitly reports unhealthy, else "active".
+	Status string `json:"status"`
+	// UpdatedAt is the latest indexed block's timestamp, RFC 3339 UTC.
 	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
 // oracleView is the shape console OraclesModule (Oracle) consumes — one row per
 // on-chain price feed. requests/telemetry the graph does not carry are omitted.
 type oracleView struct {
-	ID        string `json:"id"`
-	Name      string `json:"name,omitempty"`
-	Feed      string `json:"feed,omitempty"`
-	Value     string `json:"value,omitempty"`
-	Source    string `json:"source,omitempty"`
-	Status    string `json:"status"`
+	// ID is the feed's own id, else its trading pair.
+	ID string `json:"id"`
+	// Name is the feed's display name — the trading pair, e.g. "LUX/USD".
+	Name string `json:"name,omitempty"`
+	// Feed is the trading pair this feed prices.
+	Feed string `json:"feed,omitempty"`
+	// Value is the feed's price, verbatim as the registry carries it.
+	Value string `json:"value,omitempty"`
+	// Source is the oracle network the feed originates from; "O-Chain" by default.
+	Source string `json:"source,omitempty"`
+	// Status is "active" for a listed feed.
+	Status string `json:"status"`
+	// UpdatedAt is the feed's own timestamp, RFC 3339 UTC.
 	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 

@@ -16,9 +16,16 @@ import (
 	"github.com/hanzoai/cloud/apps/plan"
 )
 
+// teamPrefix is THE path every team route hangs under — one constant, so the
+// group each file builds for its own routes cannot drift from the group Mount
+// builds for the bridge. A constant (not a variable) because cmd/zipdoc resolves
+// a typed op's prefix from the CONSTANT VALUE of the Group argument.
+const teamPrefix = "/v1/team"
+
 // guardFn wraps a route handler so it fails closed (503) in degraded mode. It is
 // applied per-route by Mount so the enforcement lives in ONE place and the health
-// probe is never wrapped.
+// probe is never wrapped. A TYPED op is not a zip.Handler and cannot be wrapped
+// by one, so it carries the same refusal itself — see typed.go.
 type guardFn = func(zip.Handler) zip.Handler
 
 // state is team's own data: the account store + the transactor. Held via the
@@ -94,6 +101,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		bots:      agentsBotLister, // the ONE in-process seam to the agents registry
 		log:       log,
 		startedAt: time.Now().UnixMilli(), // freshness floor: messages older than boot are never answered
+		degraded:  degraded,
 	}
 	// Chunter agent responder: OFF by default (one-way safe default). Only when
 	// TEAM_AGENTS_ENABLED=1 do we wire the LLM seam + the concurrency cap, so an
@@ -121,10 +129,25 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		// 'team'"; plan answers the plan's entitlement block (team.guests cap).
 		commerce: deps.Commerce,
 		planEnt:  plan.Entitlements,
+		degraded: degraded,
 	}
-	// One /v1/team group; every route below is a child of it.
-	tg := app.Group("/v1/team")
-	acct.register(tg, guard)
+	// One /v1/team group; every route below is a child of it. Each file that
+	// declares TYPED ops builds its own group from the same teamPrefix constant —
+	// a fiber group IS its prefix, so those are the same routing subtree, and it
+	// is what lets cmd/zipdoc resolve each op's path from the file it is declared
+	// in (see bots.go).
+	tg := app.Group(teamPrefix)
+	// Bridge FIRST, before any leaf: a typed op receives only a context, so the
+	// validated org reaches it by being parked there — never as an In field,
+	// which is caller-supplied and would be a cross-tenant read the caller
+	// asserted for itself. fiber runs middleware in registration order, so one
+	// installed after its leaves never runs. Serve installs the same middleware
+	// for the whole binary; this one is what makes team's typed ops resolve their
+	// tenant under a BARE Mount too (the app's own tests, and any embedder that
+	// mounts without Serve). Nesting is harmless — the inner one is what the
+	// handler sees. Same shape apps/agents, apps/search and apps/integrations use.
+	tg.Use(cloud.Bridge())
+	acct.register(app, guard)
 
 	// The front's workspace switcher polls this statistics endpoint on the
 	// transactor base (LoginEndpoint ws→http + /api/v1/statistics). Static route —
@@ -133,34 +156,36 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Canon is the api.* host + /v1/ with no nested /api/vN. The clean path is the
 	// canonical one new callers use; the /api/v1/ path stays as a forward-compatible
 	// alias for the current transactor front until it repoints (no outage, no rename
-	// in place). Both resolve to the SAME handler.
-	tg.Get("/transactor/statistics", guard(trans.statistics))
-	tg.Get("/transactor/api/v1/statistics", guard(trans.statistics))
+	// in place). Both resolve to the SAME handler — and both are TYPED ops, so each
+	// is its own registry entry and its own operation in the document.
+	zip.Get(tg, "/transactor/statistics", trans.statistics)
+	zip.Get(tg, "/transactor/api/v1/statistics", trans.statistics)
 
 	// The transactor data-plane WebSocket. The :token segment is a JWT (a single
-	// path segment — no slashes), decoded + VERIFIED before the upgrade.
+	// path segment — no slashes), decoded + VERIFIED before the upgrade. UNTYPED,
+	// and it cannot be otherwise: the response is a protocol upgrade, not a value.
 	tg.Get("/transactor/:token", guard(trans.serveWS))
 
-	bridge := &botsBridge{trans: trans, accounts: accounts}
-	bridge.register(tg, guard)
+	bridge := &botsBridge{trans: trans, accounts: accounts, degraded: degraded}
+	bridge.register(app)
 
 	// Files plane: the workspace blob store the Team front's UPLOAD_URL/FILES_URL
 	// hit, backed by cloud's canonical VFS seam (deps.VFS) and org-scoped by the
 	// verified session token — the SAME isolation invariant as the docs store.
-	files := &filesService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret}
-	files.register(tg, guard)
+	files := &filesService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret, degraded: degraded}
+	files.register(app, guard)
 
 	// Billing plane: the go:embed'd usage/wallet page (/billing/ui/*) + the
 	// plan/seats read (/billing/plan) — session-gated, org-scoped through the
 	// SAME commerce/plan seams the login gate (entitle.go) uses.
-	billing := &billingService{accounts: accounts, commerce: deps.Commerce, planEnt: plan.Entitlements, secret: cfg.serverSecret}
-	billing.register(tg, guard)
+	billing := &billingService{accounts: accounts, commerce: deps.Commerce, planEnt: plan.Entitlements, secret: cfg.serverSecret, degraded: degraded}
+	billing.register(app, guard)
 
 	// Collaborator planes, both app-level under /collaborator: the markup
 	// snapshot RPC (collab.go, POST /collaborator/rpc/:documentId) and the live
 	// hocuspocus Y.js WebSocket (collabws.go, GET /collaborator) — one service,
 	// one tenancy gate, one VFS seam.
-	collab := &collabService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret, hub: newCollabHub(deps.VFS)}
+	collab := &collabService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret, hub: newCollabHub(deps.VFS), degraded: degraded}
 	collab.register(app, guard)
 
 	mounted = &cloud.Service[state]{Base: cloud.NewBase(deps, "team"), State: state{accounts: accounts, trans: trans}}

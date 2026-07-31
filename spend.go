@@ -232,7 +232,7 @@ var meteredTrees = []string{
 	"/v1/ai/",         // LLM token costs (ai self-meters).
 	"/v1/agents/",     // per-run agent fee.
 	"/v1/agent/",      // the agent orchestrator's round.
-	"/v1/mcp/",        // per-tool dispatch.
+	"/v1/tools/",      // per-tool dispatch (POST /v1/tools/call meters one unit).
 	"/v1/functions/",  // serverless invoke.
 	"/v1/s3/",         // object-storage data plane.
 	"/v1/storage/",    // clients/storage NewResourceMeter(deps, "s3").

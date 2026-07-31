@@ -21,38 +21,28 @@ import (
 
 // ── shared scope resolver ────────────────────────────────────────────────────
 
-// repoScope validates the :name of a control-plane route against the caller's
-// tenant, 404-ing a repo the caller cannot see. The existence check uses the
-// tenant's project sub-scope, so a cross-tenant name is a 404 and never reaches
-// the subscription/mirror store. Returns the normalized repo name.
-//
-// It takes a context and a tenant rather than a *zip.Ctx so the ONE resolver
-// serves both handler shapes: a typed op has only the context, and the raw
-// creators pass theirs in.
-func repoScope(s *cloud.Service[state], ctx context.Context, t tenant, rawName string) (string, error) {
-	name := normalizeName(rawName)
-	if name == "" || !nameRE.MatchString(name) {
-		return "", zip.ErrBadRequest("invalid repo name")
-	}
-	store, serr := storeFor(s, t.org)
-	if serr != nil {
-		return "", zip.Errorf(http.StatusInternalServerError, "open store: %v", serr)
-	}
-	if _, gerr := store.Get(ctx, t.org, t.project, name); gerr != nil {
-		return "", zip.ErrNotFound("repo not found")
-	}
-	return name, nil
-}
-
-// scoped is the preamble every repo-keyed typed op runs: resolve the tenant off
-// the request context, then validate the repo name against it.
+// scoped is the preamble every repo-keyed op runs: resolve the tenant off the
+// request context, then validate the :name against it — 404-ing a repo the caller
+// cannot see. The existence check uses the tenant's project sub-scope, so a
+// cross-tenant name is a 404 and never reaches the subscription/mirror store.
+// Returns the tenant and the normalized repo name.
 func (o ops) scoped(ctx context.Context, rawName string) (tenant, string, error) {
 	t, err := tenantOf(ctx)
 	if err != nil {
 		return tenant{}, "", err
 	}
-	name, err := repoScope(o.s, ctx, t, rawName)
-	return t, name, err
+	name := normalizeName(rawName)
+	if name == "" || !nameRE.MatchString(name) {
+		return t, "", zip.ErrBadRequest("invalid repo name")
+	}
+	store, serr := storeFor(o.s, t.org)
+	if serr != nil {
+		return t, "", zip.Errorf(http.StatusInternalServerError, "open store: %v", serr)
+	}
+	if _, gerr := store.Get(ctx, t.org, t.project, name); gerr != nil {
+		return t, "", zip.ErrNotFound("repo not found")
+	}
+	return t, name, nil
 }
 
 // ── subscriptions ────────────────────────────────────────────────────────────
@@ -63,9 +53,18 @@ func (o ops) scoped(ctx context.Context, rawName string) (tenant, string, error)
 // chat.postMessage body.
 var channelRE = regexp.MustCompile(`^#?[A-Za-z0-9._-]{1,80}$`)
 
+// subscribeReq is the subscribe request: the repo comes from the URL, the
+// channel and event filter from the body.
 type subscribeReq struct {
-	Channel string   `json:"channel"`
-	Events  []string `json:"events"`
+	// Name is the repo to subscribe, from the :name path segment.
+	Name string `json:"name"`
+	// Channel is the Slack channel the notifier posts to — an id (C…/G…), a
+	// #name, or a bare name. Required.
+	Channel string `json:"channel"`
+	// Events narrows delivery to these lifecycle kinds (push.landed,
+	// deploy.live, deploy.failed). Omit it to receive every deliverable kind; a
+	// kind that is never posted to Slack is refused rather than silently dropped.
+	Events []string `json:"events"`
 }
 
 // subscriptionView is one repo→Slack-channel subscription.
@@ -103,49 +102,45 @@ func subscriptionToView(v Subscription) subscriptionView {
 	}
 }
 
-// subscribe binds a Slack channel to a repo for lifecycle notifications. Raw,
-// not a typed op: it answers 201, and zip's typed registrar has no status seam.
-func subscribe(s *cloud.Service[state], c *zip.Ctx) error {
-	t, herr := tenantFrom(c)
+// subscribe binds a Slack channel to a repo, so the lifecycle notifier posts
+// that repo's push and deploy events there. Answers 201. The same channel twice
+// on one repo is a 409; a repo outside the caller's scope is a 404, exactly as
+// reading it is.
+//
+// Example: {"name": "widgets", "channel": "#builds", "events": ["push.landed"]}
+func (o ops) subscribe(ctx context.Context, in *subscribeReq) (*subscriptionView, error) {
+	t, name, herr := o.scoped(ctx, in.Name)
 	if herr != nil {
-		return herr
+		return nil, herr
 	}
-	org, project := t.org, t.project
-	name, herr := repoScope(s, c.Context(), t, c.Param("name"))
-	if herr != nil {
-		return herr
-	}
-	var body subscribeReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	channel := strings.TrimSpace(body.Channel)
+	channel := strings.TrimSpace(in.Channel)
 	if !channelRE.MatchString(channel) {
-		return zip.ErrBadRequest("channel must be a Slack channel id or name")
+		return nil, zip.ErrBadRequest("channel must be a Slack channel id or name")
 	}
-	events, err := normalizeEvents(body.Events)
+	events, err := normalizeEvents(in.Events)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	store, err := storeFor(s, org)
+	store, err := storeFor(o.s, t.org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
 	id, err := genID("sub")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	v := Subscription{
-		ID: id, Org: org, Project: project, Repo: name,
+		ID: id, Org: t.org, Project: t.project, Repo: name,
 		Channel: channel, Events: events, CreatedAt: time.Now().Unix(),
 	}
-	if err := store.CreateSubscription(c.Context(), v); err != nil {
+	if err := store.CreateSubscription(ctx, v); err != nil {
 		if err == errConflict {
-			return zip.ErrConflict("channel already subscribed to this repo")
+			return nil, zip.ErrConflict("channel already subscribed to this repo")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
-	return c.JSON(http.StatusCreated, subscriptionToView(v))
+	view := subscriptionToView(v)
+	return &view, nil
 }
 
 // listSubscriptions returns a repo's Slack subscriptions — which channels the
@@ -201,9 +196,19 @@ func (o ops) unsubscribe(ctx context.Context, in *childRef) (*noContent, error) 
 
 // ── mirror targets ───────────────────────────────────────────────────────────
 
+// mirrorTargetReq is the add-a-mirror request: the repo comes from the URL, the
+// downstream remote from the body.
 type mirrorTargetReq struct {
+	// Name is the repo whose advanced refs are pushed downstream, from the :name
+	// path segment.
+	Name string `json:"name"`
+	// Host is an optional assertion of the target's hostname. The authoritative
+	// host is the one in URL; a value that disagrees with it is refused.
 	Host string `json:"host"`
-	URL  string `json:"url"`
+	// URL is the downstream https git remote. Must be https to an allowlisted
+	// host (github.com / gitlab.com); any embedded credentials are stripped.
+	// Required.
+	URL string `json:"url"`
 }
 
 // mirrorTargetView is one downstream remote a repo's refs are pushed to.
@@ -230,55 +235,49 @@ func mirrorToView(v MirrorTarget) mirrorTargetView {
 	return mirrorTargetView{ID: v.ID, Repo: v.Repo, Host: v.Host, URL: v.URL, CreatedAt: rfc3339(v.CreatedAt)}
 }
 
-// addMirror registers a downstream remote the repo's advanced refs are pushed to.
-// The URL must be https to a host on the mirror allowlist (github.com / gitlab.com
-// / git.hanzo.ai): the same set the mirror credential may be sent to, so a target
-// can never capture the shared token or point the push at an internal service. Any
-// embedded userinfo is stripped (credentials ride env-only at push time).
+// addMirror registers a downstream remote the repo's advanced refs are pushed to
+// whenever a push lands here. Answers 201. The URL must be https to a host on the
+// mirror allowlist (github.com / gitlab.com): the same set the mirror credential
+// may be sent to, so a target can never capture the shared token or point the push
+// at an internal service. Any embedded userinfo is stripped — credentials ride
+// env-only at push time and never enter the stored URL. One mirror per host per
+// repo; a second is a 409.
 //
-// Raw, not a typed op: it answers 201, and zip's typed registrar has no status seam.
-func addMirror(s *cloud.Service[state], c *zip.Ctx) error {
-	t, herr := tenantFrom(c)
+// Example: {"name": "widgets", "url": "https://github.com/acme/widgets.git"}
+func (o ops) addMirror(ctx context.Context, in *mirrorTargetReq) (*mirrorTargetView, error) {
+	t, name, herr := o.scoped(ctx, in.Name)
 	if herr != nil {
-		return herr
+		return nil, herr
 	}
-	org, project := t.org, t.project
-	name, herr := repoScope(s, c.Context(), t, c.Param("name"))
-	if herr != nil {
-		return herr
-	}
-	var body mirrorTargetReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	target, host, err := validateMirrorTarget(body.URL)
+	target, host, err := validateMirrorTarget(in.URL)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	// An explicit body.host is a hint; the authoritative host is the URL's — reject
+	// An explicit in.Host is a hint; the authoritative host is the URL's — reject
 	// a mismatch so the stored (host,url) pair can never disagree.
-	if h := strings.ToLower(strings.TrimSpace(body.Host)); h != "" && h != host {
-		return zip.ErrBadRequest("host does not match url host")
+	if h := strings.ToLower(strings.TrimSpace(in.Host)); h != "" && h != host {
+		return nil, zip.ErrBadRequest("host does not match url host")
 	}
-	store, err := storeFor(s, org)
+	store, err := storeFor(o.s, t.org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
 	id, err := genID("mir")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	v := MirrorTarget{
-		ID: id, Org: org, Project: project, Repo: name,
+		ID: id, Org: t.org, Project: t.project, Repo: name,
 		Host: host, URL: target, CreatedAt: time.Now().Unix(),
 	}
-	if err := store.CreateMirror(c.Context(), v); err != nil {
+	if err := store.CreateMirror(ctx, v); err != nil {
 		if err == errConflict {
-			return zip.ErrConflict("a mirror to this host already exists for the repo")
+			return nil, zip.ErrConflict("a mirror to this host already exists for the repo")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
-	return c.JSON(http.StatusCreated, mirrorToView(v))
+	view := mirrorToView(v)
+	return &view, nil
 }
 
 // listMirrors returns a repo's outbound mirror targets — the downstream remotes

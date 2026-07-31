@@ -1,11 +1,12 @@
-// Package authors mounts the Hanzo Cloud /v1/authors/* OSS-author surface: a
-// native-Go, per-org program on Base/SQLite that pays open-source AUTHORS a royalty
-// on the metered platform spend of the orgs who DEPLOY their projects on Hanzo. It
-// sits next to clients/referrals (a one-time credit for both sides) and
-// clients/affiliates (an ongoing partner commission on referred customers) as the
-// THIRD growth loop — the CREATOR one — and mirrors their structure exactly: one
-// SQLite store, server-side tenant isolation, one Mount, HIP-0106, and the SAME
-// commerce ledger path (a credits payout is a grant, tag grant:author).
+// Package authors is the OSS royalty program: an author links GitHub, proves they
+// own a repo, and earns a royalty on the metered spend of every org that deploys a
+// project built from it — accrued per period and auto-paid, with a full audit
+// trail behind the number.
+//
+// It is the CREATOR member of the three programs built on the same shape;
+// apps/referrals is the one-time bonus and apps/affiliates the partner commission.
+// All three share the commerce ledger path (a credits payout is a grant, tag
+// grant:author).
 //
 // The loop, end to end:
 //
@@ -65,15 +66,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/treasury"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
@@ -159,6 +158,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("authors.Mount: empty DataDir")
 	}
+	// A typed op is a route PLUS a registry entry, and the registry lives on the App.
+	// A router that cannot reach it would serve every route with no schema, no prose,
+	// no MCP tool and no SDK method — so the mount FAILS rather than quietly
+	// publishing a surface no projection knows about.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("authors.Mount: router is not a zip app, so the typed ops have no registry")
+	}
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
 		return fmt.Errorf("authors.Mount: data dir: %w", err)
 	}
@@ -177,7 +184,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted = s
 
-	routes(app, s)
+	routes(app, zapp, s)
 
 	// Drive the DEFAULT automatic money loop: a periodic goroutine that accrues every
 	// approved author's royalty AND auto-pays their pending balance, no human in the
@@ -190,272 +197,38 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the authors surface.
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/authors", cloud.Handle(s, myAuthors))
-	app.Get("/v1/authors/basis", cloud.Handle(s, basis))
-	app.Post("/v1/authors/connect", cloud.Handle(s, connect))
-	app.Post("/v1/authors/repos/verify", cloud.Handle(s, verifyRepo))
-	app.Post("/v1/authors/deploys/record", cloud.Handle(s, recordDeploy))
-	app.Get("/v1/admin/authors", cloud.Handle(s, adminList))
-	app.Post("/v1/admin/authors/sweep", cloud.Handle(s, adminSweep))
-	app.Post("/v1/admin/authors/:id/approve", cloud.Handle(s, adminApprove))
-	app.Post("/v1/admin/authors/:id/suspend", cloud.Handle(s, adminSuspend))
-	app.Post("/v1/admin/authors/:id/payout", cloud.Handle(s, adminPayout))
-	app.Get("/v1/admin/authors/:id/basis", cloud.Handle(s, adminBasis))
-}
+// routes registers the authors surface. Every route is a TYPED op (typed.go) — one
+// registry entry carrying the schema, the prose, an MCP tool, a CLI command and an
+// SDK method.
+//
+// The two subtrees are declared on their OWN groups, because they are two surfaces:
+// /v1/authors is the tenant's, /v1/admin/authors is the platform's. Both get
+// cloud.Bridge, which is what parks the validated org a typed op reads — never an In
+// field, which is caller-supplied and would be a cross-tenant read the caller
+// asserted for itself. fiber runs middleware in registration order, so each Use
+// precedes its own leaves; nesting under Serve's own Bridge is harmless.
+func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
+	o := ops{s: s}
 
-// ── customer surface ─────────────────────────────────────────────────────────
+	g := app.Group("/v1/authors")
+	g.Use(cloud.Bridge())
+	// The root of the tenant surface, declared on the App with its whole path rather
+	// than on the group with an empty leaf: joining "/v1/authors" with "" yields
+	// "/v1/authors/", a DIFFERENT path from the one it has always served.
+	zip.Get(zapp, "/v1/authors", o.myAuthors)
+	zip.Get(g, "/basis", o.basis)
+	zip.Post(g, "/connect", o.connect)
+	zip.Post(g, "/repos/verify", o.verifyRepo)
+	zip.Post(g, "/deploys/record", o.recordDeploy)
 
-// myAuthors answers GET /v1/authors for the validated caller. If the org has not
-// connected it returns an honest "not enrolled" shape so the console shows the
-// connect form; otherwise it returns the dashboard (status, login, verified, repos,
-// deploys, accrued/pending/paid, payouts). For an APPROVED author it ALSO
-// opportunistically runs the accrual sweep, so the dashboard is self-updating.
-func myAuthors(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in to view your author program")
-	}
-	ctx := c.Context()
-
-	a, err := s.State.store.GetByOrg(ctx, org)
-	if err == errNotFound {
-		return c.JSON(http.StatusOK, map[string]any{
-			"isAuthor":        false,
-			"defaultShareBps": defaultShareBps,
-			"badgeBase":       s.State.badgeBase,
-		})
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
-	}
-
-	// Lazy accrual sweep for MY deploying orgs (bounded, best-effort — a commerce
-	// hiccup never fails the page; it simply accrues on the next sweep).
-	if a.Status == StatusApproved {
-		if _, _, serr := sweepAuthor(s, ctx, a); serr != nil {
-			s.Log.Warn("authors: lazy sweep failed", "author", a.ID, "err", serr)
-		}
-		if refreshed, rerr := s.State.store.GetByID(ctx, a.ID); rerr == nil {
-			a = refreshed // pick up any accrual the lazy sweep just latched
-		}
-	}
-
-	repos, err := s.State.store.ListRepos(ctx, a.ID, repoLimit)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list repos: %v", err)
-	}
-	orgs, err := s.State.store.ListOrgs(ctx, a.ID, repoLimit)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list orgs: %v", err)
-	}
-	deploys, err := s.State.store.ListDeploys(ctx, a.ID, deployLimit)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list deploys: %v", err)
-	}
-	payouts, err := s.State.store.ListPayouts(ctx, a.ID, payoutLimit)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
-	}
-	ledger, err := s.State.store.ListLedger(ctx, a.ID, "", ledgerLimit)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list ledger: %v", err)
-	}
-
-	return c.JSON(http.StatusOK, map[string]any{
-		"isAuthor":      true,
-		"id":            a.ID,
-		"status":        a.Status,
-		"githubLogin":   a.GithubLogin,
-		"verified":      a.VerifiedAt > 0,
-		"verifyCode":    a.VerifyCode,
-		"verifyFile":    verifyFile,
-		"verifySnippet": verifySnippet(a.VerifyCode),
-		"shareBps":      a.ShareBps,
-		"badgeBase":     s.State.badgeBase,
-		"repos":         repoViews(repos, s.State.badgeBase),
-		"orgs":          orgViews(orgs, s.State.badgeBase),
-		"deploys":       deployViews(deploys),
-		"accruedCents":  a.AccruedCents,
-		"pendingCents":  a.PendingCents(),
-		"paidCents":     a.PaidCents,
-		"payouts":       payoutViews(payouts),
-		"ledger":        ledger,
-	})
-}
-
-// connectRequest is the POST /v1/authors/connect body: the forge provider (github or
-// gitlab, default github) and an optional login used only when IAM has no linked
-// account for that provider.
-type connectRequest struct {
-	Provider    string `json:"provider"`
-	GithubLogin string `json:"githubLogin"`
-	Login       string `json:"login"` // generic alias for githubLogin (any provider)
-}
-
-// connect enrolls the validated caller's org as an author at status=connected,
-// idempotently. It links a GitHub login — from IAM's linked account (identity
-// verified) when present, else the supplied login (verified later per-repo) — and
-// mints a stable verify code for the file method.
-func connect(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in to connect GitHub")
-	}
-	var body connectRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	ctx := c.Context()
-	userSub := strings.TrimSpace(c.User())
-	provider := normalizeProvider(body.Provider)
-
-	// Prefer IAM's linked forge identity for the provider (strong proof of the login).
-	login := normalizeLogin(firstNonEmpty(body.Login, body.GithubLogin))
-	identityVerified := false
-	if l, _, linked, lerr := s.State.forge.linkedAccount(ctx, provider, org, userSub); lerr != nil {
-		s.Log.Warn("authors: linked-account lookup failed", "org", org, "provider", provider, "err", lerr)
-	} else if linked && l != "" {
-		login = normalizeLogin(l)
-		identityVerified = true
-	}
-	if login == "" {
-		return zip.ErrBadRequest("login is required (no linked " + provider + " account found)")
-	}
-
-	id, err := genID("aut")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	verifyCode, err := genID("avc")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	a, created, err := s.State.store.Connect(ctx, id, org, login, verifyCode, defaultShareBps, identityVerified, time.Now().Unix())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "connect: %v", err)
-	}
-	status := http.StatusOK
-	if created {
-		status = http.StatusCreated
-	}
-	return c.JSON(status, map[string]any{
-		"id":            a.ID,
-		"status":        a.Status,
-		"githubLogin":   a.GithubLogin,
-		"verified":      a.VerifiedAt > 0,
-		"verifyCode":    a.VerifyCode,
-		"verifyFile":    verifyFile,
-		"verifySnippet": verifySnippet(a.VerifyCode),
-		"shareBps":      a.ShareBps,
-		"created":       created,
-	})
-}
-
-// verifyRepoRequest is the POST /v1/authors/repos/verify body.
-type verifyRepoRequest struct {
-	RepoURL string `json:"repoUrl"`
-}
-
-// verifyRepo verifies the caller owns a REPO or a whole OWNER (org) and records the
-// verified claim. A repo url (github.com/owner/name) records a per-repo claim; an org
-// url (github.com/owner, no repo segment) records an owner-wide claim covering every
-// repo under that owner. Ownership is proven the SAME two ways in both cases — an
-// IAM-linked forge token with admin/push permission OR a hanzo.json carrying the
-// author's verify code on the default branch (for an org, of the owner's .github
-// control repo). The author must have connected first.
-func verifyRepo(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in to verify a repo")
-	}
-	var body verifyRepoRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	target, perr := parseTarget(body.RepoURL)
-	if perr != nil {
-		return zip.ErrBadRequest("repoUrl must be a GitHub or GitLab repo OR owner — github.com/owner or github.com/owner/name (gitlab.com too)")
-	}
-	ctx := c.Context()
-
-	a, err := s.State.store.GetByOrg(ctx, org)
-	if err == errNotFound {
-		return zip.ErrBadRequest("connect a forge account before verifying a repo")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
-	}
-
-	if target.isOrg() {
-		return verifyOrg(s, ctx, c, a, org, target)
-	}
-
-	host, owner, name := target.host, target.owner, target.name
-	method, verified := proveOwnership(s, ctx, a, org, strings.TrimSpace(c.User()), host, owner, name)
-	if !verified {
-		return zip.Errorf(http.StatusUnprocessableEntity,
-			"could not verify ownership of %s — grant the Hanzo %s app OR add %s containing your verify code (%s) to the default branch",
-			target.canonical, providerForHost(host), verifyFile, a.VerifyCode)
-	}
-
-	repoID, err := genID("arp")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	repo, created, err := s.State.store.UpsertVerifiedRepo(ctx, repoID, a.ID, target.canonical, method, time.Now().Unix())
-	if err != nil {
-		if err == errRepoOwned {
-			return zip.ErrConflict("that repo is already verified by another author")
-		}
-		return zip.Errorf(http.StatusInternalServerError, "record repo: %v", err)
-	}
-	emitAudit(s, ctx, "author.verify_repo", a, map[string]any{"repoUrl": target.canonical, "method": method})
-	status := http.StatusOK
-	if created {
-		status = http.StatusCreated
-	}
-	return c.JSON(status, map[string]any{
-		"repo":    repoViewOf(repo, s.State.badgeBase),
-		"created": created,
-	})
-}
-
-// verifyOrg proves an OWNER-WIDE claim and records it. Ownership of the whole owner is
-// proven the SAME two ways as a repo — reusing proveOwnership against the owner's
-// canonical control repo "<owner>/.github" (OAuth admin/push on it, OR a hanzo.json
-// with the verify code on its default branch). The ownership check is NOT weakened: an
-// owner the caller can't prove is 422, exactly like an unprovable repo. A verified org
-// claim covers every repo the author publishes under that owner.
-func verifyOrg(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, a Author, org string, t verifyTarget) error {
-	method, verified := proveOwnership(s, ctx, a, org, strings.TrimSpace(c.User()), t.host, t.owner, orgProofRepo)
-	if !verified {
-		return zip.Errorf(http.StatusUnprocessableEntity,
-			"could not verify ownership of the %s owner %q — grant the Hanzo %s app admin on %s/%s OR add %s carrying your verify code (%s) to its default branch",
-			providerForHost(t.host), t.owner, providerForHost(t.host), t.owner, orgProofRepo, verifyFile, a.VerifyCode)
-	}
-
-	orgID, err := genID("aog")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	claim, created, err := s.State.store.UpsertVerifiedOrg(ctx, orgID, a.ID, t.canonical, method, time.Now().Unix())
-	if err != nil {
-		if err == errOrgOwned {
-			return zip.ErrConflict("that owner is already verified by another author")
-		}
-		return zip.Errorf(http.StatusInternalServerError, "record org: %v", err)
-	}
-	emitAudit(s, ctx, "author.verify_org", a, map[string]any{"ownerUrl": t.canonical, "method": method})
-	status := http.StatusOK
-	if created {
-		status = http.StatusCreated
-	}
-	return c.JSON(status, map[string]any{
-		"org":     orgViewOf(claim, s.State.badgeBase),
-		"created": created,
-	})
+	ga := app.Group("/v1/admin/authors")
+	ga.Use(cloud.Bridge())
+	zip.Get(zapp, "/v1/admin/authors", o.adminList)
+	zip.Post(ga, "/sweep", o.adminSweep)
+	zip.Post(ga, "/:id/approve", o.adminApprove)
+	zip.Post(ga, "/:id/suspend", o.adminSuspend)
+	zip.Post(ga, "/:id/payout", o.adminPayout)
+	zip.Get(ga, "/:id/basis", o.adminBasis)
 }
 
 // proveOwnership tries the two verification methods in order (oauth, then file) on the
@@ -504,87 +277,6 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// recordDeployRequest is the POST /v1/authors/deploys/record body: the sourceRepo a
-// project was built from and the project id. The deploying org is the caller.
-type recordDeployRequest struct {
-	RepoURL string `json:"repoUrl"`
-	Project string `json:"project"`
-}
-
-// recordDeploy records a deploy-attribution edge for the validated DEPLOYING org.
-// When repoUrl matches a VERIFIED author repo, the edge is recorded (idempotent per
-// repo+project+org) and becomes eligible for royalty. A deploy of a repo that isn't a
-// verified author repo is NOT an error — it returns recorded:false so the deploy path
-// can fire this unconditionally. A self-deploy is recorded (provenance) but excluded
-// from accrual by the sweep.
-func recordDeploy(s *cloud.Service[state], c *zip.Ctx) error {
-	deployingOrg, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in to record a deploy")
-	}
-	var body recordDeployRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	project := strings.TrimSpace(body.Project)
-	if project == "" {
-		return zip.ErrBadRequest("project is required")
-	}
-	repoURL := normalizeRepo(body.RepoURL)
-	if repoURL == "" {
-		// No source repo → nothing to attribute (a hand-built project). Honest no-op.
-		return c.JSON(http.StatusOK, map[string]any{"recorded": false, "reason": "no source repo"})
-	}
-	ctx := c.Context()
-
-	// Hanzo-maintained template (owner ∈ this brand's GitHub orgs, e.g. hanzoai /
-	// hanzo-*)? Attribute it to the treasury SYSTEM author so its creator royalty
-	// accrues to the Hanzo treasury ("pay ourselves") — idempotent, no human verify
-	// step. A repo a real external author already verified is left theirs (first-verify
-	// wins, enforced inside ensureMaintainedRepo). This makes Hanzo earn 20% on its own
-	// templates when other orgs deploy them.
-	if isMaintainedRepo(repoURL, s.State.maintainerOrg) {
-		ensureMaintainedRepo(s, ctx, repoURL, time.Now().Unix())
-	}
-
-	// Attribution resolves in ONE of two arms — per-repo first, then owner-wide: a repo
-	// with its OWN verified claim earns for that author; otherwise a repo whose OWNER is
-	// a verified org claim earns for the org's author (so every repo under a verified
-	// owner earns without a per-repo verify). Neither → an honest recorded:false no-op.
-	authorID, err := resolveDeployAuthor(s, ctx, repoURL)
-	if err == errUnknownRepo || err == errRepoNotVerified {
-		return c.JSON(http.StatusOK, map[string]any{"recorded": false, "reason": "repo is not a verified author repo"})
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "resolve repo: %v", err)
-	}
-
-	id, err := genID("ade")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	edge, created, err := s.State.store.RecordDeploy(ctx, id, authorID, repoURL, project, deployingOrg, time.Now().Unix())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "record deploy: %v", err)
-	}
-	author, _ := s.State.store.GetByID(ctx, authorID)
-	self := author.Org == deployingOrg
-	status := http.StatusOK
-	if created {
-		status = http.StatusCreated
-		emitAudit(s, ctx, "author.deploy", author, map[string]any{
-			"repoUrl": repoURL, "project": project, "deployingOrg": deployingOrg, "self": self,
-		})
-	}
-	return c.JSON(status, map[string]any{
-		"recorded":  true,
-		"created":   created,
-		"self":      self,
-		"deployId":  edge.ID,
-		"createdAt": edge.CreatedAt,
-	})
-}
-
 // resolveDeployAuthor returns the author a deployed repo earns for, trying the two
 // attribution arms in order: (1) a per-repo verified claim, then (2) an owner-wide
 // verified org claim covering the repo. Per-repo wins, so a specifically-claimed repo
@@ -604,137 +296,6 @@ func resolveDeployAuthor(s *cloud.Service[state], ctx context.Context, repoURL s
 		return "", oerr
 	}
 	return claim.AuthorID, nil
-}
-
-// ── admin surface (SuperAdmin, fail-closed) ────────────────────────────────
-
-// adminList answers GET /v1/admin/authors — every author (org exposed) + a fleet
-// summary. SuperAdmin only.
-func adminList(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
-	}
-	ctx := c.Context()
-	rows, err := s.State.store.ListAll(ctx, adminLimitOf(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list authors: %v", err)
-	}
-	repoCounts, err := s.State.store.RepoCountsByAuthor(ctx)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "count repos: %v", err)
-	}
-	deployCounts, err := s.State.store.DeployCountsByAuthor(ctx)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "count deploys: %v", err)
-	}
-	views := make([]adminAuthorView, 0, len(rows))
-	sum := adminSummary{}
-	for _, a := range rows {
-		sum.add(a)
-		views = append(views, adminViewOf(a, repoCounts[a.ID], deployCounts[a.ID]))
-	}
-	return adminOK(c, map[string]any{"authors": views, "summary": sum})
-}
-
-// adminApprove answers POST /v1/admin/authors/:id/approve — admit to earning. Body
-// may carry a {shareBps} override. SuperAdmin only.
-func adminApprove(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
-	}
-	id := strings.TrimSpace(c.Param("id"))
-	var body struct {
-		ShareBps int64 `json:"shareBps"`
-	}
-	_ = c.Bind(&body) // body is optional
-	if body.ShareBps < 0 || body.ShareBps > bpsDenom {
-		return zip.ErrBadRequest("shareBps must be 0–10000")
-	}
-	ctx := c.Context()
-	a, err := s.State.store.Approve(ctx, id, body.ShareBps, time.Now().Unix())
-	if err != nil {
-		if err == errNotFound {
-			return zip.ErrNotFound("author not found")
-		}
-		return zip.Errorf(http.StatusInternalServerError, "approve: %v", err)
-	}
-	emitAudit(s, ctx, "author.approve", a, map[string]any{"shareBps": a.ShareBps})
-	return adminOK(c, map[string]any{"author": adminViewOf(a, 0, 0)})
-}
-
-// adminSuspend answers POST /v1/admin/authors/:id/suspend. SuperAdmin only.
-func adminSuspend(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
-	}
-	id := strings.TrimSpace(c.Param("id"))
-	ctx := c.Context()
-	a, err := s.State.store.Suspend(ctx, id, time.Now().Unix())
-	if err != nil {
-		if err == errNotFound {
-			return zip.ErrNotFound("author not found")
-		}
-		return zip.Errorf(http.StatusInternalServerError, "suspend: %v", err)
-	}
-	emitAudit(s, ctx, "author.suspend", a, nil)
-	return adminOK(c, map[string]any{"author": adminViewOf(a, 0, 0)})
-}
-
-// payoutRequest is the POST /v1/admin/authors/:id/payout body.
-type payoutRequest struct {
-	AmountCents int64  `json:"amountCents"`
-	Method      string `json:"method"`
-	Reference   string `json:"reference"`
-}
-
-// adminPayout records a payout of accrued royalty. A "credits" method issues a
-// commerce grant into the author's wallet; a cash method is record-only. The amount
-// can never exceed pending (accrued − paid), reserved atomically before any grant.
-// SuperAdmin only.
-func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
-	}
-	id := strings.TrimSpace(c.Param("id"))
-	var body payoutRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if body.AmountCents <= 0 {
-		return zip.ErrBadRequest("amountCents must be positive")
-	}
-	method := strings.ToLower(strings.TrimSpace(body.Method))
-	if method == "" {
-		return zip.ErrBadRequest("method is required (credits, wire, paypal, …)")
-	}
-	ctx := c.Context()
-
-	a, err := s.State.store.GetByID(ctx, id)
-	if err != nil {
-		if err == errNotFound {
-			return zip.ErrNotFound("author not found")
-		}
-		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
-	}
-
-	payout, err := issuePayout(s, ctx, a, body.AmountCents, method, strings.TrimSpace(body.Reference))
-	if err != nil {
-		switch err {
-		case errNotFound:
-			return zip.ErrNotFound("author not found")
-		case errInsufficientPending:
-			return zip.ErrBadRequest(fmt.Sprintf("amount exceeds pending royalty (%d cents available)", a.PendingCents()))
-		default:
-			return err // issuePayout returns a ready zip error (reserve/PaymentRequired/rng)
-		}
-	}
-
-	after, _ := s.State.store.GetByID(ctx, a.ID)
-	emitAudit(s, ctx, "author.payout", after, map[string]any{
-		"payoutId": payout.ID, "amountCents": payout.AmountCents, "method": payout.Method,
-		"reference": payout.Reference, "txn": payout.Txn,
-	})
-	return adminOK(c, map[string]any{"payout": payoutViewOf(payout), "author": adminViewOf(after, 0, 0)})
 }
 
 // issuePayout is the ONE payout path — the manual admin endpoint AND the automatic
@@ -840,30 +401,6 @@ func settlementOf(s *cloud.Service[state], a Author, method string) string {
 	default:
 		return settlementCash
 	}
-}
-
-// adminSweep answers POST /v1/admin/authors/sweep — the periodic accrual path. It
-// folds over every approved author's DISTINCT deploying orgs and accrues this
-// period's royalty, at-most-once per period. SuperAdmin only.
-func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
-	}
-	ctx := c.Context()
-	approved, err := s.State.store.ListApproved(ctx, sweepLimit)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list approved: %v", err)
-	}
-	swept, accrued := 0, 0
-	for _, a := range approved {
-		checked, credited, serr := sweepAuthor(s, ctx, a)
-		swept += checked
-		accrued += credited
-		if serr != nil {
-			s.Log.Warn("authors: sweep author failed", "author", a.ID, "err", serr)
-		}
-	}
-	return adminOK(c, map[string]any{"swept": swept, "accrued": accrued})
 }
 
 // ── accrual core (the ONE royalty path, shared by sweep + lazy read) ───────────
@@ -1149,9 +686,9 @@ func adminViewOf(a Author, repos, deploys int) adminAuthorView {
 	}
 }
 
-// repoView is one row of an author's verified/claimed repos, with the ready-to-paste
+// authorRepo is one row of an author's verified/claimed repos, with the ready-to-paste
 // Deploy-on-Hanzo markdown snippet.
-type repoView struct {
+type authorRepo struct {
 	RepoURL       string `json:"repoUrl"`
 	Verified      bool   `json:"verified"`
 	Method        string `json:"method,omitempty"`
@@ -1160,18 +697,18 @@ type repoView struct {
 	CreatedAt     int64  `json:"createdAt"`
 }
 
-func repoViewOf(r AuthorRepo, badgeBase string) repoView {
-	return repoView{
+func authorRepoOf(r AuthorRepo, badgeBase string) authorRepo {
+	return authorRepo{
 		RepoURL: r.RepoURL, Verified: r.Verified, Method: r.Method,
 		BadgeMarkdown: badgeMarkdown(badgeBase, r.RepoURL),
 		VerifiedAt:    r.VerifiedAt, CreatedAt: r.CreatedAt,
 	}
 }
 
-func repoViews(rs []AuthorRepo, badgeBase string) []repoView {
-	out := make([]repoView, 0, len(rs))
+func authorRepos(rs []AuthorRepo, badgeBase string) []authorRepo {
+	out := make([]authorRepo, 0, len(rs))
 	for _, r := range rs {
-		out = append(out, repoViewOf(r, badgeBase))
+		out = append(out, authorRepoOf(r, badgeBase))
 	}
 	return out
 }
@@ -1246,8 +783,11 @@ func payoutViews(ps []Payout) []payoutView {
 	return out
 }
 
-// adminSummary is the fleet tally for the admin directory.
-type adminSummary struct {
+// authorProgramSummary is the fleet tally for the admin directory.
+// authorProgramSummary is the fleet roll-up of the author program. The name is
+// product-qualified because the fleet's schema namespace is FLAT and apps/referrals
+// already publishes an "adminSummary" of its own.
+type authorProgramSummary struct {
 	Total        int   `json:"total"`
 	Connected    int   `json:"connected"`
 	Approved     int   `json:"approved"`
@@ -1257,7 +797,7 @@ type adminSummary struct {
 	PaidCents    int64 `json:"paidCents"`
 }
 
-func (s *adminSummary) add(a Author) {
+func (s *authorProgramSummary) add(a Author) {
 	s.Total++
 	switch a.Status {
 	case StatusConnected:
@@ -1305,14 +845,6 @@ func fileProvesCode(file []byte, code string) bool {
 // case-insensitive; store one canonical form).
 func normalizeLogin(login string) string { return strings.ToLower(strings.TrimSpace(login)) }
 
-// adminOK writes the { status:"ok", msg, data } envelope the console's admin surface
-// (originGet/originPost via app/admin/aggregate) unwraps — identical to
-// clients/admin's ok() and clients/affiliates' adminOK. The customer /v1/authors
-// surface stays bare JSON (read via the /cloud proxy + restGet).
-func adminOK(c *zip.Ctx, data any) error {
-	return cloud.OK(c, data)
-}
-
 // orgSubject is the billing subject commerce keys an org's wallet on — the bare org
 // slug, exactly like clients/affiliates.orgSubject. Kept as a named function so the
 // "subject == org" contract lives in one place.
@@ -1322,17 +854,6 @@ func orgSubject(org string) string { return org }
 // usage rollup is month-to-date, so one accrual per deploying org per month is the
 // at-most-once unit.
 func periodKey(t time.Time) string { return t.UTC().Format("2006-01") }
-
-func adminLimitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
-		return listLimit
-	}
-	if n > maxAdminLimit {
-		return maxAdminLimit
-	}
-	return n
-}
 
 // mustJSON marshals v for the audit After payload, returning an empty object on the
 // (unexpected) marshal error rather than crashing a money action.

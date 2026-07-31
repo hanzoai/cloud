@@ -24,6 +24,7 @@ package graph
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -89,16 +90,16 @@ func newClient() *client {
 // health reads the indexer's /health ({healthy, chain_id, chain_name}). Present on
 // the production explorer Service; a mode without it simply yields an error the caller
 // treats as best-effort.
-func (cl *client) health(c *zip.Ctx) (map[string]any, error) {
-	return cl.getJSON(c, cl.indexer+"/health")
+func (cl *client) health(ctx context.Context, auth string) (map[string]any, error) {
+	return cl.getJSON(ctx, auth, cl.indexer+"/health")
 }
 
 // latestBlock reads the newest indexed block from /v1/explorer/blocks (items are
 // ordered newest-first; items[0] is the latest). This endpoint is common to every
 // indexer mode, so it is the mode-agnostic reachability + height probe. Returns nil
 // (no error) when the indexer is up but has indexed no blocks yet.
-func (cl *client) latestBlock(c *zip.Ctx) (map[string]any, error) {
-	raw, err := cl.getJSON(c, cl.indexer+"/v1/explorer/blocks?items_count=1")
+func (cl *client) latestBlock(ctx context.Context, auth string) (map[string]any, error) {
+	raw, err := cl.getJSON(ctx, auth, cl.indexer+"/v1/explorer/blocks?items_count=1")
 	if err != nil {
 		return nil, err
 	}
@@ -114,13 +115,13 @@ func (cl *client) latestBlock(c *zip.Ctx) (map[string]any, error) {
 
 // getJSON issues one read-only GET and decodes the JSON body into a generic map. A
 // transport failure → 502; a non-2xx → that status.
-func (cl *client) getJSON(c *zip.Ctx, url string) (map[string]any, error) {
-	req, err := http.NewRequestWithContext(c.Context(), http.MethodGet, url, nil)
+func (cl *client) getJSON(ctx context.Context, auth, url string) (map[string]any, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "graph: build request: %v", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	authorize(req, c)
+	authorize(req, auth)
 
 	resp, err := cl.cc.Do(req)
 	if err != nil {
@@ -143,17 +144,17 @@ func (cl *client) getJSON(c *zip.Ctx, url string) (map[string]any, error) {
 // priceFeeds queries the graph's O-Chain price-feed registry. It returns the raw feed
 // objects (dynamic maps — the graph stores entities as maps); the caller maps them to
 // the console view. A transport failure or a GraphQL {errors} envelope → honest 502.
-func (cl *client) priceFeeds(c *zip.Ctx) ([]map[string]any, error) {
+func (cl *client) priceFeeds(ctx context.Context, auth string) ([]map[string]any, error) {
 	const query = `{ priceFeeds(first: 200) { id pair price timestamp } }`
 	body, _ := json.Marshal(map[string]string{"query": query})
 
-	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, cl.graph+graphQLPath, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cl.graph+graphQLPath, bytes.NewReader(body))
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "graph: build query: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	authorize(req, c)
+	authorize(req, auth)
 
 	resp, err := cl.cc.Do(req)
 	if err != nil {
@@ -183,16 +184,16 @@ func (cl *client) priceFeeds(c *zip.Ctx) ([]map[string]any, error) {
 }
 
 // authorize attaches a read identity per the one-rule model: a configured service
-// token (Bearer) wins; otherwise the caller's forwarded Authorization is passed
-// through. Chain data is public, so an absent identity is fine (open read). Never
-// logged.
-func authorize(req *http.Request, c *zip.Ctx) {
+// token (Bearer) wins; otherwise the caller's own Authorization (auth, forwarded by
+// the handler) is passed through. Chain data is public, so an absent identity is
+// fine (open read). Never logged.
+func authorize(req *http.Request, auth string) {
 	if tok := serviceToken(); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 		return
 	}
-	if a := c.Header("Authorization"); a != "" {
-		req.Header.Set("Authorization", a)
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
 	}
 }
 

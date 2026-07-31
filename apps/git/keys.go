@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 	"golang.org/x/crypto/ssh"
 )
@@ -23,41 +22,42 @@ import (
 // fingerprint as the global unique handle; SSH auth (ssh.go) resolves a
 // presented key to its owner by that fingerprint.
 
+// registerKeyReq is the register-a-key request body.
 type registerKeyReq struct {
-	Title     string `json:"title"`
+	// Title labels the key in the console. Max 256 chars; when omitted the
+	// comment on the key line is used.
+	Title string `json:"title"`
+	// PublicKey is one OpenSSH authorized-key line ("ssh-ed25519 AAAA… you@host").
+	// Required; a line that does not parse is refused and never stored.
 	PublicKey string `json:"publicKey"`
 }
 
-// registerKey validates an OpenSSH public key, computes its fingerprint, and
-// stores it under the caller's org + user. The full key round-trips (it is
-// public); the fingerprint is the auth lookup key. A key already registered
-// (to this or any org — fingerprint is globally unique) yields 409.
+// registerKey registers an SSH public key so it can authenticate `git clone
+// git@<host>:<org>/<repo>.git` for the caller's org. The key line is parsed and
+// canonicalized before storage, its SHA256 fingerprint becomes the auth lookup
+// handle, and the full public key round-trips (it is public). Answers 201.
+// Fingerprints are globally unique, so a key already registered — to this org or
+// any other — is a 409: one key belongs to exactly one org.
 //
-// Raw, not a typed op: it answers 201, and zip's typed registrar writes 200 for
-// a value and 204 for none with no seam to set another status.
-func registerKey(s *cloud.Service[state], c *zip.Ctx) error {
-	t, terr := tenantFrom(c)
+// Example: {"title": "laptop", "publicKey": "ssh-ed25519 AAAAC3Nz… z@hanzo.ai"}
+func (o ops) registerKey(ctx context.Context, in *registerKeyReq) (*keyView, error) {
+	t, terr := tenantOf(ctx)
 	if terr != nil {
-		return terr
+		return nil, terr
 	}
-	org := t.org
-	var body registerKeyReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	raw := strings.TrimSpace(body.PublicKey)
+	raw := strings.TrimSpace(in.PublicKey)
 	if raw == "" {
-		return zip.ErrBadRequest("publicKey is required")
+		return nil, zip.ErrBadRequest("publicKey is required")
 	}
-	title := strings.TrimSpace(body.Title)
+	title := strings.TrimSpace(in.Title)
 	if len(title) > 256 {
-		return zip.ErrBadRequest("title too long (max 256)")
+		return nil, zip.ErrBadRequest("title too long (max 256)")
 	}
 	// Parse the authorized-key line to validate it and canonicalize the stored
 	// form + fingerprint. A malformed key is a 400, never stored.
 	pub, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(raw))
 	if err != nil {
-		return zip.ErrBadRequest("invalid openssh public key")
+		return nil, zip.ErrBadRequest("invalid openssh public key")
 	}
 	if title == "" {
 		title = strings.TrimSpace(comment) // fall back to the key comment as the label
@@ -68,19 +68,23 @@ func registerKey(s *cloud.Service[state], c *zip.Ctx) error {
 
 	id, err := genID("gitkey")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
+	// The owner is the BRIDGED principal (ops.go), never an In field: an In field
+	// is caller-supplied, so a key written under a user read from one would let a
+	// caller register a key in someone else's name.
 	row := sshKey{
-		ID: id, Org: org, UserID: strings.TrimSpace(c.User()), Title: title,
+		ID: id, Org: t.org, UserID: t.user, Title: title,
 		PublicKey: canonical, Fingerprint: fp, CreatedAt: time.Now().Unix(),
 	}
-	if err := s.State.keys.Add(c.Context(), row); err != nil {
+	if err := o.s.State.keys.Add(ctx, row); err != nil {
 		if errors.Is(err, errKeyConflict) {
-			return zip.ErrConflict("this ssh key is already registered")
+			return nil, zip.ErrConflict("this ssh key is already registered")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "register key: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "register key: %v", err)
 	}
-	return c.JSON(http.StatusCreated, row.view())
+	view := row.view()
+	return &view, nil
 }
 
 // keyList is the collection envelope for registered SSH keys.

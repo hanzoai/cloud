@@ -230,11 +230,21 @@ type AuthInput struct {
 	Actor    string
 	Org      string
 	Currency string
-	// AmountCents, when > 0, gates on available >= AmountCents instead of the
-	// bare available > 0. Use it to authorize a known up-front charge (e.g. the
-	// first hour of a machine) so a 1-cent balance cannot green-light an
-	// arbitrarily expensive request. Zero preserves the legacy "any positive
-	// balance" gate.
+	// Amount, when non-zero, gates on available >= Amount instead of the bare
+	// available > 0. Use it to authorize a known up-front charge (e.g. the first
+	// hour of a machine) so a 1-cent balance cannot green-light an arbitrarily
+	// expensive request. Zero preserves the "any positive balance" gate.
+	//
+	// It is the exact, typed value — the same one Usage.Amount carries, at the
+	// ledger's own 18-decimal precision — so the gate and the debit that follows
+	// it weigh the SAME number. A cents-rounded gate admitted a charge the debit
+	// then wrote in full, which is how a sub-cent price gets authorized against a
+	// figure nobody spent.
+	Amount money.Amount
+
+	// AmountCents is the same charge in whole cents, for the HTTP path to
+	// commerce and for callers that have not got a typed value. Amount wins when
+	// both are set.
 	AmountCents int64
 
 	// Project and Service scope the per-scope spend cap + rate limit (issue #70).
@@ -352,8 +362,12 @@ func (c *Client) AuthorizeVerdict(ctx context.Context, in AuthInput) (Verdict, e
 		return Verdict{}, err // unknown -> deny (fail-closed).
 	}
 	funded := available > 0
-	if in.AmountCents > 0 {
-		funded = available >= in.AmountCents
+	if want := in.amount(); !want.IsZero() {
+		// Weigh both sides in the exact domain. Comparing a cents-rounded charge
+		// against a cents balance let a sub-cent price round to zero and fall back
+		// to the bare "any positive balance" gate — a charge authorized against a
+		// figure nobody was going to spend.
+		funded = money.FromCents(available).Cmp(want) >= 0
 	}
 	if !funded {
 		return Verdict{Allow: false, Reason: "insufficient_balance"}, nil
@@ -421,8 +435,10 @@ func (c *Client) scopeAuthorize(ctx context.Context, in AuthInput) (scopeVerdict
 	if s := strings.TrimSpace(in.Service); s != "" {
 		q.Set("service", s)
 	}
-	if in.AmountCents > 0 {
-		q.Set("amount", strconv.FormatInt(in.AmountCents, 10))
+	if want := in.amount(); !want.IsZero() {
+		// The cap surface still speaks whole cents. Send the charge rounded UP, so
+		// a sub-cent spend is never weighed against a cap as nothing.
+		q.Set("amount", strconv.FormatInt(want.CentsUp(), 10))
 	}
 	// pv=1 only when the project axis is bound to a validated claim; otherwise
 	// commerce degrades a project-scoped hard cap to soft (anti project-spoof).
@@ -589,10 +605,39 @@ type Usage struct {
 	ClientIP         string `json:"clientIp,omitempty"`
 }
 
+// amount returns the canonical typed charge this gate weighs. Amount wins;
+// otherwise the int64 wire field is reconstructed, so a caller that has not got
+// a typed value still gates. Zero means "any positive balance", the gate's
+// behaviour when no specific charge is named.
+func (in AuthInput) amount() money.Amount {
+	if !in.Amount.IsZero() {
+		return in.Amount
+	}
+	if in.AmountCents > 0 {
+		return money.FromCents(in.AmountCents)
+	}
+	return money.Zero()
+}
+
 // amountMoney returns the canonical typed debit. Amount wins; otherwise the
 // int64 wire fields are reconstructed (micros preferred, then cents) so a
 // legacy Usage without a typed Amount still debits. The result is zero when no
 // amount is set, which Record treats as "skip".
+// Money is the debit this Usage carries, as the one exact value — resolving the
+// precedence the type documents: the typed Amount when set, else micro-USD, else
+// whole cents.
+//
+// It is EXPORTED because "is there anything to bill here?" is the same question
+// wherever it is asked, and asking it any other way gets a different answer. The
+// resource meter asked it as `AmountCents <= 0 && AmountMicros <= 0` and so
+// dropped, silently and before Record ever saw it, every usage priced only as a
+// typed Amount — which is exactly the shape a per-token 18-dp caller sends. Money
+// billed nobody and appeared nowhere: not an error, not a log, no row.
+//
+// One question, one answer, one place. A caller that needs the value and a caller
+// that only needs to know whether there IS one both read this.
+func (u Usage) Money() money.Amount { return u.amountMoney() }
+
 func (u Usage) amountMoney() money.Amount {
 	if !u.Amount.IsZero() {
 		return u.Amount

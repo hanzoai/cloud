@@ -53,6 +53,13 @@ type Session struct {
 	Repo   string
 	Target string
 
+	// Terminal is where this session's live terminal can be WATCHED — the URL the
+	// machine published for it (zrok gives one without opening a port). Optional:
+	// a session that publishes nothing is still a session, it just cannot be
+	// watched. It is a URL rather than a stream because the bytes belong to the
+	// machine running the shell; cloud holds the address, never the connection.
+	Terminal string
+
 	// Provider/Account tag a session with the linked AI account it ran under (the
 	// login-manager tie-in): which provider (claude|codex|hanzo|…) and which
 	// subscription/api account served this run. Optional (a surface that doesn't
@@ -165,6 +172,7 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 		"cwd":      "TEXT NOT NULL DEFAULT ''",
 		"repo":     "TEXT NOT NULL DEFAULT ''",
 		"target":   "TEXT NOT NULL DEFAULT ''",
+		"terminal": "TEXT NOT NULL DEFAULT ''",
 		"provider": "TEXT NOT NULL DEFAULT ''",
 		"account":  "TEXT NOT NULL DEFAULT ''",
 		// The readable build (provenance.go). Defaults keep every pre-existing
@@ -189,13 +197,13 @@ CREATE INDEX IF NOT EXISTS ix_sessions_published ON agent_sessions(published, up
 	return nil
 }
 
-const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,target,provider,account,project,published`
+const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published`
 
 func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 	var x Session
 	err := sc.Scan(&x.ID, &x.Org, &x.Agent, &x.Actor, &x.Status, &x.ParentID, &x.RootID,
 		&x.Title, &x.StartedAt, &x.EndedAt, &x.CreatedAt, &x.UpdatedAt,
-		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Target,
+		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Terminal, &x.Target,
 		&x.Provider, &x.Account, &x.Project, &x.Published)
 	return x, err
 }
@@ -221,10 +229,10 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 		}
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		x.ID, x.Org, x.Agent, x.Actor, x.Status, x.ParentID, x.RootID, x.Title,
 		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID,
-		x.Host, x.Cwd, x.Repo, x.Target, x.Provider, x.Account, x.Project, x.Published)
+		x.Host, x.Cwd, x.Repo, x.Terminal, x.Target, x.Provider, x.Account, x.Project, x.Published)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}

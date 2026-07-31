@@ -15,6 +15,7 @@
 package leaderboard
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -23,22 +24,48 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-func activityHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view activity")
+// activityQuery selects whose activity to read and over what days. Every field rides
+// the query string and every one is optional.
+type activityQuery struct {
+	// Subject is what the series is about: "user" (default), "org" or "project".
+	Subject string `json:"subject"`
+	// ID names the subject within what the caller is entitled to see. Omitted (or
+	// "me") it is the caller themselves, or their own org. Another user requires org
+	// admin and must belong to the caller's org; another org requires a SuperAdmin.
+	ID string `json:"id"`
+	// From is the first day of the range, "2006-01-02". Defaults to 90 days back.
+	From string `json:"from"`
+	// To is the last day of the range, "2006-01-02". Defaults to today; the span is
+	// clamped to 366 days.
+	To string `json:"to"`
+}
+
+// Activity returns the per-day usage series for ONE authorized subject — the points a
+// contribution heatmap and a timeline are drawn from, gap-filled so every day in the
+// range is present. Authorization is resolved server-side from the validated
+// principal, so a caller can never widen the subject past what they are entitled to:
+// a non-admin reads only themselves and their own org. subject=project answers empty
+// with a note, because the usage ledger records no project column yet. When the
+// warehouse is not connected the series answers empty with available=false rather
+// than fabricated days.
+//
+// Example: {"subject": "user", "from": "2026-01-01", "to": "2026-03-31"}
+func (o boardOps) activity(ctx context.Context, in *activityQuery) (*ActivityView, error) {
+	org, err := tenantOf(ctx, "sign in to view activity")
+	if err != nil {
+		return nil, err
 	}
-	subject := strings.ToLower(strings.TrimSpace(c.Query("subject")))
+	subject := strings.ToLower(strings.TrimSpace(in.Subject))
 	if subject == "" {
 		subject = "user"
 	}
-	id := strings.TrimSpace(c.Query("id"))
-	w, err := resolveRange(c.Query("from"), c.Query("to"), nowFn())
+	id := strings.TrimSpace(in.ID)
+	w, err := resolveRange(in.From, in.To, nowFn())
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 
-	c.SetHeader("Cache-Control", "no-store")
+	noStore(ctx)
 	base := ActivityView{
 		Subject: subject,
 		ID:      id,
@@ -50,22 +77,20 @@ func activityHandler(s *cloud.Service[state], c *zip.Ctx) error {
 
 	switch subject {
 	case "user":
-		self := selfLedgerID(c, org)
-		admin := principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c)
-		target, status, msg := resolveUserSubject(self, admin, org, id)
+		target, status, msg := resolveUserSubject(selfIDOf(ctx, org), adminOf(ctx), org, id)
 		if status != 0 {
-			return zip.Errorf(status, "%s", msg)
+			return nil, zip.Errorf(status, "%s", msg)
 		}
 		base.ID = target
-		return runActivity(s, c, base, org, target, w)
+		return runActivity(ctx, o.s, base, org, target, w)
 
 	case "org":
-		effOrg, status, msg := resolveOrgSubject(principal.IsSuperAdmin(c), org, id)
+		effOrg, status, msg := resolveOrgSubject(superOf(ctx), org, id)
 		if status != 0 {
-			return zip.Errorf(status, "%s", msg)
+			return nil, zip.Errorf(status, "%s", msg)
 		}
 		base.ID = effOrg
-		return runActivity(s, c, base, effOrg, "", w)
+		return runActivity(ctx, o.s, base, effOrg, "", w)
 
 	case "project":
 		// A project is a sub-scope of the caller's OWN org (the validated principal
@@ -75,33 +100,32 @@ func activityHandler(s *cloud.Service[state], c *zip.Ctx) error {
 		// surface exists; it lights up when the ledger gains a project column.
 		base.Available = false
 		base.Note = "per-project usage attribution is not recorded in the usage ledger yet"
-		return c.JSON(http.StatusOK, base)
+		return &base, nil
 
 	default:
-		return zip.ErrBadRequest("subject must be user|org|project")
+		return nil, zip.ErrBadRequest("subject must be user|org|project")
 	}
 }
 
 // runActivity executes the per-day query for a resolved+authorized subject and
 // assembles the gap-filled series. Datastore down / query blip → honest-empty.
-func runActivity(s *cloud.Service[state], c *zip.Ctx, base ActivityView, effOrg, subjectUser string, w window) error {
+func runActivity(ctx context.Context, s *cloud.Service[state], base ActivityView, effOrg, subjectUser string, w window) (*ActivityView, error) {
 	if !datastoreEnabled() {
-		return c.JSON(http.StatusOK, base)
+		return &base, nil
 	}
-	ctx := c.Context()
 	if err := EnsureUsageRollup(ctx); err != nil {
 		s.Log.Debug("rollup ensure failed; activity honest-empty", "err", err)
-		return c.JSON(http.StatusOK, base)
+		return &base, nil
 	}
 	sqlStr, args := buildActivitySQL(effOrg, subjectUser, w)
 	rows, err := queryDatastore(ctx, sqlStr, args...)
 	if err != nil {
 		s.Log.Debug("activity query failed; honest-empty", "org", effOrg, "err", err)
-		return c.JSON(http.StatusOK, base)
+		return &base, nil
 	}
 	base.Days, base.Totals = buildActivitySeries(w, rows)
 	base.Available = true
-	return c.JSON(http.StatusOK, base)
+	return &base, nil
 }
 
 // ── authorization (PURE — no Ctx, no I/O — so the policy is unit-tested directly) ──

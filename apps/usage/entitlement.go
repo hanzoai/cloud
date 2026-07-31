@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package usage
+
 // Analytics entitlement contract.
 //
 // This file is the ONE place cloud maps a Hanzo plan to the access that gates the
@@ -47,7 +49,6 @@
 // GET /v1/usage/analytics reads ?plan= for its gate. Wiring the resolver into the
 // handler (swap the ?plan= line for the resolved caller-org plan) is the rollout
 // step — the gate logic is unchanged by it.
-package usage
 
 import (
 	"context"

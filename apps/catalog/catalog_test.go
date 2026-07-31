@@ -64,9 +64,9 @@ func do(t *testing.T, app *zip.App, method, url, body string, hdr map[string]str
 	return resp.StatusCode, string(out)
 }
 
-func decode(t *testing.T, body string) Response {
+func decode(t *testing.T, body string) catalogPage {
 	t.Helper()
-	var out Response
+	var out catalogPage
 	if err := json.Unmarshal([]byte(body), &out); err != nil {
 		t.Fatalf("decode %q: %v", body, err)
 	}

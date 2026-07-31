@@ -22,33 +22,382 @@
     "/v1/admin/referrals/bonuses": {
       "get": {
         "operationId": "get_v1_admin_referrals_bonuses",
+        "summary": "adminList returns every one-time referral bonus in the ledger with a fleet summary.",
+        "description": "adminList returns every one-time referral bonus in the ledger with a fleet summary.\n\nSuperAdmin only, fail-closed. This is the ONE-TIME BONUS ledger — who referred\nwhom, what each side was granted and which ledger transactions carried it. The\ncross-tenant referral ANALYTICS board (top referrers, conversion, multi-level\naccrual liability) is a different surface, GET /v1/admin/referrals, owned by the\naffiliates subsystem over the shared attribution spine.",
         "tags": [
           "admin"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many referrals to return, as a decimal string in the `?limit=`\nquery. Absent, unparseable or non-positive means 500; over 1000 is clamped to\n1000. It is a string rather than a number because the parse that has always\nserved this route trims surrounding whitespace, and one parse rule is better\nthan two.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/adminBonusesEnvelope"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/referrals/sweep": {
       "post": {
         "operationId": "post_v1_admin_referrals_sweep",
+        "summary": "adminSweep qualify-checks every pending referral and grants the ones that now qualify.",
+        "description": "adminSweep qualify-checks every pending referral and grants the ones that now qualify.\n\nSuperAdmin only, fail-closed. This is the cron path: a referee QUALIFIES once\nthey have made metered spend — the honest signal that they actually used the\nproduct rather than merely claiming a welcome grant — and qualifying grants the\nreferrer and the referee their bonuses in one latched step.\n\nThe grant is backed against the platform reserve fund before it is latched, so\nan empty fund leaves the referral honestly pending rather than minting unbacked\ncredit, and the latch makes it at-most-once: this sweep, a concurrent sweep and\nthe lazy check on GET /v1/referrals can never double-pay. One pass is bounded,\nso a large backlog drains over several runs instead of wedging one request.\n\nIt reads nothing from the caller — the counters it returns are the whole result.",
         "tags": [
           "admin"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sweepEnvelope"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/referrals": {
       "get": {
         "operationId": "get_v1_referrals",
+        "summary": "mine returns the caller's referral code, share link and the referrals they have made.",
+        "description": "mine returns the caller's referral code, share link and the referrals they have made.\n\nThe code is a stable, deterministic function of the org, so the link in this\nresponse is the same one every time. Each row carries the referee, its status and\nthe credit this org earned from it; creditsEarnedCents is their sum.\n\nThe read is self-updating: before listing, it runs the qualify check over this\norg's still-pending referees, so a referee who has since made metered spend is\ncredited by the act of the referrer loading their page. That check is\nbest-effort and bounded — a commerce hiccup leaves the referral pending for the\nnext check rather than failing the page — and the grant is latched at-most-once,\nso this path and the admin sweep can never double-pay.",
         "tags": [
           "referrals"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/myReferrals"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/referrals/claim": {
       "post": {
         "operationId": "post_v1_referrals_claim",
+        "summary": "claim records that the caller's org signed up through a referral code.",
+        "description": "claim records that the caller's org signed up through a referral code.\n\nThe REFEREE is the validated caller, never a client field, and the referrer is\nresolved from the code — so a caller can only ever attach THEMSELVES to someone\nelse's code. Referring yourself is 400 and an unknown code is 404.\n\nIt is idempotent and first-touch: an org can be referred once, ever. A repeat\ncall returns the referral already on file with created=false and 200, where the\nfirst call answers 201.\n\nRecording a referral grants nothing. Both bonuses are granted later, when the\nreferee actually makes metered spend — see GET /v1/referrals and\nPOST /v1/admin/referrals/sweep.",
         "tags": [
           "referrals"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "code": "H4NZ0ABC"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/claimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/claimView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "adminBonusDirectory": {
+        "properties": {
+          "referrals": {
+            "description": "Referrals is every referral in the ledger, both orgs exposed.",
+            "items": {
+              "$ref": "#/components/schemas/adminReferralView"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/adminSummary",
+            "description": "Summary is the fleet tally across those referrals."
+          }
+        },
+        "type": "object"
+      },
+      "adminBonusesEnvelope": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/adminBonusDirectory",
+            "description": "Data is the directory itself."
+          },
+          "msg": {
+            "description": "Msg is empty on success; the console surfaces it when status is not \"ok\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "adminReferralView": {
+        "properties": {
+          "code": {
+            "description": "Code is the referral code the referral was recorded against.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the referral was recorded, as a Unix timestamp.",
+            "type": "integer"
+          },
+          "creditedAt": {
+            "description": "CreditedAt is when the bonuses were latched and granted, as a Unix\ntimestamp; 0 until they are.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the referral's handle.",
+            "type": "string"
+          },
+          "qualifiedAt": {
+            "description": "QualifiedAt is when the referee first made metered spend, as a Unix\ntimestamp; 0 while still pending.",
+            "type": "integer"
+          },
+          "refereeGrantCents": {
+            "description": "RefereeGrantCents is what the referee was granted, in USD cents; 0 until the\nreferral is credited.",
+            "type": "integer"
+          },
+          "refereeOrg": {
+            "description": "RefereeOrg is the org that signed up with it.",
+            "type": "string"
+          },
+          "refereeTxn": {
+            "description": "RefereeTxn is the commerce ledger transaction that carried the referee's\ngrant, omitted until one exists.",
+            "type": "string"
+          },
+          "referrerGrantCents": {
+            "description": "ReferrerGrantCents is what the referrer was granted, in USD cents; 0 until\nthe referral is credited.",
+            "type": "integer"
+          },
+          "referrerOrg": {
+            "description": "ReferrerOrg is the org whose code was used.",
+            "type": "string"
+          },
+          "referrerTxn": {
+            "description": "ReferrerTxn is the commerce ledger transaction that carried the referrer's\ngrant, omitted until one exists.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the referral's lifecycle state: \"signup\", \"qualified\" or\n\"credited\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "adminSummary": {
+        "properties": {
+          "credited": {
+            "description": "Credited is how many have paid both bonuses.",
+            "type": "integer"
+          },
+          "grantedCents": {
+            "description": "GrantedCents is the promo credit granted across BOTH sides of every\nreferral, in USD cents — the program's total liability to date.",
+            "type": "integer"
+          },
+          "qualified": {
+            "description": "Qualified is how many have qualified but are not yet credited.",
+            "type": "integer"
+          },
+          "signup": {
+            "description": "Signup is how many are recorded but not yet qualified.",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total is every referral in the ledger.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "claimRequest": {
+        "properties": {
+          "code": {
+            "description": "Code is the referrer's referral code, as it appeared in their ?ref= link.\nCase and surrounding whitespace do not matter.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "claimView": {
+        "properties": {
+          "code": {
+            "description": "Code is the referral code the referral was recorded against.",
+            "type": "string"
+          },
+          "created": {
+            "description": "Created is true when this call recorded the referral and false when it found\none already recorded for this referee — the idempotent replay.",
+            "type": "boolean"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the referral was first recorded, as a Unix timestamp.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the referral's handle.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the referral's lifecycle state: \"signup\" until the referee\nmakes metered spend, then \"qualified\", then \"credited\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "myReferralView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the referral was recorded, as a Unix timestamp.",
+            "type": "integer"
+          },
+          "creditedAt": {
+            "description": "CreditedAt is when the bonuses were latched and granted, as a Unix\ntimestamp; 0 until they are. It is the at-most-once latch.",
+            "type": "integer"
+          },
+          "creditsCents": {
+            "description": "CreditsCents is what I earned from this referral, in USD cents. It is 0\nuntil the referee qualifies.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the referral's handle.",
+            "type": "string"
+          },
+          "qualifiedAt": {
+            "description": "QualifiedAt is when the referee first made metered spend, as a Unix\ntimestamp; 0 while the referral is still pending.",
+            "type": "integer"
+          },
+          "referee": {
+            "description": "Referee is the org that signed up with my code.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the referral's lifecycle state: \"signup\" until the referee\nmakes metered spend, then \"qualified\", then \"credited\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "myReferrals": {
+        "properties": {
+          "code": {
+            "description": "Code is the org's STABLE referral code — a deterministic function of the org\nid, so it never changes and never has to be stored to be reproduced.",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/statusCounts",
+            "description": "Counts tallies this org's referrals by status."
+          },
+          "creditsEarnedCents": {
+            "description": "CreditsEarnedCents is the total promo credit this org has earned as the\nREFERRER, in USD cents.",
+            "type": "integer"
+          },
+          "link": {
+            "description": "Link is the shareable signup link carrying the code, on the brand's own host.",
+            "type": "string"
+          },
+          "refereeBonusCents": {
+            "description": "RefereeBonusCents is what a referee is granted on qualification, in USD cents.",
+            "type": "integer"
+          },
+          "referrals": {
+            "description": "Referrals is one row per org that signed up with this code.",
+            "items": {
+              "$ref": "#/components/schemas/myReferralView"
+            },
+            "type": "array"
+          },
+          "referrerBonusCents": {
+            "description": "ReferrerBonusCents is what the referrer is granted when a referee qualifies,\nin USD cents.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "statusCounts": {
+        "properties": {
+          "credited": {
+            "description": "Credited is how many referrals have paid both bonuses.",
+            "type": "integer"
+          },
+          "qualified": {
+            "description": "Qualified is how many referees have spent but are not yet credited.",
+            "type": "integer"
+          },
+          "signup": {
+            "description": "Signup is how many referees have signed up but not yet spent.",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total is every referral this org has made.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sweepEnvelope": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/sweepResult",
+            "description": "Data is the sweep's counters."
+          },
+          "msg": {
+            "description": "Msg is empty on success; the console surfaces it when status is not \"ok\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sweepResult": {
+        "properties": {
+          "credited": {
+            "description": "Credited is how many of those referrals qualified on this pass and were\ngranted their bonuses.",
+            "type": "integer"
+          },
+          "swept": {
+            "description": "Swept is how many pending referrals were checked.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

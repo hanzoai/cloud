@@ -43,11 +43,12 @@
 //	GET /v1/blueprint/sbom            batch: every blueprint's SBOM + cost   -> {data:[Estimate]}
 //	GET /v1/blueprint/health          liveness + the active rate card       (not JWT-gated)
 //
-// Registered as id "blueprint" with cloud.HealthOwner: it serves its own
-// /v1/blueprint/health, so serve.go skips the generic liveness route.
+// Its plugin declares OwnsHealth, so it serves its own /v1/blueprint/health and the
+// host skips the generic liveness route.
 package blueprint
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -61,6 +62,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 //go:embed blueprints
 var blueprintsFS embed.FS
@@ -107,12 +110,28 @@ func build(b cloud.Base) (state, error) {
 // routes registers the read surface. Health is registered before nothing greedy
 // (the paths are exact), and is not JWT-gated (liveness must be probe-able).
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	o := blueprintOps{s: s}
+	zapp := cloud.ZipApp(app)
 	g := app.Group("/v1/blueprint")
-	g.Get("/health", cloud.Handle(s, health))
+	zip.Get(g, "/health", o.health)
+	// UNTYPED, and it has to be: ONE address answers with TWO shapes at 200 —
+	// `?template=<id>` returns a bare Estimate, no template returns the
+	// `{data:[Estimate]}` batch. A typed op declares one Out, so either shape
+	// would publish the other as a lie. Convertible the day zip can declare a
+	// polymorphic response (the #78 family).
 	g.Get("/sbom", cloud.Handle(s, sbomRead))
 	// Collection root stays flat — Group("/v1/blueprint").Get("") yields "/v1/blueprint/".
-	app.Get("/v1/blueprint", cloud.Handle(s, listIDs))
+	zip.Get(zapp, "/v1/blueprint", o.list)
 }
+
+// blueprintOps binds the service to the typed blueprint ops. A TypedHandler takes
+// no service parameter, so the service arrives as a RECEIVER and every op is a
+// method value — also the only bound form cmd/zipdoc can lift prose from.
+type blueprintOps struct{ s *cloud.Service[state] }
+
+// noIn is the input of an op that takes nothing: no body, no path parameter, no
+// query. GET carries no request body (zip's hasBody), so this publishes nothing.
+type noIn struct{}
 
 // ── in-process seam (deploy / metering / authors) ────────────────────────────
 
@@ -201,39 +220,78 @@ func sbomRead(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, est)
 }
 
-// listIDs answers GET /v1/blueprint: a lightweight index (id + service count +
-// monthly cost) the console lists before drilling into one blueprint's SBOM.
-func listIDs(s *cloud.Service[state], c *zip.Ctx) error {
+// blueprintRow is one entry of the blueprint index: which stack it is, how many
+// services it runs, and what a month of that footprint costs at the active card.
+type blueprintRow struct {
+	// TemplateID is the blueprint slug — the id GET /v1/blueprint/sbom takes as
+	// ?template= and the path under templates.hanzo.ai/blueprints/<id>/.
+	TemplateID string `json:"templateId"`
+	// Services is how many compose services the stack runs.
+	Services int `json:"services"`
+	// CentsPerMonth is the estimated compute cost of running the whole stack for
+	// one month, in USD cents, from the rate card GET /v1/blueprint/health echoes.
+	CentsPerMonth int64 `json:"estCentsPerMonth"`
+}
+
+// blueprintIndex is the GET /v1/blueprint envelope: every priced blueprint, id-sorted.
+type blueprintIndex struct {
+	// Data is one row per embedded blueprint, sorted by template id.
+	Data []blueprintRow `json:"data"`
+}
+
+// list returns every deployable blueprint with its service count and estimated
+// monthly compute cost.
+//
+// It is the lightweight index the console renders as a template gallery before
+// drilling into one stack's bill of images — GET /v1/blueprint/sbom?template=<id>
+// is the detail view. The cost is the same figure the deploy path meters the
+// deploying org on and the 20% author royalty is taken from, priced from the
+// active rate card (GET /v1/blueprint/health echoes that card).
+func (o blueprintOps) list(ctx context.Context, _ *noIn) (*blueprintIndex, error) {
 	ids, err := catalogIDs()
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "blueprint: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "blueprint: %v", err)
 	}
-	type row struct {
-		TemplateID    string `json:"templateId"`
-		Services      int    `json:"services"`
-		CentsPerMonth int64  `json:"estCentsPerMonth"`
-	}
-	out := make([]row, 0, len(ids))
+	out := make([]blueprintRow, 0, len(ids))
 	for _, id := range ids {
 		est, ok := EstimateTemplate(id)
 		if !ok {
 			continue
 		}
-		out = append(out, row{TemplateID: id, Services: len(est.SBOM), CentsPerMonth: est.CentsPerMonth})
+		out = append(out, blueprintRow{TemplateID: id, Services: len(est.SBOM), CentsPerMonth: est.CentsPerMonth})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &blueprintIndex{Data: out}, nil
 }
 
-// health is a pure liveness probe that also echoes the active rate card, so an
-// operator can confirm the tuned knobs took effect. Not JWT-gated, always 200.
-func health(s *cloud.Service[state], c *zip.Ctx) error {
+// blueprintHealth is the GET /v1/blueprint/health body. Field order is the
+// alphabetical key order the map it replaced marshalled in, so the bytes on the
+// wire did not move when this route became a typed op.
+type blueprintHealth struct {
+	// Blueprints is how many blueprints this build has embedded and priced.
+	Blueprints int `json:"blueprints"`
+	// RateCard is the rate card actually in force after the operator env overlay
+	// (CLOUD_BLUEPRINT_UCPU_HR / CLOUD_BLUEPRINT_UGB_HR), not the shipped default.
+	RateCard RateCard `json:"rateCard"`
+	// Service names the subsystem answering — always "blueprint".
+	Service string `json:"service"`
+	// Status is "ok"; the route answers 200 whenever the subsystem is mounted.
+	Status string `json:"status"`
+}
+
+// health reports blueprint liveness and echoes the compute rate card in force.
+//
+// The rate card is the one the estimator actually applies after the operator env
+// overlay, so an operator can confirm a tuned knob took effect rather than
+// inferring it from a price. Not JWT-gated — a liveness probe must be reachable —
+// and it always answers 200 while the subsystem is mounted.
+func (o blueprintOps) health(ctx context.Context, _ *noIn) (*blueprintHealth, error) {
 	ids, _ := catalogIDs()
-	return c.JSON(http.StatusOK, map[string]any{
-		"service":    "blueprint",
-		"status":     "ok",
-		"blueprints": len(ids),
-		"rateCard":   rates,
-	})
+	return &blueprintHealth{
+		Blueprints: len(ids),
+		RateCard:   rates,
+		Service:    "blueprint",
+		Status:     "ok",
+	}, nil
 }
 
 // ── rate-card env overlay ────────────────────────────────────────────────────

@@ -84,7 +84,7 @@ func TestParseAcceptsJSON(t *testing.T) {
 }
 
 // linear is a 3-step chain a → b → c for the transition/gating tests.
-var linear = Curriculum{Version: "t", Steps: []Step{
+var linear = Curriculum{Version: "t", Steps: []JourneyStep{
 	{ID: "a", Title: "A"},
 	{ID: "b", Title: "B", Dependencies: []string{"a"}},
 	{ID: "c", Title: "C", Dependencies: []string{"b"}},
@@ -146,7 +146,7 @@ func TestDependencyGating(t *testing.T) {
 // TestMultiDependencyBlockedByAll: a step with several deps lists every unmet one,
 // sorted, and clears them as they resolve.
 func TestMultiDependencyBlockedByAll(t *testing.T) {
-	c := Curriculum{Steps: []Step{
+	c := Curriculum{Steps: []JourneyStep{
 		{ID: "x", Title: "X"},
 		{ID: "y", Title: "Y"},
 		{ID: "z", Title: "Z", Dependencies: []string{"y", "x"}},

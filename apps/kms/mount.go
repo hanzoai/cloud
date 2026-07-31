@@ -34,7 +34,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
@@ -191,9 +190,12 @@ func newEmbeddedClient(cfg *cloud.Config, log luxlog.Logger) (cloud.KMSClient, e
 	return c, nil
 }
 
-// guard wraps a secrets handler with the org-scope gate. Fail-closed: a request
-// whose validated org is neither {org} nor a SuperAdmin is refused 403 before
-// the store is touched; an unconfigured master key yields 503.
+// guard wraps a secrets handler with the platform gate (cloud.Member — a
+// validated principal, HIP-0519's one predicate set) and then the two facts that
+// are this subsystem's OWN business: the org key must be a storage-safe label,
+// and the store must hold a master key. Fail-closed in that order, before any
+// record is touched: 403 for an unvalidated caller, 400 for a malformed org, 503
+// for an unconfigured key.
 //
 // The org match is EXACT (==), not case-folded: this mirrors the platform's own
 // tenant boundary (SanitizeIdentity gates admin on `owner == adminOrg`, and
@@ -201,13 +203,7 @@ func newEmbeddedClient(cfg *cloud.Config, log luxlog.Logger) (cloud.KMSClient, e
 // path in lockstep — orgPath folds :org into /orgs/{org} verbatim, so a
 // case-insensitive authz check would let org "Acme" reach org "acme"'s namespace.
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
-	return func(ctx *zip.Ctx) error {
-		// A validated principal FIRST: the identity middleware restores a client
-		// X-Org-Id on the bearer-less path, so an unvalidated ctx.Org() is just a
-		// header an off-gateway caller chose. Refuse before reading it.
-		if !principal.Validated(ctx) {
-			return zip.ErrForbidden("no validated principal")
-		}
+	return cloud.Guard(cloud.Member, func(ctx *zip.Ctx) error {
 		org := reqOrg(ctx)
 		if !validOrg(org) {
 			return zip.ErrBadRequest("org must be a DNS-1123 label")
@@ -216,7 +212,7 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 			return zip.Errorf(http.StatusServiceUnavailable, "%s", ErrMasterKeyMissing.Error())
 		}
 		return h(ctx)
-	}
+	})
 }
 
 // ── health + config ────────────────────────────────────────────────────────────

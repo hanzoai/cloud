@@ -5,6 +5,7 @@
 // buildFromPush as the cloud.PushBuilder in Mount; clients/git calls
 // cloud.OnGitPush after a push lands, which dispatches here. Best-effort by
 // contract — a build-trigger failure never fails the push the client committed.
+
 package platform
 
 import (

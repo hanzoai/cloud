@@ -6,58 +6,96 @@ package cloudflare
 // A value is relayed RAW (getRaw) since a stored value is not the CF JSON envelope.
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
-func kvNamespaceList(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctClient(s, c)
-	if err != nil {
-		return err
-	}
-	return cl.pass(c, http.MethodGet, "/accounts/"+acct+"/storage/kv/namespaces"+query(c, "page", "per_page", "order", "direction"), nil)
+// namespacesIn pages and sorts the namespace list. Every field is optional and
+// rides the query string; each is forwarded to Cloudflare under the same name.
+type namespacesIn struct {
+	// Page is the 1-based page of namespaces to return.
+	Page string `json:"page"`
+	// PerPage is how many namespaces one page holds.
+	PerPage string `json:"per_page"`
+	// Order names the field to sort by, and Direction sorts asc or desc.
+	Order     string `json:"order"`
+	Direction string `json:"direction"`
 }
 
-func kvNamespaceCreate(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare
+// account. Any org member may read.
+func (o ops) kvNamespaceList(ctx context.Context, in *namespacesIn) (*cfResult, error) {
+	cl, acct, err := o.acctClient(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var in struct {
-		Title string `json:"title"`
-	}
-	if err := json.Unmarshal(c.Body(), &in); err != nil {
-		return zip.ErrBadRequest("invalid request body")
+	q := forward(map[string]string{
+		"page": in.Page, "per_page": in.PerPage, "order": in.Order, "direction": in.Direction,
+	})
+	return cl.relay(ctx, http.MethodGet, "/accounts/"+acct+"/storage/kv/namespaces"+q, nil)
+}
+
+// namespaceCreateIn titles a new KV namespace.
+type namespaceCreateIn struct {
+	// Title is the namespace's display title. Cloudflare mints the id.
+	Title string `json:"title"`
+}
+
+// KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare
+// account. Requires org admin. Cloudflare mints the namespace id the value routes
+// address.
+//
+// Example: {"title": "sessions"}
+func (o ops) kvNamespaceCreate(ctx context.Context, in *namespaceCreateIn) (*cfResult, error) {
+	cl, acct, err := o.acctWrite(ctx)
+	if err != nil {
+		return nil, err
 	}
 	title := strings.TrimSpace(in.Title)
 	if title == "" {
-		return zip.ErrBadRequest("namespace title is required")
+		return nil, zip.ErrBadRequest("namespace title is required")
 	}
-	return cl.pass(c, http.MethodPost, "/accounts/"+acct+"/storage/kv/namespaces", map[string]string{"title": title})
+	return cl.relay(ctx, http.MethodPost, "/accounts/"+acct+"/storage/kv/namespaces",
+		map[string]string{"title": title})
 }
 
-func kvNamespaceDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// namespaceRef addresses one KV namespace by id, from the path.
+type namespaceRef struct {
+	// Namespace is the Cloudflare KV namespace id.
+	Namespace string `json:"namespace"`
+}
+
+// KVNamespaceDelete deletes a Workers KV namespace and every key in it. Requires
+// org admin.
+//
+// Example: {"namespace": "0123456789abcdef0123456789abcdef"}
+func (o ops) kvNamespaceDelete(ctx context.Context, in *namespaceRef) (*cfResult, error) {
+	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ns, err := pathSeg(c, "namespace", nameRE)
+	ns, err := seg("namespace", in.Namespace, nameRE)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return cl.pass(c, http.MethodDelete, "/accounts/"+acct+"/storage/kv/namespaces/"+ns, nil)
+	return cl.relay(ctx, http.MethodDelete, "/accounts/"+acct+"/storage/kv/namespaces/"+ns, nil)
 }
 
 // kvValueGet relays a namespace key's raw value (getRaw — a stored value is bytes,
 // not the CF envelope), with its content type. A missing key is Cloudflare's own 404.
-func kvValueGet(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctClient(s, c)
+//
+// NOT a typed op: a KV value is opaque bytes under whatever content type it was
+// written with, and a typed op answers JSON. Typing it would re-encode a stored
+// value into a JSON document.
+func (o ops) kvValueGet(c *zip.Ctx) error {
+	ctx := c.Context()
+	cl, acct, err := o.acctClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -69,7 +107,7 @@ func kvValueGet(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	data, ctype, err := cl.getRaw(c.Context(), "/accounts/"+acct+"/storage/kv/namespaces/"+ns+"/values/"+key)
+	data, ctype, err := cl.getRaw(ctx, "/accounts/"+acct+"/storage/kv/namespaces/"+ns+"/values/"+key)
 	if err != nil {
 		return cfErr(err)
 	}
@@ -79,8 +117,12 @@ func kvValueGet(s *cloud.Service[state], c *zip.Ctx) error {
 
 // kvValuePut writes a key's value: the request body IS the value (any content type),
 // forwarded verbatim; optional expiration params ride the query. Mutation → org admin.
-func kvValuePut(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+//
+// NOT a typed op: the request body IS the stored value, under the caller's own
+// content type. A typed In would parse it as JSON and refuse everything else.
+func (o ops) kvValuePut(c *zip.Ctx) error {
+	ctx := c.Context()
+	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
 		return err
 	}
@@ -98,26 +140,38 @@ func kvValuePut(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	var out json.RawMessage
 	path := "/accounts/" + acct + "/storage/kv/namespaces/" + ns + "/values/" + key + query(c, "expiration", "expiration_ttl")
-	if err := cl.cfUpload(c.Context(), http.MethodPut, path, ctype, c.Body(), &out); err != nil {
+	if err := cl.cfUpload(ctx, http.MethodPut, path, ctype, c.Body(), &out); err != nil {
 		return cfErr(err)
 	}
 	return writeResult(c, out)
 }
 
-func kvValueDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// valueRef addresses one key in one KV namespace, both from the path.
+type valueRef struct {
+	// Namespace is the Cloudflare KV namespace id.
+	Namespace string `json:"namespace"`
+	// Key is the key within that namespace. KV keys are broad (up to 512 bytes),
+	// so this one is escaped rather than charset-restricted.
+	Key string `json:"key"`
+}
+
+// KVValueDelete removes one key from a Workers KV namespace. Requires org admin.
+//
+// Example: {"namespace": "0123456789abcdef0123456789abcdef", "key": "session/abc"}
+func (o ops) kvValueDelete(ctx context.Context, in *valueRef) (*cfResult, error) {
+	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ns, err := pathSeg(c, "namespace", nameRE)
+	ns, err := seg("namespace", in.Namespace, nameRE)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	key, err := kvKeySeg(c.Param("key"))
+	key, err := kvKeySeg(in.Key)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return cl.pass(c, http.MethodDelete, "/accounts/"+acct+"/storage/kv/namespaces/"+ns+"/values/"+key, nil)
+	return cl.relay(ctx, http.MethodDelete, "/accounts/"+acct+"/storage/kv/namespaces/"+ns+"/values/"+key, nil)
 }
 
 // kvKeySeg validates + url-escapes a KV key for the value path segment. KV keys are

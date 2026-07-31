@@ -26,12 +26,28 @@
 # opt-in for a plugin-less host, to be fed by a dedicated per-arch publisher if one
 # is ever needed — not by this 16-bounded lane.
 
+# THE CGO TAG FLOOR for every raw `go` invocation below. Under cgo,
+# `sqlite_math_functions` is not a preference — hanzoai/base declares a
+# COMPILE ERROR without it (base/core/sqlite_math_required.go, `//go:build cgo &&
+# !sqlite_math_functions`): its search layer generates SQL calling acos/cos/sin/
+# radians/sqrt, which the cgo sqlite has only behind that tag, so base refuses to
+# build a binary whose SQL surface is smaller than the code above it writes
+# against. 47 of cloud's 306 packages reach base/core (apps/git, apps/agents,
+# apps/billing, apps/base, … plus their plugin/<app> mains), so a cgo build
+# without the tag fails to COMPILE them — and a gate that cannot build is a gate
+# that never ran a test. `sqlite_fts5` is the same tag the image and `make test`
+# carry: without it any store whose migration declares an FTS5 table cannot open.
+# The Dockerfile passes both (plus libsqlite3) already; these steps are the raw-go
+# path that bypasses the Makefile, which is exactly how the two drifted apart.
+# Note go-vet sets no CGO_ENABLED: it inherits the toolchain default, which is 1
+# on a runner with a C toolchain (build.yml provisions one), so vet needs the tag
+# for the same reason go-unit does.
 test:
   - name: go-vet
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
-      go vet ./...
+      go vet -tags "sqlite_fts5 sqlite_math_functions" ./...
   - name: generated-current
     # manifest/apps.go is the hand-authored source of truth for the subsystem set.
     # gen-app-cmds scaffolds a plugin/<app>/main.go for any manifest app that
@@ -108,16 +124,14 @@ test:
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
-      make -f mk/fleet.mk openapi-apps
-      # --porcelain, not `git diff`: a NEW app produces a NEW subset, which is
-      # untracked and therefore invisible to a diff. Scoped to the files the
-      # per-app target owns.
-      stale=$(git status --porcelain -- 'plugin/*/openapi.json')
-      if [ -n "$stale" ]; then
-        echo "::error::an app's published subset is stale — its routes changed without 'make -C apps/<app> openapi'. Run 'make -f mk/fleet.mk openapi-apps' and commit."
-        echo "$stale"
-        exit 1
-      fi
+      # ONE gate definition, called here rather than restated: mk/fleet.mk's
+      # surface-check regenerates every subset AND weaves the golden, then fails
+      # on any porcelain change. This step used to regenerate the subsets only,
+      # so openapi.yaml — the file the SDK repos actually pull — was never checked
+      # against source by anything: openapi-composed above compares it to the
+      # subsets, and both are derived. That is how plugin/ingress lost eight paths
+      # with every gate green.
+      make -f mk/fleet.mk surface-check
   - name: go-unit
     run: |
       set -e
@@ -134,6 +148,9 @@ test:
       #   TestIndexerUnreachableHonestEmpty — asserts a hostname does NOT resolve.
       #     A resolver that hijacks NXDOMAIN (or is merely slow) fails it for
       #     reasons that have nothing to do with this code.
-      go test -count=1 -timeout 30m \
+      # -tags: the cgo floor above. CGO_ENABLED=1 without sqlite_math_functions
+      # cannot compile the 47 packages that reach hanzoai/base/core, so this step
+      # reported "[build failed]" for them instead of running their tests.
+      go test -count=1 -timeout 30m -tags "sqlite_fts5 sqlite_math_functions" \
         -skip 'TestRecord_DebitsFinanceInProcess|TestIndexerUnreachableHonestEmpty' \
         ./...

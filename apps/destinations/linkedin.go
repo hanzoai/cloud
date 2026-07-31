@@ -31,7 +31,7 @@ func (linkedinDest) Category() string { return categoryAdvertising }
 
 func (linkedinDest) Spec() Spec {
 	return Spec{
-		Fields: []Field{
+		Fields: []DestinationField{
 			{Key: "conversionId", Label: "Conversion Rule ID", Required: true, Example: "1234567"},
 		},
 		Secrets:  []string{"access_token"},
