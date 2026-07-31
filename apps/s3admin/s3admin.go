@@ -1,10 +1,13 @@
-// Package s3admin is the ONE shared S3 access path for the unified cloud binary.
+// Package s3admin builds the cloud binary's S3 clients from the one shared admin
+// credential (S3_ADMIN_*) — an internal client for control and data operations,
+// and a public-host client whose only job is minting presigned URLs.
 //
-// Every subsystem that touches the shared object store — clients/projects (the
-// deploy blob store) and clients/s3 (the /v1/s3 file-manager control plane) —
-// builds its *s3.Client here, from the SAME admin credentials
-// (S3_ADMIN_*). There is no second S3 client construction anywhere in the
-// binary: one endpoint, one credential source, one connect path (DRY).
+// Its consumers are apps/storage (the /v1/s3 object plane), apps/projects (the
+// deploy blob store), apps/sites (static site serving), clients/s3vfs (deps.VFS,
+// team blobs) and build.go. One credential source, one endpoint, one connect
+// path — but NOT yet the only construction site: apps/provisioning builds its own
+// *s3.Client from the SAME S3_ADMIN_* variables (provisioner.go newS3), which is
+// the second site this package exists to retire.
 //
 // The backend is the SeaweedFS S3 gateway (s3.hanzo.svc:9000), which speaks the
 // S3 API, so hanzoai/s3-go is the client. The gateway is reached over the internal

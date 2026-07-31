@@ -1,10 +1,12 @@
-// Package graph mounts the Hanzo Cloud CHAIN-DATA surface: the deployment's
-// blockchain indexing + oracle feeds, served as clean, principal-gated REST off the
-// unified cloud binary and fronting the Lux chain-data plane — luxfi/indexer (the
-// per-network block/event indexer, explorer REST at /v1/explorer/*) and luxfi/graph
-// (the GraphQL query layer that indexes O-Chain oracle price feeds). It exists so
-// the console's Indexer and Oracles pages read REAL chain state from ONE place
-// (api.hanzo.ai/v1/*) instead of rendering "not connected".
+// Package graph is chain data (/v1/indexers, /v1/oracles): the deployment's block
+// indexers with the height each has reached, and the on-chain price feeds — read
+// from the Lux chain-data plane, principal-gated, and never fabricated.
+//
+// The two upstreams are luxfi/indexer (the per-network block/event indexer,
+// explorer REST at /v1/explorer/*) and luxfi/graph (the GraphQL query layer that
+// indexes O-Chain oracle price feeds). It exists so the console's Indexer and
+// Oracles pages read REAL chain state from ONE place (api.hanzo.ai/v1/*) instead
+// of rendering "not connected".
 //
 // This subsystem OWNS no chain state — the indexer and graph do. It is a thin,
 // principal-gated translator: it reads the indexer's health + latest block and the
