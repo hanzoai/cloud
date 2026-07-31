@@ -754,6 +754,32 @@
           "runner"
         ]
       }
+    },
+    "/v1/runner/releases": {
+      "get": {
+        "operationId": "get_v1_runner_releases",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/v1/runner/releases/{id}": {
+      "get": {
+        "operationId": "get_v1_runner_releases_by_id",
+        "tags": [
+          "runner"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
