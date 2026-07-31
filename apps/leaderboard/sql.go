@@ -14,6 +14,7 @@
 // bucket/limit a closed enum / validated int. The builders return (sql, args) so
 // a test can assert a hostile org slug or metric lands in args (or is rejected),
 // never in the SQL string.
+
 package leaderboard
 
 import (

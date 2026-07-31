@@ -28,6 +28,7 @@
 //     it leaves the process.
 //   - FAIL-SOFT. The sink runs detached (a panic-guarded goroutine) so a slow or
 //     broken destination can never block, fail, or crash an ingest.
+
 package analytics
 
 import "time"

@@ -53,6 +53,7 @@
 // this replaces) answers a foreign org's lookup with the real owner's replica id
 // and then forwards the invocation there: the tenant boundary would exist in the
 // socket layer and nowhere in the routing layer.
+
 package bot
 
 import (

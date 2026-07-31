@@ -31,6 +31,7 @@
 // already owns — "copy an arbitrary prefix" is not a reachable state, and the
 // server-side copy is therefore not an exfiltration primitive. Traversal is
 // killed by safeRel, the SAME rooted-clean rule the artifact walker uses.
+
 package projects
 
 import (

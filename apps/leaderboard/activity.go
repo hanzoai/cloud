@@ -12,6 +12,7 @@
 // Authorization is resolved SERVER-SIDE from the validated principal; a caller can
 // never widen scope past what they're entitled to. org is always the leading bound
 // predicate in the query.
+
 package leaderboard
 
 import (

@@ -20,6 +20,7 @@
 // registry, no network — exactly as clients/sbom/parse.go proves out its assemblers.
 // blueprint.go is the thin orchestration that resolves a template id to a compose
 // and serves these values.
+
 package blueprint
 
 import (

@@ -6,6 +6,7 @@
 // day — so it refuses when the rollup is already non-empty unless ?force=true. Pass
 // ?before=<RFC3339> to bound the seed (default now); use the MV-creation instant so
 // the seed and the live MV never overlap.
+
 package leaderboard
 
 import (
