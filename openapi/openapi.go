@@ -50,6 +50,7 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -94,6 +95,24 @@ type Route struct {
 var methods = map[string]bool{
 	"GET": true, "PUT": true, "POST": true, "DELETE": true,
 	"OPTIONS": true, "PATCH": true, "TRACE": true,
+}
+
+// Methods returns the methods this generator publishes, sorted.
+//
+// It exists for ONE caller shape: a subsystem whose whole surface is an All()
+// registration. All() binds every method at one path, so there is no per-method
+// registration site to hang prose on — the subsystem declares its prose in a loop
+// instead, and that loop has to cover EXACTLY what the document renders. Reading
+// the projection's own set is what makes it exact: a method added or dropped here
+// moves both halves at once, so the loop can neither describe an operation nobody
+// publishes nor miss one that is published.
+func Methods() []string {
+	out := make([]string, 0, len(methods))
+	for m := range methods {
+		out = append(out, m)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Live reads the router. It is the SOLE adapter from fiber to data — every other
@@ -691,6 +710,28 @@ func Mount(app *zip.App, info Info, servers ...Server) {
 // encoding/json rather than the app's own encoder, because these are the bytes
 // openapi.yaml is rendered from (openapi/weave_test.go): the served document and
 // the committed artifact are then the same bytes, not two encodings that agree.
+// The document endpoint describes ITSELF, in an init rather than in serve, because
+// serve runs once per document source (Mount and MountFleet) and Describe refuses a
+// duplicate — a self-description that panicked the second time a process mounted
+// would be worse than none.
+//
+// It is the one operation with no owning subsystem, so nothing else would ever
+// declare it, and it was the last route in the fleet publishing an operationId and
+// nothing else. A generated SDK offers it as a method; a spec-derived CLI offers it
+// as a command. Both should be able to say what it is.
+func init() {
+	Describe(Path, http.MethodGet,
+		"The API description this SDK was generated from",
+		"Serves the OpenAPI document for the routes this process actually answers — "+
+			"generated from the live router at request time, not from a checked-in file that "+
+			"can disagree with it.\n\n"+
+			"On an app it is that app's own surface; on the fleet's front door it is the woven "+
+			"document for every mounted app. Unauthenticated by design: a client has to be able "+
+			"to read the contract before it holds a credential, and the document grants nothing.\n\n"+
+			"Rendered once and served as bytes thereafter, so the route table's immutability is "+
+			"what makes a repeat request a memcpy rather than a re-encode of a megabyte document.")
+}
+
 func serve(app *zip.App, doc func() (*Document, error)) {
 	render := sync.OnceValues(func() ([]byte, error) {
 		d, err := doc()
