@@ -176,7 +176,7 @@
                     "u_1",
                     "u_2"
                   ],
-                  "source": "hanzo.events",
+                  "source": "event.event",
                   "unmatched": 497
                 },
                 "schema": {
