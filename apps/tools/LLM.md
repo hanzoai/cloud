@@ -44,6 +44,23 @@ so the tools read `stripe_charge` rather than `m4f21c8_charge`. `Dispatch` cuts 
 tool name on the FIRST underscore, which is why `sanitize` drops underscores from
 an id rather than mapping them.
 
+## Known gap: a credential can be destroyed, not deleted
+
+`types.KMSClient` (`types/types.go:206`) has `GetSecret`, `PutSecret` and `Sign`
+and no removal. The KMS service HAS one — `apps/kms` `Client.Delete` — so the gap
+is the interface and `KMSPeer` (`kmspeer.go`), not the store.
+
+So `deleteServer` OVERWRITES a deregistered server's credential with empty rather
+than removing the ref (`http.go` `forget`). That destroys the material, which is
+the part that matters for a deletion request or a rotation; it leaves an empty ref
+behind, which nothing reads because the row is gone.
+
+Closing it properly means adding `DeleteSecret` to `types.KMSClient`, implementing
+it on `KMSPeer` over the existing `plane.KMS*` ops, and updating the fifteen
+implementations (mostly test fakes across twelve packages). That is a change to a
+fleet-wide seam and it belongs to whoever owns that seam — not smuggled in behind
+a catalog feature.
+
 ## The door — `door.go`
 
 The fleet serves ONE MCP door at `POST /v1/mcp`. Its build-time half is 549 typed
