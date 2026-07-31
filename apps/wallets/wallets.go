@@ -1,3 +1,5 @@
+package wallets
+
 // wallets.go owns the HTTP surface (/v1/wallets/*), the Mount/config seam that
 // selects the custody set, the process singleton, and the finance seam.
 //
@@ -14,7 +16,6 @@
 // KMS is ALWAYS available (deps.KMS); MPC + treasury only when the cluster is
 // wired (CLOUD_WALLETS_MPC_ADDR) and the JWT secret resolves from KMS — else
 // those Kinds fail closed with ErrMPCNotConfigured.
-package wallets
 
 import (
 	"context"
