@@ -589,6 +589,11 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	if err := mountProbes(deps); err != nil { // fleet health probes -> hanzo_service_up
 		return err
 	}
+	// PUBLIC status face GET /v1/summary — the outward projection of the gauge the
+	// probes above record. After mountProbes because it reads what they write, and
+	// before the terminal wildcard like every other specific route. Unauthenticated
+	// and tenant-free by construction; see summary.go.
+	mountSummary(a, deps)
 	// TERMINAL sub-mount: the hanzoai/o11y module wildcard /v1/o11y/* — the runtime
 	// route surface, delegating to the SAME gated handler mountRuntime installed via
 	// o11y.SetHandler. Registered LAST (after every specific /v1/o11y/* route above) so

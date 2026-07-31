@@ -35,7 +35,11 @@ var Apps = []App{
 	{Name: "account", Prefixes: []string{"/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed-status", "/v1/iam/keys", "/v1/iam/onboard", "/v1/keys"}},
 	{Name: "iam", Prefixes: []string{"/login/oauth", "/v1/iam"}},
 	{Name: "base", Prefixes: []string{"/v1/base", "/v1/collections", "/v1/waitlist"}},
-	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry"}, Eager: true},
+	// /v1/summary is the PUBLIC platform status document (apps/o11y/summary.go),
+	// the outward projection of the fleet health probes o11y already runs. It has
+	// to be listed here or the host never routes it to this app and it falls to
+	// commerce's bare "/v1", which does not serve it.
+	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry", "/v1/summary"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
 	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
 	// the fleet's route of last resort: every path no app named deeper — the whole
