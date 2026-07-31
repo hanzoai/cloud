@@ -49,6 +49,72 @@
         "description": "Registers a new hosted-checkout tenant so its hostnames resolve to their own branding, identity config, payment providers and broker backend. PLATFORM admin only — the reserved admin org's owner claim; an org owner with the org-level admin bit is refused 403 and an anonymous caller 401, so a tenant can never be minted from inside a tenant. A duplicate name is 409 and a malformed hostname 400. The response echoes only the identity and timestamps, never the provider records the caller just sent, and the mutation is audited by hash rather than by content so a credential that slips into the body is not replayable from the log."
       }
     },
+    "/v1/billing/alerts": {
+      "get": {
+        "operationId": "get_v1_billing_alerts",
+        "summary": "List your org's spend caps and rate limits",
+        "description": "Returns the caps and alerts keyed to the caller's own billing subject, each with its threshold, enforcement flag, soft-warning percentage and current period spend. Any authenticated member of the org may read them — only the writes require an admin. The rows are keyed on the org subject the enforcement gate itself reads, which is why a cap created here is the one that actually binds. A caller with no resolvable org or subject gets an empty list, never another tenant's caps.",
+        "tags": [
+          "billing"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_billing_alerts",
+        "summary": "Set a spend cap or rate limit on your org",
+        "description": "Creates a cap for the caller's own org and answers the stored row with its current period spend. A spend cap is a FINANCIAL SAFETY control, so writing one requires an ORG ADMIN, a platform admin, or the internal service token — a plain authenticated member is refused 403, because a member who could delete the cap could uncap the org's spend and a member who could set a one-cent enforcing cap could deny the whole org. The cap is always keyed to the caller's own billing subject: a userId in the body is overwritten, never honored, so a cap cannot be planted on another subject. At least one of a positive threshold or a positive rateLimitRpm is required, softPct must be within 0 to 100, and an org that has reached its row limit is refused 400.",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/alerts/authorize": {
+      "get": {
+        "operationId": "get_v1_billing_alerts_authorize",
+        "summary": "The per-request spend-cap verdict the metering gate consumes",
+        "description": "Answers allow, reason, capCents, spentCents and warnPct for a proposed amount against a (project, service) scope — the verdict the request-edge metering gate reads before admitting a call. It evaluates EVERY covering cap and the most restrictive enforcing one wins; soft caps and an enforcing project cap whose project axis is not validated never block, they only raise the warning utilization. It is a service-to-service read authenticated by the internal service token with the org pinned by the gateway, not a browser call. Two rules matter: the spend it scores comes from the finance ledger's current-month total, and it FAILS OPEN on unknown spend — a transient read failure allows rather than denies, so a backend blip never bills-blocks an under-cap customer, while a known overage still denies.",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/alerts/{id}": {
+      "delete": {
+        "operationId": "delete_v1_billing_alerts_by_id",
+        "summary": "Remove one of your org's spend caps",
+        "description": "Deletes the addressed cap and answers 204. Requires an ORG ADMIN, a platform admin, or the internal service token — deleting a cap uncaps the org's spend, so a plain member is refused 403. Ownership is checked per row and a cap the caller does not own is refused as 404 rather than 403, so the response cannot confirm that another org's id exists.",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_billing_alerts_by_id",
+        "summary": "Change one of your org's spend caps",
+        "description": "Applies only the fields the body actually carries — title, threshold, project, service, enforce, softPct, rateLimitRpm — and leaves the rest as stored, answering the merged row with its current period spend. Requires an ORG ADMIN, a platform admin, or the internal service token, for the same reason creation does: a member who could edit the cap could raise it to nothing or drop it to a punitive floor. Ownership is checked per row and a cap the caller does not own is refused as 404, never 403, so the id space cannot be probed.",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/billing/auto-recharge/run-all": {
       "post": {
         "operationId": "post_v1_billing_auto-recharge_run-all",
@@ -116,72 +182,6 @@
         "description": "Returns every subscription tier a buyer can choose, each carrying the platform promo currently in effect, optionally narrowed with the category query. Prices come from the admin-editable plan authority in the database; the embedded catalog is only a loud-failing fallback, so a failed seed or a query error serves the known plans rather than a silently blank list. It is a catalog read, not an entitlement read — it says what may be bought, never what this caller has.",
         "tags": [
           "billing"
-        ]
-      }
-    },
-    "/v1/billing/spend-alerts": {
-      "get": {
-        "operationId": "get_v1_billing_spend-alerts",
-        "summary": "List your org's spend caps and rate limits",
-        "description": "Returns the caps and alerts keyed to the caller's own billing subject, each with its threshold, enforcement flag, soft-warning percentage and current period spend. Any authenticated member of the org may read them — only the writes require an admin. The rows are keyed on the org subject the enforcement gate itself reads, which is why a cap created here is the one that actually binds. A caller with no resolvable org or subject gets an empty list, never another tenant's caps.",
-        "tags": [
-          "billing"
-        ]
-      },
-      "post": {
-        "operationId": "post_v1_billing_spend-alerts",
-        "summary": "Set a spend cap or rate limit on your org",
-        "description": "Creates a cap for the caller's own org and answers the stored row with its current period spend. A spend cap is a FINANCIAL SAFETY control, so writing one requires an ORG ADMIN, a platform admin, or the internal service token — a plain authenticated member is refused 403, because a member who could delete the cap could uncap the org's spend and a member who could set a one-cent enforcing cap could deny the whole org. The cap is always keyed to the caller's own billing subject: a userId in the body is overwritten, never honored, so a cap cannot be planted on another subject. At least one of a positive threshold or a positive rateLimitRpm is required, softPct must be within 0 to 100, and an org that has reached its row limit is refused 400.",
-        "tags": [
-          "billing"
-        ]
-      }
-    },
-    "/v1/billing/spend-alerts/authorize": {
-      "get": {
-        "operationId": "get_v1_billing_spend-alerts_authorize",
-        "summary": "The per-request spend-cap verdict the metering gate consumes",
-        "description": "Answers allow, reason, capCents, spentCents and warnPct for a proposed amount against a (project, service) scope — the verdict the request-edge metering gate reads before admitting a call. It evaluates EVERY covering cap and the most restrictive enforcing one wins; soft caps and an enforcing project cap whose project axis is not validated never block, they only raise the warning utilization. It is a service-to-service read authenticated by the internal service token with the org pinned by the gateway, not a browser call. Two rules matter: the spend it scores comes from the finance ledger's current-month total, and it FAILS OPEN on unknown spend — a transient read failure allows rather than denies, so a backend blip never bills-blocks an under-cap customer, while a known overage still denies.",
-        "tags": [
-          "billing"
-        ]
-      }
-    },
-    "/v1/billing/spend-alerts/{id}": {
-      "delete": {
-        "operationId": "delete_v1_billing_spend-alerts_by_id",
-        "summary": "Remove one of your org's spend caps",
-        "description": "Deletes the addressed cap and answers 204. Requires an ORG ADMIN, a platform admin, or the internal service token — deleting a cap uncaps the org's spend, so a plain member is refused 403. Ownership is checked per row and a cap the caller does not own is refused as 404 rather than 403, so the response cannot confirm that another org's id exists.",
-        "tags": [
-          "billing"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "patch": {
-        "operationId": "patch_v1_billing_spend-alerts_by_id",
-        "summary": "Change one of your org's spend caps",
-        "description": "Applies only the fields the body actually carries — title, threshold, project, service, enforce, softPct, rateLimitRpm — and leaves the rest as stored, answering the merged row with its current period spend. Requires an ORG ADMIN, a platform admin, or the internal service token, for the same reason creation does: a member who could edit the cap could raise it to nothing or drop it to a punitive floor. Ownership is checked per row and a cap the caller does not own is refused as 404, never 403, so the id space cannot be probed.",
-        "tags": [
-          "billing"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
         ]
       }
     },

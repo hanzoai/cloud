@@ -13237,6 +13237,17 @@ components:
           description: OK is true whenever the flag engine is serving.
           type: boolean
       type: object
+    healthPlane:
+      properties:
+        bus:
+          type: string
+        ready:
+          type: boolean
+        reason:
+          type: string
+        stream:
+          type: string
+      type: object
     healthReport:
       properties:
         datastore:
@@ -13245,6 +13256,8 @@ components:
           $ref: '#/components/schemas/healthLenses'
         lost:
           $ref: '#/components/schemas/loss'
+        plane:
+          $ref: '#/components/schemas/healthPlane'
         reason:
           type: string
         service:
@@ -16221,7 +16234,7 @@ components:
           description: DistinctID is the person/visitor the event is attributed to.
           type: string
         event:
-          description: Event is the event name, e.g. $pageview.
+          description: Event is the event name, e.g. page_viewed or signup_completed.
           type: string
         id:
           description: |-
@@ -16238,8 +16251,9 @@ components:
           type: string
         properties:
           description: |-
-            Properties is the caller's own property bag, returned verbatim as stored — any
-            JSON object. Omitted when the row carries none or it did not parse.
+            Properties is the row's attributes map as a JSON object (string values — the
+            plane stores Map(String,String), so a nested value the caller sent is a
+            JSON-encoded string). Omitted when the row carries none.
         sessionId:
           description: SessionID groups the events of one visit. Omitted when the
             client sent none.
@@ -16248,8 +16262,10 @@ components:
           description: Timestamp is when the event happened, RFC3339 UTC.
           type: string
         type:
-          description: 'Type is the canonical kind: pageview, error, identify, group
-            or event.'
+          description: |-
+            Type is the row's kind — the plane's discriminator: page, track, identify or
+            group. (Errors are not here at all: they land on event.error and are read at
+            /v1/errors.)
           type: string
         url:
           description: URL is the full page address the event fired on. Omitted when
@@ -26714,13 +26730,17 @@ paths:
   /v1/analytics/health:
     get:
       description: |-
-        Reports the analytics subsystem's own liveness: whether the shared warehouse connection is up, and — when it is — whether each read lens's table has been provisioned yet (the LLM usage ledger and the product-event table, each named in the report).
+        Reports the analytics subsystem's own liveness in BOTH directions: `plane` is the event plane it WRITES (the bus and the JetStream stream every accepted event is published to, both named in the report), and `datastore` is the warehouse it READS, with each read lens's table reported as it is provisioned (the LLM usage ledger and the product-event table).
 
-        IT DOES NOT PROBE THE WAREHOUSE TO EARN ITS 200. `datastore` here is the state of the process's own shared client — established, and not since closed — not the result of a query, so a warehouse that is accepting connections and failing reads still reports healthy. Degraded means only that the client never came up: 503, CARRYING the report (status, datastore:false, reason) as its body rather than an error envelope, so a readiness gate can read the cause off the same object it got at 200.
+        EITHER ONE DOWN IS A 503, and the report says WHICH — they are probed independently and never collapse into a single bit. This endpoint used to report the read half only, and answered 200/ok while every POST /v1/event failed on a stream that could not bind: a total ingest outage behind a green probe. A readiness gate wired here now gates on the write path too.
 
-        A MISSING LENS TABLE IS NOT A FAILURE and never moves the status. The per-lens probe runs only once connected, and a lens reported available:false answers honest-empty rather than erroring — a fresh deployment whose collector has not emitted yet is legitimately 200 with the product-event lens unavailable. The lens block is absent entirely from a degraded report, which has nothing to say about tables it could not reach.
+        `plane.ready` IS A REAL PROBE and walks the ingest path itself — the same connection and the same stream a publish uses — so it cannot answer ready while a publish would 503. `plane.reason` carries the plane's own error text when it is false.
 
-        Unauthenticated on purpose — liveness has to be probe-able — and it reads NO tenant data: table existence only, never a row.
+        `datastore` IS NOT PROBED WITH A QUERY. It is the state of the process's own shared client — established, and not since closed — so a warehouse accepting connections and failing reads still reports true. Degraded CARRIES the report (status, the failing half, reason) as its body rather than an error envelope, so a gate reads the cause off the same object it got at 200.
+
+        A MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens reported available:false answers honest-empty rather than erroring, so a fresh deployment whose collector has not emitted yet is legitimately 200 with the product-event lens unavailable. The lens block is reported whenever the warehouse is REACHABLE — including on a report degraded by the plane, where the tables genuinely were probed — and is absent only when the warehouse is not, having nothing to say about tables it could not reach.
+
+        Unauthenticated on purpose — liveness has to be probe-able — and it reads NO tenant data: table existence and stream presence only, never a row and never an event.
       operationId: get_v1_analytics_health
       responses:
         2XX:
@@ -26729,8 +26749,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/healthReport'
           description: Success
-      summary: Whether the analytics warehouse is reachable, and which lens tables
-        exist
+      summary: Whether the event plane can take a write and the warehouse can answer
+        a read
       tags:
       - analytics
   /v1/analytics/overview:
@@ -28020,6 +28040,86 @@ paths:
       summary: Queue a benchmark run against a catalog model or your own endpoint
       tags:
       - benchmark
+  /v1/billing/alerts:
+    get:
+      description: Returns the caps and alerts keyed to the caller's own billing subject,
+        each with its threshold, enforcement flag, soft-warning percentage and current
+        period spend. Any authenticated member of the org may read them — only the
+        writes require an admin. The rows are keyed on the org subject the enforcement
+        gate itself reads, which is why a cap created here is the one that actually
+        binds. A caller with no resolvable org or subject gets an empty list, never
+        another tenant's caps.
+      operationId: get_v1_billing_alerts
+      summary: List your org's spend caps and rate limits
+      tags:
+      - billing
+    post:
+      description: 'Creates a cap for the caller''s own org and answers the stored
+        row with its current period spend. A spend cap is a FINANCIAL SAFETY control,
+        so writing one requires an ORG ADMIN, a platform admin, or the internal service
+        token — a plain authenticated member is refused 403, because a member who
+        could delete the cap could uncap the org''s spend and a member who could set
+        a one-cent enforcing cap could deny the whole org. The cap is always keyed
+        to the caller''s own billing subject: a userId in the body is overwritten,
+        never honored, so a cap cannot be planted on another subject. At least one
+        of a positive threshold or a positive rateLimitRpm is required, softPct must
+        be within 0 to 100, and an org that has reached its row limit is refused 400.'
+      operationId: post_v1_billing_alerts
+      summary: Set a spend cap or rate limit on your org
+      tags:
+      - billing
+  /v1/billing/alerts/{id}:
+    delete:
+      description: Deletes the addressed cap and answers 204. Requires an ORG ADMIN,
+        a platform admin, or the internal service token — deleting a cap uncaps the
+        org's spend, so a plain member is refused 403. Ownership is checked per row
+        and a cap the caller does not own is refused as 404 rather than 403, so the
+        response cannot confirm that another org's id exists.
+      operationId: delete_v1_billing_alerts_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Remove one of your org's spend caps
+      tags:
+      - billing
+    patch:
+      description: 'Applies only the fields the body actually carries — title, threshold,
+        project, service, enforce, softPct, rateLimitRpm — and leaves the rest as
+        stored, answering the merged row with its current period spend. Requires an
+        ORG ADMIN, a platform admin, or the internal service token, for the same reason
+        creation does: a member who could edit the cap could raise it to nothing or
+        drop it to a punitive floor. Ownership is checked per row and a cap the caller
+        does not own is refused as 404, never 403, so the id space cannot be probed.'
+      operationId: patch_v1_billing_alerts_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Change one of your org's spend caps
+      tags:
+      - billing
+  /v1/billing/alerts/authorize:
+    get:
+      description: 'Answers allow, reason, capCents, spentCents and warnPct for a
+        proposed amount against a (project, service) scope — the verdict the request-edge
+        metering gate reads before admitting a call. It evaluates EVERY covering cap
+        and the most restrictive enforcing one wins; soft caps and an enforcing project
+        cap whose project axis is not validated never block, they only raise the warning
+        utilization. It is a service-to-service read authenticated by the internal
+        service token with the org pinned by the gateway, not a browser call. Two
+        rules matter: the spend it scores comes from the finance ledger''s current-month
+        total, and it FAILS OPEN on unknown spend — a transient read failure allows
+        rather than denies, so a backend blip never bills-blocks an under-cap customer,
+        while a known overage still denies.'
+      operationId: get_v1_billing_alerts_authorize
+      summary: The per-request spend-cap verdict the metering gate consumes
+      tags:
+      - billing
   /v1/billing/auto-recharge/run-all:
     post:
       description: 'Walks every organization and, for those that enabled auto-recharge
@@ -28176,86 +28276,6 @@ paths:
         what this caller has.
       operationId: get_v1_billing_plans
       summary: The public plan catalog, annotated with the active platform promotion
-      tags:
-      - billing
-  /v1/billing/spend-alerts:
-    get:
-      description: Returns the caps and alerts keyed to the caller's own billing subject,
-        each with its threshold, enforcement flag, soft-warning percentage and current
-        period spend. Any authenticated member of the org may read them — only the
-        writes require an admin. The rows are keyed on the org subject the enforcement
-        gate itself reads, which is why a cap created here is the one that actually
-        binds. A caller with no resolvable org or subject gets an empty list, never
-        another tenant's caps.
-      operationId: get_v1_billing_spend-alerts
-      summary: List your org's spend caps and rate limits
-      tags:
-      - billing
-    post:
-      description: 'Creates a cap for the caller''s own org and answers the stored
-        row with its current period spend. A spend cap is a FINANCIAL SAFETY control,
-        so writing one requires an ORG ADMIN, a platform admin, or the internal service
-        token — a plain authenticated member is refused 403, because a member who
-        could delete the cap could uncap the org''s spend and a member who could set
-        a one-cent enforcing cap could deny the whole org. The cap is always keyed
-        to the caller''s own billing subject: a userId in the body is overwritten,
-        never honored, so a cap cannot be planted on another subject. At least one
-        of a positive threshold or a positive rateLimitRpm is required, softPct must
-        be within 0 to 100, and an org that has reached its row limit is refused 400.'
-      operationId: post_v1_billing_spend-alerts
-      summary: Set a spend cap or rate limit on your org
-      tags:
-      - billing
-  /v1/billing/spend-alerts/{id}:
-    delete:
-      description: Deletes the addressed cap and answers 204. Requires an ORG ADMIN,
-        a platform admin, or the internal service token — deleting a cap uncaps the
-        org's spend, so a plain member is refused 403. Ownership is checked per row
-        and a cap the caller does not own is refused as 404 rather than 403, so the
-        response cannot confirm that another org's id exists.
-      operationId: delete_v1_billing_spend-alerts_by_id
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: Remove one of your org's spend caps
-      tags:
-      - billing
-    patch:
-      description: 'Applies only the fields the body actually carries — title, threshold,
-        project, service, enforce, softPct, rateLimitRpm — and leaves the rest as
-        stored, answering the merged row with its current period spend. Requires an
-        ORG ADMIN, a platform admin, or the internal service token, for the same reason
-        creation does: a member who could edit the cap could raise it to nothing or
-        drop it to a punitive floor. Ownership is checked per row and a cap the caller
-        does not own is refused as 404, never 403, so the id space cannot be probed.'
-      operationId: patch_v1_billing_spend-alerts_by_id
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: Change one of your org's spend caps
-      tags:
-      - billing
-  /v1/billing/spend-alerts/authorize:
-    get:
-      description: 'Answers allow, reason, capCents, spentCents and warnPct for a
-        proposed amount against a (project, service) scope — the verdict the request-edge
-        metering gate reads before admitting a call. It evaluates EVERY covering cap
-        and the most restrictive enforcing one wins; soft caps and an enforcing project
-        cap whose project axis is not validated never block, they only raise the warning
-        utilization. It is a service-to-service read authenticated by the internal
-        service token with the org pinned by the gateway, not a browser call. Two
-        rules matter: the spend it scores comes from the finance ledger''s current-month
-        total, and it FAILS OPEN on unknown spend — a transient read failure allows
-        rather than denies, so a backend blip never bills-blocks an under-cap customer,
-        while a known overage still denies.'
-      operationId: get_v1_billing_spend-alerts_authorize
-      summary: The per-request spend-cap verdict the metering gate consumes
       tags:
       - billing
   /v1/billing/subscribe/card:
@@ -36917,9 +36937,9 @@ paths:
     get:
       description: |-
         Errors returns the caller org's most recently captured errors, newest first. The
-        error-tracking read view over the same table the capture doors write: only rows
-        stored as type 'error', each with its captured exception lifted out of the property
-        bag as a first-class field.
+        error-tracking read view over event.error — the plane table the write core's error
+        facts land in (errors are DELIBERATELY not on event.event) — each with its captured
+        exception surfaced from the attributes map as a first-class field.
 
         The org is the validated principal's — never a parameter — and this read requires a
         real bearer, NEVER the write-only publishable key: pk- can attribute a write and can
@@ -42474,8 +42494,9 @@ paths:
     get:
       description: |-
         InsightsEvents returns the caller org's most recent product events, newest first.
-        The console's raw-event view over the same table the capture doors write: one row
-        per stored event, with the caller's own property bag returned verbatim.
+        The console's raw-event view over event.event — the same table the capture doors
+        fill — one row per stored event, with the row's attributes returned as the
+        properties object.
 
         The org is the validated principal's — never a parameter — and a read requires a
         real bearer, never the write-only publishable key. 403 without a validated bearer,
@@ -45005,7 +45026,7 @@ paths:
                 sample:
                 - u_1
                 - u_2
-                source: hanzo.events
+                source: event.event
                 unmatched: 497
               schema:
                 $ref: '#/components/schemas/AudiencePreview'
