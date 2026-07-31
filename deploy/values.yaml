@@ -1,0 +1,31 @@
+# The image tag production runs — the ONE line a release moves.
+#
+# cd.hanzo.ai's `hanzo-cloud` Application is multi-source: it renders the shared
+# chart at hanzoai/universe `charts/app` against that repo's
+# `values/hanzo/cloud.yaml` (848 lines of this service's real configuration,
+# which stay there and are not duplicated here), and then layers THIS file over
+# it as `$values/deploy/values.yaml`. Helm merges later files last, so the only
+# key this file names is the only key it overrides.
+#
+# WHY IT LIVES IN THIS REPO. The second source tracks THIS repo's tags with a
+# semver constraint (`targetRevision: '>=1.801.0'`, `tagPrefix: v`), so CD reads
+# this file from the commit the tag points at. That closes the release loop
+# inside one repo: compute version -> build -> smoke -> write this file -> commit
+# -> tag that commit. A tag can then never name an image that was not built,
+# because the tag is minted last, and the values CD reads always came from the
+# commit the tag proves.
+#
+# Before this, the pin lived only in hanzoai/universe and a human moved it. That
+# worked — the Application has been Synced/Healthy the whole time — but it meant
+# a release stopped one manual step short of production, which is why v1.801.327
+# outlived every commit that followed it.
+#
+# NOT A TEMPLATE. A values file is DATA: Helm does not render `{{ }}` inside one
+# unless the chart explicitly `tpl`s the value, and `charts/app` does not. A
+# template expression here would reach the Deployment as the literal string and
+# fail to pull. The release writes the resolved version; nothing here interpolates.
+#
+# Seeded at the version already live, so the first sync of the multi-source
+# Application is a provable no-op: it proves the wiring without moving production.
+image:
+  tag: v1.801.327
