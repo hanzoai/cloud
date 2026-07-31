@@ -14990,9 +14990,6 @@ components:
           description: Stream is the stream name, from the path.
           type: string
       type: object
-    noContent:
-      properties: {}
-      type: object
     nodeList:
       properties:
         nodes:
@@ -39384,12 +39381,8 @@ paths:
         schema:
           type: string
       responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/noContent'
-          description: ok
+        "204":
+          description: no content
       summary: 'Removes a registered SSH key, scoped to the caller''s org: an org
         can only delete its own, and a key id it does not own is not found.'
       tags:
@@ -39470,12 +39463,8 @@ paths:
         schema:
           type: string
       responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/noContent'
-          description: ok
+        "204":
+          description: no content
       summary: Removes a repo's metadata and purges its storage.
       tags:
       - git
@@ -39867,12 +39856,8 @@ paths:
         schema:
           type: string
       responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/noContent'
-          description: ok
+        "204":
+          description: no content
       summary: Removes one outbound mirror target; later pushes stop being forwarded
         to it.
       tags:
@@ -40091,12 +40076,8 @@ paths:
         schema:
           type: string
       responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/noContent'
-          description: ok
+        "204":
+          description: no content
       summary: Removes one Slack subscription from a repo; the notifier stops posting
         that repo's events to that channel.
       tags:
