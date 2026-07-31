@@ -90,31 +90,69 @@ func TestSynopsisIsEmptyForAnAppFromAnotherModule(t *testing.T) {
 	}
 }
 
-// A product is described by the app of the SAME NAME, in that app's own words,
+// A product is described by the app that SERVES it, in that app's own words,
 // carried on the subset the app wrote. The tag LIST stays a function of the
 // document's operations — every product is named — so a consumer enumerating
 // products loses nothing because nobody wrote a sentence.
 //
-// The fleet's own identity is not a description of any product: a part carrying it
-// has said nothing about itself, and stamping it on a tag would hand every
-// undescribed product the same sentence.
-func TestWeaveDescribesAProductInItsOwnAppsWords(t *testing.T) {
-	part := func(app, desc string) Part {
-		return Part{App: app, Doc: &Document{
-			Info:  Info{Title: fleetInfo.Title, Description: desc, Version: fleetInfo.Version},
-			Paths: map[string]PathItem{"/v1/" + app: {"get": {OperationID: "get_" + app, Tags: []string{app}}}},
+// A tag is a path prefix; an app is a mount; the two are only sometimes one word.
+// Keying this by app name alone left every product whose prefix differs from its
+// app undescribed — 59 of 150 tags, ~50 of them served by one app that had already
+// written the sentence (kb ← knowledge, scrape ← websearch, machines ← visor).
+//
+// Everything else here is a way of saying NOTHING, because each alternative would
+// publish a guess a consumer cannot tell from a fact:
+//
+//   - two apps serve the product → no description (never a coin flip),
+//   - the sole owner has no package doc → no description,
+//   - the part carries the FLEET's identity → it has said nothing about itself,
+//     and stamping that would hand every undescribed product the same sentence.
+//
+// Nothing is ever derived from the product's own name.
+func TestWeaveDescribesAProductInTheWordsOfTheAppThatServesIt(t *testing.T) {
+	// Each app at its OWN address under the shared prefix — which is how a product
+	// comes to have two owners at all: /v1/finance/invoices is billing's and
+	// /v1/finance/ledger is treasury's, no address contested.
+	part := func(app, says string, products ...string) Part {
+		p := Part{App: app, Doc: &Document{
+			Info:  Info{Title: fleetInfo.Title, Description: says, Version: fleetInfo.Version},
+			Paths: map[string]PathItem{},
 		}}
+		for _, prod := range products {
+			p.Doc.Paths["/v1/"+prod+"/"+app] = PathItem{
+				"get": {OperationID: "get_" + app + "_" + prod, Tags: []string{prod}},
+			}
+		}
+		return p
 	}
+
 	doc, err := Weave([]Part{
-		part("kms", "Package kms is the key plane."),
-		part("security", fleetInfo.Description),
+		part("kms", "Package kms is the key plane.", "kms"),
+		part("knowledge", "Package knowledge is the knowledge base.", "kb"),
+		part("billing", "Package billing meters and invoices.", "billing", "finance"),
+		part("treasury", "Package treasury moves money.", "treasury", "finance"),
+		part("metrics", "", "logs"),
+		part("security", fleetInfo.Description, "security"),
+		// admin the APP is named for the tag; plugins also serves the prefix.
+		part("admin", "Package admin is the operator console.", "admin"),
+		part("plugins", "Package plugin lists what is mounted.", "admin", "plugins"),
 	})
 	if err != nil {
 		t.Fatalf("weave: %v", err)
 	}
-	want := map[string]string{"kms": "Package kms is the key plane.", "security": ""}
+	want := map[string]string{
+		"kms":      "Package kms is the key plane.",            // app and prefix are one word
+		"kb":       "Package knowledge is the knowledge base.", // inherited from its sole owner
+		"finance":  "",                                         // two owners — silence
+		"logs":     "",                                         // sole owner has no package doc
+		"security": "",                                         // said nothing about itself
+		"admin":    "Package admin is the operator console.",   // the app it is NAMED for still wins
+		"plugins":  "Package plugin lists what is mounted.",
+		"billing":  "Package billing meters and invoices.",
+		"treasury": "Package treasury moves money.",
+	}
 	if len(doc.Tags) != len(want) {
-		t.Fatalf("tags = %+v, want one per product", doc.Tags)
+		t.Fatalf("tags = %+v, want one per product — an app that is not a prefix (knowledge, metrics) is not a tag", doc.Tags)
 	}
 	for _, tag := range doc.Tags {
 		if tag.Description != want[tag.Name] {

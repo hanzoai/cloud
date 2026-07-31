@@ -50702,7 +50702,9 @@ tags:
 - description: Package bots is a bot doing your work on a real desktop, live, while
     you watch.
   name: bots
-- name: builds
+- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
+    namespace — builds, releases, environments, logs, custom domains.'
+  name: builds
 - description: Package campaign is one go-to-market push across paid, organic and
     email at once.
   name: campaign
@@ -50715,15 +50717,21 @@ tags:
 - description: Package channels is one inbox for the chat apps you connect — Discord,
     Slack, Teams, Telegram.
   name: channels
-- name: cloud
+- description: 'Package venue is bring your own cloud: link a DigitalOcean, AWS or
+    GCP account and its clusters show up ready to run work.'
+  name: cloud
 - description: 'Package cloudflare is your Cloudflare account, managed from Hanzo:
     zones, Pages, Workers, Workers AI, R2, KV and D1.'
   name: cloudflare
-- name: clusters
+- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
+    clusters — launch one, resize it, tear it down.'
+  name: clusters
 - description: Package code is search and symbols across your repos, for you and your
     agents.
   name: code
-- name: collections
+- description: 'Package base is managed Hanzo Base: a hosted backend for your app
+    — collections, records, access rules and sign-in.'
+  name: collections
 - description: 'Package commerce is selling: checkout, subscriptions, invoices, spend
     alerts, payment webhooks and the storefront catalog.'
   name: commerce
@@ -50733,9 +50741,15 @@ tags:
 - description: Package compliance is your KYC/KYB onboarding, accreditation records,
     and the evidence trail behind them.
   name: compliance
-- name: compute
-- name: connector
-- name: connectors
+- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
+    clusters — launch one, resize it, tear it down.'
+  name: compute
+- description: Package integrations is how your org connects third-party accounts
+    like Slack, and revokes them.
+  name: connector
+- description: Package integrations is how your org connects third-party accounts
+    like Slack, and revokes them.
+  name: connectors
 - description: Package content is marketing content from draft to published, on every
     channel.
   name: content
@@ -50745,11 +50759,15 @@ tags:
 - description: 'Package crm is your sales pipeline: the companies, the people, the
     deals in play.'
   name: crm
-- name: csrf
+- description: 'Package account is your own account: API keys you mint and revoke,
+    org onboarding, and wallet top-up.'
+  name: csrf
 - description: Package dataroom is a secure document room you share by link and watch
     page by page.
   name: dataroom
-- name: datastore
+- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
+    document, vector, search or object store, wired straight into your app.'
+  name: datastore
 - description: 'Package deploy is Hanzo CD: see what each app is running, sync it,
     and roll back a bad release.'
   name: deploy
@@ -50759,41 +50777,63 @@ tags:
 - description: 'Package dns is your DNS records: the zones and records behind every
     name you point at Hanzo.'
   name: dns
-- name: docdb
+- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
+    document, vector, search or object store, wired straight into your app.'
+  name: docdb
 - description: 'Package domain is Hanzo Domains: search a name, see the price, buy
     it from your prepaid wallet.'
   name: domain
-- name: download
-- name: edge
-- name: embed-status
-- name: enablement
+- description: 'Package exec is the code interpreter: run a snippet in a sandbox and
+    move files in and out.'
+  name: download
+- description: 'Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant''s
+    Hanzo Zero Trust footprint — overlay networks, mesh services and edge nodes —
+    served as clean, org-scoped REST off the unified cloud binary and fronting the
+    Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
+  name: edge
+- description: 'Package account is your own account: API keys you mint and revoke,
+    org onboarding, and wallet top-up.'
+  name: embed-status
+- description: 'Package pricing is the price list: what every model, provider, GPU
+    tier, tool and hosting plan costs.'
+  name: enablement
 - description: 'Package engine is Hanzo Engine: which models the serving runtime has
     loaded, and the GPUs under it.'
   name: engine
 - description: 'Package entitlements is what your org may run: what the plan grants,
     and which of those products are switched on.'
   name: entitlements
-- name: environments
-- name: errors
+- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
+    namespace — builds, releases, environments, logs, custom domains.'
+  name: environments
+- description: 'Package analytics is product analytics: send an event, read back who
+    did what.'
+  name: errors
 - description: Package esign is a document out for signature, signed and filed with
     an audit trail.
   name: esign
 - description: Package eval is scoring a model on your own data, with a judge you
     choose.
   name: evals
-- name: event
+- description: 'Package analytics is product analytics: send an event, read back who
+    did what.'
+  name: event
 - description: 'Package exec is the code interpreter: run a snippet in a sandbox and
     move files in and out.'
   name: exec
 - description: 'Package experiments is A/B testing anything: a flag, an ad, a subject
     line, a model.'
   name: experiments
-- name: files
+- description: 'Package exec is the code interpreter: run a snippet in a sandbox and
+    move files in and out.'
+  name: files
 - name: finance
 - description: 'Package flags is feature flags: ship it dark, then turn it on for
     who you pick.'
   name: flags
-- name: fleet
+- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
+    clusters — launch one, resize it, tear it down.'
+  name: fleet
 - description: 'Package flow is Hanzo Flow: build an agent workflow on a visual canvas,
     run it, and read every run.'
   name: flow
@@ -50809,7 +50849,9 @@ tags:
 - description: 'Package git is Git hosting for your org: create repos, clone, push,
     and see what they cost.'
   name: git
-- name: gpus
+- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
+    clusters — launch one, resize it, tear it down.'
+  name: gpus
 - description: Package guide is a step-by-step checklist that gets your business running
     on AI.
   name: guide
@@ -50821,40 +50863,66 @@ tags:
   name: iam
 - description: Package index is fast full-text search over your own data, typos forgiven.
   name: index
-- name: indexers
+- description: 'Package graph is chain data: your block indexers and how far each
+    has caught up, plus the on-chain price feeds.'
+  name: indexers
 - description: 'Package ingress is your front door: automatic TLS certificates and
     hostname routing to any backend, changed live.'
   name: ingress
-- name: insights
+- description: 'Package analytics is product analytics: send an event, read back who
+    did what.'
+  name: insights
 - description: Package integrations is how your org connects third-party accounts
     like Slack, and revokes them.
   name: integrations
-- name: k8s
-- name: kb
-- name: keys
+- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
+    clusters — launch one, resize it, tear it down.'
+  name: k8s
+- description: Package knowledge is your team's wiki and your agents' memory, searchable
+    by meaning.
+  name: kb
+- description: 'Package account is your own account: API keys you mint and revoke,
+    org onboarding, and wallet top-up.'
+  name: keys
 - description: 'Package kms is secret custody: your org''s secrets sealed at rest,
     plus threshold signing.'
   name: kms
-- name: kv
+- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
+    document, vector, search or object store, wired straight into your app.'
+  name: kv
 - description: Package legal is the paperwork your company needs, drafted, signed
     and filed.
   name: legal
 - name: licensing
-- name: links
-- name: load-balancers
+- description: 'Package link is the unified AI login manager''s registry: the org+user-scoped
+    record of WHICH provider accounts (Claude Max, ChatGPT Plus, a Hanzo API key,
+    a raw provider key) a developer has signed into, ON WHICH MACHINES, with each
+    account''s latest usage snapshot.'
+  name: links
+- description: Package do is the org-scoped private-network surface — /v1/vpcs and
+    /v1/load-balancers — carved out of Hanzo's OWN house DigitalOcean account.
+  name: load-balancers
 - name: logs
-- name: machines
+- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
+    clusters — launch one, resize it, tear it down.'
+  name: machines
 - description: 'Package marketing is lifecycle email: drip sequences that reach the
     right people.'
   name: marketing
 - description: 'Package marketplace is the shop for tools and agents: browse, install
     into your project, publish your own free or priced.'
   name: marketplace
-- name: mcp
+- description: 'Package tools is everything your org can call, in one list: connector
+    actions, functions, agents, skills and your own MCP servers.'
+  name: mcp
 - description: 'Package meet is the virtual office: it decides who may join a room
     and mints the short-lived token that lets them in.'
   name: meet
-- name: mesh
+- description: 'Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant''s
+    Hanzo Zero Trust footprint — overlay networks, mesh services and edge nodes —
+    served as clean, org-scoped REST off the unified cloud binary and fronting the
+    Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
+  name: mesh
 - name: metrics
 - description: 'Package ml is model serving and training: deploy a model behind an
     endpoint, run a training job, tune it with experiments.'
@@ -50862,16 +50930,26 @@ tags:
 - description: 'Package mq is queue and stream admin for your org: create them, watch
     them drain, ack what you pulled.'
   name: mq
-- name: networks
+- description: 'Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant''s
+    Hanzo Zero Trust footprint — overlay networks, mesh services and edge nodes —
+    served as clean, org-scoped REST off the unified cloud binary and fronting the
+    Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
+  name: networks
 - description: Package notify is transactional email and SMS, sent through your org's
     own provider credential.
   name: notify
 - description: 'Package o11y is your logs, metrics and traces: ship them in, query
     them, chart them.'
   name: o11y
-- name: oracles
-- name: orgs
-- name: pipelines
+- description: 'Package graph is chain data: your block indexers and how far each
+    has caught up, plus the on-chain price feeds.'
+  name: oracles
+- description: 'Package entitlements is what your org may run: what the plan grants,
+    and which of those products are switched on.'
+  name: orgs
+- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
+    namespace — builds, releases, environments, logs, custom domains.'
+  name: pipelines
 - name: plans
 - description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
     namespace — builds, releases, environments, logs, custom domains.'
@@ -50885,7 +50963,9 @@ tags:
 - description: 'Package pricing is the price list: what every model, provider, GPU
     tier, tool and hosting plan costs.'
   name: pricing
-- name: pricing-policy
+- description: 'Package pricing is the price list: what every model, provider, GPU
+    tier, tool and hosting plan costs.'
+  name: pricing-policy
 - description: 'Package projects is where your sites live: create one, deploy a build,
     roll back to any release.'
   name: projects
@@ -50901,35 +50981,58 @@ tags:
 - description: 'Package registry is your container and package registry: push images,
     pull them back, see what you store.'
   name: registry
-- name: releases
+- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
+    namespace — builds, releases, environments, logs, custom domains.'
+  name: releases
 - description: Package research is every experiment you have ever run, kept and comparable.
   name: research
-- name: run
-- name: runner
+- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
+    namespace — builds, releases, environments, logs, custom domains.'
+  name: run
+- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
+    namespace — builds, releases, environments, logs, custom domains.'
+  name: runner
 - name: s3
 - description: 'Package sbom is what is inside a container image: every component,
     resolvable by digest or image ref.'
   name: sbom
-- name: scrape
-- name: search
-- name: search-docs
+- description: Package websearch is a web search and a page fetch your agents can
+    call.
+  name: scrape
+- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
+    document, vector, search or object store, wired straight into your app.'
+  name: search
+- description: 'Package product is the read-only inventory of the search and vector
+    backends: /v1/search-docs/{indexes,stats} read from Meilisearch and /v1/vector/{collections,stats}
+    from Qdrant, reshaped into the rows the console renders.'
+  name: search-docs
 - description: 'Package security is secret scanning for your code: submit sources,
     get findings, masked never raw.'
   name: security
-- name: sentry
+- description: 'Package o11y is your logs, metrics and traces: ship them in, query
+    them, chart them.'
+  name: sentry
 - description: Package settings is how an org configures each product it uses, secret
     fields included.
   name: settings
 - description: Package share is a public URL for a service on your own machine, and
     a list of what you have open.
   name: share
-- name: sites
-- name: skills
+- description: 'Package projects is where your sites live: create one, deploy a build,
+    roll back to any release.'
+  name: sites
+- description: 'Package tools is everything your org can call, in one list: connector
+    actions, functions, agents, skills and your own MCP servers.'
+  name: skills
 - description: Package social is posting to every social account you own, now or on
     a schedule.
   name: social
-- name: sql
-- name: store
+- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
+    document, vector, search or object store, wired straight into your app.'
+  name: sql
+- description: 'Package commerce is selling: checkout, subscriptions, invoices, spend
+    alerts, payment webhooks and the storefront catalog.'
+  name: store
 - description: 'Package sync is data sync: link two endpoints and keep them in step,
     on a webhook, on a schedule, or on demand.'
   name: sync
@@ -50949,11 +51052,15 @@ tags:
 - description: 'Package tracker is your org''s issue tracker: projects, issues, and
     the filters to find them.'
   name: tracker
-- name: train
+- description: 'Package ml is model serving and training: deploy a model behind an
+    endpoint, run a training job, tune it with experiments.'
+  name: train
 - description: Package translate is text in, the same text out in the language you
     asked for.
   name: translate
-- name: upload
+- description: 'Package exec is the code interpreter: run a snippet in a sandbox and
+    move files in and out.'
+  name: upload
 - description: Package usage is what your org ran and what it cost, broken down per
     account.
   name: usage
@@ -50961,7 +51068,9 @@ tags:
     NFT, get a node provisioned, queue its registration.'
   name: validators
 - name: vector
-- name: vpcs
+- description: Package do is the org-scoped private-network surface — /v1/vpcs and
+    /v1/load-balancers — carved out of Hanzo's OWN house DigitalOcean account.
+  name: vpcs
 - description: 'Package wallets is blockchain key custody: create wallets, rotate
     their keys, and sign with them.'
   name: wallets
