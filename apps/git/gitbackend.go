@@ -11,6 +11,7 @@
 // difference is that failures now come back as the model's sentinel errors
 // instead of raw go-git errors, so a handler can tell "no such ref" from "this
 // repository is broken" rather than reporting both as 404.
+
 package git
 
 import (

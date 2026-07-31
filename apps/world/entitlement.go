@@ -38,6 +38,7 @@
 // against the live catalog. Wiring the rate limiter into the handlers is the
 // rollout step, coordinated with the feat/world-model-engine gate to avoid two
 // enforcement paths.
+
 package world
 
 import (

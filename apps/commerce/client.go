@@ -15,6 +15,7 @@
 // the specified secure default, so an unverifiable product is never enabled. A
 // clean "resolved, but no plan licenses this product" is a real Active:false answer
 // (the gate turns it into a 402 upgrade prompt), never an error and never a grant.
+
 package commerce
 
 import (

@@ -31,6 +31,7 @@
 // Honest failure (no fabricated credit, ever): no rail configured → 501; an unknown
 // rail, or a missing/failed/non-matching tx → 400; the chain or commerce unreachable
 // → 502.
+
 package account
 
 import (

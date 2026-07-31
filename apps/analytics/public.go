@@ -62,6 +62,7 @@
 // Everything admitted here flows through the SAME ONE write core (ingestEvents) into
 // the SAME hanzo.events table. One write path; this file only decides what a caller
 // nobody vouched for may put on it.
+
 package analytics
 
 import (

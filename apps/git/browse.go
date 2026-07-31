@@ -19,6 +19,7 @@
 // slashed branch (feature/x) and a nested path are always unambiguous. Isolation is
 // identical to the rest of git: the org is the gateway-minted, IAM-validated
 // X-Org-Id (org(c)); a repo outside the caller's org is simply not found.
+
 package git
 
 import (

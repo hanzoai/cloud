@@ -9,6 +9,7 @@
 // Every field is a REAL upstream value or an honest omission. Data the upstream does
 // not carry — the chain HEAD (hence true indexing lag) — is left off so the UI renders
 // "—", never a fabricated 0.
+
 package graph
 
 import (

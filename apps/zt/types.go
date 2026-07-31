@@ -19,6 +19,7 @@
 // used verbatim). List/get filter to the caller's role, so one tenant can never see
 // another's services or nodes. An untagged resource belongs to NO org and is
 // invisible to every tenant — honest-empty over a cross-tenant leak.
+
 package zt
 
 import "strings"

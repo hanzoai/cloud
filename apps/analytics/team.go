@@ -45,6 +45,7 @@
 // door that resolved its own tenant would be the drift that design exists to
 // prevent. A team session token is a platform credential, so it works on the
 // canonical door too — that is the point, not a side effect.
+
 package analytics
 
 import (

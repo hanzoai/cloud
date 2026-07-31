@@ -14,6 +14,7 @@
 //     only ever contains the caller's own org's rows; an org board carries only
 //     org-level aggregates (never a user identity). So a row can never carry
 //     ANOTHER tenant's user detail.
+
 package leaderboard
 
 import (
