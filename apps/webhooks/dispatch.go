@@ -14,7 +14,7 @@ package webhooks
 // spawning unbounded goroutines or dropping events).
 //
 // ONE OPS KNOB. The bus URL is CLOUD_WEBHOOKS_NATS_URL, falling back to the SAME
-// CLOUD_COMMERCE_NATS_URL clients/catalogsync reads — so a deployment sets one variable
+// CLOUD_COMMERCE_NATS_URL apps/catalogsync reads — so a deployment sets one variable
 // and both the reverse-storefront loop and this dispatcher come alive, with an optional
 // webhooks-specific override. Unset ⇒ the dispatcher is inert (the registry still serves).
 
