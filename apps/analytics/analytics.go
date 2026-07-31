@@ -26,7 +26,8 @@
 //
 //   - LLM lens (REAL today): hanzo.cloud_usage, the live per-org usage ledger the
 //     cloud o11y path already writes (requests, tokens, spend, models, errors).
-//   - Web/commerce lens: hanzo.events, what this package's own doors ingest.
+//   - Web/commerce lens: event.event on the o11y-owned event plane — what this
+//     package's own doors ingest (as facts, landed by the sink in warehouse.go).
 //
 // The accepted batch is also handed to registered SINKS (forward.go) — apps/
 // destinations forwards it to the org's connected ad platforms. analytics never
@@ -174,7 +175,7 @@ func Shutdown(context.Context) error {
 
 // installHostCarve wires the published-site-host beacon ingest (the twin of base's
 // sites.SetBaseHostHandler): a page served on a site host can POST its OWN analytics
-// beacon to an ingest door and have it ingested into hanzo.events under the site's
+// beacon to an ingest door and have it ingested onto the event plane under the site's
 // resolved Org — the server-supplied, host-derived tenant, never a body/header claim.
 //
 // It goes STRAIGHT to the ANONYMOUS lane (publicIngest), and this is the honest
@@ -264,7 +265,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// stamped cmp.Or(op.Status, 204).
 	app.Get("/v1/analytics/health", cloud.Handle(s, health))
 
-	// Capture (WRITE) side — the ingest that fills hanzo.events. Every ingest door
+	// Capture (WRITE) side — the ingest that fills the event plane. Every ingest door
 	// is registered HERE and only here, from doors (event.go): one Post per declared
 	// door, no hand-written path beside it. A door contributes its WIRE and nothing
 	// else — admission (handle) and the write core (ingestEvents) are shared — so
@@ -517,8 +518,9 @@ func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, erro
 	}
 	s := o.s
 	// Ensure the ai-owned ledger table exists (idempotent, latched) so a fresh
-	// warehouse yields honest zeros, not an error. We NEVER create hanzo.events —
-	// that table is operator-owned (unified-analytics.md §3.1).
+	// warehouse yields honest zeros, not an error. We NEVER create event.event —
+	// the plane's DDL owner is hanzoai/o11y (exactly the stance this lens has
+	// always taken for tables it does not own).
 	if err := datastore.EnsureCloudUsage(ctx); err != nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
@@ -535,12 +537,16 @@ func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, erro
 	}
 	llm := buildLLMOverview(firstRow(llmRows))
 
-	// Web/commerce lens — one events query; degrades to honest-empty if the events
-	// table is absent (not yet provisioned) or errors.
+	// Web/commerce lens — one events query over the plane; degrades to honest-empty
+	// if event.event is absent (not yet provisioned) or errors. A pageview is
+	// kind='page' (the plane's discriminator, not a magic name) and revenue is the
+	// numeric read-back of the attributes entry the writer stamped (fact.go
+	// attributesOf), so the sum is the same fact forward-era rows carried in a
+	// dedicated column.
 	ewhere, eargs := eventsWhere(org, start, end)
-	eventsSQL := "SELECT countIf(event = '$pageview') AS pageviews, uniqExact(distinct_id) AS visitors, " +
-		"uniqExact(session_id) AS sessions, countIf(event = 'order_completed') AS orders, " +
-		"toFloat64(sum(revenue)) AS revenue FROM " + eventsTable + " WHERE " + ewhere
+	eventsSQL := "SELECT countIf(kind = 'page') AS pageviews, uniqExact(distinct_id) AS visitors, " +
+		"uniqExact(session_id) AS sessions, countIf(name = 'order_completed') AS orders, " +
+		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue FROM " + eventsTable + " WHERE " + ewhere
 	eventsRows, eerr := datastore.Query(ctx, eventsSQL, eargs...)
 	eventsOK := eerr == nil
 	if eerr != nil {
@@ -658,14 +664,17 @@ func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
 		return nil, warehouseErr("top-models", err)
 	}
 
-	// Top products — honest-empty until commerce emits order events.
+	// Top products — honest-empty until commerce emits order events. product_id,
+	// revenue and quantity live in the envelope's attributes map (fact.go
+	// attributesOf); the numeric reads parse back exactly what the writer stamped.
 	ewhere, eargs := eventsWhere(org, start, end)
-	prodSQL := fmt.Sprintf("SELECT product_id AS productId, countIf(event = 'order_completed') AS orders, "+
-		"toFloat64(sum(revenue)) AS revenue, sum(quantity) AS units FROM %s WHERE %s AND product_id != '' "+
-		"GROUP BY product_id ORDER BY revenue DESC LIMIT %d", eventsTable, ewhere, limit)
+	prodSQL := fmt.Sprintf("SELECT attributes['product_id'] AS productId, countIf(name = 'order_completed') AS orders, "+
+		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue, sum(toUInt64OrZero(attributes['quantity'])) AS units "+
+		"FROM %s WHERE %s AND attributes['product_id'] != '' "+
+		"GROUP BY productId ORDER BY revenue DESC LIMIT %d", eventsTable, ewhere, limit)
 	prodRows, perr := datastore.Query(ctx, prodSQL, eargs...)
 
-	// Behavior lenses over hanzo.events — WHERE people go / WHAT they look at
+	// Behavior lenses over event.event — WHERE people go / WHAT they look at
 	// (topPages) and where they come FROM (topReferrers organic/referral,
 	// topSources campaigns). Each is ONE pageview breakdown that degrades to
 	// honest-empty if the events table is absent or the query errors — never a 500
@@ -749,7 +758,7 @@ type healthReport struct {
 type healthLenses struct {
 	// LLM is the live per-org usage ledger lens (hanzo.cloud_usage).
 	LLM healthLens `json:"llm"`
-	// Events is the web/commerce lens (hanzo.events), honest-empty until the
+	// Events is the web/commerce lens (event.event), honest-empty until the
 	// collector emits.
 	Events healthLens `json:"events"`
 }

@@ -31,7 +31,7 @@ func TestPublishablePrefixIsTheIAMFamily(t *testing.T) {
 }
 
 // foldException lifts a type:'error' event's exception into properties.$exception
-// and defaults the type, so the write core stores it as event_type='error'.
+// and defaults the type, so the plane normalizer routes it to event.error.
 func TestFoldException(t *testing.T) {
 	handled := false
 	e := CaptureEvent{
@@ -61,13 +61,20 @@ func TestFoldException(t *testing.T) {
 		t.Fatalf("lifted exception malformed: %s", b)
 	}
 
-	// normalizeEvent must then store event_type='error'.
-	row, ok := normalizeEvent("acme", time.Now().UTC(), got)
+	// normalize must then route it to the ERROR signal — event.error, the table the
+	// /v1/errors lens reads — with the fault carrying the exception's class.
+	f, ok := normalize("acme", time.Now().UTC(), got)
 	if !ok {
 		t.Fatal("normalize dropped a folded error event")
 	}
-	if row.eventType != "error" || row.event != "$error" {
-		t.Fatalf("stored type/event = %q/%q, want error/$error", row.eventType, row.event)
+	if f.signal != signalError {
+		t.Fatalf("signal = %q, want %q", f.signal, signalError)
+	}
+	if f.fault == nil || f.fault.class != "TypeError" {
+		t.Fatalf("fault = %+v, want class TypeError", f.fault)
+	}
+	if f.attributes["$exception"] == "" {
+		t.Fatal("attributes[$exception] missing — the /v1/errors lens surfaces the exception from it")
 	}
 
 	// A non-error event is untouched.
