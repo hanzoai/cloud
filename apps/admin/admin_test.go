@@ -208,7 +208,7 @@ func TestGate_AllowsSuperAdmin(t *testing.T) {
 func TestUsers_DefaultsPagination(t *testing.T) {
 	var gotP, gotPageSize string
 	iamSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/users") {
+		if r.URL.Path == "/v1/iam/get-users" {
 			gotP = r.URL.Query().Get("p")
 			gotPageSize = r.URL.Query().Get("pageSize")
 			w.Header().Set("Content-Type", "application/json")
@@ -261,21 +261,21 @@ func newFakeIAM() *fakeIAM {
 		f.gotCook = r.Header.Get("Cookie")
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/organizations"):
+		case r.URL.Path == "/v1/iam/get-organizations":
 			io.WriteString(w, `{"status":"ok","msg":"","data":[
 				{"owner":"admin","name":"hanzo","displayName":"Hanzo","createdTime":"2020-01-01T00:00:00Z"},
 				{"owner":"admin","name":"acme","displayName":"Acme Inc","createdTime":"2021-02-02T00:00:00Z"}
 			],"data2":2}`)
-		case strings.HasSuffix(r.URL.Path, "/users"):
+		case r.URL.Path == "/v1/iam/get-users":
 			// A single-page count probe (pageSize=1) still reports the full total.
 			io.WriteString(w, `{"status":"ok","msg":"","data":[
 				{"owner":"hanzo","name":"alice","email":"alice@hanzo.ai","displayName":"Alice","tag":"staff","createdTime":"2020-03-01T00:00:00Z","lastSigninTime":"2026-06-01T00:00:00Z","isAdmin":true,"isForbidden":false}
 			],"data2":7}`)
-		case strings.HasSuffix(r.URL.Path, "/roles"):
+		case r.URL.Path == "/v1/iam/get-roles":
 			io.WriteString(w, `{"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"data2":1}`)
-		case strings.HasSuffix(r.URL.Path, "/applications"):
+		case r.URL.Path == "/v1/iam/get-applications":
 			io.WriteString(w, `{"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"data2":1}`)
-		case strings.HasSuffix(r.URL.Path, "/audit-logs"):
+		case r.URL.Path == "/v1/iam/get-records":
 			io.WriteString(w, `{"status":"ok","msg":"","data":[{"createdTime":"2026-06-29T00:00:00Z","organization":"hanzo","user":"alice","clientIp":"1.2.3.4","method":"POST","action":"login","requestUri":"/v1/iam/login"}],"data2":1}`)
 		default:
 			w.WriteHeader(404)
