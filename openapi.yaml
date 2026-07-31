@@ -25201,6 +25201,11 @@ paths:
       operationId: get_v1_billing_spend-alerts_authorize
       tags:
       - billing
+  /v1/billing/subscribe/card:
+    post:
+      operationId: post_v1_billing_subscribe_card
+      tags:
+      - billing
   /v1/billing/subscriptions:
     get:
       operationId: get_v1_billing_subscriptions
@@ -25226,6 +25231,11 @@ paths:
         required: true
         schema:
           type: string
+      tags:
+      - billing
+  /v1/billing/test-mode:
+    post:
+      operationId: post_v1_billing_test-mode
       tags:
       - billing
   /v1/billing/topup/token:
@@ -43799,20 +43809,6 @@ paths:
           type: string
       tags:
       - sentry
-  /v1/sessions:
-    get:
-      operationId: get_v1_sessions
-      tags:
-      - sessions
-    post:
-      operationId: post_v1_sessions
-      tags:
-      - sessions
-  /v1/sessions/:id:
-    delete:
-      operationId: delete_v1_sessions_id
-      tags:
-      - sessions
   /v1/settings/{product}:
     get:
       description: |-
@@ -47812,7 +47808,6 @@ tags:
 - name: search-docs
 - name: security
 - name: sentry
-- name: sessions
 - name: settings
 - name: share
 - name: sites
