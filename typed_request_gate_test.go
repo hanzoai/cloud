@@ -29,6 +29,9 @@ import (
 // One is a URL-borne value on a BODY-carrying route, which zip cannot name on an
 // In without also accepting it in the body — a wire that route has never had.
 var allowedRequestUses = map[string]string{
+	"apps/o11y/summary.go": "brandForRequest — the o11y summary is white-labelled by the request HOST " +
+		"(BrandForHostOK(c.Host())), a value that is neither the org nor nameable on an In field: it is " +
+		"the vhost the caller reached, read only to pick the brand the summary renders for.",
 	"apps/admin/core/typed.go": "Admit / AdmitScoped — the SuperAdmin and white-label tenant gates. " +
 		"Both read validated identity beyond the org (IsAdmin, the WL allowlist), which principal.OrgFrom does not carry.",
 	"apps/account/account.go": "requestCaller — account IS the signed-in caller's own account, and resolving " +
