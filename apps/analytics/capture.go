@@ -191,7 +191,7 @@ var eventsTableReady atomic.Bool
 //
 // CREATES — it does not RECONCILE. `IF NOT EXISTS` returns success without looking at
 // the existing table, so an schema change in eventsTableDDL reaches fresh deployments
-// only. That is deliberate: the partition key cannot be ALTERed in ClickHouse at all
+// only. That is deliberate: the partition key cannot be ALTERed in the datastore at all
 // (the ALTER grammar has no such command), so a self-migrating boot path could deliver
 // only half a reconcile and a human would still be needed for the other half — two
 // mechanisms for one migration. There is one: the reconcile in LLM.md, run once per
@@ -800,12 +800,27 @@ func withSource(p map[string]any, source string) map[string]any {
 	return out
 }
 
-// ingestEvents is the ONE write core: normalize → scrub → batch INSERT into the
-// ONE hanzo.events table. org is the SERVER-resolved tenant (never client input);
-// source tags the ingest adapter. Every front door — the canonical /v1/event and
-// the deprecated PostHog / Segment / beacon adapters — funnels here, so there is
-// exactly one write path. Returns the honest accepted/dropped receipt; the errors
-// it returns are already HTTP-shaped (zip) for the handler to pass straight up.
+// ingestEvents is the ONE write core: normalize → scrub → PUBLISH the fact onto the
+// event plane → batch INSERT the legacy wide row. org is the SERVER-resolved tenant
+// (never client input); source tags the ingest adapter. Every front door — the
+// canonical /v1/event and the deprecated PostHog / Segment / beacon adapters — funnels
+// here, so there is exactly one write path. Returns the honest accepted/dropped
+// receipt; the errors it returns are already HTTP-shaped (zip) for the handler to pass
+// straight up.
+//
+// TWO TABLES, ONE ADMISSION. The publish is what makes an event QUERYABLE BY SIGNAL:
+// it is the only thing that puts a fact on event.error, event.log and event.span, none
+// of which the wide table has a shape for — an error reported here used to reach
+// hanzo.events and stop there, so the one signal with a table of its own was the one
+// signal that never reached it. The insert is what keeps the wide read lenses
+// answering. They are two PROJECTIONS of one admitted event and not two doors: nothing
+// decides twice whether to take an event, which is the property that let the two drift
+// apart in the first place.
+//
+// The bus is a COMMIT and not a best-effort fan-out (contrast fanOut below, which is
+// detached and fail-soft because its facts are already durable here). A fact that could
+// not be published is a fact that will never be queryable, so it is a 503 — the one
+// answer this whole design exists to give instead of a 200.
 func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (CaptureResult, error) {
 	if len(evs) == 0 {
 		return CaptureResult{}, nil
@@ -820,26 +835,50 @@ func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (
 		return CaptureResult{}, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 	now := time.Now().UTC()
+	facts := make([]fact, 0, len(evs))
 	rows := make([]eventRow, 0, len(evs))
 	dropped := 0
 	for _, e := range evs {
 		e.Properties = withSource(e.Properties, source)
-		row, ok := normalizeEvent(org, now, e)
-		if !ok {
+		// ONE ADMISSION DECISION, and it is the plane's own normalizer (fact.go) that
+		// makes it — the canonical answer to "what is this event", which is exactly
+		// what admission is asking. It is also the only normalizer that can see the
+		// signal, so it is the only one that can refuse a signal nothing can land.
+		f, ok := normalize(org, now, e)
+		if !ok || !landableSignals[f.signal] {
 			dropped++
 			continue
 		}
-		rows = append(rows, row)
+		facts = append(facts, f)
+		// The legacy wide row is the SECOND projection of the same admitted event, not
+		// a second gate. It is kept because the read lenses (query.go, campaign.go,
+		// outcomes.go, insights.go, apps/guide) still select from hanzo.events; a
+		// signal it cannot represent simply produces no row.
+		if row, ok := normalizeEvent(org, now, e); ok {
+			rows = append(rows, row)
+		}
 	}
-	if len(rows) == 0 {
+	if len(facts) == 0 {
 		return CaptureResult{Dropped: dropped}, nil
 	}
-	stmt, args := buildEventsInsert(rows)
-	if err := warehouseExec(ctx, stmt, args...); err != nil {
-		return CaptureResult{}, warehouseErr("capture", err)
+	// PUBLISH FIRST, and the ORDER IS THE POINT. Both writes below can fail and both
+	// answer 503, so the caller retries the whole batch either way — the question is
+	// what a retry costs. Every event.* table is a ReplacingMergeTree keyed on the fact
+	// id, so a re-published fact collapses on merge; hanzo.events is a plain MergeTree,
+	// so a re-inserted row is a duplicate that nothing ever removes. Putting the
+	// idempotent commit first means the failure that forces the retry happens before
+	// the write that cannot absorb one.
+	if err := publish(ctx, facts); err != nil {
+		return CaptureResult{}, err
+	}
+	if len(rows) > 0 {
+		stmt, args := buildEventsInsert(rows)
+		if err := warehouseExec(ctx, stmt, args...); err != nil {
+			return CaptureResult{}, warehouseErr("capture", err)
+		}
 	}
 	// Fan the accepted batch out to the downstream sink (destinations), detached and
 	// fail-soft — never blocks or fails an ingest (forward.go). No-op when unset.
 	fanOut(org, evs)
-	return CaptureResult{Accepted: len(rows), Dropped: dropped}, nil
+	return CaptureResult{Accepted: len(facts), Dropped: dropped}, nil
 }
