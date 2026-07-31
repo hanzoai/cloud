@@ -177,3 +177,40 @@ func TestWakeWithNoRouterIsNoPeer(t *testing.T) {
 		t.Fatalf("no socket and no router must be ErrNoPeer, got: %v", err)
 	}
 }
+
+// TestWakeAgainstAnOlderRouterIsAnOutage is the ROLLING DEPLOY, and it is the case
+// that made carrying this fact on a status code untenable.
+//
+// A host pod on a build that predates the start door still serves a plane socket —
+// it just has no host_start on it — so the call is answered "unknown op", which on
+// the wire is a 404. The router's own "this fleet runs no such app" was ALSO a 404,
+// and both rebuild into the same *HTTPError with an empty Code, so nothing but the
+// message text told them apart.
+//
+// Read as absence, that skew says "this fleet prices nothing" — and the payment rail
+// serves every priced tool free for as long as one old pod is still routing. So the
+// absence now travels as a FIELD on a 200, and a router that cannot answer this op
+// cannot claim anything about the fleet.
+func TestWakeAgainstAnOlderRouterIsAnOutage(t *testing.T) {
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	cloud.ResetPlane()
+
+	// A router of the previous generation: a plane socket at the host's name, with
+	// some other op on it and no host_start.
+	old := zip.New(zip.Config{AppName: "plane", Logger: luxlog.New("test")})
+	zip.Post[struct{}, plane.Started](old, "/host/other",
+		func(context.Context, *struct{}) (*plane.Started, error) { return &plane.Started{}, nil },
+		zip.WithOperationID("host_other"))
+	go func() { _ = old.Listen(zip.SocketPath(plane.HostApp)) }()
+	t.Cleanup(func() { _ = old.Shutdown() })
+	waitFor(t, zip.SocketPath(plane.HostApp))
+
+	_, err := cloud.Ask[struct{}, plane.Started](context.Background(), "sleepy", "wake_alive", &struct{}{})
+	if err == nil {
+		t.Fatal("a call through a router that cannot start anything SUCCEEDED")
+	}
+	if errors.Is(err, cloud.ErrNoPeer) {
+		t.Fatalf("version skew read as \"not deployed here\" — a rail believing this serves "+
+			"every priced tool free until the last old pod turns over: %v", err)
+	}
+}
