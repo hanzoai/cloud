@@ -314,7 +314,13 @@ func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPSer
 				"%s publishes no streamable-http endpoint; it ships a package that has to be run", l.Name)
 		}
 		if name == "" {
+			// The title is the publisher's, so it is adopted but not trusted to be
+			// short: an over-long one would otherwise refuse the enablement with
+			// "name is required", to a caller who supplied no name at all.
 			name = cmp.Or(l.Title, l.Name)
+			if len(name) > maxName {
+				name = l.Name
+			}
 		}
 		// The server id PREFIXES every tool name this server contributes, so an
 		// enabled listing's tools read "acme_create_payment_link" rather than
@@ -331,28 +337,42 @@ func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPSer
 	if err := validateServerURL(url); err != nil {
 		return nil, zip.ErrBadRequest(err.Error())
 	}
+	header := strings.TrimSpace(in.AuthHeader)
+	if header != "" && !validHeader.MatchString(header) {
+		return nil, zip.ErrBadRequest("authHeader must be an HTTP header name")
+	}
 	hasSecret := in.Secret != ""
+	if len(in.Secret) > maxSecret {
+		return nil, zip.ErrBadRequest("secret too large")
+	}
 	if hasSecret && o.s.State.kms == nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "KMS not configured; refusing to store an MCP server secret")
 	}
-	created, fresh, err := o.s.State.servers.Create(ctx, MCPServer{
-		ID: id, Org: org, Name: name, URL: url, AuthHeader: strings.TrimSpace(in.AuthHeader),
-		HasSecret: hasSecret, Listing: listing,
-	})
+	// The credential is sealed BEFORE the row is written, and the row's id is
+	// resolved before either. That ordering is what makes the whole thing need no
+	// undo: a failed seal leaves the store exactly as it was, rather than a row
+	// claiming a credential nobody stored — which does not fail loudly, it makes
+	// the server's tools quietly stop appearing.
+	id, fresh, err := o.s.State.servers.Resolve(ctx, org, listing, id)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "create server: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "resolve server id: %v", err)
 	}
 	if hasSecret {
-		if err := o.s.State.kms.PutSecret(ctx, authRef(org, created.ID), []byte(in.Secret)); err != nil {
-			// Undo only what this request brought into being. Re-enabling an
-			// existing server with a new credential must not COST the org that
-			// server when KMS hiccups: the row it already had stands, still
-			// pointing at the credential it was already using.
-			if fresh {
-				_, _ = o.s.State.servers.Delete(ctx, org, created.ID)
-			}
+		if err := o.s.State.kms.PutSecret(ctx, authRef(org, id), []byte(in.Secret)); err != nil {
 			return nil, zip.Errorf(http.StatusInternalServerError, "seal server secret: %v", err)
 		}
+	} else if !fresh {
+		// Re-registering WITHOUT a credential drops the one that was there. The row
+		// is about to say so, and a credential outliving the thing it belonged to
+		// is the state nobody audits.
+		o.forget(ctx, org, id)
+	}
+	created, err := o.s.State.servers.Write(ctx, MCPServer{
+		ID: id, Org: org, Name: name, URL: url, AuthHeader: header,
+		HasSecret: hasSecret, Listing: listing,
+	}, fresh)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "create server: %v", err)
 	}
 	o.audit(ctx, "tools.call", org, "server:"+created.ID, "created", http.StatusCreated)
 	return &created, nil
@@ -382,8 +402,33 @@ func (o toolOps) deleteServer(ctx context.Context, in *serverRef) (*noContent, e
 	if !removed {
 		return nil, zip.ErrNotFound("server not found")
 	}
+	o.forget(ctx, org, id)
 	o.audit(ctx, "tools.call", org, "server:"+id, "deleted", http.StatusOK)
 	return nil, nil
+}
+
+// forget destroys the credential a deregistered server held, so a customer's
+// secret does not outlive the thing it belonged to — which is what a deletion
+// request and a rotation both actually mean.
+//
+// It OVERWRITES rather than deletes, because types.KMSClient has GetSecret,
+// PutSecret and Sign and no removal at all. The KMS service itself has one
+// (apps/kms Client.Delete), so the gap is the interface and KMSPeer, not the
+// store; closing it properly is a fleet-wide change to a seam fifteen packages
+// implement, and it is written up in apps/tools/LLM.md rather than smuggled in
+// here. Overwriting destroys the credential material today, which is the part
+// that matters.
+//
+// Best effort by construction: the row is already gone, so nothing reads this ref
+// again, and refusing the delete because custody was briefly unreachable would
+// leave the server the caller asked to remove.
+func (o toolOps) forget(ctx context.Context, org, id string) {
+	if o.s.State.kms == nil {
+		return
+	}
+	if err := o.s.State.kms.PutSecret(ctx, authRef(org, id), nil); err != nil {
+		o.s.Log.Warn("could not destroy a deregistered server credential", "org", org, "server", id, "err", err)
+	}
 }
 
 // ── the catalog: what the public registries publish ─────────────────────────────
@@ -404,15 +449,27 @@ type catalogQuery struct {
 	// Official keeps only the vendors' OWN servers — not third-party copies of
 	// them — and only when it is exactly the string "true".
 	Official string `json:"official"`
+	// Limit bounds the page: default 50, maximum 200. A value that is not a
+	// positive integer reads as the default.
+	Limit int `json:"limit"`
+	// Offset skips that many listings.
+	Offset int `json:"offset"`
 }
 
 // mcpCatalog is a page of the catalog. Never null: an unsynced deployment gets
 // an empty array, not a null.
 type mcpCatalog struct {
-	// Catalog is every listing the caller may see, featured first, then by name.
+	// Catalog is this page of listings, featured first, then by name.
 	Catalog []MCPListing `json:"catalog"`
-	// Total is how many that is.
+	// Total is how many listings the filter matched, which is more than this page
+	// holds whenever there is a next one.
 	Total int `json:"total"`
+	// Limit is the page size that was actually applied — the default or the clamp,
+	// when the request asked for neither or for too much.
+	Limit int `json:"limit"`
+	// Offset is where this page started, so a caller pages from what the server
+	// did rather than from what it asked for.
+	Offset int `json:"offset"`
 }
 
 // ListCatalog lists the MCP servers the public registries publish, as we hold
@@ -428,23 +485,31 @@ type mcpCatalog struct {
 // Hidden entries are absent: they are the ones we took off the shelf. A platform
 // SuperAdmin sees them, because the same query answers "what is on the shelf" and
 // "what is in the catalog" and two queries would drift apart.
+//
+// It is PAGED — 50 by default, 200 at most. The public registry publishes tens of
+// thousands of servers, so an unbounded answer is a twenty-megabyte response and a
+// storefront that renders in a minute. total is the whole match, not the page.
 func (o toolOps) listCatalog(ctx context.Context, in *catalogQuery) (*mcpCatalog, error) {
 	if _, err := tenantOf(ctx); err != nil {
 		return nil, err
 	}
 	if o.s.State.catalog == nil {
-		return &mcpCatalog{Catalog: []MCPListing{}}, nil
+		return &mcpCatalog{Catalog: []MCPListing{}, Limit: catalogPage}, nil
 	}
-	out, err := o.s.State.catalog.List(ctx, Query{
+	q := Query{
 		Text:     strings.TrimSpace(in.Q),
 		Featured: in.Featured == "true",
 		Official: in.Official == "true",
 		Hidden:   adminOf(ctx),
-	})
+		Limit:    in.Limit,
+		Offset:   in.Offset,
+	}
+	out, total, err := o.s.State.catalog.List(ctx, q)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list catalog: %v", err)
 	}
-	return &mcpCatalog{Catalog: out, Total: len(out)}, nil
+	limit, offset := q.page()
+	return &mcpCatalog{Catalog: out, Total: total, Limit: limit, Offset: offset}, nil
 }
 
 // listingRef addresses one catalog listing. The id is the path segment: the URL

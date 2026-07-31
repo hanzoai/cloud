@@ -13,7 +13,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud/cek"
@@ -134,52 +136,58 @@ func (s *MCPServerStore) Close() error {
 	return s.db.Close()
 }
 
-// Create writes one server for an org, and is the ONE place a registration comes
-// into being — typed in or enabled off the shelf. It does NOT touch KMS: the
-// handler stores the secret first, then records has_secret here.
+// Resolve answers what id a registration WOULD get, without writing anything.
 //
-// srv.ID is a PREFERRED id, not a demand. Empty gets a random handle, which is
-// what a hand-registered server has always had. A catalog enablement asks for the
-// vendor's brand instead, because the id PREFIXES every tool name the server
-// contributes — so the difference between a readable "stripe_create_payment_link"
-// and an opaque "m4f21c8_create_payment_link" is one argument here. Taken names
-// are suffixed rather than refused: two servers from one vendor is a thing an org
-// is allowed to have.
+// It exists because a registration is two writes — the row and the credential —
+// and the credential's KMS ref is keyed on the id. Resolving first lets the seal
+// happen BEFORE the row, which is the only ordering with no undo in it: a failed
+// seal leaves the store exactly as it was, rather than leaving a row asserting a
+// credential that was never stored. (It did leave one. A row with has_secret=1 and
+// nothing in KMS makes every dispatch fail inside listRemote, which mcpProvider
+// skips — so the server's tools SILENTLY vanish from the org's plane with no error
+// anywhere. That is worse than the refusal it should have been.)
 //
-// Re-enabling a listing the org already has REVISES that row in place, keeping its
-// id — so the tool names an agent already learned do not move under it, and a
-// retried enable is one server rather than a near-duplicate beside it.
-//
-// It reports whether the row is FRESH, because the caller has one more thing to do
-// after this — seal the credential — and the undo for a failed seal is not the
-// same in both cases. Deleting is right for a row this request brought into
-// being; it is DESTRUCTIVE for one the org already had and was merely re-enabling,
-// which would turn a KMS hiccup into a working server disappearing.
-func (s *MCPServerStore) Create(ctx context.Context, srv MCPServer) (out MCPServer, fresh bool, err error) {
-	srv.Source = srv.source()
-	if srv.Listing != "" {
-		if cur, err := s.byListing(ctx, srv.Org, srv.Listing); err == nil {
-			srv.ID, srv.CreatedAt = cur.ID, cur.CreatedAt
-			if _, err := s.db.ExecContext(ctx,
-				`UPDATE mcp_servers SET name=?, url=?, auth_header=?, has_secret=? WHERE org=? AND id=?`,
-				srv.Name, srv.URL, srv.AuthHeader, boolInt(srv.HasSecret), srv.Org, srv.ID); err != nil {
-				return MCPServer{}, false, fmt.Errorf("tools: revise mcp server: %w", err)
-			}
-			return srv, false, nil
+// want is a PREFERRED id, not a demand. Empty gets a random handle, which is what
+// a hand-registered server has always had. A catalog enablement asks for the
+// vendor's own handle instead, because the id PREFIXES every tool name the server
+// contributes. Taken names are suffixed: two servers from one vendor is a thing an
+// org is allowed to have. Re-enabling a listing the org already has resolves to
+// THAT row's id, so the tool names an agent already learned do not move under it.
+func (s *MCPServerStore) Resolve(ctx context.Context, org, listing, want string) (id string, fresh bool, err error) {
+	if listing != "" {
+		if cur, err := s.byListing(ctx, org, listing); err == nil {
+			return cur.ID, false, nil
 		}
 	}
-	id, err := s.handle(ctx, srv.Org, srv.ID)
-	if err != nil {
-		return MCPServer{}, false, err
+	id, err = s.handle(ctx, org, want)
+	return id, true, err
+}
+
+// Write stores one registration at an id Resolve produced. It is the ONE place a
+// registration comes into being — typed in or enabled off the shelf — and it
+// touches no KMS: by the time it runs, the credential is already sealed.
+func (s *MCPServerStore) Write(ctx context.Context, srv MCPServer, fresh bool) (MCPServer, error) {
+	srv.Source = srv.source()
+	if !fresh {
+		cur, err := s.Get(ctx, srv.Org, srv.ID)
+		if err != nil {
+			return MCPServer{}, err
+		}
+		srv.CreatedAt = cur.CreatedAt
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE mcp_servers SET name=?, url=?, auth_header=?, has_secret=?, listing=? WHERE org=? AND id=?`,
+			srv.Name, srv.URL, srv.AuthHeader, boolInt(srv.HasSecret), srv.Listing, srv.Org, srv.ID); err != nil {
+			return MCPServer{}, fmt.Errorf("tools: revise mcp server: %w", err)
+		}
+		return srv, nil
 	}
-	srv.ID = id
 	srv.CreatedAt = time.Now().Unix()
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO mcp_servers (id, org, name, url, auth_header, has_secret, created_at, listing) VALUES (?,?,?,?,?,?,?,?)`,
 		srv.ID, srv.Org, srv.Name, srv.URL, srv.AuthHeader, boolInt(srv.HasSecret), srv.CreatedAt, srv.Listing); err != nil {
-		return MCPServer{}, false, fmt.Errorf("tools: create mcp server: %w", err)
+		return MCPServer{}, fmt.Errorf("tools: create mcp server: %w", err)
 	}
-	return srv, true, nil
+	return srv, nil
 }
 
 // handle resolves a preferred id to a free one within the org: the preference
@@ -226,22 +234,22 @@ func sanitize(want string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-// brand is the publisher's own name inside a reverse-DNS namespace: the
-// registrable domain, which is the SECOND label ("com.stripe" → stripe,
-// "ac.inference.sh" → inference). Under a code forge the namespace attests an
-// ACCOUNT and not a domain, so the account is the publisher ("io.github.alice" →
-// alice). It is what an enabled listing's tools are prefixed with, so it is
-// chosen to be the word a person would use for the thing.
+// brand is the handle an enabled listing's tools are prefixed with: the
+// publisher's DOMAIN, read back out of the reverse-DNS namespace, dots to dashes.
+// "com.stripe" → stripe-com. "io.github.alice" → alice-github-io.
+//
+// It names the whole domain and not the memorable label inside it, and that is the
+// entire point. A namespace is issued against proof of the domain, so anyone may
+// hold "sh.stripe" by owning stripe.sh — and a handle taken from one label would
+// render that vendor's tools as "stripe_create_payment_link" on the very screen
+// where an org pastes its real Stripe key. stripe-sh and stripe-com are two
+// different things and say so. Longer, and true.
 func brand(vendor string) string {
 	labels := strings.Split(vendor, ".")
-	if len(labels) < 2 {
-		return vendor
+	for i, j := 0, len(labels)-1; i < j; i, j = i+1, j-1 {
+		labels[i], labels[j] = labels[j], labels[i]
 	}
-	forge := labels[0] + "." + labels[1]
-	if len(labels) > 2 && (forge == "io.github" || forge == "io.gitlab") {
-		return labels[2]
-	}
-	return labels[1]
+	return strings.Join(labels, "-")
 }
 
 // Get returns one server for (org, id).
@@ -310,10 +318,31 @@ type mcpProvider struct {
 	store *MCPServerStore
 	kms   types.KMSClient
 	http  *http.Client
+	seen  sync.Map // (org, server, url) -> *listed
 }
 
 func newMCPProvider(store *MCPServerStore, kms types.KMSClient) *mcpProvider {
 	return &mcpProvider{store: store, kms: kms, http: guardedHTTPClient()}
+}
+
+// listedFor is how long one server's tool list is reused. A remote's tool set
+// changes on the vendor's deploys, not on our requests, so a minute is far inside
+// the window where re-asking teaches us nothing.
+//
+// Without it the cost was quadratic in the wrong place: EVERY dispatch resolves
+// through the registry, which lists every provider, which asked every one of the
+// org's servers over the network — so an org that enabled thirty listings turned
+// each of its tool calls into thirty outbound HTTP requests, each with a 20s
+// timeout. The MCP door lists on the same path, and tools/list is the method a
+// client calls constantly.
+const listedFor = time.Minute
+
+// listed is one server's remembered tool list.
+type listed struct {
+	mu    sync.Mutex
+	at    time.Time
+	tools []remoteTool
+	err   error
 }
 
 func (p *mcpProvider) Source() Source { return SourceMCP }
@@ -331,7 +360,7 @@ func (p *mcpProvider) List(ctx context.Context, scope Scope) ([]Tool, error) {
 	}
 	var out []Tool
 	for _, srv := range servers {
-		remote, err := p.listRemote(ctx, srv)
+		remote, err := p.tools(ctx, srv)
 		if err != nil {
 			continue
 		}
@@ -353,7 +382,7 @@ func (p *mcpProvider) List(ctx context.Context, scope Scope) ([]Tool, error) {
 // a caller can only ever reach its OWN registered servers.
 func (p *mcpProvider) Dispatch(ctx context.Context, pr Principal, name string, args map[string]any) (any, error) {
 	id, remoteName, ok := strings.Cut(name, "_")
-	if !ok {
+	if !ok || p.store == nil || pr.Org == "" {
 		return nil, ErrUnknownTool
 	}
 	srv, err := p.store.Get(ctx, pr.Org, id)
@@ -368,6 +397,23 @@ type remoteTool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"inputSchema"`
+}
+
+// tools is listRemote behind the per-server window. Keyed on the URL as well as
+// the id, so re-pointing a server at a different endpoint is asked about at once
+// rather than a minute later.
+func (p *mcpProvider) tools(ctx context.Context, srv MCPServer) ([]remoteTool, error) {
+	key := srv.Org + "\x00" + srv.ID + "\x00" + srv.URL
+	v, _ := p.seen.LoadOrStore(key, &listed{})
+	e := v.(*listed)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !e.at.IsZero() && time.Since(e.at) < listedFor {
+		return e.tools, e.err
+	}
+	e.tools, e.err = p.listRemote(ctx, srv)
+	e.at = time.Now()
+	return e.tools, e.err
 }
 
 func (p *mcpProvider) listRemote(ctx context.Context, srv MCPServer) ([]remoteTool, error) {
@@ -475,6 +521,15 @@ func guardedHTTPClient() *http.Client {
 	base := &net.Dialer{Timeout: 5 * time.Second}
 	return &http.Client{
 		Timeout: 20 * time.Second,
+		// A credential is injected into an ARBITRARY header name here, and Go
+		// strips only Authorization and Cookie across a redirect — so an org that
+		// used X-Api-Key would have it replayed verbatim to wherever the server
+		// sent us. An MCP JSON-RPC endpoint has no reason to redirect, and the
+		// endpoint may now come from a third party's catalog entry rather than
+		// from the org itself.
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				host, port, err := net.SplitHostPort(addr)
@@ -508,6 +563,16 @@ func isPublicIP(ip net.IP) bool {
 	}
 	return true
 }
+
+// maxSecret bounds a credential. Generous for a bearer token or an API key, and
+// far under anything that is a mistake or an attempt to fill a store.
+const maxSecret = 8 << 10
+
+// validHeader is the HTTP field-name grammar (RFC 9110 token). Checked at the
+// REGISTRATION boundary rather than at dispatch: net/http refuses a bad name when
+// the request is built, which is hours later, in a background listing, where the
+// symptom is a server whose tools quietly never appear.
+var validHeader = regexp.MustCompile(`^[!#$%&'*+\-.^_` + "`" + `|~0-9A-Za-z]+$`)
 
 func boolInt(b bool) int {
 	if b {

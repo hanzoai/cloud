@@ -121,7 +121,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/tools/catalog", zip.Doc{
-		Description: "ListCatalog lists the MCP servers the public registries publish, as we hold\nthem: our canonical copy of registry.modelcontextprotocol.io, plus what we\ndecided about each entry.\n\nThis is the SHELF an org picks from. A listing with a streamable-http endpoint\ncan be enabled as-is — POST /v1/mcp/servers with its id — and its tools then\njoin the org's tool plane and the fleet's MCP door. A listing that only ships a\nstdio package needs a process to run it, which is why the transports are on\nevery entry rather than implied.\n\nHidden entries are absent: they are the ones we took off the shelf. A platform\nSuperAdmin sees them, because the same query answers \"what is on the shelf\" and\n\"what is in the catalog\" and two queries would drift apart.",
+		Description: "ListCatalog lists the MCP servers the public registries publish, as we hold\nthem: our canonical copy of registry.modelcontextprotocol.io, plus what we\ndecided about each entry.\n\nThis is the SHELF an org picks from. A listing with a streamable-http endpoint\ncan be enabled as-is — POST /v1/mcp/servers with its id — and its tools then\njoin the org's tool plane and the fleet's MCP door. A listing that only ships a\nstdio package needs a process to run it, which is why the transports are on\nevery entry rather than implied.\n\nHidden entries are absent: they are the ones we took off the shelf. A platform\nSuperAdmin sees them, because the same query answers \"what is on the shelf\" and\n\"what is in the catalog\" and two queries would drift apart.\n\nIt is PAGED — 50 by default, 200 at most. The public registry publishes tens of\nthousands of servers, so an unbounded answer is a twenty-megabyte response and a\nstorefront that renders in a minute. total is the whole match, not the page.",
 		Fields: map[string]string{
 			"MCPListing.description": "Description is the publisher's one-line summary.",
 			"MCPListing.featured":    "Featured puts the listing on the front of the shelf. Curation.",
@@ -148,10 +148,14 @@ func init() {
 			"MCPRemote.transport":    "Transport is \"streamable-http\" or \"sse\".",
 			"MCPRemote.url":          "URL is the endpoint.",
 			"catalogQuery.featured":  "Featured keeps only the listings we put on the front of the shelf, and only\nwhen it is exactly the string \"true\".",
+			"catalogQuery.limit":     "Limit bounds the page: default 50, maximum 200. A value that is not a\npositive integer reads as the default.",
 			"catalogQuery.official":  "Official keeps only the vendors' OWN servers — not third-party copies of\nthem — and only when it is exactly the string \"true\".",
+			"catalogQuery.offset":    "Offset skips that many listings.",
 			"catalogQuery.q":         "Q matches the name, title or description, case-insensitively.",
-			"mcpCatalog.catalog":     "Catalog is every listing the caller may see, featured first, then by name.",
-			"mcpCatalog.total":       "Total is how many that is.",
+			"mcpCatalog.catalog":     "Catalog is this page of listings, featured first, then by name.",
+			"mcpCatalog.limit":       "Limit is the page size that was actually applied — the default or the clamp,\nwhen the request asked for neither or for too much.",
+			"mcpCatalog.offset":      "Offset is where this page started, so a caller pages from what the server\ndid rather than from what it asked for.",
+			"mcpCatalog.total":       "Total is how many listings the filter matched, which is more than this page\nholds whenever there is a next one.",
 		},
 	})
 	zip.Describe("GET /v1/tools/catalog/:id", zip.Doc{

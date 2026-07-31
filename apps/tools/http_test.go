@@ -201,10 +201,10 @@ func TestExternalMCPDispatch(t *testing.T) {
 		t.Fatalf("OpenMCPServerStore: %v", err)
 	}
 	defer func() { _ = store.Close() }()
-	if _, _, err := store.Create(context.Background(), MCPServer{
+	if _, err := store.Write(context.Background(), MCPServer{
 		ID: "m123abc", Org: "acme", Name: "myserver", URL: ts.URL,
 		AuthHeader: "Authorization", HasSecret: true,
-	}); err != nil {
+	}, true); err != nil {
 		t.Fatalf("create server: %v", err)
 	}
 
