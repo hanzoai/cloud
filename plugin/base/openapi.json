@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package base is managed Hanzo Base (/v1/base, /v1/collections): a hosted app engine per org — collections, records, rules, IAM-validated auth — plus the platform's public waitlist at /v1/waitlist.",
     "version": "v1"
   },
   "servers": [

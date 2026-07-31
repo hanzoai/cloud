@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/blueprint", zip.Doc{
-		Description: "list returns every deployable blueprint with its service count and estimated\nmonthly compute cost.\n\nIt is the lightweight index the console renders as a template gallery before\ndrilling into one stack's bill of images — GET /v1/blueprint/sbom?template=<id>\nis the detail view. The cost is the same figure the deploy path meters the\ndeploying org on and the 20% author royalty is taken from, priced from the\nactive rate card (GET /v1/blueprint/health echoes that card).",
+		Description: "Returns every deployable blueprint with its service count and estimated\nmonthly compute cost.\n\nIt is the lightweight index the console renders as a template gallery before\ndrilling into one stack's bill of images — GET /v1/blueprint/sbom?template=<id>\nis the detail view. The cost is the same figure the deploy path meters the\ndeploying org on and the 20% author royalty is taken from, priced from the\nactive rate card (GET /v1/blueprint/health echoes that card).",
 		Fields: map[string]string{
 			"blueprintIndex.data":           "Data is one row per embedded blueprint, sorted by template id.",
 			"blueprintRow.estCentsPerMonth": "CentsPerMonth is the estimated compute cost of running the whole stack for\none month, in USD cents, from the rate card GET /v1/blueprint/health echoes.",
@@ -17,7 +17,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/blueprint/health", zip.Doc{
-		Description: "health reports blueprint liveness and echoes the compute rate card in force.\n\nThe rate card is the one the estimator actually applies after the operator env\noverlay, so an operator can confirm a tuned knob took effect rather than\ninferring it from a price. Not JWT-gated — a liveness probe must be reachable —\nand it always answers 200 while the subsystem is mounted.",
+		Description: "Reports blueprint liveness and echoes the compute rate card in force.\n\nThe rate card is the one the estimator actually applies after the operator env\noverlay, so an operator can confirm a tuned knob took effect rather than\ninferring it from a price. Not JWT-gated — a liveness probe must be reachable —\nand it always answers 200 while the subsystem is mounted.",
 		Fields: map[string]string{
 			"RateCard.basis":               "Basis names where the rates come from, so a published price can be\nexplained rather than merely asserted.",
 			"RateCard.microUsdPerGbHour":   "MicroUSDPerGBHour is the price of one GiB of memory for one hour, in\nmillionths of a US dollar.",

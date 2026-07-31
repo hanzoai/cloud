@@ -1,6 +1,6 @@
 [
   {
-    "description": "dropConn forgets a connector: every custodied secret, then the row.\nIdempotent — dropping a never-connected id still answers {disconnected:true}\n(disconnect() parity). No provider Revoke: none of the user-plane providers\nexposes a revoke endpoint.",
+    "description": "Forgets a connector: every custodied secret, then the row.\nIdempotent — dropping a never-connected id still answers {disconnected:true}\n(disconnect() parity). No provider Revoke: none of the user-plane providers\nexposes a revoke endpoint.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -13,7 +13,7 @@
     "name": "delete_v1_connectors_id"
   },
   {
-    "description": "githubPagesDisable deletes the repo's Pages site. 404 when there is none, so a\ncaller can tell \"turned it off\" from \"there was nothing on\".",
+    "description": "Deletes the repo's Pages site. 404 when there is none, so a\ncaller can tell \"turned it off\" from \"there was nothing on\".",
     "inputSchema": {
       "properties": {
         "repo": {
@@ -26,7 +26,7 @@
     "name": "delete_v1_integrations_github_repos_repo_pages"
   },
   {
-    "description": "connectors lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
+    "description": "Lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -34,7 +34,7 @@
     "name": "get_v1_connectors"
   },
   {
-    "description": "tokenConn hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
+    "description": "Hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -47,7 +47,7 @@
     "name": "get_v1_connectors_id_token"
   },
   {
-    "description": "connectorProviders lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
+    "description": "Lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -55,7 +55,7 @@
     "name": "get_v1_connectors_providers"
   },
   {
-    "description": "list returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/connectors\nsurface) are omitted; the two planes are disjoint.",
+    "description": "Returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/connectors\nsurface) are omitted; the two planes are disjoint.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -63,7 +63,7 @@
     "name": "get_v1_integrations"
   },
   {
-    "description": "githubRepos lists the org's granted GitHub repositories, each annotated with its\nnative import + sync status from the git object plane. Org-authed: the org comes\nfrom the validated principal, and the granted set is bounded to THAT org's\ninstallation token — an org can never enumerate another org's repos. The console\npolls it to watch an import flip a repo to imported.",
+    "description": "Lists the org's granted GitHub repositories, each annotated with its\nnative import + sync status from the git object plane. Org-authed: the org comes\nfrom the validated principal, and the granted set is bounded to THAT org's\ninstallation token — an org can never enumerate another org's repos. The console\npolls it to watch an import flip a repo to imported.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -71,7 +71,7 @@
     "name": "get_v1_integrations_github_repos"
   },
   {
-    "description": "githubPagesGet returns the repo's Pages status, live URL, custom domain and build\nsource. The repo is resolved against the org installation's GRANTED set, so a\ncaller can never address a repo the App was not granted; 404 when the repo has no\nPages site.",
+    "description": "Returns the repo's Pages status, live URL, custom domain and build\nsource. The repo is resolved against the org installation's GRANTED set, so a\ncaller can never address a repo the App was not granted; 404 when the repo has no\nPages site.",
     "inputSchema": {
       "properties": {
         "repo": {
@@ -84,7 +84,7 @@
     "name": "get_v1_integrations_github_repos_repo_pages"
   },
   {
-    "description": "get returns ONE provider with this org's connection status — the same view list\ncarries, for a single id. An unknown id is 404, and so is a user-plane provider:\nthe org surface never resolves one.",
+    "description": "Returns ONE provider with this org's connection status — the same view list\ncarries, for a single id. An unknown id is 404, and so is a user-plane provider:\nthe org surface never resolves one.",
     "inputSchema": {
       "properties": {
         "provider": {
@@ -97,7 +97,7 @@
     "name": "get_v1_integrations_provider"
   },
   {
-    "description": "refreshConn forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",
+    "description": "Forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -110,7 +110,7 @@
     "name": "post_v1_connectors_id_refresh"
   },
   {
-    "description": "credential is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order).",
+    "description": "Is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order).",
     "inputSchema": {
       "$defs": {
         "oauthBundleIn": {
@@ -158,7 +158,7 @@
     "name": "post_v1_connectors_provider_credential"
   },
   {
-    "description": "startDevice begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned.",
+    "description": "Begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned.",
     "inputSchema": {
       "properties": {
         "label": {
@@ -175,7 +175,7 @@
     "name": "post_v1_connectors_provider_device"
   },
   {
-    "description": "pollDevice advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval.",
+    "description": "Advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval.",
     "inputSchema": {
       "properties": {
         "flow": {
@@ -192,7 +192,7 @@
     "name": "post_v1_connectors_provider_device_flow_poll"
   },
   {
-    "description": "githubIssuesBackfill seeds the native tracker with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
+    "description": "Seeds the native tracker with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
     "inputSchema": {
       "properties": {
         "state": {
@@ -213,7 +213,7 @@
           "type": "boolean"
         },
         "repos": {
-          "description": "Repos names the repositories to import: short names within the org's\ninstallation, with no owner prefix (a trailing \".git\" is stripped).\nIgnored when all is true.",
+          "description": "Repos names the repositories to import, either owner-qualified\n(\"hanzo-apps/ai\") or as a bare name (\"ai\"); a trailing \".git\" is stripped.\nA bare name that matches more than one granted repository is an error\nrather than a guess, because one Hanzo org may hold several GitHub\ninstallations and a name is only unique within an owner.\nIgnored when all is true.",
           "items": {
             "type": "string"
           },
@@ -225,7 +225,7 @@
     "name": "post_v1_integrations_github_repos_import"
   },
   {
-    "description": "githubPagesEnable creates the repo's Pages site and answers 201 Created with it.\nWith buildType \"workflow\" the site builds via GitHub Actions; otherwise it builds\nfrom a branch source, defaulting to the repo's own default branch when none is\ngiven. Only \"/\" and \"/docs\" are legal source paths (GitHub's rule).",
+    "description": "Creates the repo's Pages site and answers 201 Created with it.\nWith buildType \"workflow\" the site builds via GitHub Actions; otherwise it builds\nfrom a branch source, defaulting to the repo's own default branch when none is\ngiven. Only \"/\" and \"/docs\" are legal source paths (GitHub's rule).",
     "inputSchema": {
       "properties": {
         "branch": {
@@ -263,7 +263,7 @@
     "name": "post_v1_integrations_github_repos_repo_pages_builds"
   },
   {
-    "description": "connect acquires the org's credential for one provider. It has TWO paths and the\nREQUEST picks which: a \"token\" key in the body seals that credential directly\n(verify-before-store), and its absence begins the 3-legged OAuth flow — minting a\nsingle-use nonce plus an HMAC-signed state that binds this org to this provider,\nand answering with the provider's authorize URL for the caller to redirect to.\n\nFail-closed order, unchanged: no principal → 403; unknown provider → 404; an\nAdminOnly connector without the caller's own-org admin bit → 403; not configured\n→ 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now\nrather than dead-end at the callback).",
+    "description": "Acquires the org's credential for one provider. It has TWO paths and the\nREQUEST picks which: a \"token\" key in the body seals that credential directly\n(verify-before-store), and its absence begins the 3-legged OAuth flow — minting a\nsingle-use nonce plus an HMAC-signed state that binds this org to this provider,\nand answering with the provider's authorize URL for the caller to redirect to.\n\nFail-closed order, unchanged: no principal → 403; unknown provider → 404; an\nAdminOnly connector without the caller's own-org admin bit → 403; not configured\n→ 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now\nrather than dead-end at the callback).",
     "inputSchema": {
       "properties": {
         "accountId": {
@@ -284,7 +284,7 @@
     "name": "post_v1_integrations_provider_connect"
   },
   {
-    "description": "disconnect revokes (best-effort) and forgets an org's connection: it deletes\nevery custodied KMS secret and the connection row. Idempotent — disconnecting a\nprovider that was never connected still returns {disconnected:true}. Symmetric\nwith connect: an AdminOnly connector needs the caller's own-org admin bit.",
+    "description": "Revokes (best-effort) and forgets an org's connection: it deletes\nevery custodied KMS secret and the connection row. Idempotent — disconnecting a\nprovider that was never connected still returns {disconnected:true}. Symmetric\nwith connect: an AdminOnly connector needs the caller's own-org admin bit.",
     "inputSchema": {
       "properties": {
         "provider": {
@@ -297,7 +297,7 @@
     "name": "post_v1_integrations_provider_disconnect"
   },
   {
-    "description": "verifyConn re-checks a CONNECTED apikey connector's stored credential against the\nprovider, live (`hanzo connector verify`). Org-scoped (any member may check\nstatus); the credential is read from KMS, verified, and NEVER returned or logged.\nA verification failure is reported as {active:false}, not an error — the console/\nCLI renders it. Only apikey providers support verify (OAuth tokens are checked at\nuse, not re-verified here).",
+    "description": "Re-checks a CONNECTED apikey connector's stored credential against the\nprovider, live (`hanzo connector verify`). Org-scoped (any member may check\nstatus); the credential is read from KMS, verified, and NEVER returned or logged.\nA verification failure is reported as {active:false}, not an error — the console/\nCLI renders it. Only apikey providers support verify (OAuth tokens are checked at\nuse, not re-verified here).",
     "inputSchema": {
       "properties": {
         "provider": {
@@ -310,7 +310,7 @@
     "name": "post_v1_integrations_provider_verify"
   },
   {
-    "description": "telegramConnect mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",
+    "description": "Mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -318,7 +318,7 @@
     "name": "post_v1_integrations_telegram_connect"
   },
   {
-    "description": "githubPagesUpdate sets or clears the custom domain (cname) and updates HTTPS\nenforcement, build type, or source. ONLY the provided fields are sent to GitHub,\nso an update never resets a setting the caller did not mention.",
+    "description": "Sets or clears the custom domain (cname) and updates HTTPS\nenforcement, build type, or source. ONLY the provided fields are sent to GitHub,\nso an update never resets a setting the caller did not mention.",
     "inputSchema": {
       "properties": {
         "branch": {

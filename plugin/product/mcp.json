@@ -1,6 +1,6 @@
 [
   {
-    "description": "searchIndexes lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
+    "description": "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -8,7 +8,7 @@
     "name": "get_v1_search-docs_indexes"
   },
   {
-    "description": "searchStats totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
+    "description": "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -16,7 +16,7 @@
     "name": "get_v1_search-docs_stats"
   },
   {
-    "description": "vectorCollections lists the vector collections with their size and geometry.\n\nIt reads the in-cluster Qdrant service: the collection list, then each\ncollection's detail for its point count, vector dimension and distance metric.\nPer-collection detail is best-effort — one collection that fails to describe\nitself keeps its name and defaults (dimension 0, cosine) rather than blanking\nthe whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.",
+    "description": "Lists the vector collections with their size and geometry.\n\nIt reads the in-cluster Qdrant service: the collection list, then each\ncollection's detail for its point count, vector dimension and distance metric.\nPer-collection detail is best-effort — one collection that fails to describe\nitself keeps its name and defaults (dimension 0, cosine) rather than blanking\nthe whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -24,7 +24,7 @@
     "name": "get_v1_vector_collections"
   },
   {
-    "description": "vectorStats totals the collections, vectors and storage across the vector store.\n\nEvery figure is summed from the same per-collection detail\nGET /v1/vector/collections returns, so the two panels can never disagree. An\nunreachable Qdrant answers 200 with all zeros rather than an error.",
+    "description": "Totals the collections, vectors and storage across the vector store.\n\nEvery figure is summed from the same per-collection detail\nGET /v1/vector/collections returns, so the two panels can never disagree. An\nunreachable Qdrant answers 200 with all zeros rather than an error.",
     "inputSchema": {
       "properties": {},
       "type": "object"

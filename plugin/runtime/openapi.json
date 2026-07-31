@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package runtime is the transport to the bot runtime service — the TS bot that executes channels and skills — and it relays that service's own ops paths at /v1/bot/* (ops.go), the only routes it serves.",
     "version": "v1"
   },
   "servers": [

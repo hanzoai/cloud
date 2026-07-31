@@ -1,6 +1,6 @@
 [
   {
-    "description": "remove deletes the caller org's OWN starter kit. A slug they do not own is a\n404, never a delete: the DELETE binds org.",
+    "description": "Deletes the caller org's OWN starter kit. A slug they do not own is a\n404, never a delete: the DELETE binds org.",
     "inputSchema": {
       "properties": {
         "slug": {
@@ -13,7 +13,7 @@
     "name": "delete_v1_templates_slug"
   },
   {
-    "description": "browse lists the public starter-kit catalog plus, for a validated caller, that\norg's own private kits. No request field can widen the scope: the org comes\nfrom the validated principal, so an anonymous or cross-org caller structurally\nsees the public catalog only.",
+    "description": "Lists the public starter-kit catalog plus, for a validated caller, that\norg's own private kits. No request field can widen the scope: the org comes\nfrom the validated principal, so an anonymous or cross-org caller structurally\nsees the public catalog only.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -21,7 +21,7 @@
     "name": "get_v1_templates"
   },
   {
-    "description": "get returns one starter kit: the caller org's own by that slug, else the public\ncatalog's. A slug another org owns reads as not found.",
+    "description": "Returns one starter kit: the caller org's own by that slug, else the public\ncatalog's. A slug another org owns reads as not found.",
     "inputSchema": {
       "properties": {
         "slug": {
@@ -34,7 +34,7 @@
     "name": "get_v1_templates_slug"
   },
   {
-    "description": "publish creates a starter kit PRIVATE to the caller's org and answers 201 with\nthe stored kit. The owner is stamped by the server, so a body \"org\" is never\ntrusted; publishing over a public-catalog slug is 409, so a slug still names\nexactly one kit.",
+    "description": "Creates a starter kit PRIVATE to the caller's org and answers 201 with\nthe stored kit. The owner is stamped by the server, so a body \"org\" is never\ntrusted; publishing over a public-catalog slug is 409, so a slug still names\nexactly one kit.",
     "inputSchema": {
       "$defs": {
         "Variant": {
@@ -120,7 +120,7 @@
     "name": "post_v1_templates"
   },
   {
-    "description": "replace overwrites the caller org's OWN starter kit at the path slug, answering\nthe stored kit. A slug they do not own is 404, never a create: the UPDATE binds\norg, so a PUT can never reach another org's kit.",
+    "description": "Overwrites the caller org's OWN starter kit at the path slug, answering\nthe stored kit. A slug they do not own is 404, never a create: the UPDATE binds\norg, so a PUT can never reach another org's kit.",
     "inputSchema": {
       "$defs": {
         "Variant": {

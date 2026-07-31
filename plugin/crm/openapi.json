@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package crm is the sales pipeline: companies, the contacts who work at them, and the opportunities being worked — plus the Startup Program intake that lands as a scored application.",
     "version": "v1"
   },
   "servers": [

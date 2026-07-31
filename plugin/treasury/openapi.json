@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package treasury is the platform's OWN reserve fund: a real, backed pool of capital that stands behind the growth-loop payouts (referrals, affiliates, OSS authors), so a payout is a debit against funded capital and never unbounded minting.",
     "version": "v1"
   },
   "servers": [

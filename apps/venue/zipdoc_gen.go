@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/cloud/:provider/accounts/:label", zip.Doc{
-		Description: "unlinkAccount forgets one linked cloud account: it detaches every fleet cluster\nTHIS account folded (its own names, in its own shard — a neighbour's cluster of\nthe same name is untouched), deletes the sealed credential, and drops the index\nrow.\n\nIt is idempotent and deliberately not an existence oracle: an account this org\ndoes not hold answers exactly the same as one it just removed. A cluster that\nfails to detach is logged and the unlink continues, so a dead provider cannot\nstrand a credential. Requires org admin.",
+		Description: "Forgets one linked cloud account: it detaches every fleet cluster\nTHIS account folded (its own names, in its own shard — a neighbour's cluster of\nthe same name is untouched), deletes the sealed credential, and drops the index\nrow.\n\nIt is idempotent and deliberately not an existence oracle: an account this org\ndoes not hold answers exactly the same as one it just removed. A cluster that\nfails to detach is logged and the unlink continues, so a dead provider cannot\nstrand a credential. Requires org admin.",
 		Fields: map[string]string{
 			"unlinkedView.unlinked":    "Unlinked is always true. Unlinking is idempotent: an account this org does\nnot hold answers the same, so a repeated call is not an error and is not an\nexistence oracle either.",
 			"venueAccountRef.label":    "Label is the org-chosen name of the account within that provider. Empty\nmeans \"default\"; anything outside 1–64 of [A-Za-z0-9._-] is refused.",
@@ -16,7 +16,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/cloud", zip.Doc{
-		Description: "listProviders returns the clouds this deployment can link and what linking each\none needs — the DigitalOcean token, the AWS role and external id, the GCP\ncredential JSON, the Azure app — plus whether the provider can be linked without\nstoring any long-lived secret. It is the catalog a \"connect a cloud\" screen\nrenders; it reports no account and no credential.",
+		Description: "Returns the clouds this deployment can link and what linking each\none needs — the DigitalOcean token, the AWS role and external id, the GCP\ncredential JSON, the Azure app — plus whether the provider can be linked without\nstoring any long-lived secret. It is the catalog a \"connect a cloud\" screen\nrenders; it reports no account and no credential.",
 		Fields: map[string]string{
 			"providerCard.id":         "ID is the provider slug used in the path: digitalocean, aws, gcp, azure.",
 			"providerCard.keyless":    "Keyless is whether the provider can be linked WITHOUT storing a long-lived\nsecret — AWS by role assumption, GCP by workload identity federation, Azure\nby federated credential. DigitalOcean is not: it needs a stored token.",
@@ -26,7 +26,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/cloud/accounts", zip.Doc{
-		Description: "listAccounts lists the caller org's linked cloud accounts across every provider:\nwhich account each one is at the provider, which fleet clusters it folded, and\nwhen it was last discovered. Metadata only — a sealed credential never appears in\na response. Another org's accounts are not visible and not countable.",
+		Description: "Lists the caller org's linked cloud accounts across every provider:\nwhich account each one is at the provider, which fleet clusters it folded, and\nwhen it was last discovered. Metadata only — a sealed credential never appears in\na response. Another org's accounts are not visible and not countable.",
 		Fields: map[string]string{
 			"cloudAccountView.account":    "Account is the provider's human label for it, e.g. the DigitalOcean team\nemail.",
 			"cloudAccountView.clusters":   "Clusters is the fleet names this account currently owns. Unlinking detaches\nexactly these and nothing else.",
@@ -40,7 +40,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/cloud/:provider/accounts", zip.Doc{
-		Description: "linkAccount links one of the caller org's cloud accounts and folds the Kubernetes\nclusters it finds there into the ONE Hanzo fleet, so they appear at /v1/clusters\nand can run work like any managed or bring-your-own cluster. Answers 201.\n\nThe credential is verified LIVE against the provider BEFORE anything is stored,\nso a bad one is refused and nothing is written; it is then sealed in the org's own\nKMS namespace and never appears in a response, the account index, or a log line.\nDiscovery follows, and a cluster that fails to fold is reported as DATA in the\nclusters list rather than failing the link.\n\nRe-linking a label that already exists re-seals its credential and re-folds it, so\nthis is how a rotated token is replaced. Requires org admin.",
+		Description: "Links one of the caller org's cloud accounts and folds the Kubernetes\nclusters it finds there into the ONE Hanzo fleet, so they appear at /v1/clusters\nand can run work like any managed or bring-your-own cluster. Answers 201.\n\nThe credential is verified LIVE against the provider BEFORE anything is stored,\nso a bad one is refused and nothing is written; it is then sealed in the org's own\nKMS namespace and never appears in a response, the account index, or a log line.\nDiscovery follows, and a cluster that fails to fold is reported as DATA in the\nclusters list rather than failing the link.\n\nRe-linking a label that already exists re-seals its credential and re-folds it, so\nthis is how a rotated token is replaced. Requires org admin.",
 		Fields: map[string]string{
 			"accountFoldView.account":          "Account is the account as it is now recorded.",
 			"accountFoldView.clusters":         "Clusters is one entry per cluster discovered in the account. It is empty\nwhen discovery itself failed, which leaves the previously folded set\nuntouched rather than mass-detaching it.",
@@ -75,7 +75,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/cloud/:provider/accounts/:label/sync", zip.Doc{
-		Description: "syncAccount re-discovers one already-linked cloud account and reconciles what it\nfolded: kubeconfigs are refreshed, clusters that appeared since the last sync are\nfolded, and clusters this account folded that the provider no longer returns are\ndetached — only this account's own, in the fleet shard it was linked into.\n\nIt is idempotent, it reads the credential already sealed at link time, and a\ndiscovery failure leaves the existing fold set alone rather than mass-detaching\nit. An account this org has not linked is not found. Requires org admin.",
+		Description: "Re-discovers one already-linked cloud account and reconciles what it\nfolded: kubeconfigs are refreshed, clusters that appeared since the last sync are\nfolded, and clusters this account folded that the provider no longer returns are\ndetached — only this account's own, in the fleet shard it was linked into.\n\nIt is idempotent, it reads the credential already sealed at link time, and a\ndiscovery failure leaves the existing fold set alone rather than mass-detaching\nit. An account this org has not linked is not found. Requires org admin.",
 		Fields: map[string]string{
 			"accountFoldView.account":     "Account is the account as it is now recorded.",
 			"accountFoldView.clusters":    "Clusters is one entry per cluster discovered in the account. It is empty\nwhen discovery itself failed, which leaves the previously folded set\nuntouched rather than mass-detaching it.",

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package destinations is server-side conversion forwarding: connect Google Analytics 4, Meta, X, LinkedIn, TikTok, Reddit, PostHog or Umami, and every event the org captures is translated into that platform's own conversion schema and sent from the server, with PII hashed on the way out.",
     "version": "v1"
   },
   "servers": [
@@ -19,8 +19,8 @@
     "/v1/destinations": {
       "get": {
         "operationId": "get_v1_destinations",
-        "summary": "list reports every destination this deployment can forward to, each with the caller org's connection state: whether it is connected, whether it is enabled, whether a credential resolves right now, and the config fields the console renders for it.",
-        "description": "list reports every destination this deployment can forward to, each with the\ncaller org's connection state: whether it is connected, whether it is enabled,\nwhether a credential resolves right now, and the config fields the console\nrenders for it.",
+        "summary": "Reports every destination this deployment can forward to, each with the caller org's connection state: whether it is connected, whether it is enabled, whether a credential resolves right now, and the config fields the console renders for it.",
+        "description": "Reports every destination this deployment can forward to, each with the\ncaller org's connection state: whether it is connected, whether it is enabled,\nwhether a credential resolves right now, and the config fields the console\nrenders for it.",
         "tags": [
           "destinations"
         ],
@@ -41,8 +41,8 @@
     "/v1/destinations/{platform}": {
       "delete": {
         "operationId": "delete_v1_destinations_platform",
-        "summary": "disconnect forgets a destination for the caller's org: every credential held in KMS, then the stored config.",
-        "description": "disconnect forgets a destination for the caller's org: every credential held in\nKMS, then the stored config. Idempotent, and it requires org admin.",
+        "summary": "Forgets a destination for the caller's org: every credential held in KMS, then the stored config.",
+        "description": "Forgets a destination for the caller's org: every credential held in\nKMS, then the stored config. Idempotent, and it requires org admin.",
         "tags": [
           "destinations"
         ],
@@ -73,8 +73,8 @@
       },
       "get": {
         "operationId": "get_v1_destinations_platform",
-        "summary": "get reports one destination's card for the caller's org — its config fields, its connection state, and whether a credential resolves right now.",
-        "description": "get reports one destination's card for the caller's org — its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
+        "summary": "Reports one destination's card for the caller's org — its config fields, its connection state, and whether a credential resolves right now.",
+        "description": "Reports one destination's card for the caller's org — its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
         "tags": [
           "destinations"
         ],
@@ -145,8 +145,8 @@
     "/v1/destinations/{platform}/test": {
       "post": {
         "operationId": "post_v1_destinations_platform_test",
-        "summary": "test sends ONE synthetic pageview through the connected destination end to end and reports what the platform said.",
-        "description": "test sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
+        "summary": "Sends ONE synthetic pageview through the connected destination end to end and reports what the platform said.",
+        "description": "Sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
         "tags": [
           "destinations"
         ],

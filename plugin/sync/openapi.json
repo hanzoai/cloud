@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package sync is data sync (/v1/sync): a Sync links two endpoints and the engine reconciles them — on a webhook, on a schedule, or on an explicit run.",
     "version": "v1"
   },
   "servers": [

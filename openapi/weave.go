@@ -46,6 +46,34 @@ type Conflict struct {
 	A, B string // the two apps that claim it, in weave order
 }
 
+// prose is what each app SAYS ABOUT ITSELF, keyed by app name: the synopsis of
+// the package its binary mounts, which describe.go stamped into that app's own
+// subset as info.description (openapi/synopsis.go computes it, once, there).
+//
+// Reading it back off the parts is why Weave stays a pure function of its inputs.
+// The alternative — looking the package up again here — would be the same mapping
+// written twice, in two processes, free to disagree; the subset already carries
+// the answer because the app that wrote it is the app that knows.
+//
+// A part whose description is the FLEET's own has said nothing about itself: that
+// is FleetSpec's identity, the fallback for a package with no doc comment, and it
+// describes the whole API rather than this product. Stamping it on a tag would
+// give every undescribed product the same sentence, which reads as a description
+// and is not one.
+//
+// The key is the app's name because a product tag IS an app name — /v1/kms is
+// kms. Products no app is named for (finance, logs, keys) get no description
+// here, correctly: no single package implements them.
+func prose(parts []Part) map[string]string {
+	out := make(map[string]string, len(parts))
+	for _, p := range parts {
+		if d := p.Doc.Info.Description; d != "" && d != fleetInfo.Description {
+			out[p.App] = d
+		}
+	}
+	return out
+}
+
 func (c *Conflict) Error() string {
 	switch c.Kind {
 	case "operation":
@@ -128,8 +156,9 @@ func Weave(parts []Part) (*Document, error) {
 			}
 		}
 	}
+	said := prose(parts)
 	for name := range tags {
-		out.Tags = append(out.Tags, Tag{Name: name})
+		out.Tags = append(out.Tags, Tag{Name: name, Description: said[name]})
 	}
 	sort.Slice(out.Tags, func(i, j int) bool { return out.Tags[i].Name < out.Tags[j].Name })
 

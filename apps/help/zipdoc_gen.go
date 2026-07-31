@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/help/articles", zip.Doc{
-		Description: "listArticles returns the public knowledge base: the help center's Published,\npublicly-visible articles as cards. The org is server-fixed and the\nstatus/is_public filter is server-set, so neither the tenant nor the visibility\ncan be widened by the caller. A deployment with no help center answers 404.",
+		Description: "Returns the public knowledge base: the help center's Published,\npublicly-visible articles as cards. The org is server-fixed and the\nstatus/is_public filter is server-set, so neither the tenant nor the visibility\ncan be widened by the caller. A deployment with no help center answers 404.",
 		Fields: map[string]string{
 			"helpArticleCard.category":   "Category is the name of the knowledge-base section the article sits in, or\nempty when it is filed under none.",
 			"helpArticleCard.excerpt":    "Excerpt is the short summary the author wrote for listings, or empty.",
@@ -21,7 +21,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/help/articles/:slug", zip.Doc{
-		Description: "getArticle returns one public article by slug, with its body. A missing, Draft,\nor internal (non-public) article is 404 — fail-closed, so this route is no\nexistence oracle for anything beyond \"published and public\".",
+		Description: "Returns one public article by slug, with its body. A missing, Draft,\nor internal (non-public) article is 404 — fail-closed, so this route is no\nexistence oracle for anything beyond \"published and public\".",
 		Fields: map[string]string{
 			"helpArticle.body":      "Body is the article's rich-text content as the author saved it.",
 			"helpArticle.category":  "Category is the name of the knowledge-base section the article sits in, or\nempty when it is filed under none.",
@@ -33,7 +33,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/help/categories", zip.Doc{
-		Description: "listCategories returns the knowledge-base sections for the public center's\nnavigation — but ONLY the sections that front at least one Published, public\narticle, so an internal (agent-only) category name or description never leaks. A\nsection with no public article is invisible; a center with no public articles has\nno sections, which is an empty list rather than an error.",
+		Description: "Returns the knowledge-base sections for the public center's\nnavigation — but ONLY the sections that front at least one Published, public\narticle, so an internal (agent-only) category name or description never leaks. A\nsection with no public article is invisible; a center with no public articles has\nno sections, which is an empty list rather than an error.",
 		Fields: map[string]string{
 			"helpCategory.description": "Description is the section's blurb, or empty.",
 			"helpCategory.name":        "Name is the section's name, and the value an article's category matches.",
@@ -41,7 +41,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/help/tickets", zip.Doc{
-		Description: "fileTicket files a customer support ticket into the public help center. It\ncreates the ticket (status Open, source portal) with the customer's message on\nthe description, then records that same message as the opening entry of the\nticket's conversation thread; the description carries it regardless, so failing\nto write that entry loses nothing. Answers 201 with an opaque reference.\n\nA deployment with no help center answers 404, one whose center has not installed\nthe Help model answers 503, and a body over 64 KiB answers 413 — in that order,\nwhich is the order the route has always decided them in.",
+		Description: "Files a customer support ticket into the public help center. It\ncreates the ticket (status Open, source portal) with the customer's message on\nthe description, then records that same message as the opening entry of the\nticket's conversation thread; the description carries it regardless, so failing\nto write that entry loses nothing. Answers 201 with an opaque reference.\n\nA deployment with no help center answers 404, one whose center has not installed\nthe Help model answers 503, and a body over 64 KiB answers 413 — in that order,\nwhich is the order the route has always decided them in.",
 		Fields: map[string]string{
 			"helpTicketFiled.status":       "Status is the lifecycle state the ticket was filed in — always \"Open\".",
 			"helpTicketFiled.ticket":       "Ticket is the opaque, random customer-facing reference (\"tkt_\" + 24 hex\ncharacters). It is NOT the ticket's internal name: that name is sequential,\nand handing it out would disclose the center's ticket volume.",

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package venue is the org-scoped \"connect a cloud account\" plane: an org links its native cloud-provider accounts (DigitalOcean / AWS / GCP), and Hanzo DISCOVERS the Kubernetes clusters in each account and FOLDS them into the ONE fleet (apps/fleet) — the same registry apps/visor surfaces at /v1/clusters and apps/ml federates workloads onto.",
     "version": "v1"
   },
   "servers": [
@@ -19,8 +19,8 @@
     "/v1/cloud": {
       "get": {
         "operationId": "get_v1_cloud",
-        "summary": "listProviders returns the clouds this deployment can link and what linking each one needs — the DigitalOcean token, the AWS role and external id, the GCP credential JSON, the Azure app — plus whether the provider can be linked without storing any long-lived secret.",
-        "description": "listProviders returns the clouds this deployment can link and what linking each\none needs — the DigitalOcean token, the AWS role and external id, the GCP\ncredential JSON, the Azure app — plus whether the provider can be linked without\nstoring any long-lived secret. It is the catalog a \"connect a cloud\" screen\nrenders; it reports no account and no credential.",
+        "summary": "Returns the clouds this deployment can link and what linking each one needs — the DigitalOcean token, the AWS role and external id, the GCP credential JSON, the Azure app — plus whether the provider can be linked without storing any long-lived secret.",
+        "description": "Returns the clouds this deployment can link and what linking each\none needs — the DigitalOcean token, the AWS role and external id, the GCP\ncredential JSON, the Azure app — plus whether the provider can be linked without\nstoring any long-lived secret. It is the catalog a \"connect a cloud\" screen\nrenders; it reports no account and no credential.",
         "tags": [
           "cloud"
         ],
@@ -41,8 +41,8 @@
     "/v1/cloud/accounts": {
       "get": {
         "operationId": "get_v1_cloud_accounts",
-        "summary": "listAccounts lists the caller org's linked cloud accounts across every provider: which account each one is at the provider, which fleet clusters it folded, and when it was last discovered.",
-        "description": "listAccounts lists the caller org's linked cloud accounts across every provider:\nwhich account each one is at the provider, which fleet clusters it folded, and\nwhen it was last discovered. Metadata only — a sealed credential never appears in\na response. Another org's accounts are not visible and not countable.",
+        "summary": "Lists the caller org's linked cloud accounts across every provider: which account each one is at the provider, which fleet clusters it folded, and when it was last discovered.",
+        "description": "Lists the caller org's linked cloud accounts across every provider:\nwhich account each one is at the provider, which fleet clusters it folded, and\nwhen it was last discovered. Metadata only — a sealed credential never appears in\na response. Another org's accounts are not visible and not countable.",
         "tags": [
           "cloud"
         ],
@@ -63,8 +63,8 @@
     "/v1/cloud/{provider}/accounts": {
       "post": {
         "operationId": "post_v1_cloud_provider_accounts",
-        "summary": "linkAccount links one of the caller org's cloud accounts and folds the Kubernetes clusters it finds there into the ONE Hanzo fleet, so they appear at /v1/clusters and can run work like any managed or bring-your-own cluster.",
-        "description": "linkAccount links one of the caller org's cloud accounts and folds the Kubernetes\nclusters it finds there into the ONE Hanzo fleet, so they appear at /v1/clusters\nand can run work like any managed or bring-your-own cluster. Answers 201.\n\nThe credential is verified LIVE against the provider BEFORE anything is stored,\nso a bad one is refused and nothing is written; it is then sealed in the org's own\nKMS namespace and never appears in a response, the account index, or a log line.\nDiscovery follows, and a cluster that fails to fold is reported as DATA in the\nclusters list rather than failing the link.\n\nRe-linking a label that already exists re-seals its credential and re-folds it, so\nthis is how a rotated token is replaced. Requires org admin.",
+        "summary": "Links one of the caller org's cloud accounts and folds the Kubernetes clusters it finds there into the ONE Hanzo fleet, so they appear at /v1/clusters and can run work like any managed or bring-your-own cluster.",
+        "description": "Links one of the caller org's cloud accounts and folds the Kubernetes\nclusters it finds there into the ONE Hanzo fleet, so they appear at /v1/clusters\nand can run work like any managed or bring-your-own cluster. Answers 201.\n\nThe credential is verified LIVE against the provider BEFORE anything is stored,\nso a bad one is refused and nothing is written; it is then sealed in the org's own\nKMS namespace and never appears in a response, the account index, or a log line.\nDiscovery follows, and a cluster that fails to fold is reported as DATA in the\nclusters list rather than failing the link.\n\nRe-linking a label that already exists re-seals its credential and re-folds it, so\nthis is how a rotated token is replaced. Requires org admin.",
         "tags": [
           "cloud"
         ],
@@ -106,8 +106,8 @@
     "/v1/cloud/{provider}/accounts/{label}": {
       "delete": {
         "operationId": "delete_v1_cloud_provider_accounts_label",
-        "summary": "unlinkAccount forgets one linked cloud account: it detaches every fleet cluster THIS account folded (its own names, in its own shard — a neighbour's cluster of the same name is untouched), deletes the sealed credential, and drops the index row.",
-        "description": "unlinkAccount forgets one linked cloud account: it detaches every fleet cluster\nTHIS account folded (its own names, in its own shard — a neighbour's cluster of\nthe same name is untouched), deletes the sealed credential, and drops the index\nrow.\n\nIt is idempotent and deliberately not an existence oracle: an account this org\ndoes not hold answers exactly the same as one it just removed. A cluster that\nfails to detach is logged and the unlink continues, so a dead provider cannot\nstrand a credential. Requires org admin.",
+        "summary": "Forgets one linked cloud account: it detaches every fleet cluster THIS account folded (its own names, in its own shard — a neighbour's cluster of the same name is untouched), deletes the sealed credential, and drops the index row.",
+        "description": "Forgets one linked cloud account: it detaches every fleet cluster\nTHIS account folded (its own names, in its own shard — a neighbour's cluster of\nthe same name is untouched), deletes the sealed credential, and drops the index\nrow.\n\nIt is idempotent and deliberately not an existence oracle: an account this org\ndoes not hold answers exactly the same as one it just removed. A cluster that\nfails to detach is logged and the unlink continues, so a dead provider cannot\nstrand a credential. Requires org admin.",
         "tags": [
           "cloud"
         ],
@@ -148,8 +148,8 @@
     "/v1/cloud/{provider}/accounts/{label}/sync": {
       "post": {
         "operationId": "post_v1_cloud_provider_accounts_label_sync",
-        "summary": "syncAccount re-discovers one already-linked cloud account and reconciles what it folded: kubeconfigs are refreshed, clusters that appeared since the last sync are folded, and clusters this account folded that the provider no longer returns are detached — only this account's own, in the fleet shard it was linked into.",
-        "description": "syncAccount re-discovers one already-linked cloud account and reconciles what it\nfolded: kubeconfigs are refreshed, clusters that appeared since the last sync are\nfolded, and clusters this account folded that the provider no longer returns are\ndetached — only this account's own, in the fleet shard it was linked into.\n\nIt is idempotent, it reads the credential already sealed at link time, and a\ndiscovery failure leaves the existing fold set alone rather than mass-detaching\nit. An account this org has not linked is not found. Requires org admin.",
+        "summary": "Re-discovers one already-linked cloud account and reconciles what it folded: kubeconfigs are refreshed, clusters that appeared since the last sync are folded, and clusters this account folded that the provider no longer returns are detached — only this account's own, in the fleet shard it was linked into.",
+        "description": "Re-discovers one already-linked cloud account and reconciles what it\nfolded: kubeconfigs are refreshed, clusters that appeared since the last sync are\nfolded, and clusters this account folded that the provider no longer returns are\ndetached — only this account's own, in the fleet shard it was linked into.\n\nIt is idempotent, it reads the credential already sealed at link time, and a\ndiscovery failure leaves the existing fold set alone rather than mass-detaching\nit. An account this org has not linked is not found. Requires org admin.",
         "tags": [
           "cloud"
         ],

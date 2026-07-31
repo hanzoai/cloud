@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package channels is the /v1/channels transport plane: the portable chat envelope, per-org access policy (pairing / allowlist / open), a durable inbox, and outbound send across the connected chat transports (Discord, Slack, Teams, Telegram).",
     "version": "v1"
   },
   "servers": [
@@ -19,8 +19,8 @@
     "/v1/channels": {
       "get": {
         "operationId": "get_v1_channels",
-        "summary": "list returns every chat transport channels can talk to — Discord, Slack, Teams and Telegram — with the caller org's own facts on each: whether it is connected and to which account, what the transport supports, the org's DM and group access policies, and how many pairing requests are pending approval.",
-        "description": "list returns every chat transport channels can talk to — Discord, Slack, Teams\nand Telegram — with the caller org's own facts on each: whether it is\nconnected and to which account, what the transport supports, the org's DM and\ngroup access policies, and how many pairing requests are pending approval. The\norder is fixed, so a console can render the same rows every time. A policy that\ncannot be read leaves that channel's policy fields empty rather than failing\nthe whole listing.",
+        "summary": "Returns every chat transport channels can talk to — Discord, Slack, Teams and Telegram — with the caller org's own facts on each: whether it is connected and to which account, what the transport supports, the org's DM and group access policies, and how many pairing requests are pending approval.",
+        "description": "Returns every chat transport channels can talk to — Discord, Slack, Teams\nand Telegram — with the caller org's own facts on each: whether it is\nconnected and to which account, what the transport supports, the org's DM and\ngroup access policies, and how many pairing requests are pending approval. The\norder is fixed, so a console can render the same rows every time. A policy that\ncannot be read leaves that channel's policy fields empty rather than failing\nthe whole listing.",
         "tags": [
           "channels"
         ],
@@ -41,8 +41,8 @@
     "/v1/channels/allowlist": {
       "get": {
         "operationId": "get_v1_channels_allowlist",
-        "summary": "allowlistGet returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-only here), and the org's named access groups.",
-        "description": "allowlistGet returns the caller org's access policy for one channel: whether\nDMs are pairing-gated, allowlisted or open, whether group rooms are open,\nallowlisted or disabled, the config-managed DM and group allow entries, the\nsenders approved through PAIRING (read-only here), and the org's named access\ngroups. An unknown channel is a 404.",
+        "summary": "Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-only here), and the org's named access groups.",
+        "description": "Returns the caller org's access policy for one channel: whether\nDMs are pairing-gated, allowlisted or open, whether group rooms are open,\nallowlisted or disabled, the config-managed DM and group allow entries, the\nsenders approved through PAIRING (read-only here), and the org's named access\ngroups. An unknown channel is a 404.",
         "tags": [
           "channels"
         ],
@@ -73,8 +73,8 @@
       },
       "put": {
         "operationId": "put_v1_channels_allowlist",
-        "summary": "allowlistPut edits the caller org's access policy for one channel and answers the policy as GET would, so both verbs return ONE shape.",
-        "description": "allowlistPut edits the caller org's access policy for one channel and answers\nthe policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.\nEvery field but `channel` is optional and applied only when provided: an empty\npolicy string leaves that policy alone, an absent or null list leaves that list\nalone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries\n— senders approved through pairing belong to the approval flow, so a policy\nedit can never revoke one. An unknown channel is a 404.",
+        "summary": "Edits the caller org's access policy for one channel and answers the policy as GET would, so both verbs return ONE shape.",
+        "description": "Edits the caller org's access policy for one channel and answers\nthe policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.\nEvery field but `channel` is optional and applied only when provided: an empty\npolicy string leaves that policy alone, an absent or null list leaves that list\nalone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries\n— senders approved through pairing belong to the approval flow, so a policy\nedit can never revoke one. An unknown channel is a 404.",
         "tags": [
           "channels"
         ],
@@ -112,8 +112,8 @@
     "/v1/channels/inbox": {
       "get": {
         "operationId": "get_v1_channels_inbox",
-        "summary": "inbox returns the messages people have sent to the caller org's connected chat bots, oldest first, in the portable envelope shape every transport normalises into.",
-        "description": "inbox returns the messages people have sent to the caller org's connected chat\nbots, oldest first, in the portable envelope shape every transport normalises\ninto. It is a CURSOR feed, not a search: pass the returned cursor back as\n`since` to get only what has arrived since. Only this org's messages are\nstored under this org, so the feed can never carry another tenant's chat.",
+        "summary": "Returns the messages people have sent to the caller org's connected chat bots, oldest first, in the portable envelope shape every transport normalises into.",
+        "description": "Returns the messages people have sent to the caller org's connected chat\nbots, oldest first, in the portable envelope shape every transport normalises\ninto. It is a CURSOR feed, not a search: pass the returned cursor back as\n`since` to get only what has arrived since. Only this org's messages are\nstored under this org, so the feed can never carry another tenant's chat.",
         "tags": [
           "channels"
         ],
@@ -156,8 +156,8 @@
     "/v1/channels/pairing": {
       "get": {
         "operationId": "get_v1_channels_pairing",
-        "summary": "pairingList returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a channel whose DM policy is \"pairing\" and who is not allowed yet.",
-        "description": "pairingList returns the pairing requests waiting for the caller org to approve\n— one per person who messaged a connected bot on a channel whose DM policy is\n\"pairing\" and who is not allowed yet. Each row carries the CODE an org admin\npasses to POST /v1/channels/pairing/approve. Expired requests are not\nreturned. Codes are capability strings: they are shown here, and never logged.",
+        "summary": "Returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a channel whose DM policy is \"pairing\" and who is not allowed yet.",
+        "description": "Returns the pairing requests waiting for the caller org to approve\n— one per person who messaged a connected bot on a channel whose DM policy is\n\"pairing\" and who is not allowed yet. Each row carries the CODE an org admin\npasses to POST /v1/channels/pairing/approve. Expired requests are not\nreturned. Codes are capability strings: they are shown here, and never logged.",
         "tags": [
           "channels"
         ],
@@ -178,8 +178,8 @@
     "/v1/channels/pairing/approve": {
       "post": {
         "operationId": "post_v1_channels_pairing_approve",
-        "summary": "pairingApprove turns one pending pairing code into a standing allow entry, so that person can DM the org's bot on that channel from now on.",
-        "description": "pairingApprove turns one pending pairing code into a standing allow entry, so\nthat person can DM the org's bot on that channel from now on. It requires ORG\nADMIN, not merely membership. The first approval an org makes on a channel also\nbootstraps that sender as the channel's owner, which the answer reports. An\nunknown or expired code is a 404, and a code always belongs to exactly one\norg, so it can never approve someone into another tenant.",
+        "summary": "Turns one pending pairing code into a standing allow entry, so that person can DM the org's bot on that channel from now on.",
+        "description": "Turns one pending pairing code into a standing allow entry, so\nthat person can DM the org's bot on that channel from now on. It requires ORG\nADMIN, not merely membership. The first approval an org makes on a channel also\nbootstraps that sender as the channel's owner, which the answer reports. An\nunknown or expired code is a 404, and a code always belongs to exactly one\norg, so it can never approve someone into another tenant.",
         "tags": [
           "channels"
         ],

@@ -10,20 +10,20 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/channels", zip.Doc{
-		Description: "list returns every chat transport channels can talk to — Discord, Slack, Teams\nand Telegram — with the caller org's own facts on each: whether it is\nconnected and to which account, what the transport supports, the org's DM and\ngroup access policies, and how many pairing requests are pending approval. The\norder is fixed, so a console can render the same rows every time. A policy that\ncannot be read leaves that channel's policy fields empty rather than failing\nthe whole listing.",
+		Description: "Returns every chat transport channels can talk to — Discord, Slack, Teams\nand Telegram — with the caller org's own facts on each: whether it is\nconnected and to which account, what the transport supports, the org's DM and\ngroup access policies, and how many pairing requests are pending approval. The\norder is fixed, so a console can render the same rows every time. A policy that\ncannot be read leaves that channel's policy fields empty rather than failing\nthe whole listing.",
 		Fields: map[string]string{
 			"chatChannels.channels": "Channels is every chat transport this deployment supports, in a fixed\norder, each carrying whether the org has connected it, the account behind\nthe connection, what the transport can do, the org's DM/group access\npolicies for it, and how many pairing requests are waiting.",
 		},
 	})
 	zip.Describe("GET /v1/channels/allowlist", zip.Doc{
-		Description: "allowlistGet returns the caller org's access policy for one channel: whether\nDMs are pairing-gated, allowlisted or open, whether group rooms are open,\nallowlisted or disabled, the config-managed DM and group allow entries, the\nsenders approved through PAIRING (read-only here), and the org's named access\ngroups. An unknown channel is a 404.",
+		Description: "Returns the caller org's access policy for one channel: whether\nDMs are pairing-gated, allowlisted or open, whether group rooms are open,\nallowlisted or disabled, the config-managed DM and group allow entries, the\nsenders approved through PAIRING (read-only here), and the org's named access\ngroups. An unknown channel is a 404.",
 		Fields: map[string]string{
 			"allowlistRef.channel": "Channel is the transport to read: discord, slack, teams or telegram.\nRequired; an unknown value is a 404.",
 		},
 		Example: json.RawMessage(`{"channel":"slack"}`),
 	})
 	zip.Describe("GET /v1/channels/inbox", zip.Doc{
-		Description: "inbox returns the messages people have sent to the caller org's connected chat\nbots, oldest first, in the portable envelope shape every transport normalises\ninto. It is a CURSOR feed, not a search: pass the returned cursor back as\n`since` to get only what has arrived since. Only this org's messages are\nstored under this org, so the feed can never carry another tenant's chat.",
+		Description: "Returns the messages people have sent to the caller org's connected chat\nbots, oldest first, in the portable envelope shape every transport normalises\ninto. It is a CURSOR feed, not a search: pass the returned cursor back as\n`since` to get only what has arrived since. Only this org's messages are\nstored under this org, so the feed can never carry another tenant's chat.",
 		Fields: map[string]string{
 			"inboxIn.limit":      "Limit caps how many messages come back. Empty or 0 uses the store's\ndefault page size. Must parse as an integer.",
 			"inboxIn.since":      "Since is the exclusive cursor: only messages with a higher row id come\nback. Empty starts at the beginning. Must parse as an integer.",
@@ -33,13 +33,13 @@ func init() {
 		Example: json.RawMessage(`{"since":"1042","limit":"100"}`),
 	})
 	zip.Describe("GET /v1/channels/pairing", zip.Doc{
-		Description: "pairingList returns the pairing requests waiting for the caller org to approve\n— one per person who messaged a connected bot on a channel whose DM policy is\n\"pairing\" and who is not allowed yet. Each row carries the CODE an org admin\npasses to POST /v1/channels/pairing/approve. Expired requests are not\nreturned. Codes are capability strings: they are shown here, and never logged.",
+		Description: "Returns the pairing requests waiting for the caller org to approve\n— one per person who messaged a connected bot on a channel whose DM policy is\n\"pairing\" and who is not allowed yet. Each row carries the CODE an org admin\npasses to POST /v1/channels/pairing/approve. Expired requests are not\nreturned. Codes are capability strings: they are shown here, and never logged.",
 		Fields: map[string]string{
 			"pairingQueue.pending": "Pending is every unexpired pairing request waiting on an org admin, each\ncarrying the channel, the requesting sender and the code to approve it with.",
 		},
 	})
 	zip.Describe("POST /v1/channels/pairing/approve", zip.Doc{
-		Description: "pairingApprove turns one pending pairing code into a standing allow entry, so\nthat person can DM the org's bot on that channel from now on. It requires ORG\nADMIN, not merely membership. The first approval an org makes on a channel also\nbootstraps that sender as the channel's owner, which the answer reports. An\nunknown or expired code is a 404, and a code always belongs to exactly one\norg, so it can never approve someone into another tenant.",
+		Description: "Turns one pending pairing code into a standing allow entry, so\nthat person can DM the org's bot on that channel from now on. It requires ORG\nADMIN, not merely membership. The first approval an org makes on a channel also\nbootstraps that sender as the channel's owner, which the answer reports. An\nunknown or expired code is a 404, and a code always belongs to exactly one\norg, so it can never approve someone into another tenant.",
 		Fields: map[string]string{
 			"approvePairingIn.channel":          "Channel is the transport the request came in on: discord, slack, teams or telegram.",
 			"approvePairingIn.code":             "Code is the pairing code from GET /v1/channels/pairing. It is a capability:\nholding it is what authorises the approval, alongside org admin.",
@@ -49,7 +49,7 @@ func init() {
 		Example: json.RawMessage(`{"channel":"telegram","code":"PAIR-7Q2M"}`),
 	})
 	zip.Describe("PUT /v1/channels/allowlist", zip.Doc{
-		Description: "allowlistPut edits the caller org's access policy for one channel and answers\nthe policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.\nEvery field but `channel` is optional and applied only when provided: an empty\npolicy string leaves that policy alone, an absent or null list leaves that list\nalone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries\n— senders approved through pairing belong to the approval flow, so a policy\nedit can never revoke one. An unknown channel is a 404.",
+		Description: "Edits the caller org's access policy for one channel and answers\nthe policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.\nEvery field but `channel` is optional and applied only when provided: an empty\npolicy string leaves that policy alone, an absent or null list leaves that list\nalone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries\n— senders approved through pairing belong to the approval flow, so a policy\nedit can never revoke one. An unknown channel is a 404.",
 		Fields: map[string]string{
 			"allowlistPutIn.accessGroups": "AccessGroups REPLACES the org's named access groups, as\ngroup name -> channel -> entries. Absent or null leaves them alone.",
 			"allowlistPutIn.channel":      "Channel is the transport to edit: discord, slack, teams or telegram.\nRequired; an unknown value is a 404.",

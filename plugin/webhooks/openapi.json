@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package webhooks is the platform-global webhook layer (HIP-0106): ONE registry plus ONE dispatcher that delivers ANY event on the platform bus to org-registered HTTP subscribers.",
     "version": "v1"
   },
   "servers": [
@@ -19,8 +19,8 @@
     "/v1/webhooks": {
       "get": {
         "operationId": "get_v1_webhooks",
-        "summary": "listEndpoints returns every webhook endpoint the caller's org has registered, newest first, each with its 7-day delivery and failure counts.",
-        "description": "listEndpoints returns every webhook endpoint the caller's org has registered,\nnewest first, each with its 7-day delivery and failure counts. Signing secrets\nare redacted here — a secret leaves the server only on create and on rotate.\nThe listing is physically org-scoped, so another tenant's endpoints are not\nreachable from this route at all.",
+        "summary": "Returns every webhook endpoint the caller's org has registered, newest first, each with its 7-day delivery and failure counts.",
+        "description": "Returns every webhook endpoint the caller's org has registered,\nnewest first, each with its 7-day delivery and failure counts. Signing secrets\nare redacted here — a secret leaves the server only on create and on rotate.\nThe listing is physically org-scoped, so another tenant's endpoints are not\nreachable from this route at all.",
         "tags": [
           "webhooks"
         ],
@@ -39,8 +39,8 @@
       },
       "post": {
         "operationId": "post_v1_webhooks",
-        "summary": "createEndpoint registers a new webhook subscription for the caller's org and answers 201 with the endpoint INCLUDING its freshly minted signing secret.",
-        "description": "createEndpoint registers a new webhook subscription for the caller's org and\nanswers 201 with the endpoint INCLUDING its freshly minted signing secret.\nThis is one of only two responses that ever carry that secret (the other is\nrotate) — store it now, because no later read returns it. The org is stamped by\nthe server from the validated principal, so a body can never register an\nendpoint in another tenant.",
+        "summary": "Registers a new webhook subscription for the caller's org and answers 201 with the endpoint INCLUDING its freshly minted signing secret.",
+        "description": "Registers a new webhook subscription for the caller's org and\nanswers 201 with the endpoint INCLUDING its freshly minted signing secret.\nThis is one of only two responses that ever carry that secret (the other is\nrotate) — store it now, because no later read returns it. The org is stamped by\nthe server from the validated principal, so a body can never register an\nendpoint in another tenant.",
         "tags": [
           "webhooks"
         ],
@@ -78,8 +78,8 @@
     "/v1/webhooks/{id}": {
       "delete": {
         "operationId": "delete_v1_webhooks_id",
-        "summary": "deleteEndpoint removes one of the caller org's webhook endpoints and answers 204 with no body.",
-        "description": "deleteEndpoint removes one of the caller org's webhook endpoints and answers\n204 with no body. Delivery stops immediately and the endpoint's signing secret\nis gone with it; its recorded delivery history goes too. An id another org owns\nreads as not found.",
+        "summary": "Removes one of the caller org's webhook endpoints and answers 204 with no body.",
+        "description": "Removes one of the caller org's webhook endpoints and answers\n204 with no body. Delivery stops immediately and the endpoint's signing secret\nis gone with it; its recorded delivery history goes too. An id another org owns\nreads as not found.",
         "tags": [
           "webhooks"
         ],
@@ -102,8 +102,8 @@
       },
       "get": {
         "operationId": "get_v1_webhooks_id",
-        "summary": "getEndpoint returns one of the caller org's webhook endpoints with its 7-day delivery and failure counts, signing secret redacted.",
-        "description": "getEndpoint returns one of the caller org's webhook endpoints with its 7-day\ndelivery and failure counts, signing secret redacted. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
+        "summary": "Returns one of the caller org's webhook endpoints with its 7-day delivery and failure counts, signing secret redacted.",
+        "description": "Returns one of the caller org's webhook endpoints with its 7-day\ndelivery and failure counts, signing secret redacted. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
         "tags": [
           "webhooks"
         ],
@@ -133,8 +133,8 @@
       },
       "put": {
         "operationId": "put_v1_webhooks_id",
-        "summary": "updateEndpoint replaces the editable fields of one of the caller org's endpoints — url, events, status and description — and answers the stored row with its secret redacted.",
-        "description": "updateEndpoint replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhooks/{id}/rotate-secret.",
+        "summary": "Replaces the editable fields of one of the caller org's endpoints — url, events, status and description — and answers the stored row with its secret redacted.",
+        "description": "Replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhooks/{id}/rotate-secret.",
         "tags": [
           "webhooks"
         ],
@@ -184,8 +184,8 @@
     "/v1/webhooks/{id}/deliveries": {
       "get": {
         "operationId": "get_v1_webhooks_id_deliveries",
-        "summary": "listDeliveries returns one endpoint's per-attempt delivery log, newest first — the record of what was sent, what the subscriber answered, and how long it took.",
-        "description": "listDeliveries returns one endpoint's per-attempt delivery log, newest first —\nthe record of what was sent, what the subscriber answered, and how long it\ntook. One event that retried three times appears as three rows sharing a\ndelivery id. It is org-scoped exactly like every other route here: the endpoint\nlookup only ever finds THIS org's endpoint, so another org's id is a 404 and\nnever a window onto its logs.",
+        "summary": "Returns one endpoint's per-attempt delivery log, newest first — the record of what was sent, what the subscriber answered, and how long it took.",
+        "description": "Returns one endpoint's per-attempt delivery log, newest first —\nthe record of what was sent, what the subscriber answered, and how long it\ntook. One event that retried three times appears as three rows sharing a\ndelivery id. It is org-scoped exactly like every other route here: the endpoint\nlookup only ever finds THIS org's endpoint, so another org's id is a 404 and\nnever a window onto its logs.",
         "tags": [
           "webhooks"
         ],
@@ -237,8 +237,8 @@
     "/v1/webhooks/{id}/rotate-secret": {
       "post": {
         "operationId": "post_v1_webhooks_id_rotate-secret",
-        "summary": "rotateSecret mints a NEW HMAC signing secret for the endpoint and answers the endpoint WITH it — the only other response besides create that ever carries a secret.",
-        "description": "rotateSecret mints a NEW HMAC signing secret for the endpoint and answers the\nendpoint WITH it — the only other response besides create that ever carries a\nsecret. The old secret stops working the instant this returns: every subsequent\ndelivery signs with the new one, with no overlap window. Call it when the\nsubscriber is ready to swap the value on its side, not before.",
+        "summary": "Mints a NEW HMAC signing secret for the endpoint and answers the endpoint WITH it — the only other response besides create that ever carries a secret.",
+        "description": "Mints a NEW HMAC signing secret for the endpoint and answers the\nendpoint WITH it — the only other response besides create that ever carries a\nsecret. The old secret stops working the instant this returns: every subsequent\ndelivery signs with the new one, with no overlap window. Call it when the\nsubscriber is ready to swap the value on its side, not before.",
         "tags": [
           "webhooks"
         ],
@@ -270,8 +270,8 @@
     "/v1/webhooks/{id}/test": {
       "post": {
         "operationId": "post_v1_webhooks_id_test",
-        "summary": "testEndpoint sends ONE signed test event to the endpoint right now and answers the outcome inline, so the console can show whether the subscriber is reachable without waiting for real traffic.",
-        "description": "testEndpoint sends ONE signed test event to the endpoint right now and answers\nthe outcome inline, so the console can show whether the subscriber is reachable\nwithout waiting for real traffic. It takes the same attempt path the bus\ndispatcher takes — one attempt, 10s timeout, no retry ladder — and records the\nresult in the endpoint's delivery log. It works on a DISABLED endpoint too:\nvalidating one you have paused is the whole point.",
+        "summary": "Sends ONE signed test event to the endpoint right now and answers the outcome inline, so the console can show whether the subscriber is reachable without waiting for real traffic.",
+        "description": "Sends ONE signed test event to the endpoint right now and answers\nthe outcome inline, so the console can show whether the subscriber is reachable\nwithout waiting for real traffic. It takes the same attempt path the bus\ndispatcher takes — one attempt, 10s timeout, no retry ladder — and records the\nresult in the endpoint's delivery log. It works on a DISABLED endpoint too:\nvalidating one you have paused is the whole point.",
         "tags": [
           "webhooks"
         ],
