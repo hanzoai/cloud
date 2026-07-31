@@ -27,7 +27,7 @@ var frozen = []string{
 	"campaign", "validators", "social", "analytics", "git", "sync",
 	"visor", "venue", "captable", "code", "zero-trust", "share",
 	"dataroom", "graph", "security", "integrations", "destinations", "cloudflare",
-	"sbom", "team", "meet", "settings", "prefs", "sessions", "notify",
+	"sbom", "team", "meet", "settings", "prefs", "notify",
 	"channels", "gateway", "entitlements", "exec", "websearch", "crawl",
 	"index", "catalog", "world", "bot", "runtime", "authors",
 	"bots", "audit", "affiliates", "esign", "product", "evals",
