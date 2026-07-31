@@ -149,7 +149,13 @@ func (s *MCPServerStore) Close() error {
 // Re-enabling a listing the org already has REVISES that row in place, keeping its
 // id — so the tool names an agent already learned do not move under it, and a
 // retried enable is one server rather than a near-duplicate beside it.
-func (s *MCPServerStore) Create(ctx context.Context, srv MCPServer) (MCPServer, error) {
+//
+// It reports whether the row is FRESH, because the caller has one more thing to do
+// after this — seal the credential — and the undo for a failed seal is not the
+// same in both cases. Deleting is right for a row this request brought into
+// being; it is DESTRUCTIVE for one the org already had and was merely re-enabling,
+// which would turn a KMS hiccup into a working server disappearing.
+func (s *MCPServerStore) Create(ctx context.Context, srv MCPServer) (out MCPServer, fresh bool, err error) {
 	srv.Source = srv.source()
 	if srv.Listing != "" {
 		if cur, err := s.byListing(ctx, srv.Org, srv.Listing); err == nil {
@@ -157,23 +163,23 @@ func (s *MCPServerStore) Create(ctx context.Context, srv MCPServer) (MCPServer, 
 			if _, err := s.db.ExecContext(ctx,
 				`UPDATE mcp_servers SET name=?, url=?, auth_header=?, has_secret=? WHERE org=? AND id=?`,
 				srv.Name, srv.URL, srv.AuthHeader, boolInt(srv.HasSecret), srv.Org, srv.ID); err != nil {
-				return MCPServer{}, fmt.Errorf("tools: revise mcp server: %w", err)
+				return MCPServer{}, false, fmt.Errorf("tools: revise mcp server: %w", err)
 			}
-			return srv, nil
+			return srv, false, nil
 		}
 	}
 	id, err := s.handle(ctx, srv.Org, srv.ID)
 	if err != nil {
-		return MCPServer{}, err
+		return MCPServer{}, false, err
 	}
 	srv.ID = id
 	srv.CreatedAt = time.Now().Unix()
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO mcp_servers (id, org, name, url, auth_header, has_secret, created_at, listing) VALUES (?,?,?,?,?,?,?,?)`,
 		srv.ID, srv.Org, srv.Name, srv.URL, srv.AuthHeader, boolInt(srv.HasSecret), srv.CreatedAt, srv.Listing); err != nil {
-		return MCPServer{}, fmt.Errorf("tools: create mcp server: %w", err)
+		return MCPServer{}, false, fmt.Errorf("tools: create mcp server: %w", err)
 	}
-	return srv, nil
+	return srv, true, nil
 }
 
 // handle resolves a preferred id to a free one within the org: the preference
