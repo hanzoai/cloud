@@ -10,6 +10,7 @@
 // namespace by the deterministic job-name label. It NEVER fabricates output — an
 // unreachable cluster or an absent pod yields the honest recorded timeline instead,
 // exactly as the rest of the subsystem degrades.
+
 package platform
 
 import (

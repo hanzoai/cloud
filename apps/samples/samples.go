@@ -12,9 +12,9 @@
 // append here rather than growing private telemetry tables.
 //
 // It is deliberately a LEAF. It depends on the datastore seam (ai/object) and the
-// tenancy vocabulary (clients/principal) and nothing else in cloud, so every
-// compute source — clients/agents, clients/visor, ml — can import it without a
-// cycle (clients/link imports clients/agents, and clients/agents imports this).
+// tenancy vocabulary (apps/principal) and nothing else in cloud, so every
+// compute source — apps/agents, apps/visor, ml — can import it without a
+// cycle (apps/link imports apps/agents, and apps/agents imports this).
 //
 //   - Record(ctx, Sample)  append one utilization sample (samples.go)
 //   - Series(ctx, Query)   an org's samples over a bounded window (read.go)

@@ -42,6 +42,7 @@
 // (constant time), so a login-CSRF — an attacker completing THEIR authorization in
 // the victim's browser — is refused. The cookie is the only store, so the flow
 // survives any replica handling the callback.
+
 package deploy
 
 import (

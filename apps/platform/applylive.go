@@ -11,6 +11,7 @@
 // supersede-check → applyService → FinalizeLive as one per-app-serialized
 // critical section: an older deploy that loses the race is superseded and never
 // writes its (older) CR.
+
 package platform
 
 import (

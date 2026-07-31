@@ -13,6 +13,7 @@
 // (RegisterPushBuilder → commit → engine sync), desiredSource becomes "git" with
 // the SAME diff shape. P2b replaces the field-strip diff with gitops-engine
 // pkg/diff (three-way) for exact ArgoCD parity.
+
 package deploy
 
 import (

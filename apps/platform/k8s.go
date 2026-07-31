@@ -14,6 +14,7 @@
 // buildkit-job.ts) via client-go — no GitHub builders. When the cluster / CI
 // prerequisites are absent the subsystem fails CLOSED with the real reason
 // (never status-theater), matching the fleet board.
+
 package platform
 
 import (
