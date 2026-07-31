@@ -355,7 +355,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		{"/v1/billing/invoices", commercebilling.ListInvoices},
 		{"/v1/billing/invoices/:id/pdf", commercebilling.DownloadInvoicePDF},
 		{"/v1/billing/subscriptions", commercebilling.ListBillingSubscriptions},
-		{"/v1/billing/spend-alerts", commercebilling.ListSpendAlerts},
+		{"/v1/billing/alerts", commercebilling.ListSpendAlerts},
 		{"/v1/billing/payouts", commercebilling.ListPayouts},
 		{"/v1/billing/payment-config", commercebilling.GetPaymentConfig},
 	}
@@ -368,7 +368,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		)
 	}
 
-	// GET /v1/billing/spend-alerts/authorize — the per-request per-scope spend-CAP
+	// GET /v1/billing/alerts/authorize — the per-request per-scope spend-CAP
 	// VERDICT the request-edge metering gate consumes (clients/metering scopeAuthorize,
 	// pathLimitsAuthorize). It is a SERVICE-token S2S read (COMMERCE_SERVICE_TOKEN +
 	// X-Org-Id), NOT a browser/IAM read — so it needs its OWN registration, distinct from
@@ -379,7 +379,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// self-routing dispatch, re-entering the same wildcard until the depth-8 guard refused
 	// → 502 → the gate fails OPEN (the cap is a policy overlay, so no traffic was blocked,
 	// but ~135 502s/30m spammed the money path and each burned 8 full-app dispatches). The
-	// plain GET /v1/billing/spend-alerts (registered above) already broke this loop for the
+	// plain GET /v1/billing/alerts (registered above) already broke this loop for the
 	// CRUD read; this closes the /authorize sibling the metering gate hits on every call.
 	//
 	// Chain mirrors commerce's OWN gate on this route (api/billing/handlers.go: the `billing`
@@ -390,7 +390,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// the gateway-pinned X-Org-Id into Locals("organization"), which AuthorizeSpendCap reads.
 	// No PlatformOnly:
 	// authorize is a per-org cap read, not a cross-org mint (unlike auto-recharge/run-all).
-	app.Get("/v1/billing/spend-alerts/authorize",
+	app.Get("/v1/billing/alerts/authorize",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
 		commercebilling.AuthorizeSpendCap,
@@ -398,35 +398,35 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	// Self-service spend-cap CRUD WRITES — the customer half of the cap: a customer
 	// (or the admin S2S) CREATES / EDITS / REMOVES their own usage caps. These are the
-	// write siblings of the co-resident GET /v1/billing/spend-alerts list; without their
+	// write siblings of the co-resident GET /v1/billing/alerts list; without their
 	// own registration they too fell through the account bridge's /v1/billing/* wildcard
-	// (its allowlist included POST spend-alerts) into the SAME 502 self-dispatch loop
+	// (its allowlist included POST alerts) into the SAME 502 self-dispatch loop
 	// authorize hit — so a customer could not set a cap AT ALL in the unified binary
 	// (POST/PATCH/DELETE all 502'd). Same chain commerce's own route table gates them with
 	// (api/billing/handlers.go:322-325, the `user` group's userRequired = TokenRequired) +
 	// the global RequestContext — an IAM JWT OR the COMMERCE_SERVICE_TOKEN, org resolved
 	// from the gateway-pinned X-Org-Id into Locals("organization"). Org-scoped by that
 	// namespace (a caller only ever writes their OWN org's caps; a foreign :id is a
-	// not-found miss in the caller's namespace), so no PinBillingSubject — spend-alerts are
+	// not-found miss in the caller's namespace), so no PinBillingSubject — alerts are
 	// org-level, not billing-subject-level.
 	// A spend cap is a FINANCIAL SAFETY control, so its writes are gated to an ORG ADMIN
 	// (or SuperAdmin, or the trusted S2S service token for the SuperAdmin cap-oversight
 	// Forward) — never any authenticated member. commerce's own `user` group admits any
 	// member, which would let a compromised member key DELETE the org's cap (→ unbounded
 	// spend) or POST a 1¢ enforce cap (→ org-wide 402 DoS). requireSpendCapAdmin closes that.
-	app.Post("/v1/billing/spend-alerts",
+	app.Post("/v1/billing/alerts",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
 		requireSpendCapAdmin(),
 		commercebilling.CreateSpendAlert,
 	)
-	app.Patch("/v1/billing/spend-alerts/:id",
+	app.Patch("/v1/billing/alerts/:id",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
 		requireSpendCapAdmin(),
 		commercebilling.UpdateSpendAlert,
 	)
-	app.Delete("/v1/billing/spend-alerts/:id",
+	app.Delete("/v1/billing/alerts/:id",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
 		requireSpendCapAdmin(),
@@ -437,7 +437,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// "Billing → Credits → add credits": the Square Web Payments SDK tokenizes the card
 	// IN THE BROWSER → a single-use nonce → this endpoint charges it and credits the
 	// caller's balance). commerce's api.Route() billing bundle is NOT compiled into the
-	// co-resident embed, so — exactly like plans/invoices/spend-alerts above — without
+	// co-resident embed, so — exactly like plans/invoices/alerts above — without
 	// this registration the POST fell through to the account bridge's /v1/billing/*
 	// wildcard (order 122). That wildcard was service-token-forwardable for topup/token,
 	// so it re-forwarded to COMMERCE_URL (default the public api.hanzo.ai edge = THIS
@@ -565,7 +565,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	//   - SetPeriodSpendReader: AuthorizeSpendCap's scopeSpentCents reads the org's
 	//     finance period spend instead of the empty commerce transaction ledger, so
 	//     a real LLM request increments the cap's `spent` and trips the 402.
-	//   - SetUsageHook: after each finance debit, fire the org's spend-alerts on the
+	//   - SetUsageHook: after each finance debit, fire the org's alerts on the
 	//     SAME crossing (the alert half), reading the same finance spend + debouncing.
 	commercebilling.SetPeriodSpendReader(financePeriodSpend)
 	financeclient.SetUsageHook(fireCapAlert)
@@ -645,7 +645,7 @@ func financePeriodSpend(ctx context.Context, org string, test bool, _, _ string)
 	return summer.SumUsageSince(ctx, org, test, since)
 }
 
-// fireCapAlert fires the org's spend-alerts after a finance usage debit — the alert
+// fireCapAlert fires the org's alerts after a finance usage debit — the alert
 // half of the cap on the finance path (wired via finance.SetUsageHook). It resolves
 // the org's commerce datastore (where the spend-alert rows live) and calls the
 // exported commerce trigger, which reads the org's period spend via financePeriodSpend

@@ -54,7 +54,7 @@ import (
 //     /v1/commerce REMAINDERS were account-bridge's — a wildcard forwarder that
 //     re-served both families over an HTTP hop — and the entire self-service paid
 //     path sat here because of it: plans, invoices, subscriptions, subscribe/card,
-//     topup/token, spend-alerts, payouts, payment-config, payment-methods. Every
+//     topup/token, alerts, payouts, payment-config, payment-methods. Every
 //     one was registered co-resident and reachable by nobody, so the public plan
 //     catalog answered "sign in to view billing" to a pricing page and the card
 //     endpoints answered it to a buyer. commerce's and billing's rows name each

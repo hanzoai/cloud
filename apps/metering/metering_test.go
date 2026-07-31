@@ -37,7 +37,7 @@ func (f *fakeCommerce) handler() http.HandlerFunc {
 		// (issue #70). These tests pin the FUNDS contract (balance/tier/usage), so
 		// answer the scope call with the canned body but don't record it as the
 		// asserted request.
-		if strings.HasPrefix(r.URL.Path, "/v1/billing/spend-alerts") {
+		if strings.HasPrefix(r.URL.Path, "/v1/billing/alerts") {
 			if f.status != 0 {
 				w.WriteHeader(f.status)
 			}
@@ -365,7 +365,7 @@ func TestContractMatchesGateway(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Capture ONLY the balance request. Authorize also consults the per-scope
 		// spend-cap endpoint after funds pass (issue #70); this test pins the
-		// balance contract, so ignore the follow-on /spend-alerts/authorize call.
+		// balance contract, so ignore the follow-on /alerts/authorize call.
 		if strings.HasPrefix(r.URL.Path, "/v1/billing/balance") {
 			gotURL = r.URL.String()
 		}

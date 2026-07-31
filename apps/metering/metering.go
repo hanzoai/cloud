@@ -67,8 +67,8 @@ const (
 	pathBalance         = "/v1/billing/balance"
 	pathTier            = "/v1/billing/tier"
 	pathUsage           = "/v1/billing/usage"
-	pathSpendAlerts     = "/v1/billing/spend-alerts"
-	pathLimitsAuthorize = "/v1/billing/spend-alerts/authorize"
+	pathSpendAlerts     = "/v1/billing/alerts"
+	pathLimitsAuthorize = "/v1/billing/alerts/authorize"
 )
 
 // Header carrying the tenant org slug for commerce namespace resolution.
