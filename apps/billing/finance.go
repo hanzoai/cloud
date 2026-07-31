@@ -1,3 +1,5 @@
+package billing
+
 // finance.go mounts the customer-facing, org-scoped /v1/finance/* PROJECTION of the
 // commerce billing plane — the data the finance.hanzo.ai app shell and the console
 // Finance module (both render the SAME @hanzo/finance-ui components) consume.
@@ -36,7 +38,6 @@
 // prepaid wallet: deposits + withdraws, not issued invoices), so /v1/finance/invoices
 // returns an honest empty typed array rather than a fabricated figure. It becomes real
 // the day an invoice ledger exists — the shape is already stable for the UI.
-package billing
 
 import (
 	"context"

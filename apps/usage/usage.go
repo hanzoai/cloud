@@ -1,6 +1,11 @@
-// Package usage is the ONE Hanzo Cloud usage surface (/v1/usage). It owns ALL usage
-// — clients/link owns links and nothing usage — as one coherent plane over one
-// window grammar:
+// Package usage is the usage plane at /v1/usage: what an org ran, what it cost, and
+// the per-account breakdown, over one window grammar. It absorbed the account-usage
+// board from apps/link, which owns links and nothing usage. It is NOT the only usage
+// address — billing serves the wallet's own /v1/billing/usage{,/accounts} and
+// /v1/finance/usage off the ledger — and the two answer different questions: this one
+// composes the categorized roll-up, billing reports the raw drain on the wallet.
+//
+// The surface:
 //
 //   - POST /v1/usage          record account-usage samples (the collector's data
 //     plane; write path over the hanzo.account_usage warehouse series, datastore.go).
@@ -24,11 +29,11 @@
 //   - The account board: the caller's OWN linked provider accounts (a Claude Max
 //     plan's window %, metered from the provider's own login) beside the org's
 //     Hanzo-routed usage, every row labelled by source/scope and NEVER summed. This
-//     is the account-usage global view, unified here from clients/link.
+//     is the account-usage global view, unified here from apps/link.
 //
 // The console Usage view composes THIS with the existing org-scoped inventory
 // endpoints (/v1/machines, /v1/gpus, /v1/agents, provisioning lists) for the
-// per-kind counts — one screen, this one authoritative money source.
+// per-kind counts — one screen, one categorized cost lens.
 //
 // TENANT ISOLATION (the bar). The org is the VALIDATED IAM owner claim (principal.Org
 // — the trusted X-Org-Id the identity middleware minted from the caller's verified
@@ -38,9 +43,9 @@
 // board, subject) POSITIONALLY. A caller can only ever read/write its OWN org —
 // fail-closed: no principal → 401.
 //
-// Registered as "usage" (order 131, OwnsHealth=false): the generic GET
-// /v1/usage/health liveness route is a distinct path and never shadows these; order
-// 131 binds /v1/usage/* before the ai subsystem's /v1/* catch-all (150).
+// Its plugin does not declare OwnsHealth, so the host's generic GET /v1/usage/health
+// liveness route stands — a distinct path that never shadows these. The manifest.Apps
+// sequence is what binds /v1/usage/* ahead of the ai subsystem's /v1/* catch-all.
 package usage
 
 import (

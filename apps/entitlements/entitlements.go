@@ -1,10 +1,10 @@
-// Package entitlements is the per-org product-enablement plane for the unified
-// Hanzo Cloud binary: the /v1/orgs/:org/entitlements surface the console's paid-
-// product sidebar reads to decide which products to SHOW, and org owners /
-// super admins write to TURN a product on or off.
+// Package entitlements answers "what may this org run": what its plan GRANTS, and
+// which of those products it has actually TURNED ON. Both authorities live here, one
+// door each, and the package's whole discipline is that they are never braided.
 //
-// Surface (all org-scoped; /v1 only):
+// Surface (/v1 only):
 //
+//	GET  /v1/entitlements             -> per-app booleans from the org's PLAN (projection.go)
 //	GET  /v1/orgs/:org/entitlements   -> { "enabled": ["engine","chat",...] }
 //	POST /v1/orgs/:org/entitlements   { "add":[...], "remove":[...] }  -> { "enabled":[...] }
 //
@@ -20,7 +20,7 @@
 // product off is never gated). A SUPER ADMIN (owner==AdminOrg) BYPASSES the commerce
 // gate — the operator can comp/grant any product to any org — and may target ANY :org.
 //
-// ORG SCOPING mirrors clients/kms (/v1/kms/orgs/:org): {:org} must equal the
+// ORG SCOPING mirrors apps/kms (/v1/kms/orgs/:org): {:org} must equal the
 // caller's VALIDATED org (c.Org()), unless the caller is a super admin (c.IsAdmin(),
 // minted only for owner==AdminOrg by SanitizeIdentity — never client-forgeable), who
 // may act on any org. A bearer-less forge (X-Org-Id restored, no X-User-Id) fails the

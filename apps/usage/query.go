@@ -1,9 +1,10 @@
+package usage
+
 // Pure core of the usage summary: the response shape, the ledger→category mapper,
 // the spend roll-up + gap-filled series assembler, and the datastore value
 // coercers. Everything here is I/O-free so the tests drive it with plain structs
 // and mock rows — no commerce, no datastore. The handler (usage.go) is the thin
 // orchestration that fetches and calls these.
-package usage
 
 import (
 	"encoding/json"
