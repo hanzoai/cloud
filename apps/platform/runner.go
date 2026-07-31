@@ -244,31 +244,39 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	req.Repo = strings.TrimSpace(req.Repo)
 	req.Image = strings.TrimSpace(req.Image)
 
-	// Release self-publishes ghcr.io/hanzoai/cloud (compute version → build → smoke
-	// → tag → notify). It is the most privileged operation this surface has, so
-	// IAM DECIDES IT AND NOTHING ELSE DOES: principal.IsSuperAdmin, the same
-	// predicate every other privileged surface reads.
+	// Release self-publishes the platform's own image (compute version → build →
+	// smoke → tag → notify).
 	//
-	// The shared build-callback token no longer authorizes it. That token is a
-	// second auth system standing beside IAM — a bearer secret with no identity
-	// behind it, no expiry, no membership, and nothing to revoke but a rotation
-	// that restarts every holder. It can still ENQUEUE an ordinary build (above),
-	// which is what git-push-to-deploy needs and what it was built for; it can no
-	// longer cut the release that publishes the image the fleet runs.
+	// IAM DECIDES IT AND NOTHING ELSE DOES, and the authority it takes is the SAME
+	// one an ordinary build takes: admin of an org that OWNS the registry namespace
+	// being published to. Releasing ghcr.io/hanzoai/cloud is admin of the org that
+	// owns `hanzoai` — a lux admin is refused, exactly as they are refused an
+	// ordinary push to ghcr.io/hanzoai/*.
 	//
-	// This is a NARROWING, and it is the reason CI cannot self-release today. A
-	// robot SHOULD be able to: the way is an IAM identity, not a shared secret —
-	// an application principal holding authz.CapRelease, which is IAM stating that
-	// THIS named app may release, revocable by name and attributable in the audit
-	// log. Provisioning that app is the follow-on; until it exists a release is a
-	// SuperAdmin's to cut, and a SuperAdmin is a human PROVISIONED in the reserved
-	// org (never a brand-org user promoted into it).
+	// It used to demand platform SUDO, and that was a category error. SuperAdmin is
+	// the CROSS-TENANT scope — the authority to act in an org you do not belong to.
+	// Publishing your own org's artifact is not cross-tenant, so requiring the
+	// broadest scope in the system for it did not make the operation safer; it made
+	// releasing impossible for the engineers who own the artifact, while the only
+	// identities that could were the ones trusted with every other tenant's data.
+	// Conflating "privileged" with "cross-tenant" is the same error that let an
+	// org-role bit be read as platform authority.
+	//
+	// The namespace is taken from the CONSTANT releaseImage, never from the request:
+	// launchRelease publishes releaseImage regardless of what req.Image says, so
+	// binding on the request would be a check against a value the caller chooses.
 	if req.Release {
 		if viaToken && !principal.IsSuperAdmin(c) {
 			return zip.ErrForbidden("the platform build token may enqueue a build but may not cut a release; IAM is the only authority for it")
 		}
 		if !principal.IsSuperAdmin(c) {
-			return zip.ErrForbidden("cutting a release requires a SuperAdmin identity; IAM is the only authority for it")
+			org, ok := principal.Org(c)
+			if !ok || !imageInOrgRegistry(releaseImage, org) {
+				return zip.ErrForbidden("cutting this release requires admin of the org that owns " + releaseImage)
+			}
+			if !principal.IsOrgAdmin(c) {
+				return zip.ErrForbidden("cutting a release requires an org admin")
+			}
 		}
 		return startRelease(s, c, req)
 	}
