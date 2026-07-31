@@ -1,4 +1,4 @@
-// Package principal is the ONE place the cloud data plane turns a request into a
+// Package principal is the ONE place the cloud data plane turns a request into an
 // org. Every subsystem that reads or writes per-org data resolves its org
 // through here, so the trust decision lives once and can never drift between six
 // hand-rolled copies.
