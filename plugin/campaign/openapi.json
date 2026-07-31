@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package campaign is go-to-market orchestration: one campaign — audience, creatives, schedule, budget — launched across paid, organic and email channels at once, and read back as one funnel with each channel's spend.",
+    "description": "Package campaign is one go-to-market push across paid, organic and email at once.",
     "version": "v1"
   },
   "servers": [

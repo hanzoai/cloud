@@ -1,6 +1,7 @@
-// Package campaign is go-to-market orchestration: one campaign — audience,
-// creatives, schedule, budget — launched across paid, organic and email channels
-// at once, and read back as one funnel with each channel's spend.
+// Package campaign is one go-to-market push across paid, organic and email at once.
+//
+// A campaign — audience, creatives, schedule, budget — launches to every
+// channel and reads back as one funnel with each channel's spend.
 //
 // A Campaign is a VALUE — {name, audience, content[], schedule, budget,
 // channels[], status} — that SPANS channels and fans out to orthogonal executors.

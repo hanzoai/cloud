@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package referrals is the customer referral loop: every org has a stable code and share link, a new org claims it at signup, and BOTH sides are granted cloud credit once the referee actually spends — at-most-once, never on signup alone.",
+    "description": "Package referrals is credit for both sides when someone you refer actually spends.",
     "version": "v1"
   },
   "servers": [

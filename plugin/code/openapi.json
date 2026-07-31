@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package code mounts the Hanzo Cloud /v1/code/* surface: a native, per-org code-intelligence engine for AI coding agents and the hanzo.app UI.",
+    "description": "Package code is search and symbols across your repos, for you and your agents.",
     "version": "v1"
   },
   "servers": [

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package index mounts the Hanzo Cloud /v1/index/* surface: a native-Go, multi-tenant full-text index on Base/SQLite that speaks the Meilisearch REST dialect.",
+    "description": "Package index is fast full-text search over your own data, typos forgiven.",
     "version": "v1"
   },
   "servers": [

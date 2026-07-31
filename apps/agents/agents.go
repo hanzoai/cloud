@@ -1,10 +1,12 @@
-// Package agents mounts the Hanzo Cloud /v1/agents surface: per-org autonomous
-// agent definitions and their runs. An agent is a model + a system prompt
-// (instructions) + a set of tool names; running one executes a real chat
-// completion through the in-process AI client (the SAME gateway path the rest
-// of the console uses) and records the run. Tenant isolation is the
-// gateway-minted X-Org-Id (HIP-0026) enforced as the org column on every
-// query, so one tenant can never read, run, or delete another's agents.
+// Package agents is autonomous agents for your org: define them, run them, keep
+// every run.
+//
+// An agent is a model + a system prompt (instructions) + a set of tool names;
+// running one executes a real chat completion through the in-process AI client
+// (the SAME gateway path the rest of the console uses) and records the run.
+// Tenant isolation is the gateway-minted X-Org-Id (HIP-0026) enforced as the
+// org column on every query, so one tenant can never read, run, or delete
+// another's agents.
 //
 // Surface (all org-scoped; console's AgentsModule reads {agents:[...]}):
 //

@@ -1,7 +1,9 @@
-// Package affiliates is the partner program: partners apply, get approved with a
-// commission rate and a share link, and earn an ONGOING COMMISSION on the metered
-// spend of every customer they refer, accrued per period and paid out in credits
-// or cash.
+// Package affiliates is a partner program that pays commission on what your
+// referrals spend.
+//
+// Partners apply, get approved with a commission rate and a share link, and
+// earn an ONGOING COMMISSION on the metered spend of every customer they refer,
+// accrued per period and paid out in credits or cash.
 //
 // It is one of THREE programs in this repo built on the same shape — apply/connect,
 // approve, attribute, accrue at-most-once per (party, counterparty, period), pay

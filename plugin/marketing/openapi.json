@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package marketing is lifecycle email: drip sequences, audiences resolved from the IAM roster, promo codes redeemed as wallet credit, and the per-org suppression list every send passes through.",
+    "description": "Package marketing is lifecycle email: drip sequences that reach the right people.",
     "version": "v1"
   },
   "servers": [

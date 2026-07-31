@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package legal mounts the ORG-SCOPED legal-document surface (/v1/legal): a versioned, org-overridable library of standardized templates, a PURE merge-field generation engine that renders those templates from the org's own company/cap-table data, a KMS-sealed store for the generated documents, and the e-signature + filing seams that carry a document to execution — all on the shared audit plane.",
+    "description": "Package legal is the paperwork your company needs, drafted, signed and filed.",
     "version": "v1"
   },
   "servers": [

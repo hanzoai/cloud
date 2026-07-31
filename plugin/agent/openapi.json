@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package agent mounts the hanzoai/agent orchestrator into cloud: POST /v1/agent (+ /v1/agent/presets, /v1/agent/conversations).",
+    "description": "Package agent is a conversation that uses your org's own tools to get an answer.",
     "version": "v1"
   },
   "servers": [

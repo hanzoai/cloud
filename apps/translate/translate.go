@@ -1,5 +1,7 @@
-// Package translate serves POST /v1/translate — the ONE translation surface, two
-// tiers behind one endpoint, one auth path, one meter (HIP-0516).
+// Package translate is text in, the same text out in the language you asked for.
+//
+// POST /v1/translate is the ONE translation surface: two tiers behind one
+// endpoint, one auth path, one meter (HIP-0516).
 //
 //	POST /v1/translate  { text | batch[], target, source?, tier?, glossary?, format? }
 //	                 -> { translations[], detected_source?, tier, usage }

@@ -1,7 +1,9 @@
-// Package code mounts the Hanzo Cloud /v1/code/* surface: a native, per-org
-// code-intelligence engine for AI coding agents and the hanzo.app UI. Retrieval
-// is HYBRID — three orthogonal tiers fused with reciprocal-rank fusion, the SOTA
-// lesson that embeddings alone under-serve code search:
+// Package code is search and symbols across your repos, for you and your agents.
+//
+// A native, per-org code-intelligence engine for AI coding agents and the
+// hanzo.app UI. Retrieval is HYBRID — three orthogonal tiers fused with
+// reciprocal-rank fusion, the SOTA lesson that embeddings alone under-serve
+// code search:
 //
 //   - lexical  (store.go/tokenize.go) — FTS5 trigram over code-tokenized text
 //     (camelCase/snake_case split, operators kept); substring + regex (Zoekt model).

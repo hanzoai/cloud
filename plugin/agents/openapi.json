@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package agents mounts the Hanzo Cloud /v1/agents surface: per-org autonomous agent definitions and their runs.",
+    "description": "Package agents is autonomous agents for your org: define them, run them, keep every run.",
     "version": "v1"
   },
   "servers": [

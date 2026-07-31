@@ -1,6 +1,8 @@
-// Package flags is feature flags: define a flag, target it by property or
-// percentage rollout, and evaluate it for an identity — plus the platform switches
-// operators flip to change how the deployment behaves without a redeploy.
+// Package flags is feature flags: ship it dark, then turn it on for who you pick.
+//
+// Define a flag, target it by property or percentage rollout, and evaluate it
+// for an identity — plus the platform switches operators flip to change how the
+// deployment behaves without a redeploy.
 //
 // Definitions live in per-(org, project) SQLite (cloud.OrgDB —
 // {DataDir}/orgs/{org}/projects/{project}/flags.db, encrypted at rest via cek) and
