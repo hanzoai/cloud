@@ -101,9 +101,11 @@ var Prefixes = []string{
 	"/v1/billing/webhooks",
 	// The platform auto-recharge sweep (PlatformOnly, POST .../run-all). The
 	// durable cron's poke carries the COMMERCE_SERVICE_TOKEN bearer; without
-	// this owner it lands on the account-bridge /v1/billing/* catch-all, whose
-	// session gate 403s a service token. (Landed 5x before the unfork — #274 —
-	// and the pin test lives beside THIS list so it can't silently regress.)
+	// this owner it landed on the account-bridge /v1/billing/* catch-all, whose
+	// session gate 403s a service token. That catch-all is gone, so the miss is
+	// now a 404 from the /v1 remainder instead of a 403 — still an outage, still
+	// this list's job to prevent. (Landed 5x before the unfork — #274 — and the
+	// pin test lives beside THIS list so it can't silently regress.)
 	"/v1/billing/auto-recharge",
 }
 
@@ -267,7 +269,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/billing/webhooks/:provider", commercemid.RequestContext(), commercebilling.HandleProviderWebhook)
 
 	// Durable-cron auto-recharge poke (COMMERCE_SERVICE_TOKEN bearer) at its
-	// live path — the bridge's session gate would 403 the poke. Same gate
+	// live path — the retired /v1/billing/* forwarder's session gate 403'd it. Same gate
 	// chain the commerce route table uses: TokenRequired authenticates the
 	// service token, PlatformOnly authorizes the mint.
 	app.Post("/v1/billing/auto-recharge/run-all",
@@ -301,29 +303,37 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// legacy api.Route() billing bundle (ListPlans, invoices, subscriptions, …) is NOT
 	// registered by the co-resident embed: setupRoutes wires only /v1/commerce/*, so
 	// /v1/billing/plans has NO handler in this binary. The account bridge's
-	// /v1/billing/* wildcard (order 122) then forwards the read BACK to commerce at
+	// /v1/billing/* wildcard (order 122) then forwarded the read BACK to commerce at
 	// COMMERCE_URL — which defaults to the public api.hanzo.ai edge — re-entering the
-	// same bridge in an unbounded self-dispatch loop that surfaces as a 502
+	// same bridge in an unbounded self-dispatch loop that surfaced as a 502
 	// ("commerce unreachable: Get https://api.hanzo.ai/v1/billing/plans"). Registering
-	// the static ListPlans handler HERE (order 100, ahead of the bridge) shadows that
-	// wildcard and serves plans in-process — the same co-resident move billing.go makes
-	// for usage/balance. RequestContext supplies the namespaced context promo.Active reads.
+	// the static ListPlans handler HERE serves plans in-process — the same co-resident
+	// move billing.go makes for usage/balance. RequestContext supplies the namespaced
+	// context promo.Active reads.
+	//
+	// THE BRIDGE IS GONE (its manifest row with it), and this registration is why: the
+	// wildcard's whole allowlist ended up served co-resident, here and on billing, so it
+	// held two bare stems and answered nothing. Each address below is claimed on THIS
+	// app's manifest row, deeper than the bare /v1/billing stem, which is what makes the
+	// host route it here. The past-tense loops recorded below are the reason each of
+	// these registrations exists — history, not a live hazard — and dropping one now
+	// misses on the /v1 remainder instead of self-dispatching.
 	app.Get("/v1/billing/plans", commercemid.RequestContext(), commercebilling.ListPlans)
 
 	// The rest of the console's billing READS, served co-resident for the SAME reason
 	// plans is: commerce's api.Route() billing bundle is never compiled here, so without
-	// these registrations every one of them falls through to the account bridge's
-	// /v1/billing/* wildcard, which forwards to COMMERCE_URL — the public api.hanzo.ai
-	// edge, which is THIS binary — and self-dispatches into a 502 loop. In prod there is
+	// these registrations every one of them fell through to the account bridge's
+	// /v1/billing/* wildcard, which forwarded to COMMERCE_URL — the public api.hanzo.ai
+	// edge, which is THIS binary — and self-dispatched into a 502 loop. In prod there is
 	// no separate commerce backend to point COMMERCE_URL at (the in-cluster `commerce`
-	// Service selects the cloud pods), so co-residence is the only way to break the loop.
+	// Service selects the cloud pods), so co-residence is the only way to serve them.
 	//
 	// Chain: RequestContext (gated context) → IAMTokenRequired (resolves the org from the
 	// gateway-validated X-Org-Id into Locals("organization"), the namespace commerce's
 	// GetOrganization reads) → PinBillingSubject (pins the caller's OWN billing subject
-	// into the query — the SAME isolation the bridge applies, so a read can never widen
-	// past the caller; fail-closed for an unvalidated caller) → the commerce handler. The
-	// specific paths shadow the bridge wildcard (order 100 < 122). payment-config is
+	// into the query — the isolation the bridge applied, carried onto the co-resident
+	// route so a read can never widen past the caller; fail-closed for an unvalidated
+	// caller) → the commerce handler. payment-config is
 	// org-scoped, not subject-scoped, but PinBillingSubject is still the auth gate that
 	// keeps an unvalidated caller from reaching GetOrganization; its pinned (unused)
 	// subject params are ignored by that handler.
@@ -353,7 +363,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// X-Org-Id), NOT a browser/IAM read — so it needs its OWN registration, distinct from
 	// the console billingRead block above: without a co-resident handler this authorize
 	// fell through to the account bridge's /v1/billing/* wildcard (order 122), which — being
-	// service-token-forwardable (billing.go billingForwardable) — re-forwarded it to
+	// service-token-forwardable (its allowlist) — re-forwarded it to
 	// COMMERCE_URL (the public api.hanzo.ai edge = THIS binary) over the commerce transport's
 	// self-routing dispatch, re-entering the same wildcard until the depth-8 guard refused
 	// → 502 → the gate fails OPEN (the cap is a policy overlay, so no traffic was blocked,
@@ -367,7 +377,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// IAM JWT, so IAMTokenRequired would leave GetOrganization unset and AuthorizeSpendCap
 	// would 500. TokenRequired authenticates the service token AND resolves the tenant from
 	// the gateway-pinned X-Org-Id into Locals("organization"), which AuthorizeSpendCap reads.
-	// The specific route shadows the bridge wildcard (order 100 < 122). No PlatformOnly:
+	// No PlatformOnly:
 	// authorize is a per-org cap read, not a cross-org mint (unlike auto-recharge/run-all).
 	app.Get("/v1/billing/spend-alerts/authorize",
 		commercemid.RequestContext(),
@@ -379,7 +389,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// (or the admin S2S) CREATES / EDITS / REMOVES their own usage caps. These are the
 	// write siblings of the co-resident GET /v1/billing/spend-alerts list; without their
 	// own registration they too fell through the account bridge's /v1/billing/* wildcard
-	// (billingForwardable includes POST spend-alerts) into the SAME 502 self-dispatch loop
+	// (its allowlist included POST spend-alerts) into the SAME 502 self-dispatch loop
 	// authorize hit — so a customer could not set a cap AT ALL in the unified binary
 	// (POST/PATCH/DELETE all 502'd). Same chain commerce's own route table gates them with
 	// (api/billing/handlers.go:322-325, the `user` group's userRequired = TokenRequired) +
@@ -387,7 +397,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// from the gateway-pinned X-Org-Id into Locals("organization"). Org-scoped by that
 	// namespace (a caller only ever writes their OWN org's caps; a foreign :id is a
 	// not-found miss in the caller's namespace), so no PinBillingSubject — spend-alerts are
-	// org-level, not billing-subject-level. Shadow the bridge wildcard (order 100 < 122).
+	// org-level, not billing-subject-level.
 	// A spend cap is a FINANCIAL SAFETY control, so its writes are gated to an ORG ADMIN
 	// (or SuperAdmin, or the trusted S2S service token for the SuperAdmin cap-oversight
 	// Forward) — never any authenticated member. commerce's own `user` group admits any
@@ -418,16 +428,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// caller's balance). commerce's api.Route() billing bundle is NOT compiled into the
 	// co-resident embed, so — exactly like plans/invoices/spend-alerts above — without
 	// this registration the POST fell through to the account bridge's /v1/billing/*
-	// wildcard (order 122). That wildcard is service-token-forwardable for topup/token
-	// (billing.go billingForwardable), so billingData re-forwarded it to COMMERCE_URL
-	// (default the public api.hanzo.ai edge = THIS binary) over the commerce transport's
-	// self-routing dispatch, re-entering the SAME wildcard until the depth-8 guard
-	// refused → the "commerce transport: in-process dispatch depth 8 exceeded" 502 that broke
-	// top-up outright. Registering commerce's real TopupWithToken co-resident here
-	// (order 100 < 122) shadows the wildcard and serves the charge in-process at depth 1
-	// — no HTTP hop, no self-dispatch. topup/token STAYS in billingForwardable as the
-	// split-deploy fallback (a standalone commerce still serves it); co-residence just
-	// wins first.
+	// wildcard (order 122). That wildcard was service-token-forwardable for topup/token,
+	// so it re-forwarded to COMMERCE_URL (default the public api.hanzo.ai edge = THIS
+	// binary) over the commerce transport's self-routing dispatch, re-entering the SAME
+	// wildcard until the depth-8 guard refused → the "commerce transport: in-process
+	// dispatch depth 8 exceeded" 502 that broke top-up outright. Registering commerce's
+	// real TopupWithToken co-resident here serves the charge in-process at depth 1 — no
+	// HTTP hop, no self-dispatch — and it is the ONLY route to it now: the wildcard and
+	// its allowlist are gone, and the split-deploy case is the commerce transport's
+	// plain-HTTP fallback, not a second copy of this endpoint.
 	//
 	// Chain — the browser money-WRITE posture, byte-for-byte what the bridge applied:
 	//   RequireCSRF        — the ambient-cookie anti-CSRF gate the bridge's requireCSRF
@@ -438,10 +447,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	//                        Locals("organization"), which TopupWithToken.GetOrganization
 	//                        + topupDestination read as the org billing key.
 	//   PinBillingSubject  — pins ?user= to the caller's OWN account.Payer subject (the
-	//                        SAME rule the ai spend-gate debits and billingData pins), so
-	//                        the credit lands on the caller's subject (person=org/name) and
-	//                        can never be widened; fail-closed for an unvalidated caller —
-	//                        the IDOR boundary stays exactly where billingData put it.
+	//                        SAME rule the ai spend-gate debits), so the credit lands on
+	//                        the caller's subject (person=org/name) and can never be
+	//                        widened; fail-closed for an unvalidated caller — the IDOR
+	//                        boundary stays exactly where the bridge put it.
 	// The card PAN never touches this binary: TopupWithToken charges the Square nonce only,
 	// and the settled charge itself is the mint authority (mintauth.WithAuthorized).
 	app.Post("/v1/billing/topup/token",
@@ -466,7 +475,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// IAMTokenRequired is that gate here, resolving the org GetOrganization reads.
 	// PinBillingSubject pins the subject into query AND body, so subscribeSubject can
 	// only ever resolve the caller's OWN org (its `userId` is honored only inside that
-	// bound) — the IDOR boundary billingData set. The PAN never touches this binary:
+	// bound) — the IDOR boundary the bridge set. The PAN never touches this binary:
 	// the nonce goes to Square and the settled charge is its own mint authority.
 	app.Post("/v1/billing/subscribe/card",
 		accountclient.RequireCSRF(),
@@ -477,14 +486,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	)
 
 	// The remaining console billing WRITES that share topup/token's self-dispatch loop
-	// class — each is a POST the console makes (billingForwardable in billing.go), each had
-	// NO co-resident handler, so each fell through to the account bridge's /v1/billing/*
-	// wildcard (order 122) and re-entered it over the commerce transport until the depth-8 guard
-	// refused (the same "in-process dispatch depth 8 exceeded" 502 that broke top-up). Each
-	// commerce handler exists in the vendored module (v1.49.13); registering them co-resident
-	// (order 100 < 122) shadows the wildcard and serves the write in-process at depth 1. They
-	// STAY in billingForwardable as the split-deploy fallback (same precedent as topup/token
-	// + spend-alerts). Chain matches the bridge's write posture byte-for-byte:
+	// class — each is a POST the console makes, each had NO co-resident handler, so each
+	// fell through to the account bridge's /v1/billing/* wildcard (order 122) and re-entered
+	// it over the commerce transport until the depth-8 guard refused (the same "in-process
+	// dispatch depth 8 exceeded" 502 that broke top-up). Each commerce handler exists in the
+	// vendored module (v1.49.13); registering them co-resident serves the write in-process at
+	// depth 1, and is now the only route to it. Chain matches the bridge's write posture
+	// byte-for-byte:
 	//
 	//   - RequireCSRF        — the ambient-cookie anti-CSRF gate the bridge wrapped POST
 	//                          /v1/billing/* with (Bearer/gateway callers are not CSRF-able).
@@ -514,7 +522,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// is a 404 miss), so tenancy is the namespace IAMTokenRequired resolves and PinBillingSubject
 	// is the fail-closed-anon auth gate — its pinned subject params are ignored by these
 	// handlers (the SAME role it plays for the org-scoped payment-config read). The bridge's
-	// subject-pin was likewise a no-op for these, so nothing is dropped.
+	// subject-pin was likewise a no-op for these, so nothing was dropped.
 	app.Post("/v1/billing/subscriptions/:id/cancel",
 		accountclient.RequireCSRF(),
 		commercemid.RequestContext(),

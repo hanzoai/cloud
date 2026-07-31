@@ -55,11 +55,12 @@ const (
 	csrfTokenLen  = 8 + csrfMACLen // ts || mac
 )
 
-// csrfKeyOnce guards the process-wide CSRF MAC key. It is shared across BOTH account
-// subsystems (account@48 issues GET /v1/csrf; account-bridge@122 verifies the token on
-// the /v1/billing|commerce writes), so a token minted by one verifies on the other —
-// even in the ephemeral (no CONSOLE_CSRF_KEY) case where each Mount would otherwise
-// generate its own random key. Deterministic from CONSOLE_CSRF_KEY (KMS) in prod.
+// csrfKeyOnce guards the process-wide CSRF MAC key. account@48 issues GET /v1/csrf and
+// the money WRITES that verify the token are registered elsewhere — co-resident on
+// commerce (RequireCSRF below) — so the key must be ONE value for the process, not one
+// per Mount. Without that, the ephemeral (no CONSOLE_CSRF_KEY) case gives each
+// registration its own random key and no minted token ever verifies. Deterministic from
+// CONSOLE_CSRF_KEY (KMS) in prod.
 var (
 	csrfKeyOnce sync.Once
 	csrfKeyVal  []byte
@@ -181,12 +182,12 @@ func requireCSRF(s *cloud.Service[state]) zip.Middleware {
 
 // RequireCSRF exposes the ambient-cookie anti-CSRF gate as a STANDALONE middleware for a
 // co-resident money-WRITE route registered OUTSIDE this package — specifically
-// apps/commerce.go's POST /v1/billing/topup/token, which shadows the account-bridge's
-// POST /v1/billing/* wildcard (order 100 < 122) that would otherwise have wrapped the
-// write in requireCSRF. Moving the route co-resident to break the commerce transport
-// self-dispatch loop must NOT silently drop that anti-CSRF gate, so the identical
-// enforcement rides along as its own handler. It binds to the SAME process-wide key
-// (sharedCSRFKey) the GET /v1/csrf issuer and the bridge verifier use, so a token minted
+// apps/commerce.go's POST /v1/billing/topup/token. That write used to be wrapped in
+// requireCSRF by the /v1/billing/* forwarder this package once mounted; moving it
+// co-resident (to break the commerce transport self-dispatch loop) must NOT silently
+// drop the gate, so the identical enforcement rides along as its own handler — and it
+// is now the ONLY thing enforcing it, the forwarder being gone. It binds to the SAME
+// process-wide key (sharedCSRFKey) the GET /v1/csrf issuer uses, so a token minted
 // at /v1/csrf verifies here byte-identically. Enforces ONLY on the ambient-cookie path (a
 // Bearer/gateway/API caller is not CSRF-able); on success it c.Next()s into the rest of
 // the chain. The minimal Service carries only the shared key — requireCSRF/verifyCSRF

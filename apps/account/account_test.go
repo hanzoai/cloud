@@ -223,22 +223,18 @@ func mountApp(t *testing.T, base, clientID, clientSecret string) *zip.App {
 	t.Setenv("IAM_URL", base)
 	t.Setenv("IAM_MINT_CLIENT_ID", clientID)
 	t.Setenv("IAM_MINT_CLIENT_SECRET", clientSecret)
-	return mountBoth(t, "hanzo")
+	return mount(t, "hanzo")
 }
 
-// mountBoth mounts BOTH account subsystems (self-service + data bridges) on one app —
-// exactly what production registers (account@48 then account-bridge@122), so a test
-// exercises the full surface with the shared CSRF key. The caller sets the IAM env
-// (IAM_URL / IAM_MINT_CLIENT_*) before calling.
-func mountBoth(t *testing.T, brand string) *zip.App {
+// mount mounts the account subsystem on a bare app — exactly what production
+// registers (account@48). The caller sets the IAM env (IAM_URL / IAM_MINT_CLIENT_*)
+// before calling.
+func mount(t *testing.T, brand string) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	deps := cloud.Deps{Logger: luxlog.New("test"), Brand: brand}
 	if err := MountAccount(app, deps); err != nil {
 		t.Fatalf("MountAccount: %v", err)
-	}
-	if err := MountBridge(app, deps); err != nil {
-		t.Fatalf("MountBridge: %v", err)
 	}
 	return app
 }

@@ -25706,27 +25706,6 @@ paths:
       operationId: post_v1_benchmark_runs
       tags:
       - benchmark
-  /v1/billing/{wildcard1}:
-    get:
-      operationId: get_v1_billing_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - billing
-    post:
-      operationId: post_v1_billing_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - billing
   /v1/billing/auto-recharge/run-all:
     post:
       operationId: post_v1_billing_auto-recharge_run-all
@@ -29713,57 +29692,6 @@ paths:
           type: string
       tags:
       - collections
-  /v1/commerce/{wildcard1}:
-    delete:
-      operationId: delete_v1_commerce_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - commerce
-    get:
-      operationId: get_v1_commerce_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - commerce
-    patch:
-      operationId: patch_v1_commerce_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - commerce
-    post:
-      operationId: post_v1_commerce_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - commerce
-    put:
-      operationId: put_v1_commerce_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - commerce
   /v1/commerce/admin/catalog:
     get:
       operationId: get_v1_commerce_admin_catalog
