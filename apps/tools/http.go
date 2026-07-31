@@ -288,7 +288,7 @@ type createServerReq struct {
 // adding a near-duplicate beside it, so a retried enable is the same one server.
 // Answers 201 with the stored record.
 //
-// Example: {"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "Bearer …"}
+// Example: {"listing": "com.acme_mcp", "authHeader": "Authorization", "secret": "Bearer …"}
 func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPServer, error) {
 	org, err := tenantOf(ctx)
 	if err != nil {
@@ -317,7 +317,7 @@ func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPSer
 			name = cmp.Or(l.Title, l.Name)
 		}
 		// The server id PREFIXES every tool name this server contributes, so an
-		// enabled listing's tools read "stripe_create_payment_link" rather than
+		// enabled listing's tools read "acme_create_payment_link" rather than
 		// carrying a random handle a model has no way to interpret. It is a
 		// PREFERENCE: the store resolves a collision within the org.
 		id = brand(l.Vendor)
@@ -451,7 +451,7 @@ func (o toolOps) listCatalog(ctx context.Context, in *catalogQuery) (*mcpCatalog
 // is the addressing authority.
 type listingRef struct {
 	// ID is the listing, from the path. It is the publisher's reverse-DNS name
-	// with its one slash written as an underscore — "com.stripe_mcp".
+	// with its one slash written as an underscore — "com.acme_mcp".
 	ID string `json:"id"`
 }
 
