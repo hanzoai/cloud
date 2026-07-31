@@ -107,7 +107,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		// Echo-loop guard (belt-and-suspenders with the route-level bot_id drop): drop
 		// the bot's OWN message using THIS org's recorded bot user id, before a pool
 		// slot or a dedupe row is spent. A bot echo never triggers a run either way.
-		if conn, ok := ConnectionFor(org, "slack"); ok && conn.BotUserID != "" && d.User == conn.BotUserID {
+		if conn, ok := ConnectionFor(org, "slack", ""); ok && conn.BotUserID != "" && d.User == conn.BotUserID {
 			return c.NoContent(http.StatusOK)
 		}
 		// SHED BEFORE the dedupe write (Red M-1). Try to acquire a pool slot first; if

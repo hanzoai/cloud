@@ -552,7 +552,7 @@ func (cl *client) resolveAccount(ctx context.Context, org string) (string, error
 			return url.PathEscape(a), nil
 		}
 	}
-	if conn, ok := connectionFor(org, providerCloudflare); ok {
+	if conn, ok := connectionFor(org, providerCloudflare, ""); ok {
 		if id := strings.TrimSpace(conn.ExternalID); idRE.MatchString(id) {
 			return url.PathEscape(id), nil
 		}

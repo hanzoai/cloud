@@ -230,7 +230,7 @@ func (o ops) list(ctx context.Context, _ *noInput) (*chatChannels, error) {
 	}
 	out := make([]channelView, 0, len(transports))
 	for _, tr := range transports {
-		conn, connected := integrations.ConnectionFor(org, tr.id)
+		conn, connected := integrations.ConnectionFor(org, tr.id, "")
 		// Absent row ⇒ defaults (policyFor); a read error leaves zero policy
 		// fields rather than failing the whole listing.
 		p, _ := policyFor(ctx, s.State.store, org, tr.id)

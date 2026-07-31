@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/apps/kms"
+	"github.com/hanzoai/cloud/cek"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -239,7 +239,7 @@ func TestIntegrationsCallbackHappyPath(t *testing.T) {
 	}
 
 	// The connection row (non-secret metadata) landed.
-	conn, ok := ConnectionFor("acme", "slack")
+	conn, ok := ConnectionFor("acme", "slack", "")
 	if !ok || conn.ExternalID != "T0TEAM" || conn.AccountLabel != "Acme Inc" {
 		t.Fatalf("connection row: ok=%v %+v", ok, conn)
 	}
@@ -317,7 +317,7 @@ func TestIntegrationsCallbackTamperedStateRejected(t *testing.T) {
 		t.Fatalf("tampered state want failure 302, got %d %q", r.Code, r.Location)
 	}
 	// And nothing was stored for the org the attacker might have hoped to hit.
-	if _, ok := ConnectionFor("acme", "slack"); ok {
+	if _, ok := ConnectionFor("acme", "slack", ""); ok {
 		t.Fatal("a forged callback must never create a connection")
 	}
 }
@@ -352,7 +352,7 @@ func TestIntegrationsDisconnect(t *testing.T) {
 		t.Fatal("bot_token must be deleted from KMS after disconnect")
 	}
 	// Connection row gone.
-	if _, ok := ConnectionFor("acme", "slack"); ok {
+	if _, ok := ConnectionFor("acme", "slack", ""); ok {
 		t.Fatal("connection row must be gone after disconnect")
 	}
 	// Idempotent.
@@ -473,7 +473,7 @@ func TestIntegrationsCallbackSanitizesMeta(t *testing.T) {
 		t.Fatalf("redirect Location off console origin: %q", cb.Location)
 	}
 
-	conn, ok := ConnectionFor("acme", "slack")
+	conn, ok := ConnectionFor("acme", "slack", "")
 	if !ok {
 		t.Fatal("connection row must exist")
 	}
@@ -519,7 +519,7 @@ func TestIntegrationsDisconnectNoPrincipal403(t *testing.T) {
 		t.Fatalf("forged disconnect want 403, got %d", resp.StatusCode)
 	}
 	// The victim's connection + secret survive.
-	if _, ok := ConnectionFor("acme", "slack"); !ok {
+	if _, ok := ConnectionFor("acme", "slack", ""); !ok {
 		t.Fatal("forged disconnect must NOT delete the connection row")
 	}
 	if _, err := kc.Get(kmsPath("acme", "slack"), "bot_token", kmsEnv); err != nil {
@@ -553,7 +553,7 @@ func TestIntegrationsGithubScaffoldCallbackFailsClosed(t *testing.T) {
 	if r.Code != http.StatusFound || !strings.Contains(r.Location, "error=github") {
 		t.Fatalf("github scaffold callback must fail closed, got %d %q", r.Code, r.Location)
 	}
-	if _, ok := ConnectionFor("acme", "github"); ok {
+	if _, ok := ConnectionFor("acme", "github", ""); ok {
 		t.Fatal("github scaffold must NEVER create a connection (fabricated success)")
 	}
 }
@@ -585,7 +585,7 @@ func TestIntegrationsCallbackOversizedCodeRejected(t *testing.T) {
 	if cb.Code != http.StatusFound || !strings.Contains(cb.Location, "error=slack") {
 		t.Fatalf("oversized code must fail closed, got %d %q", cb.Code, cb.Location)
 	}
-	if _, ok := ConnectionFor("acme", "slack"); ok {
+	if _, ok := ConnectionFor("acme", "slack", ""); ok {
 		t.Fatal("oversized code must never create a connection")
 	}
 }
@@ -596,7 +596,7 @@ func TestIntegrationsSeamUnmountedFailsClosed(t *testing.T) {
 	if _, err := TokenFor(context.Background(), "acme", "slack", "bot_token"); err == nil {
 		t.Fatal("TokenFor must fail when not mounted")
 	}
-	if _, ok := ConnectionFor("acme", "slack"); ok {
+	if _, ok := ConnectionFor("acme", "slack", ""); ok {
 		t.Fatal("ConnectionFor must be false when not mounted")
 	}
 	if _, ok := OrgForExternalID("slack", "x"); ok {

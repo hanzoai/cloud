@@ -176,7 +176,7 @@ func TestMetaE2EConnectSealsAndIsolates(t *testing.T) {
 	if !ok || string(got) != "META-LONG-LIVED-SECRET" {
 		t.Fatalf("long-lived token must be sealed for acme, got %q ok=%v", got, ok)
 	}
-	conn, ok := ConnectionFor("acme", "meta_ads")
+	conn, ok := ConnectionFor("acme", "meta_ads", "")
 	if !ok || conn.ExternalID != "act_123" {
 		t.Fatalf("connection row wrong: %+v ok=%v", conn, ok)
 	}
