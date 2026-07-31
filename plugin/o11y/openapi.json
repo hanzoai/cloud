@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package o11y is the ONE owner of the cloud binary's observability plane — registered as a SINGLE `o11y` subsystem (this file's init) that internally mounts, in the load-bearing order, every part of the concept:",
     "version": "v1"
   },
   "servers": [

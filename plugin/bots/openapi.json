@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package bots is the CONTROL PLANE for a bot run: a task the bot runtime executes on a surface — a desktop or terminal sandbox it drives — with a LIVE session (the URL the hanzo.app /vnc panel embeds to watch/attach).",
     "version": "v1"
   },
   "servers": [

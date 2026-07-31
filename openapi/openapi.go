@@ -160,8 +160,17 @@ type Server struct {
 
 // Tag is an OpenAPI tag — one per product, so a consumer can read the product
 // list off the document without walking every path.
+//
+// Description says what the product IS, in the words of the package that
+// implements it (Synopsis). It is omitted rather than filled: a product whose
+// package carries no doc comment is a product nobody has described yet, and
+// inventing a sentence here would make that indistinguishable from one somebody
+// wrote. The NAME is never conditional on it — the tag list stays a function of
+// the document's operations, which is the one thing a consumer enumerating
+// products can rely on.
 type Tag struct {
-	Name string `json:"name"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 // Schema is the sliver of JSON Schema this generator can honestly assert as a

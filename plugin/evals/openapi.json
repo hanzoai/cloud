@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package eval is /v1/evals: score a model on YOUR data with YOUR judge — datasets, dataset items, evaluators, score configs, runs, scores and traces, per org.",
     "version": "v1"
   },
   "servers": [

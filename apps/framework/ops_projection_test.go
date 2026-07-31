@@ -264,8 +264,11 @@ func TestSpecCarriesProse(t *testing.T) {
 	for _, want := range []string{
 		// Substrings that do not cross a source line break — the lift keeps the
 		// comment's own wrapping, so a wrapped phrase would never match.
-		"createDocType defines a DocType in the caller's org", // an op's prose
-		"Data is every DocType defined in the caller's org",   // an Out field's prose
+		// An op's prose, WITHOUT the leading `createDocType` its source comment
+		// opens with: the identifier belongs to Go's namespace, and zip strips an
+		// exact leading match of the handler's own name on the way out (v1.18.13).
+		"Defines a DocType in the caller's org",
+		"Data is every DocType defined in the caller's org", // an Out field's prose
 		"TASK-00001", // an Example:
 	} {
 		if !strings.Contains(string(spec), want) {

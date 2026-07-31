@@ -76,7 +76,10 @@ func TestTypedOpsProject(t *testing.T) {
 	// the spec has shapes and no words.
 	for _, want := range []string{
 		"fans the sequence out over a saved audience", // an In field's doc
-		"previewAudience evaluates the cohort LIVE",   // a handler's doc
+		// A handler's doc, WITHOUT the leading `previewAudience` its source comment
+		// opens with: the identifier belongs to Go's namespace, and zip strips an
+		// exact leading match of the handler's own name on the way out (v1.18.13).
+		"Evaluates the cohort LIVE",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("the OpenAPI document is missing lifted prose %q — run `go generate ./clients/marketing`", want)

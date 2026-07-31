@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package legal mounts the ORG-SCOPED legal-document surface (/v1/legal): a versioned, org-overridable library of standardized templates, a PURE merge-field generation engine that renders those templates from the org's own company/cap-table data, a KMS-sealed store for the generated documents, and the e-signature + filing seams that carry a document to execution — all on the shared audit plane.",
     "version": "v1"
   },
   "servers": [

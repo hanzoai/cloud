@@ -10,21 +10,21 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/git/keys/:id", zip.Doc{
-		Description: "deleteKey removes a registered SSH key, scoped to the caller's org: an org can\nonly delete its own, and a key id it does not own is not found. Answers 204\nwith no body. Once removed the key no longer authenticates any SSH git access.",
+		Description: "Removes a registered SSH key, scoped to the caller's org: an org can\nonly delete its own, and a key id it does not own is not found. Answers 204\nwith no body. Once removed the key no longer authenticates any SSH git access.",
 		Fields: map[string]string{
 			"keyRef.id": "ID is the key's identifier (\"gitkey_…\"), from the :id path segment.",
 		},
 		Example: json.RawMessage(`{"id":"gitkey_4a1b"}`),
 	})
 	zip.Describe("DELETE /v1/git/repos/:name", zip.Doc{
-		Description: "deleteRepo removes a repo's metadata and purges its storage. Answers 204 with\nno body. The metadata row is the source of truth for existence, so a storage\npurge that fails is logged and the delete still succeeds — and a second call\nis a 404, not a second delete.",
+		Description: "Removes a repo's metadata and purges its storage. Answers 204 with\nno body. The metadata row is the source of truth for existence, so a storage\npurge that fails is logged and the delete still succeeds — and a second call\nis a 404, not a second delete.",
 		Fields: map[string]string{
 			"repoRef.name": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
 		},
 		Example: json.RawMessage(`{"name":"widgets"}`),
 	})
 	zip.Describe("DELETE /v1/git/repos/:name/mirrors/:id", zip.Doc{
-		Description: "deleteMirror removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped.",
+		Description: "Removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped.",
 		Fields: map[string]string{
 			"childRef.id":   "ID is the row to remove, from the :id path segment.",
 			"childRef.name": "Name is the repo, from the :name path segment.",
@@ -32,7 +32,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"widgets","id":"mir_2d90"}`),
 	})
 	zip.Describe("DELETE /v1/git/repos/:name/subscriptions/:id", zip.Doc{
-		Description: "unsubscribe removes one Slack subscription from a repo; the notifier stops\nposting that repo's events to that channel. Answers 204 with no body. An id\nthat is not this repo's subscription is not found.",
+		Description: "Removes one Slack subscription from a repo; the notifier stops\nposting that repo's events to that channel. Answers 204 with no body. An id\nthat is not this repo's subscription is not found.",
 		Fields: map[string]string{
 			"childRef.id":   "ID is the row to remove, from the :id path segment.",
 			"childRef.name": "Name is the repo, from the :name path segment.",
@@ -40,7 +40,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"widgets","id":"sub_7c2e"}`),
 	})
 	zip.Describe("GET /v1/git/keys", zip.Doc{
-		Description: "listKeys returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@<host>:<org>/<repo>.git`. Keys are org-scoped\non read even though the fingerprint index is global, so one org never sees\nanother's.",
+		Description: "Returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@<host>:<org>/<repo>.git`. Keys are org-scoped\non read even though the fingerprint index is global, so one org never sees\nanother's.",
 		Fields: map[string]string{
 			"keyList.data":        "Data holds the org's keys.",
 			"keyView.createdAt":   "CreatedAt is RFC 3339 UTC.",
@@ -53,7 +53,7 @@ func init() {
 		Response: json.RawMessage(`{"data":[{"id":"gitkey_4a1b","title":"laptop","publicKey":"ssh-ed25519 AAAAC3Nz…","fingerprint":"SHA256:9pQ…","createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
 	zip.Describe("GET /v1/git/repos", zip.Doc{
-		Description: "listRepos returns the repos in the caller's scope, most recently updated\nfirst. The scope is the request principal's — the gateway-minted org and its\noptional project — never anything off the wire, so a caller only ever sees its\nown. Rows carry no branches or HEAD; read one repo for those.",
+		Description: "Returns the repos in the caller's scope, most recently updated\nfirst. The scope is the request principal's — the gateway-minted org and its\noptional project — never anything off the wire, so a caller only ever sees its\nown. Rows carry no branches or HEAD; read one repo for those.",
 		Fields: map[string]string{
 			"repoList.data":          "Data holds the repos in scope, most recently updated first.",
 			"repoView.branches":      "Branches are the repo's branch names. Read live, so the detail view carries\nthem and a list row does not.",
@@ -75,7 +75,7 @@ func init() {
 		Response: json.RawMessage(`{"data":[{"id":"repo_9f3c","org":"acme","name":"widgets","defaultBranch":"main","public":false,"cloneUrl":"https://api.hanzo.ai/v1/git/acme/widgets.git","sshUrl":"git@git.hanzo.ai:acme/widgets.git","sizeBytes":4096,"createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
 	zip.Describe("GET /v1/git/repos/:name", zip.Doc{
-		Description: "getRepo returns one repo with its live ref state: every branch name and the\nresolved HEAD commit. Both are read from the object store on each call, so an\nempty repo reports no branches and an empty head rather than failing. A repo\noutside the caller's scope is not found.",
+		Description: "Returns one repo with its live ref state: every branch name and the\nresolved HEAD commit. Both are read from the object store on each call, so an\nempty repo reports no branches and an empty head rather than failing. A repo\noutside the caller's scope is not found.",
 		Fields: map[string]string{
 			"repoRef.name":           "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
 			"repoView.branches":      "Branches are the repo's branch names. Read live, so the detail view carries\nthem and a list row does not.",
@@ -96,7 +96,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"widgets"}`),
 	})
 	zip.Describe("GET /v1/git/repos/:name/blob", zip.Doc{
-		Description: "browseBlob returns one file's bytes at one revision. Text comes back verbatim,\nbinary comes back base64, and a file past the 1 MiB view cap comes back marked\ntruncated with NO content — the client is expected to clone instead.",
+		Description: "Returns one file's bytes at one revision. Text comes back verbatim,\nbinary comes back base64, and a file past the 1 MiB view cap comes back marked\ntruncated with NO content — the client is expected to clone instead.",
 		Fields: map[string]string{
 			"blobJSON.binary":    "Binary marks content git could not treat as text; it comes back base64.",
 			"blobJSON.content":   "Content is the file's bytes, empty when Truncated.",
@@ -112,7 +112,7 @@ func init() {
 		Response: json.RawMessage(`{"path":"go.mod","size":42,"encoding":"utf8","content":"module widgets\n","binary":false,"truncated":false}`),
 	})
 	zip.Describe("GET /v1/git/repos/:name/commits", zip.Doc{
-		Description: "browseCommits walks a ref's history newest first, or one path's history when a\npath is given. There is no cursor: the page is the newest `limit` commits.",
+		Description: "Walks a ref's history newest first, or one path's history when a\npath is given. There is no cursor: the page is the newest `limit` commits.",
 		Fields: map[string]string{
 			"commitJSON.authorEmail": "AuthorEmail is the commit author's email.",
 			"commitJSON.authorName":  "AuthorName is the commit author's name.",
@@ -130,7 +130,7 @@ func init() {
 		Response: json.RawMessage(`{"commits":[{"sha":"a1b2c3d4e5f6","shortSha":"a1b2c3d","message":"add the widget service","authorName":"Ada","authorEmail":"ada@hanzo.ai","date":"2026-07-01T10:00:00Z"}]}`),
 	})
 	zip.Describe("GET /v1/git/repos/:name/files", zip.Doc{
-		Description: "browseFiles returns every file a glob selects at one revision, WITH its bytes\nand the revision they came from. It is the read a delivery generator makes:\none call answers \"what is the inventory at this commit, and what does it say\",\nwhere listing and then fetching would be a request per file.\n\nReturning the resolved revision matters as much as the bytes. A generator that\nlists at `main` and then reads at `main` can straddle a push and assemble half\nits inventory from one commit and half from the next; resolving once makes the\nwhole read consistent by construction.\n\nA file past the read cap comes back Truncated with no content rather than\nbeing dropped. A caller building a desired set has to know the difference\nbetween \"this file is empty\" and \"this file was not read\" — silently omitting\nit is how a pruning reconcile deletes what the missing file declared.",
+		Description: "Returns every file a glob selects at one revision, WITH its bytes\nand the revision they came from. It is the read a delivery generator makes:\none call answers \"what is the inventory at this commit, and what does it say\",\nwhere listing and then fetching would be a request per file.\n\nReturning the resolved revision matters as much as the bytes. A generator that\nlists at `main` and then reads at `main` can straddle a push and assemble half\nits inventory from one commit and half from the next; resolving once makes the\nwhole read consistent by construction.\n\nA file past the read cap comes back Truncated with no content rather than\nbeing dropped. A caller building a desired set has to know the difference\nbetween \"this file is empty\" and \"this file was not read\" — silently omitting\nit is how a pruning reconcile deletes what the missing file declared.",
 		Fields: map[string]string{
 			"fileJSON.content":   "Content is the file's bytes, empty when Truncated.",
 			"fileJSON.encoding":  "Encoding is how Content is carried: \"utf8\" verbatim, or \"base64\".",
@@ -146,7 +146,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"universe","ref":"main","glob":"charts/app/values/*/*.yaml"}`),
 	})
 	zip.Describe("GET /v1/git/repos/:name/mirrors", zip.Doc{
-		Description: "listMirrors returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
+		Description: "Returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
 		Fields: map[string]string{
 			"mirrorList.data":            "Data holds the repo's outbound mirror targets.",
 			"mirrorTargetView.createdAt": "CreatedAt is RFC 3339 UTC.",
@@ -160,7 +160,7 @@ func init() {
 		Response: json.RawMessage(`{"data":[{"id":"mir_2d90","repo":"widgets","host":"github.com","url":"https://github.com/acme/widgets.git","createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
 	zip.Describe("GET /v1/git/repos/:name/readme", zip.Doc{
-		Description: "browseReadme returns the README at the tree root as plain text — unrendered, so\nthe caller decides how to present it. A repo with no README is not found.",
+		Description: "Returns the README at the tree root as plain text — unrendered, so\nthe caller decides how to present it. A repo with no README is not found.",
 		Fields: map[string]string{
 			"readmeJSON.content":  "Content is the file's text, verbatim and unrendered.",
 			"readmeJSON.encoding": "Encoding is always \"utf8\" — a README is text by definition.",
@@ -172,7 +172,7 @@ func init() {
 		Response: json.RawMessage(`{"path":"README.md","content":"# widgets\n","encoding":"utf8"}`),
 	})
 	zip.Describe("GET /v1/git/repos/:name/refs", zip.Doc{
-		Description: "browseRefs lists a repo's branches, tags and default branch — what a branch\npicker needs in one call. Unlike the other read ops it tolerates a repo with no\ncommits: the ref sets come back empty and the default branch is still named.",
+		Description: "Lists a repo's branches, tags and default branch — what a branch\npicker needs in one call. Unlike the other read ops it tolerates a repo with no\ncommits: the ref sets come back empty and the default branch is still named.",
 		Fields: map[string]string{
 			"refJSON.name":      "Name is the short ref name (\"main\", \"v1.2.0\"), not the full refs/… path.",
 			"refJSON.sha":       "SHA is the full commit hash the ref resolves to.",
@@ -185,7 +185,7 @@ func init() {
 		Response: json.RawMessage(`{"branches":[{"name":"main","sha":"a1b2c3d4"}],"tags":[],"default":"main"}`),
 	})
 	zip.Describe("GET /v1/git/repos/:name/subscriptions", zip.Doc{
-		Description: "listSubscriptions returns a repo's Slack subscriptions — which channels the\nlifecycle notifier posts this repo's push and deploy events to.",
+		Description: "Returns a repo's Slack subscriptions — which channels the\nlifecycle notifier posts this repo's push and deploy events to.",
 		Fields: map[string]string{
 			"repoRef.name":               "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
 			"subscriptionList.data":      "Data holds the repo's subscriptions.",
@@ -199,7 +199,7 @@ func init() {
 		Response: json.RawMessage(`{"data":[{"id":"sub_7c2e","repo":"widgets","channel":"#builds","events":["push.landed"],"createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
 	zip.Describe("GET /v1/git/repos/:name/tree", zip.Doc{
-		Description: "browseTree lists the immediate children of one directory at one revision,\ndirectories before files. It does not recurse — walk down a level at a time.",
+		Description: "Lists the immediate children of one directory at one revision,\ndirectories before files. It does not recurse — walk down a level at a time.",
 		Fields: map[string]string{
 			"pathRef.name":       "Name is the repo to read, from the :name path segment.",
 			"pathRef.path":       "Path is repo-relative; empty is the tree root. Traversal is stripped.",
@@ -215,7 +215,7 @@ func init() {
 		Response: json.RawMessage(`{"entries":[{"name":"server","path":"cmd/server","type":"tree","size":0,"mode":"040000"}]}`),
 	})
 	zip.Describe("GET /v1/git/usage", zip.Doc{
-		Description: "usage returns per-repo and total storage bytes for the caller's org — the\nqueryable, per-tenant number commerce and o11y meter on. It spans EVERY\nproject sub-scope, unlike the repo list, so a billing consumer sees the whole\ntenant footprint in one call. Sizes are last-measured values (create, push,\nmirror and gc each re-measure), not a live walk of the disk.",
+		Description: "Returns per-repo and total storage bytes for the caller's org — the\nqueryable, per-tenant number commerce and o11y meter on. It spans EVERY\nproject sub-scope, unlike the repo list, so a billing consumer sees the whole\ntenant footprint in one call. Sizes are last-measured values (create, push,\nmirror and gc each re-measure), not a live walk of the disk.",
 		Fields: map[string]string{
 			"usageRepo.name":       "Name is the repo's org-unique handle.",
 			"usageRepo.project":    "Project is the sub-scope the repo lives in; absent for the default scope.",
@@ -228,7 +228,7 @@ func init() {
 		Response: json.RawMessage(`{"org":"acme","totalBytes":12288,"repos":[{"name":"widgets","sizeBytes":4096},{"name":"site","project":"web","sizeBytes":8192}]}`),
 	})
 	zip.Describe("PATCH /v1/git/repos/:name", zip.Doc{
-		Description: "setVisibility flips a repo's public bit, the one mutable repo setting today.\nPublic grants ANONYMOUS fetch only; push and the whole control plane stay\norg-authed. Returns the updated repo.",
+		Description: "Flips a repo's public bit, the one mutable repo setting today.\nPublic grants ANONYMOUS fetch only; push and the whole control plane stay\norg-authed. Returns the updated repo.",
 		Fields: map[string]string{
 			"patchIn.name":           "Name is the repo to update, from the :name path segment.",
 			"patchIn.public":         "Public flips anonymous read access. Omit it and the request is refused —\nthere is nothing else to update yet.",
@@ -250,13 +250,13 @@ func init() {
 		Example: json.RawMessage(`{"name":"widgets","public":true}`),
 	})
 	zip.Describe("POST /git/files", zip.Doc{
-		Description: "planeFiles reads the glob-selected files of one of the caller's repos at one\nrevision, returning the resolved commit and each file's path and contents.\nThe org is the CALLER's plane identity, never the argument — an anonymous\ncaller is refused — and the whole reply is read at one resolved commit, so a\ncaller can never assemble half an inventory from each side of a push. A named\nhandler, not a closure, so zipdoc can lift this prose into the registry.",
+		Description: "Reads the glob-selected files of one of the caller's repos at one\nrevision, returning the resolved commit and each file's path and contents.\nThe org is the CALLER's plane identity, never the argument — an anonymous\ncaller is refused — and the whole reply is read at one resolved commit, so a\ncaller can never assemble half an inventory from each side of a push. A named\nhandler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
 	zip.Describe("POST /git/publish", zip.Doc{
-		Description: "planePublish reconciles a project's canonical repo to the project's published\nvisibility: it provisions the repo on first publish and thereafter flips only\nthe public bit, then keeps the GitHub replica's visibility in step.\nIdempotent, so projects can fire it on every create, visibility change and\nmoderation event. The org is the CALLER's plane identity, never the argument —\na caller that could name the org would be publishing into another tenant's\nrepos — and an anonymous caller is refused. A named handler, not a closure, so\nzipdoc can lift this prose into the registry.",
+		Description: "Reconciles a project's canonical repo to the project's published\nvisibility: it provisions the repo on first publish and thereafter flips only\nthe public bit, then keeps the GitHub replica's visibility in step.\nIdempotent, so projects can fire it on every create, visibility change and\nmoderation event. The org is the CALLER's plane identity, never the argument —\na caller that could name the org would be publishing into another tenant's\nrepos — and an anonymous caller is refused. A named handler, not a closure, so\nzipdoc can lift this prose into the registry.",
 	})
 	zip.Describe("POST /v1/git/keys", zip.Doc{
-		Description: "registerKey registers an SSH public key so it can authenticate `git clone\ngit@<host>:<org>/<repo>.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
+		Description: "Registers an SSH public key so it can authenticate `git clone\ngit@<host>:<org>/<repo>.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
 		Fields: map[string]string{
 			"keyView.createdAt":        "CreatedAt is RFC 3339 UTC.",
 			"keyView.fingerprint":      "Fingerprint is the key's SHA256 fingerprint (\"SHA256:…\"), globally unique\nand the handle SSH auth resolves a presented key by.",
@@ -269,7 +269,7 @@ func init() {
 		Example: json.RawMessage(`{"title":"laptop","publicKey":"ssh-ed25519 AAAAC3Nz… z@hanzo.ai"}`),
 	})
 	zip.Describe("POST /v1/git/repos", zip.Doc{
-		Description: "createRepo provisions an empty bare repository in the caller's scope and\nreturns it with its clone URLs. Answers 201. The name must be unique within\nthe scope — a repeat is a 409, never a silent overwrite of an existing repo.\nThe org comes from the validated principal, so a repo is always born owned by\nthe caller's own tenant.",
+		Description: "Provisions an empty bare repository in the caller's scope and\nreturns it with its clone URLs. Answers 201. The name must be unique within\nthe scope — a repeat is a 409, never a silent overwrite of an existing repo.\nThe org comes from the validated principal, so a repo is always born owned by\nthe caller's own tenant.",
 		Fields: map[string]string{
 			"createReq.description":  "Description is a free-form blurb, max 4KiB.",
 			"createReq.name":         "Name is the repo's handle, unique within the scope, and the last segment of\nboth clone URLs. Must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$; a trailing\n\".git\" is stripped first. Required.",
@@ -293,7 +293,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"widgets","description":"the widget service"}`),
 	})
 	zip.Describe("POST /v1/git/repos/:name/gc", zip.Doc{
-		Description: "gc repacks a repo into one bitmapped pack and rewrites its commit-graph, so\nthe next clone reuses the bitmap instead of walking the whole object graph.\nIdempotent, and safe to interrupt — git swaps both artifacts atomically. It\nruns under one pack slot with the same memory bounds as a clone, so it can\nblock behind heavy pack traffic rather than compete with it. Storage usage is\nre-measured afterwards, since a repack reclaims space.",
+		Description: "Repacks a repo into one bitmapped pack and rewrites its commit-graph, so\nthe next clone reuses the bitmap instead of walking the whole object graph.\nIdempotent, and safe to interrupt — git swaps both artifacts atomically. It\nruns under one pack slot with the same memory bounds as a clone, so it can\nblock behind heavy pack traffic rather than compete with it. Storage usage is\nre-measured afterwards, since a repack reclaims space.",
 		Fields: map[string]string{
 			"gcOut.maintained": "Maintained is always true; the call fails rather than reporting false.",
 			"gcOut.repo":       "Repo is the repo that was repacked.",
@@ -304,7 +304,7 @@ func init() {
 		Response: json.RawMessage(`{"repo":"widgets","sizeBytes":3072,"maintained":true}`),
 	})
 	zip.Describe("POST /v1/git/repos/:name/mirror", zip.Doc{
-		Description: "mirror imports an external git repository into the caller's repo, provisioning\nit on first use. Fetch is FORCED and covers every ref, so a first call clones\nthe source and a repeat call re-syncs it — the endpoint is idempotent by mirror\nsemantics. Mirrored bytes are metered exactly like a push, and a push.landed\nevent is emitted for the default branch so the code index picks the repo up.",
+		Description: "Imports an external git repository into the caller's repo, provisioning\nit on first use. Fetch is FORCED and covers every ref, so a first call clones\nthe source and a repeat call re-syncs it — the endpoint is idempotent by mirror\nsemantics. Mirrored bytes are metered exactly like a push, and a push.landed\nevent is emitted for the default branch so the code index picks the repo up.",
 		Fields: map[string]string{
 			"mirrorReq.name":         "Name is the local repo to mirror into, from the :name path segment. It is\nCREATED on first use.",
 			"mirrorReq.project":      "Project is the sub-scope to land the repo in; empty uses the caller's own,\nexactly as a create would.",
@@ -327,7 +327,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"widgets","source":"https://github.com/acme/widgets.git"}`),
 	})
 	zip.Describe("POST /v1/git/repos/:name/mirrors", zip.Doc{
-		Description: "addMirror registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
+		Description: "Registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
 		Fields: map[string]string{
 			"mirrorTargetReq.host":       "Host is an optional assertion of the target's hostname. The authoritative\nhost is the one in URL; a value that disagrees with it is refused.",
 			"mirrorTargetReq.name":       "Name is the repo whose advanced refs are pushed downstream, from the :name\npath segment.",
@@ -341,7 +341,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"widgets","url":"https://github.com/acme/widgets.git"}`),
 	})
 	zip.Describe("POST /v1/git/repos/:name/push", zip.Doc{
-		Description: "pushFiles lands a set of files as one commit without a git client — the\nhanzo.app builder's push. The repo is CREATED on first push, the files are\nmerged onto the branch tip (unlisted files survive), and the same\npush-to-deploy hook a real receive-pack fires is fired, so downstream this is\nindistinguishable from a `git push`.",
+		Description: "Lands a set of files as one commit without a git client — the\nhanzo.app builder's push. The repo is CREATED on first push, the files are\nmerged onto the branch tip (unlisted files survive), and the same\npush-to-deploy hook a real receive-pack fires is fired, so downstream this is\nindistinguishable from a `git push`.",
 		Fields: map[string]string{
 			"pushFile.content":  "Content is the file's bytes, carried per Encoding.",
 			"pushFile.encoding": "Encoding is \"base64\", or \"utf-8\" (the default, also \"utf8\" / \"text\").",
@@ -359,7 +359,7 @@ func init() {
 		Response: json.RawMessage(`{"commit":"a1b2c3d4e5f6","branch":"main","cloneUrl":"https://api.hanzo.ai/v1/git/acme/widgets.git","sshUrl":"git@git.hanzo.ai:acme/widgets.git"}`),
 	})
 	zip.Describe("POST /v1/git/repos/:name/subscriptions", zip.Doc{
-		Description: "subscribe binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there. Answers 201. The same channel twice\non one repo is a 409; a repo outside the caller's scope is a 404, exactly as\nreading it is.",
+		Description: "Binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there. Answers 201. The same channel twice\non one repo is a 409; a repo outside the caller's scope is a 404, exactly as\nreading it is.",
 		Fields: map[string]string{
 			"subscribeReq.channel":       "Channel is the Slack channel the notifier posts to — an id (C…/G…), a\n#name, or a bare name. Required.",
 			"subscribeReq.events":        "Events narrows delivery to these lifecycle kinds (push.landed,\ndeploy.live, deploy.failed). Omit it to receive every deliverable kind; a\nkind that is never posted to Slack is refused rather than silently dropped.",

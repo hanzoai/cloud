@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package plugin is the control plane for the host's zip-native plugins: what each host is running, and the operations that change it — enable, disable, reload, and pin to (or roll back to) a named version.",
     "version": "v1"
   },
   "servers": [
@@ -19,8 +19,8 @@
     "/v1/admin/plugins": {
       "get": {
         "operationId": "adminPlugins",
-        "summary": "list reports what each host is actually running: every loaded plugin with its version, pid, uptime, reload and restart counts, and its measured CPU, RSS, thread and fd cost — read from the kernel, which is only answerable at all because a plugin is a process.",
-        "description": "list reports what each host is actually running: every loaded plugin with its\nversion, pid, uptime, reload and restart counts, and its measured CPU, RSS,\nthread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
+        "summary": "Reports what each host is actually running: every loaded plugin with its version, pid, uptime, reload and restart counts, and its measured CPU, RSS, thread and fd cost — read from the kernel, which is only answerable at all because a plugin is a process.",
+        "description": "Reports what each host is actually running: every loaded plugin with its\nversion, pid, uptime, reload and restart counts, and its measured CPU, RSS,\nthread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
         "tags": [
           "admin"
         ],
@@ -84,8 +84,8 @@
     "/v1/admin/plugins/{name}/disable": {
       "post": {
         "operationId": "adminDisablePlugin",
-        "summary": "disable stops the plugin.",
-        "description": "disable stops the plugin. Its routes STAY REGISTERED and answer 503 — not 404.\n\nThat is zip's choice and this keeps it. Removing the routes would mutate the\nroute table, and re-adding them on enable would grow it without bound across\nrepeated cycles, which is the invariant that makes reloads flat in memory. It\nis also the better answer: 404 says \"no such API\" and a client may cache it\nand stop retrying, while 503 says \"this API exists and is down right now\",\nwhich is true and retryable. Which of the two 503s this is — deliberate stop\nor crash — is what the status's disabled flag reports.",
+        "summary": "Stops the plugin.",
+        "description": "Stops the plugin. Its routes STAY REGISTERED and answer 503 — not 404.\n\nThat is zip's choice and this keeps it. Removing the routes would mutate the\nroute table, and re-adding them on enable would grow it without bound across\nrepeated cycles, which is the invariant that makes reloads flat in memory. It\nis also the better answer: 404 says \"no such API\" and a client may cache it\nand stop retrying, while 503 says \"this API exists and is down right now\",\nwhich is true and retryable. Which of the two 503s this is — deliberate stop\nor crash — is what the status's disabled flag reports.",
         "tags": [
           "admin"
         ],
@@ -141,8 +141,8 @@
     "/v1/admin/plugins/{name}/enable": {
       "post": {
         "operationId": "adminEnablePlugin",
-        "summary": "enable brings a stopped or disabled plugin back on the artifact it already has: the zero Plugin names no new artifact, so Reload reuses the loaded spec and clears the disabled flag.",
-        "description": "enable brings a stopped or disabled plugin back on the artifact it already\nhas: the zero Plugin names no new artifact, so Reload reuses the loaded spec\nand clears the disabled flag. Named for what an operator means by it.",
+        "summary": "Brings a stopped or disabled plugin back on the artifact it already has: the zero Plugin names no new artifact, so Reload reuses the loaded spec and clears the disabled flag.",
+        "description": "Brings a stopped or disabled plugin back on the artifact it already\nhas: the zero Plugin names no new artifact, so Reload reuses the loaded spec\nand clears the disabled flag. Named for what an operator means by it.",
         "tags": [
           "admin"
         ],
@@ -198,8 +198,8 @@
     "/v1/admin/plugins/{name}/reload": {
       "post": {
         "operationId": "adminReloadPlugin",
-        "summary": "reload swaps a plugin for another build without dropping a request.",
-        "description": "reload swaps a plugin for another build without dropping a request. The\nreplacement is started and proven to be LISTENING before any traffic moves to\nit, so a bad build leaves the old one serving and returns an error rather\nthan a hole; the old process then drains before it is killed.\n\nWith a version or url+sum it pins; naming a digest this host has run before is\nthe rollback, and costs no network because the digest IS the cache key. With\nneither it restarts what is already loaded.\n\nFleet scope applies it to one host at a time and STOPS at the first failure,\nso a build that cannot come up reaches exactly one host.",
+        "summary": "Swaps a plugin for another build without dropping a request.",
+        "description": "Swaps a plugin for another build without dropping a request. The\nreplacement is started and proven to be LISTENING before any traffic moves to\nit, so a bad build leaves the old one serving and returns an error rather\nthan a hole; the old process then drains before it is killed.\n\nWith a version or url+sum it pins; naming a digest this host has run before is\nthe rollback, and costs no network because the digest IS the cache key. With\nneither it restarts what is already loaded.\n\nFleet scope applies it to one host at a time and STOPS at the first failure,\nso a build that cannot come up reaches exactly one host.",
         "tags": [
           "admin"
         ],

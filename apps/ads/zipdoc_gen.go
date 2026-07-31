@@ -10,11 +10,11 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/ads/campaigns/:id", zip.Doc{
-		Description: "deleteCampaign removes one of the caller org's campaigns and answers 204 with\nno body. It deletes the stored record only: a campaign already launched keeps\nrunning on the ad network, which must be stopped there. An id another org owns\nreads as not found.",
+		Description: "Removes one of the caller org's campaigns and answers 204 with\nno body. It deletes the stored record only: a campaign already launched keeps\nrunning on the ad network, which must be stopped there. An id another org owns\nreads as not found.",
 		Example:     json.RawMessage(`{"id":"camp_2f9c1d"}`),
 	})
 	zip.Describe("GET /v1/ads/campaigns", zip.Doc{
-		Description: "listCampaigns returns the caller org's ad campaigns, most recently updated\nfirst, optionally narrowed to one lifecycle status. The listing is bounded by\nthe org: another tenant's campaigns are not reachable from here at all.",
+		Description: "Returns the caller org's ad campaigns, most recently updated\nfirst, optionally narrowed to one lifecycle status. The listing is bounded by\nthe org: another tenant's campaigns are not reachable from here at all.",
 		Fields: map[string]string{
 			"AdCampaign.account":     "provider ad-account ref (Meta act_<id>)",
 			"AdCampaign.externalId":  "provider campaign id after a launch",
@@ -25,7 +25,7 @@ func init() {
 		Example: json.RawMessage(`{"status":"active","limit":50}`),
 	})
 	zip.Describe("GET /v1/ads/campaigns/:id", zip.Doc{
-		Description: "getCampaign returns one of the caller org's campaigns. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
+		Description: "Returns one of the caller org's campaigns. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
 		Fields: map[string]string{
 			"AdCampaign.account":    "provider ad-account ref (Meta act_<id>)",
 			"AdCampaign.externalId": "provider campaign id after a launch",
@@ -33,7 +33,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"camp_2f9c1d"}`),
 	})
 	zip.Describe("GET /v1/ads/summary", zip.Doc{
-		Description: "summary rolls the caller org's ad campaigns up into four numbers: how many\ncampaigns exist, how many are active, and the summed budget and spend across\nall of them. Budget and spend are MINOR units (cents), the same units the\ncampaign rows carry. It counts only this org's campaigns.",
+		Description: "Rolls the caller org's ad campaigns up into four numbers: how many\ncampaigns exist, how many are active, and the summed budget and spend across\nall of them. Budget and spend are MINOR units (cents), the same units the\ncampaign rows carry. It counts only this org's campaigns.",
 		Fields: map[string]string{
 			"adSummary.active":    "Active is how many of those campaigns are in the active state.",
 			"adSummary.budget":    "Budget is the summed budget of every campaign in the org, in cents.",
@@ -42,7 +42,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/ads/campaigns", zip.Doc{
-		Description: "createCampaign registers a new ad campaign for the caller's org and answers\n201 with the stored row. It only records the campaign — nothing is sent to the\nad network until POST /v1/ads/campaigns/{id}/launch runs it. The org is\nstamped by the server from the validated principal, so a body can never place\na campaign in another tenant.",
+		Description: "Registers a new ad campaign for the caller's org and answers\n201 with the stored row. It only records the campaign — nothing is sent to the\nad network until POST /v1/ads/campaigns/{id}/launch runs it. The org is\nstamped by the server from the validated principal, so a body can never place\na campaign in another tenant.",
 		Fields: map[string]string{
 			"AdCampaign.account":      "provider ad-account ref (Meta act_<id>)",
 			"AdCampaign.externalId":   "provider campaign id after a launch",
@@ -57,7 +57,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"Spring Launch","platform":"meta","objective":"conversions","budget":50000}`),
 	})
 	zip.Describe("PUT /v1/ads/campaigns/:id", zip.Doc{
-		Description: "updateCampaign replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution.",
+		Description: "Replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution.",
 		Fields: map[string]string{
 			"AdCampaign.account":         "provider ad-account ref (Meta act_<id>)",
 			"AdCampaign.externalId":      "provider campaign id after a launch",

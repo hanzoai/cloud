@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package index mounts the Hanzo Cloud /v1/index/* surface: a native-Go, multi-tenant full-text index on Base/SQLite that speaks the Meilisearch REST dialect.",
     "version": "v1"
   },
   "servers": [

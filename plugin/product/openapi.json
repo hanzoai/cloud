@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package product is the read-only inventory of the search and vector backends: /v1/search-docs/{indexes,stats} read from Meilisearch and /v1/vector/{collections,stats} from Qdrant, reshaped into the rows the console renders.",
     "version": "v1"
   },
   "servers": [
@@ -22,8 +22,8 @@
     "/v1/search-docs/indexes": {
       "get": {
         "operationId": "get_v1_search-docs_indexes",
-        "summary": "searchIndexes lists the search indexes with their document counts and timestamps.",
-        "description": "searchIndexes lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
+        "summary": "Lists the search indexes with their document counts and timestamps.",
+        "description": "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
         "tags": [
           "search-docs"
         ],
@@ -44,8 +44,8 @@
     "/v1/search-docs/stats": {
       "get": {
         "operationId": "get_v1_search-docs_stats",
-        "summary": "searchStats totals the documents across every search index.",
-        "description": "searchStats totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
+        "summary": "Totals the documents across every search index.",
+        "description": "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
         "tags": [
           "search-docs"
         ],
@@ -66,8 +66,8 @@
     "/v1/vector/collections": {
       "get": {
         "operationId": "get_v1_vector_collections",
-        "summary": "vectorCollections lists the vector collections with their size and geometry.",
-        "description": "vectorCollections lists the vector collections with their size and geometry.\n\nIt reads the in-cluster Qdrant service: the collection list, then each\ncollection's detail for its point count, vector dimension and distance metric.\nPer-collection detail is best-effort — one collection that fails to describe\nitself keeps its name and defaults (dimension 0, cosine) rather than blanking\nthe whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.",
+        "summary": "Lists the vector collections with their size and geometry.",
+        "description": "Lists the vector collections with their size and geometry.\n\nIt reads the in-cluster Qdrant service: the collection list, then each\ncollection's detail for its point count, vector dimension and distance metric.\nPer-collection detail is best-effort — one collection that fails to describe\nitself keeps its name and defaults (dimension 0, cosine) rather than blanking\nthe whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.",
         "tags": [
           "vector"
         ],
@@ -88,8 +88,8 @@
     "/v1/vector/stats": {
       "get": {
         "operationId": "get_v1_vector_stats",
-        "summary": "vectorStats totals the collections, vectors and storage across the vector store.",
-        "description": "vectorStats totals the collections, vectors and storage across the vector store.\n\nEvery figure is summed from the same per-collection detail\nGET /v1/vector/collections returns, so the two panels can never disagree. An\nunreachable Qdrant answers 200 with all zeros rather than an error.",
+        "summary": "Totals the collections, vectors and storage across the vector store.",
+        "description": "Totals the collections, vectors and storage across the vector store.\n\nEvery figure is summed from the same per-collection detail\nGET /v1/vector/collections returns, so the two panels can never disagree. An\nunreachable Qdrant answers 200 with all zeros rather than an error.",
         "tags": [
           "vector"
         ],

@@ -147,7 +147,7 @@
     "inputSchema": {
       "properties": {
         "id": {
-          "description": "ID is the listing, from the path. It is the publisher's reverse-DNS name\nwith its one slash written as an underscore — \"com.stripe_mcp\".",
+          "description": "ID is the listing, from the path. It is the publisher's reverse-DNS name\nwith its one slash written as an underscore — \"com.acme_mcp\".",
           "type": "string"
         }
       },

@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/code/ask", zip.Doc{
-		Description: "askGet answers a question about the caller org's code with a CITED answer:\nretrieval packs grounding context, then the synthesizer writes the answer over\nexactly those spans, which come back alongside it. It never answers without\ngrounding — with no matched code the answer is empty and says so, and with no\nsynthesizer available the citations still come back with \"degraded\": true so\nthe caller can reason over the spans itself.",
+		Description: "Answers a question about the caller org's code with a CITED answer:\nretrieval packs grounding context, then the synthesizer writes the answer over\nexactly those spans, which come back alongside it. It never answers without\ngrounding — with no matched code the answer is empty and says so, and with no\nsynthesizer available the citations still come back with \"degraded\": true so\nthe caller can reason over the spans itself.",
 		Fields: map[string]string{
 			"askIn.q":    "Q is the question to answer. Required, max 4000 bytes.",
 			"askIn.repo": "Repo narrows retrieval to one repository. Empty searches every repo the org\nhas indexed.",
@@ -18,7 +18,7 @@ func init() {
 		Example: json.RawMessage(`{"q":"where is the per-org SQLite file opened","repo":"cloud"}`),
 	})
 	zip.Describe("GET /v1/code/file", zip.Doc{
-		Description: "file returns the INDEXED content of one file — read_file over the chunks the\nsearch tiers hold, for pulling up code an agent just found. It is NOT\nbyte-verbatim: the git object plane is the source of record for exact bytes,\nhistory and blame. A file absent from the index is a 404, so an agent can tell\n\"not indexed\" from \"empty file\".",
+		Description: "Returns the INDEXED content of one file — read_file over the chunks the\nsearch tiers hold, for pulling up code an agent just found. It is NOT\nbyte-verbatim: the git object plane is the source of record for exact bytes,\nhistory and blame. A file absent from the index is a 404, so an agent can tell\n\"not indexed\" from \"empty file\".",
 		Fields: map[string]string{
 			"fileContent.content": "Content is the file's text as the index stored it. It is NOT guaranteed\nbyte-verbatim — the git object plane is the source of record for exact\nbytes, history and blame.",
 			"fileContent.lang":    "Lang is the detected language.",
@@ -30,7 +30,7 @@ func init() {
 		Example: json.RawMessage(`{"repo":"cloud","path":"apps/code/store.go"}`),
 	})
 	zip.Describe("GET /v1/code/search", zip.Doc{
-		Description: "search finds code in the caller org's index across three orthogonal retrieval\ntiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over\ncode-tokenized text), symbolic (real definition and reference edges), and\nsemantic (embedding cosine over AST-boundary chunks). Pick one tier with\n`type`, or leave it to run all three as hybrid, which is what a coding agent\nusually wants. It is FAIL-HONEST: a retrieval outage answers 200 with an empty\nresult set and \"degraded\": true rather than a 5xx, so an agent degrades instead\nof stalling. A malformed regex is a 400.",
+		Description: "Finds code in the caller org's index across three orthogonal retrieval\ntiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over\ncode-tokenized text), symbolic (real definition and reference edges), and\nsemantic (embedding cosine over AST-boundary chunks). Pick one tier with\n`type`, or leave it to run all three as hybrid, which is what a coding agent\nusually wants. It is FAIL-HONEST: a retrieval outage answers 200 with an empty\nresult set and \"degraded\": true rather than a 5xx, so an agent degrades instead\nof stalling. A malformed regex is a 400.",
 		Fields: map[string]string{
 			"Span.role":              "context: match | definition | caller",
 			"searchIn.limit":         "Limit caps how many spans come back: default 20, maximum 100. A value that\nis not a positive integer reads as the default.",
@@ -45,7 +45,7 @@ func init() {
 		Example: json.RawMessage(`{"q":"func openStore","type":"hybrid","repo":"cloud","limit":20}`),
 	})
 	zip.Describe("GET /v1/code/tree", zip.Doc{
-		Description: "tree returns one repository's file structure with a per-file symbol count —\nget_repo_structure over the org's own index, with no git checkout involved. A\nrepository that has not been indexed answers an empty tree rather than an\nerror, so an agent can tell \"nothing here\" without handling a failure.",
+		Description: "Returns one repository's file structure with a per-file symbol count —\nget_repo_structure over the org's own index, with no git checkout involved. A\nrepository that has not been indexed answers an empty tree rather than an\nerror, so an agent can tell \"nothing here\" without handling a failure.",
 		Fields: map[string]string{
 			"repoTree.files": "Files are the repo's indexed files in path order, each with its language\nand how many symbols it defines. Never null.",
 			"repoTree.repo":  "Repo echoes the repository that was walked.",
@@ -54,7 +54,7 @@ func init() {
 		Example: json.RawMessage(`{"repo":"cloud"}`),
 	})
 	zip.Describe("POST /v1/code/ask", zip.Doc{
-		Description: "askPost is askGet with the question in the request BODY, for a question too\nlong or too awkward to put in a URL. `query` and `repo` in the body take\nprecedence over `?q=` and `?repo=`; either source works alone.",
+		Description: "Is askGet with the question in the request BODY, for a question too\nlong or too awkward to put in a URL. `query` and `repo` in the body take\nprecedence over `?q=` and `?repo=`; either source works alone.",
 		Fields: map[string]string{
 			"askPostIn.query": "Query is the question, from the BODY. Takes precedence over `?q=`.",
 			"askPostIn.repo":  "Repo is the repository narrowing, from the BODY. Takes precedence over `?repo=`.",
@@ -62,7 +62,7 @@ func init() {
 		Example: json.RawMessage(`{"query":"where is the per-org SQLite file opened","repo":"cloud"}`),
 	})
 	zip.Describe("POST /v1/code/context", zip.Doc{
-		Description: "context packs the most relevant code for a query into a token budget — THE\nprimitive for a coding agent that has to decide what to put in a prompt. It\nretrieves seed spans, expands each with the definitions it calls and its key\ncallers, then greedily fills the budget, so the answer is a coherent slice of\nthe codebase rather than a list of disconnected matches. The top match is\nalways included, truncated if it alone overflows, so a matched query never\ncomes back empty. A retrieval outage answers 200 with an empty bundle rather\nthan a 5xx.",
+		Description: "Packs the most relevant code for a query into a token budget — THE\nprimitive for a coding agent that has to decide what to put in a prompt. It\nretrieves seed spans, expands each with the definitions it calls and its key\ncallers, then greedily fills the budget, so the answer is a coherent slice of\nthe codebase rather than a list of disconnected matches. The top match is\nalways included, truncated if it alone overflows, so a matched query never\ncomes back empty. A retrieval outage answers 200 with an empty bundle rather\nthan a 5xx.",
 		Fields: map[string]string{
 			"Span.role":              "context: match | definition | caller",
 			"contextIn.budgetTokens": "BudgetTokens caps the bundle's size. Clamped to [256, 32000]; 0 or absent\nuses 4000.",
@@ -72,7 +72,7 @@ func init() {
 		Example: json.RawMessage(`{"query":"how does the store open a per-org database","budgetTokens":4000,"repo":"cloud"}`),
 	})
 	zip.Describe("POST /v1/code/index", zip.Doc{
-		Description: "index (re)indexes a repository for the caller's org, incrementally: files whose\ncontent hash is unchanged are skipped, so re-sending a whole tree is cheap.\nEach file is parsed for symbols, split at AST boundaries and — when the\nsemantic tier is available — embedded, which is what makes it searchable across\nall three retrieval tiers. Pass `prune` to also DELETE indexed files absent\nfrom the request, which turns the call into a full sync; without it the call is\nan upsert. The index is written to the caller org's own physically separate\ndatabase.",
+		Description: "(re)indexes a repository for the caller's org, incrementally: files whose\ncontent hash is unchanged are skipped, so re-sending a whole tree is cheap.\nEach file is parsed for symbols, split at AST boundaries and — when the\nsemantic tier is available — embedded, which is what makes it searchable across\nall three retrieval tiers. Pass `prune` to also DELETE indexed files absent\nfrom the request, which turns the call into a full sync; without it the call is\nan upsert. The index is written to the caller org's own physically separate\ndatabase.",
 		Fields: map[string]string{
 			"fileInput.content":    "Content is the file's full text. Max 1 MiB per file; binary files should\nsimply be omitted rather than sent.",
 			"fileInput.path":       "Path is the file's repo-relative path, e.g. \"internal/store/db.go\".",

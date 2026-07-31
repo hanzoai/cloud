@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package captable is the org's cap table: stakeholders, share classes, share certificates and transfers, option grants and equity plans, SAFEs and convertible notes, priced rounds and their investments, and the summary that totals outstanding and fully-diluted ownership from them.",
     "version": "v1"
   },
   "servers": [

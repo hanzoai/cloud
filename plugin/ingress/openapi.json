@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package ingress is cloud's embedded, runtime-configurable edge — the /v1/ingress subsystem.",
     "version": "v1"
   },
   "servers": [

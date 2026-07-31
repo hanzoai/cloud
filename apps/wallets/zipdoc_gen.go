@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/wallets", zip.Doc{
-		Description: "listWallets returns the caller org's wallets, newest first, optionally NARROWED\nwithin the org by project, agent or account. The org is always the bound\nisolation boundary — the filters only ever narrow inside it, so a caller can\nnever widen past its own org.",
+		Description: "Returns the caller org's wallets, newest first, optionally NARROWED\nwithin the org by project, agent or account. The org is always the bound\nisolation boundary — the filters only ever narrow inside it, so a caller can\nnever widen past its own org.",
 		Fields: map[string]string{
 			"Wallet.Scope":          "Org, Project, Agent, AccountID — the addressing scope",
 			"listWalletsIn.account": "Account narrows to wallets under one account id. Must be a url-safe segment.",
@@ -21,20 +21,20 @@ func init() {
 		Example: json.RawMessage(`{"account":"acct_9f8c1d"}`),
 	})
 	zip.Describe("GET /v1/wallets/:id", zip.Doc{
-		Description: "getWallet returns one of the caller org's wallets: its scope, custody kind,\ntier, chain and on-chain address. The custody handle to the signing material is\nnever part of the answer. A wallet id another org owns reads as not found, so\nthe response cannot confirm that it exists.",
+		Description: "Returns one of the caller org's wallets: its scope, custody kind,\ntier, chain and on-chain address. The custody handle to the signing material is\nnever part of the answer. A wallet id another org owns reads as not found, so\nthe response cannot confirm that it exists.",
 		Fields: map[string]string{
 			"Wallet.Scope": "Org, Project, Agent, AccountID — the addressing scope",
 		},
 		Example: json.RawMessage(`{"id":"wal_4b1e77"}`),
 	})
 	zip.Describe("GET /v1/wallets/accounts", zip.Doc{
-		Description: "listAccounts returns the caller org's wallet accounts, newest first. Accounts\nare physically org-scoped, so another tenant's are not reachable from here.",
+		Description: "Returns the caller org's wallet accounts, newest first. Accounts\nare physically org-scoped, so another tenant's are not reachable from here.",
 		Fields: map[string]string{
 			"accountList.accounts": "Accounts are the org's accounts, newest first.",
 		},
 	})
 	zip.Describe("POST /v1/wallets", zip.Doc{
-		Description: "createWallet provisions a new signing identity under one of the caller org's\naccounts and answers the stored wallet including its on-chain address. The\ncustody backend generates the key material — a KMS-sealed secp256k1 key, an\nMPC threshold key on the ring, or a Safe smart wallet owned by one — and the\nHANDLE to it is kept server-side and never returned. A custody kind the\ndeployment has not wired fails CLOSED with 503: a signature is never\nfabricated. The wallet is scoped to the org, the caller's ambient project, and\noptionally an agent and the named account; those narrowings are what its key\nref is derived from, so each must be a url-safe segment.",
+		Description: "Provisions a new signing identity under one of the caller org's\naccounts and answers the stored wallet including its on-chain address. The\ncustody backend generates the key material — a KMS-sealed secp256k1 key, an\nMPC threshold key on the ring, or a Safe smart wallet owned by one — and the\nHANDLE to it is kept server-side and never returned. A custody kind the\ndeployment has not wired fails CLOSED with 503: a signature is never\nfabricated. The wallet is scoped to the org, the caller's ambient project, and\noptionally an agent and the named account; those narrowings are what its key\nref is derived from, so each must be a url-safe segment.",
 		Fields: map[string]string{
 			"Wallet.Scope":             "Org, Project, Agent, AccountID — the addressing scope",
 			"createWalletIn.accountId": "AccountID is the account this wallet belongs to. Required, and it must be\nan account of the caller's own org — an unknown one is a 404.",
@@ -47,14 +47,14 @@ func init() {
 		Example: json.RawMessage(`{"accountId":"acct_9f8c1d","name":"ops hot wallet","custody":"kms","tier":"hot","chain":"eip155:36963"}`),
 	})
 	zip.Describe("POST /v1/wallets/:id/keys", zip.Doc{
-		Description: "rotateKeys rolls one wallet's signing material through its own custody backend\nand answers the wallet with whatever address that produced. For KMS custody a\nfresh secp256k1 key is generated and sealed, which CHANGES the address — funds\nand approvals at the old address do not move. For a Safe the address is\ncounterfactual and the owner shares are ring-managed, so rotation is a no-op\nand the address is unchanged. A backend that is not configured fails closed\nwith 503 rather than leaving the wallet half-rotated.",
+		Description: "Rolls one wallet's signing material through its own custody backend\nand answers the wallet with whatever address that produced. For KMS custody a\nfresh secp256k1 key is generated and sealed, which CHANGES the address — funds\nand approvals at the old address do not move. For a Safe the address is\ncounterfactual and the owner shares are ring-managed, so rotation is a no-op\nand the address is unchanged. A backend that is not configured fails closed\nwith 503 rather than leaving the wallet half-rotated.",
 		Fields: map[string]string{
 			"Wallet.Scope": "Org, Project, Agent, AccountID — the addressing scope",
 		},
 		Example: json.RawMessage(`{"id":"wal_4b1e77"}`),
 	})
 	zip.Describe("POST /v1/wallets/:id/safe-tx", zip.Doc{
-		Description: "proposeSafeTx composes a Safe transaction on the MPC ring and answers its\nEIP-712 hash together with the owner approval the ring's threshold signature\nproduced. Only a wallet whose custody is \"safe\" can do this — any other custody\nis a 400, because the backend itself is asked whether it can propose rather\nthan the kind being switched on. The ring computes the Safe-tx hash bound to\nthe Safe contract and the chain id, so the hash a caller gets back is the one\nthe Safe will verify. This PROPOSES: it does not execute the transaction.",
+		Description: "Composes a Safe transaction on the MPC ring and answers its\nEIP-712 hash together with the owner approval the ring's threshold signature\nproduced. Only a wallet whose custody is \"safe\" can do this — any other custody\nis a 400, because the backend itself is asked whether it can propose rather\nthan the kind being switched on. The ring computes the Safe-tx hash bound to\nthe Safe contract and the chain id, so the hash a caller gets back is the one\nthe Safe will verify. This PROPOSES: it does not execute the transaction.",
 		Fields: map[string]string{
 			"safeProposal.r":           "R is the r component of the MPC threshold signature over the Safe-tx hash.",
 			"safeProposal.s":           "S is the s component of that signature.",
@@ -70,7 +70,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"wal_4b1e77","to":"0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984","value":"0","data":"0x","chainId":36963,"nonce":7}`),
 	})
 	zip.Describe("POST /v1/wallets/:id/sign", zip.Doc{
-		Description: "sign produces a secp256k1 signature from one of the caller org's wallets over\na 32-byte digest, through whichever custody backend that wallet uses. Give it\neither a `digest` (32 bytes as hex, signed verbatim) or a `message` (hashed\nwith Keccak256 first) — exactly one is required. The private key never leaves\nits backend: KMS custody opens the sealed key in-process, MPC custody produces\na threshold signature on the ring. The answer carries the digest that was\nsigned alongside the signature, so a caller can verify what it got.",
+		Description: "Produces a secp256k1 signature from one of the caller org's wallets over\na 32-byte digest, through whichever custody backend that wallet uses. Give it\neither a `digest` (32 bytes as hex, signed verbatim) or a `message` (hashed\nwith Keccak256 first) — exactly one is required. The private key never leaves\nits backend: KMS custody opens the sealed key in-process, MPC custody produces\na threshold signature on the ring. The answer carries the digest that was\nsigned alongside the signature, so a caller can verify what it got.",
 		Fields: map[string]string{
 			"signIn.digest":       "Digest is a pre-computed 32-byte digest as hex, with or without the 0x\nprefix. When present it is signed verbatim and message is ignored.",
 			"signIn.message":      "Message is arbitrary text to hash with Keccak256 and sign. Used only when\ndigest is empty.",
@@ -82,7 +82,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"wal_4b1e77","message":"approve withdrawal 42"}`),
 	})
 	zip.Describe("POST /v1/wallets/accounts", zip.Doc{
-		Description: "createAccount opens a named wallet account for the caller's org. An account is\na GROUPING of wallets, not a key or a balance: wallets are created under one\nand can be listed by it. The org is stamped by the server from the validated\nprincipal, so a request can never open an account in another tenant.",
+		Description: "Opens a named wallet account for the caller's org. An account is\na GROUPING of wallets, not a key or a balance: wallets are created under one\nand can be listed by it. The org is stamped by the server from the validated\nprincipal, so a request can never open an account in another tenant.",
 		Fields: map[string]string{
 			"createAccountIn.name": "Name is the account's label. Required, trimmed; it groups wallets and is\nnot itself a key.",
 		},

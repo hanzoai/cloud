@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/admin/subscriptions", zip.Doc{
-		Description: "Subscriptions answers GET /v1/admin/subscriptions.\n\n\tGET /v1/admin/subscriptions?org=&status=&limit=",
+		Description: "Answers GET /v1/admin/subscriptions.\n\n\tGET /v1/admin/subscriptions?org=&status=&limit=",
 		Fields: map[string]string{
 			"SubscriptionsIn.limit":  "Limit caps the rows returned. total still reports the full match count.",
 			"SubscriptionsIn.org":    "Org filters to one tenant, matched exactly.",
