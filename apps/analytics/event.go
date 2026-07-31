@@ -463,31 +463,35 @@ type door struct {
 //     (which tolerates a trailing slash) and never the site-host carve — the carve's
 //     byte-exact matching is not what holds this door open.
 //
-// The last three are SUNSETTING: they speak the canonical wire under an older name,
-// so they are aliases and the target is /v1/event. They are still here because they
-// still carry traffic, which is a caller fact and not a design opinion:
+// A door is a WIRE, never a NAME. /v1/analytics, /v1/analytics/batch and /v1/tracker
+// were three more spellings of the canonical wire already served above, and the ONE
+// thing that made them alternatives rather than duplicates — a caller that named them
+// — is gone:
 //
-//   - @hanzo/capture (the SDK @hanzo/event replaced) POSTs /v1/analytics and beacons
-//     /v1/tracker on unload. It is a PUBLISHED npm package, so retiring it in our
-//     repos does not retire the bundles already serving it.
-//   - /v1/analytics/batch is a published contract: openapi analytics_batch, the
-//     generated python SDK, and `hanzo analytics batch` in the CLI.
+//   - @hanzo/event (0.3.x) is the client every Hanzo surface now ships, and it posts
+//     the canonical door. The SDK it replaced, @hanzo/capture 0.1.1, POSTed
+//     /v1/analytics and beaconed /v1/tracker on unload; the fleet holds no importer
+//     of it, and its unload beacon had ALREADY stopped landing anywhere — apps/tracker
+//     owns /v1/tracker in the app manifest and registers only /v1/tracker/projects/…,
+//     so this package's entry for that path sat behind the tracker product's prefix
+//     and answered 405 in the fleet while passing its own single-app tests.
+//   - the batch alias was kept for "openapi analytics_batch, the generated python SDK,
+//     and `hanzo analytics batch`". Those name analytics.hanzo.ai — the standalone
+//     collector, whose batch takes an array of SendPayload and answers
+//     {size,processed,errors,details}. This package answers CaptureResult, and cloud
+//     serves none of that collector's routes (/v1/analytics/heartbeat is 404 here).
+//     They were never a contract on THIS door.
 //
-// $source is what closes THOSE THREE. Every row this package writes carries the door
-// it arrived through, so "has the alias stopped being used" is a warehouse query
-// (properties.$source = 'capture') rather than a guess — and when that count is zero
-// the three entries are deleted, which by construction also drops them from the routes
-// and from the site-host carve.
+// BATCH IS A BODY, NOT A PATH — the same reason there is no /v1/event/batch: a JSON
+// array, or a {batch:[…]} envelope, IS the batch, and decodeIngest takes both at the
+// one door. A second path for a second body shape is a second way to say one thing.
 //
-// The rule holds only because those callers name those paths themselves. It does NOT
-// generalize to /v1/insights/e, whose callers arrive through an ingress rewrite — see
-// its entry below before applying a $source count to any door.
+// The prefixes stay in the app manifest, because /v1/analytics still carries the READ
+// lenses (overview, timeseries, top, health) and /v1/tracker belongs to the tracker
+// product. What ends here is this package's claim on them as WRITE paths.
 var doors = []door{
 	{path: "/v1/event", decode: decodeIngest, wire: canonicalWire, source: sourceEvent},
 	{path: "/v1/insights/e", decode: decodeInsights, wire: insightsBody{}, source: sourcePostHog},
-	{path: "/v1/analytics", decode: decodeIngest, wire: canonicalWire, source: sourceCapture},
-	{path: "/v1/analytics/batch", decode: decodeIngest, wire: canonicalWire, source: sourceCapture},
-	{path: "/v1/tracker", decode: decodeIngest, wire: canonicalWire, source: sourceCapture},
 }
 
 // canonicalWire is what decodeIngest accepts, said in the document's own vocabulary:
