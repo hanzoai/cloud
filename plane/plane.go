@@ -53,6 +53,7 @@ const (
 	KMSGet  = "kms_get"
 	KMSPut  = "kms_put"
 	KMSSign = "kms_sign"
+	KMSDel  = "kms_delete"
 
 	IAMMailable = "iam_mailable"
 
