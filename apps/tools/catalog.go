@@ -53,10 +53,17 @@ const (
 	// syncPage is how many listings one upstream request asks for. 100 is the
 	// registry's documented maximum, so this is the fewest round trips it allows.
 	syncPage = 100
-	// syncPages bounds the walk. The cursor comes from a third party, so a loop
-	// that trusted it to end could be made not to; 200 pages is 20k listings,
-	// comfortably past the whole registry and nowhere near forever.
-	syncPages = 200
+	// syncPages is the walk's backstop. The public registry held 19,321 servers
+	// the first time this ran, so a cap chosen to be "comfortably past the whole
+	// registry" is a cap that starts SILENTLY TRUNCATING the catalog one good
+	// quarter from now — which is the failure it was written to prevent, arrived
+	// at quietly. So it sits two orders of magnitude out, and hitting it is an
+	// ERROR: a short catalog that says so beats a short catalog that does not.
+	//
+	// It is not the loop guard either. A cursor that never ends is a cursor that
+	// REPEATS, and Sync catches that directly (see seen) — which is both the real
+	// adversarial shape and immediate, rather than 5000 requests later.
+	syncPages = 5000
 	// syncBody bounds one upstream response.
 	syncBody = 8 << 20
 )
@@ -338,19 +345,19 @@ func (s *CatalogStore) Sync(ctx context.Context) (added, updated int, err error)
 		return 0, 0, err
 	}
 	base := registryURL()
-	cursor := ""
-	for page := 0; page < syncPages; page++ {
+	cursor, seen := "", map[string]bool{}
+	for page := 0; ; page++ {
 		batch, next, err := s.fetch(ctx, base, cursor)
 		if err != nil {
 			return added, updated, err
 		}
 		for _, l := range batch {
-			was, seen := have[l.ID]
+			was, held := have[l.ID]
 			if err := s.put(ctx, l); err != nil {
 				return added, updated, err
 			}
 			switch {
-			case !seen:
+			case !held:
 				added++
 			case was != l.digest():
 				updated++
@@ -360,9 +367,18 @@ func (s *CatalogStore) Sync(ctx context.Context) (added, updated int, err error)
 		if next == "" || len(batch) == 0 {
 			return added, updated, nil
 		}
+		// The cursor is a third party's, so the walk must not depend on it ending.
+		// A cursor already followed is a loop, and one more request would be the
+		// same request.
+		if seen[next] {
+			return added, updated, fmt.Errorf("tools: registry cursor %q repeated after %d pages", next, page+1)
+		}
+		seen[next] = true
+		if page+1 >= syncPages {
+			return added, updated, fmt.Errorf("tools: registry did not end after %d pages", syncPages)
+		}
 		cursor = next
 	}
-	return added, updated, nil
 }
 
 // registryURL is the upstream to sync from: the public registry, or the override
