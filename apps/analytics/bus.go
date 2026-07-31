@@ -60,6 +60,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/pubsub"
 	"github.com/hanzoai/commerce/infra"
+	"github.com/hanzoai/pubsub-go/jetstream"
 	"github.com/zap-proto/zip"
 )
 
@@ -84,6 +85,27 @@ var EventSubjects = []string{plane + ".>"}
 // would deliver to nobody rather than fail loudly — which is precisely why the spelling
 // is a constant here, in the plane's own package, and not a string literal at each end.
 const EventOrgKey = "org"
+
+// EventSignalKey is the field that says WHICH VOCABULARY a message on this plane
+// speaks, and it exists because two of them share it.
+//
+// A fact (message, below) carries it; the subscriber-facing EventEnvelope does not.
+// The two are separate contracts by design, and their subject spaces WOULD have kept
+// them apart — event.<signal> is a closed set of five, event.<folded product name> is
+// whatever a caller names an event — except that the fold maps a product event named
+// "$error" straight onto event.error, which is precisely the subject the fact plane's
+// error writer drains, and "$error" is what a browser error with no name of its own is
+// called. An open namespace minting a reserved token is the collision; the fold's
+// mapping is a PUBLISHED contract (orgs subscribe to it) and so cannot be the thing
+// that moves.
+//
+// So the discriminator is the BODY, not the subject: each consumer takes the
+// vocabulary it speaks and leaves the other alone. The warehouse lands facts and
+// ignores envelopes (warehouse.go); webhooks delivers envelopes and ignores facts
+// (apps/webhooks). It is a constant HERE, in the plane's own package, for the same
+// reason EventOrgKey is — a consumer that spelled it itself would silently take the
+// wrong half.
+const EventSignalKey = "signal"
 
 // Retention. The stream is a HAND-OFF to the consumers, not the system of record — the
 // warehouse is — so it holds enough for a consumer to be down, redeployed or added and
@@ -145,25 +167,64 @@ func (b *bus) connect(ctx context.Context) (*infra.PubSubClient, error) {
 	return cl, nil
 }
 
-// EnsureEventStream creates the event plane if it is not there yet, with the retention
-// this package chose for it. It is idempotent (create-if-missing) and it is the ONE
-// declaration of the stream's configuration anywhere in the platform.
+// EnsureEventStream RECONCILES the event plane to the configuration this package chose
+// for it, creating it when absent. It is the ONE declaration of that configuration
+// anywhere in the platform.
 //
 // It is EXPORTED so a consumer can make sure the plane exists before binding a durable
 // to it — a consumer that starts before the first ingest would otherwise find no stream
-// — WITHOUT holding a second copy of the config. Whoever calls it first creates the
-// stream, and because there is only one config, it does not matter who that is.
+// — WITHOUT holding a second copy of the config. Whoever calls it first applies it, and
+// because there is only one config, it does not matter who that is.
+//
+// RECONCILES, NOT CREATE-IF-MISSING, and the difference is the whole point. A
+// create-if-missing ensure returns success the moment the stream exists and never looks
+// at what it looks like, so every constant below was decorative on a live deployment:
+// raising the ceiling, shortening the hand-off window, or fixing the discard policy
+// changed the source and nothing else, forever. CreateOrUpdateStream applies them.
+//
+// DISCARD NEW, NOT OLD, which is the config that was silently wrong. On a full stream
+// the JetStream default (DiscardOld) evicts the OLDEST messages to make room — and the
+// oldest messages on a hand-off stream are precisely the ones no consumer has drained
+// yet. That is data the door already answered 200 for, deleted to make room for data the
+// door has not answered for yet, with no error at either end. DiscardNew inverts it: a
+// full stream REFUSES THE PUBLISH, so publishToStream fails, the door answers 503, and
+// the client retries — backpressure the caller can see instead of loss nobody can. The
+// ceiling stops being a silent shredder and becomes what it reads like: a limit.
+//
+// MaxAge still expires drained-or-not after streamAge. That is the deliberate hand-off
+// window, not a capacity failure, and a consumer down for three days is an outage to
+// alarm on rather than a case to size storage for.
+//
+// It goes through cl.JetStream() rather than infra.EnsureStream because the wrapper
+// models neither operation this needs: its StreamConfig has no Discard field at all,
+// and it returns early the moment the stream exists. That accessor is exported for
+// exactly this — a caller that needs a capability the thin wrapper does not carry —
+// and this package is the stream's owner, so the full config belongs here in the
+// vocabulary that can express it. The wrapper's own create-if-missing behavior is a
+// platform-wide defect (every other stream in the fleet is declared through it and is
+// equally undeclarable after creation); fixing it there is a change to hanzoai/commerce
+// and to every stream owner at once, which is not this package's to make.
 func EnsureEventStream(ctx context.Context, cl *infra.PubSubClient) error {
-	return cl.EnsureStream(ctx, &infra.StreamConfig{
-		Name:        EventStream,
-		Description: "the event plane: every signal, one log",
-		Subjects:    EventSubjects,
-		// LimitsPolicy — every consumer gets its own copy. See the file header.
-		Retention: infra.RetentionLimits,
-		Storage:   infra.StorageFile,
-		MaxAge:    streamAge,
-		MaxBytes:  streamBytes,
-	})
+	js := cl.JetStream()
+	if js == nil {
+		return fmt.Errorf("jetstream not enabled on %s", busURL())
+	}
+	_, err := js.CreateOrUpdateStream(ctx, eventStream)
+	return err
+}
+
+// eventStream is that configuration as a VALUE, so what the plane is declared to be can
+// be read — and asserted — without a bus to apply it to.
+var eventStream = jetstream.StreamConfig{
+	Name:        EventStream,
+	Description: "the event plane: every signal, one log",
+	Subjects:    EventSubjects,
+	// LimitsPolicy — every consumer gets its own copy. See the file header.
+	Retention: jetstream.LimitsPolicy,
+	Storage:   jetstream.FileStorage,
+	MaxAge:    streamAge,
+	MaxBytes:  streamBytes,
+	Discard:   jetstream.DiscardNew,
 }
 
 // drop marks the connection dead so the next publish re-dials.
@@ -440,6 +501,14 @@ type messageSample struct {
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
+// errNotAFact says the payload is well-formed JSON that simply is not a fact — it names
+// no signal, so it belongs to the other vocabulary on this plane (EventSignalKey). It is
+// a SENTINEL and not a bare error because the difference is the difference between a
+// message this consumer should ignore and a fact it has just LOST: counting an
+// EventEnvelope as an unlandable fact would make the loss counter read non-zero on every
+// browser error and mean nothing at all (warehouse.go).
+var errNotAFact = errors.New("message names no signal")
+
 // decodeMessage reads a published message back off the bus. It is the ONE decode of
 // the plane's own contract — the inverse of wire — so a consumer never parses the
 // payload by hand.
@@ -449,7 +518,7 @@ func decodeMessage(data []byte) (message, error) {
 		return message{}, err
 	}
 	if strings.TrimSpace(m.Signal) == "" {
-		return message{}, errors.New("message names no signal")
+		return message{}, errNotAFact
 	}
 	return m, nil
 }

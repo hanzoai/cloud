@@ -41,8 +41,15 @@ func TestFoldException(t *testing.T) {
 	if got.Type != "error" {
 		t.Fatalf("type = %q, want error", got.Type)
 	}
-	if got.Error != nil {
-		t.Fatalf("error object must be lifted out (nil after fold), got %+v", got.Error)
+	// The exception SURVIVES the fold, redacted. It used to be nilled here, which was
+	// right while the property bag was the only place an error could go; the event also
+	// becomes a fact now, and faultOf reads this field to fill event.error's message,
+	// class and group. Erased, that table got rows with none of the three.
+	if got.Error == nil {
+		t.Fatal("fold erased the exception — event.error's message, class and group come from it")
+	}
+	if got.Error.Message != "x is not a function" || got.Error.Type != "TypeError" {
+		t.Fatalf("folded exception = %+v, want the redacted original", got.Error)
 	}
 	ex, ok := got.Properties["$exception"]
 	if !ok {

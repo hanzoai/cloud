@@ -188,8 +188,10 @@ var proseless = map[string]bool{
 	"CaptureResult": true,
 	// The PostHog wire — now served on /v1/event, sniffed by decodeEvent.
 	"insightsBody": true, "insightsEvent": true,
-	// The health probe's report — the one body that is the same at 200 and 503.
-	"healthReport": true, "healthLenses": true, "healthLens": true,
+	// The health probe's report — the one body that is the same at 200 and 503 —
+	// including the sink's irrecoverable-loss counters, which reach the document
+	// nested inside it through that same Register seam.
+	"healthReport": true, "healthLenses": true, "healthLens": true, "loss": true,
 }
 
 // TestEveryPublishedFieldIsDescribed covers the RESPONSE side the op-level gate
@@ -430,6 +432,11 @@ func TestHealthReportKeepsTheMapItReplaced(t *testing.T) {
 	want := map[string]any{
 		"service": "analytics", "status": "degraded", "datastore": false, "warehouse": "hanzo",
 		"reason": "datastore (datastore) not connected",
+		// `lost` is present on the DEGRADED report too, and that is the point of it
+		// being here rather than under omitempty: an unreachable warehouse is exactly
+		// when deliveries start failing, so a zero that disappears at the moment the
+		// number would move is worse than useless to whoever is reading this.
+		"lost": map[string]any{"undecodable": float64(0), "exhausted": float64(0)},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("degraded report = %v, want exactly %v — lenses must be ABSENT, not null: the "+

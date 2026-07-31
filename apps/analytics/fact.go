@@ -392,7 +392,7 @@ func annotationOf(props map[string]any) annotation {
 // time (the read lenses do exactly that for revenue and quantity).
 //
 // Empty values are OMITTED rather than stored blank: an absent key and an empty one
-// read identically out of a ClickHouse Map, so writing the blank buys nothing and costs
+// read identically out of a datastore Map, so writing the blank buys nothing and costs
 // a key in every row's LowCardinality dictionary.
 func attributesOf(props map[string]any, e CaptureEvent) map[string]string {
 	out := make(map[string]string, len(props)+8)

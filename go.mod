@@ -450,7 +450,7 @@ require (
 	github.com/hanzoai/gochimp3 v1.0.0 // indirect
 	github.com/hanzoai/orm v0.6.18
 	github.com/hanzoai/pdf v1.2.0 // indirect
-	github.com/hanzoai/pubsub-go v1.53.0 // indirect
+	github.com/hanzoai/pubsub-go v1.53.0
 	github.com/hanzoai/search-go v0.36.0 // indirect
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
 	github.com/hanzoai/tasks v1.52.4
