@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // campaign.go is the in-process CAMPAIGN-METRICS seam over the ONE analytics
-// warehouse: the /v1/campaign plane (clients/campaign) reads a campaign's funnel
+// warehouse: the /v1/campaign plane (apps/campaign) reads a campaign's funnel
 // from HERE rather than opening a second store. A campaign's results ARE an
 // analytics query scoped to the campaign — the utm_campaign-tagged events in
 // hanzo.events — so there is one metrics plane, not a parallel one.
@@ -86,7 +86,10 @@ func CampaignMetrics(ctx context.Context, org, campaignID, variant string, start
 	sql := "SELECT " +
 		"countIf(event = 'impression' OR event = 'ad_impression') AS impressions, " +
 		"countIf(event = 'click' OR event = 'ad_click') AS clicks, " +
-		"countIf(event = 'order_completed' OR event = 'signup' OR event = 'conversion') AS conversions, " +
+		// signup_completed is the terminal event of the signup funnel (@hanzo/event
+		// EVENTS grammar: <object>_<verb-past>); a bare 'signup' was counted here
+		// before, an event NOTHING emits — signup conversions always read zero.
+		"countIf(event = 'order_completed' OR event = 'signup_completed' OR event = 'conversion') AS conversions, " +
 		"toFloat64(sum(revenue)) AS revenue, " +
 		"uniqExact(distinct_id) AS visitors " +
 		"FROM " + eventsTable + " WHERE " + where

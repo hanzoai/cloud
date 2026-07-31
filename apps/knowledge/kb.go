@@ -1,9 +1,13 @@
-// Package kb declares the Hanzo Knowledge Base + unified AI memory model as
-// DocType fixtures on the framework engine (clients/framework), and wires the ONE
-// per-org vector-indexing path (index.go) that turns every knowledge document
-// into retrievable org memory. It is the FOURTH app lane after cms/erp/help and
-// the one that makes "a Notion-like wiki + agent memory" just another module on
-// Base — no new Base, no new database.
+// Package knowledge is the org's knowledge base and agent memory at /v1/kb: wiki
+// pages, memories and connector-ingested documents are ONE framework document
+// store, indexed into the org's own vector namespace on every save and read back
+// as semantic search, a link graph, or an imported vault.
+//
+// The model is declared here as DocType fixtures on the framework engine
+// (clients/framework), and index.go wires the ONE per-org vector path that turns
+// every knowledge document into retrievable org memory. It is the FOURTH app lane
+// after cms/erp/help and the one that makes "a Notion-like wiki + agent memory"
+// just another module on Base — no new Base, no new database.
 //
 // Like cms/erp/help, the content model is fixtures: a wiki page IS a framework
 // document (module "kb"), a memory IS a framework document, an ingested doc from

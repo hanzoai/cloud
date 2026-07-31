@@ -53,8 +53,28 @@ type Logger interface {
 //
 // The returned Closer stops accepting and removes the socket. A nil Closer means
 // this process does not broker, which is the normal case for 107 of 108 apps.
+//
+// The process that WAS asked to broker and declined says which half was missing.
+// That silence cost real time: on 2026-07-29 the pubsub child died with
+// "CLOUD_KMS_MASTER_KEY_REF is required" while the broker child booted clean, and
+// nothing in either log said the deployment had no broker at all. Because a child
+// launched by the host always carries a CREDZ_TOKEN, and resolve() refuses to fall
+// back to a dev key once a token is present, a missing broker means EVERY child
+// resolves Unkeyed and fails closed at its first store open — the loudest possible
+// consequence from the quietest possible cause. A declining broker is only boring
+// when it was never the broker (not Root); the other two reasons are a
+// misconfiguration this line names.
 func Publish(p Posture, src Source, dataDir, adminOrg string, log Logger) (io.Closer, error) {
 	if p != Root || src == nil || adminOrg == "" {
+		if p == Root {
+			// This process holds the root key, so it IS the intended broker, and it
+			// is about to serve nothing. Say which half is missing: src == nil means
+			// the sealed store did not open in this process (pickKMSClient failed
+			// closed), and an empty adminOrg means it has no scope to delegate.
+			log.Error("credz broker NOT started although this process holds the root key: "+
+				"every other child will resolve Unkeyed and fail closed at its first store open",
+				"have_store", src != nil, "admin_org", adminOrg)
+		}
 		return nil, nil
 	}
 	sock := filepath.Join(dataDir, SockName)

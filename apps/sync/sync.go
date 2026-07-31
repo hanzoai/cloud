@@ -1,7 +1,7 @@
-// Package sync is the universal sync service (/v1/sync): cloud↔cloud data
-// sync between connected platforms, expressed as Syncs the engine runs. Git
-// (GitHub/GitLab ⇆ native Hanzo Git) is the FIRST provider; storage, db, and other
-// kinds are new providers at their own kind with nothing in the engine to change.
+// Package sync is data sync (/v1/sync): a Sync links two endpoints and the engine
+// reconciles them — on a webhook, on a schedule, or on an explicit run. Git
+// (GitHub/GitLab ⇆ native Hanzo Git) is the one provider registered today; another
+// kind is another Provider, with nothing in the engine to change.
 //
 // Shape (decomplected):
 //   - store.go        ONE table, syncs — the sync intent + engine cursor state.
@@ -17,9 +17,11 @@ package sync
 
 import (
 	"fmt"
+	"net/http"
 	"sync/atomic"
 
 	"github.com/hanzoai/cloud"
+	"github.com/zap-proto/zip"
 )
 
 // state is the subsystem's mounted state: the per-org syncs store cache.
@@ -62,7 +64,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted.Store(s)
 
-	routes(app, s)
+	if err := routes(app, s); err != nil {
+		return err
+	}
 	registerProvider(gitProvider{})
 	cloud.RegisterSync(reconcileEvent)
 	schedStop = startScheduler(s) // freshness: periodic reconcile of every poll sync (env-gated)
@@ -88,24 +92,57 @@ func Shutdown() error {
 	return err
 }
 
+// terminal adapts cloud.Terminal to zip's leaf-wrapping Middleware so a TYPED op
+// gets the same in-band error write an untyped handler got from
+// cloud.Terminal(cloud.Handle(...)). ONE implementation of the behaviour, reached two
+// ways — this is a signature adapter, not a second copy: zip.Handler is a defined
+// type, so `func(Handler) Handler` and cloud.Terminal's `func(func(*Ctx) error)
+// func(*Ctx) error` are not the same type even though each value converts.
+func terminal(next zip.Handler) zip.Handler { return cloud.Terminal(next) }
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document,
+// the MCP tool list and the generated SDK — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // routes registers the /v1/sync control plane: the record and the service share the
 // one word "sync". Org-scoped like every tenant surface (the gateway-validated
 // principal selects the org).
 //
-// Every handler is wrapped in cloud.Terminal: sync mounts AFTER the commerce embed,
-// whose /v1 ErrorHandlerJSON filter flattens any PROPAGATED handler error to HTTP
-// 500. Terminal writes the reject status (401 no-principal, 400 bad body, 404
-// not-found) in-band, so the filter has nothing to flatten and the real 4xx stands.
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Collection endpoints sit AT the group root (/v1/sync). Group(p).Method("")
-	// yields "p/", so these stay flat on app to preserve the exact path.
-	app.Post("/v1/sync", cloud.Terminal(cloud.Handle(s, createSync)))
-	app.Get("/v1/sync", cloud.Terminal(cloud.Handle(s, listSyncs)))
-	g := app.Group("/v1/sync")
-	g.Get("/:id", cloud.Terminal(cloud.Handle(s, getSync)))
-	g.Patch("/:id", cloud.Terminal(cloud.Handle(s, patchSync)))
-	g.Delete("/:id", cloud.Terminal(cloud.Handle(s, deleteSync)))
+// Every op is wrapped in cloud.Terminal: sync mounts AFTER the commerce embed, whose
+// /v1 ErrorHandlerJSON filter flattens any PROPAGATED handler error to HTTP 500.
+// Terminal writes the reject status (401 no-principal, 400 bad body, 404 not-found)
+// in-band, so the filter has nothing to flatten and the real 4xx stands. With(...)
+// carries that wrapper down to a typed op exactly as it wraps an untyped leaf, so
+// going typed did not cost this surface its real statuses.
+//
+// The group is "/v1" and each op names its own "/sync…" leaf, because the collection
+// endpoints sit AT /v1/sync and a group prefix composed with an empty leaf yields
+// "/v1/sync/" — a different address. Composed this way every op's published path is
+// exactly the path the router matches.
+//
+// cloud.Bridge comes FIRST, ahead of every leaf: a typed op receives a
+// context.Context and its decoded In and nothing else, so the validated org crosses
+// on the context. Serve installs the same middleware binary-wide; nesting is harmless
+// (the inner one is the one the handler sees) and declaring it here is what makes the
+// subsystem self-sufficient when a test or a non-Serve composition root mounts it on
+// a bare app.
+func routes(app cloud.Router, s *cloud.Service[state]) error {
+	app.Use(cloud.Bridge())
+	za := cloud.ZipApp(app)
+	if za == nil {
+		return fmt.Errorf("sync.Mount: router exposes no op registry")
+	}
+	g := za.With(terminal).Group("/v1")
+	o := syncOps{s: s}
+	zip.Post(g, "/sync", o.create)
+	zip.Get(g, "/sync", o.list)
+	zip.Get(g, "/sync/:id", o.get)
+	zip.Patch(g, "/sync/:id", o.patch)
+	zip.Delete(g, "/sync/:id", o.delete)
 	// Manual run: reconcile one sync now (initial import, or a re-sync after an
 	// upstream you couldn't webhook). A distinct trailing segment, never shadows :id.
-	g.Post("/:id/run", cloud.Terminal(cloud.Handle(s, runSync)))
+	zip.Post(g, "/sync/:id/run", o.run, zip.WithStatus(http.StatusAccepted))
+	return nil
 }

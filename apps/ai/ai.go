@@ -1,6 +1,7 @@
-// Package ai wires the hanzoai/ai module into a cloud binary: it installs the
-// money, ingest and telemetry callbacks cloud BUILDS but cannot INSTALL, then
-// mounts ai.
+// Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+// /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+// a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS
+// but cannot INSTALL.
 //
 // It cannot live in package cloud — github.com/hanzoai/ai imports
 // github.com/hanzoai/cloud, so that direction is an import cycle. It lived in
@@ -17,6 +18,7 @@ package ai
 
 import (
 	"context"
+	"fmt"
 
 	aimod "github.com/hanzoai/ai"
 	aiobject "github.com/hanzoai/ai/object"
@@ -45,21 +47,46 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if cloud.TracerProviderInstalled() {
 		aiobject.AdoptHostTracerProvider()
 	}
-	if f := cloud.TierReader(); f != nil {
-		aiobject.SetTierReader(aiobject.TierReaderFunc(f))
-	}
-	if f := cloud.BalanceReader(); f != nil {
-		aiobject.SetBalanceReader(aiobject.BalanceReaderFunc(f))
-	}
-	if f := cloud.UsageRecorder(); f != nil {
-		aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
-			return f(ctx, cloud.UsageEvent{
-				Subject: u.Subject, Namespace: u.Namespace, USD: u.USD,
-				Currency: u.Currency, Model: u.Model, Provider: u.Provider,
-				RequestID: u.RequestID,
-			})
+	// TRAMPOLINES, not snapshots — for the same reason the rolling-cap hook below is
+	// one, and it is not a hypothetical: `ai` is a LAZY plugin (it mounts on the first
+	// /v1/chat/completions), so it can mount before the app that installs these hooks.
+	// A nil snapshot then latches for the PROCESS LIFETIME, and the money hooks have no
+	// benign nil: with no native balance reader the ai module falls back to an HTTP
+	// self-call to /v1/billing/*, which the edge 401s (the toothless-gate bug named in
+	// cloud/build.go wireTierReader) — and the balance gate is fail-CLOSED, so every
+	// completion answered 503 balance_unavailable. Observed in prod on v1.801.320:
+	// "balance_gate: balance unverifiable for cold subject=hanzo: commerce returned 401
+	// (fail-CLOSED, retryable)" on a pod whose commerce plugin was fully mounted 10
+	// minutes later. Resolving per call takes mount order out of the equation.
+	aiobject.SetTierReader(func(ctx context.Context, subject, namespace string) (string, error) {
+		f := cloud.TierReader()
+		if f == nil {
+			return "", nil // unknown tier → the gate ALLOWs, the documented fail-safe
+		}
+		return f(ctx, subject, namespace)
+	})
+	aiobject.SetBalanceReader(func(ctx context.Context, subject, namespace, currency string) (int64, error) {
+		f := cloud.BalanceReader()
+		if f == nil {
+			// Say WHICH wiring is missing. Returning 0 would read as a real zero balance
+			// and deny a paying caller as "insufficient"; the ai module's other branch —
+			// an HTTP self-call to /v1/billing/* — is the path the edge 401s, so it is
+			// deliberately unreachable from cloud. Fail closed, and legibly.
+			return 0, fmt.Errorf("no native balance reader installed in this process (commerce/finance not wired); refusing to guess a balance")
+		}
+		return f(ctx, subject, namespace, currency)
+	})
+	aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
+		f := cloud.UsageRecorder()
+		if f == nil {
+			return nil // nothing to debit through; ai's own path records it
+		}
+		return f(ctx, cloud.UsageEvent{
+			Subject: u.Subject, Namespace: u.Namespace, USD: u.USD,
+			Currency: u.Currency, Model: u.Model, Provider: u.Provider,
+			RequestID: u.RequestID,
 		})
-	}
+	})
 	if d := cloud.IngestDialer(); d != nil {
 		aiobject.SetIngestDialer(d)
 	}
@@ -74,5 +101,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		}
 		return f(ctx, subject, namespace)
 	})
+	// UNTYPED BY DESIGN, and NOT this package's to fix. aimod.Mount registers a
+	// single `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy beego
+	// ControllerRegister through zip.AdaptNetHTTP, so ai's ~200 real routes —
+	// /v1/chat/completions, /v1/models, /v1/messages and the rest — reach the wire
+	// through ONE greedy wildcard. Typing it here is impossible on three counts
+	// (All has no typed registrar; a `{wildcard1}` path segment cannot be a bound
+	// In field; the adapter relays the beego handler's own status and Content-Type
+	// verbatim), and typing it AT ALL means declaring ops inside github.com/hanzoai/ai
+	// where those handlers live. The consequence is worth stating plainly because
+	// it is the largest hole in the fleet document: plugin/ai/openapi.json publishes
+	// seven operations at /v1/{wildcard1} and NONE of the AI API, so no generated
+	// SDK and no MCP tool list carries chat completions today.
 	return aimod.Mount(app, deps)
 }

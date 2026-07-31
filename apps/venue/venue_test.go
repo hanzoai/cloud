@@ -337,7 +337,7 @@ func TestDigitalOcean_LinkDiscoversAndFolds(t *testing.T) {
 		t.Fatalf("response leaked the token: %s", res.Body)
 	}
 	var out struct {
-		Account  accountView     `json:"account"`
+		Account  cloudAccountView     `json:"account"`
 		Clusters []clusterResult `json:"clusters"`
 	}
 	if err := json.Unmarshal(res.Body, &out); err != nil {
@@ -396,7 +396,7 @@ func TestMultiCredentialPerOrg(t *testing.T) {
 
 	list := call(t, app, http.MethodGet, "/v1/cloud/accounts", "acme", "", false, nil)
 	var lv struct {
-		Accounts []accountView `json:"accounts"`
+		Accounts []cloudAccountView `json:"accounts"`
 	}
 	_ = json.Unmarshal(list.Body, &lv)
 	if len(lv.Accounts) != 2 {
@@ -430,7 +430,7 @@ func TestTenantIsolation(t *testing.T) {
 	// org2 sees no accounts.
 	l2 := call(t, app, http.MethodGet, "/v1/cloud/accounts", "org2", "", false, nil)
 	var lv struct {
-		Accounts []accountView `json:"accounts"`
+		Accounts []cloudAccountView `json:"accounts"`
 	}
 	_ = json.Unmarshal(l2.Body, &lv)
 	if len(lv.Accounts) != 0 {

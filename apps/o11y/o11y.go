@@ -7,7 +7,8 @@
 //	  - tenant-scoped reads  /v1/o11y/{logs,metrics,status}   (scope.go)
 //	  - SuperAdmin VM proxy  /v1/o11y/vm/{query,query_range}   (vmproxy.go)
 //	  - flat builder query   /v1/o11y/{query,query_range}      (query.go)
-//	  - LLM-obs event ingest POST /v1/o11y/ingestion           (event_ingest.go)
+//	  - event ingest         POST /v1/event/ingestion          (event_ingest.go)
+//	  - Sentry-wire ingest   POST /v1/event/{project}/envelope|store (via cloud.ObsErrorIngest)
 //	RUNTIME handler the hanzoai/o11y wildcard (order 70) delegates to via
 //	  o11y.SetHandler — the in-process runtime (embed.go) or a reverse-proxy
 //	  fallback (this file).
@@ -88,14 +89,27 @@ func newHandler(rawURL string) (http.Handler, error) {
 	return proxy, nil
 }
 
-// gate refuses any request that carries no validated principal before it reaches
-// the o11y runtime. The bare reverse proxy forwards ALL inbound headers upstream,
-// including a client-forged X-Org-Id restored on the bearer-less path; without
-// this an off-gateway caller reads another tenant's telemetry/logs. X-User-Id is
-// set ONLY by the identity middleware from a verified credential (the same signal
-// principal.Validated uses), so its presence is the authoritative principal gate.
-// Every legitimate /v1/o11y/* caller arrives through the console BFF with a
-// user-bound bearer, so this refuses only the anonymous-forge path.
+// gate decides, per request, WHAT SCOPE the o11y runtime may serve — it is not a
+// single all-or-nothing admission test:
+//
+//	no validated principal            → 403 (the anonymous-forge path)
+//	a member of an org                → that org, and only that org
+//	a validated platform SuperAdmin   → the cross-tenant view
+//
+// The middle line is the product: Sentry/o11y telemetry is a TENANT's own data,
+// so org membership is the whole admission test and there is deliberately no
+// admin term on it. Gating the product itself on platform sudo would make the
+// only way to see your own errors a scope that shows you everyone's — the same
+// predicate at the wrong level. It is applied ONE LEVEL IN instead
+// (scopeToTenant): SuperAdmin buys the cross-tenant selectors, nothing else.
+//
+// X-User-Id is set ONLY by the identity middleware from a verified credential
+// (the same signal principal.Validated uses), so its presence is the
+// authoritative principal term; X-Org-Id is minted the same way from the
+// principal's `owner`. The bare reverse proxy forwards ALL inbound headers and
+// the query string upstream, so an org-less caller is refused rather than served
+// unscoped, and a member's cross-org query keys are stripped before the runtime
+// can honour them.
 //
 // Liveness/readiness endpoints are exempt: they carry NO tenant data (the o11y
 // runtime itself serves them without identity — that is how the k8s pod probes
@@ -115,15 +129,81 @@ func newHandler(rawURL string) (http.Handler, error) {
 // /v1/o11y/api/vN/… and the Issues list/detail remain principal-gated.
 func gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isHealthPath(r.URL.Path) && !isErrorIngestPath(r.Method, r.URL.Path) && !isSentryIngestPath(r.Method, r.URL.Path) && strings.TrimSpace(r.Header.Get("X-User-Id")) == "" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(`{"status":"error","msg":"no validated principal"}`))
+		if isHealthPath(r.URL.Path) || isErrorIngestPath(r.Method, r.URL.Path) || isSentryIngestPath(r.Method, r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if strings.TrimSpace(r.Header.Get("X-User-Id")) == "" {
+			refuse(w, "no validated principal")
+			return
+		}
+		// The PRODUCT is org-scoped: errors, logs, traces and metrics are a
+		// tenant's own telemetry, so MEMBERSHIP OF AN ORG is the whole admission
+		// test. Admin-gating the product is what made sentry.hanzo.ai answer
+		// "Access required — admin-only surface" to a signed-in customer whose
+		// own errors were sitting in event.error. Platform sudo belongs one level
+		// in, on the cross-tenant fleet view, not on the product.
+		//
+		// A SuperAdmin passes without an org because the admin console reads
+		// before an org is selected. It buys reach, not data: the runtime still
+		// scopes every read from X-Org-Id, so an org-less request returns an
+		// org-less result rather than the fleet.
+		if superAdmin(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if orgOf(r) == "" {
+			refuse(w, "an org-scoped principal is required")
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
 }
+
+// refuse writes the gate's fail-closed answer. ONE writer, so every refusal on
+// this seam is the same shape (403 + JSON reason) whatever term rejected it.
+func refuse(w http.ResponseWriter, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusForbidden)
+	_, _ = w.Write([]byte(`{"status":"error","msg":"` + msg + `"}`))
+}
+
+// superAdmin is the SAME platform-sudo predicate scope.go's admin() owns —
+// X-User-IsAdmin, minted by SanitizeIdentity ONLY for a verified member of the
+// reserved admin org and never restored from client input. Read off the request
+// here because this seam is a net/http handler, not a zip.Ctx.
+func superAdmin(r *http.Request) bool { return r.Header.Get("X-User-IsAdmin") == "true" }
+
+// orgOf is the validated tenant SanitizeIdentity pinned from the principal's
+// `owner` claim. A client copy never survives ingress, so this value is either
+// server-minted or absent.
+func orgOf(r *http.Request) string { return strings.TrimSpace(r.Header.Get("X-Org-Id")) }
+
+// THERE IS NO QUERY-KEY ORG FILTER HERE, AND THERE MUST NOT BE ONE.
+//
+// A `scopeToTenant` used to sit at this seam, deleting ?org=/?orgId=/?tenant=/
+// ?allOrgs= from a non-admin's request "so org A cannot read org B". It was
+// removed because it did nothing and hid a bypass while claiming to be a control:
+//
+//   - INERT. hanzoai/o11y has no query-parameter org selector to strip. Every
+//     read handler takes its tenant from orgFromContext -> ClaimsFromContext,
+//     set only by the iamidentn provider from the X-Org-Id this gate validated.
+//     DiscoverRequest, the one POST body read, carries no org field either. The
+//     eight keys were read by nothing.
+//   - BYPASSABLE. Go's url.ParseQuery SKIPS any pair containing a semicolon, so
+//     `?org=victim;x=1` made q.Has("org") false, nothing was stripped, and
+//     RawQuery was forwarded verbatim — org=victim included. A denylist over a
+//     lossy parser is not a filter. It was also case-sensitive (Org=, ORG= passed)
+//     and named none of organization=, owner=, orgs=, workspace=, customerId=.
+//   - LOSSY. Whenever a listed key did appear the whole query was re-parsed and
+//     re-Encoded, silently dropping pairs Go rejects (?bad=%zz) and rewriting
+//     %20 to + inside a caller's legitimate ?query=.
+//
+// Isolation is the org pin, not the query string: SanitizeIdentity deletes every
+// client X-Org-*/X-User-* header at ingress and re-mints X-Org-Id from the
+// validated principal's own claim, and the runtime scopes from that alone. If a
+// future runtime ever DOES read an org from the query, the fix is to stop it
+// reading one — not to guess the spellings here.
 
 // isSentryIngestPath reports whether r is a Hanzo Sentry error-ingest WRITE the
 // runtime authenticates with a DSN key (not a Hanzo principal): POST to
@@ -238,14 +318,42 @@ func mountSentry(a cloud.Router) {
 	})))
 }
 
+// eventToRuntimePath maps the Sentry wire on the ONE /v1/event door to its
+// runtime route: POST /v1/event/<project>/envelope|store(/) onto the clean
+// /v1/sentry ingest routes. ok=false for anything else — the mapping carries
+// ingest ONLY, so no READ API is reachable through it.
+func eventToRuntimePath(method, path string) (string, bool) {
+	rest, found := strings.CutPrefix(path, "/v1/event/")
+	if !found {
+		return "", false
+	}
+	mapped := "/v1/sentry/" + rest
+	return mapped, isSentryIngestPath(method, mapped)
+}
+
 // mountO11y is the ONE mount for the whole observability concept. It performs the
 // ordered sub-mounts in-process so the public registry carries a single `o11y`
 // name. Every cloud-native /v1/o11y/* route is registered here — inside this one
 // order-69 mount, hence BEFORE the hanzoai/o11y wildcard (order 70) — so Fiber's
 // in-order match gives the specific routes precedence over the runtime proxy.
 func MountO11y(a *zip.App, deps cloud.Deps) error {
+	// Bridge FIRST, on the subtree the typed ops live under. A typed op receives
+	// only a context, so the validated org reaches it by being parked there —
+	// never as an In field, which is caller-supplied and would be a cross-tenant
+	// read the caller asserted for itself. fiber runs middleware in registration
+	// order, so this must precede every leaf below.
+	//
+	// It has to be installed HERE, not only by cloud.Serve, because o11y runs as
+	// its OWN process (plugin/o11y/main.go builds a bare zip.App and mounts this).
+	// The host's app-wide Bridge parks the org on a context in the HOST; the
+	// request crosses to this process as headers, so without this install every
+	// typed op in the child would answer 403 for a caller the host had already
+	// validated. Nesting under Serve's own Bridge — the fused case — is harmless:
+	// the inner one is what the handler sees.
+	a.Group(o11yPrefix).Use(cloud.Bridge())
+
 	// READ/SERVE plane — specific routes before the wildcard.
-	if err := mountEventIngest(a, deps); err != nil { // POST /v1/o11y/ingestion
+	if err := mountEventIngest(a, deps); err != nil { // POST /v1/event/ingestion
 		return err
 	}
 	mountScope(a)  // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
@@ -270,6 +378,27 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// to mount /v1/sentry as a second prefix or the request 404s before it ever
 	// reaches this process — see cloud.PluginSpec in apps.Wire().
 	mountSentry(a)
+	// The Sentry wire on the ONE /v1/event door: POST /v1/event/{project}/envelope|store.
+	// The door's owner (analytics) carries the route — the project segment is
+	// variable, so no static prefix could route it here — and forwards through
+	// cloud.ObsErrorIngest to this handler, which rewrites onto the /v1/sentry
+	// runtime routes BEFORE the principal gate sees the path, so the existing
+	// ingest exemption stays the only exemption. No /api/ segment anywhere:
+	// /v1/ is the only prefix this platform speaks.
+	cloud.SetObsErrorIngest(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mapped, ok := eventToRuntimePath(r.Method, r.URL.Path)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		h := runtimeHandler
+		if h == nil {
+			http.Error(w, "o11y runtime not initialized", http.StatusServiceUnavailable)
+			return
+		}
+		r.URL.Path = mapped
+		h.ServeHTTP(w, r)
+	}))
 	// WRITE plane — opt-in, order-independent (no /v1/o11y/* Fiber route).
 	if err := mountIngest(deps); err != nil { // ZAP ingest collector (:4317)
 		return err

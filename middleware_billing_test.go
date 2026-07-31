@@ -230,7 +230,7 @@ func TestBillingGate_NilClientIsNoop(t *testing.T) {
 // REAL declarations, and it is where a change in what customers pay shows up.
 func TestDefaultPrice(t *testing.T) {
 	index(t, &Config{Enable: []string{"ai", "agent", "agents", "commerce", "o11y", "iam", "base", "probe"}},
-		Plugin{Name: "ai", Price: Metered, Prefixes: []string{"/v1/ai", "/v1/mcp"}},
+		Plugin{Name: "ai", Price: Metered, Prefixes: []string{"/v1/ai", "/v1/tools"}},
 		Plugin{Name: "agent", Price: Metered},
 		Plugin{Name: "agents", Price: Metered},
 		Plugin{Name: "commerce", Price: Free},
@@ -246,7 +246,7 @@ func TestDefaultPrice(t *testing.T) {
 	}{
 		{"/v1/ai/chat/completions", 0, "ai declares Metered — the model plane's token meter owns the charge, so an edge charge double-bills"},
 		{"/v1/ai/embeddings", 0, "same surface, same declaration"},
-		{"/v1/mcp/tools/call", 0, "ai owns /v1/mcp too; per-tool dispatch meters downstream"},
+		{"/v1/tools/call", 0, "ai owns /v1/tools too; per-tool dispatch meters downstream"},
 		{"/v1/commerce/billing/usage", 0, "commerce declares Free — it IS the pay path"},
 		{"/v1/o11y/ingest", 0, "o11y declares Free — telemetry ingest is not user-billable"},
 		{"/health", 0, "liveness probe"},

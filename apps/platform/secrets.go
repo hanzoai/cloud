@@ -35,6 +35,7 @@
 // CR, and the managed Secret all live under the VALIDATED tenant, never a request
 // value — the same cross-tenant boundary as the rest of /v1/platform, enforced at
 // cloud's ONE auth boundary (SanitizeIdentity + the kms org-scope guard).
+
 package platform
 
 import (

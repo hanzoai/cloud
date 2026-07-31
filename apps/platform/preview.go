@@ -14,6 +14,7 @@
 //
 // Every handler is org-scoped through s.tenant and every cluster write targets
 // tenant-<org> derived from the VALIDATED org — never a request value.
+
 package platform
 
 import (

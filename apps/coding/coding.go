@@ -1,15 +1,14 @@
-// Package coding is the keystone that turns @hanzo from a chatbot into an
-// engineer: it orchestrates ONE autonomous coding run — register a live agent
+// Package coding orchestrates ONE autonomous coding run: open a live agent
 // session, dispatch the job to the bot-gateway sandbox runtime, mirror the
-// sandbox's progress into the session live, verify the pushed branch landed in
-// native git, and open a native "PR" work item — then returns a Result the
-// trigger surface (Slack today, console/API tomorrow) renders.
+// sandbox's progress into the session, verify the pushed branch landed in native
+// git, open a native "PR" work item, and return a Result the caller renders.
 //
-// It is a LEAF, transport-agnostic library. It touches its collaborators only
-// through interface seams (Sessions, Tracker, Runner) plus two git functions
-// (CloneURL, VerifyRef), so the whole orchestration is unit-testable with fakes
-// and — critically — coding does NOT import clients/git: git imports
-// clients/integrations, integrations calls coding, so coding->git would cycle.
+// It is a LIBRARY, not an app: no route, no plugin, no manifest row. Its one
+// caller is apps/integrations (the Slack `code:` trigger). It touches its
+// collaborators only through interface seams (Sessions, Tracker, Runner) plus two
+// git functions (CloneURL, VerifyRef), so the whole orchestration is unit-testable
+// with fakes and — critically — coding does NOT import apps/git: git imports
+// apps/integrations, integrations calls coding, so coding->git would cycle.
 // The composition root assembles the real Dispatcher (adapters.go) and injects
 // it into the trigger surface.
 //

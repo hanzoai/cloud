@@ -3,13 +3,16 @@
 // runtime's ops face, not a control plane: a liveness probe is not a
 // tenant-scoped resource, so it stays a relay rather than being reimplemented in
 // Go. Everything a tenant can ACT on is native and lives in its own domain —
-// /v1/bots is the run control plane (clients/bots).
+// /v1/bots is the run control plane (apps/bots).
 //
 // Path mapping: the runtime serves bare paths (/health, /v1/chat/completions),
 // NOT the /v1/bot/* prefix — the edge strips it. So this face strips /v1/bot too:
 // /v1/bot/<rest> → {runtime}/<rest> (e.g. /v1/bot/health → /health).
 //
 // Order 143 — binds /v1/bot/* before the AI subsystem's /v1/* catch-all (150).
+//
+// The package doc lives once, in runtime.go.
+
 package runtime
 
 import (
@@ -53,6 +56,22 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		log:    deps.Logger.New("subsystem", "runtime"),
 		cc:     &http.Client{Timeout: 60 * time.Second},
 	}
+	// UNTYPED BY DESIGN — and it is the only route here, so this whole subsystem
+	// publishes no prose, no MCP tool and no CLI command. Three wire facts make it
+	// untypable as it stands, each on its own sufficient:
+	//
+	//   - it is ONE registration for EVERY method (All), including OPTIONS and
+	//     TRACE. zip's typed registrars are per-method and it has no All[In, Out].
+	//   - the path is a GREEDY wildcard whose value is a whole sub-path the proxy
+	//     re-mounts on the runtime (Params("*") below). fiber calls it `*1` and the
+	//     document calls it `{wildcard1}`; no typed In field can be both.
+	//   - the response is the runtime's own, verbatim: its status code
+	//     (c.Bytes(resp.StatusCode, rb), below) and its Content-Type, which is
+	//     frequently not JSON at all. A typed op answers its DECLARED status and
+	//     serialises its Out as JSON, so both move.
+	//
+	// The tenant-actionable surface is native and typed elsewhere: /v1/bots is the
+	// run control plane (clients/bots). This face is ops, and it stays a relay.
 	app.All("/v1/bot/*", s.proxy)
 	s.log.Info("runtime ops surface mounted", "target", s.target, "brand", deps.Brand)
 	return nil

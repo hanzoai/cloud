@@ -75,11 +75,14 @@ func uiBase(s *cloud.Service[state], c *zip.Ctx) string {
 // (https://git.hanzo.ai/<org>/<repo>.git) the root smart-HTTP routes serve, not
 // the /v1/git-prefixed API form. Falls back to the API cloneURL when no git host
 // is configured.
-func uiCloneURL(s *cloud.Service[state], org, name string) string {
+func uiCloneURL(s *cloud.Service[state], org, project, name string) string {
 	if h := s.State.gitHost; h != "" {
-		return fmt.Sprintf("https://%s/%s/%s.git", h, org, name)
+		if project == "" {
+			return fmt.Sprintf("https://%s/%s/%s.git", h, org, name)
+		}
+		return fmt.Sprintf("https://%s/%s/%s/%s.git", h, org, project, name)
 	}
-	return cloneURL(s, org, name)
+	return cloneURL(s, org, project, name)
 }
 
 // uiOrg resolves the caller's validated org and enforces the :org path segment
@@ -186,7 +189,7 @@ func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
 	ref := strings.TrimSpace(c.Query("ref"))
 	base := uiBase(s, c)
 	d := repoData{Base: base, Org: o, Repo: r.Name, Description: r.Description,
-		CloneHTTP: uiCloneURL(s, o, r.Name), CloneSSH: sshURL(s, o, r.Name)}
+		CloneHTTP: uiCloneURL(s, o, r.Project, r.Name), CloneSSH: sshURL(s, o, r.Project, r.Name)}
 
 	repo, err := openRepository(s, r)
 	if err == nil {

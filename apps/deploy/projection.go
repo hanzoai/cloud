@@ -12,11 +12,11 @@
 // (list + detail + tree). Distinct from the native `Application` (applications.go)
 // which backs the native /v1/deploy/applications surface — this backs the
 // ArgoCD-UI-compatible /v1/deploy/* surface (dashboard.go; no /api/, no inner /v1).
+
 package deploy
 
 import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // ── ArgoCD v1alpha1 JSON (minimal, UI-render-complete) ───────────────────────
@@ -346,11 +346,6 @@ func projectClusters(crs []unstructured.Unstructured) argoClusterList {
 }
 
 // ── ArgoCD AppProject projection (distinct App-CR projects → AppProjectList) ──
-
-// appProjectGVR is the ArgoCD AppProject CRD. This plane does not run argocd, so
-// the CRD is normally absent — dashProjects checks for it and falls back to
-// synthesizing a project set from the distinct App-CR project names.
-var appProjectGVR = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "appprojects"}
 
 // argoGroupKind is metav1.GroupKind — a clusterResourceWhitelist entry.
 type argoGroupKind struct {

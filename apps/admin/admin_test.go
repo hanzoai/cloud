@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
 	"github.com/hanzoai/cloud/apps/admin/health"
 	"github.com/hanzoai/cloud/apps/admin/iam"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -206,7 +208,7 @@ func TestGate_AllowsSuperAdmin(t *testing.T) {
 func TestUsers_DefaultsPagination(t *testing.T) {
 	var gotP, gotPageSize string
 	iamSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/users") {
+		if r.URL.Path == "/v1/iam/get-users" {
 			gotP = r.URL.Query().Get("p")
 			gotPageSize = r.URL.Query().Get("pageSize")
 			w.Header().Set("Content-Type", "application/json")
@@ -234,13 +236,13 @@ func TestUsers_DefaultsPagination(t *testing.T) {
 	}
 	var env struct {
 		Data  []operatorUser `json:"data"`
-		Data2 int            `json:"data2"`
+		Total int            `json:"total"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode users envelope: %v (body=%s)", err, body)
 	}
-	if env.Data2 != 222 || len(env.Data) == 0 {
-		t.Fatalf("users must surface the REAL directory (got %d rows, total %d), not 0-of-222", len(env.Data), env.Data2)
+	if env.Total != 222 || len(env.Data) == 0 {
+		t.Fatalf("users must surface the REAL directory (got %d rows, total %d), not 0-of-222", len(env.Data), env.Total)
 	}
 }
 
@@ -259,21 +261,21 @@ func newFakeIAM() *fakeIAM {
 		f.gotCook = r.Header.Get("Cookie")
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/organizations"):
+		case r.URL.Path == "/v1/iam/get-organizations":
 			io.WriteString(w, `{"status":"ok","msg":"","data":[
 				{"owner":"admin","name":"hanzo","displayName":"Hanzo","createdTime":"2020-01-01T00:00:00Z"},
 				{"owner":"admin","name":"acme","displayName":"Acme Inc","createdTime":"2021-02-02T00:00:00Z"}
 			],"data2":2}`)
-		case strings.HasSuffix(r.URL.Path, "/users"):
-			// A single-page count probe (pageSize=1) still reports data2 total.
+		case r.URL.Path == "/v1/iam/get-users":
+			// A single-page count probe (pageSize=1) still reports the full total.
 			io.WriteString(w, `{"status":"ok","msg":"","data":[
 				{"owner":"hanzo","name":"alice","email":"alice@hanzo.ai","displayName":"Alice","tag":"staff","createdTime":"2020-03-01T00:00:00Z","lastSigninTime":"2026-06-01T00:00:00Z","isAdmin":true,"isForbidden":false}
 			],"data2":7}`)
-		case strings.HasSuffix(r.URL.Path, "/roles"):
+		case r.URL.Path == "/v1/iam/get-roles":
 			io.WriteString(w, `{"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"data2":1}`)
-		case strings.HasSuffix(r.URL.Path, "/applications"):
+		case r.URL.Path == "/v1/iam/get-applications":
 			io.WriteString(w, `{"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"data2":1}`)
-		case strings.HasSuffix(r.URL.Path, "/audit-logs"):
+		case r.URL.Path == "/v1/iam/get-records":
 			io.WriteString(w, `{"status":"ok","msg":"","data":[{"createdTime":"2026-06-29T00:00:00Z","organization":"hanzo","user":"alice","clientIp":"1.2.3.4","method":"POST","action":"login","requestUri":"/v1/iam/login"}],"data2":1}`)
 		default:
 			w.WriteHeader(404)
@@ -379,7 +381,7 @@ func TestCommerce_ReconcilesWithXOrgIdBareSlug(t *testing.T) {
 
 // TestOrgs_RealAggregation drives /v1/admin/orgs against fake IAM + commerce and
 // verifies the envelope, the field mapping, the per-org user count (from IAM
-// data2), the money (from commerce), and that the caller's credential is
+// total), the money (from commerce), and that the caller's credential is
 // replayed to IAM (admin never forges a service credential for the fan-out).
 func TestOrgs_RealAggregation(t *testing.T) {
 	iam := newFakeIAM()
@@ -399,13 +401,13 @@ func TestOrgs_RealAggregation(t *testing.T) {
 	var env struct {
 		Status string   `json:"status"`
 		Data   []orgRow `json:"data"`
-		Data2  int      `json:"data2"`
+		Total  int      `json:"total"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if env.Status != "ok" || env.Data2 != 2 || len(env.Data) != 2 {
-		t.Fatalf("orgs envelope wrong: status=%q data2=%d rows=%d", env.Status, env.Data2, len(env.Data))
+	if env.Status != "ok" || env.Total != 2 || len(env.Data) != 2 {
+		t.Fatalf("orgs envelope wrong: status=%q total=%d rows=%d", env.Status, env.Total, len(env.Data))
 	}
 	// Rows are sorted by org name: acme, hanzo.
 	acme := env.Data[0]
@@ -413,7 +415,7 @@ func TestOrgs_RealAggregation(t *testing.T) {
 		t.Errorf("org row[0] = %+v, want acme/Acme Inc", acme)
 	}
 	if acme.Users != 7 {
-		t.Errorf("org acme users = %d, want 7 (IAM data2)", acme.Users)
+		t.Errorf("org acme users = %d, want 7 (IAM total)", acme.Users)
 	}
 	if acme.SpendCents != 1500 || acme.CreditsCents != 5000 {
 		t.Errorf("org acme money = spend %d credits %d, want 1500/5000", acme.SpendCents, acme.CreditsCents)
@@ -428,7 +430,7 @@ func TestOrgs_RealAggregation(t *testing.T) {
 }
 
 // TestUsers_MapsIAMToOperatorUser verifies the cross-org directory mapping,
-// including the derived isSuperAdmin (owner == adminOrg) and the data2 total.
+// including the derived isSuperAdmin (owner == adminOrg) and the full total.
 func TestUsers_MapsIAMToOperatorUser(t *testing.T) {
 	iam := newFakeIAM()
 	defer iam.server.Close()
@@ -441,13 +443,13 @@ func TestUsers_MapsIAMToOperatorUser(t *testing.T) {
 	}
 	var env struct {
 		Data  []operatorUser `json:"data"`
-		Data2 int            `json:"data2"`
+		Total int            `json:"total"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if env.Data2 != 7 || len(env.Data) != 1 {
-		t.Fatalf("users total=%d rows=%d, want 7/1", env.Data2, len(env.Data))
+	if env.Total != 7 || len(env.Data) != 1 {
+		t.Fatalf("users total=%d rows=%d, want 7/1", env.Total, len(env.Data))
 	}
 	u := env.Data[0]
 	if u.Name != "alice" || u.Email != "alice@hanzo.ai" || !u.IsAdmin || u.LastSignin == "" {
@@ -473,7 +475,7 @@ func TestRolesAndApplications_PassthroughShape(t *testing.T) {
 			Name     string `json:"name"`
 			ClientId string `json:"clientId"`
 		} `json:"data"`
-		Data2 int `json:"data2"`
+		Total int `json:"total"`
 	}
 	if err := json.Unmarshal(appsBody, &appsEnv); err != nil {
 		t.Fatalf("apps decode: %v", err)
@@ -541,7 +543,7 @@ func TestOverview_RealTilesAndSources(t *testing.T) {
 	if d.Orgs != 2 {
 		t.Errorf("overview orgs = %d, want 2", d.Orgs)
 	}
-	// 2 orgs × 7 users each (both count probes return data2=7).
+	// 2 orgs × 7 users each (both count probes return total=7).
 	if d.Users != 14 {
 		t.Errorf("overview users = %d, want 14", d.Users)
 	}
@@ -674,12 +676,12 @@ func TestProductsAndSync_HonestShapes(t *testing.T) {
 	_, pBody := do("GET", "/v1/admin/products", admin)
 	var pEnv struct {
 		Data  []productRow `json:"data"`
-		Data2 int          `json:"data2"`
+		Total int          `json:"total"`
 	}
 	if err := json.Unmarshal(pBody, &pEnv); err != nil {
 		t.Fatalf("products decode: %v", err)
 	}
-	if pEnv.Data == nil || len(pEnv.Data) != 0 || pEnv.Data2 != 0 {
+	if pEnv.Data == nil || len(pEnv.Data) != 0 || pEnv.Total != 0 {
 		t.Errorf("products must be an empty registry (no fabricated rows): %+v", pEnv)
 	}
 
@@ -743,13 +745,20 @@ func TestMount_NilGuards(t *testing.T) {
 // registry and never fabricate a row.
 func servePlatformEmpty(t *testing.T) {
 	t.Helper()
-	t.Setenv("CLOUD_RUN_DIR", t.TempDir())
-	cloud.Expose("platform.fleet", func(context.Context, cloud.Ident, []byte) ([]byte, error) {
-		return cloud.PutApps(nil), nil
-	})
-	c, err := cloud.Listen("platform", nil)
-	if err != nil {
-		t.Fatalf("platform stand-in: %v", err)
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	app := zip.New(zip.Config{AppName: "platform"})
+	zip.Post[struct{}, plane.Fleet](app, "/platform/fleet",
+		func(context.Context, *struct{}) (*plane.Fleet, error) {
+			return &plane.Fleet{}, nil
+		}, zip.WithOperationID(plane.PlatformFleet))
+	go func() { _ = app.Listen(zip.SocketPath("platform")) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	for i := 0; i < 200; i++ {
+		if c, derr := net.Dial("unix", zip.SocketPath("platform")); derr == nil {
+			_ = c.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	t.Cleanup(func() { _ = c.Close() })
+	t.Fatalf("platform stand-in never began listening at %s", zip.SocketPath("platform"))
 }

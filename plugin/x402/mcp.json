@@ -1,0 +1,15 @@
+[
+  {
+    "description": "Settlement reads one x402 payment receipt by id.\n\nIt is scoped to the caller's PAYER org — the ledger that was debited — so one\ntenant can never read another's settlement, and an id that exists but belongs\nto somebody else is a 404 exactly like one that does not exist. A caller with\nno billable identity is refused outright.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the settlement id from the URL — the deterministic keccak(from|nonce)\nkey an x402 receipt is issued under (the `id` field of a Receipt, and the\nvalue of the X-Payment-Response header a paid request answers with).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_x402_settlements_id"
+  }
+]

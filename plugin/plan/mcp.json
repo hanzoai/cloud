@@ -1,0 +1,132 @@
+[
+  {
+    "description": "ListCloudPlans returns the Hanzo cloud plan catalog: every cloud tier with its\nprice, included capacity, limits and feature list, scoped to the caller's\ncatalog. A reseller org sees its own overrides in place of the canonical\nrecords it has replaced, and the canonical record for every tier it has not.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans"
+  },
+  {
+    "description": "ListBlockchainPlans returns the blockchain RPC plan catalog: the tiers metered\nin monthly compute units, with their prices, limits and overage terms. It is\nthe canonical catalog for every caller — these plans carry no reseller\noverrides.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_blockchain"
+  },
+  {
+    "description": "ListCloudCapacityPlans returns the cloud plan catalog. It is the same section\nListCloudPlans answers and a separate operation because it is a separate\naddress, and an address is what every projection keys on.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_cloud"
+  },
+  {
+    "description": "ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records\nper zone and queries per day. It is the canonical catalog for every caller —\nthese plans carry no reseller overrides.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_dns"
+  },
+  {
+    "description": "GetPlanEntitlements returns what one plan GRANTS and not what it costs: the\ncanonical namespaced entitlement block and the flat license-feature list\nderived from it. It is the entitlement half of ResolvePlan, over the same\ncatalog and the same 404 for an id no catalog holds — the read a licensing or\nquota gate makes.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the plan's catalog id or slug — \"pro\", \"team\", \"world-enterprise\",\n\"rpc-growth\". Both are matched, so a slug resolves the plan it names.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_plans_entitlements_id"
+  },
+  {
+    "description": "ListGPUTiers returns the rentable GPU configurations, each with its accelerator\ncount and model, VRAM, vCPUs, host memory and hourly price.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_gpu"
+  },
+  {
+    "description": "Health reports that the plans subsystem is mounted and serving. It answers from\nthe process itself and consults neither the catalog bundle nor the goja host,\nso it stays \"ok\" while either is degraded.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_health"
+  },
+  {
+    "description": "GetPricingPolicy returns the published pricing policy: whether pricing is\ntransparent, the revenue-sharing terms (idle compute resale and the open-source\nshare) and the principles the catalog is priced by.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_policy"
+  },
+  {
+    "description": "ListRegions returns the regions cloud capacity is offered in, each with its\ndisplay name and physical location.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_regions"
+  },
+  {
+    "description": "ResolvePlan resolves one plan to everything a consumer of the catalog needs at\nonce: its canonical entitlement block, the flat license-feature list a signed\nlicense carries, its billing reference, and the catalog it came from. The id\nmay be the plan's id or its slug, and it is resolved against the caller's\ncatalog, so a reseller's override wins over the canonical record. An id no\ncatalog holds answers 404.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the plan's catalog id or slug — \"pro\", \"team\", \"world-enterprise\",\n\"rpc-growth\". Both are matched, so a slug resolves the plan it names.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_plans_resolve_id"
+  },
+  {
+    "description": "GetPlanSchemas returns the two JSON Schema documents this surface speaks:\nentitlements.schema.json, which declares every entitlement key with its type,\nunit and enum, and plan.schema.json, which a catalog plan record conforms to.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_schema"
+  },
+  {
+    "description": "GetStoragePricing returns the block-storage price block: the price per GB per\nmonth and the volume size bounds a cloud plan may attach.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_storage"
+  },
+  {
+    "description": "ListSubscriptionPlans returns the subscription ladder — the personal and team\ntiers a customer buys to use the cloud, each with its monthly and annual price,\nseat rules, limits and billing reference. Scoped to the caller's catalog.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_subscriptions"
+  },
+  {
+    "description": "ListToolPrices returns the per-use price of every metered tool — web search,\ncode interpreter, image generation, speech — each with the unit it is billed\nin.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_tools"
+  },
+  {
+    "description": "GetEntitlementVocabulary returns the entitlement key vocabulary: every key with\nits namespace, JSON type, nullability, unit, enum and title, the list of\nnamespaces, and the engine features a license can grant. It is derived from\nentitlements.schema.json on every call, so it cannot fall behind the schema.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plans_vocab"
+  }
+]

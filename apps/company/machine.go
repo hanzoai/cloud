@@ -93,12 +93,24 @@ func (s Structure) incorporationType() string {
 // Founder is one founding stakeholder. EquityBps is the founder's ownership in
 // basis points (1% == 100 bps); the founders' shares seed the cap-table genesis.
 type Founder struct {
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	EquityBps int    `json:"equityBps"`
+	// Name is the founder's full legal name, as it appears on the formation documents.
+	Name string `json:"name"`
+	// Email is the founder's email, and the key a KYC decision addresses a founder
+	// by — POST /v1/company/kyc/decision matches on it.
+	Email string `json:"email"`
+	// EquityBps is the founder's ownership in basis points, 0–10000 (1% == 100 bps,
+	// so 10000 is the whole company). The founders' shares seed the cap-table genesis.
+	EquityBps int `json:"equityBps"`
+	// KYCStatus is the founder's identity-verification state: pending, verified (a
+	// real idv provider reported a pass), reviewer_confirmed (a privileged reviewer
+	// confirmed out-of-band) or failed. The payment stage is unreachable until every
+	// founder passes.
 	KYCStatus string `json:"kycStatus"`
-	KYCRef    string `json:"kycRef,omitempty"`    // idv session reference
-	DecidedBy string `json:"decidedBy,omitempty"` // who settled a terminal KYC status: the provider name, or a reviewer's user id
+	// KYCRef is the idv provider's session reference for this founder.
+	KYCRef string `json:"kycRef,omitempty"`
+	// DecidedBy is who settled a terminal KYC status: the provider name, or a
+	// reviewer's user id.
+	DecidedBy string `json:"decidedBy,omitempty"`
 }
 
 // Genesis is the cap-table equity genesis: a deterministic root of the founding
@@ -106,13 +118,24 @@ type Founder struct {
 // it for reads). Root is always computed; TxHash/Block are set only when the L1
 // anchor is wired — otherwise Status reports the honest pending state.
 type Genesis struct {
-	Root    string `json:"root"`             // 0x… keccak root of the founding allocation
-	TxHash  string `json:"txHash,omitempty"` // L1 transaction hash (empty until anchored)
-	Block   uint64 `json:"block,omitempty"`
-	ChainID int64  `json:"chainId,omitempty"`
-	At      int64  `json:"at"`
-	Status  string `json:"status"` // pending | anchored
-	Note    string `json:"note,omitempty"`
+	// Root is the 0x-prefixed keccak256 root of the founding allocation. It is
+	// ALWAYS computed, whether or not the on-chain anchor is wired, because the root
+	// is the tamper-evident witness.
+	Root string `json:"root"`
+	// TxHash is the L1 transaction hash of the anchoring commit. Empty until anchored.
+	TxHash string `json:"txHash,omitempty"`
+	// Block is the L1 block the anchoring transaction landed in. Set only once the
+	// receipt has been read; absent otherwise.
+	Block uint64 `json:"block,omitempty"`
+	// ChainID is the EVM chain the root is committed to — the Hanzo L1 by default.
+	ChainID int64 `json:"chainId,omitempty"`
+	// At is the unix second the genesis root was computed.
+	At int64 `json:"at"`
+	// Status is pending (root computed, not yet on-chain) or anchored (committed).
+	Status string `json:"status"`
+	// Note explains an unanchored genesis honestly — anchor wiring absent, or the
+	// submit error — rather than reporting a commit that did not happen.
+	Note string `json:"note,omitempty"`
 }
 
 // Filing is the state-of-incorporation filing record. A real filing is performed by
@@ -120,42 +143,80 @@ type Genesis struct {
 // wired the status is honest ("manual"/"pending") and NO fabricated filing id is
 // recorded.
 type Filing struct {
+	// Provider is the filing partner that performed the filing, or "manual" when no
+	// partner is wired.
 	Provider string `json:"provider"`
-	Ref      string `json:"ref,omitempty"`
-	Status   string `json:"status"` // manual | submitted | filed | rejected
-	Note     string `json:"note,omitempty"`
-	At       int64  `json:"at,omitempty"`
+	// Ref is the partner's or the state's filing reference. Empty when nothing was
+	// actually filed — no filing id is ever fabricated.
+	Ref string `json:"ref,omitempty"`
+	// Status is manual (no partner wired — a registered agent files out-of-band),
+	// submitted (the partner accepted it, awaiting the state), filed (the state
+	// accepted it) or rejected.
+	Status string `json:"status"`
+	// Note explains a filing Hanzo did not perform itself: what remains to be done
+	// and by whom.
+	Note string `json:"note,omitempty"`
+	// At is the unix second the filing record was written.
+	At int64 `json:"at,omitempty"`
 }
 
 // Formation is the one incorporation record per org. It is both the persisted row
 // (store.go) and the value the machine transitions. Every field a guard reads is
 // here, so a transition decision is a pure function of this struct.
 type Formation struct {
-	Org          string       `json:"org"`
-	Structure    Structure    `json:"structure"`
+	// Org is the owning org — the tenant key, and the reason there is exactly one
+	// formation per org.
+	Org string `json:"org"`
+	// Structure is the legal entity being formed: c-corp, llc or dao-llc.
+	Structure Structure `json:"structure"`
+	// Jurisdiction is the state of formation: DE or WY.
 	Jurisdiction Jurisdiction `json:"jurisdiction"`
-	Name         string       `json:"name"`
-	Stage        Stage        `json:"stage"`
-	Founders     []Founder    `json:"founders"`
+	// Name is the company name the entity is being formed under.
+	Name string `json:"name"`
+	// Stage is the machine's current state: structure, founders, payment, documents,
+	// esign or genesis on the formation path, import on the skip path, and company
+	// at the terminal.
+	Stage Stage `json:"stage"`
+	// Founders is every founding stakeholder, with its equity split and KYC state.
+	Founders []Founder `json:"founders"`
 
-	Paid       bool   `json:"paid"`
+	// Paid reports whether the one-time formation fee has been charged.
+	Paid bool `json:"paid"`
+	// PaymentRef is the billing reference recorded for the charged formation fee on
+	// the org's own ledger.
 	PaymentRef string `json:"paymentRef,omitempty"`
 
-	DocumentIDs []string `json:"documentIds,omitempty"` // dataroom doc ids of generated formation docs
-	Filing      *Filing  `json:"filing,omitempty"`
+	// DocumentIDs are the data room ids of the GENERATED formation documents.
+	DocumentIDs []string `json:"documentIds,omitempty"`
+	// Filing is the state-of-incorporation filing record, once documents exist.
+	Filing *Filing `json:"filing,omitempty"`
 
-	Signed   bool   `json:"signed"`
+	// Signed reports whether the formation documents have come back signed — the
+	// e-signature provider's answer, which a real provider's webhook drives.
+	Signed bool `json:"signed"`
+	// EsignRef is the e-signature provider's reference for the signature request.
 	EsignRef string `json:"esignRef,omitempty"`
 
+	// Genesis is the cap-table equity genesis, once recorded.
 	Genesis *Genesis `json:"genesis,omitempty"`
 
-	// SKIP path.
-	AlreadyIncorporated bool     `json:"alreadyIncorporated"`
-	Imported            bool     `json:"imported"`
-	ImportedDocs        []string `json:"importedDocs,omitempty"` // dataroom doc ids ingested from Drive
-	CapTableImported    bool     `json:"capTableImported"`
+	// ---- the SKIP path: an org that already has an entity ----
 
+	// AlreadyIncorporated declares an org that already has a legal entity, which
+	// takes the import path (structure → import → company) instead of forming one.
+	AlreadyIncorporated bool `json:"alreadyIncorporated"`
+	// Imported reports whether the existing company's corporate documents have been
+	// ingested into the org's data room.
+	Imported bool `json:"imported"`
+	// ImportedDocs are the data room ids of the documents ingested from Drive.
+	ImportedDocs []string `json:"importedDocs,omitempty"`
+	// CapTableImported reports whether the existing company's cap table has been
+	// imported onto the canonical cap table.
+	CapTableImported bool `json:"capTableImported"`
+
+	// CreatedAt is the unix second the formation was opened.
 	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is the unix second of the most recent write to the formation.
 	UpdatedAt int64 `json:"updatedAt"`
 }
 

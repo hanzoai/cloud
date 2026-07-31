@@ -25,10 +25,9 @@
 // masked). A plaintext secret can never reach SQLite — a secret write routes to KMS
 // or fails closed (503).
 //
-// This surface was previously mounted by clients/observe alongside the o11y read
-// paths; those reads now live in clients/o11y (the embedded runtime). Settings is
-// NOT observability — it is console product-detail config — so it is its own plane
-// here, its behavior preserved verbatim from the observe original.
+// NOT OBSERVABILITY. This surface once shared a package with the o11y read paths;
+// those reads live in apps/o11y now. A product's config and a product's telemetry
+// are different questions with different stores, so they are different planes.
 package settings
 
 import (
@@ -98,13 +97,34 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &service{store: store, kms: deps.KMS, log: log}
 	mounted = s
 
-	g := app.Group("/v1/settings")
-	g.Get("/:product", s.getSettings)
-	g.Put("/:product", s.putSettings)
+	routes(app, s)
 
 	log.Info("settings surface mounted", "prefix", "/v1/settings", "brand", deps.Brand, "kms", deps.KMS != nil)
 	return nil
 }
+
+// routes is the ONE place the surface is wired, so a test drives the same router
+// the binary serves rather than a reconstruction of it.
+func routes(app cloud.Router, s *service) {
+	g := app.Group("/v1/settings")
+	// A typed op receives only a context, so the validated org has to be parked
+	// there. Installed on the group BEFORE its leaves — fiber runs middleware in
+	// registration order, so one installed after them never runs.
+	g.Use(cloud.Bridge())
+	o := settingsOps{s: s}
+	zip.Get(g, "/:product", o.getSettings)
+	zip.Put(g, "/:product", o.putSettings)
+}
+
+// settingsOps is the receiver the settings ops hang off. A method value is the only
+// bound form cmd/zipdoc can lift prose from, so ops are methods and not closures.
+type settingsOps struct{ s *service }
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 // Shutdown releases the settings store. Idempotent.
 func Shutdown(_ context.Context) error {
@@ -122,12 +142,17 @@ func Shutdown(_ context.Context) error {
 // ── tenant ───────────────────────────────────────────────────────────────────
 
 // tenant resolves the org — the tenant-isolation KEY — for a VALIDATED principal
-// only. Fails closed (caller answers 403) for an unvalidated or org-less request.
-func (s *service) tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+// only, from the context cloud.Bridge parked it on. Fails closed (caller answers
+// 403) for an unvalidated or org-less request. It is NEVER an In field: an In field
+// is caller-supplied, so a tenant key read from one is a cross-tenant read the
+// caller asserted for itself.
+func (s *service) tenant(ctx context.Context) (string, bool) { return principal.OrgFrom(ctx) }
 
-// requireProductParam reads + validates the :product path segment against productRE.
-func requireProductParam(c *zip.Ctx) (string, error) {
-	p := strings.TrimSpace(c.Param("product"))
+// requireProduct validates the :product path segment against productRE. The value
+// arrives on the In, bound from the PATH last (zip binds body, then query, then
+// path), so the URL names the product whatever a body claims.
+func requireProduct(product string) (string, error) {
+	p := strings.TrimSpace(product)
 	if p == "" {
 		return "", zip.ErrBadRequest("product is required")
 	}
@@ -139,75 +164,113 @@ func requireProductParam(c *zip.Ctx) (string, error) {
 
 // ── settings CRUD ────────────────────────────────────────────────────────────
 
+// settingsView is one (org, product) configuration as the console renders it.
 type settingsView struct {
-	Product    string          `json:"product"`
-	Config     json.RawMessage `json:"config"`
-	SecretKeys []string        `json:"secretKeys"` // names of set secret fields (values masked, never returned)
-	UpdatedAt  string          `json:"updatedAt"`
-	CreatedAt  string          `json:"createdAt"`
+	// Product is the catalog slug this configuration belongs to.
+	Product string `json:"product"`
+	// Config is the product's non-secret configuration, an opaque JSON object the
+	// server stores and returns verbatim. `{}` when nothing has been saved.
+	Config json.RawMessage `json:"config"`
+	// SecretKeys names the secret fields that ARE set. Their VALUES live only in KMS
+	// and are never returned here — the console renders a mask.
+	SecretKeys []string `json:"secretKeys"`
+	// UpdatedAt is when this configuration was last written, RFC 3339 UTC. Empty
+	// when nothing has been saved.
+	UpdatedAt string `json:"updatedAt"`
+	// CreatedAt is when this configuration was first written, RFC 3339 UTC.
+	CreatedAt string `json:"createdAt"`
 }
 
-func (s *service) getSettings(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+// productIn addresses one product's configuration. The product comes from the PATH.
+type productIn struct {
+	// Product is the catalog slug, from the path. Must match ^[a-z0-9][a-z0-9._-]{0,62}$.
+	Product string `json:"product"`
+}
+
+// GetSettings reads the caller org's configuration for one product, with every
+// secret field MASKED — only the names of the set secrets come back, never their
+// values, which live in KMS. A product the org has never configured is not a 404:
+// it answers 200 with an empty config object, so the console's Settings tab always
+// renders and merges its own display defaults on top.
+func (o settingsOps) getSettings(ctx context.Context, in *productIn) (*settingsView, error) {
+	s := o.s
+	org, ok := s.tenant(ctx)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return nil, zip.ErrForbidden("X-Org-Id required")
 	}
-	product, err := requireProductParam(c)
+	product, err := requireProduct(in.Product)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	st, err := s.store.Get(c.Context(), org, product)
+	st, err := s.store.Get(ctx, org, product)
 	if err == errNotFound {
 		// No override yet — an honest empty config (the console merges its own
 		// display defaults). Not a 404: the tab always renders.
-		return c.JSON(http.StatusOK, settingsView{
+		return &settingsView{
 			Product: product, Config: json.RawMessage(`{}`), SecretKeys: []string{},
-		})
+		}, nil
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get settings: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get settings: %v", err)
 	}
-	return c.JSON(http.StatusOK, toSettingsView(st))
+	v := toSettingsView(st)
+	return &v, nil
 }
 
+// settingsReq is the write body plus the product the URL named.
 type settingsReq struct {
-	Config  map[string]any    `json:"config"`  // non-secret config; stored verbatim (bounded)
-	Secrets map[string]string `json:"secrets"` // secret fields; VALUES routed to KMS, never SQLite
+	// Product is the catalog slug, from the PATH. zip binds the path last, so the
+	// URL names the product being written whatever a body field claims.
+	Product string `json:"product"`
+	// Config is the product's non-secret configuration, stored verbatim. Bounded at
+	// 64 KiB once serialized. Omit it to store an empty object.
+	Config map[string]any `json:"config"`
+	// Secrets are the secret fields, by name. Each VALUE is sealed into KMS and
+	// never reaches this deployment's database; a value that is empty or equal to
+	// the mask the read path returns means "unchanged" and is skipped, so a console
+	// round-trip cannot blank a stored secret. A key must match
+	// ^[a-z0-9][a-z0-9._-]{0,62}$, a value is bounded at 8 KiB, and an org may hold
+	// at most 64 secret fields per product.
+	Secrets map[string]string `json:"secrets"`
 }
 
-func (s *service) putSettings(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+// PutSettings writes the caller org's configuration for one product and answers the
+// stored result, secrets masked. Secret VALUES are sealed into KMS under
+// orgs/{org}/settings/{product}/{key} and never touch this deployment's database;
+// with no KMS configured a write that carries any secret is refused whole (503)
+// rather than dropping it or persisting it in the clear. A secret the body omits
+// keeps its stored value, so a partial write never silently clears one.
+func (o settingsOps) putSettings(ctx context.Context, in *settingsReq) (*settingsView, error) {
+	s := o.s
+	org, ok := s.tenant(ctx)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return nil, zip.ErrForbidden("X-Org-Id required")
 	}
-	product, err := requireProductParam(c)
+	product, err := requireProduct(in.Product)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var body settingsReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 
 	// Non-secret config: validate + serialize within the cap.
 	cfgJSON := []byte("{}")
 	if body.Config != nil {
 		b, mErr := json.Marshal(body.Config)
 		if mErr != nil {
-			return zip.ErrBadRequest("config must be JSON-serializable")
+			return nil, zip.ErrBadRequest("config must be JSON-serializable")
 		}
 		if len(b) > maxConfig {
-			return zip.ErrBadRequest("config too large (max 64KiB)")
+			return nil, zip.ErrBadRequest("config too large (max 64KiB)")
 		}
 		cfgJSON = b
 	}
 
 	// Existing secret-key set (so a PUT that omits a secret keeps it).
 	var secretKeys []string
-	if prev, gErr := s.store.Get(c.Context(), org, product); gErr == nil {
+	if prev, gErr := s.store.Get(ctx, org, product); gErr == nil {
 		secretKeys = prev.SecretKeys
 	} else if gErr != errNotFound {
-		return zip.Errorf(http.StatusInternalServerError, "load settings: %v", gErr)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load settings: %v", gErr)
 	}
 
 	// Route each provided secret to KMS. A secret VALUE never touches SQLite; if KMS
@@ -215,11 +278,11 @@ func (s *service) putSettings(c *zip.Ctx) error {
 	// persisting the secret in plaintext.
 	if len(body.Secrets) > 0 {
 		if s.kms == nil {
-			return zip.Errorf(http.StatusServiceUnavailable, "settings: KMS not configured; refusing to store secrets")
+			return nil, zip.Errorf(http.StatusServiceUnavailable, "settings: KMS not configured; refusing to store secrets")
 		}
 		for key, val := range body.Secrets {
 			if !productRE.MatchString(key) {
-				return zip.ErrBadRequest("secret key must match ^[a-z0-9][a-z0-9._-]{0,62}$")
+				return nil, zip.ErrBadRequest("secret key must match ^[a-z0-9][a-z0-9._-]{0,62}$")
 			}
 			if val == "" || val == secretMask {
 				// Empty / mask sentinel = "unchanged" — never overwrite a stored secret
@@ -227,27 +290,28 @@ func (s *service) putSettings(c *zip.Ctx) error {
 				continue
 			}
 			if len(val) > maxSecretValue {
-				return zip.ErrBadRequest("secret value too large (max 8KiB)")
+				return nil, zip.ErrBadRequest("secret value too large (max 8KiB)")
 			}
 			ref := secretRef(org, product, key)
-			if err := s.kms.PutSecret(c.Context(), ref, []byte(val)); err != nil {
-				return zip.Errorf(http.StatusInternalServerError, "kms put secret: %v", err)
+			if err := s.kms.PutSecret(ctx, ref, []byte(val)); err != nil {
+				return nil, zip.Errorf(http.StatusInternalServerError, "kms put secret: %v", err)
 			}
 			secretKeys = addStr(secretKeys, key)
 		}
 		if len(secretKeys) > maxSecretKeys {
-			return zip.ErrBadRequest("too many secret fields (max 64)")
+			return nil, zip.ErrBadRequest("too many secret fields (max 64)")
 		}
 	}
 
 	now := time.Now().Unix()
-	st, err := s.store.Put(c.Context(), Settings{
+	st, err := s.store.Put(ctx, Settings{
 		Org: org, Product: product, Config: string(cfgJSON), SecretKeys: secretKeys, UpdatedAt: now,
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist settings: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist settings: %v", err)
 	}
-	return c.JSON(http.StatusOK, toSettingsView(st))
+	v := toSettingsView(st)
+	return &v, nil
 }
 
 func toSettingsView(st Settings) settingsView {

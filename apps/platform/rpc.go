@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/zap-proto/zip"
 )
 
 // rpc.go — platform's methods on the internal plane.
@@ -41,35 +43,39 @@ import (
 // because that is an observation; and an RBAC denial surfaces as an error, so a
 // board never shows a denial as an empty estate.
 func exposeFleet(s *cloud.Service[fleetState]) {
-	cloud.Expose("platform.fleet", func(ctx context.Context, who cloud.Ident, _ []byte) ([]byte, error) {
-		// The request carries nothing and is ignored: every fact that decides WHICH
-		// namespaces are observed comes from the capability, so there is no payload
-		// field a caller could name a scope in (cloud/payloads.go).
-		p := capPrincipal(who)
-		if !p.validated {
-			return nil, cloud.Fault(403, "platform fleet: authentication required")
-		}
-		if !p.mayObserve() {
-			return nil, cloud.Fault(403, "platform fleet: admin required")
-		}
-		if s.State.dyn == nil {
-			return nil, cloud.Fault(503, "platform fleet: kubernetes client not configured: "+s.State.initErr)
-		}
-		views, err := observeFleet(s, ctx, scopeNamespaces(discoverNamespaces(s, ctx), p))
-		if err != nil {
-			return nil, err
-		}
-		out := make([]cloud.App, 0, len(views))
-		for _, v := range views {
-			out = append(out, cloud.App{
-				Org: v.Org, Name: v.App, Env: v.Env, Repo: v.Repo, Role: v.Role,
-				Cluster: v.Cluster, Namespace: v.Namespace,
-				Phase: v.Phase, Health: v.Health,
-				DeclaredTag: v.DeclaredTag, RunningTag: v.RunningTag, LatestTag: v.LatestTag,
-				Registry:      v.Registry,
-				DriftSeverity: string(v.Drift.Severity),
-			})
-		}
-		return cloud.PutApps(out), nil
-	})
+	zip.Post[struct{}, plane.Fleet](cloud.Plane(), "/platform/fleet",
+		func(ctx context.Context, _ *struct{}) (*plane.Fleet, error) {
+			// The input carries nothing and there is nothing for it to carry: every
+			// fact that decides WHICH namespaces are observed comes from the caller,
+			// so there is no field a caller could name a scope in.
+			p := capPrincipal(cloud.Who(ctx))
+			if !p.Validated {
+				return nil, zip.ErrForbidden("platform fleet: authentication required")
+			}
+			if !p.mayObserve() {
+				return nil, zip.ErrForbidden("platform fleet: admin required")
+			}
+			if s.State.dyn == nil {
+				return nil, zip.Errorf(503, "platform fleet: kubernetes client not configured: %s", s.State.initErr)
+			}
+			views, err := observeFleet(s, ctx, scopeNamespaces(discoverNamespaces(s, ctx), p))
+			if err != nil {
+				return nil, err
+			}
+			out := make([]plane.App, 0, len(views))
+			for _, v := range views {
+				out = append(out, plane.App{
+					Org:  v.Org,
+					Name: v.App, Env: v.Env, Repo: v.Repo, Role: v.Role,
+					Cluster: v.Cluster, Namespace: v.Namespace,
+					Phase: v.Phase, Health: v.Health,
+					DeclaredTag: v.DeclaredTag, RunningTag: v.RunningTag, LatestTag: v.LatestTag,
+					Registry:      v.Registry,
+					DriftSeverity: string(v.Drift.Severity),
+				})
+			}
+			return &plane.Fleet{Apps: out}, nil
+		},
+		zip.WithOperationID(plane.PlatformFleet),
+		zip.WithSummary("Every app this org can observe"))
 }

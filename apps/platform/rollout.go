@@ -8,6 +8,7 @@
 // and names the one way to roll a tag: commit it to the manifest. The clean-semver
 // gate (splitReleaseImage) still validates the request so a caller gets an honest,
 // specific error.
+
 package platform
 
 import (

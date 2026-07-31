@@ -8,12 +8,13 @@ import (
 )
 
 // typedOpCount is git's typed-op surface: every /v1/git route with a real
-// request/response shape. The four creators (repo, ssh key, subscription, mirror
-// target) answer 201 and zip's typed registrar has no status seam, so they stay
-// raw; the pack protocol, the ZAP envelope adapters and the HTML UI have no JSON
-// shape at all. Change this number only by moving a route between the two.
-// 20 since browseFiles — the delivery inventory read (browse.go).
-const typedOpCount = 20
+// request/response shape. What is left raw has no JSON shape to type: the pack
+// protocol streams binary, the ZAP adapters answer an envelope a typed op cannot
+// produce, the webhook's HMAC covers the raw bytes it would have to re-parse, and
+// the UI serves HTML. Change this number only by moving a route between the two.
+// 24 since the four creators (repo, ssh key, subscription, mirror target) went
+// typed — they answer 201, which zip.WithStatus has declared since v1.18.2.
+const typedOpCount = 24
 
 // TestTypedOpsProject pins the payoff of registering ops instead of handlers:
 // zip's registry — the single value REST, OpenAPI, MCP and the CLI are each
@@ -56,7 +57,7 @@ func TestTypedOpsProject(t *testing.T) {
 	// spec has shapes and no words, and zipdoc needs re-running.
 	if !strings.Contains(string(body), "most recently updated") ||
 		!strings.Contains(string(body), "the isolation key") {
-		t.Fatal("the OpenAPI document carries no lifted prose — run `go generate ./clients/git`")
+		t.Fatal("the OpenAPI document carries no lifted prose — run `go generate -run zipdoc ./apps/git`")
 	}
 }
 

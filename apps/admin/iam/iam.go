@@ -93,18 +93,18 @@ func (c *Client) List(ctx context.Context, cr Creds, path string, q url.Values) 
 	if err != nil {
 		return List{}, err
 	}
-	total := envTotal(env.Data2, env.Data)
+	total := envTotal(env.Total, env.Data)
 	return List{Rows: env.Data, Total: total}, nil
 }
 
 // Orgs lists organizations (GET /v1/iam/organizations).
 func (c *Client) Orgs(ctx context.Context, cr Creds, q url.Values) (List, error) {
-	return c.List(ctx, cr, "/v1/iam/organizations", q)
+	return c.List(ctx, cr, "/v1/iam/get-organizations", q)
 }
 
 // Users lists users (GET /v1/iam/users).
 func (c *Client) Users(ctx context.Context, cr Creds, q url.Values) (List, error) {
-	return c.List(ctx, cr, "/v1/iam/users", q)
+	return c.List(ctx, cr, "/v1/iam/get-users", q)
 }
 
 // Org fetches ONE organization row (GET /v1/iam/organizations/get?owner=&name=)
@@ -115,7 +115,7 @@ func (c *Client) Users(ctx context.Context, cr Creds, q url.Values) (List, error
 // error and falls back to a name-only row.
 func (c *Client) Org(ctx context.Context, cr Creds, id string) (Org, error) {
 	q := url.Values{"id": {id}}
-	env, err := c.get(ctx, cr, "/v1/iam/organizations/get", q)
+	env, err := c.get(ctx, cr, "/v1/iam/get-organization", q)
 	if err != nil {
 		return Org{}, err
 	}
@@ -134,7 +134,7 @@ func (c *Client) Org(ctx context.Context, cr Creds, id string) (Org, error) {
 // read as the same validated SuperAdmin.
 func (c *Client) User(ctx context.Context, cr Creds, id string) (map[string]any, error) {
 	q := url.Values{"id": {id}}
-	env, err := c.get(ctx, cr, "/v1/iam/users/get", q)
+	env, err := c.get(ctx, cr, "/v1/iam/get-user", q)
 	if err != nil {
 		return nil, err
 	}
@@ -164,13 +164,20 @@ func (c *Client) SetUser(ctx context.Context, cr Creds, id string, user map[stri
 	return err
 }
 
-// envelope is the uniform /v1 response shape every /v1/iam handler returns.
-// data is the payload; data2 the list total (paginated reads).
+// envelope is what hanzoai/iam ANSWERS WITH — a decoder for a foreign wire, not
+// cloud's own shape. Cloud writes { status, msg, data, total } (see cloud's
+// envelope.go); IAM still writes Casdoor's { status, msg, data, data2 }, so the
+// tag here says data2 and the field says Total. One adapter, at the boundary,
+// naming both truths at once.
+//
+// It converges when IAM ships the same rename. Until then a "fix" that spells
+// this field total on the wire silently reads nothing: the total becomes zero
+// and every paginated admin list quietly reports its own page size.
 type envelope struct {
 	Status string          `json:"status"`
 	Msg    string          `json:"msg"`
 	Data   json.RawMessage `json:"data"`
-	Data2  json.RawMessage `json:"data2"`
+	Total  json.RawMessage `json:"data2"`
 }
 
 // get performs one authenticated GET and decodes the /v1 envelope.

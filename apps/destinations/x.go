@@ -25,7 +25,7 @@ func (xDest) Category() string { return categoryAdvertising }
 
 func (xDest) Spec() Spec {
 	return Spec{
-		Fields: []Field{
+		Fields: []DestinationField{
 			{Key: "pixelId", Label: "Pixel / Event Tag ID", Required: true, Example: "o1abc"},
 		},
 		Secrets: []string{"access_token"},

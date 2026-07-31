@@ -134,7 +134,28 @@ func openOrgDB(p cek.Principal, path string) (*sql.DB, error) {
 	}
 	db, err := cek.Open(p, path)
 	if err != nil {
-		return nil, fmt.Errorf("cloud: OrgDB open %q: %w", path, err)
+		// A store whose sidecar predates "a store's key names its owner" is wrapped
+		// under the legacy Global derivation, so the owner-bound open above cannot
+		// unwrap it. Rewrap carries the SAME DEK to the owner-bound wrapping and we
+		// retry, ONCE — the migration runs where the need is discovered rather than
+		// in a tool someone has to remember.
+		//
+		// It shipped as cmd/cek-rewrap alone and nothing invoked it, so the
+		// derivation changed under stores that were never migrated and two of them
+		// (git, sync) simply stopped opening in production — which took the native
+		// git plane and the mirror engine down, and with them every deploy. A
+		// migration that must be run by hand is a migration that has not shipped.
+		//
+		// Idempotent and conservative: Rewrap reports Already when the owner-bound
+		// key already opens it, and refuses when NEITHER identity does — a genuinely
+		// wrong master key or a corrupt sidecar stays an error, and is not papered
+		// over by rewriting a sidecar we could not read.
+		if res := cek.Rewrap(p, path); res.Err == nil && res.Rewrapped {
+			db, err = cek.Open(p, path)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("cloud: OrgDB open %q: %w", path, err)
+		}
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

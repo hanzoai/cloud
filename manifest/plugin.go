@@ -33,12 +33,58 @@ type App struct {
 	// one binary.
 	Prefixes []string
 
+	// Coresident means the app is NOT prefix-routed: it mounts as middleware on
+	// another app's router and decides per request whether to serve or call Next.
+	// The light host must not Load it, because Load's whole job is to claim a
+	// prefix and hand matching requests to a process — a contract a middleware
+	// cannot express, since a proxied request never falls through to the next
+	// candidate.
+	//
+	// The row still exists, because every plugin/<name> binary needs one (the
+	// gen-app-cmds bijection). What it must not do is state a Prefix it does not
+	// route: zen said "/v1", the same prefix ai serves, so the manifest carried a
+	// duplicate claim that only worked because nothing checked. zip now refuses
+	// two owners for one prefix at compose time, which is how this surfaced.
+	// Naming the property is the fix; tolerating the duplicate would have been a
+	// second way to say one thing.
+	Coresident bool
+
 	// Eager starts the child WITH the host instead of on the first request
 	// reaching one of its prefixes. It is for a subsystem whose work is not
 	// request-driven — one that owns a listener or a background loop, where
 	// deferring the start means it silently does nothing and the symptom is an
 	// empty dashboard rather than an error.
 	Eager bool
+
+	// Open means this app also serves tools that depend on WHO is asking, so its
+	// build-time catalogue (plugin/<name>/mcp.json) is incomplete BY CONSTRUCTION
+	// and the host asks it per caller — see zip.Plugin.Open. Exactly one app in
+	// the fleet may be open, because a tool name no catalogue claims has to
+	// resolve somewhere and two candidates would make it ambiguous.
+	Open bool
+
+	// Required means the HOST must not serve without this app. A required app
+	// that will not start aborts the process; every other app degrades to being
+	// absent — its prefixes answer 503 and the rest of the fleet serves.
+	//
+	// It is deliberately a property of the app rather than of start order,
+	// because start order is where it lived by accident and that cost a 25-minute
+	// outage of the whole API: pubsub is Apps[0] and Eager, so when its child
+	// could not open a store, the single `return err` in the host's mount loop
+	// took down the API, IAM validation, billing and the team backend with it.
+	// Being first in a list is not a claim on everyone else's availability.
+	//
+	// The default is false, and NOTHING in Apps sets it — see
+	// manifest/required_test.go for the argument and for what would justify an
+	// entry. The host is a router: it opens no store, validates no token, and
+	// holds no state whose absence corrupts anything. Every child enforces its
+	// own auth in its own process, so one child's absence cannot silently weaken
+	// another's plane — the planes ARE processes. Against that, aborting buys
+	// exactly one thing (a pod that never goes Ready) and destroys the console,
+	// the health surface, the log stream an operator needs, and every healthy
+	// sibling. CrashLoopBackOff is the state in which a process cannot tell you
+	// why it is unhappy.
+	Required bool
 }
 
 // Plugin says where this app's binary is, without naming it twice:
@@ -61,6 +107,18 @@ type App struct {
 // the host falls through to the index). A dedicated binary present on disk is
 // someone's explicit intent, so it wins over the index.
 func (a App) Plugin() zip.Plugin {
+	p := a.resolve()
+	// Open is a property of the APP — what it serves — and not of where its binary
+	// came from, so it is stamped once here rather than in each of resolve's four
+	// rungs, which is four places for it to be forgotten.
+	p.Open = a.Open
+	return p
+}
+
+// resolve is the ladder: an operator's address, an operator's path, the binary on
+// disk beside the host, a published release, and finally the on-disk path again so
+// the failure names the file a developer expected to have built.
+func (a App) resolve() zip.Plugin {
 	env := "CLOUD_" + strings.ToUpper(strings.NewReplacer("-", "_").Replace(a.Name))
 	if addr := strings.TrimSpace(os.Getenv(env + "_ADDR")); addr != "" {
 		return zip.Plugin{Name: a.Name, Addr: addr}

@@ -247,29 +247,52 @@ type buildEventBody struct {
 // buildsCap bounds one build read. A published build is a story, not an archive.
 const buildsCap = 1000
 
-// readBuild serves GET /v1/agents/builds/:org/:project — PUBLIC, no tenancy.
-// It answers only for a session its author explicitly published, which is why it
-// can be anonymous: publishing is the author's act, and an unpublished session
-// is invisible here no matter who asks. The owner reads the same session through
-// the org-scoped /v1/agents/sessions routes, which need a validated principal.
-func readBuild(s *cloud.Service[state], c *zip.Ctx) error {
-	org := strings.TrimSpace(c.Param("org"))
-	project := strings.TrimSpace(c.Param("project"))
+// buildRef addresses one published build by the (org, project) pair in the URL.
+//
+// THIS IS NOT A TENANT KEY, and it is the one route in this package where an org
+// arrives as an In field. The route is PUBLIC by construction: the only rows it
+// can reach are ones an author explicitly published, so the org here is part of
+// the build's public ADDRESS (the same pair a visitor reads in the URL bar), not
+// an assertion of who is asking. Every org-scoped read in this package takes its
+// tenant from principal.OrgFrom instead, because a tenant key read off the wire
+// is a cross-tenant read the caller asserted for itself.
+type buildRef struct {
+	// Org is the org that published the build, from the path.
+	Org string `json:"org"`
+	// Project is the product's slug, from the path.
+	Project string `json:"project"`
+}
+
+// ReadBuild returns the readable build of one product: the agent session that
+// produced it, turn by turn — the prompts, the reasoning, the commits each turn
+// produced — plus the exact `git log` that re-derives every commit binding from
+// git itself, so nothing here has to be taken on trust.
+//
+// PUBLIC, no tenancy: it answers only for a session its author explicitly
+// published, which is what makes it safe to be anonymous. An unpublished session
+// is invisible here no matter who asks; its owner reads it through the org-scoped
+// /v1/agents/sessions routes, which need a validated principal.
+//
+// Example: {"org": "hanzo", "project": "landing"}
+func (o sessionOps) build(ctx context.Context, in *buildRef) (*buildView, error) {
+	s := o.s
+	org := strings.TrimSpace(in.Org)
+	project := strings.TrimSpace(in.Project)
 	if org == "" || project == "" || len(project) > maxProject {
-		return zip.ErrNotFound("build not found")
+		return nil, zip.ErrNotFound("build not found")
 	}
-	rows, err := s.State.store.ListSessions(c.Context(), org,
+	rows, err := s.State.store.ListSessions(ctx, org,
 		SessionFilter{Project: project, Published: true, Limit: 1})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "builds: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "builds: %v", err)
 	}
 	if len(rows) == 0 {
-		return zip.ErrNotFound("no published build for " + org + "/" + project)
+		return nil, zip.ErrNotFound("no published build for " + org + "/" + project)
 	}
 	x := rows[0]
-	evs, err := s.State.store.ListEvents(c.Context(), org, x.ID, 0, buildsCap)
+	evs, err := s.State.store.ListEvents(ctx, org, x.ID, 0, buildsCap)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "turns: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "turns: %v", err)
 	}
 	v := buildView{
 		Org: org, Project: project, Session: x.ID, Title: x.Title, Agent: x.Agent,
@@ -291,7 +314,7 @@ func readBuild(s *cloud.Service[state], c *zip.Ctx) error {
 			Commit: b.Commit, Subject: b.Subject, At: rfc3339(e.CreatedAt),
 		})
 	}
-	return c.JSON(http.StatusOK, v)
+	return &v, nil
 }
 
 // ---- the deploy, as the build's last turn ----
@@ -342,21 +365,52 @@ func (w deployWriter) OnDeploy(ctx context.Context, org, slug, url, deploymentID
 	publishEvent(w.s, org, rows[0].RootID, e)
 }
 
-// listBuilds serves GET /v1/agents/builds — PUBLIC index of every published
-// build, so the gallery can link straight to the story behind each product.
-func listBuilds(s *cloud.Service[state], c *zip.Ctx) error {
-	rows, err := s.State.store.ListPublishedBuilds(c.Context(), queryInt(c, "limit"))
+// buildsQuery pages the public build index.
+type buildsQuery struct {
+	// Limit caps the page. Absent, zero or over 500 reads as 100.
+	Limit int `json:"limit"`
+}
+
+// buildSummary is one published build as the index lists it: enough to render a
+// gallery card and link to the full story. Every field is always present —
+// including the empty ones — because that is what this route has always sent.
+type buildSummary struct {
+	Org       string `json:"org"`
+	Project   string `json:"project"`
+	Session   string `json:"session"`
+	Title     string `json:"title"`
+	Agent     string `json:"agent"`
+	Status    string `json:"status"`
+	Repo      string `json:"repo"`
+	Turns     int    `json:"turns"`
+	StartedAt string `json:"startedAt"`
+	EndedAt   string `json:"endedAt"`
+}
+
+// buildList is the public index of published builds.
+type buildList struct {
+	// Builds is every published build, most recently updated first.
+	Builds []buildSummary `json:"builds"`
+}
+
+// ListBuilds returns the public index of every published build, most recently
+// updated first, so a gallery can link straight to the story behind each product.
+// PUBLIC, no tenancy: publishing is the author's act, and only published root
+// sessions appear here.
+func (o sessionOps) builds(ctx context.Context, in *buildsQuery) (*buildList, error) {
+	s := o.s
+	rows, err := s.State.store.ListPublishedBuilds(ctx, in.Limit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "builds: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "builds: %v", err)
 	}
-	out := make([]map[string]any, 0, len(rows))
+	out := make([]buildSummary, 0, len(rows))
 	for _, x := range rows {
-		n, _ := s.State.store.CountEvents(c.Context(), x.Org, x.ID)
-		out = append(out, map[string]any{
-			"org": x.Org, "project": x.Project, "session": x.ID, "title": x.Title,
-			"agent": x.Agent, "status": x.Status, "repo": x.Repo, "turns": n,
-			"startedAt": rfc3339(x.StartedAt), "endedAt": rfc3339(x.EndedAt),
+		n, _ := s.State.store.CountEvents(ctx, x.Org, x.ID)
+		out = append(out, buildSummary{
+			Org: x.Org, Project: x.Project, Session: x.ID, Title: x.Title,
+			Agent: x.Agent, Status: x.Status, Repo: x.Repo, Turns: n,
+			StartedAt: rfc3339(x.StartedAt), EndedAt: rfc3339(x.EndedAt),
 		})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"builds": out})
+	return &buildList{Builds: out}, nil
 }

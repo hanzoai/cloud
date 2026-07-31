@@ -1,17 +1,19 @@
-// Package books is the revenue BOOKS spine: a native double-entry ledger that records
-// hanzo.ai's real prepaid-credit revenue on per-org Base/SQLite, exposed at /v1/books.
+// Package books is double-entry accounting at /v1/books: a fixed chart of accounts, an
+// append-only general ledger, bank feeds with reconciliation, receipt scanning, and the
+// trial-balance / P&L / balance-sheet reports that prove the books balance.
 //
-// WHY THIS EXISTS. commerce holds the money (a prepaid wallet: deposits + withdraws);
-// finance.go PROJECTS that wallet for the customer UI. Neither keeps BOOKS — a
-// double-entry general ledger with a chart of accounts, revenue recognition, and a trial
-// balance that proves the books balance. This domain ports ERPNext's Accounts SEMANTICS
-// (process_gl_map: merge → toggle → round-off → the debit==credit invariant) to Go, with
-// ZERO of its Python/Postgres, and books commerce's transactions into it.
+// WHY THIS EXISTS. finance holds the money (a prepaid wallet: deposits + usage debits);
+// billing PROJECTS that wallet for the customer UI. Neither keeps BOOKS — a general
+// ledger with a chart of accounts, revenue recognition, and a trial balance. This domain
+// ports ERPNext's Accounts SEMANTICS (process_gl_map: merge → toggle → round-off → the
+// debit==credit invariant) to Go, with ZERO of its Python/Postgres.
 //
-// THE ONE POSTING SOURCE. commerce GET /v1/billing/transactions is the SOLE source
-// (ingest.go). This domain is READ-ONLY against commerce — it never mints a deposit,
-// credit, or payout. It only READS money that already moved and writes the accounting
-// twin. So the books can restate but never create money.
+// IT RECORDS MONEY, IT NEVER MOVES IT. Three sources post: commerce
+// GET /v1/billing/transactions (ingest.go), a read-only bank connector (bank.go), and a
+// reviewed receipt scan (scan.go). Every one of them lands through the SAME post() choke
+// point, and none of them can mint a deposit, credit, or payout — this domain only READS
+// money that already moved and writes the accounting twin, so the books can restate but
+// never create money.
 //
 // TENANT ISOLATION. Every read resolves the caller's OWN org from the validated
 // principal (principal.Org — the gateway-minted X-Org-Id, HIP-0026), and each org's
@@ -107,21 +109,41 @@ func Shutdown() error {
 }
 
 func routes(app cloud.Router, s *cloud.Service[*state]) {
-	app.Get("/v1/books/accounts", cloud.Handle(s, accountsHandler))
-	app.Get("/v1/books/gl", cloud.Handle(s, glHandler))
-	app.Get("/v1/books/trial-balance", cloud.Handle(s, trialBalanceHandler))
-	app.Get("/v1/books/metrics", cloud.Handle(s, metricsHandler))
-	app.Get("/v1/books/pnl", cloud.Handle(s, pnlHandler))
-	app.Get("/v1/books/balance-sheet", cloud.Handle(s, balanceSheetHandler))
-	app.Get("/v1/books/export", cloud.Handle(s, exportHandler))
-	// The AI Ask brain: a plain-language question answered with REAL figures computed from
-	// the books (ask.go), and the clarifying-questions detector over unusual transactions
-	// (anomalies.go). Both are strictly read-only over the ledger.
-	app.Post("/v1/books/ask", cloud.Handle(s, askHandler))
-	app.Get("/v1/books/questions", cloud.Handle(s, questionsHandler))
+	g := app.Group("/v1/books")
+	// Bridge FIRST, then noStore: fiber runs middleware in registration order, so
+	// one installed after its leaves never runs. Bridge parks the VALIDATED org on
+	// the context, which is the only way a typed op — which receives a context and
+	// its decoded In and nothing else — can resolve its tenant; noStore carries the
+	// Cache-Control every books answer has always sent. Both are prefix-scoped, and
+	// nesting under Serve's own app-wide Bridge is harmless (the inner one is what
+	// the handler sees). See typed.go.
+	g.Use(cloud.Bridge(), noStore())
+
+	// TYPED ops, declared on the group: the prefix is part of each op's path and
+	// therefore of every projection — the document, the MCP tool, the CLI command,
+	// the SDK method — so this one registration is the whole contract.
+	o := booksOps{s: s}
+	zip.Get(g, "/accounts", o.listAccounts)
+	zip.Get(g, "/gl", o.listGL)
+	zip.Get(g, "/trial-balance", o.trialBalance)
+	zip.Get(g, "/pnl", o.profitAndLoss)
+	zip.Get(g, "/balance-sheet", o.balanceSheet)
+	zip.Get(g, "/export", o.exportPackage)
+	zip.Get(g, "/questions", o.listQuestions)
+	// The metrics read went typed the day its Out stopped embedding Metrics:
+	// MetricsResponse now spells the snapshot fields out flat (metrics.go), because
+	// zip's schema walk publishes an embedded struct as a NESTED property while
+	// encoding/json flattens it — the copy is pinned complete by
+	// TestMetricsResponseCarriesEveryMetricsField, so it cannot silently drift.
+	zip.Get(g, "/metrics", o.metrics)
 	// The customer-triggered ingestion of the caller's OWN org: reads commerce's
 	// transactions and posts the accounting twin. Idempotent, so a repeat is safe.
-	app.Post("/v1/books/sync", cloud.Handle(s, syncHandler))
+	zip.Post(g, "/sync", o.sync)
+	// The AI Ask brain: a plain-language question answered from the org's real
+	// figures. Its body IS its In; the ?sandbox selector stays on the URL (query,
+	// typed.go), so typing described the route without moving it.
+	zip.Post(g, "/ask", o.ask)
+
 	// The shared BANK engine surface (bank_api.go): OFX/CSV import, connector sync,
 	// transaction + unreconciled reads, and the Plaid/Teller link plumbing stubs.
 	bankRoutes(app, s)
@@ -227,7 +249,7 @@ func (r *commerceReader) transactions(ctx context.Context, org string, sandbox b
 	return rows, nil
 }
 
-// sandboxQuery reads the ?sandbox=true toggle a read handler uses to select the ledger.
-func sandboxQuery(c *zip.Ctx) bool {
-	return strings.EqualFold(strings.TrimSpace(c.Query("sandbox")), "true")
-}
+// sandboxQuery reads the ?sandbox=true toggle a handler still untyped uses to select the
+// ledger. It is sandboxOf (typed.go) read off a request — one rule, two readers, so the
+// typed ops and the raw handlers beside them can never disagree about which books answer.
+func sandboxQuery(c *zip.Ctx) bool { return sandboxOf(c.Query("sandbox")) }

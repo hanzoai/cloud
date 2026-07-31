@@ -220,17 +220,30 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	app.Get("/v1/compute/regions", cloud.Handle(s, listRegions))
 	app.Get("/v1/compute/sizes", cloud.Handle(s, listSizes))
 
-	// Agent↔machine binding — thin proxy over vm's binding surface (mark a machine
-	// as running the @hanzo/bot runtime for a cloud Agent). Deeper than
-	// /v1/machines/:id so no machine id captures these literals. See bots.go.
-	zip.Post(reg, "/v1/machines/:id/bind-agent", o.bindMachineAgent,
+	// A machine's AGENT — thin proxy over vm's binding surface (mark a machine as
+	// running the @hanzo/bot runtime for a cloud Agent).
+	//
+	// One noun, one address, and the METHOD carries the verb. This surface used to
+	// spell one resource three ways — POST .../bind-agent to create, GET and DELETE
+	// .../agent-binding to read and remove, GET /v1/agent-bindings to list — so a
+	// caller had to learn that create lives at a different path from its own read,
+	// and every projection published three names for one thing. A machine hosts at
+	// most one agent, so it is a to-one sub-resource: singular at the member,
+	// plural at the collection, which is the same rule everywhere else.
+	//
+	// PUT, not POST, because binding is idempotent: re-binding the same agent to
+	// the same machine is the state the caller asked for, not a second binding.
+	//
+	// Both literals are registered ahead of /v1/machines/:id so no machine id
+	// captures them — the same ordering /v1/machines/launch relies on. See bots.go.
+	zip.Get(reg, "/v1/machines/agents", o.listAgents,
+		zip.WithOperationID("listMachineAgents"), zip.WithTags("compute"))
+	zip.Put(reg, "/v1/machines/:id/agent", o.bindAgent,
 		zip.WithOperationID("bindMachineAgent"), zip.WithTags("compute"))
-	zip.Get(reg, "/v1/machines/:id/agent-binding", o.getMachineAgentBinding,
-		zip.WithOperationID("getMachineAgentBinding"), zip.WithTags("compute"))
-	zip.Delete(reg, "/v1/machines/:id/agent-binding", o.unbindMachineAgent,
+	zip.Get(reg, "/v1/machines/:id/agent", o.getAgent,
+		zip.WithOperationID("getMachineAgent"), zip.WithTags("compute"))
+	zip.Delete(reg, "/v1/machines/:id/agent", o.unbindAgent,
 		zip.WithOperationID("unbindMachineAgent"), zip.WithTags("compute"))
-	zip.Get(reg, "/v1/agent-bindings", o.listAgentBindings,
-		zip.WithOperationID("listAgentBindings"), zip.WithTags("compute"))
 
 	// Bot machines — a kind=bot machine + an agent binding, composed from the vm
 	// compute + binding surface (bots.go). The value is a MACHINE that hosts a bot

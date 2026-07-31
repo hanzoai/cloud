@@ -82,9 +82,9 @@ func newAskApp(t *testing.T, ai types.AIClient, mrrByOrg map[string]string) *zip
 
 // ask POSTs a question as a VALIDATED principal for org (X-User-Id set, exactly as the gateway
 // mints it — the test app has no sanitizer). Empty org exercises the anonymous 403 path.
-func ask(t *testing.T, app *zip.App, org, question string) (int, AskResponse) {
+func ask(t *testing.T, app *zip.App, org, question string) (int, askAnswer) {
 	t.Helper()
-	body, _ := json.Marshal(AskRequest{Question: question})
+	body, _ := json.Marshal(askRequest{Question: question})
 	req := httptest.NewRequest(http.MethodPost, "/v1/ask", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {
@@ -96,7 +96,7 @@ func ask(t *testing.T, app *zip.App, org, question string) (int, AskResponse) {
 		t.Fatalf("ask %q: %v", question, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	var out AskResponse
+	var out askAnswer
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode == http.StatusOK {
 		if err := json.Unmarshal(b, &out); err != nil {
@@ -106,7 +106,7 @@ func ask(t *testing.T, app *zip.App, org, question string) (int, AskResponse) {
 	return resp.StatusCode, out
 }
 
-func figure(r AskResponse, label string) (string, bool) {
+func figure(r askAnswer, label string) (string, bool) {
 	for _, f := range r.Figures {
 		if f.Label == label {
 			return f.Value, true
@@ -115,7 +115,7 @@ func figure(r AskResponse, label string) (string, bool) {
 	return "", false
 }
 
-func hasSource(r AskResponse, src string) bool {
+func hasSource(r askAnswer, src string) bool {
 	for _, s := range r.Sources {
 		if s == src {
 			return true
@@ -238,7 +238,7 @@ func TestOrgIsolation(t *testing.T) {
 func TestAnonymousRefused(t *testing.T) {
 	app := newAskApp(t, nil, map[string]string{"acme": "$4,200"})
 	// Forged X-Org-Id with NO X-User-Id (no validated principal) — the anonymous forge.
-	body, _ := json.Marshal(AskRequest{Question: "what's my mrr?"})
+	body, _ := json.Marshal(askRequest{Question: "what's my mrr?"})
 	req := httptest.NewRequest(http.MethodPost, "/v1/ask", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-Id", "acme")

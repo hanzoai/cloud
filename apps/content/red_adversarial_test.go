@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/framework"
+	"github.com/hanzoai/cloud/apps/metering"
 )
 
 // ── counting commerce meter ───────────────────────────────────────────────────────
@@ -34,12 +34,12 @@ import (
 // (tier, spend-alerts) 404s so the scope-cap overlay fails OPEN (funds-only gating),
 // exactly as in production.
 type redMeter struct {
-	srv        *httptest.Server
-	available  int64 // cents returned by the balance gate
-	gates      int64 // GET /v1/billing/balance count (atomic)
-	debits     chan redDebit
-	client     *metering.Client
-	closeOnce  sync.Once
+	srv       *httptest.Server
+	available int64 // cents returned by the balance gate
+	gates     int64 // GET /v1/billing/balance count (atomic)
+	debits    chan redDebit
+	client    *metering.Client
+	closeOnce sync.Once
 }
 
 // redDebit captures a POST /v1/billing/usage. `user` (the body) is the per-org billing

@@ -37,18 +37,22 @@
 //	GET  /v1/research/projects      every project + real totals (canonical + retained)
 //	GET  /v1/research/totals        headline aggregate + per-kind (?project=)
 //	POST /v1/research/grants        set visibility/consent for a stable id (separate auth)
+//	POST /v1/research/artifacts     record a diary artifact, content-addressed
+//	GET  /v1/research/artifacts     the diary feed, newest first (metadata only)
+//	GET  /v1/research/artifacts/:sha256  the artifact's bytes, by content hash
 //
-// Mounted into the unified cloud binary via apps.go ({Name:"research", Mount}).
+// Its own binary (plugin/research) states Name/Price/Mount; the host learns the
+// prefix from its manifest row.
 package research
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -214,36 +218,70 @@ func build(b cloud.Base) (state, error) {
 // apps.go), so a graceful stop flushes and releases each org's SQLite file.
 func Shutdown() error { return shutdownStores() }
 
+// zipdoc lifts the doc comment off each typed op — and off each field of its In
+// and Out — into zipdoc_gen.go, which hands them to zip.Describe at init. Go
+// drops comments at compile time, so this build-time pass is the ONLY way that
+// prose reaches the published document, the MCP tool list and the generated SDKs.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// ops carries the subsystem's state onto every typed op. A typed handler takes a
+// context and its decoded In and nothing else, so the state rides on the receiver.
+type ops struct{ s *cloud.Service[state] }
+
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	shutdownStores = s.State.stores.CloseAll
 	mountedStores = s.State.stores // the in-process evidence seam (compose.go)
+	// cloud.Bridge carries into a typed op the request its signature drops: the
+	// validated org (the physical tenant boundary) and the project sub-scope. On the
+	// scoped Router it installs once per DECLARED prefix (/v1/research) and nowhere
+	// else, and it must precede the leaves below — fiber runs middleware in
+	// registration order. Serve installs one app-wide too; nesting is harmless.
+	app.Use(cloud.Bridge())
 	g := app.Group("/v1/research")
-	g.Post("/experiments", cloud.Handle(s, postExperiments))      // ingest (idempotent) → SQLite → roll up
-	g.Get("/experiments", cloud.Handle(s, listExperiments))       // list canonical
-	g.Get("/projects", cloud.Handle(s, getProjects))              // every project + real totals
-	g.Get("/totals", cloud.Handle(s, getTotals))                  // headline aggregate + per-kind
-	g.Post("/grants", cloud.Handle(s, postGrant))                 // visibility/consent (separate auth)
-	g.Post("/artifacts", cloud.Handle(s, postArtifact))           // record a diary artifact (content-addressed)
-	g.Get("/artifacts", cloud.Handle(s, listArtifacts))           // chronological diary feed (newest-first)
+	o := ops{s: s}
+	zip.Post(g, "/experiments", o.postExperiments) // ingest (idempotent) → SQLite → roll up
+	zip.Get(g, "/experiments", o.listExperiments)  // list canonical
+	zip.Get(g, "/projects", o.getProjects)         // every project + real totals
+	zip.Get(g, "/totals", o.getTotals)             // headline aggregate + per-kind
+	zip.Post(g, "/grants", o.postGrant)            // visibility/consent (separate auth)
+	zip.Post(g, "/artifacts", o.postArtifact)      // record a diary artifact (content-addressed)
+	zip.Get(g, "/artifacts", o.listArtifacts)      // chronological diary feed (newest-first)
+	// UNTYPED, and it has to be: this route streams the artifact's raw BYTES with the
+	// artifact's own Content-Type (image/png for a snapshot, application/octet-stream
+	// otherwise). A typed op answers application/json from a Go value — it has no
+	// vocabulary for a binary body — so typing it would change what every caller
+	// receives. See LLM.md.
 	g.Get("/artifacts/:sha256", cloud.Handle(s, getArtifactBlob)) // retrieve the bytes by content hash
 }
 
 var shutdownStores = func() error { return nil }
 
 // orgStore resolves the caller's org-scoped store (the physical tenant boundary). Every
-// handler leads with it, so tenant isolation is derived in ONE place from the validated
-// principal, never a client field.
-func orgStore(s *cloud.Service[state], c *zip.Ctx) (*store, string, error) {
-	org, ok := principal.Org(c)
+// op leads with it, so tenant isolation is derived in ONE place from the validated
+// principal, never a client field: the org is parked on the context by cloud.Bridge
+// and an In field could only ever be a tenant key the caller asserted for itself.
+func (o ops) orgStore(ctx context.Context) (*store, string, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return nil, "", errJSON(c, http.StatusForbidden, "X-Org-Id required")
+		return nil, "", zip.ErrForbidden("X-Org-Id required")
 	}
-	st, err := s.State.stores.For(org, "")
+	st, err := o.s.State.stores.For(org, "")
 	if err != nil {
-		s.Log.Error("research store open failed", "org", org, "err", err)
-		return nil, "", errJSON(c, http.StatusInternalServerError, "research store unavailable")
+		o.s.Log.Error("research store open failed", "org", org, "err", err)
+		return nil, "", zip.Errorf(http.StatusInternalServerError, "research store unavailable")
 	}
 	return st, org, nil
+}
+
+// project is the caller's project sub-scope — a column inside the org, never a
+// tenant key. Absent off the HTTP path, where the default project is the honest
+// answer (the whole-org view).
+func project(ctx context.Context) string {
+	if c, ok := cloud.Request(ctx); ok {
+		return principal.Project(c)
+	}
+	return principal.DefaultProject
 }
 
 // shipDurable is the ship-before-ack step every research WRITE runs after its SQLite
@@ -254,267 +292,393 @@ func orgStore(s *cloud.Service[state], c *zip.Ctx) (*store, string, error) {
 // acknowledged write is ever lost. On a local-only deployment (no Durability) it acks
 // trivially, so the call is a harmless no-op there. Returns nil to proceed, or a
 // written error response to return.
-func shipDurable(s *cloud.Service[state], c *zip.Ctx, org string) error {
-	acked, err := s.State.stores.Sync(org, "")
+func (o ops) shipDurable(org string) error {
+	acked, err := o.s.State.stores.Sync(org, "")
 	if err != nil {
-		s.Log.Warn("research durable ship failed", "org", org, "err", err)
-		return errJSON(c, http.StatusServiceUnavailable, "research store failover in progress; retry")
+		o.s.Log.Warn("research durable ship failed", "org", org, "err", err)
+		return zip.Errorf(http.StatusServiceUnavailable, "research store failover in progress; retry")
 	}
 	if !acked {
-		return errJSON(c, http.StatusServiceUnavailable, "research store failover in progress; retry")
+		return zip.Errorf(http.StatusServiceUnavailable, "research store failover in progress; retry")
 	}
 	return nil
 }
 
-// postExperiments appends one batch of versions idempotently into the org's durable
-// SQLite plane, then rolls it up to the warehouse best-effort. project is the SERVER's
-// value; a BYO endpoint is SSRF-gated before the store is touched. The response carries
-// BOTH canonical and retained counts so a caller sees the versioned truth.
-func postExperiments(s *cloud.Service[state], c *zip.Ctx) error {
-	st, org, done := orgStore(s, c)
-	if st == nil {
-		return done
-	}
-	project := principal.Project(c)
+// ingestOut is what one ingest batch did, in BOTH views: what this call added and
+// what the org's store now holds.
+type ingestOut struct {
+	// Project is the project the batch was filed under — the SERVER's value, never the body's.
+	Project string `json:"project"`
+	// ExperimentsIngested is how many experiment versions this call appended.
+	ExperimentsIngested int `json:"experiments_ingested"`
+	// AttemptsIngested is how many attempt versions this call appended.
+	AttemptsIngested int `json:"attempts_ingested"`
+	// CanonicalExperiments is the deduped experiment count the store now holds.
+	CanonicalExperiments int `json:"canonical_experiments"`
+	// ExperimentsRetained is the full versioned experiment history the store now holds.
+	ExperimentsRetained int `json:"experiments_retained"`
+	// CanonicalAttempts is the deduped attempt count the store now holds.
+	CanonicalAttempts int `json:"canonical_attempts"`
+	// AttemptsRetained is the full versioned attempt history the store now holds.
+	AttemptsRetained int `json:"attempts_retained"`
+	// RolledUp is false when the OLAP roll-up was skipped; the SQLite write still stands.
+	RolledUp bool `json:"rolled_up"`
+}
 
-	var req IngestRequest
-	if err := c.Bind(&req); err != nil {
-		return errJSON(c, http.StatusBadRequest, "invalid research ingest body")
+// IngestExperiments appends one batch of experiment and attempt versions to the
+// caller org's evidence store, idempotently by content, then rolls it up to the
+// analytics plane best-effort. The project is the SERVER's value and visibility is
+// forced private — an upload grants no training or publication right, which is a
+// separate call. A run carrying a BYO endpoint is SSRF-checked before the store is
+// touched. The answer carries BOTH the canonical (deduped) and retained (full
+// history) counts, so a caller sees the versioned truth rather than a dedup that
+// reads as loss.
+//
+// Example: {"experiments": [{"id": "benchmark:zen-1:mmlu", "kind": "benchmark", "subject": "zen-1", "metric": "accuracy", "value": 0.81, "ts": 1750000000}], "attempts": []}
+func (o ops) postExperiments(ctx context.Context, in *IngestRequest) (*ingestOut, error) {
+	st, org, err := o.orgStore(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if len(req.Experiments) == 0 && len(req.Attempts) == 0 {
-		return errJSON(c, http.StatusBadRequest, "ingest needs at least one experiment or attempt")
+	proj := project(ctx)
+
+	if len(in.Experiments) == 0 && len(in.Attempts) == 0 {
+		return nil, zip.ErrBadRequest("ingest needs at least one experiment or attempt")
 	}
-	if n := len(req.Experiments) + len(req.Attempts); n > maxBatchItems {
-		return errJSON(c, http.StatusRequestEntityTooLarge, "batch too large; split the upload")
+	if n := len(in.Experiments) + len(in.Attempts); n > maxBatchItems {
+		return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "batch too large; split the upload")
 	}
-	for i := range req.Experiments {
-		e := &req.Experiments[i]
+	for i := range in.Experiments {
+		e := &in.Experiments[i]
 		if e.ID == "" || e.Kind == "" || e.Subject == "" {
-			return errJSON(c, http.StatusUnprocessableEntity, "experiment needs id, kind, and subject")
+			return nil, zip.Errorf(http.StatusUnprocessableEntity, "experiment needs id, kind, and subject")
 		}
 		if e.Endpoint != "" {
 			if err := ssrfSafe(e.Endpoint); err != nil {
-				return errJSON(c, http.StatusUnprocessableEntity, err.Error())
+				return nil, zip.Errorf(http.StatusUnprocessableEntity, "%s", err.Error())
 			}
 		}
 	}
-	for i := range req.Attempts {
-		a := &req.Attempts[i]
+	for i := range in.Attempts {
+		a := &in.Attempts[i]
 		if a.Benchmark == "" || a.Item == "" || a.Model == "" {
-			return errJSON(c, http.StatusUnprocessableEntity, "attempt needs benchmark, item, and model")
+			return nil, zip.Errorf(http.StatusUnprocessableEntity, "attempt needs benchmark, item, and model")
 		}
 	}
 
-	ctx := c.Context()
-	expAdded, attAdded, err := st.ingest(ctx, project, req.Experiments, req.Attempts)
+	expAdded, attAdded, err := st.ingest(ctx, proj, in.Experiments, in.Attempts)
 	if err != nil {
-		s.Log.Error("research ingest failed", "org", org, "project", project, "err", err)
-		return errJSON(c, http.StatusInternalServerError, "research ingest failed")
+		o.s.Log.Error("research ingest failed", "org", org, "project", proj, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "research ingest failed")
 	}
 	// Ship the committed ingest durably BEFORE acknowledging (and before the external
 	// roll-up), so a failover never loses an acked write.
-	if e := shipDurable(s, c, org); e != nil {
-		return e
+	if e := o.shipDurable(org); e != nil {
+		return nil, e
 	}
 
 	// Roll up best-effort — the SQLite write above is the source of truth, so a datastore
 	// outage degrades to rolled_up:false, never a failed ingest.
 	rolledUp := true
-	if err := s.State.wh.rollUp(ctx, org, project, req.Experiments, req.Attempts, time.Now()); err != nil {
+	if err := o.s.State.wh.rollUp(ctx, org, proj, in.Experiments, in.Attempts, time.Now()); err != nil {
 		rolledUp = false
-		s.Log.Warn("research roll-up skipped; SQLite retains the write", "org", org, "err", err)
+		o.s.Log.Warn("research roll-up skipped; SQLite retains the write", "org", org, "err", err)
 	}
 
 	cnt, err := st.counts(ctx)
 	if err != nil {
-		s.Log.Error("research counts failed", "org", org, "err", err)
-		return errJSON(c, http.StatusInternalServerError, "research counts failed")
+		o.s.Log.Error("research counts failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "research counts failed")
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"project":               project,
-		"experiments_ingested":  expAdded,
-		"attempts_ingested":     attAdded,
-		"canonical_experiments": cnt.ExperimentsCanonical,
-		"experiments_retained":  cnt.ExperimentsRetained,
-		"canonical_attempts":    cnt.AttemptsCanonical,
-		"attempts_retained":     cnt.AttemptsRetained,
-		"rolled_up":             rolledUp,
-	})
+	return &ingestOut{
+		Project:              proj,
+		ExperimentsIngested:  expAdded,
+		AttemptsIngested:     attAdded,
+		CanonicalExperiments: cnt.ExperimentsCanonical,
+		ExperimentsRetained:  cnt.ExperimentsRetained,
+		CanonicalAttempts:    cnt.AttemptsCanonical,
+		AttemptsRetained:     cnt.AttemptsRetained,
+		RolledUp:             rolledUp,
+	}, nil
 }
 
-// listExperiments returns the canonical experiments. Default (no ?project=) is the org's
-// entire set across projects — the ops board's cross-project view (projects are
-// sub-scopes of the one tenant); ?project= narrows to one, ?kind= to one discriminator.
-func listExperiments(s *cloud.Service[state], c *zip.Ctx) error {
-	st, org, done := orgStore(s, c)
-	if st == nil {
-		return done
-	}
-	exps, err := st.listExperiments(c.Context(), c.Query("project"), c.Query("kind"))
+// listIn narrows a canonical experiment listing. Both are query parameters.
+type listIn struct {
+	// Project narrows to one project. Empty reads the org's whole set across projects.
+	Project string `json:"project"`
+	// Kind narrows to one discriminator: benchmark, kernel-perf, training, ablation or policy-eval.
+	Kind string `json:"kind"`
+}
+
+// experimentsOut is a canonical experiment listing.
+type experimentsOut struct {
+	// Data are the canonical experiment versions.
+	Data []Experiment `json:"data"`
+	// Total is len(data) — the rows in this answer, not the store's history.
+	Total int `json:"total"`
+}
+
+// ListExperiments returns the caller org's CANONICAL experiments — the deterministic
+// deduped view over the versioned history. With no ?project= it reads the org's
+// whole set across projects (the ops board's cross-project view, since a project is
+// a sub-scope of the one tenant); ?project= narrows to one and ?kind= to one
+// discriminator.
+func (o ops) listExperiments(ctx context.Context, in *listIn) (*experimentsOut, error) {
+	st, org, err := o.orgStore(ctx)
 	if err != nil {
-		s.Log.Error("research list failed", "org", org, "err", err)
-		return errJSON(c, http.StatusInternalServerError, "research list failed")
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": exps, "total": len(exps)})
-}
-
-// getProjects returns every research project in the org with its real totals (canonical +
-// retained) — the ops board's "every project + real totals" view.
-func getProjects(s *cloud.Service[state], c *zip.Ctx) error {
-	st, org, done := orgStore(s, c)
-	if st == nil {
-		return done
-	}
-	ps, err := st.projectSummaries(c.Context())
+	exps, err := st.listExperiments(ctx, in.Project, in.Kind)
 	if err != nil {
-		s.Log.Error("research projects failed", "org", org, "err", err)
-		return errJSON(c, http.StatusInternalServerError, "research projects failed")
+		o.s.Log.Error("research list failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "research list failed")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": ps, "total": len(ps)})
+	return &experimentsOut{Data: exps, Total: len(exps)}, nil
 }
 
-// getTotals returns the headline aggregate for the org (or one project via ?project=)
-// plus a per-kind breakdown — the observatory's poll target. Canonical + retained counts
-// travel together. Read from the durable SQLite plane; the OLAP roll-up serves the
-// identical shape for the real-time cross-ORG view once the datastore is live (the
-// SSE/stream hook attaches at that read, owned by the board).
-func getTotals(s *cloud.Service[state], c *zip.Ctx) error {
-	st, org, done := orgStore(s, c)
-	if st == nil {
-		return done
-	}
-	t, err := st.totals(c.Context(), c.Query("project"))
+// projectsOut is every project in the org with its real totals.
+type projectsOut struct {
+	// Data are the org's projects with canonical + retained counts.
+	Data []ProjectSummary `json:"data"`
+	// Total is len(data).
+	Total int `json:"total"`
+}
+
+// ListResearchProjects returns every research project in the caller's org with its
+// real totals — canonical and retained side by side — which is the ops board's
+// "every project + real totals" view.
+func (o ops) getProjects(ctx context.Context, _ *noInput) (*projectsOut, error) {
+	st, org, err := o.orgStore(ctx)
 	if err != nil {
-		s.Log.Error("research totals failed", "org", org, "err", err)
-		return errJSON(c, http.StatusInternalServerError, "research totals failed")
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, t)
+	ps, err := st.projectSummaries(ctx)
+	if err != nil {
+		o.s.Log.Error("research projects failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "research projects failed")
+	}
+	return &projectsOut{Data: ps, Total: len(ps)}, nil
 }
 
-// postGrant records the SEPARATE visibility/consent authorization upload never implies.
-// It is org-scoped (the validated principal owns the org's records) and defaults the
-// record's project to the caller's project scope.
-func postGrant(s *cloud.Service[state], c *zip.Ctx) error {
-	st, org, done := orgStore(s, c)
-	if st == nil {
-		return done
+// totalsIn narrows the headline aggregate.
+type totalsIn struct {
+	// Project narrows the aggregate to one project. Empty aggregates the whole org.
+	Project string `json:"project"`
+}
+
+// GetResearchTotals returns the caller org's headline aggregate plus a per-kind
+// breakdown — the observatory's poll target. Canonical and retained counts travel
+// together, so a deduped view never reads as loss. ?project= narrows to one project.
+func (o ops) getTotals(ctx context.Context, in *totalsIn) (*ResearchTotals, error) {
+	st, org, err := o.orgStore(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var req GrantRequest
-	if err := c.Bind(&req); err != nil {
-		return errJSON(c, http.StatusBadRequest, "invalid grant body")
+	t, err := st.totals(ctx, in.Project)
+	if err != nil {
+		o.s.Log.Error("research totals failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "research totals failed")
 	}
-	if req.ID == "" && req.SHA256 == "" {
-		return errJSON(c, http.StatusBadRequest, "grant needs a stable id or an artifact sha256")
+	return &t, nil
+}
+
+// grantOut reports how many records a grant moved.
+type grantOut struct {
+	// Updated is the number of records the grant applied to. Zero is a 404, never a silent no-op.
+	Updated int `json:"updated"`
+}
+
+// GrantResearchVisibility records the SEPARATE authorization an upload never
+// implies: a record's visibility (private, org or public) and, for a run, its
+// training and commons-publication consent. Address a run by its stable id or an
+// artifact by its sha256; an artifact grant sets visibility only. The ORG is the
+// tenant boundary and comes from the validated principal, so a caller can only ever
+// grant within its own org; `project` locates WHICH record inside it and defaults to
+// the caller's project scope.
+//
+// Example: {"id": "benchmark:zen-1:mmlu", "visibility": "public", "trainable": true}
+func (o ops) postGrant(ctx context.Context, in *GrantRequest) (*grantOut, error) {
+	st, org, err := o.orgStore(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if req.Visibility != nil && !visibilities[*req.Visibility] {
-		return errJSON(c, http.StatusUnprocessableEntity, "visibility must be private, org, or public")
+	if in.ID == "" && in.SHA256 == "" {
+		return nil, zip.ErrBadRequest("grant needs a stable id or an artifact sha256")
+	}
+	if in.Visibility != nil && !visibilities[*in.Visibility] {
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "visibility must be private, org, or public")
 	}
 	// project locates WHICH run/artifact in the caller's org to grant — a run's stable
 	// id is (project, id), so the target project is an INPUT, defaulting to the
 	// caller's project scope. This is intentionally not server-forced (as ingest's is):
-	// the ORG (the physical file, orgStore→principal.Org) is the tenant boundary, and
+	// the ORG (the physical file, orgStore→principal.OrgFrom) is the tenant boundary, and
 	// project is an org-internal label the org's own board reads across, so a caller
 	// granting for any project in ITS OWN org is within its authority — never cross-org.
-	project := req.Project
-	if project == "" {
-		project = principal.Project(c)
+	proj := in.Project
+	if proj == "" {
+		proj = project(ctx)
 	}
 	// An artifact grant (by sha256) sets only visibility — the same private-by-default
 	// rule as runs. A run grant (by id) sets visibility + consent flags.
 	var n int
-	var err error
-	if req.SHA256 != "" {
-		if req.Visibility == nil {
-			return errJSON(c, http.StatusBadRequest, "artifact grant needs a visibility")
+	if in.SHA256 != "" {
+		if in.Visibility == nil {
+			return nil, zip.ErrBadRequest("artifact grant needs a visibility")
 		}
-		n, err = st.setArtifactVisibility(c.Context(), project, req.SHA256, *req.Visibility)
+		n, err = st.setArtifactVisibility(ctx, proj, in.SHA256, *in.Visibility)
 	} else {
-		n, err = st.setGrant(c.Context(), project, req.ID, req.Visibility, req.Trainable, req.Publishable)
+		n, err = st.setGrant(ctx, proj, in.ID, in.Visibility, in.Trainable, in.Publishable)
 	}
 	if err != nil {
-		s.Log.Error("research grant failed", "org", org, "err", err)
-		return errJSON(c, http.StatusInternalServerError, "research grant failed")
+		o.s.Log.Error("research grant failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "research grant failed")
 	}
 	if n == 0 {
-		return errJSON(c, http.StatusNotFound, "no records for that target")
+		return nil, zip.ErrNotFound("no records for that target")
 	}
-	if e := shipDurable(s, c, org); e != nil {
-		return e
+	if e := o.shipDurable(org); e != nil {
+		return nil, e
 	}
-	return c.JSON(http.StatusOK, map[string]any{"updated": n})
+	return &grantOut{Updated: n}, nil
 }
 
-// postArtifact records one diary artifact, CONTENT-ADDRESSED inside the trust boundary:
-// the caller submits the bytes (base64 content), the SERVER hashes them, and that hash is
-// the identity + ref — never a client-asserted sha256 (which would be poisonable and make
-// "hash-addressed" unearned). A client-provided sha256, if any, must MATCH. project is the
-// SERVER's value; visibility is forced private.
-func postArtifact(s *cloud.Service[state], c *zip.Ctx) error {
-	st, org, done := orgStore(s, c)
-	if st == nil {
-		return done
+// artifactOut is the content address the server derived for the submitted bytes.
+type artifactOut struct {
+	// SHA256 is the SERVER's hash of the bytes — the artifact's identity.
+	SHA256 string `json:"sha256"`
+	// Ref is the content address, "sha256:<hash>".
+	Ref string `json:"ref"`
+	// Created is false when these exact bytes were already recorded — the write is a no-op.
+	Created bool `json:"created"`
+	// RolledUp is false when the OLAP roll-up was skipped; the SQLite write still stands.
+	RolledUp bool `json:"rolled_up"`
+}
+
+// RecordResearchArtifact records one research-diary artifact — a board snapshot or a
+// generated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits
+// the bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity
+// and the ref, so the address can never be poisoned by a client-asserted one. A
+// client-supplied sha256, if present, must match the bytes. The project is the
+// SERVER's value and visibility is forced private. Re-posting the same bytes is a
+// no-op that reports created=false.
+//
+// Example: {"kind": "snapshot", "content": "iVBORw0KGgo=", "run_id": "benchmark:zen-1:mmlu"}
+func (o ops) postArtifact(ctx context.Context, in *Artifact) (*artifactOut, error) {
+	st, org, err := o.orgStore(ctx)
+	if err != nil {
+		return nil, err
 	}
-	project := principal.Project(c)
-	var a Artifact
-	if err := c.Bind(&a); err != nil {
-		return errJSON(c, http.StatusBadRequest, "invalid artifact body")
-	}
+	proj := project(ctx)
+	a := *in
 	if !artifactKinds[a.Kind] {
-		return errJSON(c, http.StatusUnprocessableEntity, "kind must be snapshot or report")
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "kind must be snapshot or report")
 	}
 	if a.Content == "" {
-		return errJSON(c, http.StatusUnprocessableEntity, "artifact needs content bytes (base64) to content-address")
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "artifact needs content bytes (base64) to content-address")
 	}
 	content, err := base64.StdEncoding.DecodeString(a.Content)
 	if err != nil || len(content) == 0 {
-		return errJSON(c, http.StatusUnprocessableEntity, "content must be non-empty base64")
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "content must be non-empty base64")
 	}
 	if len(content) > maxArtifactBytes {
-		return errJSON(c, http.StatusRequestEntityTooLarge, "artifact content too large")
+		return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "artifact content too large")
 	}
 	// Hash inside the trust boundary — the SERVER derives the identity from the bytes it
 	// stores, so a poisoned first-write is impossible (a distinct hash needs a preimage).
 	sum := sha256.Sum256(content)
 	hash := hex.EncodeToString(sum[:])
 	if a.SHA256 != "" && !strings.EqualFold(a.SHA256, hash) {
-		return errJSON(c, http.StatusUnprocessableEntity, "sha256 does not match the content bytes")
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "sha256 does not match the content bytes")
 	}
 	a.SHA256 = hash
 	a.Ref = "sha256:" + hash // server-derived content address — never a client file:// ref
 	a.Content = ""
-	ctx := c.Context()
-	created, err := st.putArtifact(ctx, project, a, content)
+	created, err := st.putArtifact(ctx, proj, a, content)
 	if err != nil {
-		s.Log.Error("research artifact failed", "org", org, "err", err)
-		return errJSON(c, http.StatusInternalServerError, "research artifact failed")
+		o.s.Log.Error("research artifact failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "research artifact failed")
 	}
-	if e := shipDurable(s, c, org); e != nil {
-		return e
+	if e := o.shipDurable(org); e != nil {
+		return nil, e
 	}
 	rolledUp := true
-	if err := s.State.wh.rollUpArtifact(ctx, org, project, a, time.Now()); err != nil {
+	if err := o.s.State.wh.rollUpArtifact(ctx, org, proj, a, time.Now()); err != nil {
 		rolledUp = false
 	}
-	return c.JSON(http.StatusOK, map[string]any{"sha256": a.SHA256, "ref": a.Ref, "created": created == 1, "rolled_up": rolledUp})
+	return &artifactOut{SHA256: a.SHA256, Ref: a.Ref, Created: created == 1, RolledUp: rolledUp}, nil
 }
 
+// artifactsIn filters the diary feed. All three are query parameters.
+type artifactsIn struct {
+	// Project narrows to one project. Empty takes the caller's project scope.
+	Project string `json:"project"`
+	// Run narrows to one run's artifacts by its stable id.
+	Run string `json:"run"`
+	// Since bounds the feed to artifacts recorded at or after this unix second.
+	Since int64 `json:"since"`
+}
+
+// artifactsOut is the diary feed.
+type artifactsOut struct {
+	// Data are the artifacts, newest first. Content bytes are never returned here.
+	Data []Artifact `json:"data"`
+	// Total is len(data).
+	Total int `json:"total"`
+}
+
+// ListResearchArtifacts returns the caller org's research-diary feed newest-first —
+// the snapshots and reports tied to its runs, as metadata and content addresses;
+// the bytes themselves are fetched by hash. ?run= narrows to one run, ?project=
+// to one project (default the caller's project scope), and ?since= to a unix second.
+func (o ops) listArtifacts(ctx context.Context, in *artifactsIn) (*artifactsOut, error) {
+	st, org, err := o.orgStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+	proj := in.Project
+	if proj == "" {
+		proj = project(ctx)
+	}
+	arts, err := st.listArtifacts(ctx, proj, in.Run, in.Since, maxArtifactPage)
+	if err != nil {
+		o.s.Log.Error("research artifacts list failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "research artifacts list failed")
+	}
+	return &artifactsOut{Data: arts, Total: len(arts)}, nil
+}
+
+// noInput is the In of an op addressed entirely by the caller's principal: it takes
+// nothing off the wire. ONE of these for the whole package.
+type noInput struct{}
+
 // getArtifactBlob serves one artifact's stored bytes, hash-addressed by :sha256 and
-// org-scoped — the retrieval side of hash-addressing (the board fetches a snapshot by its
-// content hash).
+// org-scoped — the retrieval side of hash-addressing (the board fetches a snapshot by
+// its content hash).
+//
+// It is the ONE route on this surface that is not a typed op, and it cannot be one:
+// it answers the artifact's RAW BYTES under the artifact's own Content-Type
+// (image/png for a snapshot, application/octet-stream otherwise). A typed op
+// serialises a Go value as application/json and has no vocabulary for a binary body,
+// so typing this would change what every caller receives — a wire break, not a
+// description. Its errors therefore stay in-band, as the rest of this file's did.
 func getArtifactBlob(s *cloud.Service[state], c *zip.Ctx) error {
-	st, org, done := orgStore(s, c)
-	if st == nil {
-		return done
+	org, ok := principal.Org(c)
+	if !ok {
+		return errJSON(c, http.StatusForbidden, "X-Org-Id required")
 	}
-	project := c.Query("project")
-	if project == "" {
-		project = principal.Project(c)
+	st, err := s.State.stores.For(org, "")
+	if err != nil {
+		s.Log.Error("research store open failed", "org", org, "err", err)
+		return errJSON(c, http.StatusInternalServerError, "research store unavailable")
 	}
-	content, kind, ok := st.artifactContent(c.Context(), project, c.Param("sha256"))
+	proj := c.Query("project")
+	if proj == "" {
+		proj = principal.Project(c)
+	}
+	content, kind, ok := st.artifactContent(c.Context(), proj, c.Param("sha256"))
 	if !ok {
 		return errJSON(c, http.StatusNotFound, "artifact not found")
 	}
-	_ = org
 	ct := "application/octet-stream"
 	if kind == "snapshot" {
 		ct = "image/png"
@@ -524,32 +688,11 @@ func getArtifactBlob(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.SendStream(bytes.NewReader(content))
 }
 
-// listArtifacts returns the chronological diary feed newest-first, filtered by ?run=,
-// ?project= (default the caller's project scope), and ?since= (unix seconds).
-func listArtifacts(s *cloud.Service[state], c *zip.Ctx) error {
-	st, org, done := orgStore(s, c)
-	if st == nil {
-		return done
-	}
-	project := c.Query("project")
-	if project == "" {
-		project = principal.Project(c)
-	}
-	var since int64
-	if v := strings.TrimSpace(c.Query("since")); v != "" {
-		since, _ = strconv.ParseInt(v, 10, 64)
-	}
-	arts, err := st.listArtifacts(c.Context(), project, c.Query("run"), since, maxArtifactPage)
-	if err != nil {
-		s.Log.Error("research artifacts list failed", "org", org, "err", err)
-		return errJSON(c, http.StatusInternalServerError, "research artifacts list failed")
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": arts, "total": len(arts)})
-}
-
 // errJSON writes an error status in-band (status + {error} JSON, nil returned) — the
 // arena family's pattern for a subsystem mounted under commerce's error-flatten filter
-// (see service.Terminal): writing before the filter runs keeps the real 4xx.
+// (see service.Terminal): writing before the filter runs keeps the real 4xx. Only the
+// blob route above needs it now; every other op on this surface is typed and RETURNS
+// its error, which zip renders as {status, error} with the same status code.
 func errJSON(c *zip.Ctx, status int, msg string) error {
 	return c.JSON(status, map[string]string{"error": msg})
 }

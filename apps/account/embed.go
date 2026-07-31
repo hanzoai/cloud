@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -71,14 +70,27 @@ func embedUp(status int) bool {
 	return status > 0
 }
 
+// embedStatusReq names which shared app the module is asking about.
+type embedStatusReq struct {
+	// App is the embedded app to report on: cms (Content Studio), erp or help.
+	App string `json:"app"`
+}
+
 // embedStatusResp is the verdict the module reads. Mirrors the route.ts JSON.
 type embedStatusResp struct {
-	App       string `json:"app"`
-	Origin    string `json:"origin"`
-	EmbedURL  string `json:"embedUrl"`
-	Reachable bool   `json:"reachable"`
-	Entitled  bool   `json:"entitled"`
-	Phase     string `json:"phase"`
+	// App is the app this verdict is about.
+	App string `json:"app"`
+	// Origin is the app's origin on this deployment's own brand domain.
+	Origin string `json:"origin"`
+	// EmbedURL is the in-app landing URL to frame. Empty when the caller is not
+	// entitled — a non-entitled caller never receives it.
+	EmbedURL string `json:"embedUrl"`
+	// Reachable is whether the app answered the liveness probe.
+	Reachable bool `json:"reachable"`
+	// Entitled is whether the caller's org may frame this brand-owned app.
+	Entitled bool `json:"entitled"`
+	// Phase is the verdict in one word: not-entitled, not-provisioned or ready.
+	Phase string `json:"phase"`
 }
 
 // reachProbe reports whether an embed origin answers "up". It is a package var so
@@ -86,20 +98,33 @@ type embedStatusResp struct {
 // Mount uses the real, time-boxed probe.
 var reachProbe = liveReachProbe
 
-// embedStatus is GET /v1/embed-status?app=cms|erp|help. Mirrors
-// GET app/embed-status/route.ts.
-func embedStatus(s *cloud.Service[state], c *zip.Ctx) error {
-	cr, ok := resolveCaller(c, false) // validated; a customer org (owner set) is fine
+// EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp,
+// help) may be framed by the caller and is actually running, so a console module
+// can choose between the embed and the provision panel.
+//
+// It answers two questions the browser cannot answer for itself. ENTITLEMENT is
+// server-authoritative: each app is a single shared per-BRAND instance, so only a
+// member of the owning brand org — or a SuperAdmin — is given the embed URL; every
+// other caller gets phase "not-entitled" and no URL. REACHABILITY is a probe of
+// that origin, which a cross-origin page cannot read for itself.
+//
+// The probed host is always <app>.<this deployment's own brand domain>: no part of
+// it comes from the request, so this can never be steered into probing an
+// arbitrary origin.
+//
+// Example: {"app": "cms"}
+func (o ops) embedStatus(ctx context.Context, in *embedStatusReq) (*embedStatusResp, error) {
+	cr, c, ok := requestCaller(ctx, false) // validated; a customer org (owner set) is fine
 	if !ok {
-		return zip.ErrForbidden("sign in to continue")
+		return nil, zip.ErrForbidden("sign in to continue")
 	}
-	app := strings.ToLower(strings.TrimSpace(c.Query("app")))
+	app := strings.ToLower(strings.TrimSpace(in.App))
 	landing, known := embedApps[app]
 	if !known {
-		return zip.ErrBadRequest("unknown embed app")
+		return nil, zip.ErrBadRequest("unknown embed app")
 	}
 
-	origin := "https://" + app + "." + embedBrandDomain(s.Brand)
+	origin := "https://" + app + "." + embedBrandDomain(o.s.Brand)
 	embedURL := origin + landing
 
 	// SERVER-SIDE entitlement gate: a brand-owned app frames only for a member of the
@@ -107,9 +132,9 @@ func embedStatus(s *cloud.Service[state], c *zip.Ctx) error {
 	// caller NEVER receives the embed URL and we don't even probe — the module shows
 	// the provision panel. This is the authoritative gate (the client check only
 	// avoids a flash).
-	entitled := (cr.owner != "" && cr.owner == strings.ToLower(strings.TrimSpace(s.Brand))) || c.IsAdmin()
+	entitled := (cr.owner != "" && cr.owner == strings.ToLower(strings.TrimSpace(o.s.Brand))) || c.IsAdmin()
 	if !entitled {
-		return c.JSON(http.StatusOK, embedStatusResp{App: app, Origin: origin, EmbedURL: "", Reachable: false, Entitled: false, Phase: "not-entitled"})
+		return &embedStatusResp{App: app, Origin: origin, EmbedURL: "", Reachable: false, Entitled: false, Phase: "not-entitled"}, nil
 	}
 
 	up := reachProbe(c.Context(), origin)
@@ -117,7 +142,7 @@ func embedStatus(s *cloud.Service[state], c *zip.Ctx) error {
 	if up {
 		phase = "ready"
 	}
-	return c.JSON(http.StatusOK, embedStatusResp{App: app, Origin: origin, EmbedURL: embedURL, Reachable: up, Entitled: true, Phase: phase})
+	return &embedStatusResp{App: app, Origin: origin, EmbedURL: embedURL, Reachable: up, Entitled: true, Phase: phase}, nil
 }
 
 // liveReachProbe does a time-boxed GET of the origin root. `redirect: manual` so an

@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -105,6 +107,24 @@ func (b *bus) close() {
 		delete(b.subs, id)
 		close(s.ch)
 	}
+}
+
+// The document's prose for the one operation here that cannot be a typed op —
+// a typed op's prose is lifted from its doc comment by zipdoc, and stream has
+// no typed op to lift from (the wire fact is on the handler below; the closed
+// refusal list in typed_wire_test.go pins it). Declared through the same
+// registry Register uses, so it renders only while the router actually serves
+// the route, and every consumer of the document — the generated SDKs, the
+// spec-derived CLI — carries it.
+func init() {
+	openapi.Describe("/v1/world/stream", http.MethodGet,
+		"Live news refreshes for the caller's org and project, as Server-Sent Events.",
+		"Holds the connection open as text/event-stream and pushes a `news` event — "+
+			"the same {items:[…]} body GET /v1/world/news answers — each time the caller's "+
+			"(org, project) feed refreshes, with a `: ping` heartbeat comment every 25s. "+
+			"Delivery is best-effort: a slow consumer is dropped on buffer overrun and "+
+			"reconnects, re-fetching GET /v1/world/news, which stays the source of truth. "+
+			"Requires a validated principal; 403 without one.")
 }
 
 // stream is GET /v1/world/stream — a Server-Sent Events feed of live news

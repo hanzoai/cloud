@@ -135,6 +135,19 @@ func (a Amount) IsZero() bool { return a.a.IsZero() }
 // IsNeg reports whether a < 0.
 func (a Amount) IsNeg() bool { return a.a.Sign() < 0 }
 
+// Unwrap is the wrapped shared money.Amount — the same exact value, in the credit
+// unit. It exists for the ONE boundary that speaks the shared type: the internal
+// plane (plane.Amount takes a hanzoai/money Amount), which is a decimal-string
+// wire built so a debit crosses a process boundary UNROUNDED. Reaching that wire
+// through Cents() defeated the wire's whole reason to exist: every plane.Amount
+// call site in the repo was plane.Amount(money.FromUSD(x.Cents())) — an exact
+// value, flattened to cents, re-wrapped as "exact". A per-token debit priced
+// below a cent crossed as $0.00.
+//
+// When this wrapper collapses into hanzoai/money, call sites lose the call and
+// nothing else.
+func (a Amount) Unwrap() hz.Amount { return a.a }
+
 // Atto returns a fresh big.Int of the atto-USD magnitude — 18 decimals, the on-chain
 // uint256 value. The unit is in the name: this is NOT interchangeable with
 // money.Amount.Minor(), which renders the CURRENCY's minor unit (money.USD declares 2, so
@@ -148,6 +161,32 @@ func (a Amount) AttoString() string { return a.a.MinorString() }
 // Cents rounds the value to whole cents (half-away-from-zero) — a human/legacy display unit
 // ONLY; never use it inside money math (it is lossy by construction).
 func (a Amount) Cents() int64 { return a.a.Decimal().Round(2).Coef().Int64() }
+
+// CentsUp rounds AWAY from zero to whole cents: the amount rendered in a
+// cents-only surface without ever rendering as less than it is.
+//
+// Cents rounds to nearest, so a sub-half-cent charge becomes zero — and a zero
+// charge sent to a spend cap is a charge the cap does not weigh at all. Rounding
+// up is the conservative direction for anything that GATES: the caller may be
+// refused a fraction of a cent early, never admitted for free. Use Cents for
+// display and this for limits.
+func (a Amount) CentsUp() int64 {
+	atto := a.Atto()
+	if atto.Sign() == 0 {
+		return 0
+	}
+	// 18 decimals down to 2: divide by 10^16, rounding the magnitude up so the
+	// sign is preserved and |result| is never understated.
+	unit := new(big.Int).Exp(big.NewInt(10), big.NewInt(Decimals-2), nil)
+	q, r := new(big.Int).QuoRem(new(big.Int).Abs(atto), unit, new(big.Int))
+	if r.Sign() != 0 {
+		q.Add(q, big.NewInt(1))
+	}
+	if atto.Sign() < 0 {
+		q.Neg(q)
+	}
+	return q.Int64()
+}
 
 // String renders the value as a trimmed decimal USD string ("6.6", "0.00132", "-0.5", "0")
 // — the human/JSON form. Exact: derived from the integer coefficient, never a float.

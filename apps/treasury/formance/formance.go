@@ -86,15 +86,15 @@ var _ ledger.Backend = (*Backend)(nil)
 
 // ── policy (native config store; Formance does not model it) ─────────────────
 
-func (b *Backend) Policy(ctx context.Context) (ledger.Policy, error) { return b.policy.Policy(ctx) }
+func (b *Backend) Policy(ctx context.Context) (ledger.SharePolicy, error) { return b.policy.Policy(ctx) }
 
-func (b *Backend) SetPolicy(ctx context.Context, bps, now int64) (ledger.Policy, error) {
+func (b *Backend) SetPolicy(ctx context.Context, bps, now int64) (ledger.SharePolicy, error) {
 	if bps < 0 || bps > 10000 {
-		return ledger.Policy{}, fmt.Errorf("revenueShareBps must be in [0,10000], got %d", bps)
+		return ledger.SharePolicy{}, fmt.Errorf("revenueShareBps must be in [0,10000], got %d", bps)
 	}
-	p := ledger.Policy{RevenueShareBps: bps, UpdatedAt: now}
+	p := ledger.SharePolicy{RevenueShareBps: bps, UpdatedAt: now}
 	if err := b.policy.SetPolicy(ctx, p); err != nil {
-		return ledger.Policy{}, err
+		return ledger.SharePolicy{}, err
 	}
 	return p, nil
 }
@@ -103,14 +103,14 @@ func (b *Backend) SetPolicy(ctx context.Context, bps, now int64) (ledger.Policy,
 
 // Accrue posts the revenue-share for a period (world → fund:reserve), idempotent by
 // the Formance transaction reference "accrual:<period>". A zero share is a no-op.
-func (b *Backend) Accrue(ctx context.Context, period string, revenueCents, now int64) (ledger.Entry, bool, error) {
+func (b *Backend) Accrue(ctx context.Context, period string, revenueCents, now int64) (ledger.JournalEntry, bool, error) {
 	pol, err := b.policy.Policy(ctx)
 	if err != nil {
-		return ledger.Entry{}, false, fmt.Errorf("policy: %w", err)
+		return ledger.JournalEntry{}, false, fmt.Errorf("policy: %w", err)
 	}
 	share := revenueCents * pol.RevenueShareBps / 10000
 	if share <= 0 {
-		return ledger.Entry{}, false, nil
+		return ledger.JournalEntry{}, false, nil
 	}
 	ref := "accrual:" + period
 	memo := fmt.Sprintf("revenue-share %d bps of %d cents (period %s)", pol.RevenueShareBps, revenueCents, period)
@@ -118,9 +118,9 @@ func (b *Backend) Accrue(ctx context.Context, period string, revenueCents, now i
 }
 
 // Seed posts a bootstrap capital injection (world → fund:reserve), idempotent by ref.
-func (b *Backend) Seed(ctx context.Context, ref, memo string, amountCents, now int64) (ledger.Entry, bool, error) {
+func (b *Backend) Seed(ctx context.Context, ref, memo string, amountCents, now int64) (ledger.JournalEntry, bool, error) {
 	if amountCents <= 0 {
-		return ledger.Entry{}, false, ledger.ErrNonPositive
+		return ledger.JournalEntry{}, false, ledger.ErrNonPositive
 	}
 	return b.postTransfer(ctx, ledger.KindSeed, "", ref, memo, externalAccount, reserveAddress, amountCents, now)
 }
@@ -130,16 +130,16 @@ func (b *Backend) Seed(ctx context.Context, ref, memo string, amountCents, now i
 // backed=false, nothing posted. A duplicate reference (409) is an idempotent replay
 // → backed=true, created=false. This is the reserve overdraw guard, enforced by
 // Formance's Numscript source semantics — not reimplemented here.
-func (b *Backend) DebitReserve(ctx context.Context, program, ref, memo string, amountCents, now int64) (ledger.Entry, bool, bool, error) {
+func (b *Backend) DebitReserve(ctx context.Context, program, ref, memo string, amountCents, now int64) (ledger.JournalEntry, bool, bool, error) {
 	if amountCents <= 0 {
-		return ledger.Entry{}, false, false, ledger.ErrNonPositive
+		return ledger.JournalEntry{}, false, false, ledger.ErrNonPositive
 	}
 	entry, created, err := b.postTransfer(ctx, ledger.KindPayout, program, ref, memo, reserveAddress, ledger.PayoutAccount(program), amountCents, now)
 	if err != nil {
 		if isInsufficientFunds(err) {
-			return ledger.Entry{}, false, false, nil // not backed, no error
+			return ledger.JournalEntry{}, false, false, nil // not backed, no error
 		}
-		return ledger.Entry{}, false, false, err
+		return ledger.JournalEntry{}, false, false, err
 	}
 	return entry, true, created, nil
 }
@@ -148,7 +148,7 @@ func (b *Backend) DebitReserve(ctx context.Context, program, ref, memo string, a
 // 2xx → created; 409 CONFLICT (duplicate reference) → idempotent replay (created
 // false); 400 INSUFFICIENT_FUND → surfaced as errInsufficientFunds for the caller to
 // interpret.
-func (b *Backend) postTransfer(ctx context.Context, kind, program, ref, memo, source, dest string, amountCents, now int64) (ledger.Entry, bool, error) {
+func (b *Backend) postTransfer(ctx context.Context, kind, program, ref, memo, source, dest string, amountCents, now int64) (ledger.JournalEntry, bool, error) {
 	body, _ := json.Marshal(map[string]any{
 		"postings": []map[string]any{{
 			"amount":      amountCents,
@@ -161,12 +161,12 @@ func (b *Backend) postTransfer(ctx context.Context, kind, program, ref, memo, so
 	})
 	raw, status, errCode, err := b.do(ctx, http.MethodPost, "/v2/"+b.ledger+"/transactions", nil, body)
 	amt := money.FromCents(amountCents)
-	entry := ledger.Entry{
+	entry := ledger.JournalEntry{
 		Kind: kind, Program: program, Ref: ref, Memo: memo, Amount: amt, CreatedAt: now,
 		Postings: []ledger.Posting{{Account: source, Amount: amt.Neg()}, {Account: dest, Amount: amt}},
 	}
 	if err != nil {
-		return ledger.Entry{}, false, err
+		return ledger.JournalEntry{}, false, err
 	}
 	switch {
 	case status >= 200 && status < 300:
@@ -176,25 +176,25 @@ func (b *Backend) postTransfer(ctx context.Context, kind, program, ref, memo, so
 		entry.ID = ref // idempotent replay — the reference IS the stable key
 		return entry, false, nil
 	case errCode == "INSUFFICIENT_FUND":
-		return ledger.Entry{}, false, errInsufficientFunds
+		return ledger.JournalEntry{}, false, errInsufficientFunds
 	default:
-		return ledger.Entry{}, false, fmt.Errorf("formance transaction %d: %s", status, string(raw))
+		return ledger.JournalEntry{}, false, fmt.Errorf("formance transaction %d: %s", status, string(raw))
 	}
 }
 
 // Snapshot reads the reserve + per-program payout balances from Formance and
-// assembles the same Report the native backend returns.
-func (b *Backend) Snapshot(ctx context.Context) (ledger.Report, error) {
+// assembles the same TreasuryReport the native backend returns.
+func (b *Backend) Snapshot(ctx context.Context) (ledger.TreasuryReport, error) {
 	reserve, err := b.Balance(ctx, reserveAddress)
 	if err != nil {
-		return ledger.Report{}, fmt.Errorf("reserve balance: %w", err)
+		return ledger.TreasuryReport{}, fmt.Errorf("reserve balance: %w", err)
 	}
 	byProgram := make(map[string]int64, len(knownPrograms))
 	var paid int64
 	for _, p := range knownPrograms {
 		bal, err := b.Balance(ctx, ledger.PayoutAccount(p))
 		if err != nil {
-			return ledger.Report{}, fmt.Errorf("payout %s balance: %w", p, err)
+			return ledger.TreasuryReport{}, fmt.Errorf("payout %s balance: %w", p, err)
 		}
 		if bal != 0 {
 			byProgram[p] = bal
@@ -203,9 +203,9 @@ func (b *Backend) Snapshot(ctx context.Context) (ledger.Report, error) {
 	}
 	pol, err := b.policy.Policy(ctx)
 	if err != nil {
-		return ledger.Report{}, fmt.Errorf("policy: %w", err)
+		return ledger.TreasuryReport{}, fmt.Errorf("policy: %w", err)
 	}
-	return ledger.Report{
+	return ledger.TreasuryReport{
 		ReserveCents:     reserve,
 		AccruedCents:     reserve + paid,
 		PaidCents:        paid,
@@ -238,9 +238,9 @@ func (b *Backend) Balance(ctx context.Context, account string) (int64, error) {
 	return out.Data[assetUSD], nil
 }
 
-// Entries lists recent Formance transactions and maps them to ledger.Entry for the
+// Entries lists recent Formance transactions and maps them to ledger.JournalEntry for the
 // admin journal view + the anchor root.
-func (b *Backend) Entries(ctx context.Context, limit int) ([]ledger.Entry, error) {
+func (b *Backend) Entries(ctx context.Context, limit int) ([]ledger.JournalEntry, error) {
 	q := url.Values{}
 	if limit > 0 {
 		q.Set("pageSize", strconv.Itoa(limit))
@@ -271,9 +271,9 @@ func (b *Backend) Entries(ctx context.Context, limit int) ([]ledger.Entry, error
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("formance transactions decode: %w", err)
 	}
-	entries := make([]ledger.Entry, 0, len(out.Cursor.Data))
+	entries := make([]ledger.JournalEntry, 0, len(out.Cursor.Data))
 	for _, t := range out.Cursor.Data {
-		e := ledger.Entry{
+		e := ledger.JournalEntry{
 			ID:        t.ID.String(),
 			Kind:      t.Metadata["kind"],
 			Program:   t.Metadata["program"],

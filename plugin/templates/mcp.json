@@ -1,0 +1,208 @@
+[
+  {
+    "description": "remove deletes the caller org's OWN starter kit. A slug they do not own is a\n404, never a delete: the DELETE binds org.",
+    "inputSchema": {
+      "properties": {
+        "slug": {
+          "description": "Slug is the starter kit to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_templates_slug"
+  },
+  {
+    "description": "browse lists the public starter-kit catalog plus, for a validated caller, that\norg's own private kits. No request field can widen the scope: the org comes\nfrom the validated principal, so an anonymous or cross-org caller structurally\nsees the public catalog only.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_templates"
+  },
+  {
+    "description": "get returns one starter kit: the caller org's own by that slug, else the public\ncatalog's. A slug another org owns reads as not found.",
+    "inputSchema": {
+      "properties": {
+        "slug": {
+          "description": "Slug is the starter kit to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_templates_slug"
+  },
+  {
+    "description": "publish creates a starter kit PRIVATE to the caller's org and answers 201 with\nthe stored kit. The owner is stamped by the server, so a body \"org\" is never\ntrusted; publishing over a public-catalog slug is 409, so a slug still names\nexactly one kit.",
+    "inputSchema": {
+      "$defs": {
+        "Variant": {
+          "properties": {
+            "framework": {
+              "description": "only when it differs from the template's",
+              "type": "string"
+            },
+            "id": {
+              "description": "selector, unique within the template (\"react\", \"grid-3-fluid\")",
+              "type": "string"
+            },
+            "kind": {
+              "description": "the axis it varies: format | page | theme",
+              "type": "string"
+            },
+            "label": {
+              "description": "human label for the picker",
+              "type": "string"
+            },
+            "source": {
+              "description": "the repository this shape is forked from; the synthesized default shape carries the template's own",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "category": {
+          "description": "Category groups the kit in the gallery browser.",
+          "type": "string"
+        },
+        "demo": {
+          "description": "Demo is the deployed site itself, when there is one.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description is the browse-card blurb, max 4096 characters.",
+          "type": "string"
+        },
+        "features": {
+          "description": "Features are the highlights the card lists, at most 32.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "framework": {
+          "description": "Framework is the stack the kit is built on (\"Next.js 14\").",
+          "type": "string"
+        },
+        "preview": {
+          "description": "Preview is the still image the browse card renders, max 4096 characters.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "Slug is the kit's identity — lowercase alphanumeric with dashes, max 40.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source is the repository the kit is forked from, max 4096 characters.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Title is the display name. Required, max 200 characters.",
+          "type": "string"
+        },
+        "useCase": {
+          "description": "UseCase is what the kit is for, in a phrase.",
+          "type": "string"
+        },
+        "variants": {
+          "description": "Variants are the shapes this kit ships in, at most 32; the fork picks one.",
+          "items": {
+            "$ref": "#/$defs/Variant"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_templates"
+  },
+  {
+    "description": "replace overwrites the caller org's OWN starter kit at the path slug, answering\nthe stored kit. A slug they do not own is 404, never a create: the UPDATE binds\norg, so a PUT can never reach another org's kit.",
+    "inputSchema": {
+      "$defs": {
+        "Variant": {
+          "properties": {
+            "framework": {
+              "description": "only when it differs from the template's",
+              "type": "string"
+            },
+            "id": {
+              "description": "selector, unique within the template (\"react\", \"grid-3-fluid\")",
+              "type": "string"
+            },
+            "kind": {
+              "description": "the axis it varies: format | page | theme",
+              "type": "string"
+            },
+            "label": {
+              "description": "human label for the picker",
+              "type": "string"
+            },
+            "source": {
+              "description": "the repository this shape is forked from; the synthesized default shape carries the template's own",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "category": {
+          "description": "Category groups the kit in the gallery browser.",
+          "type": "string"
+        },
+        "demo": {
+          "description": "Demo is the deployed site itself, when there is one.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description is the browse-card blurb, max 4096 characters.",
+          "type": "string"
+        },
+        "features": {
+          "description": "Features are the highlights the card lists, at most 32.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "framework": {
+          "description": "Framework is the stack the kit is built on (\"Next.js 14\").",
+          "type": "string"
+        },
+        "preview": {
+          "description": "Preview is the still image the browse card renders, max 4096 characters.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "Slug is the kit to replace, from the path.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source is the repository the kit is forked from, max 4096 characters.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Title is the display name. Required, max 200 characters.",
+          "type": "string"
+        },
+        "useCase": {
+          "description": "UseCase is what the kit is for, in a phrase.",
+          "type": "string"
+        },
+        "variants": {
+          "description": "Variants are the shapes this kit ships in, at most 32; the fork picks one.",
+          "items": {
+            "$ref": "#/$defs/Variant"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "put_v1_templates_slug"
+  }
+]

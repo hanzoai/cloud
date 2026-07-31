@@ -13,6 +13,7 @@ package finance
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
+	"github.com/hanzoai/ai/funding"
 	"context"
 	"errors"
 	"time"
@@ -245,6 +246,21 @@ func Compute(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) Fi
 			do.AvgDailyBurnCents = AvgDailyBurnCents(int64(bal.Usage), time.Now().UTC())
 			do.History = doHistory(s, ctx)
 			sources = append(sources, core.SrcOf("digitalocean", nil, 1, now))
+
+			// Feed the cash circuit-breaker from the SAME numbers this board renders,
+			// so the guard and the dashboard can never disagree about whether we are
+			// spending real money. On-cash is "the promo grant is gone", which is
+			// exactly credit == 0; today's cash is the month-to-date usage attributed
+			// to the current day by the same average this board already computes.
+			//
+			// The ceiling comes from CLOUD_DAILY_CASH_CEILING_CENTS and defaults to 0,
+			// which DISARMS the breaker — so this publish is observational until an
+			// operator sets a number. See ai/internal/funding.
+			funding.Publish(funding.State{
+				OnCash:       credit <= 0,
+				TodayCents:   do.AvgDailyBurnCents,
+				CeilingCents: dailyCashCeilingCents(),
+			})
 		}
 	}
 	if do.History == nil {

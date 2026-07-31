@@ -8,7 +8,7 @@
 //go:build datastore_live
 
 // Live end-to-end proof of the capture plane against a REAL datastore
-// (Datastore). It drives the ACTUAL POST /v1/analytics handler (bind → normalize
+// (Datastore). It drives the ACTUAL POST /v1/event handler (bind → normalize
 // → EnsureEventsTable → DatastoreExec) and then reads the rows back through the
 // EXACT SQL the /v1/analytics/overview + /top handlers run — so a green run proves
 // "emit → hanzo.events row lands → analytics read lens sees it".
@@ -79,9 +79,9 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 	  {"type":"event","event":"waitlist_joined","distinctId":"anon-1","sessionId":"s1","product":"console","refCode":"REF123"}
 	]}`
 
-	code, respBody := livePost(t, app, "/v1/analytics", "user-42", org, body)
+	code, respBody := livePost(t, app, canonDoor, "user-42", org, body)
 	if code != http.StatusOK {
-		t.Fatalf("POST /v1/analytics = %d (%s)", code, respBody)
+		t.Fatalf("POST %s = %d (%s)", canonDoor, code, respBody)
 	}
 	var res CaptureResult
 	if err := json.Unmarshal(respBody, &res); err != nil {
@@ -205,7 +205,7 @@ func TestLiveAnonymousCapture(t *testing.T) {
 	marker := "anon-" + time.Now().UTC().Format("150405.000")
 	body := `{"batch":[{"type":"pageview","event":"$pageview","distinctId":"visitor-x","product":"site","path":"/","properties":{"marker":"` + marker + `"}}]}`
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/analytics", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, canonDoor, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Host = "hanzo.ai" // recognized brand host; NO principal headers
 	resp, err := app.Fiber().Test(req)

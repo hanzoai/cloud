@@ -32,9 +32,21 @@ on:
     # release.go's receipt for an image that already built and smoked — so the
     # artifact a host installs unattended can only come from a proven commit,
     # and this still mints no tag of its own.
+    #
+    # This sat under `workflow_dispatch:` instead of `push:`, where it means
+    # nothing — and a SECOND `workflow_dispatch:` key below then overwrote that
+    # whole mapping, so the filter was dropped twice over. YAML takes the last
+    # duplicate key and says nothing, so the file parsed, the workflow ran, and
+    # `v*` tags simply never triggered a build. Effective `on:` was
+    #   {push: {branches: [main]}, workflow_dispatch: None, pull_request: None}
     tags: ["v*"]
   pull_request:
-  # The sync (sync-from-github.yml) dispatches this workflow by name after a
+  # On-demand rebuild. Without this the ONLY way to get an image is to land a
+  # commit on main, so recovering from a bad build means pushing an empty commit
+  # and waiting — and POST .../workflows/cicd.yml/dispatches answers 500, which
+  # reads like a broken forge rather than a workflow that never opted in.
+  #
+  # It is also how the sync (sync-from-github.yml) starts this workflow after a
   # fast-forward: a push made with the workflow token does not trigger workflows,
   # so without this trigger every synced commit would gate nothing. deploy.yml
   # declared no dispatch trigger, which is why that curl could only 404.
@@ -45,6 +57,27 @@ concurrency:
 jobs:
   # The test gate, driven by hanzo.yml.
   gate:
+    # `.hanzo/workflows/`, and the reason it is safe to say that NOW is that the
+    # v1 channel tag moved: hanzoai/ci 66d4f21 publishes build.yml at BOTH paths
+    # from every tag, byte-identical apart from its header, because GitHub
+    # resolves only `.github/workflows` and git.hanzo.ai only `.hanzo/workflows`.
+    # Verified against the live remote — v1 and v2 both serve
+    # .hanzo/workflows/build.yml (blob 1100f49a672b).
+    #
+    # It could not be said before, and the old failure is worth keeping in view
+    # because of HOW it failed. Pinned at a path the ref does not carry, the
+    # forge cannot even construct a run:
+    #   PrepareRun: InsertRun: read hanzoai/ci@v1:.hanzo/workflows/build.yml:
+    #   object does not exist
+    # InsertRun fails before any run row is written, so there is no failed run to
+    # look at — pushes and workflow_dispatch alike silently do nothing. Dead CI
+    # here is not red, it is absent.
+    #
+    # The path has to move regardless. Reusables resolve through
+    # services/actions.ResolveUses, which enforces the WORKFLOW_DIRS allowlist on
+    # the referenced path, so once that list narrows to `.hanzo/workflows` alone
+    # a `uses:` naming `.github/workflows` is refused outright. Leaving it would
+    # trade one silent no-run for another.
     uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     with:
       # Not on a tag: release.go mints v* only after that SHA passed this gate

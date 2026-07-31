@@ -11,7 +11,7 @@ package storage
 // The guard is tested directly against a handler stub (guard takes any
 // zip.Handler): the S3 backend is never dialed, so success/failure of the wrapped
 // handler is deterministic and the billing contract is isolated from a live
-// SeaweedFS. tenant() requires a validated principal (X-User-Id), so requests
+// SeaweedFS. The guard admits only a validated principal (X-User-Id), so requests
 // carry it exactly as SanitizeIdentity would in prod.
 
 import (
@@ -27,8 +27,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/s3admin"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // billServer is a minimal commerce double: a fixed balance + records the
@@ -213,17 +213,19 @@ func TestGuard_FreeFeeUngated(t *testing.T) {
 	}
 }
 
-// Billing unconfigured (no commerce URL) → the gate is a no-op: the op runs and
-// nothing is billed.
-func TestGuard_BillingUnconfiguredNoop(t *testing.T) {
+// No commerce URL no longer means "nothing bills": the ledger has ONE writer and
+// it lives with commerce, so a meter without a local URL ASKS it, and a biller it
+// cannot reach is UNKNOWN — never allowed. The priced op is refused and the
+// handler never runs. See TestResourceMeter_UnconfiguredIsNoop.
+func TestGuard_UnreachableBillerRefusesAndRunsNothing(t *testing.T) {
 	s := newBilledService(t, "") // empty commerce URL ⇒ !Enabled()
 
 	status, ran := callGuard(t, s, "acme", nil)
-	if status != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204", status)
+	if status == http.StatusNoContent {
+		t.Fatal("a priced op ran with no reachable biller — that is free work")
 	}
-	if atomic.LoadInt32(ran) != 1 {
-		t.Fatalf("handler ran %d times, want 1", atomic.LoadInt32(ran))
+	if atomic.LoadInt32(ran) != 0 {
+		t.Fatalf("handler ran %d times with no biller reachable, want 0", atomic.LoadInt32(ran))
 	}
 }
 

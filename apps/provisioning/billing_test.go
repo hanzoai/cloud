@@ -188,17 +188,20 @@ func TestCreate_FreeKindUngated(t *testing.T) {
 	}
 }
 
-// Billing unconfigured (no commerce URL) → the gate is a no-op: provisioning
-// works and nothing is billed (an unconfigured deployment is never blocked).
-func TestCreate_BillingUnconfiguredNoop(t *testing.T) {
+// No commerce URL no longer means "nothing bills": the ledger has ONE writer and
+// it lives with commerce, so a meter without a local URL ASKS it, and a biller it
+// cannot reach is UNKNOWN — never allowed. A priced create is refused and the
+// provisioner never runs, because provisioning first and discovering later that
+// nobody could bill it is a resource somebody has to find. See
+// TestResourceMeter_UnconfiguredIsNoop for the same rule at the gate.
+func TestCreate_UnreachableBillerRefusesAndProvisionsNothing(t *testing.T) {
 	s, mp := newBilledService(t, "", "vector") // empty commerce URL => !Enabled()
 	resp := postCreate(t, s, "vector", "acme", "orders")
-	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)
+	if resp.StatusCode == http.StatusCreated {
+		t.Fatal("a priced create ran with no reachable biller — that is free work")
 	}
-	if mp.created != 1 {
-		t.Fatalf("provisioner ran %d times, want 1", mp.created)
+	if mp.created != 0 {
+		t.Fatalf("provisioner ran %d times with no biller reachable, want 0", mp.created)
 	}
 }
 

@@ -19,38 +19,159 @@
     "/v1/flags": {
       "post": {
         "operationId": "post_v1_flags",
+        "summary": "Evaluate runs the caller's flag definitions for one identity and returns the PostHog-shaped verdict: which flags are on (or which variant), their payloads, and whether any definition failed to compute.",
+        "description": "Evaluate runs the caller's flag definitions for one identity and returns the\nPostHog-shaped verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
         "tags": [
           "flags"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "distinct_id": "u1",
+                "groups": {
+                  "0": {
+                    "key": "acme"
+                  }
+                },
+                "person_properties": {
+                  "plan": "pro"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/evaluateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "errorsWhileComputingFlags": false,
+                  "featureFlagPayloads": {},
+                  "featureFlags": {
+                    "new-editor": true
+                  }
+                },
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/flags/activity": {
       "get": {
         "operationId": "get_v1_flags_activity",
+        "summary": "ListFlagActivity returns the caller's flag change log newest-first: every create, update and delete, with the actor and the time.",
+        "description": "ListFlagActivity returns the caller's flag change log newest-first: every\ncreate, update and delete, with the actor and the time.",
         "tags": [
           "flags"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned. 1–500; anything else takes the default 100.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/activityOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/flags/decide": {
       "post": {
         "operationId": "post_v1_flags_decide",
+        "summary": "Evaluate runs the caller's flag definitions for one identity and returns the PostHog-shaped verdict: which flags are on (or which variant), their payloads, and whether any definition failed to compute.",
+        "description": "Evaluate runs the caller's flag definitions for one identity and returns the\nPostHog-shaped verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
         "tags": [
           "flags"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "distinct_id": "u1",
+                "groups": {
+                  "0": {
+                    "key": "acme"
+                  }
+                },
+                "person_properties": {
+                  "plan": "pro"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/evaluateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "errorsWhileComputingFlags": false,
+                  "featureFlagPayloads": {},
+                  "featureFlags": {
+                    "new-editor": true
+                  }
+                },
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/flags/defs": {
       "get": {
         "operationId": "get_v1_flags_defs",
+        "summary": "ListFlagDefinitions returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it.",
+        "description": "ListFlagDefinitions returns every flag definition in the caller's (org,\nproject) store, by key, with its version and who last changed it.",
         "tags": [
           "flags"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/defsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/flags/defs/{key}": {
       "delete": {
-        "operationId": "delete_v1_flags_defs_by_key",
+        "operationId": "delete_v1_flags_defs_key",
+        "summary": "DeleteFlagDefinition removes one flag definition by key and records the deletion in the change log.",
+        "description": "DeleteFlagDefinition removes one flag definition by key and records the\ndeletion in the change log. A key the caller's store does not hold is a 404.",
         "tags": [
           "flags"
         ],
@@ -59,14 +180,29 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the flag key to act on, from the path.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deletedOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_flags_defs_by_key",
+        "operationId": "get_v1_flags_defs_key",
+        "summary": "GetFlagDefinition returns one flag definition by key, or 404 when the caller's store has none under that key.",
+        "description": "GetFlagDefinition returns one flag definition by key, or 404 when the caller's\nstore has none under that key.",
         "tags": [
           "flags"
         ],
@@ -75,14 +211,29 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the flag key to act on, from the path.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefRow"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_flags_defs_by_key",
+        "operationId": "put_v1_flags_defs_key",
+        "summary": "PutFlagDefinition creates or replaces the flag definition at the path's key and returns the stored row.",
+        "description": "PutFlagDefinition creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the PostHog-shaped\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity.",
         "tags": [
           "flags"
         ],
@@ -91,19 +242,176 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the flag key to write, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "new-editor"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "active": true,
+                "filters": {
+                  "groups": [
+                    {
+                      "rollout_percentage": 25
+                    }
+                  ]
+                },
+                "key": "new-editor"
+              },
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefRow"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/flags/health": {
       "get": {
         "operationId": "get_v1_flags_health",
+        "summary": "Health reports that the flag engine is serving.",
+        "description": "Health reports that the flag engine is serving. It is not gated: liveness must\nbe probe-able without a token.",
         "tags": [
           "flags"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "engine": "hanzo-flags",
+                  "ok": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/healthOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActivityRow": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DefRow": {
+        "properties": {
+          "definition": {},
+          "key": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "activityOut": {
+        "properties": {
+          "data": {
+            "description": "Data is the change log newest-first: who created, updated or deleted which key, when.",
+            "items": {
+              "$ref": "#/components/schemas/ActivityRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "defsOut": {
+        "properties": {
+          "data": {
+            "description": "Data is every definition in the caller's (org, project) store, by key.",
+            "items": {
+              "$ref": "#/components/schemas/DefRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "deletedOut": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is the key that no longer exists.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "evaluateIn": {
+        "properties": {
+          "distinct_id": {
+            "description": "DistinctID is the identity the flags are evaluated for. Required.",
+            "type": "string"
+          },
+          "groups": {
+            "description": "Groups are the group-level properties, keyed by group type index."
+          },
+          "person_properties": {
+            "description": "PersonProperties are the person-level properties conditions match against."
+          }
+        },
+        "type": "object"
+      },
+      "healthOut": {
+        "properties": {
+          "engine": {
+            "description": "Engine names the evaluator this deployment runs.",
+            "type": "string"
+          },
+          "ok": {
+            "description": "OK is true whenever the flag engine is serving.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
       }
     }
   }

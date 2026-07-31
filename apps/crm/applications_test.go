@@ -308,19 +308,19 @@ func TestStageTransitions(t *testing.T) {
 			t.Fatalf("%s→%s should be blocked", from, to)
 		}
 	}
-	ok(StageApplied, StageScreened)              // advance one
-	ok(StageScreened, StageQualified)            // advance one
-	ok(StageQualified, StageCreditsOffered)      // advance one
-	ok(StageCreditsOffered, StageOnboarded)      // advance one
-	ok(StageQualified, StageApplied)             // move back (correction)
-	ok(StageApplied, StageRejected)              // reject from any
-	ok(StageOnboarded, StageRejected)            // reject from any
-	ok(StageRejected, StageApplied)              // reopen
-	ok(StageApplied, StageApplied)               // no-op
-	no(StageApplied, StageQualified)             // skip forward
-	no(StageApplied, StageOnboarded)             // skip forward
-	no(StageRejected, StageScreened)             // reopen only to applied
-	no(StageApplied, "bogus")                    // unknown
+	ok(StageApplied, StageScreened)         // advance one
+	ok(StageScreened, StageQualified)       // advance one
+	ok(StageQualified, StageCreditsOffered) // advance one
+	ok(StageCreditsOffered, StageOnboarded) // advance one
+	ok(StageQualified, StageApplied)        // move back (correction)
+	ok(StageApplied, StageRejected)         // reject from any
+	ok(StageOnboarded, StageRejected)       // reject from any
+	ok(StageRejected, StageApplied)         // reopen
+	ok(StageApplied, StageApplied)          // no-op
+	no(StageApplied, StageQualified)        // skip forward
+	no(StageApplied, StageOnboarded)        // skip forward
+	no(StageRejected, StageScreened)        // reopen only to applied
+	no(StageApplied, "bogus")               // unknown
 }
 
 // TestParseScreen covers extraction from prose/fences, clamping, and snapping.

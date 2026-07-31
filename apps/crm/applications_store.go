@@ -44,23 +44,41 @@ var validStages = func() map[string]bool {
 // ScreenResult is the AI screen stored on an application. Status is
 // pending → done | failed; a failed/absent screen never blocks intake.
 type ScreenResult struct {
-	Status           string `json:"status"` // pending | done | failed
-	Score            int    `json:"score"`  // 0..100
-	Tier1Backed      string `json:"tier1Backed"`
-	SuggestedCredits int    `json:"suggestedCredits"` // 0 | 5000 | 25000 | 50000 | 150000
-	Summary          string `json:"summary"`
-	DraftReply       string `json:"draftReply"`
-	Model            string `json:"model"`
-	ScreenedAt       int64  `json:"screenedAt"`
-	Error            string `json:"error,omitempty"`
+	// Status is the screen's state: pending | done | failed.
+	Status string `json:"status"`
+	// Score is the model's 0..100 fit score, clamped to that range.
+	Score int `json:"score"`
+	// Tier1Backed is the model's read on tier-1 backing, normalized to
+	// "yes", "no" or "unclear" (anything it cannot resolve reads "unclear").
+	Tier1Backed string `json:"tier1Backed"`
+	// SuggestedCredits is the recommended credit grant in USD, snapped to the
+	// nearest allowed rung: 0 | 5000 | 25000 | 50000 | 150000.
+	SuggestedCredits int `json:"suggestedCredits"`
+	// Summary is the model's short assessment of the application.
+	Summary string `json:"summary"`
+	// DraftReply is a suggested email reply for staff to edit and send.
+	DraftReply string `json:"draftReply"`
+	// Model is the LLM the screen ran on.
+	Model string `json:"model"`
+	// ScreenedAt is the unix second the screen finished (0 while pending).
+	ScreenedAt int64 `json:"screenedAt"`
+	// Error says why a failed screen failed — no AI gateway configured, a gateway
+	// error, or a reply that carried no parseable JSON. Absent on success.
+	Error string `json:"error,omitempty"`
 }
 
 // StageEvent is one entry in an application's append-only stage-transition log.
 type StageEvent struct {
+	// From is the stage moved out of; empty on the intake event that opens the log.
 	From string `json:"from"`
-	To   string `json:"to"`
-	At   int64  `json:"at"`
-	By   string `json:"by"` // "system" or a staff user id
+	// To is the stage moved into.
+	To string `json:"to"`
+	// At is the unix second of the move.
+	At int64 `json:"at"`
+	// By is who moved it: "system" for intake and the AI auto-advance, else the
+	// validated staff user id.
+	By string `json:"by"`
+	// Note is the free-text comment recorded with the move. Absent when none.
 	Note string `json:"note,omitempty"`
 }
 
@@ -70,23 +88,53 @@ type StageEvent struct {
 // projections. Tier1 is deterministically derived at intake from the submitted
 // fund list (independent of the AI screen's judgement).
 type Application struct {
-	ID          string         `json:"id"`
-	Org         string         `json:"-"`
-	Company     string         `json:"company"`
-	Website     string         `json:"website"`
-	ContactName string         `json:"contactName"`
-	Email       string         `json:"email"`
-	Role        string         `json:"role"`
-	Stage       string         `json:"stage"`
-	Tier1       bool           `json:"tier1"`
-	Metadata    map[string]any `json:"metadata"`
-	Screen      ScreenResult   `json:"screen"`
-	Events      []StageEvent   `json:"events"`
-	CompanyID   string         `json:"companyId"`
-	ContactID   string         `json:"contactId"`
-	Reason      string         `json:"reason"`
-	CreatedAt   int64          `json:"createdAt"`
-	UpdatedAt   int64          `json:"updatedAt"`
+	// ID is the server-minted application id ("appl_" + 128 random bits).
+	ID string `json:"id"`
+	// Org is the owning tenant — the program org, which is the deployment brand.
+	// Never on the wire: it is the isolation key the server reads, not a field a
+	// caller sends or reads.
+	Org string `json:"-"`
+	// Company is the applicant's company name.
+	Company string `json:"company"`
+	// Website is the applicant's website as submitted.
+	Website string `json:"website"`
+	// ContactName is the person who applied.
+	ContactName string `json:"contactName"`
+	// Email is the applicant's email — half of the (email, company) key a
+	// resubmission refreshes instead of duplicating.
+	Email string `json:"email"`
+	// Role is the applicant's role at their company.
+	Role string `json:"role"`
+	// Stage is the pipeline stage: applied, screened, qualified, credits-offered,
+	// onboarded or rejected. Server-owned — it starts at "applied" and moves only
+	// through the transition machine.
+	Stage string `json:"stage"`
+	// Tier1 is whether the applicant is tier-1 backed, derived deterministically
+	// at intake from the submitted fund list — independent of the AI screen.
+	Tier1 bool `json:"tier1"`
+	// Metadata is the FULL submitted form, every field, including the arrays the
+	// promoted columns above do not carry (tier1Investors, useCases) and the
+	// deterministic tier1Matched list.
+	Metadata map[string]any `json:"metadata"`
+	// Screen is the AI screen. It runs after intake, so a freshly created
+	// application carries a "pending" screen.
+	Screen ScreenResult `json:"screen"`
+	// Events is the append-only stage-transition log, oldest first.
+	Events []StageEvent `json:"events"`
+	// CompanyID is the CRM Company minted for this lead at intake, so the startup
+	// also appears in the org's standard CRM tabs. Empty when that best-effort
+	// projection did not run.
+	CompanyID string `json:"companyId"`
+	// ContactID is the CRM Contact minted for this lead at intake. Empty when that
+	// best-effort projection did not run.
+	ContactID string `json:"contactId"`
+	// Reason is why the application was rejected, required to reject. Empty
+	// otherwise.
+	Reason string `json:"reason"`
+	// CreatedAt is the unix second the application arrived. Server-owned.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is the unix second of the last write. Server-owned.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // migrateApplications creates the crm_applications table. Idempotent; called

@@ -35,7 +35,7 @@ func (posthog) Category() string { return categoryAnalytics }
 
 func (posthog) Spec() Spec {
 	return Spec{
-		Fields: []Field{
+		Fields: []DestinationField{
 			{Key: "host", Label: "Host (optional, self-hosted)", Required: false, Example: posthogHost},
 		},
 		Secrets: []string{"api_key"},

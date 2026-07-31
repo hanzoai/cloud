@@ -23,8 +23,10 @@ package provisioning
 //     create, and a recurring footprint charge for as long as it runs. Drop
 //     stops the meter (the row is removed).
 //
-// The five shared kinds (sql/vector/kv/s3/search) keep the shared-logical
-// strategy in provisioner.go — this file is purely additive.
+// FOUR kinds are dedicated (sql, kv, datastore, docdb — dedicatedEngines below);
+// the three shared-logical ones (vector, search, s3) keep their strategy in
+// provisioner.go. sql and kv moved here after this file's header was first
+// written, so the split is stated once, from the two maps, and not twice.
 
 import (
 	"context"
@@ -458,7 +460,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 	// the instance. The recurring footprint meter charges ongoing GB-time.
 	meterProvision(s, org, kind, size, fee, c.RequestID(), cloud.ClientIP(c))
 
-	return c.JSON(http.StatusCreated, createResp{
+	return c.JSON(http.StatusCreated, provisionResult{
 		ID: id, Kind: kind, Name: name, Status: statusProvisioning,
 		Host: host, Port: e.clientPort, Username: user, Database: db,
 		ConnectionString: dsn, Password: pw,

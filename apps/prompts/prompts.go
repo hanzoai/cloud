@@ -10,6 +10,7 @@
 //	GET    /v1/prompts            list current prompts for the org   -> {data:[PromptMeta]}
 //	POST   /v1/prompts            create or add-a-version            -> PromptDetail
 //	GET    /v1/prompts/metrics    real per-prompt stats              -> {data:[...]}
+//	GET    /v1/prompts/catalog    the embedded read-only starter set -> {data:[...]}
 //	GET    /v1/prompts/:name      prompt detail + version history    -> PromptDetail
 //	DELETE /v1/prompts/:name      delete a prompt (+ its versions)
 //
@@ -18,6 +19,7 @@
 package prompts
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -155,53 +157,139 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "prompts"), State: state{store: store}}
 	mounted = s
-	routes(app, s)
+	if err := routes(app, s); err != nil {
+		return err
+	}
 	s.Log.Info("prompts mounted", "brand", s.Brand)
 	return nil
 }
 
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document,
+// the MCP tool list and the generated SDK — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // routes registers the prompts surface. Static sub-routes are registered before
 // the :name param route so a real prompt can never shadow /metrics (and
 // "metrics"/"new" are reserved names).
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/prompts")
-	// Root routes stay flat: Group("/v1/prompts").<M>("") would register "/v1/prompts/".
-	app.Get("/v1/prompts", cloud.Handle(s, list))
-	app.Post("/v1/prompts", cloud.Handle(s, create))
-	g.Get("/metrics", cloud.Handle(s, metrics))
-	g.Get("/catalog", cloud.Handle(s, catalog))
-	g.Get("/:name", cloud.Handle(s, get))
-	g.Delete("/:name", cloud.Handle(s, del))
+//
+// cloud.Bridge comes FIRST, ahead of every leaf: a typed op receives a
+// context.Context and its decoded In and nothing else, so the validated org crosses
+// on the context. Serve installs the same middleware binary-wide; nesting is harmless
+// (the inner one is the one the handler sees) and declaring it here is what makes the
+// subsystem self-sufficient when a test or a non-Serve composition root mounts it on
+// a bare app.
+//
+// Every op is registered on the App with its WHOLE path rather than on a group: the
+// collection routes ARE /v1/prompts, and a group prefix composed with an empty leaf
+// yields "/v1/prompts/" — a different address. One registrar for all six keeps each
+// op's published path exactly the path the router matches.
+func routes(app cloud.Router, s *cloud.Service[state]) error {
+	app.Use(cloud.Bridge())
+	za := cloud.ZipApp(app)
+	if za == nil {
+		return fmt.Errorf("prompts.Mount: router exposes no op registry")
+	}
+	o := promptOps{s: s}
+	zip.Get(za, "/v1/prompts", o.list)
+	zip.Post(za, "/v1/prompts", o.create, zip.WithStatus(http.StatusCreated))
+	zip.Get(za, "/v1/prompts/metrics", o.metrics)
+	zip.Get(za, "/v1/prompts/catalog", o.catalog)
+	zip.Get(za, "/v1/prompts/:name", o.get)
+	zip.Delete(za, "/v1/prompts/:name", o.del)
+	return nil
+}
+
+// promptOps binds the service to prompts's typed ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, which is also the only bound
+// form cmd/zipdoc can lift prose from.
+type promptOps struct{ s *cloud.Service[state] }
+
+// noInput is the In of an op addressed entirely by the caller's principal: it takes
+// nothing off the wire. ONE of these for the whole package.
+type noInput struct{}
+
+// noContent is the Out of an op that answers 204 with an empty body. It is an ALIAS
+// for the unnamed empty struct, not a definition: zip keys the response on 204 only
+// when the Out type has no name, so a defined type here would publish "200 with a
+// body" about a route that answers 204 with none.
+type noContent = struct{}
+
+// promptRef addresses one prompt by name. The name is the path segment: the URL is
+// the addressing authority, so it binds from there whatever else arrives.
+type promptRef struct {
+	// Name is the prompt to act on, from the path.
+	Name string `json:"name"`
+}
+
+// promptList is the org's current prompts.
+type promptList struct {
+	// Data is one row per prompt the org owns, each with its version numbers and
+	// taxonomy — never the template bodies.
+	Data []promptMeta `json:"data"`
+}
+
+// metricList is the org's per-prompt statistics.
+type metricList struct {
+	// Data is one row per prompt the org owns.
+	Data []metricRow `json:"data"`
+}
+
+// catalogList is the read-only starter library.
+type catalogList struct {
+	// Data is every starter prompt, each importable as-is with POST /v1/prompts.
+	Data []CatalogEntry `json:"data"`
 }
 
 // ---- handlers ----
 
-type createReq struct {
-	Name   string   `json:"name"`
-	Type   string   `json:"type"`
-	Prompt string   `json:"prompt"`
+// promptReq creates a prompt, or appends a version to one that already exists.
+//
+// Named for the RECORD, not for the verb: a schema name is GLOBAL in the woven fleet
+// document, so "createReq" is a name several subsystems would each mean something
+// different by — and openapi.Weave refuses that outright rather than let one generated
+// SDK bind whichever shape it read last. apps/git already publishes one.
+type promptReq struct {
+	// Name is the org-unique handle AND the URL segment the prompt is addressed by:
+	// 1-64 characters matching ^[A-Za-z0-9][A-Za-z0-9._-]*$. "metrics", "new" and
+	// "catalog" are reserved. A name that already exists appends a new version.
+	Name string `json:"name"`
+	// Type labels the template's kind; defaults to "text".
+	Type string `json:"type"`
+	// Prompt is the template body, capped at 64 KiB. It holds template text only —
+	// never a secret.
+	Prompt string `json:"prompt"`
+	// Labels is free-form taxonomy, each up to 64 characters, capped at 32 entries.
 	Labels []string `json:"labels"`
-	Tags   []string `json:"tags"`
+	// Tags is free-form taxonomy under the same bounds as Labels.
+	Tags []string `json:"tags"`
 }
 
-func create(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// Create records a prompt for the caller's org and answers 201 with it. A name the
+// org already uses is NOT an error and NOT an overwrite: it appends a new version,
+// so the library keeps real, inspectable history and the response carries the whole
+// version list. The name is also the URL segment the prompt is fetched by, which is
+// why its shape is constrained and a handful of names are reserved.
+//
+// Example: {"name": "greeting", "prompt": "You are a helpful assistant.", "tags": ["support"]}
+func (o promptOps) create(ctx context.Context, in *promptReq) (*promptDetail, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body createReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	if reserved[strings.ToLower(name)] {
-		return zip.ErrBadRequest("name is reserved")
+		return nil, zip.ErrBadRequest("name is reserved")
 	}
 	if !nameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 	typ := strings.TrimSpace(body.Type)
 	if typ == "" {
@@ -210,81 +298,99 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 	// Cap content (Red MED-1): unbounded prompt bodies amplify the shared DB and
 	// blow up the detail response. A prompt is a template, not a blob.
 	if len(body.Prompt) > maxContent {
-		return zip.ErrBadRequest("prompt content too large (max 64KiB)")
+		return nil, zip.ErrBadRequest("prompt content too large (max 64KiB)")
 	}
 	id, err := genID("prompt")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
 	p := Prompt{
 		ID: id, Org: org, Name: name, Type: typ, Content: body.Prompt,
 		Labels: cleanList(body.Labels), Tags: cleanList(body.Tags), UpdatedAt: now,
 	}
-	saved, err := s.State.store.Upsert(c.Context(), p)
+	saved, err := s.State.store.Upsert(ctx, p)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	vs, err := s.State.store.Versions(c.Context(), org, name)
+	vs, err := s.State.store.Versions(ctx, org, name)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toDetail(saved, vs))
+	d := toDetail(saved, vs)
+	return &d, nil
 }
 
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.List(c.Context(), org)
+// List returns the caller org's prompt library as one row per prompt: its name,
+// type, every version number it has, its taxonomy and when it last changed. The
+// template bodies are deliberately absent — fetch one prompt to read its text.
+func (o promptOps) list(ctx context.Context, _ *noInput) (*promptList, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	rows, err := s.State.store.List(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]promptMeta, 0, len(rows))
 	for _, p := range rows {
-		vs, err := s.State.store.Versions(c.Context(), org, p.Name)
+		vs, err := s.State.store.Versions(ctx, org, p.Name)
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
 		}
 		out = append(out, toMeta(p, versionNums(vs)))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &promptList{Data: out}, nil
 }
 
-func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// Get returns one of the caller org's prompts: its CURRENT template text plus the
+// metadata of every version it has had. The history carries version numbers, types
+// and timestamps only — not each version's body — so a long history cannot inflate
+// this response. A name the caller's org does not own is 404, whoever owns it.
+//
+// Example: {"name": "greeting"}
+func (o promptOps) get(ctx context.Context, in *promptRef) (*promptDetail, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	name := nameParam(c)
-	p, err := s.State.store.Get(c.Context(), org, name)
+	name := strings.TrimSpace(in.Name)
+	p, err := s.State.store.Get(ctx, org, name)
 	if err == errNotFound {
-		return zip.ErrNotFound("prompt not found")
+		return nil, zip.ErrNotFound("prompt not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	vs, err := s.State.store.Versions(c.Context(), org, name)
+	vs, err := s.State.store.Versions(ctx, org, name)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
 	}
-	return c.JSON(http.StatusOK, toDetail(p, vs))
+	d := toDetail(p, vs)
+	return &d, nil
 }
 
-func del(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	deleted, err := s.State.store.Delete(c.Context(), org, nameParam(c))
+// Delete removes one of the caller org's prompts and every version of it, answering
+// 204. It is scoped to the caller's org, so a name another tenant owns is the same
+// 404 an unknown name gives. There is no undo: the version history goes with it.
+//
+// Example: {"name": "greeting"}
+func (o promptOps) del(ctx context.Context, in *promptRef) (*noContent, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := o.s.State.store.Delete(ctx, org, strings.TrimSpace(in.Name))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("prompt not found")
+		return nil, zip.ErrNotFound("prompt not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // metricRow is a real per-prompt statistic (never fabricated): the number of
@@ -298,43 +404,55 @@ type metricRow struct {
 	LastUpdatedAt string `json:"lastUpdatedAt"`
 }
 
-func metrics(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.List(c.Context(), org)
+// Metrics returns real per-prompt statistics for the caller's org: how many versions
+// each prompt has, which one is current, and when it was created and last changed.
+// Every number is counted from the store — nothing here is estimated or fabricated.
+func (o promptOps) metrics(ctx context.Context, _ *noInput) (*metricList, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
+		return nil, err
+	}
+	rows, err := s.State.store.List(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
 	}
 	out := make([]metricRow, 0, len(rows))
 	for _, p := range rows {
-		n, err := s.State.store.CountVersions(c.Context(), org, p.Name)
+		n, err := s.State.store.CountVersions(ctx, org, p.Name)
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
 		}
 		out = append(out, metricRow{
 			Name: p.Name, Type: p.Type, Versions: n, CurrentVer: p.Version,
 			CreatedAt: rfc3339(p.CreatedAt), LastUpdatedAt: rfc3339(p.UpdatedAt),
 		})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &metricList{Data: out}, nil
 }
 
 // ---- helpers ----
 
-func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
-
-// tenant resolves the org — the tenant isolation KEY — for a request. It uses
-// c.Org() EXACTLY as SanitizeIdentity minted it from the validated IAM owner
-// claim (HIP-0026): never lowercased, stripped, or truncated. Normalizing the
-// key would collapse DISTINCT owners into one storage bucket — a cross-tenant
-// break (Red HIGH-1: "acme"/"ACME"/"acme!"/32-char-prefix all shared data).
-// Reject only empty or pathologically long; never transform. There is NO magic
-// "admin" bucket: a SuperAdmin operating on per-org data carries an explicit
-// org (SanitizeIdentity sets X-Org-Id on the admin path), so an empty org is a
-// true 403, never a bucket a real org named "admin"/"Admin" could land in.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+// tenantOf resolves the org — the tenant isolation KEY — for a typed op. It is the
+// value principal.Org decided at the identity boundary, which cloud.Bridge parked on
+// the context: EXACTLY as SanitizeIdentity minted it from the validated IAM owner
+// claim (HIP-0026), never lowercased, stripped, or truncated. Normalizing the key
+// would collapse DISTINCT owners into one storage bucket — a cross-tenant break (Red
+// HIGH-1: "acme"/"ACME"/"acme!"/32-char-prefix all shared data). Reject only empty or
+// pathologically long; never transform. There is NO magic "admin" bucket: a
+// SuperAdmin operating on per-org data carries an explicit org (SanitizeIdentity sets
+// X-Org-Id on the admin path), so an empty org is a true 403, never a bucket a real
+// org named "admin"/"Admin" could land in.
+//
+// It is never an In field: an In field is caller-supplied, so a tenant key read from
+// one is a cross-tenant read the caller asserted for itself.
+func tenantOf(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
+}
 
 // cleanList trims, drops empties, caps each element, and de-dups a taxonomy
 // slice so labels/tags stay tidy identifiers.

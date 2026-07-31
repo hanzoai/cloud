@@ -1,4 +1,4 @@
-// Package principal is the ONE place the cloud data plane turns a request into a
+// Package principal is the ONE place the cloud data plane turns a request into an
 // org. Every subsystem that reads or writes per-org data resolves its org
 // through here, so the trust decision lives once and can never drift between six
 // hand-rolled copies.
@@ -43,7 +43,7 @@ const MaxOrgLen = 128
 
 // DefaultProject is the reserved id of every org's default project. It is the ONE
 // source of truth for the wire-contract value the gateway mints against
-// (iamauth.DefaultProject): an absent X-Project-Id and the literal "default"
+// (the edge's default-project rule): an absent X-Project-Id and the literal "default"
 // denote the SAME scope, so keyed surfaces (fleet refs, ml namespaces) keep
 // today's un-suffixed keys for it — the backward-compatibility invariant.
 const DefaultProject = "default"
@@ -294,8 +294,8 @@ func ProjectScope(c *zip.Ctx) string {
 //
 // It is claim-backed iff a validated principal carries a NON-default `project`
 // claim. IAM now mints that claim next to `owner`, and BOTH minters bind
-// X-Project-Id from it SERVER-SIDE: the gateway (iamauth.Claims.MintedProject) and,
-// on the off-gateway path, cloud.SanitizeIdentity (idClaims.mintedProject) — each
+// X-Project-Id from it SERVER-SIDE: the gateway (the edge (hanzoai/authz/edge)) and,
+// on the off-gateway path, cloud.SanitizeIdentity (idClaims.renderProject) — each
 // stripping any client copy first and dropping a cross-org project. So a non-default
 // X-Project-Id can only ever be a server-minted, validated scope; the caller can no
 // longer CHOOSE its label to evade a project cap or, were it hard, weaponize it.
@@ -318,8 +318,8 @@ func ValidatedProject(c *zip.Ctx) (string, bool) {
 // reads back. It mirrors Project: a zero-copy read of a SERVER-MINTED header.
 //
 // It is AUTHORITATIVE, not a hint. Both minters bind it from the validated claim
-// and strip any client copy first — the gateway (iamauth.Claims.MintedBillingAccount)
-// and, on the in-cluster path, cloud's own SanitizeIdentity (idClaims.mintedBillingAccount)
+// and strip any client copy first — the gateway (the edge (hanzoai/authz/edge))
+// and, on the in-cluster path, cloud's own SanitizeIdentity (idClaims.renderBillingAccount)
 // — so a surviving value is IAM's signed statement of who pays, never a caller
 // naming its own payer. Hand it to Payer as Credential.Account; Payer bounds it to
 // the caller's own org and falls back when it is absent.

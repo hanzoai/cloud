@@ -2,9 +2,9 @@ package main
 
 // verify.go — the read-only post-migration proof. For every CR-derived target it
 // asserts the value on cloud is byte-identical to the value on the standalone by
-// comparing SHA-256 digests (never the values themselves), and it exercises the
-// org-isolation matrix on cloud: a token for org A cannot read org B's coordinate
-// (403), and an unauthenticated read is refused (403).
+// comparing SHA-256 digests (never the values themselves). isolationProbe, beside
+// it, states the two properties cloud's secrets surface holds: a tenant-naming URL
+// reaches no route (404), and an unauthenticated read is refused (403).
 //
 // Digests, not values: a mismatch prints only a short hash prefix, so the proof
 // never leaks a secret even on failure.
@@ -157,16 +157,23 @@ type isoResult struct {
 	Passed bool
 }
 
-// isolationProbe proves the cloud guard on dst: a token scoped to org A cannot read
-// a coordinate under a DIFFERENT org (403), and an unauthenticated read is refused
-// (403). victimOrg must be a real, distinct org so the path is well-formed.
+// isolationProbe proves the two properties cloud's secrets surface must hold: a
+// URL that NAMES a tenant reaches no route at all (404), and an unauthenticated
+// read is refused (403). victimOrg must be a real, distinct org so the path is
+// well-formed.
+//
+// The first probe replaces a cross-org 403. Under HIP-0519 the tenant comes from
+// the assertion, so cloud serves no tenant-naming URL to deny — the standalone's
+// grammar reaches nothing there. The probe carries a VALID credential precisely so
+// the 404 means "no such URL" rather than "no such caller", which is the stronger
+// statement: the cross-tenant reach does not exist to be refused.
 func isolationProbe(ctx context.Context, dst *kmsClient, orgAToken, orgA, victimOrg, path, env, key string) []isoResult {
 	var out []isoResult
-	// A→B: org A's token reading org B's coordinate must be 403 (owner != :org).
-	if st, err := dst.probeStatus(ctx, "GET", orgAToken, victimOrg, path, env, key); err == nil {
+	named := newKMSClient(dst.base, standalone, dst.do)
+	if st, err := named.probeStatus(ctx, "GET", orgAToken, victimOrg, path, env, key); err == nil {
 		out = append(out, isoResult{
-			Name: fmt.Sprintf("cross-org read %s→%s", orgA, victimOrg),
-			Want: 403, Got: st, Passed: st == 403,
+			Name: fmt.Sprintf("tenant-naming URL %s→%s reaches no route", orgA, victimOrg),
+			Want: 404, Got: st, Passed: st == 404,
 		})
 	}
 	// No principal: unauthenticated read must be 403.
@@ -203,8 +210,8 @@ func runVerify(args []string) error {
 	inv := filterHost(full, *onlyHost)
 
 	ctx := context.Background()
-	src := newKMSClient(*srcURL, nil)
-	dst := newKMSClient(*cloudURL, nil)
+	src := newKMSClient(*srcURL, standalone, nil)
+	dst := newKMSClient(*cloudURL, embedded, nil)
 	srcAuth := newTokenFunc(src, crCredResolver, "src")
 	dstAuth := newTokenFunc(dst, machineAudResolver(*dstCredNS, *dstCredSuffix), "dst")
 

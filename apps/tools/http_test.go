@@ -17,7 +17,7 @@ import (
 )
 
 // newApp resets the process-wide registry to a fresh one, mounts the tools plane on
-// a fresh app, and lets a test register extra /v1 routes (for the builtin source).
+// a fresh app, and lets a test register extra /v1 routes.
 func newApp(t *testing.T, extra func(*zip.App)) *zip.App {
 	t.Helper()
 	old := std
@@ -25,6 +25,14 @@ func newApp(t *testing.T, extra func(*zip.App)) *zip.App {
 	t.Cleanup(func() { std = old })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// Mount the plane the way the SERVER does. A typed op receives only a context,
+	// so the validated org reaches it ONLY through cloud.Bridge — which Serve
+	// installs once for the whole binary, after the identity boundary and before
+	// MountAll. This harness had no Bridge, which was invisible while every route
+	// was untyped (an untyped handler reads the header itself) and would have made
+	// every typed op here answer 403 on a request that carries a valid X-Org-Id.
+	// It must precede the leaves: fiber runs middleware in registration order.
+	app.Use(cloud.Bridge())
 	if extra != nil {
 		extra(app)
 	}
@@ -43,6 +51,14 @@ type result struct {
 
 func do(t *testing.T, app *zip.App, method, path, org string, body any) result {
 	t.Helper()
+	return send(t, app, method, path, org, body, false)
+}
+
+// send is do() for a caller who may be a platform SuperAdmin. Admin-ness is a
+// property of the CALLER and not of the route, so it is one more header on the
+// same request rather than a second harness.
+func send(t *testing.T, app *zip.App, method, path, org string, body any, admin bool) result {
+	t.Helper()
 	var r io.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -56,6 +72,9 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) result {
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u-"+org)
 	}
+	if admin {
+		rq.Header.Set("X-User-IsAdmin", "true")
+	}
 	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
@@ -65,52 +84,51 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) result {
 	return result{Code: resp.StatusCode, Body: b}
 }
 
-func rpc(t *testing.T, app *zip.App, org, raw string) result {
+// call runs POST /v1/tools/call — the ONE dispatch door onto the dynamic plane.
+func call(t *testing.T, app *zip.App, org, name string, args map[string]any) result {
 	t.Helper()
-	rq := httptest.NewRequest(http.MethodPost, "/v1/tools/mcp", bytes.NewReader([]byte(raw)))
-	rq.Header.Set("Content-Type", "application/json")
-	if org != "" {
-		rq.Header.Set("X-Org-Id", org)
-		rq.Header.Set("X-User-Id", "u-"+org)
+	if args == nil {
+		args = map[string]any{}
 	}
-	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
-	if err != nil {
-		t.Fatalf("mcp: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	b, _ := io.ReadAll(resp.Body)
-	return result{Code: resp.StatusCode, Body: b}
+	return do(t, app, http.MethodPost, "/v1/tools/call", org,
+		map[string]any{"name": name, "arguments": args})
 }
 
-// TestMCPGate403: the unified MCP endpoint refuses a caller with no validated
-// principal — the tool plane never serves an unauthenticated request.
-func TestMCPGate403(t *testing.T) {
+// activated lists the caller's callable tools — GET /v1/tools?activated=true, the
+// discovery half the dispatch door is paired with.
+func activated(t *testing.T, app *zip.App, org string) []string {
+	t.Helper()
+	return toolNames(t, do(t, app, http.MethodGet, "/v1/tools?activated=true", org, nil).Body)
+}
+
+// TestCallGate403: the dispatch door refuses a caller with no validated principal —
+// the tool plane never dispatches an unauthenticated request.
+func TestCallGate403(t *testing.T) {
 	app := newApp(t, nil)
-	r := rpc(t, app, "", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	r := call(t, app, "", "acme_hello", nil)
 	if r.Code != 403 {
-		t.Fatalf("mcp without principal want 403, got %d (%s)", r.Code, r.Body)
+		t.Fatalf("tools/call without principal want 403, got %d (%s)", r.Code, r.Body)
 	}
 }
 
-// TestActivationAndMCPCall: the full activation round-trip. A registered source's
-// tool is invisible + un-callable until activated via PUT /v1/tools/activation;
-// once activated it appears in tools/list and tools/call dispatches; an unactivated
-// tool is refused 403.
-func TestActivationAndMCPCall(t *testing.T) {
+// TestActivationAndCall: the full activation round-trip. A registered source's tool
+// is not callable and not in the activated listing until it is switched on via PUT
+// /v1/tools/activation; once activated it is listed and POST /v1/tools/call
+// dispatches it; an unactivated sibling is refused 403.
+func TestActivationAndCall(t *testing.T) {
 	app := newApp(t, nil)
 	std.Register(&fakeProvider{src: SourceConnector, tools: []Tool{
 		tool("acme_hello", SourceConnector),
 		tool("acme_secret", SourceConnector),
 	}})
 
-	// Before activation: tools/list is empty, tools/call is 403.
-	list := rpc(t, app, "acme", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
-	if names := toolNames(t, list.Body); len(names) != 0 {
-		t.Fatalf("pre-activation tools/list must be empty, got %v", names)
+	// Before activation: the activated listing is empty, dispatch is 403.
+	if names := activated(t, app, "acme"); len(names) != 0 {
+		t.Fatalf("pre-activation activated listing must be empty, got %v", names)
 	}
-	call := rpc(t, app, "acme", `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"acme_hello","arguments":{}}}`)
-	if call.Code != 403 {
-		t.Fatalf("unactivated tools/call want 403, got %d (%s)", call.Code, call.Body)
+	r := call(t, app, "acme", "acme_hello", nil)
+	if r.Code != 403 {
+		t.Fatalf("unactivated tools/call want 403, got %d (%s)", r.Code, r.Body)
 	}
 
 	// Activate one tool via the activation API.
@@ -124,23 +142,22 @@ func TestActivationAndMCPCall(t *testing.T) {
 		t.Fatalf("activation list must contain acme_hello, got %s", get.Body)
 	}
 
-	// tools/list now shows ONLY the activated tool.
-	list = rpc(t, app, "acme", `{"jsonrpc":"2.0","id":3,"method":"tools/list"}`)
-	names := toolNames(t, list.Body)
+	// The activated listing now shows ONLY the activated tool.
+	names := activated(t, app, "acme")
 	if len(names) != 1 || names[0] != "acme_hello" {
-		t.Fatalf("post-activation tools/list must be [acme_hello], got %v", names)
+		t.Fatalf("post-activation activated listing must be [acme_hello], got %v", names)
 	}
 
-	// tools/call dispatches the activated tool.
-	call = rpc(t, app, "acme", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"acme_hello","arguments":{}}}`)
-	if call.Code != 200 || !bytes.Contains(call.Body, []byte(`\"by\":\"connector\"`)) {
-		t.Fatalf("activated tools/call must dispatch on connector, got %d (%s)", call.Code, call.Body)
+	// tools/call dispatches the activated tool, and answers with its own output.
+	r = call(t, app, "acme", "acme_hello", nil)
+	if r.Code != 200 || !bytes.Contains(r.Body, []byte(`"by":"connector"`)) {
+		t.Fatalf("activated tools/call must dispatch on connector, got %d (%s)", r.Code, r.Body)
 	}
 
 	// The still-unactivated sibling stays 403 (activation is per-tool).
-	call = rpc(t, app, "acme", `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"acme_secret","arguments":{}}}`)
-	if call.Code != 403 {
-		t.Fatalf("sibling unactivated tools/call want 403, got %d (%s)", call.Code, call.Body)
+	r = call(t, app, "acme", "acme_secret", nil)
+	if r.Code != 403 {
+		t.Fatalf("sibling unactivated tools/call want 403, got %d (%s)", r.Code, r.Body)
 	}
 }
 
@@ -219,34 +236,6 @@ func TestExternalMCPDispatch(t *testing.T) {
 	}
 }
 
-// TestBuiltinRouteTool: full-cloud-control — an arbitrary /v1 route becomes a tool
-// and dispatches IN-PROCESS through the same Fiber app, returning its response.
-func TestBuiltinRouteTool(t *testing.T) {
-	app := newApp(t, func(a *zip.App) {
-		a.Get("/v1/ping", func(c *zip.Ctx) error {
-			return c.JSON(http.StatusOK, map[string]any{"pong": true})
-		})
-	})
-	// The route surfaces as a builtin tool.
-	p := newBuiltinProvider(app)
-	tools, _ := p.List(context.Background(), Scope{Org: "acme"})
-	found := false
-	for _, tl := range tools {
-		if tl.Name == "cloud_get_ping" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("builtin must expose cloud_get_ping, got %d tools", len(tools))
-	}
-	// Activate + dispatch through the FULL registry+HTTP path.
-	do(t, app, http.MethodPut, "/v1/tools/activation", "acme", map[string]any{"activate": []string{"cloud_get_ping"}})
-	call := rpc(t, app, "acme", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cloud_get_ping","arguments":{}}}`)
-	if call.Code != 200 || !bytes.Contains(call.Body, []byte(`\"pong\":true`)) {
-		t.Fatalf("builtin dispatch must return the route response, got %d (%s)", call.Code, call.Body)
-	}
-}
-
 // TestSSRFGuard: the registration boundary rejects non-public / metadata targets.
 func TestSSRFGuard(t *testing.T) {
 	bad := []string{
@@ -290,17 +279,15 @@ func (f fakeKMS) Sign(_ context.Context, _ string, _ []byte) ([]byte, error) {
 func toolNames(t *testing.T, body []byte) []string {
 	t.Helper()
 	var out struct {
-		Result struct {
-			Tools []struct {
-				Name string `json:"name"`
-			} `json:"tools"`
-		} `json:"result"`
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
-		t.Fatalf("decode tools/list: %v (%s)", err, body)
+		t.Fatalf("decode tool listing: %v (%s)", err, body)
 	}
-	names := make([]string, 0, len(out.Result.Tools))
-	for _, tl := range out.Result.Tools {
+	names := make([]string, 0, len(out.Tools))
+	for _, tl := range out.Tools {
 		names = append(names, tl.Name)
 	}
 	return names

@@ -61,18 +61,14 @@ func postBody(t *testing.T, app *zip.App, path, body, auth string) (int, Capture
 
 // ── the evidence for the door ────────────────────────────────────────────────
 
-// TestCanonicalWireSilentlyDropsTeamBatch is THE reason /v1/event/collect exists, and
-// it is a test of the OLD behavior, not the new: it pins what a naive repoint of
-// ANALYTICS_COLLECTOR_URL at the canonical door would have done.
-//
-// decodeIngest sees the leading '[' and decodes []Event, whose keys are `distinctId`
-// and `time`. The team wire has neither, so the person id and the timestamp are lost,
-// and toCapture leaves Type empty. canonicalType("") is "event", which is not in
-// publicKinds — so admitPublic drops EVERY event. Accepted 0, dropped 2.
-//
-// That is the accepted-then-dropped failure: the SPA would see a 200 and discard its
-// retry queue while nothing was ever stored.
-func TestCanonicalWireSilentlyDropsTeamBatch(t *testing.T) {
+// TestCanonicalDoorDecodesTeamBatch pins the fold that retired the /collect
+// door as a distinct wire: the canonical decode now dispatches the team SPA's
+// bare snake_case array by shape (isTeamArray), so a repoint of
+// ANALYTICS_COLLECTOR_URL at the canonical door loses nothing. This INVERTS the
+// old TestCanonicalWireSilentlyDropsTeamBatch, which pinned the
+// accepted-then-dropped failure the fold fixed: the person id, the timestamp
+// and the kind all survive now.
+func TestCanonicalDoorDecodesTeamBatch(t *testing.T) {
 	evs, err := decodeIngest([]byte(teamWire))
 	if err != nil {
 		t.Fatalf("decodeIngest: %v", err)
@@ -80,16 +76,14 @@ func TestCanonicalWireSilentlyDropsTeamBatch(t *testing.T) {
 	if len(evs) != 2 {
 		t.Fatalf("decodeIngest events = %d, want 2", len(evs))
 	}
-	// The two fields the canonical wire cannot see.
-	if evs[0].DistinctID != "" {
-		t.Errorf("canonical decode DistinctID = %q, want empty (key is distinct_id, not distinctId)", evs[0].DistinctID)
+	if evs[0].DistinctID == "" {
+		t.Error("the team person id (distinct_id) must survive the canonical decode")
 	}
-	if evs[0].Timestamp != "" {
-		t.Errorf("canonical decode Timestamp = %q, want empty (key is timestamp:number, not time:string)", evs[0].Timestamp)
+	if evs[0].Timestamp == "" {
+		t.Error("the team epoch-millis timestamp must survive the canonical decode")
 	}
-	admitted, dropped := admitPublic(evs)
-	if len(admitted) != 0 || dropped != 2 {
-		t.Fatalf("canonical wire admitted %d dropped %d, want 0 admitted / 2 dropped", len(admitted), dropped)
+	if evs[0].Type == "" {
+		t.Error("the team kind must be named — an unnamed kind is dropped whole by admitPublic")
 	}
 }
 
@@ -257,7 +251,7 @@ func TestTeamTimestampAbsentClampsToNow(t *testing.T) {
 // opinion about ONE: `"timestamp":1` is a well-formed epoch-millis that decodes to
 // 1970-01-01, which the write core used to accept verbatim into the leading column of
 // ORDER BY. That is the widest possible key range from the smallest possible request, on
-// a door reachable at /v1/event/collect.
+// the one event door.
 func TestTeamEpochMillisCannotReach1970(t *testing.T) {
 	evs, err := decodeTeam([]byte(`[{"event":"error","properties":{"error_message":"x"},"timestamp":1,"distinct_id":"u"}]`))
 	if err != nil {
@@ -339,12 +333,12 @@ func TestTeamTenantResolvesSignedOrg(t *testing.T) {
 	// warehouse (503).
 	const custom = `[{"event":"customEvent","properties":{"event":"checkout_started","revenue":42},"timestamp":1750000000000,"distinct_id":"u"}]`
 
-	code, res := postBody(t, app, "/v1/event/collect", custom, tok)
+	code, res := postBody(t, app, "/v1/event", custom, tok)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("member POST = %d %+v, want 503 (full capability reached the write core)", code, res)
 	}
 	// Same bytes, NO credential: dropped by the projection, never reaching the store.
-	code, res = postBody(t, app, "/v1/event/collect", custom, "")
+	code, res = postBody(t, app, "/v1/event", custom, "")
 	if code != http.StatusOK || res.Accepted != 0 || res.Dropped != 1 {
 		t.Fatalf("anonymous POST = %d %+v, want 200 accepted=0 dropped=1", code, res)
 	}
@@ -403,7 +397,7 @@ func TestTeamTenantRefusals(t *testing.T) {
 			//
 			// 200-with-rows-under-$public is the exact pathology this door exists to
 			// prevent: the caller sees success and the org cannot read its own data.
-			code, _ := postBody(t, app, "/v1/event/collect", teamWire, bearer)
+			code, _ := postBody(t, app, "/v1/event", teamWire, bearer)
 			if code != http.StatusForbidden {
 				t.Fatalf("POST = %d, want 403 (a presented team credential that does not resolve is refused)", code)
 			}
@@ -447,26 +441,20 @@ func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) (string, bool) {
 
 // ── the door ─────────────────────────────────────────────────────────────────
 
-// TestTeamDoorIsRegistered proves the route exists and is the TEAM wire, by the
-// clearest discriminator available without a warehouse:
-//
-//	/v1/event        + the team wire -> everything dropped -> the write core is never
-//	                                    reached (len(evs)==0 short-circuits) -> 200.
-//	/v1/event/collect+ the team wire -> events survive admission -> the write core IS
-//	                                    reached -> 503 (no warehouse in the harness).
-//
-// A wrong or missing route would 404/405; a route bound to the canonical decoder would
-// 200 with dropped=2. Only the correct binding produces 503.
+// TestTeamDoorIsRegistered proves BOTH spellings of the door carry the team
+// wire since the fold: the canonical /v1/event dispatches the team array by
+// shape (isTeamArray) and the sunsetting caller-owned /collect path binds the
+// same ONE decode — so on both, team events survive admission and REACH the
+// write core, which is 503 in this warehouse-less harness. A wrong or missing
+// route would 404/405; a decode regression that silently dropped the batch
+// would answer 200 dropped=2 — the exact accepted-then-discarded failure the
+// old two-wire split existed to prevent.
 func TestTeamDoorIsRegistered(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	app := mountApp(t)
 
-	code, res := postBody(t, app, "/v1/event", teamWire, "")
-	if code != http.StatusOK || res.Accepted != 0 || res.Dropped != 2 {
-		t.Fatalf("canonical door with team wire = %d %+v, want 200 accepted=0 dropped=2", code, res)
-	}
-	if code, _ := postBody(t, app, "/v1/event/collect", teamWire, ""); code != http.StatusServiceUnavailable {
-		t.Fatalf("team door with team wire = %d, want 503 (reached the write core)", code)
+	if code, res := postBody(t, app, "/v1/event", teamWire, ""); code != http.StatusServiceUnavailable {
+		t.Fatalf("/v1/event with team wire = %d %+v, want 503 (events must survive admission and reach the write core)", code, res)
 	}
 }
 
@@ -489,18 +477,18 @@ func TestGuestWritesProjectedIntoItsOwnOrg(t *testing.T) {
 	// The forgeable payload: a custom event carrying revenue. kind "event" is not in
 	// publicKinds, so the projection drops it whole.
 	const revenue = `[{"event":"customEvent","properties":{"event":"order_completed","revenue":99999},"timestamp":1750000000000,"distinct_id":"u"}]`
-	code, res := postBody(t, app, "/v1/event/collect", revenue, guest)
+	code, res := postBody(t, app, "/v1/event", revenue, guest)
 	if code != http.StatusOK || res.Accepted != 0 || res.Dropped != 1 {
 		t.Fatalf("guest revenue POST = %d %+v, want 200 accepted=0 dropped=1 (projected away)", code, res)
 	}
 	// A member CAN write it — so the refusal is about the role, not the payload.
-	if code, _ := postBody(t, app, "/v1/event/collect", revenue, member); code != http.StatusServiceUnavailable {
+	if code, _ := postBody(t, app, "/v1/event", revenue, member); code != http.StatusServiceUnavailable {
 		t.Fatalf("member revenue POST = %d, want 503 (reached the write core)", code)
 	}
 
 	// But the guest is NOT silenced: its errors/pageviews still land, and they land in
 	// ITS OWN org — not $public, which acme could never read.
-	code, res = postBody(t, app, "/v1/event/collect", teamWire, guest)
+	code, res = postBody(t, app, "/v1/event", teamWire, guest)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("guest error/pageview POST = %d %+v, want 503 (admitted, reached the store)", code, res)
 	}
@@ -648,7 +636,7 @@ func TestUnidentifiableBearerStillTakesTheAnonymousLane(t *testing.T) {
 	// A well-formed JWT with no `account` claim (an IAM-shaped bearer).
 	foreign := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
 		"eyJzdWIiOiJ1c2VyLTEiLCJpc3MiOiJodHRwczovL2hhbnpvLmlkIn0.c2ln"
-	if code, _ := postBody(t, app, "/v1/event/collect", teamWire, foreign); code != http.StatusServiceUnavailable {
+	if code, _ := postBody(t, app, "/v1/event", teamWire, foreign); code != http.StatusServiceUnavailable {
 		t.Fatalf("foreign bearer = %d, want 503 (anonymous lane reached the store), NOT 403", code)
 	}
 	if teamPresented2(t, foreign) {
@@ -702,7 +690,7 @@ func TestGuestRowsLandInItsOwnOrgNotPublic(t *testing.T) {
 		`[{"event":"error","properties":{"error_message":"boom"},"timestamp":1750000000000,"distinct_id":"u"}]`,
 		`[{"event":"navigation","properties":{"path":"/pricing"},"timestamp":1750000000000,"distinct_id":"u"}]`,
 	} {
-		code, res := postBody(t, app, "/v1/event/collect", body, guest)
+		code, res := postBody(t, app, "/v1/event", body, guest)
 		if code != http.StatusOK || res.Accepted != 1 {
 			t.Fatalf("guest POST = %d %+v, want 200 accepted:1 (admitted and written)", code, res)
 		}
@@ -738,7 +726,7 @@ func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
 	const victim = "ada@acme.example"
 	body := `[{"event":"navigation","properties":{"path":"/salaries","$anonymous_id":"anon-of-ada"},` +
 		`"timestamp":1750000000000,"distinct_id":"` + victim + `"}]`
-	if code, res := postBody(t, app, "/v1/event/collect", body, guest); code != http.StatusOK || res.Accepted != 1 {
+	if code, res := postBody(t, app, "/v1/event", body, guest); code != http.StatusOK || res.Accepted != 1 {
 		t.Fatalf("guest POST = %d %+v, want 200 accepted:1", code, res)
 	}
 	if got := w.col(t, 0, "distinct_id"); got == victim {
@@ -758,7 +746,7 @@ func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
 	// pass for a version that clobbered identity everywhere.
 	member := teamToken(t, "acme", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
 	w2 := fakeWarehouse(t)
-	if code, res := postBody(t, app, "/v1/event/collect", body, member); code != http.StatusOK || res.Accepted != 1 {
+	if code, res := postBody(t, app, "/v1/event", body, member); code != http.StatusOK || res.Accepted != 1 {
 		t.Fatalf("member POST = %d %+v, want 200 accepted:1", code, res)
 	}
 	if got := w2.col(t, 0, "distinct_id"); got != victim {
@@ -775,7 +763,7 @@ func TestAnonymousLaneIdentityIsUntouched(t *testing.T) {
 	w := fakeWarehouse(t)
 	app := mountApp(t)
 	body := `[{"event":"navigation","properties":{"path":"/pricing"},"timestamp":1750000000000,"distinct_id":"visitor-7"}]`
-	if code, res := postBody(t, app, "/v1/event/collect", body, ""); code != http.StatusOK || res.Accepted != 1 {
+	if code, res := postBody(t, app, "/v1/event", body, ""); code != http.StatusOK || res.Accepted != 1 {
 		t.Fatalf("anonymous POST = %d %+v, want 200 accepted:1", code, res)
 	}
 	if got := w.tenants(t); len(got) != 1 || got[0] != publicTenant {

@@ -92,8 +92,10 @@ type state struct {
 	// own it, in addition to a global admin — the platform operator (the
 	// deployment's own brand org) manages customer DNS, so its bind is the vouch.
 	// Env CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated) overrides; default is the
-	// brand org (hanzo). Every OTHER org self-serves: it claims the host pending
-	// and proves control with the DNS challenge (domains.go).
+	// brand org (hanzo). Keyed by the VERBATIM validated IAM owner — the same value
+	// org() resolves, never a fold (operatorOrgsFromEnv says why). Every OTHER org
+	// self-serves: it claims the host pending and proves control with the DNS
+	// challenge (domains.go).
 	operatorOrgs map[string]bool
 	// resolver reads the custom-domain ownership challenge (domains.go); nil ⇒ the
 	// system resolver. Tests inject a fake so verification is deterministic.
@@ -711,15 +713,18 @@ func slugParam(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.P
 //
 // The key comes from principal.Org — the ONE canonical resolver (crm, prompts,
 // agents, framework key off the same one), which returns the VALIDATED IAM owner
-// VERBATIM (trimmed, ≤128, cloned). Verbatim is load-bearing: the old sanitizeOrg
-// FOLD (lowercase + non-alnum→'-' + truncate-32) is NON-injective — two DISTINCT
-// validated owners ("acme"/"Acme", or names differing only past 32 chars) collapse
-// onto ONE key and thus ONE S3 prefix, itself a cross-tenant collision (one org
-// can overwrite/read another's deployed site). Keying off the verbatim owner makes
-// the key injective with no lock-out. Since that owner is an S3-key segment,
-// orgPathSafe refuses ONLY the traversal class ('/', '\\', or a "."/".." segment)
-// → 403, so it can never escape its prefix; SanitizeIdentity already strips
-// whitespace/control/format runes upstream, so no legitimate owner is refused.
+// VERBATIM (trimmed, ≤128, cloned). Verbatim is load-bearing, and it is now the
+// ONLY spelling of an org anywhere in this package: a DNS-ish fold (lowercase +
+// non-alnum→'-' + truncate-32) is NON-injective — two DISTINCT validated owners
+// ("acme"/"Acme", "team.a"/"team-a", or names differing only past 32 chars)
+// collapse onto ONE key. Wherever that key decides something, the collision IS
+// the break: as an S3 prefix one org overwrites/reads another's deployed site;
+// as the platform-operator set (domains.go) it hands a lookalike tenant the
+// DNS-proof bypass. Keying off the verbatim owner makes the key injective with
+// no lock-out. Since that owner is an S3-key segment, orgPathSafe refuses ONLY
+// the traversal class ('/', '\\', or a "."/".." segment) → 403, so it can never
+// escape its prefix; SanitizeIdentity already strips whitespace/control/format
+// runes upstream, so no legitimate owner is refused.
 func org(c *zip.Ctx) (string, bool) {
 	if org, ok := principal.Org(c); ok {
 		if !orgPathSafe(org) {
@@ -750,29 +755,6 @@ func orgPathSafe(org string) bool {
 		return false
 	}
 	return !strings.ContainsAny(org, "/\\")
-}
-
-// sanitizeOrg folds a string to a DNS-ish label (lowercase + non-alnum→'-' +
-// truncate-32). It is NOT the tenant key — folding is non-injective and would
-// collide distinct tenants (see org, which keys off the verbatim principal.Org).
-// It survives only for domains.go's brand/label derivation, where a lossy,
-// display-oriented fold is exactly what's wanted.
-func sanitizeOrg(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('-')
-		}
-	}
-	out := strings.Trim(b.String(), "-")
-	if len(out) > 32 {
-		out = strings.Trim(out[:32], "-")
-	}
-	return out
 }
 
 // slugify derives a slug from a display name: lowercase, non-alnum→'-',

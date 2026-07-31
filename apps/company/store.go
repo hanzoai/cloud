@@ -117,18 +117,32 @@ func (s *Store) Put(ctx context.Context, f *Formation) error {
 	return nil
 }
 
-// Summary is one row of the register: the projection Put already writes, with no
-// JSON decode. Hanzo forms the entity and carries the formation KYC/AML obligation,
-// so the platform needs to read its own book — how many entities it formed, which
-// are stalled, and where. Get answers a question about ONE org and cannot answer
-// any of those.
-type Summary struct {
-	Org       string    `json:"org"`
-	Stage     Stage     `json:"stage"`
+// Registration is one row of the register: the projection Put already writes, with
+// no JSON decode. Hanzo forms the entity and carries the formation KYC/AML
+// obligation, so the platform needs to read its own book — how many entities it
+// formed, which are stalled, and where. Get answers a question about ONE org and
+// cannot answer any of those.
+//
+// It is NOT called Summary. Schema names are flat across the fleet document, and
+// apps/marketing already publishes a Summary that means campaign counters — one
+// name, two shapes, which every generated SDK would bind to whichever it read
+// last. openapi.Weave refuses that composition, and it refused this one the
+// moment the register became a typed op.
+type Registration struct {
+	// Org is the org whose formation this row projects.
+	Org string `json:"org"`
+	// Stage is the formation's current state — what the platform reads to see which
+	// formations are stalled and where.
+	Stage Stage `json:"stage"`
+	// Structure is the legal entity being formed: c-corp, llc or dao-llc.
 	Structure Structure `json:"structure"`
-	Name      string    `json:"name"`
-	CreatedAt int64     `json:"createdAt"`
-	UpdatedAt int64     `json:"updatedAt"`
+	// Name is the company name the entity is being formed under.
+	Name string `json:"name"`
+	// CreatedAt is the unix second the formation was opened.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is the unix second of the most recent write to the formation, and
+	// the key the register sorts on (newest activity first).
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // Filter narrows the register. A zero Filter lists every formation.
@@ -152,7 +166,7 @@ const defaultRegisterLimit = 200
 //
 // Only the projection columns are read. Put maintains them precisely so a listing
 // never decodes a document it is not going to show.
-func (s *Store) List(ctx context.Context, f Filter) ([]Summary, error) {
+func (s *Store) List(ctx context.Context, f Filter) ([]Registration, error) {
 	limit := f.Limit
 	if limit <= 0 {
 		limit = defaultRegisterLimit
@@ -177,9 +191,9 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Summary, error) {
 	}
 	defer rows.Close()
 
-	out := []Summary{}
+	out := []Registration{}
 	for rows.Next() {
-		var r Summary
+		var r Registration
 		if err := rows.Scan(&r.Org, &r.Stage, &r.Structure, &r.Name, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan formation: %w", err)
 		}

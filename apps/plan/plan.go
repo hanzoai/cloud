@@ -1,5 +1,8 @@
-// Package plan mounts the @hanzo/plans catalog into the unified cloud
-// binary under /v1/plans/*, per HIP-0106.
+// Package plan is the plan catalog at /v1/plans/*: every purchasable tier — cloud,
+// subscription, blockchain, DNS, GPU, storage — with what it costs, what it grants
+// (the entitlement vocabulary and its JSON Schema), and a resolver from a plan id to
+// both. It is the catalog of RECORD; apps/pricing reads the same @hanzo/plans source
+// and answers eight of these sections again under /v1/pricing/*.
 //
 // STRATEGY: wrap, don't rewrite. @hanzo/plans is a Node data package (JSON
 // catalog + entitlements.mjs transforms). We do NOT reimplement the entitlement
@@ -8,20 +11,23 @@
 //   - github.com/hanzoai/plans (the service repo's Go embed module) ships
 //     goja/bundle.js — the ESM-free port of entitlements.mjs + the /v1/plans
 //     route table — plus the embedded *.json catalog (plans.Data()).
-//   - This wrapper loads that bundle into a goja runtime (clients/goja),
-//     injects the catalog as globalThis.__PLANS_DATA__, and registers thin zip
-//     handlers that call globalThis.handle({route, params, tenant}). The
-//     entitlement transforms (fromLegacy/toLicenseFeatures/resolvePlan) run in
+//   - This wrapper loads that bundle into a goja runtime (apps/goja),
+//     injects the catalog as globalThis.__PLANS_DATA__, and declares one TYPED op
+//     per address (ops.go) that calls globalThis.handle({route, params, tenant}).
+//     The entitlement transforms (fromLegacy/toLicenseFeatures/resolvePlan) run in
 //     goja — real JS, not a Go reimplementation.
 //
 // The plans data is read-only public-catalog content; there are no secrets
 // here. The licensing SIGNER/fingerprint that consumes toLicenseFeatures stays
 // in hanzoai/licensing. This wrapper is pure glue.
 //
-// IAM gating + X-Org-Id tenant scope: every /v1/plans route reads the
-// gateway-minted identity off the zip.Ctx (c.Org()) and threads it into the
-// bundle as the tenant, so a reseller org (tenant_id != "hanzo") sees its own
-// catalog overrides. The plan catalog is readable by any authenticated caller;
+// IAM gating + X-Org-Id tenant scope: every /v1/plans route threads the
+// VALIDATED org into the bundle as the tenant, so a reseller org
+// (tenant_id != "hanzo") sees its own catalog overrides. A typed op receives only
+// a context, so that org arrives on the context (cloud.Bridge parks it,
+// ops.go/catalogTenant reads it) and is never an In field — an In field is
+// caller-supplied, and a tenant read from one would hand any caller any
+// reseller's catalog. The plan catalog is readable by any authenticated caller;
 // no admin scope is required for reads.
 package plan
 
@@ -33,7 +39,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
-	"github.com/hanzoai/cloud/apps/principal"
 	hplans "github.com/hanzoai/plans"
 	"github.com/zap-proto/zip"
 )
@@ -71,81 +76,64 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	host = h
 
-	g := app.Group("/v1/plans")
-
-	// Native health endpoint — always answers, no JS, no auth.
-	g.Get("/health", func(c *zip.Ctx) error {
-		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "service": "plans"})
-	})
-
-	// Fixed-route handlers. Each maps a path to a bundle route name.
-	// gateway-minted identity (c.Org()) becomes the tenant for catalog scoping.
-	type binding struct{ path, route string }
-	fixed := []binding{
-		{"/v1/plans", "plans"},
-		{"/v1/plans/subscriptions", "subscriptions"},
-		{"/v1/plans/cloud", "cloud"},
-		{"/v1/plans/blockchain", "blockchain"},
-		{"/v1/plans/dns", "dns"},
-		{"/v1/plans/gpu", "gpu"},
-		{"/v1/plans/regions", "regions"},
-		{"/v1/plans/storage", "storage"},
-		{"/v1/plans/tools", "tools"},
-		{"/v1/plans/policy", "policy"},
-		{"/v1/plans/schema", "schema"},
-		{"/v1/plans/vocab", "vocab"},
+	// The typed ops. zip.Get[In, Out] is ONE registry entry with N projections —
+	// the REST route, the OpenAPI schema and prose, the MCP tool, the CLI command
+	// and the generated SDK method — so each op is declared exactly once here and
+	// every consumer follows from it. See ops.go.
+	//
+	// They are declared on the APP with absolute paths rather than on a group,
+	// because one of them IS the prefix: GET /v1/plans has no leaf, and a group
+	// cannot express it — zip.Get(g, "") composes to "/v1/plans/", a different
+	// route. A group for fourteen plus an app-level exception for one is two
+	// idioms; one absolute address per op is one, and it is the form apps/pricing
+	// already uses for the same reason.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("plan.Mount: router is not backed by a zip app — typed ops have no registry to declare into")
 	}
-	for _, b := range fixed {
-		route := b.route
-		app.Get(b.path, func(c *zip.Ctx) error {
-			return dispatch(c, route, nil)
-		})
-	}
+	// Bridge FIRST: a typed op receives only a context, so the VALIDATED org — the
+	// tenant that selects a reseller's catalog overrides — reaches it by being
+	// parked there. fiber runs middleware in registration order, so this must
+	// precede every leaf below. On the scoped router it installs once per declared
+	// prefix, which is why plugin/plan/main.go has to declare /v1/plans: under the
+	// /v1/<name> default this landed on /v1/plan and never ran. Serve installs one
+	// app-wide too; nesting is harmless (the inner one is what the handler sees)
+	// and this is what makes the subsystem's own tests, which mount it on a bare
+	// zip app, exercise the same identity path production does.
+	app.Use(cloud.Bridge())
 
-	// Parameterized: resolve + entitlements take a plan id.
-	g.Get("/resolve/:id", func(c *zip.Ctx) error {
-		return dispatch(c, "resolve", map[string]string{"id": c.Param("id")})
-	})
-	g.Get("/entitlements/:id", func(c *zip.Ctx) error {
-		return dispatch(c, "entitlements", map[string]string{"id": c.Param("id")})
-	})
+	o := ops{log: logger}
+
+	// Native health probe — no JS, no auth, answers while the bundle is degraded.
+	zip.Get(zapp, "/v1/plans/health", o.health)
+
+	// The catalog sections. Each relays one @hanzo/plans bundle route; the tenant
+	// is the validated org, so a reseller org reads its own catalog (ops.go,
+	// catalogTenant).
+	zip.Get(zapp, "/v1/plans", o.listPlans)
+	zip.Get(zapp, "/v1/plans/subscriptions", o.listSubscriptions)
+	zip.Get(zapp, "/v1/plans/cloud", o.listCloud)
+	zip.Get(zapp, "/v1/plans/blockchain", o.listBlockchain)
+	zip.Get(zapp, "/v1/plans/dns", o.listDNS)
+	zip.Get(zapp, "/v1/plans/gpu", o.listGPU)
+	zip.Get(zapp, "/v1/plans/regions", o.listRegions)
+	zip.Get(zapp, "/v1/plans/storage", o.getStorage)
+	zip.Get(zapp, "/v1/plans/tools", o.listTools)
+	zip.Get(zapp, "/v1/plans/policy", o.getPolicy)
+	zip.Get(zapp, "/v1/plans/schema", o.getSchemas)
+	zip.Get(zapp, "/v1/plans/vocab", o.getVocab)
+
+	// Entitlement resolution — the data contract, end to end, in goja.
+	zip.Get(zapp, "/v1/plans/resolve/:id", o.resolve)
+	zip.Get(zapp, "/v1/plans/entitlements/:id", o.getEntitlements)
 
 	logger.Info("plans mounted",
 		"prefix", "/v1/plans",
-		"routes", len(fixed)+2,
+		"routes", 15,
+		"typed", 15,
 		"brand", deps.Brand,
 	)
 	return nil
-}
-
-// dispatch runs one bundle route on the shared goja host and writes the
-// {status, body} back as JSON. The tenant is the gateway-minted org (X-Org-Id
-// per HIP-0026) so reseller catalogs resolve correctly.
-func dispatch(c *zip.Ctx, route string, params map[string]string) error {
-	if host == nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]any{
-			"error": "plans not initialised",
-		})
-	}
-	// Public catalog: only a VALIDATED principal selects a reseller's overlay; an
-	// anonymous or client-forged X-Org-Id falls back to the public "hanzo" default
-	// (never another reseller's catalog).
-	tenant := "hanzo"
-	if org, ok := principal.Org(c); ok {
-		tenant = org
-	}
-	resp, err := host.Dispatch(c.Context(), goja.Request{
-		Route:  route,
-		Params: params,
-		Tenant: tenant,
-	})
-	if err != nil {
-		c.Log().Error("plans dispatch failed", "route", route, "err", err)
-		return c.JSON(http.StatusInternalServerError, map[string]any{
-			"error": "plans dispatch failed",
-		})
-	}
-	return c.Bytes(resp.Status, withContentType(c, resp.Body))
 }
 
 // Entitlements resolves the canonical entitlement block for a plan id from the
@@ -224,12 +212,6 @@ func LicenseEntitlement(ctx context.Context, id string) (entitlements map[string
 		return nil, nil, false, fmt.Errorf("plan.LicenseEntitlement(%q): decode: %w", id, err)
 	}
 	return out.Entitlements, out.LicenseFeatures, true, nil
-}
-
-// withContentType sets application/json and returns the bytes unchanged.
-func withContentType(c *zip.Ctx, b []byte) []byte {
-	c.SetHeader("Content-Type", "application/json")
-	return b
 }
 
 // Shutdown drops the goja host. Idempotent.

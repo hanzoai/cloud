@@ -1,15 +1,15 @@
-// Package marketing mounts the Hanzo Cloud /v1/marketing/* surface: the native-Go
-// GTM engine folded from github.com/hanzoai/marketing onto the ONE cloud
-// framework (zip/Fiber + cloud.Deps + per-org SQLite), the twin of clients/crm —
-// NOT a proxy to a standalone pod, and nothing Python in the mount path. The
-// marketing repo keeps the CONTENT system (GTM.md, checklist.yaml, ads/,
-// analysis/, discounts.md) as data; this is the engine that acts on it.
+// Package marketing is lifecycle email: drip sequences, audiences resolved from
+// the IAM roster, promo codes redeemed as wallet credit, and the per-org
+// suppression list every send passes through.
 //
 // Subsystems (all org-scoped, /v1 only):
 //
 //   - Campaigns — named campaign on a delivery Channel (email/sms/social/meta/
 //     google/tiktok), a lifecycle Status (draft/scheduled/active/paused/
-//     completed), Budget/Spend in cents, and a send time (scheduled_at).
+//     completed), Budget/Spend in cents, and a send time (scheduled_at). This is
+//     a SECOND campaign record beside apps/campaign (the go-to-market plane) and
+//     apps/ads (the paid one); apps/campaign is the canonical owner of a campaign
+//     that spans channels, and this one holds only what an email send needs.
 //   - Email sequences — ordered drip Steps sent as DURABLE tasks on the embedded
 //     hanzoai/tasks engine (drip.go): each enrollment's next_run_at lives in
 //     SQLite, a per-minute engine schedule sweeps due steps, every step is
@@ -24,8 +24,10 @@
 //     realized as a non-cash wallet credit through the finance ledger, with the
 //     hard 1,000 cap, one-per-org, one-per-instrument and team-seat-cap guards.
 //   - Content calendar — scheduled posts as documents, published by a
-//     task-executed hook; social publish returns an honest 501 until a connector
-//     is wired (see calendar.go).
+//     task-executed hook; social publish returns an honest 501 because no
+//     publisher is wired here (see calendar.go). It targets the SAME networks as
+//     apps/social, which owns the connected accounts and the publish edge — a
+//     scheduled social post has two stores today and apps/social is the one.
 //   - Suppression / unsubscribe — a per-org opt-out list enforced at the ONE send
 //     seam (suppress.go); every send path passes through it, plus a signed
 //     public one-click unsubscribe.

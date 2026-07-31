@@ -25,7 +25,7 @@
 // for a platform SuperAdmin. Preferences are personal, and no operational task
 // requires reading someone else's.
 //
-// NOT SETTINGS. clients/settings is per-ORG, per-product configuration with KMS
+// NOT SETTINGS. apps/settings is per-ORG, per-product configuration with KMS
 // custody for secret fields. This is per-USER UI state with no secrets. They are
 // different tenancy keys answering different questions, so they are different
 // planes — collapsing them would put one user's theme under an org key and make
@@ -68,8 +68,12 @@ var mounted *service
 // server does not interpret a preference's meaning, only its shape, so a surface
 // can add a key without a server change.
 type prefsView struct {
-	Prefs     json.RawMessage `json:"prefs"`
-	UpdatedAt int64           `json:"updatedAt,omitempty"`
+	// Prefs is the caller's preference document: an opaque JSON object whose keys
+	// the surfaces own, returned verbatim. `{}` when nothing has been saved.
+	Prefs json.RawMessage `json:"prefs"`
+	// UpdatedAt is when the document was last written, unix seconds. Absent when
+	// nothing has been saved.
+	UpdatedAt int64 `json:"updatedAt,omitempty"`
 }
 
 // Mount registers the prefs surface on app per HIP-0106.
@@ -94,13 +98,61 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &service{store: store, log: log}
 	mounted = s
 
-	g := app.Group("/v1/prefs")
-	g.Get("", s.getPrefs)
-	g.Patch("", s.patchPrefs)
+	routes(app, s)
 
 	log.Info("prefs surface mounted", "prefix", "/v1/prefs", "brand", deps.Brand)
 	return nil
 }
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// routes is the ONE place the surface is wired, so a test drives the same router
+// the binary serves rather than a reconstruction of it.
+//
+// Both verbs are declared at their WHOLE path rather than as an EMPTY leaf on a
+// /v1/prefs group: joinPath normalises "" to "/", so the group form named
+// /v1/prefs/ — a path this API has never served — in the document, the
+// operationId, the MCP tool and every generated SDK's URL.
+func routes(app cloud.Router, s *service) {
+	// A typed op receives only a context, so the request facts its signature drops
+	// have to be parked there. Installed on the subsystem's own subtree BEFORE the
+	// leaves — fiber runs middleware in registration order, so one installed after
+	// them never runs.
+	app.Group("/v1/prefs").Use(cloud.Bridge())
+
+	zip.Get(cloud.ZipApp(app), "/v1/prefs", prefsOps{s: s}.getPrefs)
+
+	// PATCH stays an UNTYPED handler, and it is the one route here that cannot be
+	// typed without moving the wire. Three facts of its contract are unreachable
+	// from a typed op, each of them live:
+	//
+	//   - the 16 KiB REQUEST-BYTE cap (maxDoc, enforced in decodePatch) answers 413.
+	//     zip decodes the body before the handler and cloud's global BodyLimit is far
+	//     larger, so a 17 KiB patch that answers 413 today would answer 200.
+	//   - an EMPTY body answers 400 and a literal `null` body answers 400
+	//     (decodePatch). zip's op.invoke SKIPS the decode for an empty body, and
+	//     `null` decodes into a nil map without error, so both would become a
+	//     successful no-op merge.
+	//   - the patch's key space is OPEN — any key, and a null VALUE deletes its key
+	//     (mergeDoc). The only In that carries that is map[string]any, whose
+	//     typeName is "" so zip's hasRequestBody publishes NO request body at all:
+	//     the document would describe a PATCH that takes nothing.
+	//
+	// Typing it needs a zip that can declare a byte-capped, body-REQUIRED op over an
+	// open object. Until then this route is the escape hatch, deliberately.
+	app.Patch("/v1/prefs", s.patchPrefs)
+}
+
+// prefsOps is the receiver the prefs ops hang off. A method value is the only bound
+// form cmd/zipdoc can lift prose from, so ops are methods and not closures.
+type prefsOps struct{ s *service }
+
+// noInput is the input of an op the URL fully addresses.
+type noInput struct{}
 
 // Shutdown releases the prefs store. Idempotent.
 func Shutdown(_ context.Context) error {
@@ -143,21 +195,41 @@ func (s *service) subject(c *zip.Ctx) (string, bool) {
 	return owner + "/" + name, true
 }
 
-func (s *service) getPrefs(c *zip.Ctx) error {
-	subject, ok := s.subject(c)
+// subjectFrom resolves the preference OWNER for a typed op. It IS subject — the
+// same two validated claims, read through the request cloud.Bridge parked, because
+// the key is `<owner>/<name>` and principal.OrgFrom carries only the owner half.
+// Fails closed off the HTTP path, where there is no principal and so no "own"
+// document to serve.
+func (s *service) subjectFrom(ctx context.Context) (string, bool) {
+	c, ok := cloud.Request(ctx)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return "", false
 	}
-	p, err := s.store.Get(c.Context(), subject)
+	return s.subject(c)
+}
+
+// GetPrefs returns the signed-in caller's OWN preference document — the theme,
+// density and pinned nav that follow them across every Hanzo surface. There is no
+// path to another user's preferences: not for an org admin, not for a platform
+// SuperAdmin, because the subject is built from the validated credential and is the
+// mandatory predicate on the read. A caller who has never saved anything gets an
+// empty document at 200, never a 404, so the user menu always renders.
+func (o prefsOps) getPrefs(ctx context.Context, _ *noInput) (*prefsView, error) {
+	s := o.s
+	subject, ok := s.subjectFrom(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("a validated principal is required")
+	}
+	p, err := s.store.Get(ctx, subject)
 	if err == errNotFound {
 		// Never written any — an honest empty document. NOT a 404: "I have no
 		// preferences yet" is a successful answer, and the menu must render.
-		return c.JSON(http.StatusOK, prefsView{Prefs: json.RawMessage(`{}`)})
+		return &prefsView{Prefs: json.RawMessage(`{}`)}, nil
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get prefs: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get prefs: %v", err)
 	}
-	return c.JSON(http.StatusOK, prefsView{Prefs: json.RawMessage(p.Doc), UpdatedAt: p.UpdatedAt})
+	return &prefsView{Prefs: json.RawMessage(p.Doc), UpdatedAt: p.UpdatedAt}, nil
 }
 
 func (s *service) patchPrefs(c *zip.Ctx) error {

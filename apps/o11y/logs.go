@@ -3,7 +3,6 @@ package o11y
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -184,20 +183,24 @@ func requestLogs(ctx context.Context, org string, svc service, sinceNs int64, wi
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-// boundSinceNs parses the `sinceNs` tail cursor (nanosecond epoch). A malformed or
+// The three bounds below take the DECODED query value. An unparseable query
+// value binds as 0 (zip's typed URL binder leaves a field it cannot convert at
+// its zero value), which lands on exactly the same branch a malformed string
+// took when these parsed the raw query themselves — so `?limit=abc` still reads
+// as "no limit given" and takes the default.
+
+// boundSinceNs bounds the `sinceNs` tail cursor (nanosecond epoch). A missing or
 // negative value is ignored (0) — a fresh tail restarts.
-func boundSinceNs(raw string) int64 {
-	n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
-	if err != nil || n < 0 {
+func boundSinceNs(n int64) int64 {
+	if n < 0 {
 		return 0
 	}
 	return n
 }
 
 // boundWindowSec clamps the client `window` (seconds) to [1, maxLogWindowSec].
-func boundWindowSec(raw string) int {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n <= 0 {
+func boundWindowSec(n int) int {
+	if n <= 0 {
 		return defaultLogWindowSec
 	}
 	if n > maxLogWindowSec {
@@ -207,9 +210,8 @@ func boundWindowSec(raw string) int {
 }
 
 // boundLogLimit clamps the client `limit` to [1, maxLogLimit].
-func boundLogLimit(raw string) int {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n <= 0 {
+func boundLogLimit(n int) int {
+	if n <= 0 {
 		return defaultLogLimit
 	}
 	if n > maxLogLimit {

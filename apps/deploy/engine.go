@@ -17,6 +17,7 @@
 // first deploy of this binary is inert for the reconcile path, so it ships
 // dark and is turned on deliberately after the shadow proof — mirroring the
 // operator's gate discipline and the argocd shadow-then-flip cutover.
+
 package deploy
 
 import (
@@ -31,11 +32,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/rest"
 
-	"github.com/hanzoai/deploy/gitops-engine/pkg/cache"
-	"github.com/hanzoai/deploy/gitops-engine/pkg/engine"
-	enginesync "github.com/hanzoai/deploy/gitops-engine/pkg/sync"
-	synccommon "github.com/hanzoai/deploy/gitops-engine/pkg/sync/common"
-	"github.com/hanzoai/deploy/gitops-engine/pkg/utils/kube"
+	"github.com/hanzoai/cd/gitops-engine/pkg/cache"
+	"github.com/hanzoai/cd/gitops-engine/pkg/engine"
+	enginesync "github.com/hanzoai/cd/gitops-engine/pkg/sync"
+	synccommon "github.com/hanzoai/cd/gitops-engine/pkg/sync/common"
+	"github.com/hanzoai/cd/gitops-engine/pkg/utils/kube"
 )
 
 // engineTrackingLabel scopes an apply-set. Every object the engine declares

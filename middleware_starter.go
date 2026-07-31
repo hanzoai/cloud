@@ -33,10 +33,12 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/commerce/billing/credit"
 	"github.com/hanzoai/commerce/billing/creditledger"
 	"github.com/zap-proto/zip"
@@ -174,7 +176,17 @@ func EnsureStarterCredit(ctx context.Context, w principal.Wallet) (int64, error)
 	led := creditledger.Get()
 	fin := finance.Current()
 	if led == nil || fin == nil {
-		return 0, nil // money layer not co-resident (split deploy): nothing to grant into
+		// The ledger is not in THIS process, which is every process but the one that
+		// mounts commerce. Returning silently here is what left a new account unfunded
+		// once apps became their own binaries: this middleware runs on every chain,
+		// found no ledger, and granted nothing — so an org that should have opened
+		// with the welcome credit opened broke, and the paywall then refused it
+		// correctly for a reason nobody chose.
+		//
+		// Asking twice is safe. The grant's idempotency key is the ACCOUNT and
+		// nothing else, and finance dedups on it inside the same transaction as the
+		// insert, so two processes racing the same new wallet still grant once.
+		return grantStarterPeer(ctx, w)
 	}
 
 	bal, err := fin.Balance(ctx, w.Ledger, w.Account, "usd", false)
@@ -219,4 +231,43 @@ func EnsureStarterCredit(ctx context.Context, w principal.Wallet) (int64, error)
 // grant, which is the whole failure this key exists to prevent.
 func starterRef(subject string) string {
 	return "starter:" + strings.ToLower(strings.TrimSpace(subject))
+}
+
+// grantStarterPeer asks the process that owns the ledger to fund a new wallet.
+//
+// A failure is not fatal and not retried here: starterSeen has already marked this
+// wallet, so a wallet costs one attempt per process rather than one per request, and
+// a restart retries it. Funding is not an authorization decision — the gate that
+// follows decides what an unfunded account may do, and it fails closed on its own.
+func grantStarterPeer(ctx context.Context, w principal.Wallet) (int64, error) {
+	ctx, cancel := context.WithTimeout(For(ctx, w.Ledger), starterPeerTimeout)
+	defer cancel()
+	out, err := Ask[plane.StarterIn, plane.Granted](ctx, "commerce", plane.FinanceStarter,
+		&plane.StarterIn{Subject: w.Account})
+	if err != nil {
+		// No ledger here and no peer serving one: this deployment has no money plane
+		// at all, which is a legitimate shape and not a fault. Inert, exactly as it
+		// was before there was a peer to ask — erroring would put a line in the log
+		// on every first request of every wallet in a deployment that does not bill.
+		return 0, nil
+	}
+	if out == nil {
+		return 0, nil // nothing granted, which is the "already funded" answer
+	}
+	// A peer that ANSWERED and could not be read is different: something is serving
+	// the op and disagreeing about its shape, which is worth surfacing.
+	return out.Amount.Minor()
+}
+
+// starterPeerTimeout bounds the grant. It runs inside a request's middleware chain,
+// so a slow ledger must not hold the request open indefinitely — the caller proceeds
+// unfunded and the gate refuses, which is the same outcome as a grant that failed.
+const starterPeerTimeout = 10 * time.Second
+
+// GrantStarter funds a wallet from the process that HOLDS the ledger. It is the
+// body EnsureStarterCredit runs locally, exported so the commerce app can publish
+// it on the internal plane without duplicating the rule — one grant, one place that
+// decides whether an account qualifies.
+func GrantStarter(ctx context.Context, org, subject string) (int64, error) {
+	return EnsureStarterCredit(ctx, principal.Wallet{Ledger: org, Account: subject})
 }

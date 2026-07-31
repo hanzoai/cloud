@@ -1,8 +1,8 @@
-// Package kafka embeds the Hanzo Stream Kafka-wire adaptor (github.com/hanzoai/
-// stream) as an in-process cloud subsystem (HIP-0106), translating the Kafka
-// protocol to/from the embedded JetStream (clients/pubsub). When enabled it
-// binds the Kafka listener (default :9092) and connects, as a NATS client, to
-// the in-process PubSub on loopback :4222 — replacing the standalone
+// Package kafka is the Kafka wire onto the platform bus: the Hanzo Kafka adaptor
+// (github.com/hanzoai/kafka) speaks the Kafka binary protocol on :9092 and
+// translates it to and from the JetStream apps/pubsub serves, so a standard
+// Kafka producer or consumer works unchanged against ONE bus. It connects to
+// that PubSub as a NATS client on loopback :4222 — replacing the standalone
 // `insights-kafka` Deployment. No ZooKeeper: the adaptor is stateless over
 // JetStream (Lux consensus only).
 //
@@ -29,8 +29,8 @@ import (
 	"github.com/hanzoai/kafka/types"
 )
 
-// Mount order is the slice position in apps.Wire(): this must stay AFTER
-// clients/pubsub so the embedded NATS :4222 is already accepting when the broker
+// Mount order is the row position in manifest/apps.go: this must stay AFTER
+// apps/pubsub so the embedded NATS :4222 is already accepting when the broker
 // dials it.
 
 // startupProbe bounds how long Mount waits to distinguish a startup failure

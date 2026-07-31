@@ -1,11 +1,11 @@
-// Package eval mounts the Hanzo Cloud /v1/evals/* surface: a NATIVE, org-scoped
-// evaluation system that replaces the retired 3.x observability-console fork (the crash-looping
-// console proxy this file used to be). Nothing proxies to console anymore.
+// Package eval is /v1/evals: score a model on YOUR data with YOUR judge —
+// datasets, dataset items, evaluators, score configs, runs, scores and traces,
+// per org. Native, and nothing proxies to the retired observability console.
 //
 // Storage split (CTO directive), two orthogonal stores this package composes:
 //   - metastore  (store.go)     — Hanzo Base/SQLite, per-org config/metadata:
 //     datasets, dataset-items, evaluators, score-configs, dataset-run defs.
-//   - telemetry  (telemetry.go) — datastore/datastore, append-only event stream:
+//   - telemetry  (telemetry.go) — apps/datastore, append-only event stream:
 //     traces + scores-as-events (all AI observability). Optional at Mount; when
 //     no datastore is wired the run still scores, but trace/score persistence is
 //     honestly skipped (logged), never faked.
@@ -40,6 +40,7 @@
 //	GET    /v1/evals/traces           list traces (filters+limit)        -> {data:[…]}
 //	POST   /v1/evals/runs             run a dataset through model+judge   -> runSummary
 //	GET    /v1/evals/runs             list run records (datasetName)     -> {data:[…]}
+//	GET    /v1/evals/metrics          the org's AI overview board        -> board
 //
 // Order 145: binds /v1/evals/* BEFORE the AI subsystem's /v1/* catch-all (150),
 // the same slot product uses. serve.go auto-registers GET /v1/evals/health.

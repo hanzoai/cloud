@@ -98,9 +98,12 @@ func (f *fakeStandalone) seed(org, path, env, key, val string) {
 	f.store[Coord{org, path, env, key}] = val
 }
 
-// Do serves GET /v1/kms/{org}/secrets/{rest}?env= and the LIST + login the tool
-// uses, enforcing owner==org from the tool's org-bound token exactly like the real
-// standalone's canActOnOrg.
+// Do serves the standalone's REAL routes — GET /v1/kms/orgs/{org}/secrets/{rest}
+// (one value) and GET /v1/kms/orgs/{org}/secrets?path=&env= (names) — plus the
+// login broker, enforcing owner==:org from the tool's org-bound token exactly like
+// luxfi/kms cmd/kms requireOrgJWT. The org IS in this face's path; that is what
+// makes it a different grammar from cloud's, and the reason a client carries the
+// route of the face it talks to.
 func (f *fakeStandalone) Do(r *http.Request) (*http.Response, error) {
 	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	tokenOrg := strings.TrimPrefix(tok, "org:")
@@ -111,8 +114,8 @@ func (f *fakeStandalone) Do(r *http.Request) (*http.Response, error) {
 		return resp(200, `{"accessToken":"org:hanzo","expiresIn":3600,"tokenType":"Bearer"}`), nil
 	}
 
-	// /v1/kms/{org}/secrets(/{rest})
-	const marker = "/v1/kms/"
+	// /v1/kms/orgs/{org}/secrets(/{rest})
+	const marker = "/v1/kms/orgs/"
 	i := strings.Index(path, marker)
 	if i < 0 {
 		return resp(404, `{"message":"no route"}`), nil
@@ -129,10 +132,9 @@ func (f *fakeStandalone) Do(r *http.Request) (*http.Response, error) {
 	if env == "" {
 		env = "default"
 	}
-	// LIST: GET .../secrets (no trailing key)
+	// LIST: GET .../secrets (no trailing key) → the standalone's {"names":[…]}.
 	if tail == "" || tail == "/" {
-		qp := f.listNames(org, r.URL.Query().Get("path"), env)
-		return resp(200, `{"secrets":[`+qp+`],"total":0}`), nil
+		return resp(200, `{"names":[`+f.listNames(org, r.URL.Query().Get("path"), env)+`]}`), nil
 	}
 	// GET one: tail = "/{path}/{key}" or "/{key}"
 	sub := strings.Trim(tail, "/")
@@ -149,7 +151,7 @@ func (f *fakeStandalone) listNames(org, qpath, env string) string {
 	var names []string
 	for c := range f.store {
 		if c.Org == org && c.Env == env && c.Path == want {
-			names = append(names, `{"name":`+jsonString(c.Key)+`,"path":`+jsonString(c.Path)+`,"env":`+jsonString(c.Env)+`}`)
+			names = append(names, jsonString(c.Key))
 		}
 	}
 	return strings.Join(names, ",")
@@ -173,9 +175,9 @@ func injectToken(_ context.Context, t Target) (string, error) { return "org:" + 
 
 func TestReseal_RoundTripRealSeal(t *testing.T) {
 	app, dataDir, deps := newCloudApp(t)
-	src := newKMSClient("http://kms.hanzo.svc", newFakeStandalone())
+	src := newKMSClient("http://kms.hanzo.svc", standalone, newFakeStandalone())
 	fs := src.do.(*fakeStandalone)
-	dst := newKMSClient("http://cloud.hanzo.svc", cloudDoer{app})
+	dst := newKMSClient("http://cloud.hanzo.svc", embedded, cloudDoer{app})
 
 	// Synthetic secrets across two paths + envs (never real values).
 	fs.seed("hanzo", "admin-guard-secrets", "prod", "GUARD_HMAC_KEY", "hmac-plain-1")
@@ -212,9 +214,9 @@ func TestReseal_RoundTripRealSeal(t *testing.T) {
 
 func TestReseal_WrongOrgTokenRefusedByCloud(t *testing.T) {
 	app, _, _ := newCloudApp(t)
-	src := newKMSClient("http://kms.hanzo.svc", newFakeStandalone())
+	src := newKMSClient("http://kms.hanzo.svc", standalone, newFakeStandalone())
 	src.do.(*fakeStandalone).seed("hanzo", "p", "prod", "K", "v")
-	dst := newKMSClient("http://cloud.hanzo.svc", cloudDoer{app})
+	dst := newKMSClient("http://cloud.hanzo.svc", embedded, cloudDoer{app})
 
 	inv := Inventory{Targets: []Target{{Org: "hanzo", Path: "p", Env: "prod", Key: "K"}}}
 	// A token scoped to the WRONG org: the fake source refuses the read (403), so the
@@ -228,9 +230,9 @@ func TestReseal_WrongOrgTokenRefusedByCloud(t *testing.T) {
 
 func TestReseal_FolderSyncResolvedViaList(t *testing.T) {
 	app, _, _ := newCloudApp(t)
-	src := newKMSClient("http://kms.hanzo.svc", newFakeStandalone())
+	src := newKMSClient("http://kms.hanzo.svc", standalone, newFakeStandalone())
 	fs := src.do.(*fakeStandalone)
-	dst := newKMSClient("http://cloud.hanzo.svc", cloudDoer{app})
+	dst := newKMSClient("http://cloud.hanzo.svc", embedded, cloudDoer{app})
 
 	// A folder-sync CR (empty keys[]) at a non-root path: LIST discovers the keys.
 	fs.seed("hanzo", "commerce", "prod", "HUSD_TREASURY_KEY", "treasury-1")
@@ -253,8 +255,8 @@ func TestReseal_FolderSyncResolvedViaList(t *testing.T) {
 
 func TestReseal_PlanDoesNoNetwork(t *testing.T) {
 	// A nil-doer client would panic on any Do; --plan must never touch it.
-	src := newKMSClient("http://kms.hanzo.svc", panicDoer{})
-	dst := newKMSClient("http://cloud.hanzo.svc", panicDoer{})
+	src := newKMSClient("http://kms.hanzo.svc", standalone, panicDoer{})
+	dst := newKMSClient("http://cloud.hanzo.svc", embedded, panicDoer{})
 	inv := Inventory{Targets: []Target{{Org: "hanzo", Path: "p", Env: "prod", Key: "K"}}, Folders: []Target{{Org: "hanzo", Path: "f", Env: "prod", Folder: true}}}
 	rep := reseal(context.Background(), inv, src, dst, injectToken, injectToken, true)
 	if rep.Planned != 2 || rep.Migrated != 0 || rep.Failed != 0 {

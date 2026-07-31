@@ -16,12 +16,12 @@ import (
 // SQLite adapter serializes it.
 type memStore struct {
 	mu      sync.Mutex
-	entries []Entry
-	byRef   map[string]Entry
-	policy  Policy
+	entries []JournalEntry
+	byRef   map[string]JournalEntry
+	policy  SharePolicy
 }
 
-func newMem() *memStore { return &memStore{byRef: map[string]Entry{}} }
+func newMem() *memStore { return &memStore{byRef: map[string]JournalEntry{}} }
 
 func refKey(kind, program, ref string) string { return kind + "|" + program + "|" + ref }
 
@@ -57,23 +57,23 @@ func (m *memStore) BalancesWithPrefix(_ context.Context, prefix string) (map[str
 	return out, nil
 }
 
-func (m *memStore) Entries(_ context.Context, limit int) ([]Entry, error) {
+func (m *memStore) Entries(_ context.Context, limit int) ([]JournalEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]Entry, 0, len(m.entries))
+	out := make([]JournalEntry, 0, len(m.entries))
 	for i := len(m.entries) - 1; i >= 0 && len(out) < limit; i-- {
 		out = append(out, m.entries[i])
 	}
 	return out, nil
 }
 
-func (m *memStore) Policy(_ context.Context) (Policy, error) {
+func (m *memStore) Policy(_ context.Context) (SharePolicy, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.policy, nil
 }
 
-func (m *memStore) SetPolicy(_ context.Context, p Policy) error {
+func (m *memStore) SetPolicy(_ context.Context, p SharePolicy) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.policy = p
@@ -96,15 +96,15 @@ func (m *memStore) Tx(_ context.Context, fn func(Tx) error) error {
 
 type memTx struct {
 	m       *memStore
-	pending []Entry
+	pending []JournalEntry
 }
 
-func (t *memTx) EntryByRef(kind, program, ref string) (Entry, bool, error) {
+func (t *memTx) EntryByRef(kind, program, ref string) (JournalEntry, bool, error) {
 	e, ok := t.m.byRef[refKey(kind, program, ref)]
 	return e, ok, nil
 }
 func (t *memTx) Balance(account string) (money.Amount, error) { return t.m.balanceLocked(account), nil }
-func (t *memTx) Insert(e Entry, postings []Posting) error {
+func (t *memTx) Insert(e JournalEntry, postings []Posting) error {
 	e.Postings = postings
 	t.pending = append(t.pending, e)
 	return nil

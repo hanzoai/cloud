@@ -1,0 +1,87 @@
+[
+  {
+    "description": "GetBoard aggregates the caller org's marketing content across every publishable\ncontent type into ONE queue board — the cross-type read the framework's\nper-DocType list cannot give. It never fails on a partial outage: a content type\nthe org has not installed, or one whose search errors, is skipped and logged\nrather than failing the whole board.",
+    "inputSchema": {
+      "properties": {
+        "doctype": {
+          "description": "DocType keeps only one content type; omitted, the board spans every\npublishable type. An unknown type is refused.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Limit caps the rows returned, clamped to 1000. Defaults to 200, which is also\nwhat a non-positive or unparseable value takes.",
+          "type": "integer"
+        },
+        "project": {
+          "description": "Project keeps only items in one brand/site sub-scope.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Status keeps only items in one lifecycle state (draft, in_review, approved,\nqueued, published, archived). An undefined state is refused.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_content_board"
+  },
+  {
+    "description": "GetChannels lists the distribution channels the caller's org has connected — the\nsocial integrations a publish can target. A deployment with no distribution edge\nwired answers 503 rather than an empty list that would read as \"no channels\".",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_content_channels"
+  },
+  {
+    "description": "GetLifecycle returns the ONE marketing-content state machine: the ordered\nlifecycle states, which state a fresh document starts in, which one is publicly\nlive, and the legal successors of every state. The console builds its board\ncolumns and its per-item action buttons from this single answer, so the UI and\nthe write-time enforcement hook can never disagree about what is legal.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_content_lifecycle"
+  },
+  {
+    "description": "PostTransition moves one content item to a new lifecycle state and, on the move to\npublished, fans it out to the item's channels. The edge must be legal for the\nitem's current state — an illegal move is refused with 409 — and the status write\nre-validates it at the storage boundary. Distribution is best effort: its honest\nstate is reported on the result and a distribution failure never rolls the status\nchange back.",
+    "inputSchema": {
+      "properties": {
+        "doctype": {
+          "description": "DocType is the content type to act on, from the path.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the document to act on, from the path.",
+          "type": "string"
+        },
+        "scheduleAt": {
+          "description": "ScheduleAt is an ISO-8601 go-live time handed to the channel's own scheduler;\n\"\" distributes now.",
+          "type": "string"
+        },
+        "to": {
+          "description": "To is the lifecycle state to move to. Required, and the move must be a legal\nedge from the item's current state.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_content_doctype_name_transition"
+  },
+  {
+    "description": "Publish distributes one CMS content item to the channels recorded on it and\nreturns the honest per-channel outcome. The item names itself — its caption,\nmedia and channel list are read from the stored document, not from this request.\nIt is idempotent per channel (a channel already posted for this item is skipped),\nand a publish that loses the per-item lease to a live publisher answers status\n\"in_progress\" having posted nothing.",
+    "inputSchema": {
+      "properties": {
+        "doctype": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "scheduleAt": {
+          "description": "\"\" = now",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_content_publish"
+  }
+]

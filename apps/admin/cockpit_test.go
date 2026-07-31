@@ -94,12 +94,12 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 		w.Header().Set("Content-Type", "application/json")
 		q := r.URL.Query()
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/organizations"):
+		case r.URL.Path == "/v1/iam/get-organizations":
 			fmt.Fprintf(w, `{"status":"ok","msg":"","data":[
 				{"owner":"admin","name":"acme","displayName":"Acme Inc","createdTime":%q},
 				{"owner":"admin","name":"globex","displayName":"Globex","createdTime":%q}
-			],"data2":2}`, acmeCreated, globexCreated)
-		case strings.HasSuffix(r.URL.Path, "/users"):
+			],"total":2}`, acmeCreated, globexCreated)
+		case r.URL.Path == "/v1/iam/get-users":
 			owner := q.Get("owner")
 			rows := []string{}
 			for _, us := range users[owner] {
@@ -113,8 +113,8 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 				rows = append(rows, fmt.Sprintf(`{"owner":%q,"name":%q,"email":%q,"isAdmin":%v,"isForbidden":%v,"accessKey":%q,"createdTime":%q,"lastSigninTime":%q}`,
 					us.owner, us.name, us.email, us.admin, forb, us.key, created, now.AddDate(0, 0, -2).Format(time.RFC3339)))
 			}
-			fmt.Fprintf(w, `{"status":"ok","msg":"","data":[%s],"data2":%d}`, strings.Join(rows, ","), len(rows))
-		case strings.HasSuffix(r.URL.Path, "/users/get"):
+			fmt.Fprintf(w, `{"status":"ok","msg":"","data":[%s],"total":%d}`, strings.Join(rows, ","), len(rows))
+		case r.URL.Path == "/v1/iam/get-user":
 			id := q.Get("id")
 			parts := strings.SplitN(id, "/", 2)
 			owner := ""
@@ -134,7 +134,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 			}
 			w.WriteHeader(404)
 			io.WriteString(w, `{"status":"error","msg":"not found"}`)
-		case strings.HasSuffix(r.URL.Path, "/update-user"):
+		case r.URL.Path == "/v1/iam/update-user":
 			id := q.Get("id")
 			body, _ := io.ReadAll(r.Body)
 			var obj map[string]any
@@ -240,12 +240,12 @@ func TestCustomers_ListRealFleet(t *testing.T) {
 	}
 	var env struct {
 		Data  []customer.CustomerRow `json:"data"`
-		Data2 int                    `json:"data2"`
+		Total int                    `json:"total"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if env.Data2 != 2 || len(env.Data) != 2 {
+	if env.Total != 2 || len(env.Data) != 2 {
 		t.Fatalf("want 2 customers, got %d (%+v)", len(env.Data), env.Data)
 	}
 	acme := env.Data[0] // sorted: acme, globex

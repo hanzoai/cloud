@@ -2,8 +2,8 @@
 // GroupVersionResources that identify our own CRs and the upstream objects we read.
 //
 // These are VALUES, not per-subsystem opinions: "the operator App CR" is one fact,
-// and it was previously declared three times (clients/paas appsGVR, clients/deploy
-// appsCRGVR, clients/platform appsGVR) under two different names. Three copies of a
+// and it was previously declared three times (apps/platform appsGVR, apps/deploy
+// appsCRGVR, apps/platform appsGVR) under two different names. Three copies of a
 // constant do not disagree until one of them is edited — and the whole point of the
 // App/Service kind migration is that this coordinate CHANGES. When it does, a
 // subsystem still holding a private copy silently reads the wrong resource and its
@@ -42,3 +42,14 @@ var Volumes = schema.GroupVersionResource{Version: "v1", Resource: "persistentvo
 // WRITES those Apps, so "the App CR declares vX" and "CD has applied commit abc"
 // answer different questions and neither implies the other.
 var CDApplications = schema.GroupVersionResource{Group: "apps.hanzo.ai", Version: "v1alpha1", Resource: "applications"}
+
+// CDAppProjects is Hanzo CD's AppProject CR (apps.hanzo.ai/v1alpha1) — the policy
+// envelope a CD Application is admitted under: which repos it may pull from, which
+// destinations it may write to, which resource kinds it may create. A different
+// question from CDApplications: an Application is ONE tracked git source, a project
+// is the boundary a whole set of them may act within.
+//
+// Same group as every other CD kind. Nothing has ever served argoproj.io here — a
+// GVR naming that group comes back "the server doesn't have a resource type", which
+// a caller treating any error as "CD is not installed" reads as absence.
+var CDAppProjects = schema.GroupVersionResource{Group: "apps.hanzo.ai", Version: "v1alpha1", Resource: "appprojects"}

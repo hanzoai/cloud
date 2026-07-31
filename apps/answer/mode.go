@@ -40,24 +40,44 @@ type mode struct {
 // backs research and zen5 backs search, so either mode still answers if its primary
 // is down; the cloud-wide default is appended as a final backstop in synthModels.
 var modes = map[string]mode{
-	"search":   {name: "search", plan: false, maxQueries: 1, maxSources: 6, readTop: 0, system: answerSystem, feeCents: 2, models: []string{"zen5-flash", "zen5"}},
-	"news":     {name: "news", plan: false, maxQueries: 1, maxSources: 6, readTop: 0, newsBias: true, system: answerSystem, feeCents: 2, models: []string{"zen5-flash", "zen5"}},
-	"research": {name: "research", plan: true, maxQueries: 4, maxSources: 12, readTop: 4, system: researchSystem, feeCents: 5, models: []string{"zen5", "zen5-flash"}},
-	"deep":     {name: "deep", plan: true, maxQueries: 6, maxSources: 16, readTop: 6, system: researchSystem, feeCents: 10, models: []string{"zen5", "zen5-flash"}},
+	"search": {name: "search", plan: false, maxQueries: 1, maxSources: 6, readTop: 0, system: answerSystem, feeCents: 2, models: []string{"zen5-flash", "zen5"}},
+	"news":   {name: "news", plan: false, maxQueries: 1, maxSources: 6, readTop: 0, newsBias: true, system: answerSystem, feeCents: 2, models: []string{"zen5-flash", "zen5"}},
+	// ONE research mode, at what used to be "deep". research and deep were never
+	// two behaviours: same system prompt, same models, same plan gate — only the
+	// dials differed (4/12/4 vs 6/16/6). Two names for one thing made the product
+	// look like it had a choice to offer and made the real cost of that choice
+	// invisible behind an adjective. Research now always does the deeper pass, and
+	// carries the price that pass actually costs.
+	"research": {name: "research", plan: true, maxQueries: 6, maxSources: 16, readTop: 6, system: researchSystem, feeCents: 10, models: []string{"zen5", "zen5-flash"}},
 }
 
 // IsMode reports whether a request mode selects the answer engine. An empty or
 // unknown mode is NOT an answer-engine request — /v1/ask's figure path handles it,
 // so the advisor's existing behavior is untouched when no mode is set.
 func IsMode(name string) bool {
-	_, ok := modes[strings.ToLower(strings.TrimSpace(name))]
+	n := strings.ToLower(strings.TrimSpace(name))
+	// "deep" is a retired name that still selects the answer engine — see
+	// resolveMode. If this said otherwise, a deep request would not even reach the
+	// engine and would fall to /v1/ask's figure path instead.
+	if n == "deep" {
+		n = "research"
+	}
+	_, ok := modes[n]
 	return ok
 }
 
 // resolveMode maps a request mode to a registry entry, defaulting to search.
 // Only called after IsMode has confirmed an answer-engine request.
 func resolveMode(name string) mode {
-	if m, ok := modes[strings.ToLower(strings.TrimSpace(name))]; ok {
+	n := strings.ToLower(strings.TrimSpace(name))
+	// "deep" folded into research. Kept as a NAME, not a mode: a client that has
+	// not shipped the collapse yet would otherwise fall through to search and
+	// silently get a 1-query answer where the user asked for the deepest one —
+	// a wrong answer is worse than an error, and worse than a redirect.
+	if n == "deep" {
+		n = "research"
+	}
+	if m, ok := modes[n]; ok {
 		return m
 	}
 	return modes["search"]

@@ -1,43 +1,61 @@
 package treasury
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/wallets"
 	"github.com/luxfi/geth/common"
 	"github.com/zap-proto/zip"
 )
 
-// adminBindAnchor binds the reserve's treasury MPC wallet as the on-chain anchor
-// signer (POST /v1/admin/treasury/bind-anchor). It provisions-or-resolves the
-// caller-org's KindTreasury wallet on the deployed luxfi/mpc ring and installs it
-// via BindAnchorSigner, so subsequent POST /v1/admin/treasury/anchor commits the
-// ledger root SIGNED BY THE QUORUM WALLET (the reserve's threshold MPC wallet)
-// instead of the lone KMS key. SuperAdmin only; idempotent (a repeat resolves
-// the same wallet). Returns the bound EVM address so the operator can fund it for
-// gas on the Hanzo L1.
-func adminBindAnchor(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// bindData is the wallet that will sign the next anchor.
+type bindData struct {
+	// BoundAnchorSigner is the EVM address now signing anchors. Fund it for gas.
+	BoundAnchorSigner string `json:"boundAnchorSigner"`
+	// ChainID is the EVM chain the signer is bound for.
+	ChainID int64 `json:"chainId"`
+	// Org is the org whose treasury wallet was resolved.
+	Org string `json:"org"`
+}
+
+// bindOut is bindData in the admin envelope.
+type bindOut struct {
+	// Status is "ok" on success.
+	Status string `json:"status"`
+	// Msg carries an operator-facing note; empty on success.
+	Msg string `json:"msg"`
+	// Data is the bound signer.
+	Data bindData `json:"data"`
+}
+
+// BindTreasuryAnchorSigner makes the reserve's threshold MPC wallet the signer
+// for on-chain anchors, and returns its EVM address so an operator can fund it
+// for gas. It provisions-or-resolves the caller org's treasury wallet on the
+// deployed MPC ring and installs it, so every later anchor commits the ledger
+// root SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent: a
+// repeat resolves the same wallet. SuperAdmin only.
+func (o ops) adminBindAnchor(ctx context.Context, _ *noInput) (*bindOut, error) {
+	if _, err := admin(ctx); err != nil {
+		return nil, err
 	}
-	org, ok := principal.Org(c)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return nil, zip.ErrForbidden("a validated principal is required")
 	}
-	chain := "eip155:" + strconv.FormatInt(s.State.anchor.chainID, 10)
-	addr, sign, ok := wallets.TreasuryAnchorSigner(c.Context(), org, chain)
+	chain := "eip155:" + strconv.FormatInt(o.s.State.anchor.chainID, 10)
+	addr, sign, ok := wallets.TreasuryAnchorSigner(ctx, org, chain)
 	if !ok {
-		return zip.Errorf(http.StatusServiceUnavailable,
+		return nil, zip.Errorf(http.StatusServiceUnavailable,
 			"treasury MPC custody not configured (deploy the ring + set CLOUD_WALLETS_MPC_ADDR)")
 	}
 	BindAnchorSigner(common.HexToAddress(addr), sign)
-	s.Log.Info("treasury: bound MPC anchor signer", "org", org, "address", addr, "chainId", s.State.anchor.chainID)
-	return adminOK(c, map[string]any{
-		"boundAnchorSigner": addr,
-		"chainId":           s.State.anchor.chainID,
-		"org":               org,
-	})
+	o.s.Log.Info("treasury: bound MPC anchor signer", "org", org, "address", addr, "chainId", o.s.State.anchor.chainID)
+	return &bindOut{Status: "ok", Data: bindData{
+		BoundAnchorSigner: addr,
+		ChainID:           o.s.State.anchor.chainID,
+		Org:               org,
+	}}, nil
 }

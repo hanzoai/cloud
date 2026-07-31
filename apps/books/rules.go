@@ -12,17 +12,20 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
 // Rule is one categorization rule: a merchant substring pattern, the category (COA account)
 // it books to, and a priority (higher wins when several patterns match).
 type Rule struct {
-	Pattern  string `json:"pattern"`
+	// Pattern is the merchant substring the rule matches on, case-insensitively. It is
+	// also the key an upsert writes by.
+	Pattern string `json:"pattern"`
+	// Category is the COA expense account a matching bill books to. An upsert normalizes
+	// a slug ("cloud") to its account number.
 	Category string `json:"category"` // COA account number
-	Priority int    `json:"priority"`
+	// Priority breaks ties: when several patterns match, the highest wins.
+	Priority int `json:"priority"`
 }
 
 // matchRule finds the highest-priority rule whose pattern is a substring of the raw merchant
@@ -44,47 +47,60 @@ func (s *store) matchRule(ctx context.Context, raw string) (account string, foun
 
 // ── handlers ──
 
-// rulesListHandler answers GET /v1/books/rules: the org's rules, priority-descending.
-func rulesListHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view rules")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
-	}
-	rules, err := st.listRules(c.Context())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rules read failed")
-	}
-	return booksJSON(c, map[string]any{"rules": rules})
+// rulesOut is the org's categorization rule book.
+type rulesOut struct {
+	// Rules is every rule the org has set, highest priority first — the order they
+	// are matched in.
+	Rules []Rule `json:"rules"`
 }
 
-// ruleUpsertHandler answers POST /v1/books/rules: create or update a rule by its pattern.
-// The category is normalized to a real COA expense account.
-func ruleUpsertHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to manage rules")
-	}
-	var in Rule
-	if err := c.Bind(&in); err != nil {
-		return err
-	}
-	in.Pattern = strings.TrimSpace(in.Pattern)
-	if in.Pattern == "" {
-		return zip.ErrBadRequest("pattern is required")
-	}
-	in.Category = categoryAccount(in.Category)
-	st, err := s.State.storeFor(org, sandboxQuery(c))
+// ListRules returns the org's auto-categorization rules, highest priority first. A rule
+// is a standing instruction — "anything whose merchant contains X books to category Y" —
+// and it overrides a vendor's default category, so this is the list that decides how a
+// future bill classifies itself.
+//
+// Example: {"sandbox": "false"}
+func (o booksOps) listRules(ctx context.Context, in *ledgerIn) (*rulesOut, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view rules")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+		return nil, err
 	}
-	if err := st.upsertRule(c.Context(), in); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rule write failed")
+	rules, err := st.listRules(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "rules read failed")
 	}
-	return booksJSON(c, in)
+	return &rulesOut{Rules: rules}, nil
+}
+
+// UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —
+// writing a pattern that already exists REPLACES that row's category and priority. The
+// category is normalized to a real COA expense account, and anything unrecognized becomes
+// 5900 Uncategorized rather than a guessed real account. It answers the row exactly as
+// stored, so the caller sees the normalization. A rule overrides a vendor's default
+// category, so this is the standing instruction that decides how a future bill classifies.
+//
+// Example: {"pattern": "aws", "category": "cloud", "priority": 5}
+func (o booksOps) upsertRule(ctx context.Context, in *Rule) (*Rule, error) {
+	// Tenant first, the order this route has always refused in: an anonymous caller is
+	// 401 whatever it sends.
+	org, err := tenant(ctx, "manage rules")
+	if err != nil {
+		return nil, err
+	}
+	row := *in
+	row.Pattern = strings.TrimSpace(row.Pattern)
+	if row.Pattern == "" {
+		return nil, zip.ErrBadRequest("pattern is required")
+	}
+	row.Category = categoryAccount(row.Category)
+	st, err := o.s.State.storeFor(org, sandboxFrom(ctx))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "books open failed")
+	}
+	if err := st.upsertRule(ctx, row); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "rule write failed")
+	}
+	return &row, nil
 }
 
 // ── store methods ──
