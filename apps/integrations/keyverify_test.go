@@ -319,7 +319,7 @@ func TestDatacenter(t *testing.T) {
 
 // catalogIDs is the ecommerce+AI-startup connector set this file guards.
 var catalogIDs = []string{
-	"paypal", "square", "shopify",
+	"stripe", "paypal", "square", "shopify",
 	"gemini", "groq", "mistral", "cohere", "together", "replicate",
 	"huggingface", "openrouter", "xai", "fireworks", "deepseek", "pinecone",
 	"sendgrid", "resend", "postmark", "mailchimp", "klaviyo", "twilio",
@@ -359,6 +359,18 @@ func TestCatalogWellFormed(t *testing.T) {
 // path and placement — not just that the metadata is present.
 func TestCatalogWiring(t *testing.T) {
 	ctx := context.Background()
+
+	t.Run("stripe-bearer", func(t *testing.T) {
+		srv, cap := captureServer(t, 0)
+		t.Setenv("STRIPE_API_BASE", srv.URL)
+		if _, err := registry["stripe"].Verify(ctx, VerifyInput{Token: "sk_test_" + sentinel}); err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+		s := cap.snap()
+		if s.path != "/v1/balance" || s.auth != "Bearer sk_test_"+sentinel {
+			t.Errorf("stripe wire: path=%q auth=%q", s.path, s.auth)
+		}
+	})
 
 	t.Run("gemini-query", func(t *testing.T) {
 		srv, cap := captureServer(t, 0)

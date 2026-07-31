@@ -19,7 +19,7 @@ import (
 // KYCProvider is the identity-verification seam (the clients/idv seam in the
 // product spec). Start begins verification for one founder and returns a provider
 // reference plus, for a hosted flow, a URL the founder visits; Check reports the
-// current status. A real provider (Persona, Onfido, …) implements
+// current status. A real provider (Persona, Stripe Identity, Onfido, …) implements
 // this; manualKYC is the honest default.
 type KYCProvider interface {
 	Start(ctx context.Context, org string, f Founder) (ref, verifyURL, status string, err error)
