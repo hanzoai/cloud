@@ -433,7 +433,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// GetSecret/PutSecret/Sign; per-secret Delete + Ready live on the concrete
 	// client, so we type-assert to it exactly as clients/kms does. A non-KMS
 	// impl (RPC/disabled) leaves this nil and every secret op fails closed.
+	//
+	// The discard is LOGGED, because failing closed silently is what made this
+	// expensive: every connect answered "master key not configured (operator must
+	// inject CLOUD_KMS_MASTER_KEY_REF)" while that variable was correctly set and
+	// the KMS REST surface in the SAME process decrypted secrets fine. The message
+	// named the wrong cause, so the search went to the operator and the env rather
+	// than to this line. A nil here means the client is the wrong TYPE, not that
+	// the key is missing.
 	kc, _ := deps.KMS.(*kms.Client)
+	if kc == nil {
+		deps.Logger.Warn("integrations: deps.KMS is not the embedded *kms.Client; every credential op will fail closed",
+			"type", fmt.Sprintf("%T", deps.KMS))
+	}
 
 	providers := snapshotRegistry()
 	// Fail LOUD at boot on an incoherent provider — the plane split is structural,
@@ -741,7 +753,7 @@ func (o ops) connect(ctx context.Context, in *connectIn) (*connectOut, error) {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s integration is not configured on this deployment", p.ID)
 	}
 	if !kmsReady(s) {
-		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s", errCredentialStore)
 	}
 	// Pick the credential-acquisition path by REQUEST. A provider may offer an
 	// apikey path (Verify) and/or an OAuth path (Authorize). A credential in the
@@ -903,7 +915,7 @@ func (o ops) verifyConn(ctx context.Context, in *providerRef) (*verifyOut, error
 		return nil, zip.ErrNotFound("connector not connected")
 	}
 	if !kmsReady(s) {
-		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s", errCredentialStore)
 	}
 	tok, err := kmsGet(s, kmsPath(org, p.ID), p.Secrets[0])
 	if err != nil || len(tok) == 0 {
@@ -1134,6 +1146,13 @@ func redirectURI(s *cloud.Service[state], p *Provider) string {
 }
 
 // ── KMS custody (per-org, sealed) ──────────────────────────────────────────────
+
+// errCredentialStore is what a caller is told when credentials cannot be sealed.
+// It names the SYMPTOM, not a cause: this check is false when the client is the
+// wrong type, when it was never injected, AND when the master key is unset, and
+// the handler cannot tell which. It used to report ErrMasterKeyMissing, which
+// sent every investigation to an environment variable that was correctly set.
+const errCredentialStore = "the credential store is unavailable on this deployment"
 
 func kmsReady(s *cloud.Service[state]) bool { return s.State.kms != nil && s.State.kms.Ready() }
 

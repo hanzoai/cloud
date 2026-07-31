@@ -431,3 +431,18 @@ func TestRunnerRelease_SharedTokenCannotRelease(t *testing.T) {
 		t.Fatalf("a shared secret cut a release: %d (%s) — IAM is the only authority for it", release, body)
 	}
 }
+
+// A malformed repo is refused BEFORE the 202, so a caller is never told a
+// release is in flight that never launched. "cloud" parses as a URL with no
+// scheme and no host, which is how a release answered 202 with an image tag and
+// started nothing.
+func TestRunnerRelease_RepoMustBeACloneURL(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
+	app := runnerApp(t)
+	code, body := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, true, map[string]any{
+		"repo": "cloud", "release": true})
+	if code != http.StatusBadRequest {
+		t.Fatalf("bare repo name: want 400, got %d (%s)", code, body)
+	}
+	releasing.Store(false)
+}
