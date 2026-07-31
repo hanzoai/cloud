@@ -10,14 +10,34 @@
 // payments.go). Marketplace never dispatches a tool itself and never moves money
 // itself.
 //
-// CO-RESIDENCY. The three seams it binds — the x402 price table, the tool plane's
-// charger, and the wallet lookup that resolves a payee — are process-globals
-// (x402.reg, tools.std, wallets.mounted). They bind within ONE process. In a fleet
-// that runs marketplace, tools, x402 and wallets as separate binaries, a priced tool
-// dispatched in the tools process reaches no charger there and fails CLOSED
-// (tools.ErrChargerUnset → 402), which is the safe half of the failure: a paid tool
-// is never served free. Making it SETTLE across that boundary is a shared price
-// table or an internal settle call, and is not this file's business.
+// CO-RESIDENCY — and the shipped topology does not have it. Say it plainly: the
+// three seams this package binds are process-globals (x402.reg, tools.std, and
+// wallets' mounted singleton), so they bind within ONE process, and the fleet runs
+// ONE PROCESS PER APP. That is not a possible future deployment, it is the only one:
+// manifest/apps.go declares marketplace, tools, x402 and wallets as four ordinary
+// prefix-routed rows (only `zen` is Coresident, manifest/apps.go:194); the Dockerfile
+// builds a plugin binary per row and cmd/cloud loads each as its own CHILD PROCESS
+// (cmd/cloud/main.go:257, zip.Load on a binary path); and the fused monolith that
+// linked every subsystem was deleted (cmd/cloud/main.go:1-9).
+//
+// So today, in production:
+//
+//   - the tools process has no charger → every priced dispatch is
+//     tools.ErrChargerUnset → 402 (apps/tools/registry.go:25, http.go:130);
+//   - this process publishes a price table into ITS OWN copy of x402.reg, where
+//     x402 was never mounted, so x402.Settle here finds mounted==nil;
+//   - the x402 process has no price table, no wallets and no finance ledger.
+//
+// Every one of those fails CLOSED — a paid tool is never served free — so the
+// property that matters holds. What does NOT hold is that a priced tool can be
+// bought at all. That is the remaining half of this defect, and it is a fleet
+// topology change, not a wiring one: the fix is the internal plane
+// (resource_billing_peer.go is the precedent — the same split turned every priced
+// create free, and the answer was to ASK the owning process). It needs four ops:
+// tools→x402 settle, x402→marketplace price, x402→wallets resolve-payee, and
+// x402→commerce credit-payee. Until those exist, a priced listing is payable
+// exactly where these four are co-resident, which is what
+// apps/marketplace/payments_test.go composes and proves end to end.
 //
 // Surface (all org-gated, /v1 only):
 //
