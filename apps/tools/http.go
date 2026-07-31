@@ -323,9 +323,12 @@ func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPSer
 			}
 		}
 		// The server id PREFIXES every tool name this server contributes, so an
-		// enabled listing's tools read "acme_create_payment_link" rather than
-		// carrying a random handle a model has no way to interpret. It is a
-		// PREFERENCE: the store resolves a collision within the org.
+		// enabled listing's tools read "acme-com_create_payment_link" rather than
+		// carrying a random handle a model has no way to interpret. It names the
+		// publisher's whole DOMAIN and not the memorable label inside it, because
+		// acme-com and acme-sh are two different publishers and the prefix is read
+		// on the screen where a credential is pasted. A PREFERENCE, not a demand:
+		// the store resolves a collision within the org.
 		id = brand(l.Vendor)
 	}
 	if name == "" || len(name) > maxName {
