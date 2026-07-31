@@ -1,5 +1,8 @@
-// Package kms embeds luxfi/kms in-process inside the unified Hanzo Cloud binary
-// per HIP-0106 ("all Go embeds in cloud"), replacing the legacy Infisical fork.
+// Package kms is secret custody: per-org secrets sealed at rest, read and written
+// over /v1/kms, and signed by the MPC ring.
+//
+// It embeds luxfi/kms in-process inside the unified Hanzo Cloud binary per
+// HIP-0106 ("all Go embeds in cloud"), replacing the legacy Infisical fork.
 //
 // It has two faces, both backed by the SAME embedded luxfi/kms library:
 //
