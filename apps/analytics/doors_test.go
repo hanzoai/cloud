@@ -44,9 +44,15 @@ import (
 // decodeInsights and every canonical-wire beacon silently decodes to nothing, or
 // relabel a door's source and the $source column — which is the sunset signal, and
 // the only per-row record of which door a write came through — starts lying.
+// /v1/insights/e was REMOVED as a door on 2026-07-31: a wire is a shape, and a shape
+// does not earn a path. Its wire did not go away — decodeEvent tries the canonical
+// decoder and falls back to decodeInsights when canonical yields nothing — and the
+// ingress rewrite that fed it (insights-cloud-ingest-rewrite: insights.hanzo.ai
+// /e,/batch,/capture) now replacePaths onto /v1/event, so every PostHog-wire caller
+// keeps working through the one door. sourcePostHog therefore no longer appears here;
+// its 1 lifetime row is a probe, not traffic.
 var wantDoors = []door{
-	{path: "/v1/event", decode: decodeIngest, source: sourceEvent},
-	{path: "/v1/insights/e", decode: decodeInsights, source: sourcePostHog},
+	{path: "/v1/event", decode: decodeEvent, source: sourceEvent},
 	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},

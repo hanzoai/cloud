@@ -20,7 +20,7 @@ import (
 
 // These tests cover the project-API-key → org resolution on the deprecated PostHog
 // door, so keyed, bearer-less SDK traffic (posthog-js / insights-go batch) maps to a
-// tenant. They drive the REAL /v1/insights/e handler through the injectable
+// tenant. They drive the REAL /v1/event handler (PostHog wire) through the injectable
 // resolveKeyOrg seam, so no IAM is needed. The observable proxy for "resolved to a
 // tenant" is "passed the credential gate" — i.e. NOT 403; without a datastore the
 // handler then returns 503, so any non-403 status means the request was admitted.
@@ -76,9 +76,9 @@ func TestKeyOrg_KeyExtractionReachesResolver(t *testing.T) {
 		hdr              map[string]string
 		wantKey          string
 	}{
-		{"body", "/v1/insights/e", `{"api_key":"hk-body","event":"e","distinct_id":"d"}`, nil, "hk-body"},
-		{"query", "/v1/insights/e?api_key=hk-query", `{"event":"e","distinct_id":"d"}`, nil, "hk-query"},
-		{"x-api-key", "/v1/insights/e", `{"event":"e","distinct_id":"d"}`, map[string]string{"x-api-key": "hk-hdr"}, "hk-hdr"},
+		{"body", "/v1/event", `{"api_key":"hk-body","event":"e","distinct_id":"d"}`, nil, "hk-body"},
+		{"query", "/v1/event?api_key=hk-query", `{"event":"e","distinct_id":"d"}`, nil, "hk-query"},
+		{"x-api-key", "/v1/event", `{"event":"e","distinct_id":"d"}`, map[string]string{"x-api-key": "hk-hdr"}, "hk-hdr"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -100,7 +100,7 @@ func TestKeyOrg_KeyExtractionReachesResolver(t *testing.T) {
 func TestKeyOrg_UnresolvableKeyFailsClosed(t *testing.T) {
 	app := mountApp(t)
 	stubResolver(t, func(string) (string, bool) { return "", false }) // nothing resolves
-	code := postKeyed(t, app, "/v1/insights/e", "hanzo.ai",
+	code := postKeyed(t, app, "/v1/event", "hanzo.ai",
 		`{"api_key":"hk-bad","event":"e","distinct_id":"d"}`, nil)
 	if code != http.StatusForbidden {
 		t.Fatalf("presented-but-unresolvable key on a brand host must 403 (fail closed), got %d", code)
@@ -119,7 +119,7 @@ func TestKeyOrg_KeylessRequestNeverConsultsResolver(t *testing.T) {
 		t.Fatalf("resolver consulted for a keyless request (key=%q)", key)
 		return "", false
 	})
-	code := postKeyed(t, app, "/v1/insights/e", "hanzo.ai",
+	code := postKeyed(t, app, "/v1/event", "hanzo.ai",
 		`{"event":"e","distinct_id":"d"}`, nil)
 	if code != http.StatusOK {
 		t.Fatalf("keyless PostHog event want 200 (anonymous lane, kind dropped), got %d", code)
