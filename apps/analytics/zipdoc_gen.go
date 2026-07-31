@@ -117,7 +117,7 @@ func init() {
 		Example: json.RawMessage(`{"range":"7d","limit":25}`),
 	})
 	zip.Describe("GET /v1/errors", zip.Doc{
-		Description: "Errors returns the caller org's most recently captured errors, newest first. The\nerror-tracking read view over the same table the capture doors write: only rows\nstored as type 'error', each with its captured exception lifted out of the property\nbag as a first-class field.\n\nThe org is the validated principal's — never a parameter — and this read requires a\nreal bearer, NEVER the write-only publishable key: pk- can attribute a write and can\nread nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.",
+		Description: "Errors returns the caller org's most recently captured errors, newest first. The\nerror-tracking read view over event.error — the plane table the write core's error\nfacts land in (errors are DELIBERATELY not on event.event) — each with its captured\nexception surfaced from the attributes map as a first-class field.\n\nThe org is the validated principal's — never a parameter — and this read requires a\nreal bearer, NEVER the write-only publishable key: pk- can attribute a write and can\nread nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.",
 		Fields: map[string]string{
 			"capturedError.distinctId":     "DistinctID is the person/visitor the error is attributed to. Omitted when the\nrow carries none.",
 			"capturedError.event":          "Event is the event name the error was stored under, e.g. $error.",
@@ -137,19 +137,19 @@ func init() {
 		Example: json.RawMessage(`{"limit":100}`),
 	})
 	zip.Describe("GET /v1/insights/events", zip.Doc{
-		Description: "InsightsEvents returns the caller org's most recent product events, newest first.\nThe console's raw-event view over the same table the capture doors write: one row\nper stored event, with the caller's own property bag returned verbatim.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
+		Description: "InsightsEvents returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
 		Fields: map[string]string{
 			"eventList.data":          "Data is the events, newest first. Empty rather than absent when there are none.",
 			"limitQuery.limit":        "Limit is how many rows to return, newest first. Default 50, maximum 200; a\nvalue at or below zero, or one that is not a number, takes the default.",
 			"productEvent.distinctId": "DistinctID is the person/visitor the event is attributed to.",
-			"productEvent.event":      "Event is the event name, e.g. $pageview.",
+			"productEvent.event":      "Event is the event name, e.g. page_viewed or signup_completed.",
 			"productEvent.id":         "ID is the row's stable event id — the client's own idempotency id when it sent\none, else the server-minted one.",
 			"productEvent.path":       "Path is the URL's path component, the key the topPages lens groups by.",
 			"productEvent.product":    "Product is the surface that emitted the event. Omitted when absent.",
-			"productEvent.properties": "Properties is the caller's own property bag, returned verbatim as stored — any\nJSON object. Omitted when the row carries none or it did not parse.",
+			"productEvent.properties": "Properties is the row's attributes map as a JSON object (string values — the\nplane stores Map(String,String), so a nested value the caller sent is a\nJSON-encoded string). Omitted when the row carries none.",
 			"productEvent.sessionId":  "SessionID groups the events of one visit. Omitted when the client sent none.",
 			"productEvent.timestamp":  "Timestamp is when the event happened, RFC3339 UTC.",
-			"productEvent.type":       "Type is the canonical kind: pageview, error, identify, group or event.",
+			"productEvent.type":       "Type is the row's kind — the plane's discriminator: page, track, identify or\ngroup. (Errors are not here at all: they land on event.error and are read at\n/v1/errors.)",
 			"productEvent.url":        "URL is the full page address the event fired on. Omitted when absent.",
 		},
 		Example: json.RawMessage(`{"limit":100}`),

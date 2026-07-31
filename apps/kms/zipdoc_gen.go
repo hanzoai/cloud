@@ -7,6 +7,9 @@ import (
 )
 
 func init() {
+	zip.Describe("POST /kms/delete", zip.Doc{
+		Description: "Delete forgets one secret. It is here for the same reason put is: exactly one\nprocess holds the store, so an app that custodies a credential on a customer's\nbehalf must be able to REMOVE it when that customer disconnects — otherwise\ndisconnecting leaves the material behind and the connection row is the only\nthing that goes.\n\nIt widens no boundary. The surface is deliberately narrow because material\nLEAVING is the risk, and delete moves nothing outward; a caller that can put can\nalready overwrite a secret into uselessness, so this adds no destructive power\neither. The same ref rule as every other op applies, so a tenant's material is\nremovable only by a call acting for that tenant.",
+	})
 	zip.Describe("POST /kms/get", zip.Doc{
 		Description: "Get opens one sealed secret and returns its value to the calling process. This\nop exists because exactly one process holds the store, so every other app has to\nask it for material it needs; the value travels back over the internal socket\nonly, and appears in no log line and in no error.\n\nThe ref decides the authority. A ref naming a tenant is served only to a call\nacting for that same tenant, so an app holding one org's context cannot read\nanother's. A ref naming no tenant is the deployment's own material and is served\nto any peer, because the socket has already decided who may ask — it is\nmode-0600 and peer-credential authenticated, so the caller is one of our own\nprocesses.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})

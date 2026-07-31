@@ -67,7 +67,7 @@
     "name": "get_v1_analytics_top"
   },
   {
-    "description": "Errors returns the caller org's most recently captured errors, newest first. The\nerror-tracking read view over the same table the capture doors write: only rows\nstored as type 'error', each with its captured exception lifted out of the property\nbag as a first-class field.\n\nThe org is the validated principal's — never a parameter — and this read requires a\nreal bearer, NEVER the write-only publishable key: pk- can attribute a write and can\nread nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.",
+    "description": "Errors returns the caller org's most recently captured errors, newest first. The\nerror-tracking read view over event.error — the plane table the write core's error\nfacts land in (errors are DELIBERATELY not on event.event) — each with its captured\nexception surfaced from the attributes map as a first-class field.\n\nThe org is the validated principal's — never a parameter — and this read requires a\nreal bearer, NEVER the write-only publishable key: pk- can attribute a write and can\nread nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.",
     "inputSchema": {
       "properties": {
         "limit": {
@@ -80,7 +80,7 @@
     "name": "get_v1_errors"
   },
   {
-    "description": "InsightsEvents returns the caller org's most recent product events, newest first.\nThe console's raw-event view over the same table the capture doors write: one row\nper stored event, with the caller's own property bag returned verbatim.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
+    "description": "InsightsEvents returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
     "inputSchema": {
       "properties": {
         "limit": {
