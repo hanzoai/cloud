@@ -185,6 +185,18 @@ func (s *MCPServerStore) Write(ctx context.Context, srv MCPServer, fresh bool) (
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO mcp_servers (id, org, name, url, auth_header, has_secret, created_at, listing) VALUES (?,?,?,?,?,?,?,?)`,
 		srv.ID, srv.Org, srv.Name, srv.URL, srv.AuthHeader, boolInt(srv.HasSecret), srv.CreatedAt, srv.Listing); err != nil {
+		// Resolve read, then this writes, and between the two another request may
+		// have enabled the SAME listing — a double-clicked button is the ordinary
+		// way that happens. The row it created is the row this one was going to
+		// create, so this becomes the revise it would have been had it arrived a
+		// moment later, rather than a 500 the caller cannot act on. Both unique
+		// constraints land here: the (org, id) key and the (org, listing) index.
+		if srv.Listing != "" && strings.Contains(err.Error(), "UNIQUE constraint") {
+			if cur, gErr := s.byListing(ctx, srv.Org, srv.Listing); gErr == nil {
+				srv.ID = cur.ID
+				return s.Write(ctx, srv, false)
+			}
+		}
 		return MCPServer{}, fmt.Errorf("tools: create mcp server: %w", err)
 	}
 	return srv, nil
