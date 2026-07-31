@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"net"
+	"time"
 
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
@@ -30,15 +32,21 @@ import (
 // into a router that deliberately links none of it. One op, one socket, one
 // import of the leaf both halves already share.
 
-// serveWake binds the router's start door at plane.HostApp's socket and returns the
-// stop for it.
+// serveWake opens the router's start door at plane.HostApp's socket.
 //
-// A bind failure is NOT fatal and is not returned: the fleet still routes and still
-// serves every HTTP prefix without this door. What it loses is internal calls to cold
-// apps, and the caller's answer to that — ErrNoPeer, "not deployed here" — is already
-// the right one for a fleet that has no router. It is logged where the socket is
-// named, so the degradation is visible rather than inferred.
-func serveWake(app *zip.App) func() error {
+// It returns NOTHING and takes its teardown from the app's own shutdown hooks, on
+// purpose. The version that returned a stop function was called
+// `defer func() { _ = serveWake(app)() }()`, which evaluates serveWake at defer-RUN
+// time — so the door was opened during shutdown, for an instant, and was never open
+// while the fleet served. Every test passed, because they called serveWake directly.
+// An API with no handle cannot be deferred into never happening.
+//
+// A bind failure is NOT fatal: the fleet still routes and still serves every HTTP
+// prefix without this door. What it loses is internal calls to cold apps. It is
+// logged where the socket is named, so the degradation is visible rather than
+// inferred — and it does not return until the socket ACCEPTS, so "listening" in the
+// log is a fact rather than an intention.
+func serveWake(app *zip.App) {
 	door := zip.New(zip.Config{AppName: "plane", Logger: app.Logger()})
 
 	zip.Post[plane.StartIn, plane.Started](door, "/host/start",
@@ -64,24 +72,54 @@ func serveWake(app *zip.App) func() error {
 		zip.WithOperationID(plane.HostStart),
 		zip.WithSummary("Start one lazily-mounted app"))
 
+	// done is CLOSED when Listen returns, rather than carrying the error itself: the
+	// wait below has to observe the same event, and a one-value channel would let
+	// whichever side read first starve the other — here, a failed bind consumed by
+	// the wait would hang shutdown forever on a value that had already been taken.
+	// A closed channel broadcasts.
 	path := zip.SocketPath(plane.HostApp)
-	errs := make(chan error, 1)
-	go func() {
-		if err := door.Listen(path); err != nil {
-			app.Logger().Error("fleet start door is not listening — internal calls cannot wake a cold app",
-				"sock", path, "err", err)
-		}
-		errs <- nil
-	}()
-	app.Logger().Info("fleet start door listening", "sock", path)
-	return func() error {
+	done := make(chan struct{})
+	var listenErr error
+	go func() { listenErr = door.Listen(path); close(done) }()
+	app.OnShutdown(func(context.Context) error {
 		if err := door.Shutdown(); err != nil {
 			return err
 		}
-		<-errs
+		<-done // Listen has returned; the socket is released
 		return nil
+	})
+
+	// Wait for it to ACCEPT, and watch the listener while waiting — a stale socket
+	// file fails Listen instantly with "address already in use", and a poll that only
+	// looked at the path would spend its whole budget waiting for a listener that
+	// already gave up. (cloud.ServePlane does the same for an app's own socket; it is
+	// not shared because this router must not link the fleet's package graph to bind
+	// one socket.)
+	deadline := time.Now().Add(doorBindWait)
+	for {
+		select {
+		case <-done:
+			app.Logger().Error("fleet start door is not listening — an internal call cannot wake a cold app",
+				"sock", path, "err", listenErr)
+			return
+		default:
+		}
+		if c, err := net.DialTimeout("unix", path, time.Second); err == nil {
+			_ = c.Close()
+			app.Logger().Info("fleet start door listening", "sock", path)
+			return
+		}
+		if time.Now().After(deadline) {
+			app.Logger().Error("fleet start door did not bind — an internal call cannot wake a cold app",
+				"sock", path, "waited", doorBindWait)
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// doorBindWait bounds how long boot waits for the start door's socket.
+const doorBindWait = 5 * time.Second
 
 // isUnknownApp reports whether name is absent from this host's plugin table.
 //
