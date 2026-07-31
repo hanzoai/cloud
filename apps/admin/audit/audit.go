@@ -104,7 +104,7 @@ func (o ops) Records(ctx context.Context, in *RecordsIn) (*RecordsOut, error) {
 	// No local store configured → preserve the legacy federated IAM view so the endpoint
 	// never regresses to empty.
 	if s.State.AuditStore == nil {
-		res, err := s.State.IAM.List(ctx, core.CallerCreds(c), "/v1/iam/audit-logs", in.iamQuery())
+		res, err := s.State.IAM.List(ctx, core.CallerCreds(c), "/v1/iam/get-records", in.iamQuery())
 		if err != nil {
 			return &RecordsOut{Status: core.Err, Msg: err.Error()}, nil
 		}

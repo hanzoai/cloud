@@ -358,7 +358,7 @@ func (o ops) users(ctx context.Context, in *usersIn) (*usersOut, error) {
 // Example: {"owner":"admin","p":"1","pageSize":"50"}
 // Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"total":1}
 func (o ops) roles(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
-	return o.iamPassthrough(ctx, in, "/v1/iam/roles")
+	return o.iamPassthrough(ctx, in, "/v1/iam/get-roles")
 }
 
 // applications lists IAM applications for one owner org, forwarded VERBATIM from IAM's
@@ -368,7 +368,7 @@ func (o ops) roles(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
 // Example: {"owner":"admin","p":"1","pageSize":"50"}
 // Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"total":1}
 func (o ops) applications(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
-	return o.iamPassthrough(ctx, in, "/v1/iam/applications")
+	return o.iamPassthrough(ctx, in, "/v1/iam/get-applications")
 }
 
 // iamPassthrough forwards a paginated IAM read verbatim — the ONE body both IAM reads
