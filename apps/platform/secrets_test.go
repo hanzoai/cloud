@@ -52,6 +52,16 @@ func (f *fakeKMS) PutSecret(_ context.Context, ref string, value []byte) error {
 	return nil
 }
 
+func (f *fakeKMS) DeleteSecret(_ context.Context, ref string) error {
+	if f.fail {
+		return fmt.Errorf("kms: master key not configured")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.data, ref)
+	return nil
+}
+
 func (f *fakeKMS) Sign(_ context.Context, _ string, _ []byte) ([]byte, error) {
 	return nil, fmt.Errorf("kms: sign not supported in tests")
 }

@@ -206,6 +206,10 @@ type IAMClient interface {
 type KMSClient interface {
 	GetSecret(ctx context.Context, ref string) ([]byte, error)
 	PutSecret(ctx context.Context, ref string, value []byte) error
+	// DeleteSecret forgets one secret. An app that custodies a credential on a
+	// customer's behalf must be able to remove it when that customer disconnects;
+	// without this, disconnecting drops the connection row and leaves the material.
+	DeleteSecret(ctx context.Context, ref string) error
 	Sign(ctx context.Context, keyRef string, payload []byte) ([]byte, error)
 }
 

@@ -48,6 +48,9 @@ func (disabledKMS) GetSecret(_ context.Context, _ string) ([]byte, error) {
 func (disabledKMS) PutSecret(_ context.Context, _ string, _ []byte) error {
 	return &disabledErr{"kms"}
 }
+func (disabledKMS) DeleteSecret(_ context.Context, _ string) error {
+	return &disabledErr{"kms"}
+}
 func (disabledKMS) Sign(_ context.Context, _ string, _ []byte) ([]byte, error) {
 	return nil, &disabledErr{"kms"}
 }
