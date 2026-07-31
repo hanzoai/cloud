@@ -19,7 +19,7 @@ var frozen = []string{
 	"pubsub", "kafka", "mq", "agentskills", "flags", "kms", "metrics",
 	"ingress", "account", "iam", "base", "o11y", "authz",
 	"commerce", "licensing", "plan", "pricing", "storage", "provisioning",
-	"billing", "rollingcap", "account-bridge", "do", "platform", "projects",
+	"billing", "rollingcap", "do", "platform", "projects",
 	"dns", "domain", "prompts", "agents", "link", "wallets",
 	"x402", "deploy", "functions", "tracker", "templates", "blueprint",
 	"framework", "knowledge", "help", "content", "catalogsync", "webhooks",

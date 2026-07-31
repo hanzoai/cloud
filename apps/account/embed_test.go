@@ -15,7 +15,7 @@ func mountBrand(t *testing.T, brand string) *zip.App {
 	t.Helper()
 	t.Setenv("IAM_MINT_CLIENT_ID", "")
 	t.Setenv("IAM_MINT_CLIENT_SECRET", "")
-	return mountBoth(t, brand)
+	return mount(t, brand)
 }
 
 // stubProbe swaps the reachability probe for the duration of a test, recording how
