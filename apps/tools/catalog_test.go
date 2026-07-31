@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -527,4 +528,58 @@ func TestSyncRefusesALoopingCursor(t *testing.T) {
 	if added == 0 {
 		t.Fatal("the pages that were read before the loop must be kept")
 	}
+}
+
+// TestAFailedSealNeverCostsAnExistingServer: sealing the credential is the step
+// AFTER the row is written, so a KMS failure has to be undone — and the undo is
+// not the same in both directions. Deleting is right for a row the request
+// created; for a re-enable it would turn a KMS hiccup into the org's working
+// server disappearing.
+func TestAFailedSealNeverCostsAnExistingServer(t *testing.T) {
+	app := shelf(t, entry("com.stripe/mcp", "payments", remote("https://mcp.stripe.com"), nil))
+	mounted.State.kms = brokenKMS{}
+
+	// A FRESH registration whose secret cannot be sealed leaves nothing behind: a
+	// row claiming a credential that is not there would dispatch unauthenticated.
+	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+		map[string]any{"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "sk-live"}); r.Code != 500 {
+		t.Fatalf("a failed seal want 500, got %d (%s)", r.Code, r.Body)
+	}
+	if n := serverCount(t, app, "acme"); n != 0 {
+		t.Fatalf("a failed seal left %d rows behind", n)
+	}
+
+	// Now enable it for real, then re-enable with a secret that cannot be sealed.
+	mounted.State.kms = nil
+	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+		map[string]any{"listing": "com.stripe_mcp"}); r.Code != 201 {
+		t.Fatalf("enable: %d (%s)", r.Code, r.Body)
+	}
+	mounted.State.kms = brokenKMS{}
+	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+		map[string]any{"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "sk-live"}); r.Code != 500 {
+		t.Fatalf("a failed re-seal want 500, got %d (%s)", r.Code, r.Body)
+	}
+	if n := serverCount(t, app, "acme"); n != 1 {
+		t.Fatalf("a failed re-seal must leave the org's server standing, got %d rows", n)
+	}
+}
+
+// brokenKMS is a custody that refuses to seal — the hiccup, not the outage.
+type brokenKMS struct{ fakeKMS }
+
+func (brokenKMS) PutSecret(_ context.Context, _ string, _ []byte) error {
+	return errors.New("kms unavailable")
+}
+
+func serverCount(t *testing.T, app *zip.App, org string) int {
+	t.Helper()
+	var out struct {
+		Servers []MCPServer `json:"servers"`
+	}
+	r := do(t, app, http.MethodGet, "/v1/mcp/servers", org, nil)
+	if err := json.Unmarshal(r.Body, &out); err != nil {
+		t.Fatalf("list servers: %v (%s)", err, r.Body)
+	}
+	return len(out.Servers)
 }
