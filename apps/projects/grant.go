@@ -28,6 +28,7 @@
 // needs no STS: presigning is a signature computed with the key cloud already
 // holds, not a token exchange — which matters, because s3.hanzo.ai does not
 // expose an STS endpoint (an AssumeRole POST answers 405).
+
 package projects
 
 import (

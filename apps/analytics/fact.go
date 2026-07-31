@@ -49,6 +49,7 @@
 // The org is NOT on the wire. It is stamped here from the SERVER-resolved tenant, so a
 // caller can only ever write into its own partition — the one tenancy invariant, in the
 // one place a row is built.
+
 package analytics
 
 import (

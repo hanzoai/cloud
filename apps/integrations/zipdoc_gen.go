@@ -301,15 +301,12 @@ func init() {
 		Response: json.RawMessage(`{"repo":"widgets","status":"queued","url":"https://api.github.com/repos/acme/widgets/pages/builds/1"}`),
 	})
 	zip.Describe("POST /v1/integrations/github/repos/import", zip.Doc{
-		Description: "GithubImport imports the selected (or all) granted repos into git.hanzo.ai. The\nselection is intersected with the installation's GRANTED set, so a client can\nnever import a repo the App was not granted (org isolation + a grant check). The\nimport runs in a bounded background worker (don't block the request), so the\nanswer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo\nstatus to flip to imported.",
 		Fields: map[string]string{
 			"githubImportIn.all":     "All imports every repository the installation grants, instead of naming\nthem. Archived and disabled repositories are skipped either way — they\ncannot be fetched.",
-			"githubImportIn.repos":   "Repos names the repositories to import: short names within the org's\ninstallation, with no owner prefix (a trailing \".git\" is stripped).\nIgnored when all is true.",
+			"githubImportIn.repos":   "Repos names the repositories to import, either owner-qualified\n(\"hanzo-apps/ai\") or as a bare name (\"ai\"); a trailing \".git\" is stripped.\nA bare name that matches more than one granted repository is an error\nrather than a guess, because one Hanzo org may hold several GitHub\ninstallations and a name is only unique within an owner.\nIgnored when all is true.",
 			"githubImportOut.queued": "Queued is how many repositories were handed to the background importer.",
 			"githubImportOut.repos":  "Repos names those repositories, in the installation's listing order.",
 		},
-		Example:  json.RawMessage(`{"repos":["widgets"]}`),
-		Response: json.RawMessage(`{"queued":1,"repos":["widgets"]}`),
 	})
 	zip.Describe("POST /v1/integrations/telegram/connect", zip.Doc{
 		Description: "telegramConnect mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",

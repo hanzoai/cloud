@@ -23,6 +23,7 @@
 // The org is still folded into the store PATH as /orgs/{org}{subpath} — that is
 // the isolation partition, the same role the `org` column plays in every table,
 // and it is what keeps one org from addressing another's records.
+
 package kms
 
 import (

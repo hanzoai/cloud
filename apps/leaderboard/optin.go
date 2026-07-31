@@ -6,6 +6,7 @@
 //
 // A user writes ONLY their own preference (keyed by their validated ledger id); an
 // org preference is writable only by an admin OF that org. Nothing here is secret.
+
 package leaderboard
 
 import (

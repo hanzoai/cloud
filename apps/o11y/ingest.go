@@ -39,6 +39,7 @@
 //   - Fail-soft: any construction error logs and returns nil, so a bad telemetry
 //     config can never take cloud down (mirrors embed.go's proxy fallback posture).
 //   - Registered with a ShutdownFunc so the collector flushes on graceful stop.
+
 package o11y
 
 import (

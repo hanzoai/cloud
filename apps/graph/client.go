@@ -20,6 +20,7 @@
 // ERROR MAPPING is honest and customer-appropriate: an unreachable upstream → 502, a
 // non-2xx HTTP status → that status, and a GraphQL {errors} envelope → 502 with the
 // upstream message. It never masks an upstream failure as success or fabricates data.
+
 package graph
 
 import (

@@ -38,6 +38,7 @@
 // that batch is flushed. So the commit-before-ack ordering holds AND the write pattern
 // stays columnar. The batching lives where the batching belongs — in the store — rather
 // than in a buffer this process would lose on restart.
+
 package analytics
 
 import (

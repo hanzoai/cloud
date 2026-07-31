@@ -24,6 +24,7 @@
 // GET /:id/token's body — the ONE custody exit, readable only by the same
 // validated (org,user). Device pending state lives in the cek-encrypted grants
 // table (see the grants DDL comment in store.go), never in KMS.
+
 package integrations
 
 import (
