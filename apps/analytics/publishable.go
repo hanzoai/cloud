@@ -134,9 +134,26 @@ type Frame struct {
 }
 
 // foldException normalizes a type:'error' event so the write core stores it as a
-// first-class error: it defaults the type to "error", and lifts the top-level
-// `error` object into properties.$exception (never mutating the caller's map).
-// A non-error event passes through unchanged.
+// first-class error: it defaults the type to "error", and COPIES the top-level `error`
+// object into properties.$exception (never mutating the caller's map). A non-error
+// event passes through unchanged.
+//
+// IT REDACTS IN PLACE AND DOES NOT ERASE. Lifting the exception into the property bag
+// and then nilling the field was right while the property bag was the only place an
+// error could go — the wide table has no column for a message, a class or a frame. It
+// is wrong now that the event also becomes a FACT: faultOf reads e.Error to build the
+// fault that carries exactly those, so an erased field produced an event.error row with
+// no message, no class and an empty group — and `group` leads that table's ORDER BY, so
+// the row was not merely thin, it was unassemblable into an issue.
+//
+// ONE SCRUB, and both projections read its result. The free text (message and stack —
+// a frame carries API URLs with query secrets and PII as readily as a message does) is
+// redacted here, at the point the exception enters the pipeline, so the stored row, the
+// raw destinations fan-out (forward.go, which sees events BEFORE the warehouse scrub)
+// and the published fact all carry the same clean copy. faultOf scrubs again on the way
+// into the fact and that is deliberate belt-and-braces: it is a pure copy-and-redact, so
+// running it over already-redacted text changes nothing, and it keeps the fact path
+// correct for any caller that reaches it without passing through this fold.
 func foldException(e CaptureEvent) CaptureEvent {
 	if e.Error == nil {
 		return e
@@ -148,13 +165,10 @@ func foldException(e CaptureEvent) CaptureEvent {
 	for k, v := range e.Properties {
 		props[k] = v
 	}
-	// Redact the exception's free-text (message/stack) at the fold point so the
-	// stored row AND the raw destinations fan-out (forward.go, which sees events
-	// BEFORE the warehouse scrub) both carry a clean $exception — never a token,
-	// query secret, or PII lifted from a stack frame.
-	props["$exception"] = scrubException(e.Error)
+	clean := scrubException(e.Error)
+	props["$exception"] = clean
 	e.Properties = props
-	e.Error = nil
+	e.Error = clean
 	return e
 }
 

@@ -31,6 +31,11 @@ func main() {
 		// because cloud.Bridge is what parks the validated org a TYPED op reads.
 		Prefixes:   manifest.PrefixesFor("analytics"),
 		OwnsHealth: true,
+		// Analytics owns two background attachments to the bus — the event sink's
+		// consumers and the ingest connection — so it has a shutdown to run. Without
+		// this the drain outlived the process's own teardown and an in-flight insert
+		// could be cut off mid-commit.
+		Shutdown: analytics.Shutdown,
 	}}, []string{"analytics"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
