@@ -720,8 +720,8 @@ func githubJSON(s *cloud.Service[state], ctx context.Context, method, path, toke
 // SuperAdmin-only, like cutting one: a release names the commits and versions of
 // the platform itself.
 func listSelfReleases(s *cloud.Service[state], c *zip.Ctx) error {
-	if !principal.IsSuperAdmin(c) {
-		return zip.ErrForbidden("reading releases requires a SuperAdmin identity")
+	if err := mayReadReleases(c); err != nil {
+		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": Releases()})
 }
@@ -730,8 +730,8 @@ func listSelfReleases(s *cloud.Service[state], c *zip.Ctx) error {
 // is unknown OR has aged out of the in-memory record — the honest answer either
 // way, since this process cannot distinguish them.
 func getSelfRelease(s *cloud.Service[state], c *zip.Ctx) error {
-	if !principal.IsSuperAdmin(c) {
-		return zip.ErrForbidden("reading a release requires a SuperAdmin identity")
+	if err := mayReadReleases(c); err != nil {
+		return err
 	}
 	st, ok := ReleaseByID(c.Param("id"))
 	if !ok {
