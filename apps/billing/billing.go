@@ -184,15 +184,15 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// another tenant's. These SPECIFIC customer routes register before (and so shadow)
 	// the console pkg's /v1/billing/* wildcard, giving an unauthenticated call an honest
 	// 401 (route exists) instead of the wildcard's admin-shaped 403.
-	app.Get("/v1/billing/gpu-eligibility", cloud.Handle(s, gpuEligibility))
-	app.Post("/v1/billing/gpu-charge", cloud.Handle(s, gpuCharge))
-	app.Get("/v1/billing/payment-methods", cloud.Handle(s, paymentMethods))
+	app.Get("/v1/billing/gpu/eligibility", cloud.Handle(s, gpuEligibility))
+	app.Post("/v1/billing/gpu/charge", cloud.Handle(s, gpuCharge))
+	app.Get("/v1/billing/methods", cloud.Handle(s, paymentMethods))
 	// Saving a card must be registered on the SAME router as the read: a specific
 	// route shadows the console pkg's /v1/billing/* wildcard for its whole path, so
 	// a GET-only registration made POST miss on METHOD (405) before the wildcard or
 	// the co-resident commerce app could serve it — the console's save-card call
 	// died there, and with it auto-recharge, which charges the vaulted card.
-	app.Post("/v1/billing/payment-methods", cloud.Handle(s, createPaymentMethod))
+	app.Post("/v1/billing/methods", cloud.Handle(s, createPaymentMethod))
 
 	// The customer-facing /v1/finance/* PROJECTION of this same commerce plane (the
 	// finance.hanzo.ai + console Finance surfaces). It reuses this package's commerceProxy
@@ -252,7 +252,7 @@ func init() {
 			"principal. The co-resident read returns the 2000 most recent debits, newest first; "+
 			"`start` and `end` narrow the window only on the split-deploy upstream.")
 
-	openapi.Describe("/v1/billing/gpu-eligibility", http.MethodGet,
+	openapi.Describe("/v1/billing/gpu/eligibility", http.MethodGet,
 		"Whether the caller's org may launch a GPU right now, and what is missing",
 		"Answers `eligible` plus the exact `reason` — `ok`, `card_required` or "+
 			"`insufficient_prepaid` — with the org's prepaid available, whether a card is on "+
@@ -270,7 +270,7 @@ func init() {
 			"wallet a charge debits — the gate and the debit can never address two wallets. 401 "+
 			"without a validated principal.")
 
-	openapi.Describe("/v1/billing/gpu-charge", http.MethodPost,
+	openapi.Describe("/v1/billing/gpu/charge", http.MethodPost,
 		"Debit the caller's org prepaid balance for a GPU",
 		"Records a gpu-tagged debit against the caller's own org and answers 201 with the "+
 			"transaction id and the prepaid balance left. This is the ONE endpoint on the customer "+
@@ -298,7 +298,7 @@ func init() {
 			"401 without a validated principal — a customer charging its OWN wallet, so an absent "+
 			"identity is not signed in, never not authorized.")
 
-	openapi.Describe("/v1/billing/payment-methods", http.MethodGet,
+	openapi.Describe("/v1/billing/methods", http.MethodGet,
 		"Cards saved against the caller's org, masked",
 		"Answers the org's saved payment methods as the portal holds them — brand, last four, "+
 			"expiry, default flag. This is what the GPU launch gate's card-on-file check reads.\n\n"+
@@ -315,7 +315,7 @@ func init() {
 			"unreachable upstream is 502 — never an empty list, because no cards and could not ask "+
 			"must not look alike.")
 
-	openapi.Describe("/v1/billing/payment-methods", http.MethodPost,
+	openapi.Describe("/v1/billing/methods", http.MethodPost,
 		"Save a card on file for the caller's org",
 		"Vaults the single-use card token the browser produced with the payment processor and "+
 			"attaches the REUSABLE reference it returns to the caller's org, so a later charge — a "+
@@ -519,7 +519,7 @@ func balance(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// gpuEligibility → commerce GET /v1/billing/gpu-eligibility: the read-only launch gate
+// gpuEligibility → commerce GET /v1/billing/gpu/eligibility: the read-only launch gate
 // ({eligible,reason,prepaidAvailable,cardOnFile,requiredCents,...}). It reads PREPAID
 // available (never the combined balance) + card-on-file, so the launch UI can show the
 // exact remedy (add a card / add prepaid) — it never 402s. The immediate charge
@@ -527,12 +527,12 @@ func balance(s *cloud.Service[state], c *zip.Ctx) error {
 // subject is pinned to the caller's OWN org (commerce keys the wallet under the bare org
 // slug), so the gate reads exactly the wallet gpu-charge debits.
 func gpuEligibility(s *cloud.Service[state], c *zip.Ctx) error {
-	return proxy(s, c, "/v1/billing/gpu-eligibility", "amountCents", "minPrepaidCents", "currency")
+	return proxy(s, c, "/v1/billing/gpu/eligibility", "amountCents", "minPrepaidCents", "currency")
 }
 
 // paymentMethods → commerce GET /v1/billing/portal/payment-methods: the org's saved cards
 // as the masked descriptor commerce returns (brand + last4 + expiry — never a PAN/CVV/
-// token). The console requests the same-origin /v1/billing/payment-methods (mounted here);
+// token). The console requests the same-origin /v1/billing/methods (mounted here);
 // this proxies to commerce's admin-group PORTAL read, which filters CustomerId on the
 // pinned subject (commerce 400s without a customerId — proxy always pins it), so a caller
 // sees ONLY its OWN org's methods. Backs the launch gate's card-on-file check.
@@ -540,7 +540,7 @@ func paymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
 	return proxy(s, c, "/v1/billing/portal/payment-methods")
 }
 
-// createPaymentMethod → commerce POST /v1/billing/payment-methods: vault the Square
+// createPaymentMethod → commerce POST /v1/billing/methods: vault the Square
 // card token the browser produced as a card-on-file. Same discipline as gpuCharge —
 // the billing SUBJECT is pinned server-side to the caller's OWN org, so a forged body
 // can never attach a card to another tenant — and commerce's status is forwarded
@@ -553,7 +553,7 @@ func createPaymentMethod(s *cloud.Service[state], c *zip.Ctx) error {
 	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
-	body, status, err := s.State.commerce.post(c.Context(), "/v1/billing/payment-methods", org, pinSubjectBody(c.Body(), org), "")
+	body, status, err := s.State.commerce.post(c.Context(), "/v1/billing/methods", org, pinSubjectBody(c.Body(), org), "")
 	if err != nil {
 		s.Log.Warn("commerce save card failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")

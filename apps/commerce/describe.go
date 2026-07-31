@@ -70,7 +70,7 @@ func describeAdmin() {
 // ---- /v1/billing — the console's money surface ----
 
 func describeBilling() {
-	openapi.Describe("/v1/billing/auto-recharge/run-all", http.MethodPost,
+	openapi.Describe("/v1/billing/recharge/run-all", http.MethodPost,
 		"Platform sweep: top up every org whose balance has fallen below its own threshold",
 		"Walks every organization and, for those that enabled auto-recharge and whose available "+
 			"balance (balance minus holds) has fallen under their configured threshold, charges "+
@@ -99,7 +99,7 @@ func describeBilling() {
 			"namespace, so an id belonging to another tenant is simply absent and reads as 404; a "+
 			"caller with no validated org gets 401 rather than a document.")
 
-	openapi.Describe("/v1/billing/payment-config", http.MethodGet,
+	openapi.Describe("/v1/billing/settings", http.MethodGet,
 		"The public payment-provider config your card form needs to initialize",
 		"Answers the Square application id, location id, environment and live flag the browser's "+
 			"card iframe boots against — public values only, never a secret. Resolution lives in "+
@@ -217,7 +217,7 @@ func describeBilling() {
 			"reason. The subscription is resolved inside the caller's own org namespace, so "+
 			"another tenant's id reads as 404, and the write carries the browser anti-CSRF gate.")
 
-	openapi.Describe("/v1/billing/test-mode", http.MethodPost,
+	openapi.Describe("/v1/billing/mode", http.MethodPost,
 		"Move an org between sandbox and live billing",
 		"Flips the org's live flag, which is the single authority for both the payment "+
 			"environment and the ledger bucket its transactions land in. This is a money-MINT "+

@@ -552,11 +552,11 @@ func newCommerceReader(base, token string) *commerceReader {
 
 func (r *commerceReader) configured() bool { return r != nil && r.base != "" && r.token != "" }
 
-// rollup reads GET /v1/billing/usage-rollup for org — the authoritative MTD consumed
+// rollup reads GET /v1/billing/usage/rollup for org — the authoritative MTD consumed
 // + prepaid wallet balance.
 func (r *commerceReader) rollup(ctx context.Context, org string) (rollupWire, error) {
 	var out rollupWire
-	body, err := r.get(ctx, "/v1/billing/usage-rollup", org, url.Values{"user": {org}})
+	body, err := r.get(ctx, "/v1/billing/usage/rollup", org, url.Values{"user": {org}})
 	if err != nil {
 		return out, err
 	}

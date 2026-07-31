@@ -42,7 +42,7 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 		f.hitPaths = append(f.hitPaths, r.URL.Path)
 		f.mu.Unlock()
 	}
-	mux.HandleFunc("/v1/billing/usage-rollup", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/billing/usage/rollup", func(w http.ResponseWriter, r *http.Request) {
 		record(r)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"consumedCents":5000,"overageCents":100,"balance":{"balanceCents":20000,"availableCents":15000}}`)
@@ -115,8 +115,8 @@ func TestSummary_ScopedToCallerOrg_RollsUpCommerce(t *testing.T) {
 		t.Fatalf("scope org: want maxpower, got %q", s.Scope.Org)
 	}
 	// commerce read scoped to the caller's OWN org on BOTH the S2S selector and subject.
-	if f.gotOrg["/v1/billing/usage-rollup"] != "maxpower" || f.gotUser["/v1/billing/usage-rollup"] != "maxpower" {
-		t.Fatalf("rollup not scoped to caller: org=%q user=%q", f.gotOrg["/v1/billing/usage-rollup"], f.gotUser["/v1/billing/usage-rollup"])
+	if f.gotOrg["/v1/billing/usage/rollup"] != "maxpower" || f.gotUser["/v1/billing/usage/rollup"] != "maxpower" {
+		t.Fatalf("rollup not scoped to caller: org=%q user=%q", f.gotOrg["/v1/billing/usage/rollup"], f.gotUser["/v1/billing/usage/rollup"])
 	}
 	if f.gotAuth != "Bearer svc-token" {
 		t.Fatalf("commerce auth: want service token, got %q", f.gotAuth)
@@ -165,8 +165,8 @@ func TestSummary_ClientCannotWidenScope(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("want 200, got %d", code)
 	}
-	if f.gotUser["/v1/billing/usage-rollup"] != "maxpower" {
-		t.Fatalf("forged user must be overwritten with caller org, got %q", f.gotUser["/v1/billing/usage-rollup"])
+	if f.gotUser["/v1/billing/usage/rollup"] != "maxpower" {
+		t.Fatalf("forged user must be overwritten with caller org, got %q", f.gotUser["/v1/billing/usage/rollup"])
 	}
 	if f.gotOrg["/v1/billing/transactions"] != "maxpower" {
 		t.Fatalf("commerce X-Org-Id must be caller org, got %q", f.gotOrg["/v1/billing/transactions"])
