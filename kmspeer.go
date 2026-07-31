@@ -63,6 +63,12 @@ func (k KMSPeer) PutSecret(ctx context.Context, ref string, value []byte) error 
 
 // Sign signs a payload with a key that never leaves the store's process — which
 // is the reason signing is an op here rather than a key fetch.
+// DeleteSecret asks the store to forget one secret.
+func (k KMSPeer) DeleteSecret(ctx context.Context, ref string) error {
+	_, err := k.call(ctx, plane.KMSDel, ref, nil)
+	return err
+}
+
 func (k KMSPeer) Sign(ctx context.Context, keyRef string, payload []byte) ([]byte, error) {
 	return k.call(ctx, plane.KMSSign, keyRef, payload)
 }

@@ -47,6 +47,31 @@ func exposeSecrets(c cloud.KMSClient) {
 	zip.Post[plane.SecretIn, plane.Secret](p, "/kms/sign", o.sign,
 		zip.WithOperationID(plane.KMSSign),
 		zip.WithSummary("Sign a payload with a key that never leaves this process"))
+
+	zip.Post[plane.SecretIn, plane.Secret](p, "/kms/delete", o.del,
+		zip.WithOperationID(plane.KMSDel),
+		zip.WithSummary("Forget one secret"))
+}
+
+// Delete forgets one secret. It is here for the same reason put is: exactly one
+// process holds the store, so an app that custodies a credential on a customer's
+// behalf must be able to REMOVE it when that customer disconnects — otherwise
+// disconnecting leaves the material behind and the connection row is the only
+// thing that goes.
+//
+// It widens no boundary. The surface is deliberately narrow because material
+// LEAVING is the risk, and delete moves nothing outward; a caller that can put can
+// already overwrite a secret into uselessness, so this adds no destructive power
+// either. The same ref rule as every other op applies, so a tenant's material is
+// removable only by a call acting for that tenant.
+func (o secretOps) del(ctx context.Context, in *plane.SecretIn) (*plane.Secret, error) {
+	if err := authorize(ctx, in.Ref); err != nil {
+		return nil, err
+	}
+	if err := o.c.DeleteSecret(ctx, in.Ref); err != nil {
+		return nil, fmt.Errorf("kms.delete: %w", err)
+	}
+	return &plane.Secret{}, nil
 }
 
 // Get opens one sealed secret and returns its value to the calling process. This

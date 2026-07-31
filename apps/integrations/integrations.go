@@ -296,7 +296,7 @@ func register(p *Provider) {
 // through the package funcs at the bottom of this file.
 type state struct {
 	store      *Store
-	kms        *kms.Client // concrete client type-asserted from deps.KMS; nil ⇒ secret ops fail closed
+	kms        cloud.KMSClient // the store, reached in-process or over the internal plane; nil ⇒ secret ops fail closed
 	consoleURL string      // where the callback 302s the user back to
 	stateKey   []byte      // HMAC-SHA256 key for the CSRF/org-binding state
 	providers  map[string]*Provider
@@ -432,23 +432,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("integrations.Mount: open store: %w", err)
 	}
 
-	// deps.KMS is the in-process cloud.KMSClient. The interface exposes only
-	// GetSecret/PutSecret/Sign; per-secret Delete + Ready live on the concrete
-	// client, so we type-assert to it exactly as clients/kms does. A non-KMS
-	// impl (RPC/disabled) leaves this nil and every secret op fails closed.
+	// deps.KMS is the cloud.KMSClient, and it is USED as that interface — no
+	// assertion to the embedded client.
 	//
-	// The discard is LOGGED, because failing closed silently is what made this
-	// expensive: every connect answered "master key not configured (operator must
-	// inject CLOUD_KMS_MASTER_KEY_REF)" while that variable was correctly set and
-	// the KMS REST surface in the SAME process decrypted secrets fine. The message
-	// named the wrong cause, so the search went to the operator and the env rather
-	// than to this line. A nil here means the client is the wrong TYPE, not that
-	// the key is missing.
-	kc, _ := deps.KMS.(*kms.Client)
-	if kc == nil {
-		deps.Logger.Warn("integrations: deps.KMS is not the embedded *kms.Client; every credential op will fail closed",
-			"type", fmt.Sprintf("%T", deps.KMS))
-	}
+	// The assertion was the bug. Exactly one process owns the secret store, so
+	// every other app is handed a peer that reaches it over the internal plane;
+	// integrations is one of those, so `deps.KMS.(*kms.Client)` yielded nil for
+	// months and every credential op failed closed while the error blamed a master
+	// key that was correctly configured. Speaking the interface is what makes this
+	// work in the process it actually runs in, and the ref grammar (kmsRef) is what
+	// lets the same (path, name, env) travel over it.
+	kc := deps.KMS
 
 	providers := snapshotRegistry()
 	// Fail LOUD at boot on an incoherent provider — the plane split is structural,
@@ -1390,7 +1384,12 @@ func redirectURI(s *cloud.Service[state], p *Provider) string {
 // sent every investigation to an environment variable that was correctly set.
 const errCredentialStore = "the credential store is unavailable on this deployment"
 
-func kmsReady(s *cloud.Service[state]) bool { return s.State.kms != nil && s.State.kms.Ready() }
+// kmsReady reports whether a credential store is reachable at all. It cannot ask
+// the REMOTE store whether its master key is configured without a round trip on
+// every check, and it does not need to: a store that is wired but unhealthy
+// surfaces that on the operation, which is where the caller can act on it. What
+// this gate is for is the case with no store at all.
+func kmsReady(s *cloud.Service[state]) bool { return s.State.kms != nil }
 
 // kmsPath is the per-org, per-provider KMS namespace: /orgs/{org}/integrations/{provider}.
 // org is validOrg-checked at every entry point, so it can never smuggle path
@@ -1415,16 +1414,24 @@ func userPath(org, user, provider, label string) (string, error) {
 
 // The wrappers are path-first: org callers pass kmsPath(org, provider), user
 // callers a validated userPath — ONE seal/open/delete implementation, two planes.
+// kmsRef addresses a secret the way the KMSClient interface does — "path/name@env",
+// the grammar parseRef reads back into the same (path, name, env) the embedded
+// client holds. Composing the ref is what lets these helpers speak the INTERFACE
+// rather than the concrete client, which is the whole reason they work here: this
+// process is not the store's owner, so deps.KMS is the peer over the internal
+// plane, and a type assertion to the embedded client can never succeed.
+func kmsRef(path, name string) string { return path + "/" + name + "@" + kmsEnv }
+
 func kmsPut(s *cloud.Service[state], path, name string, value []byte) error {
-	return s.State.kms.Put(path, name, kmsEnv, value)
+	return s.State.kms.PutSecret(context.Background(), kmsRef(path, name), value)
 }
 
 func kmsGet(s *cloud.Service[state], path, name string) ([]byte, error) {
-	return s.State.kms.Get(path, name, kmsEnv)
+	return s.State.kms.GetSecret(context.Background(), kmsRef(path, name))
 }
 
 func kmsDelete(s *cloud.Service[state], path, name string) error {
-	err := s.State.kms.Delete(path, name, kmsEnv)
+	err := s.State.kms.DeleteSecret(context.Background(), kmsRef(path, name))
 	if errors.Is(err, kms.ErrSecretNotFound) {
 		return nil // idempotent — deleting an absent secret is not an error
 	}
