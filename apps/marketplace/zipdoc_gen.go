@@ -19,7 +19,11 @@ func init() {
 	zip.Describe("GET /v1/marketplace", zip.Doc{
 		Description: "Discover lists every tool and agent the caller can reach in their own org and\nproject, enriched with any public listing's title, category and price, and with\ninstalled=true on the ones already activated for that scope. It is the shop\nwindow: one read that answers what exists, what it costs and what is already on.",
 		Fields: map[string]string{
-			"Price.amountCents":   "AmountCents is what ONE call costs, in minor units of Currency.",
+			"Currency.Code":       "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
+			"Currency.Decimals":   "fractional digits of the smallest unit",
+			"Currency.Numeric":    "ISO-4217 numeric code (\"840\"); \"\" for custom",
+			"Currency.Symbol":     "display grapheme (\"$\", \"€\", \"₿\")",
+			"Price.amount":        "Amount is what ONE call costs, EXACTLY: an 18-decimal USD value, so a\nper-call price of $0.0025 is $0.0025 and not a cent-floored zero. Cents\ncannot hold a per-token price, and a tool plane is where per-token prices\nlive.",
 			"Price.currency":      "Currency is the ISO 4217 code, e.g. \"USD\". Empty means USD.",
 			"Price.recipient":     "Recipient is the payout wallet ref the marketplace seller is paid at.",
 			"Tool.activated":      "Activated is filled by the registry from the activation store for the\nrequesting (org,project); providers leave it zero. An unactivated tool is\ndiscoverable but refused 403 at dispatch.",
@@ -35,7 +39,12 @@ func init() {
 	zip.Describe("GET /v1/marketplace/listings", zip.Doc{
 		Description: "ListListings returns the listings the caller's own org has published — what this\norg is offering, not what it can buy. A publisher only ever sees its own rows.",
 		Fields: map[string]string{
-			"Listing.recipient":    "seller payout wallet (x402 Payee).",
+			"Currency.Code":        "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
+			"Currency.Decimals":    "fractional digits of the smallest unit",
+			"Currency.Numeric":     "ISO-4217 numeric code (\"840\"); \"\" for custom",
+			"Currency.Symbol":      "display grapheme (\"$\", \"€\", \"₿\")",
+			"Listing.price":        "exact per-call price; 0 is free.",
+			"Listing.recipient":    "seller payout WALLET ID, in PublisherOrg.",
 			"listingPage.listings": "Listings is every listing this org has published, private ones included\n(Public says which are discoverable by others).",
 		},
 	})
@@ -49,19 +58,24 @@ func init() {
 		Example: json.RawMessage(`{"tool":"summarize"}`),
 	})
 	zip.Describe("POST /v1/marketplace/listings", zip.Doc{
-		Description: "Publish offers one tool on the marketplace, optionally monetized. The tool must\nalready resolve in the publisher's own scope, so a listing can never advertise a\ncapability that does not exist; a listing with a price must name the payout wallet\nthe x402 seam settles to, so a monetized offer is never unpayable. The listing is\nowned by the publishing org and answers 201 with the created row.",
+		Description: "Publish offers one tool on the marketplace, optionally monetized. The tool must\nalready resolve in the publisher's own scope, so a listing can never advertise a\ncapability that does not exist; a listing with a price must name the payout wallet\nthe x402 seam settles to, so a monetized offer is never unpayable. The price is\nexact to 18 decimal places, so a per-call price below a cent is a real price and\nnot a rounded-away zero. The listing is owned by the publishing org, paid into a\nwallet of that same org, and answers 201 with the created row.",
 		Fields: map[string]string{
-			"Listing.recipient":      "seller payout wallet (x402 Payee).",
+			"Currency.Code":          "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
+			"Currency.Decimals":      "fractional digits of the smallest unit",
+			"Currency.Numeric":       "ISO-4217 numeric code (\"840\"); \"\" for custom",
+			"Currency.Symbol":        "display grapheme (\"$\", \"€\", \"₿\")",
+			"Listing.price":          "exact per-call price; 0 is free.",
+			"Listing.recipient":      "seller payout WALLET ID, in PublisherOrg.",
 			"publishReq.category":    "Category groups the listing in the shop window.",
-			"publishReq.currency":    "Currency denominates PriceCents.",
+			"publishReq.currency":    "Currency denominates Price.",
 			"publishReq.description": "Description is the long copy, clipped at 4096 characters.",
-			"publishReq.priceCents":  "PriceCents is the per-call price. 0 (the default) publishes it free; any\npositive price makes the listing monetized and requires Recipient.",
+			"publishReq.price":       "Price is the per-call price as a decimal USD string, exact to 18 places —\n\"0.0025\" is a quarter of a cent and stays one. Empty or \"0\" (the default)\npublishes it free; any positive price makes the listing monetized and\nrequires Recipient.",
 			"publishReq.public":      "Public makes the listing discoverable by other orgs. Private otherwise.",
-			"publishReq.recipient":   "Recipient is the seller's payout wallet — the x402 payee. Required for a\nmonetized listing.",
+			"publishReq.recipient":   "Recipient is the seller's payout wallet ID, in the publishing org — the\nwallet x402 pays. Required for a monetized listing.",
 			"publishReq.title":       "Title is the shop-window name, 1-200 characters. Required.",
 			"publishReq.tool":        "Tool is the registry name of the capability being offered. It must already\nresolve in the publisher's own scope — there are no phantom listings.",
 		},
-		Example: json.RawMessage(`{"tool":"summarize","title":"Summarize","priceCents":25,"recipient":"0xabc","public":true}`),
+		Example: json.RawMessage(`{"tool":"summarize","title":"Summarize","price":"0.0025","recipient":"wal_9f2","public":true}`),
 	})
 	zip.Describe("POST /v1/marketplace/uninstall", zip.Doc{
 		Description: "Uninstall deactivates one tool for the caller's own org and project, so it stops\nbeing dispatchable there. It is the exact inverse of install and touches the same\nactivation record; deactivating something that was never active is not an error.\nThe listing itself is untouched — this withdraws the caller's use of a capability,\nnot anyone's offer of it.",
