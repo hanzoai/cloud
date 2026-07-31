@@ -84,7 +84,7 @@ func TestSetAppSelfDispatch(t *testing.T) {
 	}
 }
 
-// TestSpendAlertsAuthorizeShadowsBridge pins the fix for the /v1/billing/spend-alerts/authorize
+// TestSpendAlertsAuthorizeShadowsBridge pins the fix for the /v1/billing/alerts/authorize
 // 502 self-dispatch loop the live cloud pod logged (~135×/30m, org "maxpower"): the request-edge
 // metering gate (clients/metering scopeAuthorize) issues a SERVICE-token S2S GET of that path
 // through THIS transport; with no co-resident handler it fell through to the account bridge's
@@ -103,7 +103,7 @@ func TestSetAppSelfDispatch(t *testing.T) {
 // it pins is the class — a self-proxying wildcard on the shared app re-enters itself, and a
 // specific route is what stops it — which is exactly what a future forwarder would rediscover.
 func TestSpendAlertsAuthorizeShadowsBridge(t *testing.T) {
-	const authorizePath = "/v1/billing/spend-alerts/authorize"
+	const authorizePath = "/v1/billing/alerts/authorize"
 
 	// build assembles the co-resident app: commerce's specific authorize route — present only
 	// when withSpecific — plus a self-proxying /v1/billing/* wildcard standing in for the

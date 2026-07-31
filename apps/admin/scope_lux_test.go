@@ -109,7 +109,7 @@ func TestScope_LuxAdminSpendCapWriteHardPinned(t *testing.T) {
 	var mu sync.Mutex
 	var wroteOrg string
 	commerce := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/v1/billing/spend-alerts") && r.Method == http.MethodPost {
+		if strings.HasSuffix(r.URL.Path, "/v1/billing/alerts") && r.Method == http.MethodPost {
 			mu.Lock()
 			wroteOrg = r.Header.Get("X-Org-Id") // commerce.Forward pins the target org here
 			mu.Unlock()

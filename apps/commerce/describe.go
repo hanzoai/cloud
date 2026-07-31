@@ -127,7 +127,7 @@ func describeBilling() {
 			"rather than a silently blank list. It is a catalog read, not an entitlement read — "+
 			"it says what may be bought, never what this caller has.")
 
-	openapi.Describe("/v1/billing/spend-alerts", http.MethodGet,
+	openapi.Describe("/v1/billing/alerts", http.MethodGet,
 		"List your org's spend caps and rate limits",
 		"Returns the caps and alerts keyed to the caller's own billing subject, each with its "+
 			"threshold, enforcement flag, soft-warning percentage and current period spend. Any "+
@@ -136,7 +136,7 @@ func describeBilling() {
 			"why a cap created here is the one that actually binds. A caller with no resolvable "+
 			"org or subject gets an empty list, never another tenant's caps.")
 
-	openapi.Describe("/v1/billing/spend-alerts", http.MethodPost,
+	openapi.Describe("/v1/billing/alerts", http.MethodPost,
 		"Set a spend cap or rate limit on your org",
 		"Creates a cap for the caller's own org and answers the stored row with its current "+
 			"period spend. A spend cap is a FINANCIAL SAFETY control, so writing one requires an "+
@@ -148,7 +148,7 @@ func describeBilling() {
 			"At least one of a positive threshold or a positive rateLimitRpm is required, softPct "+
 			"must be within 0 to 100, and an org that has reached its row limit is refused 400.")
 
-	openapi.Describe("/v1/billing/spend-alerts/authorize", http.MethodGet,
+	openapi.Describe("/v1/billing/alerts/authorize", http.MethodGet,
 		"The per-request spend-cap verdict the metering gate consumes",
 		"Answers allow, reason, capCents, spentCents and warnPct for a proposed amount against a "+
 			"(project, service) scope — the verdict the request-edge metering gate reads before "+
@@ -161,7 +161,7 @@ func describeBilling() {
 			"failure allows rather than denies, so a backend blip never bills-blocks an under-cap "+
 			"customer, while a known overage still denies.")
 
-	openapi.Describe("/v1/billing/spend-alerts/:id", http.MethodDelete,
+	openapi.Describe("/v1/billing/alerts/:id", http.MethodDelete,
 		"Remove one of your org's spend caps",
 		"Deletes the addressed cap and answers 204. Requires an ORG ADMIN, a platform admin, or "+
 			"the internal service token — deleting a cap uncaps the org's spend, so a plain "+
@@ -169,7 +169,7 @@ func describeBilling() {
 			"own is refused as 404 rather than 403, so the response cannot confirm that another "+
 			"org's id exists.")
 
-	openapi.Describe("/v1/billing/spend-alerts/:id", http.MethodPatch,
+	openapi.Describe("/v1/billing/alerts/:id", http.MethodPatch,
 		"Change one of your org's spend caps",
 		"Applies only the fields the body actually carries — title, threshold, project, service, "+
 			"enforce, softPct, rateLimitRpm — and leaves the rest as stored, answering the merged "+

@@ -212,7 +212,7 @@ func TestMiddleware_Denies402_WhenNoBalance(t *testing.T) {
 func TestMiddleware_Denies402_SpendCap_WhenFundedButOverCap(t *testing.T) {
 	// Balance is healthy; the authorize endpoint returns the spend_cap verdict.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/billing/spend-alerts/authorize" {
+		if r.URL.Path == "/v1/billing/alerts/authorize" {
 			_, _ = io.WriteString(w, `{"allow":false,"reason":"spend_cap","capCents":100,"spentCents":100}`)
 			return
 		}
