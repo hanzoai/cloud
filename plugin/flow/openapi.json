@@ -1,0 +1,356 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package flow is Hanzo Flow: visual AI workflow orchestration — build, manage, and run agent workflows on the unified /v1 plane.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "flow"
+    }
+  ],
+  "paths": {
+    "/v1/flow/runs": {
+      "get": {
+        "operationId": "get_v1_flow_runs",
+        "summary": "Runs reads one workflow's recorded runs: every component build with its result, keyed by component.",
+        "description": "Runs reads one workflow's recorded runs: every component build with its\nresult, keyed by component. Ownership is verified first — run records never\ncross the org boundary.",
+        "tags": [
+          "flow"
+        ],
+        "parameters": [
+          {
+            "name": "workflow",
+            "in": "query",
+            "required": false,
+            "description": "Workflow is the UUID of the workflow whose run records to read. It rides\nthe query string.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_flow_runs",
+        "summary": "Run executes one of the caller's workflows synchronously: the graph runs in the flow service and the response carries the run's session and outputs.",
+        "description": "Run executes one of the caller's workflows synchronously: the graph runs in\nthe flow service and the response carries the run's session and outputs. A\ngraph whose components fail reports the product's own error. Runs are\nbounded by the product's five-minute sync ceiling.",
+        "tags": [
+          "flow"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "input": "summarize today's tickets",
+                "workflow": "8f14e45f-…"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/flowRun"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/flow/status": {
+      "get": {
+        "operationId": "get_v1_flow_status",
+        "summary": "Status reports whether the flow service is reachable and which version it runs.",
+        "description": "Status reports whether the flow service is reachable and which version it\nruns. It is the product's own /health and /v1/version composed — an honest\nlens for \"is the workflow plane up\", never a fabricated ok.",
+        "tags": [
+          "flow"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/flowStatus"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/flow/workflows": {
+      "get": {
+        "operationId": "get_v1_flow_workflows",
+        "summary": "Workflows lists the caller's workflows, paged.",
+        "description": "Workflows lists the caller's workflows, paged. The list is scoped\nserver-side to the org's project — the page can only ever hold the caller's\nown workflows.",
+        "tags": [
+          "flow"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page of workflows to return.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "description": "Size is how many workflows one page holds (the product caps it at 100).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_flow_workflows",
+        "summary": "WorkflowCreate creates a workflow in the caller's org.",
+        "description": "WorkflowCreate creates a workflow in the caller's org. The org's project id\nis pinned server-side from the validated principal — there is no field by\nwhich a caller could place a workflow in another org.",
+        "tags": [
+          "flow"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "route tickets",
+                "name": "support-triage"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/flowCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/flow/workflows/{workflow}": {
+      "delete": {
+        "operationId": "delete_v1_flow_workflows_workflow",
+        "summary": "WorkflowDelete deletes one of the caller's workflows and its runs.",
+        "description": "WorkflowDelete deletes one of the caller's workflows and its runs. Ownership\nis verified first; a foreign id answers 404 and deletes nothing.",
+        "tags": [
+          "flow"
+        ],
+        "parameters": [
+          {
+            "name": "workflow",
+            "in": "path",
+            "required": true,
+            "description": "Workflow is the workflow's UUID, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_v1_flow_workflows_workflow",
+        "summary": "Workflow reads one of the caller's workflows — the full record, graph included.",
+        "description": "Workflow reads one of the caller's workflows — the full record, graph\nincluded. A workflow outside the caller's org answers 404, indistinguishable\nfrom one that does not exist.",
+        "tags": [
+          "flow"
+        ],
+        "parameters": [
+          {
+            "name": "workflow",
+            "in": "path",
+            "required": true,
+            "description": "Workflow is the workflow's UUID, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patch_v1_flow_workflows_workflow",
+        "summary": "WorkflowUpdate patches one of the caller's workflows: name, description, graph, or the locked flag — only the stated fields move.",
+        "description": "WorkflowUpdate patches one of the caller's workflows: name, description,\ngraph, or the locked flag — only the stated fields move. Ownership is\nverified before the patch reaches the product.",
+        "tags": [
+          "flow"
+        ],
+        "parameters": [
+          {
+            "name": "workflow",
+            "in": "path",
+            "required": true,
+            "description": "Workflow is the workflow's UUID, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "route tickets to the right queue"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/flowUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "flowCreate": {
+        "properties": {
+          "data": {
+            "description": "Data is the workflow graph (the product's nodes/edges document),\nverbatim. Omit it to create an empty workflow."
+          },
+          "description": {
+            "description": "Description says what the workflow does.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the workflow's display name, unique within the org's project\n(the product de-duplicates by suffixing).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "flowRun": {
+        "properties": {
+          "input": {
+            "description": "Input is the run's chat input value, handed to the graph's input node.",
+            "type": "string"
+          },
+          "session": {
+            "description": "Session groups runs into one conversation; the product mints one when\nabsent and returns it in the response.",
+            "type": "string"
+          },
+          "tweaks": {
+            "description": "Tweaks override component fields for this run only (the product's\ntweaks document), verbatim."
+          },
+          "workflow": {
+            "description": "Workflow is the UUID of the workflow to run.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "flowStatus": {
+        "properties": {
+          "reachable": {
+            "description": "Reachable is true when the flow service answered its health probe.",
+            "type": "boolean"
+          },
+          "version": {
+            "description": "Version is the flow service's own version, present only when reachable.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "flowUpdate": {
+        "properties": {
+          "data": {
+            "description": "Data replaces the workflow graph when present, verbatim."
+          },
+          "description": {
+            "description": "Description replaces the description when present.",
+            "type": "string"
+          },
+          "locked": {
+            "description": "Locked freezes or unfreezes the workflow against edits when present.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name renames the workflow when present.",
+            "type": "string"
+          },
+          "workflow": {
+            "description": "Workflow is the workflow's UUID, taken from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}
