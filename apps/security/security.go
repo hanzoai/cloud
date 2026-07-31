@@ -1,3 +1,6 @@
+// Package security is the code-security scan surface (/v1/security): submit
+// source files, the pure detect engine finds hardcoded secrets, and findings
+// persist masked and fingerprinted — never the raw secret.
 package security
 
 import (
@@ -12,9 +15,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/security/detect"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
