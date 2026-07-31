@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package validators mounts the Hanzo Cloud /v1/validators/* surface: the \"click → provision node + queue registration\" pipeline behind GDA/SDM validator onboarding on lux.cloud.",
+    "description": "Package validators is one-click validator onboarding: prove your Genesis NFT, get a node provisioned, queue its registration.",
     "version": "v1"
   },
   "servers": [

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package graph is chain data (/v1/indexers, /v1/oracles): the deployment's block indexers with the height each has reached, and the on-chain price feeds — read from the Lux chain-data plane, principal-gated, and never fabricated.",
+    "description": "Package graph is chain data: your block indexers and how far each has caught up, plus the on-chain price feeds.",
     "version": "v1"
   },
   "servers": [

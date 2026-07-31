@@ -1,6 +1,9 @@
-// Package domain is Hanzo Domains — the DOMAIN-REGISTRATION product: search a name,
-// see its price (with Hanzo's markup), buy it billed through the customer's prepaid
-// wallet, and have it born pointing at Hanzo's own authoritative nameservers.
+// Package domain is Hanzo Domains: search a name, see the price, buy it from
+// your prepaid wallet.
+//
+// This is the REGISTRATION product. The price carries Hanzo's markup, the
+// purchase is billed through the customer's prepaid wallet, and the domain is
+// born pointing at Hanzo's own authoritative nameservers.
 //
 // This is DISTINCT from Hanzo DNS (hanzoai/dns): DNS manages records for a domain you
 // already control; Domains ACQUIRES the domain. After a purchase, Domains hands the

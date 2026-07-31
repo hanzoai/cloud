@@ -1,5 +1,7 @@
-// Package exec is the Code Interpreter: run a snippet in a sandbox, and move the
-// session's files in and out. It owns FOUR top-level /v1 segments — /v1/exec,
+// Package exec is the code interpreter: run a snippet in a sandbox and move
+// files in and out.
+//
+// It owns FOUR top-level /v1 segments — /v1/exec,
 // /v1/upload, /v1/download and /v1/files — because the upstream client's contract
 // fixes them as siblings (below), so it publishes under four OpenAPI product tags
 // rather than one.

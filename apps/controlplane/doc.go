@@ -1,9 +1,14 @@
 //go:build controlplane
 
-// Package controlplane is Stage-1 increment-1 of the Hanzo cloud
-// consensus-plugin platform: a FULL-BFT byzantine ceremony driver for the
-// control plane, built against stable published luxfi interfaces plus stubs
-// for the one cryptographic implementation that is still being forward-ported.
+// Package controlplane is byzantine agreement over placement, leases and
+// membership, so no forged state can ever apply.
+//
+// No block applies without a certificate every voter re-composes itself.
+//
+// It is Stage-1 increment-1 of the Hanzo cloud consensus-plugin platform — a
+// full-BFT ceremony driver, built against stable published luxfi interfaces
+// plus stubs for the one cryptographic implementation that is still being
+// forward-ported.
 //
 // It is gated behind the `controlplane` build tag and is NOT wired into the
 // serving path. Nothing in the default cloud build imports it; it compiles,

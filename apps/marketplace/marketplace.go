@@ -1,6 +1,9 @@
-// Package marketplace is the /v1/marketplace surface: listing, discovery, and
-// install of tools + agents per org/project, plus monetized listings that declare a
-// price + recipient wallet and enforce through the x402 seam.
+// Package marketplace is the shop for tools and agents: browse, install into
+// your project, publish your own free or priced.
+//
+// It serves listing, discovery and install per org/project at /v1/marketplace.
+// A monetized listing declares a price + recipient wallet and enforces through
+// the x402 seam.
 //
 // It is a THIN layer over the unified tool plane (apps/tools): discovery reads
 // the tool registry (every source, activated flags); "install"/"uninstall" ARE the

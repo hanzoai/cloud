@@ -3,8 +3,11 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-// Package fleet is the ONE per-org registry of attached compute (BYO k8s clusters /
-// BYO GPU / bare metal). It is the single source of truth consumed by BOTH the fleet
+// Package fleet is your own compute, attached: bring a Kubernetes cluster, a GPU
+// box or bare metal and run work on it.
+//
+// It is the ONE per-org registry of that attached compute (BYO k8s clusters /
+// BYO GPU / bare metal), the single source of truth consumed by BOTH the fleet
 // surface (apps/visor, which serves /v1/clusters — managed clusters from Visor
 // MERGED with these BYO ones) AND ML serving (apps/ml, whose dynForOrg federates a
 // workload onto the org's registered cluster). One registry, two consumers — never a

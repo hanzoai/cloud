@@ -1,6 +1,8 @@
-// Package sites is the public site-server for published projects: the
-// host-routed edge that turns `<slug>.hanzo.app` into the static site a user
-// deployed to OUR S3.
+// Package sites is your published site, live on the public web at
+// <slug>.hanzo.app.
+//
+// It is the host-routed edge that turns `<slug>.hanzo.app` into the static site
+// a user deployed to OUR S3.
 //
 // It is NOT a /v1 API. It owns the ROOT path space for requests whose Host is a
 // site host (`<slug>.<apex>`, apex default hanzo.app). It is installed as the

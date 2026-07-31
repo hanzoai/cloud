@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package meet is the CONTROL plane for the virtual office: it decides who may
-// join which room, and says so by minting a short-lived LiveKit access token.
+// Package meet is the virtual office: it decides who may join a room and mints
+// the short-lived token that lets them in.
 //
 //	POST /v1/meet/getToken  {roomName, _id, participantName}  ->  the token, as text
 //

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package cloudflare is the per-org Cloudflare asset plane for the unified Hanzo Cloud binary — the first-class /v1/cloudflare/* surface (sibling of /v1/dns and /v1/domain) that manages an org's Cloudflare Zones/Analytics, Pages, Workers, Workers AI, R2, KV, and D1 through the SAME per-org, KMS-sealed API token the org connected via apps/integrations.",
+    "description": "Package cloudflare is your Cloudflare account, managed from Hanzo: zones, Pages, Workers, Workers AI, R2, KV and D1.",
     "version": "v1"
   },
   "servers": [
