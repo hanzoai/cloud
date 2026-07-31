@@ -743,3 +743,17 @@ func getSelfRelease(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	return c.JSON(http.StatusOK, st)
 }
+
+// mayReadReleases mirrors the release GATE (runner.go): platform sudo, or admin of
+// the org that owns the published image. One rule, so the answer to "may I read
+// this?" can never be narrower than "may I have started it?".
+func mayReadReleases(c *zip.Ctx) error {
+	if principal.IsSuperAdmin(c) {
+		return nil
+	}
+	org, ok := principal.Org(c)
+	if !ok || !imageInOrgRegistry(releaseImage, org) || !principal.IsOrgAdmin(c) {
+		return zip.ErrForbidden("reading releases requires admin of the org that owns " + releaseImage)
+	}
+	return nil
+}

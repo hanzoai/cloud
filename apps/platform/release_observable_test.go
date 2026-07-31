@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -129,5 +131,29 @@ func TestAFailedBuildNeverReachesTheTag(t *testing.T) {
 	}
 	if reached != stepNone {
 		t.Errorf("reached %s, want none", reached)
+	}
+}
+
+// Reading a release must never require MORE authority than starting one, or the
+// 202 hands back an id the caller cannot ask about — the gap these routes close.
+// Both sides read the same two predicates, so this holds them together.
+func TestReadingAReleaseIsNotStricterThanCuttingOne(t *testing.T) {
+	src, err := os.ReadFile("release.go")
+	if err != nil {
+		t.Fatalf("read release.go: %v", err)
+	}
+	gate, err := os.ReadFile("runner.go")
+	if err != nil {
+		t.Fatalf("read runner.go: %v", err)
+	}
+	// The cut admits platform sudo OR the owning org's admin; the read must admit
+	// the same two, not sudo alone.
+	for _, need := range []string{"principal.IsSuperAdmin", "principal.IsOrgAdmin", "imageInOrgRegistry"} {
+		if !strings.Contains(string(src), need) {
+			t.Errorf("the release read does not consider %s, which the cut does", need)
+		}
+		if !strings.Contains(string(gate), need) {
+			t.Errorf("fixture: the cut no longer uses %s", need)
+		}
 	}
 }
