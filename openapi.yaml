@@ -2049,6 +2049,8 @@ components:
           type: object
         time:
           type: string
+        type:
+          type: string
       type: object
     Exception:
       properties:

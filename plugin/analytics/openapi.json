@@ -644,6 +644,9 @@
           },
           "time": {
             "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
         }
       },
