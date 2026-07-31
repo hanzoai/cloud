@@ -32,7 +32,7 @@ var frozen = []string{
 	"index", "catalog", "world", "bot", "runtime", "authors",
 	"bots", "audit", "affiliates", "esign", "product", "evals",
 	"benchmark", "research", "experiments", "books", "treasury", "admin",
-	"admission", "tasks", "automations", "flow", "tools", "marketplace", "referrals",
+	"admission", "tasks", "automations", "flow", "engine", "tools", "marketplace", "referrals",
 	"guide", "company", "compliance", "legal", "agent", "ask",
 	// ai precedes zen — a DECISION, not drift: both claim "/v1", equal patterns
 	// resolve by mount order, and the /v1 remainder (the OpenAI-compatible

@@ -1,0 +1,131 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package engine is Hanzo Engine: the serving runtime behind Hanzo's models — what it serves and what it runs on, read through /v1/engine.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "engine"
+    }
+  ],
+  "paths": {
+    "/v1/engine/model": {
+      "get": {
+        "operationId": "get_v1_engine_model",
+        "summary": "Model reads one model's load state — loaded, unloading, or not_found, as the engine itself reports it.",
+        "description": "Model reads one model's load state — loaded, unloading, or not_found, as\nthe engine itself reports it.",
+        "tags": [
+          "engine"
+        ],
+        "parameters": [
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "description": "Model is the model id to inspect, exactly as the model list reports it.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "Qwen/Qwen3-4B"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/engine/models": {
+      "get": {
+        "operationId": "get_v1_engine_models",
+        "summary": "Models lists the models the engine serves, each with its load state — the server's own model table (its OpenAI-style list envelope, load status included), relayed verbatim.",
+        "description": "Models lists the models the engine serves, each with its load state — the\nserver's own model table (its OpenAI-style list envelope, load status\nincluded), relayed verbatim.",
+        "tags": [
+          "engine"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/engine/status": {
+      "get": {
+        "operationId": "get_v1_engine_status",
+        "summary": "Status reports whether the engine deployment is reachable and which build revision it runs — an honest lens for \"is the serving runtime up\", never a fabricated ok.",
+        "description": "Status reports whether the engine deployment is reachable and which build\nrevision it runs — an honest lens for \"is the serving runtime up\", never a\nfabricated ok.",
+        "tags": [
+          "engine"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/engineStatus"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/engine/system": {
+      "get": {
+        "operationId": "get_v1_engine_system",
+        "summary": "System reads the engine host's inventory: OS, CPU, memory, every accelerator device with its VRAM and compute capability, and the build's capabilities (CUDA/Metal/flash-attention) — the real hardware under the serving runtime, relayed verbatim.",
+        "description": "System reads the engine host's inventory: OS, CPU, memory, every accelerator\ndevice with its VRAM and compute capability, and the build's capabilities\n(CUDA/Metal/flash-attention) — the real hardware under the serving runtime,\nrelayed verbatim.",
+        "tags": [
+          "engine"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "engineStatus": {
+        "properties": {
+          "reachable": {
+            "description": "Reachable is true when the engine answered its health probe.",
+            "type": "boolean"
+          },
+          "revision": {
+            "description": "Revision is the engine build's git revision, present only when\nreachable (the server's own build identity — it publishes no semver).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}
