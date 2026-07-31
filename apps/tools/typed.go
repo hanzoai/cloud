@@ -98,6 +98,16 @@ func scopeOf(ctx context.Context) (Scope, error) {
 	return Scope{Org: org, Project: projectOf(ctx)}, nil
 }
 
+// adminOf reports that the caller is a platform SuperAdmin — principal's own
+// named predicate, which is the reserved "admin" org proven by X-User-IsAdmin.
+// It needs the REQUEST because admin-ness lives in a header principal.OrgFrom
+// does not carry. FALSE off the HTTP path, for the reason tenantOf refuses
+// there: no request, no attested caller, no authority.
+func adminOf(ctx context.Context) bool {
+	c, ok := cloud.Request(ctx)
+	return ok && principal.IsSuperAdmin(c)
+}
+
 // callerOf is the validated user id an activation write is recorded under
 // (c.User(), X-User-Id) — the actor, not the tenant. Empty off the HTTP path,
 // where there is no attested caller to name.

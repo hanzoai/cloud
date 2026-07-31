@@ -51,6 +51,14 @@ type result struct {
 
 func do(t *testing.T, app *zip.App, method, path, org string, body any) result {
 	t.Helper()
+	return send(t, app, method, path, org, body, false)
+}
+
+// send is do() for a caller who may be a platform SuperAdmin. Admin-ness is a
+// property of the CALLER and not of the route, so it is one more header on the
+// same request rather than a second harness.
+func send(t *testing.T, app *zip.App, method, path, org string, body any, admin bool) result {
+	t.Helper()
 	var r io.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -63,6 +71,9 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) result {
 	if org != "" {
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u-"+org)
+	}
+	if admin {
+		rq.Header.Set("X-User-IsAdmin", "true")
 	}
 	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
 	if err != nil {

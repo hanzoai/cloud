@@ -56,6 +56,13 @@ type App struct {
 	// empty dashboard rather than an error.
 	Eager bool
 
+	// Open means this app also serves tools that depend on WHO is asking, so its
+	// build-time catalogue (plugin/<name>/mcp.json) is incomplete BY CONSTRUCTION
+	// and the host asks it per caller — see zip.Plugin.Open. Exactly one app in
+	// the fleet may be open, because a tool name no catalogue claims has to
+	// resolve somewhere and two candidates would make it ambiguous.
+	Open bool
+
 	// Required means the HOST must not serve without this app. A required app
 	// that will not start aborts the process; every other app degrades to being
 	// absent — its prefixes answer 503 and the rest of the fleet serves.
@@ -100,6 +107,18 @@ type App struct {
 // the host falls through to the index). A dedicated binary present on disk is
 // someone's explicit intent, so it wins over the index.
 func (a App) Plugin() zip.Plugin {
+	p := a.resolve()
+	// Open is a property of the APP — what it serves — and not of where its binary
+	// came from, so it is stamped once here rather than in each of resolve's four
+	// rungs, which is four places for it to be forgotten.
+	p.Open = a.Open
+	return p
+}
+
+// resolve is the ladder: an operator's address, an operator's path, the binary on
+// disk beside the host, a published release, and finally the on-disk path again so
+// the failure names the file a developer expected to have built.
+func (a App) resolve() zip.Plugin {
 	env := "CLOUD_" + strings.ToUpper(strings.NewReplacer("-", "_").Replace(a.Name))
 	if addr := strings.TrimSpace(os.Getenv(env + "_ADDR")); addr != "" {
 		return zip.Plugin{Name: a.Name, Addr: addr}

@@ -66,6 +66,7 @@ type state struct {
 	servers    *MCPServerStore
 	authored   *AuthoredStore // org-authored plugins (pluginbuild.go)
 	skills     *SkillStore    // org-authored skills (skillstore.go)
+	catalog    *CatalogStore  // the canonical copy of the public registries (catalog.go)
 	kms        types.KMSClient
 	ai         types.AIClient // generates plugin source from an API spec; nil ⇒ source-only builds
 	audit      *audit.Recorder
@@ -111,6 +112,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("tools.Mount: open skill store: %w", err)
 	}
 
+	catalog, err := OpenCatalogStore(filepath.Join(deps.DataDir, "tools-catalog.db"))
+	if err != nil {
+		_ = activation.Close()
+		_ = servers.Close()
+		_ = authored.Close()
+		_ = skills.Close()
+		return fmt.Errorf("tools.Mount: open catalog store: %w", err)
+	}
+
 	// Install the activation store on the process-wide registry and register the
 	// providers this package owns: the external-MCP-server source and the org's
 	// own authored skills.
@@ -124,6 +134,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		servers:    servers,
 		authored:   authored,
 		skills:     skills,
+		catalog:    catalog,
 		kms:        deps.KMS,
 		ai:         deps.AI,
 		audit:      deps.Audit,
@@ -159,6 +170,14 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 	// Discovery + activation.
 	zip.Get(v1, "/tools", o.listTools)
+	// The catalog (catalog.go): our canonical copy of what the public MCP
+	// registries publish, and the two decisions we make about each entry. It hangs
+	// under /v1/tools because it is the SHELF this plane's servers are picked
+	// from — one noun, not a fifth top-level one.
+	zip.Get(v1, "/tools/catalog", o.listCatalog)
+	zip.Post(v1, "/tools/catalog/sync", o.syncCatalog)
+	zip.Get(v1, "/tools/catalog/:id", o.getListing)
+	zip.Patch(v1, "/tools/catalog/:id", o.curateListing)
 	zip.Get(v1, "/tools/activation", o.getActivation)
 	zip.Put(v1, "/tools/activation", o.putActivation)
 	zip.Post(v1, "/tools/call", o.callTool)
@@ -210,6 +229,11 @@ func Shutdown(_ context.Context) error {
 	}
 	if mounted.State.skills != nil {
 		if err := mounted.State.skills.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	if mounted.State.catalog != nil {
+		if err := mounted.State.catalog.Close(); err != nil && first == nil {
 			first = err
 		}
 	}
