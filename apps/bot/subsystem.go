@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// subsystem.go — /v1/bot, the node control plane in the cloud binary.
+// Package bot is /v1/bot, the node control plane: bot nodes on user machines
+// dial in and hold a socket, and an org lists its connected nodes and invokes
+// commands on one, authorized once at the socket.
 //
 //	GET  /v1/bot/connect            the socket a node dials and holds open
 //	GET  /v1/bot/nodes              this org's connected nodes
