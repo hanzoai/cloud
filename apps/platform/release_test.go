@@ -50,7 +50,7 @@ func TestNextVersion(t *testing.T) {
 	}
 }
 
-// The ordering invariant: build → smoke → tag → notify, stopping at the FIRST
+// The ordering invariant: build → smoke → tag → pin, stopping at the FIRST
 // failure — so a failure at build or smoke NEVER reaches the tag seam. No tag without
 // a proven image.
 func TestReleasePlan_Ordering(t *testing.T) {
@@ -65,20 +65,20 @@ func TestReleasePlan_Ordering(t *testing.T) {
 			}
 		}
 		return releasePlan{
-			build:  step("built", stepBuilt),
-			smoke:  step("smoked", stepSmoked),
-			tag:    step("tagged", stepTagged),
-			notify: step("notified", stepNotified),
+			build: step("built", stepBuilt),
+			smoke: step("smoked", stepSmoked),
+			tag:   step("tagged", stepTagged),
+			pin:   step("pinned", stepPinned),
 		}
 	}
 
-	// Happy path: all four run in order, reached = notified.
+	// Happy path: all four run in order, reached = pinned.
 	var calls []string
 	reached, err := mk(stepNone, &calls).run(context.Background())
-	if err != nil || reached != stepNotified {
+	if err != nil || reached != stepPinned {
 		t.Fatalf("happy: reached=%v err=%v", reached, err)
 	}
-	if got := strings.Join(calls, ","); got != "built,smoked,tagged,notified" {
+	if got := strings.Join(calls, ","); got != "built,smoked,tagged,pinned" {
 		t.Fatalf("happy order: %s", got)
 	}
 
@@ -92,24 +92,24 @@ func TestReleasePlan_Ordering(t *testing.T) {
 		t.Fatalf("build-fail MINTED A TAG WITHOUT A PROVEN IMAGE: %v", calls)
 	}
 
-	// Smoke fails: build ran (image pushed), tag/notify did NOT, reached = built.
+	// Smoke fails: build ran (image pushed), tag/pin did NOT, reached = built.
 	calls = nil
 	reached, err = mk(stepSmoked, &calls).run(context.Background())
 	if err == nil || reached != stepBuilt {
 		t.Fatalf("smoke-fail: reached=%v err=%v", reached, err)
 	}
-	if contains(calls, "tagged") || contains(calls, "notified") {
-		t.Fatalf("smoke-fail reached tag/notify (phantom tag): %v", calls)
+	if contains(calls, "tagged") || contains(calls, "pinned") {
+		t.Fatalf("smoke-fail reached tag/pin (phantom tag): %v", calls)
 	}
 
-	// Tag fails: build+smoke ran, notify did NOT, reached = smoked.
+	// Tag fails: build+smoke ran, the pin did NOT move, reached = smoked.
 	calls = nil
 	reached, err = mk(stepTagged, &calls).run(context.Background())
 	if err == nil || reached != stepSmoked {
 		t.Fatalf("tag-fail: reached=%v err=%v", reached, err)
 	}
-	if contains(calls, "notified") {
-		t.Fatalf("tag-fail reached notify: %v", calls)
+	if contains(calls, "pinned") {
+		t.Fatalf("tag-fail reached pin: %v", calls)
 	}
 }
 
@@ -362,24 +362,9 @@ func TestReleaseSeams_FailClosedWithoutTokens(t *testing.T) {
 	}
 }
 
-// A rollout with nowhere to write must FAIL, not report success.
-//
-// This is the property the deleted GitOps mirror destroyed: the old composition
-// passed the step if either writer landed, so an unrollable release still looked
-// released. With one writer there is one answer, and "the image is tagged but not
-// live" is an error — the state a release must never silently claim to have left.
-func TestRolloutFailsWhenThereIsNowhereToWrite(t *testing.T) {
-	if cloud.ServiceReleaserRegistered() {
-		t.Skip("a releaser is registered in this process; the no-writer path is unreachable")
-	}
-	err := rolloutRelease(testService(), context.Background(), "ghcr.io/hanzoai/cloud:v1.0.0", "sha")
-	if err == nil {
-		t.Fatal("rolloutRelease with no registered releaser: want an error, got nil")
-	}
-	if !strings.Contains(err.Error(), "NOT live") {
-		t.Errorf("error should say the image is not live, got: %v", err)
-	}
-}
+// The rollout's fail-honestly property is proven against the writer that actually
+// deploys — see pin_test.go TestRolloutFailsWhenThePinCannotMove. This file's own
+// version tested the CR patch, which never had a CR to write to.
 
 // swapAPIBase points the release seams at url and returns a restore func.
 func swapAPIBase(url string) func() {
