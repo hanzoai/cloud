@@ -435,7 +435,8 @@ func (d *dispatcher) backoff(ctx context.Context, dur time.Duration) {
 // ---- pure helpers ----
 
 // signPayload computes the delivery signature: hex HMAC-SHA256("<t>.<body>") under the
-// endpoint's secret. The header carries it as `t=<t>,v1=<hex>` (Stripe-style), so a
+// endpoint's secret. The header carries it as `t=<t>,v1=<hex>` — the shape every
+// webhook consumer already knows — so a
 // subscriber recomputes v1 over the received timestamp + raw body.
 func signPayload(secret string, ts int64, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
