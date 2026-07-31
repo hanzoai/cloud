@@ -18,11 +18,13 @@ package ai
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	aimod "github.com/hanzoai/ai"
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -139,9 +141,45 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if f := cloud.TierReader(); f != nil {
 		aiobject.SetTierReader(aiobject.TierReaderFunc(f))
 	}
+	// THE BALANCE READ CROSSES THE PROCESS BOUNDARY OVER THE PLANE — ZAP on the
+	// canonical unix socket — never HTTP back through our own edge.
+	//
+	// `ai` is its OWN process, so cloud.BalanceReader() (a package-level var wireFinance
+	// sets in the CLOUD process) is ALWAYS nil here and the ai module fell back to an HTTP
+	// self-call to /v1/billing/balance. That request carries COMMERCE_SERVICE_TOKEN and
+	// no user, so it is not a validated principal at the edge and answers 401 — and the
+	// balance gate is fail-CLOSED, so EVERY completion 503'd (chat, copilot, documents)
+	// on a pod whose ledger was perfectly healthy. Routing money reads back through the
+	// public edge was the mistake; the edge is for customers, the plane is for us.
+	//
+	// commerce already publishes the read as a plane op (apps/commerce/balance_rpc.go
+	// exposeBalance → plane.FinanceBalance) precisely because the ledger has ONE writer
+	// and must be asked, not opened. Ask it the way every other in-tree caller does
+	// (apps/admin/finance, apps/marketplace): typed, over the socket, org-scoped by the
+	// caller — no HTTP hop, no token to mint, no edge to satisfy.
 	if f := cloud.BalanceReader(); f != nil {
+		// Co-resident (the cloud process): the direct in-process read is strictly better.
 		aiobject.SetBalanceReader(aiobject.BalanceReaderFunc(f))
+	} else {
+		aiobject.SetBalanceReader(func(ctx context.Context, subject, namespace, currency string) (int64, error) {
+			if currency == "" {
+				currency = "usd"
+			}
+			bal, err := cloud.Ask[plane.BalanceIn, plane.Balance](
+				cloud.For(ctx, namespace), "commerce", plane.FinanceBalance,
+				&plane.BalanceIn{Subject: subject, Currency: currency})
+			if err != nil {
+				return 0, fmt.Errorf("plane balance read: %w", err)
+			}
+			if bal == nil {
+				return 0, fmt.Errorf("plane balance read: commerce answered nothing")
+			}
+			// Minor units == cents, the same coarse figure the gate compares.
+			return bal.Amount.Minor()
+		})
 	}
+	// The DEBIT crosses the same way, for the same reason — and it must key on the SAME
+	// wallet the gate read, or spend can outrun the balance that admitted it.
 	if f := cloud.UsageRecorder(); f != nil {
 		aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
 			return f(ctx, cloud.UsageEvent{
@@ -149,6 +187,26 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 				Currency: u.Currency, Model: u.Model, Provider: u.Provider,
 				RequestID: u.RequestID,
 			})
+		})
+	} else {
+		aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
+			cur := u.Currency
+			if cur == "" {
+				cur = "usd"
+			}
+			_, err := cloud.Ask[plane.RecordIn, plane.Recorded](
+				cloud.For(ctx, u.Namespace), "commerce", plane.FinanceRecord,
+				&plane.RecordIn{
+					Subject: u.Subject,
+					Amount:  plane.Money{Decimal: u.USD, Currency: cur},
+					Usage: plane.Usage{
+						Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
+					},
+				})
+			if err != nil {
+				return fmt.Errorf("plane usage debit: %w", err)
+			}
+			return nil
 		})
 	}
 	if d := cloud.IngestDialer(); d != nil {
