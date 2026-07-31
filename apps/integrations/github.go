@@ -33,7 +33,8 @@ func init() {
 		Category:     "Developer",
 		Scopes:       nil, // GitHub Apps use installation PERMISSIONS, not OAuth scopes.
 		RedirectPath: callbackPath("github"),
-		Secrets:      nil, // no token custodied: installation tokens are minted on demand, never sealed.
+		MultiAccount: true, // a GitHub App is installed per account; one org may hold several
+		Secrets:      nil,  // no token custodied: installation tokens are minted on demand, never sealed.
 		Configured:   githubConfigured,
 		Creds:        githubCreds,
 		Authorize:    githubAuthorize,

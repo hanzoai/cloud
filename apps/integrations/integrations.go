@@ -218,6 +218,14 @@ type Provider struct {
 	// AdminOnly gates /connect and /disconnect on the caller being an admin of its
 	// OWN org (principal.IsOrgAdmin — NOT SuperAdmin), parity with the platform
 	// deploy-provider adminProcedure. OAuth social/chat providers leave it false.
+	// MultiAccount marks a provider that can be connected once per PROVIDER-SIDE
+	// account. A GitHub App is installed per account, so one org holding hanzoai,
+	// hanzo-apps and hanzo-docs holds three connections; the account name is then
+	// part of the key and each row carries its own installation. A provider with
+	// one account per org leaves this false and keeps an empty owner, which is what
+	// its callers look up.
+	MultiAccount bool
+
 	AdminOnly bool
 	// Verify validates an apikey credential against the provider and returns the
 	// token(s) to seal + non-secret account metadata. It MUST fail closed (a
@@ -297,8 +305,8 @@ func register(p *Provider) {
 type state struct {
 	store      *Store
 	kms        cloud.KMSClient // the store, reached in-process or over the internal plane; nil ⇒ secret ops fail closed
-	consoleURL string      // where the callback 302s the user back to
-	stateKey   []byte      // HMAC-SHA256 key for the CSRF/org-binding state
+	consoleURL string          // where the callback 302s the user back to
+	stateKey   []byte          // HMAC-SHA256 key for the CSRF/org-binding state
 	providers  map[string]*Provider
 	flight     *flight // keyed in-process mutex: refresh + device-poll serialization
 }
@@ -1092,8 +1100,14 @@ func connectByCredential(s *cloud.Service[state], ctx context.Context, org strin
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "secret custody failed")
 	}
 	conn := Connection{
-		Org:          org,
-		Provider:     p.ID,
+		Org:      org,
+		Provider: p.ID,
+		// The provider-side account this connection is FOR, and part of the key when
+		// the provider can hold several. Without it a second account collides with
+		// the first and silently replaces it — the failure the key exists to
+		// prevent. AccountLabel is the same value, which is why the migration could
+		// recover it for rows written before the key was widened.
+		Owner:        connOwner(p, res),
 		ExternalID:   res.ExternalID,
 		AccountLabel: res.AccountLabel,
 		BotUserID:    res.BotUserID,
@@ -1231,8 +1245,10 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 		return failRedirect(s, c, p.ID, "secret custody failed")
 	}
 	conn := Connection{
-		Org:          payload.Org,
-		Provider:     p.ID,
+		Org:      payload.Org,
+		Provider: p.ID,
+		Owner:    connOwner(p, res), // part of the key — see the connect path
+
 		ExternalID:   res.ExternalID,
 		AccountLabel: res.AccountLabel,
 		BotUserID:    res.BotUserID,
@@ -1394,6 +1410,15 @@ func kmsReady(s *cloud.Service[state]) bool { return s.State.kms != nil }
 // kmsPath is the per-org, per-provider KMS namespace: /orgs/{org}/integrations/{provider}.
 // org is validOrg-checked at every entry point, so it can never smuggle path
 // structure; provider is a fixed registry slug.
+// connOwner is the account a connection is keyed by. Only a MultiAccount provider
+// gets one; everything else keeps the empty owner its callers resolve.
+func connOwner(p *Provider, res *ExchangeResult) string {
+	if p == nil || !p.MultiAccount || res == nil {
+		return ""
+	}
+	return res.AccountLabel
+}
+
 func kmsPath(org, provider string) string {
 	return "/orgs/" + org + "/integrations/" + provider
 }
