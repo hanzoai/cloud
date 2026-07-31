@@ -167,6 +167,43 @@ func (b *bus) connect(ctx context.Context) (*infra.PubSubClient, error) {
 	return cl, nil
 }
 
+// planeReady answers the ONE question a liveness probe has to ask about the write
+// path: would an ingest succeed right now?
+//
+// It answers it by WALKING THE INGEST PATH ITSELF — the same connect, the same
+// stream, the same names — because a probe that asks its own private version of the
+// question is a probe that can disagree with production, and it did: /v1/analytics/health
+// reported ok on datastore connectivity alone while 100% of writes 503'd on the bus,
+// so a total ingest outage was invisible to monitoring. A second notion of "healthy"
+// is what made that possible, so there is not one here.
+//
+// It re-reads the STREAM on every probe rather than trusting the cached connection,
+// because the cache says a client was built once, not that the plane is still there —
+// the stream is exactly what went missing. On any failure it drops the cached
+// connection, so the probe also heals: the next publish re-dials and re-ensures
+// instead of riding a client that is known bad.
+func planeReady(ctx context.Context) error {
+	cl, err := conn.connect(ctx)
+	if err != nil {
+		return err
+	}
+	nc := cl.Conn()
+	if nc == nil || !nc.IsConnected() {
+		conn.drop()
+		return fmt.Errorf("%w: not connected to %s", errBusUnavailable, busURL())
+	}
+	js := cl.JetStream()
+	if js == nil {
+		conn.drop()
+		return fmt.Errorf("%w: jetstream not enabled on %s", errBusUnavailable, busURL())
+	}
+	if _, err := js.Stream(ctx, EventStream); err != nil {
+		conn.drop()
+		return fmt.Errorf("%w: stream %s: %v", errBusUnavailable, EventStream, err)
+	}
+	return nil
+}
+
 // EnsureEventStream RECONCILES the event plane to the configuration this package chose
 // for it, creating it when absent. It is the ONE declaration of that configuration
 // anywhere in the platform.
@@ -204,13 +241,92 @@ func (b *bus) connect(ctx context.Context) (*infra.PubSubClient, error) {
 // platform-wide defect (every other stream in the fleet is declared through it and is
 // equally undeclarable after creation); fixing it there is a change to hanzoai/commerce
 // and to every stream owner at once, which is not this package's to make.
+// A STREAM IS NOT RENAMEABLE, which is the failure this function has to survive.
+// CreateOrUpdateStream reconciles a stream by NAME; JetStream binds subjects by
+// OWNERSHIP. So when the plane's name changes — EVENTS to EVENT, the day
+// apps/webhooks stopped declaring a plane it only consumes — the old stream keeps
+// event.> and the new name can never bind it. Every publish then 503s, forever,
+// and no restart, redeploy or rollback clears it: the store is durable, so the
+// stale stream outlives the code that made it. That is not a race that resolves,
+// it is a deadlock that needs a migration, and a plane that cannot migrate itself
+// is a plane that takes ingest down until somebody notices.
+//
+// So the ensure RETIRES the earlier generation. See retire for what it will and
+// will not remove.
 func EnsureEventStream(ctx context.Context, cl *infra.PubSubClient) error {
 	js := cl.JetStream()
 	if js == nil {
 		return fmt.Errorf("jetstream not enabled on %s", busURL())
 	}
 	_, err := js.CreateOrUpdateStream(ctx, eventStream)
+	if !overlaps(err) {
+		return err
+	}
+	if err := retire(ctx, js); err != nil {
+		return err
+	}
+	_, err = js.CreateOrUpdateStream(ctx, eventStream)
 	return err
+}
+
+// errSubjectOverlap is JetStream's refusal to bind subjects another stream already
+// holds. The client names every code it can return except this one, so the number
+// is written out here rather than matched on the description — the description is
+// prose and not part of the wire contract.
+const errSubjectOverlap jetstream.ErrorCode = 10065
+
+// overlaps reports whether err is exactly that refusal.
+func overlaps(err error) bool {
+	var api *jetstream.APIError
+	return errors.As(err, &api) && api.ErrorCode == errSubjectOverlap
+}
+
+// retire removes the stream that holds this plane's subjects under a name that is
+// no longer the plane's, so the canonical name can bind them.
+//
+// IT REFUSES TO DESTROY DATA, and that is the whole of its judgement. A stream
+// carrying messages is somebody's undrained hand-off whatever it is called, so
+// retire does not touch it — it returns an error NAMING the stream, its subjects
+// and its depth, which is the report an operator can act on and the opaque
+// "subjects overlap with an existing stream" never was. Only an EMPTY stream is
+// removed, because an empty stream is a name and nothing else.
+//
+// IT NEVER TOUCHES A TENANT'S STREAM. A tenant cannot reach these subjects in the
+// first place — the tenant door roots every subject it accepts at pub.<org>.
+// (apps/pubsub) — so this cannot trigger today. It is here because the cost of
+// being wrong is a customer's stream, and the check is one comparison: if the
+// door's rooting ever regressed, this refuses instead of deleting.
+func retire(ctx context.Context, js jetstream.JetStream) error {
+	for _, subject := range EventSubjects {
+		name, err := js.StreamNameBySubject(ctx, subject)
+		if err != nil {
+			return fmt.Errorf("%s is held by another stream, which could not be identified: %w", subject, err)
+		}
+		if name == EventStream {
+			continue
+		}
+		st, err := js.Stream(ctx, name)
+		if err != nil {
+			return fmt.Errorf("stream %s holds %s and could not be read: %w", name, subject, err)
+		}
+		info, err := st.Info(ctx)
+		if err != nil {
+			return fmt.Errorf("stream %s holds %s and its state could not be read: %w", name, subject, err)
+		}
+		if strings.HasPrefix(name, pubsub.TenantPrefix) {
+			return fmt.Errorf("stream %s is a TENANT stream and holds %s, which belongs to the platform event plane; "+
+				"refusing to remove it — the tenant door must not be able to bind this subject", name, subject)
+		}
+		if info.State.Msgs > 0 {
+			return fmt.Errorf("stream %s holds %s (subjects %v) with %d undrained message(s); "+
+				"refusing to remove it — drain or delete it to release the subject to %s",
+				name, subject, info.Config.Subjects, info.State.Msgs, EventStream)
+		}
+		if err := js.DeleteStream(ctx, name); err != nil {
+			return fmt.Errorf("retiring empty stream %s, which held %s: %w", name, subject, err)
+		}
+	}
+	return nil
 }
 
 // eventStream is that configuration as a VALUE, so what the plane is declared to be can
