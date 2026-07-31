@@ -1032,6 +1032,19 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 						// dropping ALL caps or setting no-new-privs breaks the user-namespace
 						// setup (proven by an on-cluster canary). The isolation win over the
 						// previous privileged=true is already decisive.
+						// A build's working set is DISK: the git clone, the module cache,
+						// 112 plugin binaries, the exported layer cache. With no request the
+						// pod is best-effort for ephemeral-storage, so the scheduler will
+						// place it on a node that has no room and the kubelet evicts it
+						// FIRST when that node fills — which is how a release died with
+						// "The node was low on resource: ephemeral-storage … request is 0"
+						// after ten minutes of work. Declaring the request is what lets the
+						// scheduler avoid a full node; the limit bounds a runaway build
+						// instead of letting it take the node down for everything else.
+						"resources": map[string]any{
+							"requests": map[string]any{"ephemeral-storage": "20Gi"},
+							"limits":   map[string]any{"ephemeral-storage": "60Gi"},
+						},
 						"securityContext": map[string]any{
 							"privileged":      false,
 							"runAsUser":       int64(1000),
