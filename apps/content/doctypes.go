@@ -19,10 +19,10 @@
 //     side-effecting lifecycle transition, and the generate/publish orchestration
 //     that reaches out to zen5 (deps.AI), studio, and hanzoai/social.
 //
-// Blog posts, pages, and articles remain the cms module's Page/Post/Article; phase 2
-// widens their status field to this shared lifecycle so ONE state machine governs all
-// publishable content. The marketing module owns the campaign/social/asset types the
-// cms lane does not.
+// The marketing module's `status` is therefore the ONE publishable-content lifecycle
+// in service. apps/cms declares a second content model (Page/Post/Article) on its own
+// Draft/Published field, but no binary imports that package, so its init never runs,
+// the "cms" module is never registered, and no org can install it.
 package content
 
 import "github.com/hanzoai/cloud/apps/framework"
