@@ -68,7 +68,7 @@ func host(t *testing.T) *zip.App {
 		}
 	}
 	health(app, absent)
-	spec(app)
+	spec(app, manifest.Names()) // no --enable: the whole fleet, as production runs it
 	if err := webui.Mount(app); err != nil {
 		t.Skipf("console embed unavailable in this build: %v", err)
 	}
@@ -148,6 +148,36 @@ func TestTheServedDocumentIsTheArtifact(t *testing.T) {
 			len(served), golden, len(committed))
 	}
 	t.Logf("%d paths served, byte-identical to %s", len(served), golden)
+}
+
+// TestTheDocumentIsScopedToWhatTheDeploymentRuns keeps the property the fused
+// binary had for free and the host could silently lose: the spec describes THIS
+// deployment.
+//
+// A white-label that runs a subset (--enable / CLOUD_ENABLE) must not publish the
+// subsystems it does not run — a route in the document that 404s on the wire is
+// the same lie as a route on the wire that is not in the document, and cheaper to
+// ship. Production names no allowlist, which is why the artifact comparison above
+// is the whole fleet.
+func TestTheDocumentIsScopedToWhatTheDeploymentRuns(t *testing.T) {
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	spec(app, []string{"kms", "flags"})
+
+	_, _, body := do(t, app, openapi.Path)
+	served := paths(t, "a two-app deployment", []byte(body))
+	if len(served) == 0 {
+		t.Fatal("a scoped deployment published NOTHING")
+	}
+	for p := range served {
+		if p == openapi.Path {
+			continue // the door itself, which every deployment serves
+		}
+		if !strings.HasPrefix(p, "/v1/kms") && !strings.HasPrefix(p, "/v1/flags") {
+			t.Errorf("a deployment running only kms and flags publishes %q — an SDK generated "+
+				"off this document offers a call that 404s here", p)
+		}
+	}
+	t.Logf("%d paths for a two-app deployment (the whole fleet is %d)", len(served), len(manifest.Apps))
 }
 
 // paths is a document's path set, whatever encoding it arrived in — sigs.k8s.io/yaml
