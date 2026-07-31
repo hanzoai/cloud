@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package commerce is the merchant plane: checkout, subscriptions, invoices, spend alerts, payment webhooks and the store/catalog CMS, embedded from hanzoai/commerce and mounted on cloud's own router.",
+    "description": "Package commerce is selling: checkout, subscriptions, invoices, spend alerts, payment webhooks and the storefront catalog.",
     "version": "v1"
   },
   "servers": [

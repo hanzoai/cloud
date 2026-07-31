@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package plan is the plan catalog at /v1/plans/*: every purchasable tier — cloud, subscription, blockchain, DNS, GPU, storage — with what it costs, what it grants (the entitlement vocabulary and its JSON Schema), and a resolver from a plan id to both.",
+    "description": "Package plan is the plan catalog: every tier you can buy, what it costs, and what it grants.",
     "version": "v1"
   },
   "servers": [

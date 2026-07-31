@@ -1,6 +1,8 @@
-// Package auditlog mounts the ORG-SCOPED audit trail surface (GET /v1/audit): an
-// org admin's read of THEIR OWN organization's security-relevant events off the
-// same tamper-evident, hash-chained store the AuditTrail middleware writes and the
+// Package auditlog is your org's tamper-evident audit trail: every security-relevant
+// event, hash-chained and readable.
+//
+// It mounts the ORG-SCOPED surface GET /v1/audit — an org admin's read of THEIR OWN
+// organization's events off the same store the AuditTrail middleware writes and the
 // admin god-view (/v1/admin/audit) reads.
 //
 // WHY THIS EXISTS. An enterprise buyer's own compliance team must be able to see

@@ -1,7 +1,8 @@
-// Package principal is the ONE place the cloud data plane turns a request into an
-// org. Every subsystem that reads or writes per-org data resolves its org
-// through here, so the trust decision lives once and can never drift between six
-// hand-rolled copies.
+// Package principal is the guarantee that one org never reads another's data.
+//
+// It is the ONE place the cloud data plane turns a request into an org. Every
+// subsystem that reads or writes per-org data resolves its org through here, so the
+// trust decision lives once and can never drift between six hand-rolled copies.
 //
 // THE TRUST SIGNAL. zip.Ctx.Org()/User()/IsAdmin() read the X-Org-Id /
 // X-User-Id / X-User-IsAdmin request headers. In production the gateway

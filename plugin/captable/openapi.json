@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package captable is the org's cap table: stakeholders, share classes, share certificates and transfers, option grants and equity plans, SAFEs and convertible notes, priced rounds and their investments, and the summary that totals outstanding and fully-diluted ownership from them.",
+    "description": "Package captable is your cap table: stakeholders, share classes, grants, SAFEs, rounds, and who owns what.",
     "version": "v1"
   },
   "servers": [

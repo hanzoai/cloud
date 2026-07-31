@@ -1,6 +1,9 @@
-// Package finance is the prepaid wallet: a per-CUSTOMER, double-entry balance on the
-// native ledger core (apps/treasury/ledger, the same engine the platform reserve posts
-// to). It registers NO routes and NO ops — it is the in-process implementation of
+// Package finance is the prepaid wallet your org pays from: deposits in, usage
+// debits out, always balanced.
+//
+// It is a per-CUSTOMER, double-entry balance on the native ledger core
+// (apps/treasury/ledger, the same engine the platform reserve posts to). It
+// registers NO routes and NO ops — it is the in-process implementation of
 // cloud's types.FinanceClient (package alias finance.Client, mirroring commerce.Client),
 // the ONE money seam the ai prepaid gate, the admin grant, commerce's credit mint and
 // the edge meter all bill through; billing is the customer-facing door onto it.

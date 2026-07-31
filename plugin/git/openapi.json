@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package git mounts the Hanzo Cloud /v1/git surface: S3-backed Git hosting native in the unified cloud binary — Hanzo Git, the internal git host foundation agents push code into.",
+    "description": "Package git is Git hosting for your org: create repos, clone, push, and see what they cost.",
     "version": "v1"
   },
   "servers": [

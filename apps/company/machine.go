@@ -1,5 +1,8 @@
-// Package company mounts /v1/company — Hanzo Company, the Stripe-Atlas-class
-// incorporation + fundraising product. It runs ONE formation state machine per
+// Package company is incorporation end to end: pick a structure, add founders, pay,
+// file, and e-sign.
+//
+// It mounts /v1/company — Hanzo Company, the Stripe-Atlas-class incorporation +
+// fundraising product. It runs ONE formation state machine per
 // org: choose a structure (C-Corp / LLC / DAO-LLC) → add founders + KYC → pay the
 // one-time $999 fee → generate formation documents → e-sign them → record the cap
 // table's equity genesis on-chain → upgrade the org to a "company". An

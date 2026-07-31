@@ -1,5 +1,7 @@
-// Package kms is secret custody: per-org secrets sealed at rest, read and written
-// over /v1/kms, and signed by the MPC ring.
+// Package kms is secret custody: your org's secrets sealed at rest, plus threshold
+// signing.
+//
+// Secrets are read and written over /v1/kms; signing is done by the MPC ring.
 //
 // It embeds luxfi/kms in-process inside the unified Hanzo Cloud binary per
 // HIP-0106 ("all Go embeds in cloud"), replacing the legacy Infisical fork.

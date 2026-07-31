@@ -49987,8 +49987,8 @@ paths:
 servers:
 - url: https://api.hanzo.ai
 tags:
-- description: Package admin mounts the god-mode admin surface (/v1/admin/*) the Hanzo
-    Admin Console (admin.hanzo.ai, apps/operator) calls, per the api.ts contract.
+- description: 'Package admin is the operator''s view of the fleet: orgs, users, roles,
+    spend and system health.'
   name: admin
 - description: 'Package ads is paid advertising: ad campaigns with an objective, a
     budget and reported spend, launched and paused on Meta, Google, TikTok, Reddit,
@@ -50012,10 +50012,8 @@ tags:
   name: analytics
 - description: 'Package ask is the UNIFIED GROUNDED ADVISOR: POST /v1/ask.'
   name: ask
-- description: 'Package auditlog mounts the ORG-SCOPED audit trail surface (GET /v1/audit):
-    an org admin''s read of THEIR OWN organization''s security-relevant events off
-    the same tamper-evident, hash-chained store the AuditTrail middleware writes and
-    the admin god-view (/v1/admin/audit) reads.'
+- description: 'Package auditlog is your org''s tamper-evident audit trail: every
+    security-relevant event, hash-chained and readable.'
   name: audit
 - description: 'Package authors is the OSS royalty program: an author links GitHub,
     proves they own a repo, and earns a royalty on the metered spend of every org
@@ -50036,16 +50034,14 @@ tags:
     any model or endpoint, under ONE standardized harness, measure Hanzo''s own models
     (enso, zen), and reconcile any external provider-reported claim against that measurement.'
   name: benchmark
-- description: 'Package billing is the customer''s own money door: what my org holds,
-    what it has spent, and the cards it pays with.'
+- description: Package billing is your org's balance, what it has spent, and the cards
+    it pays with.
   name: billing
 - description: 'Package blueprint mounts the Hanzo Cloud /v1/blueprint/* surface:
     the compute-cost basis for the OSS-template economy.'
   name: blueprint
-- description: 'Package books is double-entry accounting at /v1/books: a fixed chart
-    of accounts, an append-only general ledger, bank feeds with reconciliation, receipt
-    scanning, and the trial-balance / P&L / balance-sheet reports that prove the books
-    balance.'
+- description: 'Package books is double-entry accounting: chart of accounts, ledger,
+    bank reconciliation, and the reports that prove the books balance.'
   name: books
 - description: 'Package bot is /v1/bot, the node control plane: bot nodes on user
     machines dial in and hold a socket, and an org lists its connected nodes and invokes
@@ -50060,10 +50056,8 @@ tags:
     creatives, schedule, budget — launched across paid, organic and email channels
     at once, and read back as one funnel with each channel''s spend.'
   name: campaign
-- description: 'Package captable is the org''s cap table: stakeholders, share classes,
-    share certificates and transfers, option grants and equity plans, SAFEs and convertible
-    notes, priced rounds and their investments, and the summary that totals outstanding
-    and fully-diluted ownership from them.'
+- description: 'Package captable is your cap table: stakeholders, share classes, grants,
+    SAFEs, rounds, and who owns what.'
   name: captable
 - description: 'Package catalog is the CROSS-ORG discovery lens: one place to find
     every project, app and site the fleet has built, whichever org built it.'
@@ -50085,17 +50079,14 @@ tags:
     per-org code-intelligence engine for AI coding agents and the hanzo.app UI.'
   name: code
 - name: collections
-- description: 'Package commerce is the merchant plane: checkout, subscriptions, invoices,
-    spend alerts, payment webhooks and the store/catalog CMS, embedded from hanzoai/commerce
-    and mounted on cloud''s own router.'
+- description: 'Package commerce is selling: checkout, subscriptions, invoices, spend
+    alerts, payment webhooks and the storefront catalog.'
   name: commerce
-- description: Package company mounts /v1/company — Hanzo Company, the Stripe-Atlas-class
-    incorporation + fundraising product.
+- description: 'Package company is incorporation end to end: pick a structure, add
+    founders, pay, file, and e-sign.'
   name: company
-- description: 'Package compliance mounts the ORG-SCOPED compliance operations surface
-    (/v1/compliance): the company''s own KYC/KYB onboarding verification, accreditation
-    STATE TRACKING, and a compliance-scoped read of the tamper-evident audit trail
-    (the SOC 2 posture surface).'
+- description: Package compliance is your KYC/KYB onboarding, accreditation records,
+    and the evidence trail behind them.
   name: compliance
 - name: compute
 - name: connector
@@ -50142,8 +50133,8 @@ tags:
 - name: edge
 - name: embed-status
 - name: enablement
-- description: 'Package entitlements answers "what may this org run": what its plan
-    GRANTS, and which of those products it has actually TURNED ON.'
+- description: 'Package entitlements is what your org may run: what the plan grants,
+    and which of those products are switched on.'
   name: entitlements
 - name: environments
 - name: errors
@@ -50183,9 +50174,8 @@ tags:
 - description: 'Package gateway is the /v1/gateway subsystem: the RUNTIME config plane
     for the cloud edge ("gateway role").'
   name: gateway
-- description: 'Package git mounts the Hanzo Cloud /v1/git surface: S3-backed Git
-    hosting native in the unified cloud binary — Hanzo Git, the internal git host
-    foundation agents push code into.'
+- description: 'Package git is Git hosting for your org: create repos, clone, push,
+    and see what they cost.'
   name: git
 - name: gpus
 - description: 'Package guide mounts the Hanzo Cloud /v1/guide/* surface: the Business
@@ -50207,17 +50197,14 @@ tags:
     /v1/ingress subsystem.
   name: ingress
 - name: insights
-- description: Package integrations is the generic, provider-agnostic OAuth connector
-    plane for the unified Hanzo Cloud binary — the /v1/integrations surface that lets
-    an org connect a third-party account (Slack today; GitHub scaffolded; Google /
-    Salesforce plug into the SAME registry later) and hands the resulting per-org
-    tokens to KMS custody.
+- description: Package integrations is how your org connects third-party accounts
+    like Slack, and revokes them.
   name: integrations
 - name: k8s
 - name: kb
 - name: keys
-- description: 'Package kms is secret custody: per-org secrets sealed at rest, read
-    and written over /v1/kms, and signed by the MPC ring.'
+- description: 'Package kms is secret custody: your org''s secrets sealed at rest,
+    plus threshold signing.'
   name: kms
 - name: kv
 - description: 'Package legal mounts the ORG-SCOPED legal-document surface (/v1/legal):
@@ -50260,9 +50247,8 @@ tags:
     credential, and notify.Send (send.go) is that same rail for in-process callers
     — one sender, never a second provider path.'
   name: notify
-- description: 'Package o11y is the ONE owner of the cloud binary''s observability
-    plane — registered as a SINGLE `o11y` subsystem (this file''s init) that internally
-    mounts, in the load-bearing order, every part of the concept:'
+- description: 'Package o11y is your logs, metrics and traces: ship them in, query
+    them, chart them.'
   name: o11y
 - name: oracles
 - name: orgs
@@ -50277,14 +50263,11 @@ tags:
     what each host is running, and the operations that change it — enable, disable,
     reload, and pin to (or roll back to) a named version.'
   name: plugins
-- description: 'Package prefs is the per-USER preference plane for the unified Hanzo
-    Cloud binary: the /v1/prefs surface behind the user menu on every Hanzo surface
-    (console, insights, and anything else that renders "signed in as").'
+- description: Package prefs is your own settings — theme, density, pinned nav — following
+    you across every Hanzo app.
   name: prefs
 - description: 'Package pricing is the price list: what every model, provider, GPU
-    tier, tool and hosting plan costs, at /v1/pricing/* and /v1/pricing-policy — plus
-    the enablement registry that decides which catalog entries a caller may even see
-    (/v1/enablement{,/optin,/optout} and the SuperAdmin /v1/admin/{catalog,enablement}).'
+    tier, tool and hosting plan costs.'
   name: pricing
 - name: pricing-policy
 - description: 'Package projects is the Hanzo Cloud projects control plane: the ONE
@@ -50311,21 +50294,18 @@ tags:
 - name: run
 - name: runner
 - name: s3
-- description: 'Package sbom is the software bill of materials for container images:
-    CI posts a CycloneDX SBOM keyed by image digest, and /v1/sbom resolves an image''s
-    component set back by digest or image ref.'
+- description: 'Package sbom is what is inside a container image: every component,
+    resolvable by digest or image ref.'
   name: sbom
 - name: scrape
 - name: search
 - name: search-docs
-- description: 'Package security is the code-security scan surface (/v1/security):
-    submit source files, the pure detect engine finds hardcoded secrets, and findings
-    persist masked and fingerprinted — never the raw secret.'
+- description: 'Package security is secret scanning for your code: submit sources,
+    get findings, masked never raw.'
   name: security
 - name: sentry
-- description: 'Package settings is the per-org, per-product configuration plane for
-    the unified Hanzo Cloud binary: the /v1/settings/:product surface behind every
-    product''s detail view in console.hanzo.ai (#59).'
+- description: Package settings is how an org configures each product it uses, secret
+    fields included.
   name: settings
 - description: Package share fronts the zrok controller so a Hanzo org can publish
     a local service to a public https://<token>.share.hanzo.ai URL — "ngrok on our
@@ -50346,10 +50326,8 @@ tags:
     the unified cloud binary per HIP-0106 — the follow-up named in cloud's durable.go
     ("consolidating that surface into cloud").
   name: tasks
-- description: 'Package team is Hanzo Team, the org''s shared workspace: IAM sign-in
-    and workspace selection, the transactor WebSocket a workspace''s documents ride,
-    collaborative editing on /collaborator, per-workspace files, the wallet page with
-    its plan + seats, and the org''s agents projected in as bot members.'
+- description: 'Package team is your org''s shared workspace: documents edited together,
+    files, seats, and agents as teammates.'
   name: team
 - description: 'Package templates mounts /v1/templates — the Hanzo starter-kit gallery,
     in TWO layers that never mix:'
@@ -50361,16 +50339,16 @@ tags:
     a per-(org,project) activation state, and an optional price.'
   name: tools
 - name: traces
-- description: 'Package tracker mounts the Hanzo Cloud /v1/tracker/* surface: a native-Go,
-    per-org issue tracker (projects + issues) on SQLite.'
+- description: 'Package tracker is your org''s issue tracker: projects, issues, and
+    the filters to find them.'
   name: tracker
 - name: train
 - description: Package translate serves POST /v1/translate — the ONE translation surface,
     two tiers behind one endpoint, one auth path, one meter (HIP-0516).
   name: translate
 - name: upload
-- description: 'Package usage is the usage plane at /v1/usage: what an org ran, what
-    it cost, and the per-account breakdown, over one window grammar.'
+- description: Package usage is what your org ran and what it cost, broken down per
+    account.
   name: usage
 - description: 'Package validators mounts the Hanzo Cloud /v1/validators/* surface:
     the "click → provision node + queue registration" pipeline behind GDA/SDM validator
@@ -50378,10 +50356,8 @@ tags:
   name: validators
 - name: vector
 - name: vpcs
-- description: 'Package wallets is blockchain key custody at /v1/wallets/*: create
-    an account and its wallets, rotate their key material, and sign with them — over
-    one custody seam with FOUR interchangeable signing backends, selected PER WALLET
-    by its Kind.'
+- description: 'Package wallets is blockchain key custody: create wallets, rotate
+    their keys, and sign with them.'
   name: wallets
 - description: 'Package webhooks is the platform-global webhook layer (HIP-0106):
     ONE registry plus ONE dispatcher that delivers ANY event on the platform bus to
@@ -50396,6 +50372,6 @@ tags:
     into one NewsItem stream, applies the project''s keyword/region/source filter,
     and serves it over REST + SSE.'
   name: world
-- description: 'Package x402 is the Hanzo Cloud native x402 pay-per-use subsystem
-    (HTTP 402): challenge → the client pays → proof submitted → verify → serve → settle.'
+- description: 'Package x402 is pay-per-request over HTTP 402: quote a price, take
+    the payment, serve the resource.'
   name: x402

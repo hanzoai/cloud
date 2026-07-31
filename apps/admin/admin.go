@@ -1,4 +1,7 @@
-// Package admin mounts the god-mode admin surface (/v1/admin/*) the Hanzo Admin Console
+// Package admin is the operator's view of the fleet: orgs, users, roles, spend and
+// system health.
+//
+// It mounts the god-mode surface (/v1/admin/*) the Hanzo Admin Console
 // (admin.hanzo.ai, apps/operator) calls, per the api.ts contract.
 //
 // It is an AGGREGATOR, not a new store: identity (orgs/users/roles/applications/audit/me)

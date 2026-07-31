@@ -1,10 +1,11 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-// Package commerce is the merchant plane: checkout, subscriptions, invoices,
-// spend alerts, payment webhooks and the store/catalog CMS, embedded from
-// hanzoai/commerce and mounted on cloud's own router. It is not the wallet —
-// EmbedConfig.Ledger injects apps/finance, so a credit minted here lands in the
-// one ledger of record.
+// Package commerce is selling: checkout, subscriptions, invoices, spend alerts,
+// payment webhooks and the storefront catalog.
+//
+// It is the merchant half, embedded from hanzoai/commerce and mounted on cloud's
+// own router. It is not the wallet — EmbedConfig.Ledger injects apps/finance, so a
+// credit minted here lands in the one ledger of record.
 //
 // This file mounts that MODULE into a cloud binary (HIP-0106) via the NATIVE
 // co-residence contract: commerce registers its routes

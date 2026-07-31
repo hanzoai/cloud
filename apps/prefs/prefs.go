@@ -1,6 +1,9 @@
-// Package prefs is the per-USER preference plane for the unified Hanzo Cloud
-// binary: the /v1/prefs surface behind the user menu on every Hanzo surface
-// (console, insights, and anything else that renders "signed in as").
+// Package prefs is your own settings — theme, density, pinned nav — following you
+// across every Hanzo app.
+//
+// It is the per-USER preference plane for the unified Hanzo Cloud binary: the
+// /v1/prefs surface behind the user menu on every Hanzo surface (console, insights,
+// and anything else that renders "signed in as").
 //
 // ONE preference store, EVERY surface. A user's theme, density, and pinned nav
 // follow them between products instead of each app keeping its own copy in its
