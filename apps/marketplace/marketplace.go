@@ -2,7 +2,7 @@
 // install of tools + agents per org/project, plus monetized listings that declare a
 // price + recipient wallet and enforce through the x402 seam.
 //
-// It is a THIN layer over the unified tool plane (clients/tools): discovery reads
+// It is a THIN layer over the unified tool plane (apps/tools): discovery reads
 // the tool registry (every source, activated flags); "install"/"uninstall" ARE the
 // registry's activation writes (marketplace install == tool activation — one store,
 // one truth); and a monetized listing's price reaches per-call enforcement via the

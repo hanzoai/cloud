@@ -1,7 +1,7 @@
 // Package catalogsync is the REVERSE half of the storefront loop: it consumes the
 // commerce COMMERCE stream and turns each `commerce.product.created` into ONE
 // content.EnsureCatalogAsset call, so a newly-created catalog product gets its ecom
-// asset rendered (design == slug) — the mirror of the forward edge (clients/content
+// asset rendered (design == slug) — the mirror of the forward edge (apps/content
 // storefront.go) that publishes a rendered asset back onto the product image.
 //
 // It is a thin, in-process consumer subsystem: the mapping/idempotency/skip logic lives
