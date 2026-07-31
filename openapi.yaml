@@ -3141,6 +3141,117 @@ components:
         severity:
           type: string
       type: object
+    MCPListing:
+      properties:
+        description:
+          description: Description is the publisher's one-line summary.
+          type: string
+        featured:
+          description: Featured puts the listing on the front of the shelf. Curation.
+          type: boolean
+        hidden:
+          description: |-
+            Hidden keeps the listing out of the org-visible catalog. Curation: a sync
+            never changes it. Only a SuperAdmin sets it, and only a SuperAdmin sees a
+            hidden entry listed.
+          type: boolean
+        id:
+          description: |-
+            ID addresses the listing in a URL. It is the reverse-DNS NAME with its one
+            slash written as an underscore — reversible, because a namespace never
+            contains an underscore — so the id is readable and stable rather than a
+            hash that means nothing to whoever reads a link.
+          type: string
+        logo:
+          description: |-
+            Logo is the brand mark to render for the listing — the publisher's icon when
+            the entry carries one, or the one an admin set. Curation.
+          type: string
+        name:
+          description: Name is the publisher's reverse-DNS name, e.g. "com.stripe/mcp".
+          type: string
+        official:
+          description: |-
+            Official is whether this is the vendor's OWN server rather than someone
+            else's copy of it. Derived on every sync (see isOfficial) until a
+            SuperAdmin sets it explicitly, after which the admin's answer stands.
+          type: boolean
+        packages:
+          description: |-
+            Packages are the runnable package forms — npm, pypi, oci — each with the
+            runtime that launches it and the transport it then speaks.
+          items:
+            $ref: '#/components/schemas/MCPPackage'
+          type: array
+        registry:
+          description: Registry is the upstream this row was synced from.
+          type: string
+        remotes:
+          description: Remotes are the hosted endpoints the publisher serves the server
+            at.
+          items:
+            $ref: '#/components/schemas/MCPRemote'
+          type: array
+        repo:
+          description: Repo is the source repository URL, when the entry names one.
+          type: string
+        site:
+          description: Site is the project's homepage, when the entry names one.
+          type: string
+        synced:
+          description: Synced is when this row was last confirmed against upstream,
+            Unix seconds.
+          type: integer
+        title:
+          description: Title is the human-readable display name, when the entry carries
+            one.
+          type: string
+        transports:
+          description: |-
+            Transports are the distinct transports this server can be reached over,
+            sorted: some of "stdio", "streamable-http", "sse". A listing with
+            "streamable-http" is one an org can enable here and now; a listing that is
+            only "stdio" needs a process to run it.
+          items:
+            type: string
+          type: array
+        vendor:
+          description: Vendor is the namespace half of Name — the publisher, e.g.
+            "com.stripe".
+          type: string
+        version:
+          description: Version is the published version of this listing.
+          type: string
+      type: object
+    MCPPackage:
+      properties:
+        identifier:
+          description: Identifier is the package name or download URL.
+          type: string
+        registry:
+          description: 'Registry is where the package is fetched from: npm, pypi,
+            oci, nuget, mcpb.'
+          type: string
+        runtime:
+          description: 'Runtime is the publisher''s hint for what launches it: npx,
+            uvx, docker.'
+          type: string
+        transport:
+          description: 'Transport is what the launched process speaks: usually "stdio".'
+          type: string
+        version:
+          description: Version is the exact published package version.
+          type: string
+      type: object
+    MCPRemote:
+      properties:
+        transport:
+          description: Transport is "streamable-http" or "sse".
+          type: string
+        url:
+          description: URL is the endpoint.
+          type: string
+      type: object
     MCPServer:
       properties:
         authHeader:
@@ -3161,11 +3272,23 @@ components:
             ID is the server's id within the org. It also PREFIXES every tool name the
             server contributes, which is what keeps two servers' "search" apart.
           type: string
+        listing:
+          description: |-
+            Listing is the catalog entry this server was enabled from, when it was.
+            Empty means the org typed the URL in itself.
+          type: string
         name:
           description: Name is the org's label for the server.
           type: string
         org:
           description: Org is the org that registered the server — the validated caller's.
+          type: string
+        source:
+          description: |-
+            Source is where the registration came from: "catalog" when it was enabled
+            off the shelf, "org" when the org registered the URL itself. It is DERIVED
+            from Listing rather than stored, because two columns for one fact is two
+            chances to disagree.
           type: string
         url:
           description: |-
@@ -10952,8 +11075,16 @@ components:
             AuthHeader is the request header the credential is injected into, e.g.
             "Authorization". Empty means the server needs no credential.
           type: string
+        listing:
+          description: |-
+            Listing enables a CATALOG entry instead — the id from GET /v1/tools/catalog.
+            The endpoint is the listing's own streamable-http remote, so a listing that
+            only ships a stdio package is refused: there is nothing to reach yet.
+          type: string
         name:
-          description: Name labels the server for the org. Required, at most 128 characters.
+          description: |-
+            Name labels the server for the org. Required with URL; with Listing it
+            defaults to the listing's own title.
           type: string
         secret:
           description: |-
@@ -11087,6 +11218,32 @@ components:
             ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;
             a write with an expired token is refused.
           type: integer
+      type: object
+    curateReq:
+      properties:
+        featured:
+          description: Featured puts the listing on the front of the shelf, or takes
+            it off.
+          type: boolean
+        hidden:
+          description: Hidden takes the listing off the org-visible shelf, or puts
+            it back.
+          type: boolean
+        id:
+          description: ID is the listing to curate, from the path.
+          type: string
+        logo:
+          description: |-
+            Logo is the brand mark to render, an https URL. Empty clears ours and lets
+            the next sync adopt the publisher's own icon again.
+          type: string
+        official:
+          description: |-
+            Official overrides the derivation: setting it makes this answer FINAL, so
+            no later sync re-derives over it. That is the difference between a default
+            and a decision — the derivation can only tell that a domain-verified
+            publisher serves the endpoint, not that the product is theirs.
+          type: boolean
       type: object
     curriculumView:
       properties:
@@ -13496,6 +13653,34 @@ components:
           type: string
         title:
           type: string
+      type: object
+    mcpCatalog:
+      properties:
+        catalog:
+          description: Catalog is every listing the caller may see, featured first,
+            then by name.
+          items:
+            $ref: '#/components/schemas/MCPListing'
+          type: array
+        total:
+          description: Total is how many that is.
+          type: integer
+      type: object
+    mcpCatalogSync:
+      properties:
+        added:
+          description: Added is how many listings the catalog did not have before.
+          type: integer
+        registry:
+          description: Registry is the upstream this pass read.
+          type: string
+        total:
+          description: Total is how many listings the catalog holds now.
+          type: integer
+        updated:
+          description: Updated is how many the publisher has changed since we last
+            looked.
+          type: integer
       type: object
     mcpServerList:
       properties:
@@ -40257,22 +40442,30 @@ paths:
       - mcp
     post:
       description: |-
-        CreateServer registers one of the caller org's own external MCP servers, so its
-        tools join the unified registry and become activatable. The credential VALUE is
-        sealed in KMS under a per-org ref; the row keeps only the URL, the header name
-        to inject it into, and a has-secret flag — so a secret with no KMS configured
-        is refused 503 rather than stored in the clear. The URL is SSRF-validated here
-        and re-checked by the dialer at connect time, which is the DNS-rebinding
-        defense. Answers 201 with the stored record.
+        CreateServer gives the caller's org one more external MCP server, so its tools
+        join the org's tool plane and the fleet's MCP door. It is the ONE way an org
+        gains a server, whether it typed the URL in or enabled a catalog listing: both
+        write the SAME record, and `source` says which it was. A second registration
+        path would be a second place for a server to exist, and then a second place to
+        forget to check the credential.
+
+        The credential VALUE is sealed in KMS under a per-org ref; the row keeps only
+        the URL, the header name to inject it into, and a has-secret flag — so a secret
+        with no KMS configured is refused 503 rather than stored in the clear. The URL
+        is SSRF-validated here and re-checked by the dialer at connect time, which is
+        the DNS-rebinding defense.
+
+        Enabling a listing the org already enabled REVISES that server rather than
+        adding a near-duplicate beside it, so a retried enable is the same one server.
+        Answers 201 with the stored record.
       operationId: post_v1_mcp_servers
       requestBody:
         content:
           application/json:
             example:
               authHeader: Authorization
-              name: myserver
+              listing: com.stripe_mcp
               secret: Bearer …
-              url: https://mcp.example.com/rpc
             schema:
               $ref: '#/components/schemas/createServerReq'
         required: true
@@ -40283,8 +40476,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/MCPServer'
           description: created
-      summary: CreateServer registers one of the caller org's own external MCP servers,
-        so its tools join the unified registry and become activatable.
+      summary: CreateServer gives the caller's org one more external MCP server, so
+        its tools join the org's tool plane and the fleet's MCP door.
       tags:
       - mcp
   /v1/mcp/servers/{id}:
@@ -45505,6 +45698,154 @@ paths:
           description: ok
       summary: CallTool runs one of the caller's activated tools and answers with
         its output.
+      tags:
+      - tools
+  /v1/tools/catalog:
+    get:
+      description: |-
+        ListCatalog lists the MCP servers the public registries publish, as we hold
+        them: our canonical copy of registry.modelcontextprotocol.io, plus what we
+        decided about each entry.
+
+        This is the SHELF an org picks from. A listing with a streamable-http endpoint
+        can be enabled as-is — POST /v1/mcp/servers with its id — and its tools then
+        join the org's tool plane and the fleet's MCP door. A listing that only ships a
+        stdio package needs a process to run it, which is why the transports are on
+        every entry rather than implied.
+
+        Hidden entries are absent: they are the ones we took off the shelf. A platform
+        SuperAdmin sees them, because the same query answers "what is on the shelf" and
+        "what is in the catalog" and two queries would drift apart.
+      operationId: get_v1_tools_catalog
+      parameters:
+      - description: Q matches the name, title or description, case-insensitively.
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Featured keeps only the listings we put on the front of the shelf, and only
+          when it is exactly the string "true".
+        in: query
+        name: featured
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Official keeps only the vendors' OWN servers — not third-party copies of
+          them — and only when it is exactly the string "true".
+        in: query
+        name: official
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mcpCatalog'
+          description: ok
+      summary: 'ListCatalog lists the MCP servers the public registries publish, as
+        we hold them: our canonical copy of registry.modelcontextprotocol.io, plus
+        what we decided about each entry.'
+      tags:
+      - tools
+  /v1/tools/catalog/{id}:
+    get:
+      description: |-
+        GetListing returns one catalog entry in full: the publisher's description, its
+        repository and site, every package form with the runtime that launches it, and
+        every hosted endpoint. It is what a branding page renders, and what tells a
+        caller whether the listing can be enabled here and now (a streamable-http
+        remote) or needs somewhere to run first (a stdio package).
+
+        A HIDDEN listing is not served to an org — a shelf that renders what it does
+        not list would be a way around the shelf — but is served to a SuperAdmin, who
+        is the one deciding whether to put it back.
+      operationId: get_v1_tools_catalog_id
+      parameters:
+      - description: |-
+          ID is the listing, from the path. It is the publisher's reverse-DNS name
+          with its one slash written as an underscore — "com.stripe_mcp".
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPListing'
+          description: ok
+      summary: 'GetListing returns one catalog entry in full: the publisher''s description,
+        its repository and site, every package form with the runtime that launches
+        it, and every hosted endpoint.'
+      tags:
+      - tools
+    patch:
+      description: |-
+        CurateListing sets what WE say about one catalog entry — hidden, featured,
+        official, logo — and answers with the stored listing. SuperAdmin only; every
+        other caller is refused.
+
+        Curation is the half of a catalog row a sync cannot write, and this is the only
+        thing that writes it. The upstream half is never editable here: a description
+        that disagreed with the publisher's would be a fork of their listing, and the
+        next sync would silently undo it.
+      operationId: patch_v1_tools_catalog_id
+      parameters:
+      - description: ID is the listing to curate, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              featured: true
+              official: false
+            schema:
+              $ref: '#/components/schemas/curateReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPListing'
+          description: ok
+      summary: CurateListing sets what WE say about one catalog entry — hidden, featured,
+        official, logo — and answers with the stored listing.
+      tags:
+      - tools
+  /v1/tools/catalog/sync:
+    post:
+      description: |-
+        SyncCatalog pulls the public MCP registry into our canonical copy and reports
+        what changed. SuperAdmin only; every other caller is refused.
+
+        It is IDEMPOTENT: a listing is keyed by the publisher's own reverse-DNS name,
+        so a second pass over an unchanged registry rewrites the same rows and reports
+        added=0, updated=0. It never deletes — a listing that vanishes upstream may be
+        one an org has already enabled, and dropping its description would not drop its
+        server. And it never touches CURATION: hidden, featured, an admin-set official
+        and a logo survive every sync, because the write does not name those columns.
+      operationId: post_v1_tools_catalog_sync
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mcpCatalogSync'
+          description: ok
+      summary: SyncCatalog pulls the public MCP registry into our canonical copy and
+        reports what changed.
       tags:
       - tools
   /v1/traces/health:
