@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -31,7 +32,21 @@ import (
 // and asking it twice is how a gate and a settlement come to disagree. That is
 // unchanged here; only the wire is new.
 
-const peerX402 = "x402"
+const (
+	peerX402 = "x402"
+
+	// settleTimeout bounds the hop a CLIENT is holding open, and it is derived
+	// rather than picked: the rail's own hops — price, payee, debit, credit — are
+	// 10s each (apps/x402/peer.go), so 60s leaves every one of them room to answer
+	// and still refuse first, which is what keeps a diagnosable "payee_unavailable"
+	// from arriving as an opaque timeout on the hop that was only waiting.
+	//
+	// It has to be explicit because nothing else bounds it. A fiber Ctx.Context()
+	// carries no deadline, so both contexts this builds are deadline-free, and the
+	// only remaining limits were a transport read timeout stacked on the wake
+	// ceiling — two minutes of a tool request and its goroutine held open.
+	settleTimeout = 60 * time.Second
+)
 
 // chargePeer settles one tool call through the x402 process.
 //
@@ -77,10 +92,9 @@ func chargePeer(ctx context.Context, tool string) error {
 		}
 	}
 
-	// No deadline of its own, deliberately. The rail's own hops — price, payee,
-	// ledger — are each bounded, and the transport bounds this one; an outer cap
-	// shorter than their sum would preempt them, turning a diagnosable
-	// "payee_unavailable" into an opaque timeout on the hop that was only waiting.
+	call, cancel := context.WithTimeout(call, settleTimeout)
+	defer cancel()
+
 	out, err := cloud.Ask[plane.SettleIn, plane.Settled](call, peerX402, plane.X402Settle, &in)
 	switch {
 	case errors.Is(err, cloud.ErrNoPeer):
