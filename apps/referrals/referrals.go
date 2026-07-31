@@ -1,8 +1,11 @@
-// Package referrals mounts the Hanzo Cloud /v1/referrals/* viral-loop surface: a
-// native-Go, per-org referral program on Base/SQLite that grants promo cloud
-// credit through the SAME commerce ledger path as clients/admin.grantCredit (the
-// trial/Credit bucket, tag grant:referral). It mirrors clients/crm's structure
-// exactly — one SQLite store, server-side tenant isolation, one Mount, HIP-0106.
+// Package referrals is the customer referral loop: every org has a stable code and
+// share link, a new org claims it at signup, and BOTH sides are granted cloud
+// credit once the referee actually spends — at-most-once, never on signup alone.
+//
+// It is the ONE-TIME-BONUS member of the three programs built on the same shape;
+// apps/affiliates is the ongoing partner commission and apps/authors the OSS
+// royalty. The grant rides the same commerce ledger path as an admin credit (the
+// trial/Credit bucket, tag grant:referral).
 //
 // The loop, end to end:
 //
@@ -25,10 +28,12 @@
 //	GET  /v1/admin/referrals/bonuses   (SuperAdmin) every one-time bonus referral + a summary
 //	POST /v1/admin/referrals/sweep     (SuperAdmin) qualify-check every pending referral
 //
-// The cross-tenant referral ANALYTICS board (top referrers, conversion, multi-level
-// accrual liability) is GET /v1/admin/referrals, owned by clients/affiliates over the
-// shared attribution spine; this package owns the one-time-bonus ledger at
-// /v1/admin/referrals/bonuses so the two admin surfaces compose without colliding.
+// TWO PACKAGES SHARE ONE ADMIN PREFIX. The cross-tenant referral ANALYTICS board
+// (top referrers, conversion, multi-level accrual liability) is
+// GET /v1/admin/referrals, owned by apps/affiliates over the shared attribution
+// spine; this package owns the one-time-bonus ledger one segment deeper at
+// /v1/admin/referrals/bonuses. They do not collide, but /v1/admin/referrals/* has
+// no single owner — the merge that gives it one is the standing decision.
 //
 // serve.go auto-registers GET /v1/referrals/health.
 package referrals

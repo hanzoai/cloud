@@ -1,12 +1,15 @@
-// Package crm mounts the Hanzo Cloud /v1/crm/* surface: a native-Go,
-// per-org CRM (companies, contacts, opportunities) on Base/SQLite. It is the
-// first slice of the "collapse the business apps into the unified cloud binary"
-// program (universe/docs/architecture/unified-backend-go.md) — a native-Go port
-// of the Twenty CRM core model, NOT a proxy to a NestJS backend.
+// Package crm is the sales pipeline: companies, the contacts who work at them, and
+// the opportunities being worked — plus the Startup Program intake that lands as a
+// scored application.
 //
-// The three entities are faithful to Twenty's `company` / `person` /
+// The three core entities are faithful to Twenty's `company` / `person` /
 // `opportunity` standard objects, with Twenty's composite fields (FULL_NAME,
 // EMAILS, CURRENCY, LINKS, ADDRESS) flattened to scalar columns for SQLite.
+//
+// A CRM contact is a PROSPECT the org tracks. It is NOT a product user: an org's
+// own users live in Hanzo IAM and apps/marketing resolves audiences from that
+// roster (roster.go), never from this table. The two contact universes are
+// deliberate and do not join.
 //
 // Tenant isolation is enforced SERVER-SIDE on every request: the org is the
 // value SanitizeIdentity minted from the VALIDATED bearer owner claim

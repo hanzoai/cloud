@@ -1,7 +1,9 @@
-// Package leaderboard mounts the Hanzo Cloud GAMIFIED usage analytics surface: AI
-// usage leaderboards (top users / orgs) + a GitHub-style per-day contribution graph,
-// over the datastore OLAP rollup (#43). It is a DERIVED, read-only lens over the ONE
-// usage ledger (hanzo.cloud_usage) — it adds no metering path and double-counts
+// Package leaderboard ranks AI usage: who leads inside an org, which orgs lead
+// globally, and a GitHub-style per-day contribution graph for one subject — all
+// opt-in for public listing.
+//
+// It is a DERIVED, read-only lens over the ONE usage ledger (hanzo.cloud_usage)
+// through the datastore OLAP rollup — it adds no metering path and double-counts
 // nothing.
 //
 // Surface (all /v1, NO /api/ prefix; org-scoped, fail-closed):
@@ -13,10 +15,12 @@
 //	PUT  /v1/usage/leaderboard/optin/org    set the ORG's public-board opt-in (org admin)
 //	POST /v1/usage/rollup/backfill          seed the rollup from ledger history (SuperAdmin, once)
 //
-// It co-owns the /v1/usage/* prefix with clients/usage (the cost footprint at
+// It co-owns the /v1/usage/* prefix with apps/usage (the cost footprint at
 // /v1/usage/summary) — a DISTINCT concern (who leads + your activity graph) at its
 // own paths, registered as a separate subsystem so it stays isolated. Its auto
-// health route is /v1/leaderboard/health (the spec name).
+// health route is /v1/leaderboard/health (the spec name). apps/usage's own doc
+// claims it "owns ALL usage"; two packages under one prefix is one prefix with no
+// owner, and the name here (leaderboard) does not match the prefix it serves.
 //
 // TENANT ISOLATION (the bar). The org is the VALIDATED IAM owner claim (principal.Org
 // — the trusted X-Org-Id the identity middleware minted from the verified bearer,

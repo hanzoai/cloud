@@ -1,11 +1,12 @@
-// Package authors mounts the Hanzo Cloud /v1/authors/* OSS-author surface: a
-// native-Go, per-org program on Base/SQLite that pays open-source AUTHORS a royalty
-// on the metered platform spend of the orgs who DEPLOY their projects on Hanzo. It
-// sits next to clients/referrals (a one-time credit for both sides) and
-// clients/affiliates (an ongoing partner commission on referred customers) as the
-// THIRD growth loop — the CREATOR one — and mirrors their structure exactly: one
-// SQLite store, server-side tenant isolation, one Mount, HIP-0106, and the SAME
-// commerce ledger path (a credits payout is a grant, tag grant:author).
+// Package authors is the OSS royalty program: an author links GitHub, proves they
+// own a repo, and earns a royalty on the metered spend of every org that deploys a
+// project built from it — accrued per period and auto-paid, with a full audit
+// trail behind the number.
+//
+// It is the CREATOR member of the three programs built on the same shape;
+// apps/referrals is the one-time bonus and apps/affiliates the partner commission.
+// All three share the commerce ledger path (a credits payout is a grant, tag
+// grant:author).
 //
 // The loop, end to end:
 //
