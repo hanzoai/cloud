@@ -430,9 +430,59 @@ type door struct {
 // The rule holds only because those callers name those paths themselves. It does NOT
 // generalize to /v1/insights/e, whose callers arrive through an ingress rewrite — see
 // its entry below before applying a $source count to any door.
+// decodeEvent is the ONE door's decoder: the canonical wire, falling back to the
+// PostHog wire only when canonical yields NOTHING from a non-empty body.
+//
+// /v1/insights/e used to be a second door for the second wire. A wire is a SHAPE,
+// and a shape has never earned a path — decodeIngest already sniffs object-vs-array
+// and bare-vs-envelope on the same route, so sniffing one more encoding is the
+// mechanism it already is, not a new one. The two wires even share the `batch`
+// envelope key and differ only in per-event field names.
+//
+// The wire is chosen by SNIFFING THE KEYS, never by "did the first decoder return
+// anything". Trying canonical first and falling back on an empty result is WRONG and
+// the host-carve test proves it: decodeIngest ACCEPTS a PostHog body as a bare
+// canonical Event and returns ONE event, which is then dropped whole downstream
+// (canonicalType("") is "event", not in publicKinds). A count of 1 therefore does not
+// mean the body was understood, so a count-based fallback never fires and the event
+// silently vanishes with a 200 receipt.
+//
+// The two wires are distinguishable exactly, with no heuristic: canonical spells the
+// field `distinctId` (camel) and carries `type`; the PostHog wire spells it
+// `distinct_id` (snake) and carries `api_key`. Neither key exists in the other wire,
+// so presence is proof rather than a guess. Batches are probed on their elements
+// because the envelope key `batch` is shared by both.
+func isPostHogWire(body []byte) bool {
+	var probe struct {
+		DistinctID json.RawMessage `json:"distinct_id"`
+		APIKey     json.RawMessage `json:"api_key"`
+		Batch      []struct {
+			DistinctID json.RawMessage `json:"distinct_id"`
+		} `json:"batch"`
+	}
+	if json.Unmarshal(body, &probe) != nil {
+		return false
+	}
+	if probe.DistinctID != nil || probe.APIKey != nil {
+		return true
+	}
+	for _, e := range probe.Batch {
+		if e.DistinctID != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func decodeEvent(body []byte) ([]CaptureEvent, error) {
+	if isPostHogWire(body) {
+		return decodeInsights(body)
+	}
+	return decodeIngest(body)
+}
+
 var doors = []door{
-	{path: "/v1/event", decode: decodeIngest, source: sourceEvent},
-	{path: "/v1/insights/e", decode: decodeInsights, source: sourcePostHog},
+	{path: "/v1/event", decode: decodeEvent, source: sourceEvent},
 	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
