@@ -48,16 +48,18 @@ import (
 //
 // Three causes, all of them at the composition root:
 //
-//   - AN ADDRESS ANOTHER APP OWNS (15). A prefix is a SUBTREE and it is
+//   - AN ADDRESS ANOTHER APP OWNS (1). A prefix is a SUBTREE and it is
 //     exclusive. The /v1/billing REMAINDER belongs to account-bridge — the
-//     session-scoped data bridge the console calls — so the billing leaves
-//     commerce publishes but the manifest does not name deeper (invoices,
-//     subscriptions, spend-alerts, payouts, payment-config, topup/token) reach
-//     the bridge and are served only as far as its forwardable allowlist
-//     reaches. /v1/billing/payment-methods is the billing app's; /v1/s3 is
-//     storage's. (The webhook + auto-recharge + catalog + plans + tenant
-//     families that used to sit here are routed now: commerce's row names each
-//     one deeper than the sibling that was swallowing it.)
+//     session-scoped data bridge the console calls — so any billing leaf
+//     commerce publishes that the manifest does not name deeper reaches the
+//     bridge instead. The one left is /v1/billing/payment-methods, which the
+//     billing app serves itself. (The rest of the money surface used to sit here: plans,
+//     invoices, subscriptions, subscribe/card, topup/token, spend-alerts,
+//     payouts, payment-config — the entire self-service paid path. Every one
+//     was registered co-resident and reachable by nobody, so the public plan
+//     catalog answered "sign in to view billing" to a pricing page and the
+//     card endpoints answered it to a buyer. commerce's row names each one
+//     deeper than the sibling that was swallowing it now.)
 //   - NO APP AT ALL (9). git's /:org/:repo tree and iam's /.well-known/* are
 //     claimed by nobody, so they fall past every prefix to the console the host
 //     serves at "/" — an SDK call gets the HTML shell. (team's /collaborator pair
@@ -66,7 +68,8 @@ import (
 //     unnamed in Apps the collaborative editor got the console shell while the
 //     typed RPC — published in openapi.yaml, in every generated SDK and in the MCP
 //     tool list — reached no app at all. team's row names /collaborator now.)
-//   - ONE NAME, TWO OWNERS (1). /v1/tracker, below.
+//   - ONE NAME, TWO OWNERS (0). /v1/tracker was the last; analytics dropped
+//     the claim and the entry with it.
 //
 // Regenerating it is mechanical: the failure below prints the current list, in
 // this format, ready to paste.
@@ -84,19 +87,7 @@ var unreachable = []string{
 	// than resolved. It is resolved now: analytics dropped the claim (its wire is
 	// /v1/event), the tracker product keeps the name, and this ledger records only
 	// paths that are still owned twice.
-	"commerce /v1/billing/invoices -> account-bridge",
-	"commerce /v1/billing/invoices/{id}/pdf -> account-bridge",
-	"commerce /v1/billing/payment-config -> account-bridge",
 	"commerce /v1/billing/payment-methods -> billing",
-	"commerce /v1/billing/payouts -> account-bridge",
-	"commerce /v1/billing/plans -> account-bridge",
-	"commerce /v1/billing/spend-alerts -> account-bridge",
-	"commerce /v1/billing/spend-alerts/authorize -> account-bridge",
-	"commerce /v1/billing/spend-alerts/{id} -> account-bridge",
-	"commerce /v1/billing/subscriptions -> account-bridge",
-	"commerce /v1/billing/subscriptions/{id}/cancel -> account-bridge",
-	"commerce /v1/billing/subscriptions/{id}/reactivate -> account-bridge",
-	"commerce /v1/billing/topup/token -> account-bridge",
 	"git / -> nothing",
 	"git /{org}/{repo} -> nothing",
 	"git /{org}/{repo}/blob/{wildcard1} -> nothing",
