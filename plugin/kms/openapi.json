@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package kms is secret custody: per-org secrets sealed at rest, read and written over /v1/kms, and signed by the MPC ring.",
+    "description": "Package kms is secret custody: your org's secrets sealed at rest, plus threshold signing.",
     "version": "v1"
   },
   "servers": [

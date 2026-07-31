@@ -1,6 +1,8 @@
-// Package o11y is the ONE owner of the cloud binary's observability plane —
-// registered as a SINGLE `o11y` subsystem (this file's init) that internally
-// mounts, in the load-bearing order, every part of the concept:
+// Package o11y is your logs, metrics and traces: ship them in, query them, chart them.
+//
+// It is the ONE owner of the cloud binary's observability plane — registered as a
+// SINGLE `o11y` subsystem (this file's init) that internally mounts, in the
+// load-bearing order, every part of the concept:
 //
 //	READ/SERVE plane (specific /v1/o11y/* routes, registered BEFORE the
 //	hanzoai/o11y wildcard so Fiber's in-order match gives them precedence):

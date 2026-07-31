@@ -1,6 +1,9 @@
-// Package books is double-entry accounting at /v1/books: a fixed chart of accounts, an
-// append-only general ledger, bank feeds with reconciliation, receipt scanning, and the
-// trial-balance / P&L / balance-sheet reports that prove the books balance.
+// Package books is double-entry accounting: chart of accounts, ledger, bank
+// reconciliation, and the reports that prove the books balance.
+//
+// It serves /v1/books: a fixed chart of accounts, an append-only general ledger,
+// bank feeds with reconciliation, receipt scanning, and the trial-balance / P&L /
+// balance-sheet reports.
 //
 // WHY THIS EXISTS. finance holds the money (a prepaid wallet: deposits + usage debits);
 // billing PROJECTS that wallet for the customer UI. Neither keeps BOOKS — a general

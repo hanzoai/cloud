@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package usage is the usage plane at /v1/usage: what an org ran, what it cost, and the per-account breakdown, over one window grammar.",
+    "description": "Package usage is what your org ran and what it cost, broken down per account.",
     "version": "v1"
   },
   "servers": [

@@ -1,6 +1,8 @@
-// Package entitlements answers "what may this org run": what its plan GRANTS, and
-// which of those products it has actually TURNED ON. Both authorities live here, one
-// door each, and the package's whole discipline is that they are never braided.
+// Package entitlements is what your org may run: what the plan grants, and which of
+// those products are switched on.
+//
+// Both authorities live here, one door each, and the package's whole discipline is
+// that they are never braided.
 //
 // Surface (/v1 only):
 //

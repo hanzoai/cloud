@@ -1,10 +1,12 @@
-// Package payout is the ONE attributed-credit money seam shared by the credit
-// programs — referrals, affiliates, authors: read an org's metered spend (the
-// qualify / accrual base) and grant a promo credit to its wallet (a payout made
-// in credits, landing in commerce's Credit/trial bucket). It was three
-// byte-identical commerce.go copies (their own doc-comments said so); extracted
-// here so the S2S commerce binding — the HTTP deposit + usage-rollup path — lives
-// exactly ONCE.
+// Package payout is earned credit landing in an org's wallet: referral, affiliate
+// and author earnings.
+//
+// It is the ONE attributed-credit money seam those credit programs share: read an
+// org's metered spend (the qualify / accrual base) and grant a promo credit to its
+// wallet (a payout made in credits, landing in commerce's Credit/trial bucket). It
+// was three byte-identical commerce.go copies (their own doc-comments said so);
+// extracted here so the S2S commerce binding — the HTTP deposit + usage-rollup path
+// — lives exactly ONCE.
 //
 // Every payout lands via the SAME COMMERCE_SERVICE_TOKEN S2S path, the same
 // X-Org-Id=<org> namespace + bare-org `user` subject that admin.grantCredit uses,

@@ -1,6 +1,8 @@
-// Package idv is the ONE identity/business verification seam the Hanzo cloud binary
-// uses to orchestrate a KYC (individual) or KYB (business) check through an external
-// provider. It is deliberately small and provider-agnostic so every consumer wires
+// Package idv is identity verification: run a KYC or KYB check through a licensed
+// provider.
+//
+// It is the ONE identity/business verification seam the Hanzo cloud binary uses to
+// orchestrate that check. It is deliberately small and provider-agnostic so every consumer wires
 // the SAME contract: company formation (founder KYC) and the compliance product
 // (org-side onboarding KYB/KYC) both drive verifications through a idv.Provider, and
 // a real provider (Persona, Onfido, Stripe Identity) is a config-driven swap for the
