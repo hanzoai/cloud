@@ -49,6 +49,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -100,10 +101,11 @@ func init() {
 		"Credit grants and top-ups on the caller's org wallet",
 		"Answers the money PUT IN to the org's wallet — each staff grant, promo and settled "+
 			"top-up as a positive row with its id, label, cents and grant time.\n\n"+
-			"Spend is not a credit. A posting counts here only when its type is `deposit`; "+
-			"withdrawals belong to /v1/finance/usage (aggregated) and /v1/finance/ledger (signed). "+
-			"All three project ONE read of the same ledger, so they cannot disagree about a "+
-			"row.\n\n"+
+			"Spend is not a credit. A posting counts here only when it moved money IN; debits "+
+			"belong to /v1/finance/usage (aggregated) and /v1/finance/ledger (signed). All three "+
+			"project ONE read of the same ledger through ONE vocabulary for what a posting means, "+
+			"so they cannot disagree about a row — nor silently drop one, which is what an empty "+
+			"credits page against a funded wallet was.\n\n"+
 			"`label` falls back through the posting's notes, then its tags, then a bare Credit — "+
 			"it is a description, never an identifier. `remainingCents` is OMITTED: the wallet is "+
 			"one running balance, not per-grant buckets, so no grant has a remainder to report and "+
@@ -117,7 +119,7 @@ func init() {
 		"Answers metered spend inside `range=`: the window total, a time series to plot, and one "+
 			"line per usage TAG. Aggregated from the same charged ledger the balance comes off — "+
 			"projected, never re-metered.\n\n"+
-			"Only WITHDRAW postings count; deposits are credits and are excluded. `range` is 24h, "+
+			"Only DEBIT postings count; deposits are credits and are excluded. `range` is 24h, "+
 			"7d, 30d or 90d, and anything else — including absent — is 30d, so a typo silently "+
 			"widens the window to a month rather than failing. Buckets are hourly at 24h and daily "+
 			"otherwise, in UTC; a posting whose timestamp will not parse is dropped rather than "+
@@ -163,9 +165,12 @@ func init() {
 
 	openapi.Describe("/v1/finance/ledger", http.MethodGet,
 		"Money in and out of the caller's org wallet, signed",
-		"Answers the org's own postings inside `range=`, each as a signed entry: a `deposit` "+
+		"Answers the org's own postings inside `range=`, each as a signed entry: a DEPOSIT "+
 			"CREDITS the wallet (positive, account `credits:<org>`) and every other posting DEBITS "+
-			"it (negative, account `usage:<org>`), described by its notes or its tags.\n\n"+
+			"it (negative, account `usage:<org>`), described by its notes or its tags. The sign is "+
+			"the posting's own meaning, read through ONE vocabulary shared with the ledger that "+
+			"wrote it — a reader with its own spelling for `deposit` rendered a customer's grant "+
+			"as a charge.\n\n"+
 			"This is the closest projection of the truth. The org's double-entry postings are the "+
 			"source of record — balanced, only ever appended, one file per org — and this lane is "+
 			"that list, widest of the three: /v1/finance/credits is its deposit half and "+
@@ -283,24 +288,59 @@ type commerceBalance struct {
 	Account   string `json:"account,omitempty"`
 }
 
-// commerceTxn is one commerce ledger row (GET /v1/billing/transactions). Type is
-// "deposit" (a credit/grant) or "withdraw" (usage/consumption); Amount is the magnitude
-// in cents. This ONE row shape backs credits, usage, and ledger — a single upstream read
-// projected three ways, never a second meter.
+// commerceTxn is one ledger row as the three projections below read it. Amount is the
+// magnitude in cents. This ONE row shape backs credits, usage, and ledger — a single
+// read projected three ways, never a second meter.
+//
+// Kind is the ONE vocabulary (apps/finance owns it), never a string this file spells
+// for itself. Two wires deliver these rows — the internal plane, carrying the ledger's
+// own kinds, and commerce's S2S HTTP, carrying its own `deposit`/`withdraw` — and each
+// is translated into finance.Kind at ITS OWN boundary, so the projections classify on
+// one typed value and can never be handed a spelling they silently skip. They were:
+// the reader matched commerce's words against the ledger's kinds, so on the peer path
+// credits rendered empty, usage totalled 0, and a customer's own grant signed negative.
 type commerceTxn struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Amount    int64  `json:"amount"`
-	Currency  string `json:"currency"`
-	Tags      string `json:"tags"`
-	Notes     string `json:"notes"`
-	CreatedAt string `json:"createdAt"`
+	// Type is commerce's raw HTTP wire word, decoded on the S2S path only. It is
+	// translated into Kind by commerceKind and never classified on directly.
+	Type      string       `json:"type"`
+	Kind      finance.Kind `json:"-"`
+	ID        string       `json:"id"`
+	Amount    int64        `json:"amount"`
+	Currency  string       `json:"currency"`
+	Tags      string       `json:"tags"`
+	Notes     string       `json:"notes"`
+	CreatedAt string       `json:"createdAt"`
+}
+
+// commerceKind translates commerce's OWN HTTP wire vocabulary into the ledger's. It is
+// the one place those two words appear, because they belong to an upstream this fleet
+// does not own; every reader downstream of it sees finance.Kind and nothing else.
+func commerceKind(wire string) finance.Kind {
+	switch strings.ToLower(strings.TrimSpace(wire)) {
+	case "deposit":
+		return finance.KindDeposit
+	case "withdraw":
+		return finance.KindUsage
+	default:
+		return finance.KindUnknown
+	}
+}
+
+// kindLabel is the plain word a customer reads for a posting that carries neither
+// notes nor tags. Rendering, not classification — which is why it lives here and not
+// beside the kinds.
+func kindLabel(k finance.Kind) string {
+	if k == finance.KindDeposit {
+		return "Credit"
+	}
+	return "Usage"
 }
 
 // commercePaymentMethod tolerates both the flat descriptor and a nested `card` object,
 // so a masked card reshapes regardless of which shape commerce's portal returns.
 type commercePaymentMethod struct {
 	ID              string `json:"id"`
+	ProviderRef     string `json:"providerRef"`
 	PaymentMethodID string `json:"paymentMethodId"`
 	Type            string `json:"type"`
 	Brand           string `json:"brand"`
@@ -398,7 +438,7 @@ func financeCredits(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	credits := make([]financeCredit, 0, len(txns))
 	for _, t := range txns {
-		if strings.ToLower(strings.TrimSpace(t.Type)) != "deposit" {
+		if t.Kind != finance.KindDeposit {
 			continue
 		}
 		credits = append(credits, financeCredit{
@@ -438,7 +478,7 @@ func financeUsage(s *cloud.Service[state], c *zip.Ctx) error {
 	var order []string
 	var total int64
 	for _, t := range txns {
-		if strings.ToLower(strings.TrimSpace(t.Type)) != "withdraw" {
+		if t.Kind != finance.KindUsage {
 			continue
 		}
 		ts, perr := parseFinanceTime(t.CreatedAt)
@@ -554,7 +594,7 @@ func financeLedger(s *cloud.Service[state], c *zip.Ctx) error {
 		if ts, perr := parseFinanceTime(t.CreatedAt); perr == nil && ts.Before(cutoff) {
 			continue
 		}
-		deposit := strings.ToLower(strings.TrimSpace(t.Type)) == "deposit"
+		deposit := t.Kind == finance.KindDeposit
 		cents := abs64(t.Amount)
 		account := "usage:" + org
 		if deposit {
@@ -566,7 +606,7 @@ func financeLedger(s *cloud.Service[state], c *zip.Ctx) error {
 			ID:          firstNonEmpty(t.ID, "entry"),
 			Date:        t.CreatedAt,
 			Account:     account,
-			Description: firstNonEmpty(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), t.Type),
+			Description: firstNonEmpty(strings.TrimSpace(t.Notes), strings.TrimSpace(t.Tags), kindLabel(t.Kind)),
 			Cents:       cents,
 			Currency:    firstNonEmpty(strings.ToLower(t.Currency), "usd"),
 		})
@@ -636,13 +676,23 @@ func financeTxns(s *cloud.Service[state], c *zip.Ctx, org string) ([]commerceTxn
 		Transactions []commerceTxn `json:"transactions"`
 	}
 	if json.Unmarshal(body, &wrap) == nil && wrap.Transactions != nil {
-		return wrap.Transactions, nil
+		return classify(wrap.Transactions), nil
 	}
 	var rows []commerceTxn
 	if err := json.Unmarshal(body, &rows); err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream decode: %v", err)
 	}
-	return rows, nil
+	return classify(rows), nil
+}
+
+// classify is the S2S boundary: commerce's own wire words become the ONE vocabulary
+// the projections read, ONCE, on the way in. Nothing downstream of it sees a raw type
+// string, which is what makes a third spelling impossible to introduce quietly.
+func classify(rows []commerceTxn) []commerceTxn {
+	for i := range rows {
+		rows[i].Kind = commerceKind(rows[i].Type)
+	}
+	return rows
 }
 
 // financeJSON writes a finance payload as bare JSON with no-store (per-org money must
@@ -770,8 +820,10 @@ func peerTxns(ctx context.Context, org string) ([]commerceTxn, bool) {
 			return nil, false // a total we cannot read exactly is not a total we report
 		}
 		out = append(out, commerceTxn{
-			ID:        t.ID,
-			Type:      t.Kind,
+			ID: t.ID,
+			// The peer boundary: the ledger's own kind, parsed back into the ONE
+			// vocabulary. It arrives as text and stops being text here.
+			Kind:      finance.ParseKind(t.Kind),
 			Amount:    amt.Cents(),
 			Currency:  "usd",
 			Tags:      t.Ref,

@@ -256,7 +256,11 @@ func planeTxns(ctx context.Context, _ *struct{}) (*plane.Txns, error) {
 	out := make([]plane.Txn, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, plane.Txn{
-			ID: r.ID, Kind: r.Kind, Ref: r.Ref, Memo: r.Memo,
+			// The kind crosses as the LEDGER'S own spelling, and the reader parses
+			// it back with finance.ParseKind. It travels as text because the wire is
+			// text; it is never re-spelled here into some other vocabulary, which is
+			// how the reader came to classify on strings this ledger never writes.
+			ID: r.ID, Kind: string(r.Kind), Ref: r.Ref, Memo: r.Memo,
 			Amount:    plane.Money{Decimal: r.Amount.String(), Currency: "USD"},
 			CreatedAt: r.CreatedAt,
 		})
