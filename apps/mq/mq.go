@@ -1,7 +1,10 @@
-// Package mq is Hanzo MQ, the managed message-queue product: org-scoped
-// administration of durable JetStream queues on the platform message plane —
-// streams, their messages, pull consumers and delivery — served at /v1/mq over
-// the broker apps/pubsub embeds.
+// Package mq is queue and stream admin for your org: create them, watch them
+// drain, ack what you pulled.
+//
+// It is Hanzo MQ, the managed message-queue product: org-scoped administration of
+// durable JetStream queues on the platform message plane — streams, their
+// messages, pull consumers and delivery — served at /v1/mq over the broker
+// apps/pubsub embeds.
 //
 // # THE SPLIT — mq vs pubsub
 //
