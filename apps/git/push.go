@@ -107,7 +107,7 @@ func (o ops) pushFiles(ctx context.Context, in *pushReq) (*pushResp, error) {
 	}
 	return &pushResp{
 		Commit: commit, Branch: branch,
-		CloneURL: cloneURL(o.s, t.org, in.Name), SSHURL: sshURL(o.s, t.org, in.Name),
+		CloneURL: cloneURL(o.s, t.org, t.project, in.Name), SSHURL: sshURL(o.s, t.org, t.project, in.Name),
 	}, nil
 }
 
