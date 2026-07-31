@@ -3,7 +3,7 @@ package webhooks
 // store.go — one per-org (HIP-0302 physically-isolated) SQLite holding the org's
 // webhook endpoint registry. A distinct org resolves to a distinct
 // {DataDir}/orgs/{slug}/webhooks.db, so one org can never read or mutate another's
-// endpoints — the same per-org file idiom clients/books uses (cloud.OrgStore over
+// endpoints — the same per-org file idiom apps/books uses (cloud.OrgStore over
 // cloud.OrgDB). Each org owns its file; there is no cross-org query surface.
 
 import (
