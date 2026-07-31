@@ -283,6 +283,28 @@ func TestNoPrincipalIs403AndNoUpstreamByte(t *testing.T) {
 	}
 }
 
+// TestOrgLessButValidatedIsServed is the OTHER half of the gate, and it is the
+// reason the gate reads principal.ValidatedFrom rather than principal.OrgFrom.
+// There are no per-org rows on this plane, so the bar is AUTHENTICATION: a
+// signed-in caller whose token names no home org — a machine token, or one minted
+// before IAM's `orgs` claim, for which SanitizeIdentity mints X-User-Id and no
+// X-Org-Id — is exactly the operator polling a serving runtime's inventory, and
+// it is served. Narrowing this gate to the tenant would 403 it.
+func TestOrgLessButValidatedIsServed(t *testing.T) {
+	app, _ := harness(t)
+	for _, path := range []string{
+		"/v1/engine/status",
+		"/v1/engine/models",
+		"/v1/engine/model?model=" + fakeModel,
+		"/v1/engine/system",
+	} {
+		status, body := do(t, app, http.MethodGet, path, "u1", "", "")
+		if status != http.StatusOK {
+			t.Errorf("GET %s validated with no org = %d, want 200; body=%s", path, status, body)
+		}
+	}
+}
+
 // ── the lens over the measured wire ─────────────────────────────────────────
 
 // The model table relays verbatim — the server's own list envelope with its

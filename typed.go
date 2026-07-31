@@ -9,10 +9,12 @@ package cloud
 // typed handler receives only a context.Context and its decoded In, so three
 // facts a cloud handler needs are not in its hands:
 //
-//   - the VALIDATED org. It lives in a header the typed handler cannot see, and
-//     it must NEVER become an In field: an In field is caller-supplied, so a
-//     tenant key read from one is a cross-tenant read the caller asserted for
-//     itself.
+//   - the VALIDATED org, and beside it the bare fact that the caller was
+//     VALIDATED AT ALL — the two facts a gate turns on, since a plane with no
+//     org-scoped rows (engine's shared runtime) authenticates without a tenant.
+//     Both live in headers the typed handler cannot see, and neither may EVER
+//     become an In field: an In field is caller-supplied, so a tenant key read
+//     from one is a cross-tenant read the caller asserted for itself.
 //   - the REQUEST itself, for a subsystem that FORWARDS the caller's identity
 //     instead of only reading it. A tenant-scoped proxy (clients/visor) passes
 //     the caller's own identity headers — and, where no service credential is
@@ -36,10 +38,10 @@ package cloud
 // one the handler sees, and the outer finds nothing to apply.
 //
 // FAIL CLOSED OFF THE HTTP PATH. The CLI projection's LocalInvoke runs an op
-// with no request at all, so both Request and principal.OrgFrom read nothing
-// there and an org-scoped op refuses — the handler's own 403 gate, with no
-// second gate to keep in sync. An MCP tools/call at POST /mcp is an ordinary
-// HTTP request and does carry both, so it is gated exactly like the REST route
+// with no request at all, so Request, principal.OrgFrom and principal.ValidatedFrom
+// all read nothing there and a gated op refuses — the handler's own 403 gate, with
+// no second gate to keep in sync. An MCP tools/call at POST /mcp is an ordinary
+// HTTP request and does carry them, so it is gated exactly like the REST route
 // it mirrors: a validated principal is served, an anonymous one is refused.
 
 import (
@@ -66,11 +68,19 @@ type boundKey struct{}
 // carries back out the one fact it cannot state. Install it BEFORE the typed
 // routes it serves — fiber runs middleware in registration order, so one
 // installed after its leaves never runs — and after the identity boundary, so
-// the org it parks is the validated one.
+// the identity it parks is the validated one.
+//
+// It parks the TWO facts a gate turns on, in ONE expression, so they are always
+// set together and can never disagree: the validated ORG (principal.WithOrg, for
+// a plane with rows to scope) and VALIDATED-NESS itself (principal.WithValidated,
+// for a plane whose reads are deployment-global and whose gate is therefore
+// authentication). Both are read back through principal, so a gate that needs
+// either does not reach for the request.
 func Bridge() zip.Handler {
 	return func(c *zip.Ctx) error {
 		b := &bound{req: c}
-		c.SetContext(context.WithValue(principal.WithOrg(c.Context(), c), boundKey{}, b))
+		ctx := principal.WithValidated(principal.WithOrg(c.Context(), c), c)
+		c.SetContext(context.WithValue(ctx, boundKey{}, b))
 		err := c.Continue()
 		// Success only: an error already carries its own status. fasthttp writes
 		// the response after the whole chain returns, so setting it here still

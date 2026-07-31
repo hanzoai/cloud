@@ -1,6 +1,7 @@
 package principal_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -106,6 +107,76 @@ func TestValidated_OnlyFromUserId(t *testing.T) {
 	}
 	if _, _, v := probe(t, map[string]string{"X-User-Id": "u"}); !v {
 		t.Fatal("Validated must be true with X-User-Id")
+	}
+}
+
+// parked drives the TYPED seam: it parks both facts exactly as cloud.Bridge does
+// — one expression, so they are always set together — and reads them back the way
+// a typed op does, off a context and nothing else.
+func parked(t *testing.T, headers map[string]string) (org string, orgOK, validated bool) {
+	t.Helper()
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	app.Get("/parked", func(c *zip.Ctx) error {
+		ctx := principal.WithValidated(principal.WithOrg(c.Context(), c), c)
+		o, k := principal.OrgFrom(ctx)
+		return c.JSON(200, map[string]any{"org": o, "ok": k, "validated": principal.ValidatedFrom(ctx)})
+	})
+	req := httptest.NewRequest("GET", "/parked", nil)
+	for h, v := range headers {
+		req.Header.Set(h, v)
+	}
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("parked: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var out struct {
+		Org       string `json:"org"`
+		OK        bool   `json:"ok"`
+		Validated bool   `json:"validated"`
+	}
+	b, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("parked decode: %v (%s)", err, b)
+	}
+	return out.Org, out.OK, out.Validated
+}
+
+// TestParked_TwoFactsNeverDisagree pins what the typed seam carries, because two
+// planes read two different facts off it: a plane with org-scoped rows asks
+// OrgFrom, and a plane with none (engine's shared runtime, o11y's infra health)
+// asks ValidatedFrom. The forge is refused by BOTH — that is the isolation
+// guarantee — and the org-less-but-validated caller is the ONE state where they
+// differ, which is exactly why the weaker one exists and why reading it through
+// OrgFrom would 403 an operator whose token names no home org.
+func TestParked_TwoFactsNeverDisagree(t *testing.T) {
+	// The forge: an X-Org-Id with no credential. Neither fact resolves, so
+	// neither plane serves it.
+	if org, ok, v := parked(t, map[string]string{"X-Org-Id": "victim"}); ok || v || org != "" {
+		t.Fatalf("forged org with no principal: org=%q orgOK=%v validated=%v — all must be empty/false", org, ok, v)
+	}
+	// The ordinary caller: both resolve, and the org is verbatim.
+	if org, ok, v := parked(t, map[string]string{"X-User-Id": "u_1", "X-Org-Id": "acme"}); !ok || !v || org != "acme" {
+		t.Fatalf("validated caller: org=%q orgOK=%v validated=%v — want acme/true/true", org, ok, v)
+	}
+	// The org-less operator (a machine token, or one minted before IAM's `orgs`
+	// claim): validated, no tenant. An authentication-only plane serves it; an
+	// org-scoped one refuses it.
+	if org, ok, v := parked(t, map[string]string{"X-User-Id": "u_1"}); ok || !v || org != "" {
+		t.Fatalf("org-less validated caller: org=%q orgOK=%v validated=%v — want \"\"/false/true", org, ok, v)
+	}
+}
+
+// TestParked_NothingOffTheHTTPPath: the CLI projection's LocalInvoke runs an op
+// with a bare context — nothing parked — so both readers answer "no" and every
+// gate refuses rather than serving an unattested caller.
+func TestParked_NothingOffTheHTTPPath(t *testing.T) {
+	ctx := context.Background()
+	if org, ok := principal.OrgFrom(ctx); ok || org != "" {
+		t.Fatalf("OrgFrom off the HTTP path = %q,%v — want \"\",false", org, ok)
+	}
+	if principal.ValidatedFrom(ctx) {
+		t.Fatal("ValidatedFrom off the HTTP path must be false — there is no attested caller")
 	}
 }
 

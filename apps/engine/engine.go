@@ -249,14 +249,19 @@ func (o ops) system(ctx context.Context, _ *engineNoInput) (*engineResult, error
 // caller requires a validated principal — the ONE gate every op passes before
 // any upstream byte. Every read here is a deployment-global platform fact, so
 // no org scoping applies (there are no per-org rows to scope); the gate is
-// authentication, and it FAILS CLOSED off the HTTP path (a CLI LocalInvoke
-// has no request, so there is no validated principal).
+// AUTHENTICATION.
+//
+// It reads the bit cloud.Bridge PARKED, not the request. principal.OrgFrom is
+// the wrong reader here — it answers with an org or refuses, so it would 403 a
+// validated caller whose token names no home org (a machine token, or one minted
+// before IAM's `orgs` claim), which on a plane with no tenant is exactly the
+// operator this lens exists for. principal.ValidatedFrom is that one bit beside
+// it, and it is the reason this gate does not take the pinned cloud.Request
+// escape hatch to recompute principal.Validated(c) — the same answer by the
+// longer way. FAILS CLOSED off the HTTP path: a CLI LocalInvoke parks nothing,
+// so there is no validated principal and every op refuses.
 func caller(ctx context.Context) error {
-	c, ok := cloud.Request(ctx)
-	if !ok {
-		return zip.ErrForbidden("no validated principal")
-	}
-	if !principal.Validated(c) {
+	if !principal.ValidatedFrom(ctx) {
 		return zip.ErrForbidden("sign in to use Engine")
 	}
 	return nil

@@ -101,9 +101,10 @@ comments at compile time.
   cross the socket — so without this install every typed op here 403s a caller the
   host already validated. Pinned by
   `TestTypedOpsResolveTheirOrgThroughTheBridge`.
-- The tenant is `principal.OrgFrom(ctx)`, NEVER an `In` field. Platform-sudo-ness,
-  validated-ness and the project scope need the REQUEST (they ride in headers
-  `principal.OrgFrom` does not carry), so they go through `typed.go` — the ONE
+- The tenant is `principal.OrgFrom(ctx)` and the status probe's weaker gate is
+  `principal.ValidatedFrom(ctx)` — the two facts `cloud.Bridge` parks — NEVER an
+  `In` field. Platform-sudo-ness and the project scope do need the REQUEST (they
+  ride in headers neither reader carries), so they go through `typed.go` — the ONE
   `cloud.Request` seam in this package, pinned in cloud's `allowedRequestUses`.
 
 The other 8 stay untyped because typing them would MOVE the wire, which typing is

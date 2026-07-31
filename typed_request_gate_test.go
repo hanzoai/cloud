@@ -14,10 +14,13 @@ import (
 // signature stops the next one.
 //
 // So the count enforces itself. Each entry below is a call site and the reason
-// it needs the REQUEST rather than just the tenant — which is the test: if
-// principal.OrgFrom(ctx) would do, the answer is not this. Adding one means
-// editing this map and writing the justification, which is a decision someone
-// makes on purpose rather than a drift nobody notices.
+// it needs the REQUEST rather than just the caller's identity — which is the
+// test: if principal.OrgFrom(ctx) would do, the answer is not this, and neither
+// is it if principal.ValidatedFrom(ctx) would (the SAME two facts Bridge parks,
+// for a plane with no org-scoped rows — authentication without a tenant is not a
+// reason to hold the request). Adding one means editing this map and writing the
+// justification, which is a decision someone makes on purpose rather than a
+// drift nobody notices.
 //
 // Three reasons earn an entry, and they are the whole list. Most are identity
 // gates: they need MORE of the validated principal than the org, and admin-ness
@@ -162,13 +165,14 @@ var allowedRequestUses = map[string]string{
 		"alone would turn that live admin bucket into a 403). ONE function, which every typed op asks, " +
 		"delegating to the same tenant() the untyped handlers beside them use; fails closed off the HTTP " +
 		"path, where there is no principal and therefore no namespace to name.",
-	"apps/o11y/typed.go": "callerIsAdmin / callerValidated / callerProject — the o11y surface's ONE identity " +
-		"seam. The scoped reads switch on platform-sudo (X-User-IsAdmin: the infra-log god-view and the " +
-		"whole-product RED), the status probe gates on validated-ness alone (infra health is not " +
-		"tenant-partitioned, so an org-less but validated caller is served), and the annotation queues narrow " +
-		"by project (X-Project-Id). None of the three rides on principal.OrgFrom. Concentrated in one file so " +
-		"the escape hatch is one pin with one justification rather than the same call in three handlers; all " +
-		"three fail closed off the HTTP path.",
+	"apps/o11y/typed.go": "callerIsAdmin / callerProject — the o11y surface's ONE identity seam. The " +
+		"scoped reads switch on platform-sudo (X-User-IsAdmin: the infra-log god-view and the " +
+		"whole-product RED) and the annotation queues narrow by project (X-Project-Id); neither header " +
+		"rides on principal.OrgFrom. The status probe's weaker gate does NOT need the request — infra " +
+		"health is not tenant-partitioned, so it serves an org-less but validated caller, which is " +
+		"principal.ValidatedFrom, the bit Bridge parks beside the org. Concentrated in one file so the " +
+		"escape hatch is one pin with one justification rather than the same call in three handlers; both " +
+		"fail closed off the HTTP path.",
 	"apps/guide/guide.go": "superAdminOK / ledgerOf — the brand-blueprint SuperAdmin gate and the payer ONE " +
 		"grounded AI completion is billed to. Admin-ness lives in X-User-IsAdmin, and the payer is the SELECTED " +
 		"billing org (principal.Ledger, which a SuperAdmin masquerade moves off the effective org); neither is " +
@@ -187,12 +191,6 @@ var allowedRequestUses = map[string]string{
 		"moves off the effective org — so principal.OrgFrom would charge the org being INSPECTED for a " +
 		"platform admin's reading of its books. Empty off the HTTP path, where the meter no-ops rather " +
 		"than billing the wrong ledger.",
-	"apps/engine/engine.go": "caller — AUTHENTICATION with no tenant, which principal.OrgFrom " +
-		"cannot express at all: every op here reads a deployment-global platform fact (the host's " +
-		"accelerators, the build's capabilities), so there are no org-scoped rows and no org to scope " +
-		"by, and OrgFrom answers with an org or refuses. What the gate needs is the one bit beside " +
-		"it — principal.Validated — so an org-less but signed-in operator is admitted and an " +
-		"anonymous caller is not. ONE function, which every op asks; fails closed off the HTTP path.",
 	"apps/tools/charge_peer.go": "chargePeer — the tool plane's payment seam reaching the x402 " +
 		"process, which is a PROXY that forwards the caller's identity and carries two facts of the " +
 		"request across the boundary with it. The payer is principal.Ledger, which folds in the " +
@@ -400,7 +398,8 @@ func TestRequestEscapeHatchIsPinned(t *testing.T) {
 			t.Errorf("NEW cloud.Request call site in %s.\n"+
 				"cloud.Request is the escape hatch that hands a typed op its raw request, and it is pinned so it "+
 				"cannot grow quietly. Before adding this one: if the op needs only its tenant, use "+
-				"principal.OrgFrom(ctx) and delete the call. If the op can NAME the value, declare it on its In "+
+				"principal.OrgFrom(ctx) and delete the call; if it has no tenant and only gates on being signed "+
+				"in, that is principal.ValidatedFrom(ctx). If the op can NAME the value, declare it on its In "+
 				"and let zip bind it off the URL. If it genuinely needs the request — an identity gate reading "+
 				"more than the org, a proxy that FORWARDS the caller's identity, or a URL-borne value on a "+
 				"BODY-carrying route, which an In field cannot take without also accepting it in the body — add "+
