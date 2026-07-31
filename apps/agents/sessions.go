@@ -60,6 +60,7 @@ const (
 	maxHost         = 256
 	maxCwd          = 1024
 	maxRepo         = 512
+	maxTerminal     = 512
 	maxProvider     = 64
 	maxAccount      = 256
 )
@@ -90,9 +91,12 @@ type sessionView struct {
 	TaskRunID       string `json:"taskRunId,omitempty"`
 	// Execution context (mission-control): the machine/repo/cwd a card shows and
 	// the run-target a session is dispatched to. Omitted when a surface didn't report it.
-	Host     string `json:"host,omitempty"`
-	Cwd      string `json:"cwd,omitempty"`
-	Repo     string `json:"repo,omitempty"`
+	Host string `json:"host,omitempty"`
+	Cwd  string `json:"cwd,omitempty"`
+	Repo string `json:"repo,omitempty"`
+	// Terminal is where this session can be WATCHED — the URL the machine
+	// published for its live terminal. Omitted when it publishes none.
+	Terminal string `json:"terminal,omitempty"`
 	Target   string `json:"target,omitempty"`
 	Provider string `json:"provider,omitempty"`
 	Account  string `json:"account,omitempty"`
@@ -171,7 +175,7 @@ func toSessionView(x Session, events, children int) sessionView {
 		ID: x.ID, Org: x.Org, Agent: x.Agent, Actor: x.Actor, Status: x.Status,
 		ParentSessionID: x.ParentID, RootSessionID: x.RootID, Title: x.Title,
 		TaskWorkflowID: x.TaskWorkflowID, TaskRunID: x.TaskRunID,
-		Host: x.Host, Cwd: x.Cwd, Repo: x.Repo, Target: x.Target,
+		Host: x.Host, Cwd: x.Cwd, Repo: x.Repo, Terminal: x.Terminal, Target: x.Target,
 		Provider: x.Provider, Account: x.Account,
 		Project: x.Project, Published: x.Published,
 		Events: events, Children: children,
@@ -284,6 +288,10 @@ type registerReq struct {
 	Cwd    string `json:"cwd"`
 	Repo   string `json:"repo"`
 	Target string `json:"target"`
+	// Terminal is the URL this session's live terminal is published at, so the
+	// console can watch it. Optional — a session that publishes nothing is still
+	// a session.
+	Terminal string `json:"terminal"`
 	// Account tag — the linked AI account this session ran under (login manager).
 	Provider string `json:"provider"`
 	Account  string `json:"account"`
@@ -339,6 +347,10 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 	if cerr != nil {
 		return nil, cerr
 	}
+	terminal, terr := sessionTerminal(body.Terminal)
+	if terr != nil {
+		return nil, terr
+	}
 	provider := strings.TrimSpace(body.Provider)
 	account := strings.TrimSpace(body.Account)
 	if len(provider) > maxProvider {
@@ -365,7 +377,7 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 		Title:          strings.TrimSpace(body.Title),
 		TaskWorkflowID: strings.TrimSpace(body.TaskWorkflowID),
 		TaskRunID:      strings.TrimSpace(body.TaskRunID),
-		Host:           host, Cwd: cwd, Repo: repo, Target: target,
+		Host:           host, Cwd: cwd, Repo: repo, Terminal: terminal, Target: target,
 		Provider: provider, Account: account,
 		Project: project, Published: body.Published,
 		StartedAt: now, CreatedAt: now, UpdatedAt: now,
@@ -407,6 +419,24 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 // target). Target, when set, MUST resolve to a run-target in the SAME org (fail-
 // closed, exactly like a parent session) so a session can never claim to run on
 // another tenant's machine — the #48 dispatch association is tenant-safe.
+// sessionTerminal bounds and checks the published terminal URL. It must be https:
+// the console FRAMES this value, so anything else is a way to get a javascript:
+// or file: URL rendered on a signed-in page. Empty is fine — a session that
+// publishes no terminal simply cannot be watched.
+func sessionTerminal(v string) (string, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", nil
+	}
+	if len(v) > maxTerminal {
+		return "", zip.ErrBadRequest("terminal url too long")
+	}
+	if !strings.HasPrefix(v, "https://") {
+		return "", zip.ErrBadRequest("terminal url must be https")
+	}
+	return v, nil
+}
+
 func sessionContext(ctx context.Context, s *cloud.Service[state], org, host, cwd, repo, target string) (string, string, string, string, error) {
 	host = strings.TrimSpace(host)
 	if len(host) > maxHost {
@@ -607,6 +637,10 @@ type patchSessionIn struct {
 	Title  *string `json:"title"`
 	// Target re-dispatches a session to a run-target (the #48 association). "" detaches.
 	Target *string `json:"target"`
+	// Terminal publishes (or, with "", withdraws) the URL this session's live
+	// terminal can be watched at. A pointer so "absent" and "withdrawn" are
+	// different requests: a session that stops sharing must be able to say so.
+	Terminal *string `json:"terminal"`
 	// Project tags the product this session built; Published is the author's
 	// decision to let anyone read the story (provenance.go). Both are pointers so
 	// "absent" and "cleared" are different requests.
@@ -687,6 +721,13 @@ func (o sessionOps) patch(ctx context.Context, in *patchSessionIn) (*sessionView
 			}
 		}
 		x.Target = nt // "" detaches
+	}
+	if body.Terminal != nil {
+		nt, terr := sessionTerminal(*body.Terminal)
+		if terr != nil {
+			return nil, terr
+		}
+		x.Terminal = nt // "" withdraws
 	}
 	x.UpdatedAt = time.Now().Unix()
 	if err := s.State.store.UpdateSession(ctx, x); err != nil {
