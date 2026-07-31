@@ -10,6 +10,7 @@
 // their pull is scaffolded with an honest depth marker (they connect and record a
 // connection, and the sync returns a clear "listing not yet implemented" rather
 // than a fabricated ingest) so the depth is never overstated.
+
 package knowledge
 
 import (
