@@ -43,9 +43,11 @@ package analytics
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -141,9 +143,11 @@ func envelopeArgs(m message) []any {
 // one series. That is a cross-tenant write, not a missing feature, so the sink refuses
 // it rather than performing it.
 //
-// Metric facts are still normalized and PUBLISHED (event.metric on the bus carries org
-// in its envelope), so nothing is lost and no ingest change is needed later: the fix is
-// to fold org into the series fingerprint, and then this list grows by one row.
+// So the door REFUSES a metric rather than accepting it (landableSignals, below). It is
+// the same refusal for the same reason, moved to the boundary where a caller can still
+// be told: an unwritable signal that is admitted is a 200 that means "discarded". The
+// fix is to fold org into the series fingerprint; then this list grows by one row and
+// the door starts accepting metrics the same day, with nothing else to change.
 var writers = []writer{
 	{
 		signal:  signalEvent,
@@ -201,6 +205,67 @@ var writers = []writer{
 		},
 	},
 }
+
+// landableSignals is WHICH SIGNALS CAN BE MADE DURABLE, derived from writers so the
+// answer is written down ONCE. The door reads it (ingestEvents, capture.go) and refuses
+// a fact it cannot land, which is what keeps "accepted" honest: publishing to a subject
+// no writer drains would put the fact on the stream, answer 200, and then let it expire
+// at MaxAge with nothing to show for it.
+//
+// Deriving it — rather than keeping a second list of "supported types" beside the
+// writers — is what makes the two impossible to disagree about. A writer added here is
+// a signal the door accepts, in one edit.
+var landableSignals = func() map[signal]bool {
+	m := make(map[signal]bool, len(writers))
+	for _, w := range writers {
+		m[w.signal] = true
+	}
+	return m
+}()
+
+// ── acknowledged loss, counted ───────────────────────────────────────────────
+//
+// Two things remove a fact the door ALREADY ANSWERED 200 FOR, and both used to happen
+// with nothing to alarm on:
+//
+//   - undecodable — a message that does not parse is acked and dropped (land, below).
+//     That is the right call for the durable, and it is still a lost fact.
+//   - exhausted — after maxDeliver failed attempts the bus stops redelivering. It
+//     announces that on the MAX_DELIVERIES advisory, which nothing subscribed to, so
+//     the fact vanished leaving no record anywhere at all.
+//
+// Both are counted here and reported by /v1/analytics/health, so the alarm is
+// "lost > 0" on a probe an operator already scrapes rather than a log line nobody
+// greps. A COUNTER IS THE FLOOR, NOT THE CEILING: neither case recovers the fact. The
+// dead-letter stream that re-publishes the raw payload for replay is the real answer
+// and is its own change — this is what makes the loss impossible to miss meanwhile.
+var (
+	lostUndecodable atomic.Int64
+	lostExhausted   atomic.Int64
+)
+
+// loss is the sink's own health: what it has irrecoverably dropped since boot.
+type loss struct {
+	// Undecodable counts messages acked without landing because they did not parse.
+	Undecodable int64 `json:"undecodable"`
+	// Exhausted counts facts the bus abandoned after maxDeliver failed inserts.
+	Exhausted int64 `json:"exhausted"`
+}
+
+func lossReport() loss {
+	return loss{
+		Undecodable: lostUndecodable.Load(),
+		Exhausted:   lostExhausted.Load(),
+	}
+}
+
+// maxDeliverAdvisory is the bus's own announcement that it has GIVEN UP on a message —
+// the one event that marks a fact as lost rather than late. The subject is JetStream's
+// published advisory grammar
+// ($JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.<stream>.<consumer>); the trailing
+// wildcard covers every durable this sink binds, present and future, so a table added
+// to writers is watched without a second edit.
+var maxDeliverAdvisory = "$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES." + EventStream + ".*"
 
 // statement renders this writer's INSERT: the fixed column list (never caller input)
 // and one placeholder per bound value. `el` is the one column whose binding is a tuple
@@ -299,6 +364,16 @@ func (s *drain) run(ctx context.Context) {
 // subject, so the tables drain independently.
 func (s *drain) consume(ctx context.Context, cl *infra.PubSubClient) error {
 	errc := make(chan error, len(writers))
+	// Watch the give-up advisory BEFORE binding the durables, so a message that
+	// exhausts its deliveries during this connection is counted rather than missed.
+	// A failure to subscribe is a warning and not a consume failure: losing the
+	// ACCOUNTING must never stop the LANDING.
+	if sub, err := cl.Subscribe(maxDeliverAdvisory, s.exhausted); err != nil {
+		s.log.Warn("event sink: max-deliveries advisory unwatched — abandoned facts will not be counted",
+			"subject", maxDeliverAdvisory, "err", err)
+	} else {
+		defer func() { _ = sub.Unsubscribe() }()
+	}
 	for _, w := range writers {
 		w := w
 		durable := plane + "-" + string(w.signal)
@@ -346,9 +421,19 @@ func (s *drain) consume(ctx context.Context, cl *infra.PubSubClient) error {
 // well-formed fact on the same table. It is logged rather than swallowed.
 func (s *drain) land(ctx context.Context, w writer, sm *infra.StreamMessage) error {
 	m, err := decodeMessage(sm.Data)
-	if err != nil {
-		s.log.Warn("event sink: undecodable message — acked and dropped",
-			"subject", sm.Subject, "err", err)
+	switch {
+	case errors.Is(err, errNotAFact):
+		// The other vocabulary on this plane (EventSignalKey, bus.go) — an
+		// EventEnvelope the subscriber fan-out published onto a subject this writer
+		// happens to drain. Nothing was lost: it is not addressed to this consumer, so
+		// it is acked and NOT counted. Debug, because on a busy plane it is the
+		// steady state and not an event.
+		s.log.Debug("event sink: not a fact — acked and left to its own consumer",
+			"subject", sm.Subject)
+		return nil
+	case err != nil:
+		s.log.Error("event sink: undecodable message — acked and dropped, FACT LOST",
+			"subject", sm.Subject, "lost", lostUndecodable.Add(1), "err", err)
 		return nil
 	}
 	if !warehouseReady() {
@@ -360,6 +445,15 @@ func (s *drain) land(ctx context.Context, w writer, sm *infra.StreamMessage) err
 		return err
 	}
 	return nil
+}
+
+// exhausted records one fact the bus has given up redelivering. The advisory payload
+// carries the stream sequence of the abandoned message, so it is logged VERBATIM: that
+// sequence is the only handle an operator has left on a fact this process will never
+// see again.
+func (s *drain) exhausted(m *infra.Message) {
+	s.log.Error("event sink: fact abandoned after maxDeliver attempts — ACKNOWLEDGED DATA LOST",
+		"lost", lostExhausted.Add(1), "advisory", string(m.Data))
 }
 
 func (s *drain) setClient(cl *infra.PubSubClient) {

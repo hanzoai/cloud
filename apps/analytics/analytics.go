@@ -92,6 +92,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/hanzoai/types"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -119,11 +120,56 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 }
 
 // build carries no per-subsystem state — analytics reads the shared warehouse. It
-// records the informative mount line and installs the site-host ingest carve.
+// records the informative mount line, installs the site-host ingest carve, and brings
+// up the event sink.
 func build(b cloud.Base) (state, error) {
 	b.Log.Info("analytics surface", "warehouse", "hanzo", "brand", b.Brand)
 	installHostCarve(b)
+	startSink(b.Log)
 	return state{}, nil
+}
+
+// sink is the process's ONE warehouse drain (warehouse.go), held at package scope for
+// the same reason webhooks holds its dispatcher there: Shutdown has to be able to stop
+// what Mount started, and Mount's return value is a router and not a handle.
+var sink *drain
+
+// startSink brings the drain up, replacing any previous one. It is what makes a
+// published fact LAND: without it the ingest path publishes into a stream nothing
+// consumes, every event.* table stays empty, and the plane's tables are queryable in
+// name only.
+//
+// Starting is unconditional and cannot fail a mount — the drain retries its own
+// connection forever (drain.run) — so a bus that is down at boot delays landing and
+// never delays serving. Replacing rather than stacking makes a second Mount in one
+// process (the tests do exactly this) idempotent instead of leaving an orphan consumer
+// behind.
+func startSink(log luxlog.Logger) {
+	stopSink()
+	sink = &drain{log: log}
+	sink.start()
+}
+
+// stopSink tears the drain down and forgets it. Idempotent, and the ONE way the sink
+// stops — a test that must be the only writer through the warehouse seam calls it for
+// the same reason Shutdown does, because a live consumer is a second writer through a
+// process-global var.
+func stopSink() {
+	if sink != nil {
+		sink.stop()
+		sink = nil
+	}
+}
+
+// Shutdown stops the sink and releases the ingest connection to the bus. Idempotent.
+//
+// The order is deliberate: stop CONSUMING before closing the PUBLISHING side, so an
+// in-flight insert is never abandoned mid-commit by a connection that went away
+// underneath it.
+func Shutdown(context.Context) error {
+	stopSink()
+	closeBus()
+	return nil
 }
 
 // installHostCarve wires the published-site-host beacon ingest (the twin of base's
@@ -679,6 +725,13 @@ type healthReport struct {
 	// absent from a degraded report, which has nothing to say about tables it could
 	// not reach.
 	Lenses *healthLenses `json:"lenses,omitempty"`
+	// Lost is the count of facts the sink irrecoverably dropped since boot
+	// (warehouse.go). It is reported on the DEGRADED report too, and deliberately: a
+	// warehouse that is unreachable is exactly when facts start failing their
+	// deliveries, so suppressing the number here would hide it precisely when it
+	// moves. ANY NON-ZERO VALUE IS AN ALARM — it counts data the door already
+	// answered 200 for.
+	Lost loss `json:"lost"`
 }
 
 // healthLenses is the two read lenses this subsystem serves, named rather than
@@ -710,7 +763,8 @@ type healthLens struct {
 // honest-empty, not a failure).
 func health(s *cloud.Service[state], c *zip.Ctx) error {
 	connected := datastore.Ready()
-	res := healthReport{Service: "analytics", Status: "ok", Datastore: connected, Warehouse: "hanzo"}
+	res := healthReport{Service: "analytics", Status: "ok", Datastore: connected, Warehouse: "hanzo",
+		Lost: lossReport()}
 	if !connected {
 		res.Status = "degraded"
 		res.Reason = "datastore (datastore) not connected"

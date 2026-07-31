@@ -85,6 +85,7 @@ func carveOn(t *testing.T, cfg sites.Config, r sites.Resolver) *zip.App {
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
+	stopSink() // see mountApp: a test process holds no live consumer
 	sites.SetResolver(r)
 	t.Cleanup(func() {
 		sites.SetResolver(nil)

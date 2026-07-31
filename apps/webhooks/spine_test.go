@@ -162,6 +162,50 @@ func TestCommerceDispatchUnaffected(t *testing.T) {
 	}
 }
 
+// TestWarehouseFactsAreNotDeliveredAsEnvelopes pins the OTHER vocabulary on the event
+// plane. Two things publish there: the subscriber envelope this package delivers, and
+// the warehouse's facts. Their subjects OVERLAP — a product event named "$error" folds
+// onto event.error, which is also the error signal's subject, and "$error" is what a
+// browser error with no name of its own is called — so subject matching alone cannot
+// tell them apart, and a wildcard subscriber (event.>) matches both.
+//
+// Delivering a fact would send a subscriber a body in a shape its endpoint has never
+// been promised, and send it a SECOND time for an event already delivered. Both
+// messages below carry org=acme and land on a subject this endpoint matches; exactly
+// one of them is this package's to deliver.
+func TestWarehouseFactsAreNotDeliveredAsEnvelopes(t *testing.T) {
+	d := newTestDispatcher(t)
+	seedEndpoint(t, d, "acme", Endpoint{URL: "https://acme.test/h", Secret: "sk", Events: []string{"event.>"}})
+	src := analyticsSource()
+
+	fact := []byte(`{"signal":"error","org":"acme","id":"f1","name":"ChunkLoadError"}`)
+	if err := d.handle(context.Background(), src, &infra.StreamMessage{Subject: "event.error", Data: fact}); err != nil {
+		t.Fatalf("handle fact: %v — a fact is acked, never naked into a redelivery loop", err)
+	}
+	if jobs := drainJobs(d); len(jobs) != 0 {
+		t.Fatalf("queued %d deliveries for a warehouse fact: %+v", len(jobs), jobs)
+	}
+
+	env := []byte(`{"org":"acme","id":"e1","name":"$error","distinct_id":"d1"}`)
+	if err := d.handle(context.Background(), src, &infra.StreamMessage{Subject: "event.error", Data: env}); err != nil {
+		t.Fatalf("handle envelope: %v", err)
+	}
+	jobs := drainJobs(d)
+	if len(jobs) != 1 || jobs[0].org != "acme" {
+		t.Fatalf("the subscriber envelope on the SAME subject must still deliver, got %+v", jobs)
+	}
+}
+
+// analyticsSource is the streams row carrying event.> — the plane analytics owns.
+func analyticsSource() streamSource {
+	for _, s := range streams {
+		if s.stream == analytics.EventStream {
+			return s
+		}
+	}
+	panic("the event plane is no longer consumed")
+}
+
 // commerceSource is the streams row carrying commerce.> — the one whose envelope
 // names the tenant organization_id.
 func commerceSource() streamSource {
