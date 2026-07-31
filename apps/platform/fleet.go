@@ -58,6 +58,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -272,6 +273,60 @@ func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
 	// exposure with no service has only the package global to read, and that global
 	// is the in-process seam this whole move exists to delete.
 	exposeFleet(s)
+}
+
+// The fleet board's prose, beside the route table so the path, its guard and what
+// it means are read together. None of the three is a typed op, so there is no doc
+// comment for zipdoc to lift and each would otherwise publish an operationId and
+// NOTHING else — an SDK method that cannot explain itself and a CLI command with
+// no help text. Stating the GUARD here matters more than anywhere else on this
+// surface: two of these read the platform's own tier and the third restarts a
+// shared platform service. Declared through the same registry Register uses, so a
+// description renders only while the router actually serves the route.
+func init() {
+	openapi.Describe("/v1/platform/fleet", "GET",
+		"The platform's own service tier, and where it has drifted",
+		"Returns the board for the services the PLATFORM itself runs — iam, kms, gateway and the "+
+			"rest — as `{apps, summary}`: per service its environment, health, phase, the image tag "+
+			"its CR DECLARES, the tag actually running, and the drift between them, plus a summary "+
+			"counting the board green, yellow and red.\n\n"+
+			"This is not a customer surface. `/v1/platform/projects/:project/apps` is a tenant's "+
+			"apps; this is the tier those tenants run ON, which is why the two are named "+
+			"differently rather than sharing a prefix.\n\n"+
+			"Admission is scoped at the SCAN, before any CR is read: a platform SuperAdmin observes "+
+			"the whole fleet, an org admin observes only their own org's namespaces, and an org "+
+			"that owns none gets an empty board — a non-super caller never even lists another org's "+
+			"services. Narrow further with `env`, `health`, `org`, or `drift=1` for only what has "+
+			"drifted.\n\n"+
+			"It degrades honestly rather than failing whole: a namespace that does not exist is "+
+			"skipped, and a running-state read the caller cannot make leaves the running tag empty "+
+			"— an unknown, never a guess — while the declared, health and phase columns still "+
+			"render.")
+
+	openapi.Describe("/v1/platform/fleet/:app", "GET",
+		"One platform service, resolved to production by default",
+		"Returns a single platform service by its CR name, with the same declared-versus-running "+
+			"and drift facts the board carries. The name must be a DNS-1123 label; anything else "+
+			"is 400.\n\n"+
+			"Namespaces are scanned in lifecycle order — main, then test, then dev — and the first "+
+			"match wins, so a bare name resolves to PRODUCTION. The scan covers only the namespaces "+
+			"the caller is authorized for, so an org admin can never read a service outside their "+
+			"own org, and a name found in none of them is 404 rather than a leak.")
+
+	openapi.Describe("/v1/platform/fleet/:app/deploy", "POST",
+		"Roll a platform service's pods, in a named environment",
+		"Triggers a rolling restart of one platform service's Deployment by stamping a fresh "+
+			"restart annotation, and answers 202 with the app, the namespace, the environment and "+
+			"the timestamp. It restarts pods; it does NOT change the image — a version change is "+
+			"the release path, not this.\n\n"+
+			"SuperAdmin ONLY, and deliberately narrower than the read gate beside it. The only "+
+			"namespaces this board touches are the platform's own tier, so a restart here recycles "+
+			"a SHARED service every tenant depends on. A brand-org admin is a customer-org admin, "+
+			"not a platform operator: observing the board is bounded and audited, and restarting "+
+			"production identity is not.\n\n"+
+			"`?env=main|test|dev` is REQUIRED — a bare call does not default to production, which "+
+			"is what closes the fat-finger and confused-deputy hazard — and any other value is 400. "+
+			"A service with no Deployment to restart in that environment is 404.")
 }
 
 // THE ROLE GATE is cloud.Guard(cloud.Admin) on the read routes and

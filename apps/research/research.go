@@ -59,6 +59,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -254,6 +255,48 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// vocabulary for a binary body — so typing it would change what every caller
 	// receives. See LLM.md.
 	g.Get("/artifacts/:sha256", cloud.Handle(s, getArtifactBlob)) // retrieve the bytes by content hash
+}
+
+// The blob route's prose, declared beside the wire fact that keeps it raw.
+//
+// Every other op on this surface is typed, so zipdoc lifts its prose from the
+// handler's doc comment and hands it to the document, the MCP tool list and the
+// generated SDK. This one cannot be typed — it answers binary — and zipdoc can lift
+// nothing from a raw handler, so without this declaration the one retrieval half of
+// hash-addressing publishes an operationId and nothing else. Keyed by the fiber
+// pattern verbatim, so it renders only while the router serves the route.
+func init() {
+	openapi.Describe("/v1/research/artifacts/:sha256", http.MethodGet,
+		"Fetch one recorded artifact's bytes by its content hash.",
+		"Streams the artifact's stored bytes — the retrieval half of hash-addressing, where the "+
+			"diary feed hands out hashes and this hands back what they name. The Content-Type is "+
+			"image/png when the artifact was recorded as a snapshot and "+
+			"application/octet-stream otherwise; it comes from the recorded KIND, not from "+
+			"sniffing the bytes, so an artifact filed as a report always arrives as opaque "+
+			"bytes.\n\n"+
+
+			"The hash is an address, and the read is NOT global. The store file IS the org, so "+
+			"the same bytes recorded by two tenants are two artifacts, and a hash that exists but "+
+			"belongs to somebody else is a 404 exactly like one that was never recorded — "+
+			"knowing a content hash is never enough to read it. A caller with no validated org "+
+			"is refused 403 outright.\n\n"+
+
+			"Project narrows further INSIDE that org: the artifact's project must equal the "+
+			"caller's, which is `?project=` when given and otherwise the caller's own project "+
+			"scope, defaulting to the default project. So an artifact filed under a named "+
+			"project is not found until the caller names that project — a mismatch is the same "+
+			"404 an unknown hash gets, never a distinguishable refusal.\n\n"+
+
+			"The address can be trusted because the WRITE derived it: the server hashes the "+
+			"bytes it stores, inside the trust boundary, and refuses a client-supplied sha256 "+
+			"that disagrees with them, so poisoning a first write would take a preimage. This "+
+			"read does not re-hash — it looks the hash up as a key.\n\n"+
+
+			"One shape to expect: this route writes its errors IN-BAND as {\"error\": …} at the "+
+			"real status code, not the {status, error} envelope the typed ops beside it return. "+
+			"It is mounted under an error-flattening filter that would otherwise rewrite its 4xx, "+
+			"so the body is written before that filter runs. A store that cannot be opened is a "+
+			"500.")
 }
 
 var shutdownStores = func() error { return nil }

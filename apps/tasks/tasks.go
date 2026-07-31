@@ -42,10 +42,125 @@ import (
 	"github.com/hanzoai/cloud/apps/cron"
 	"github.com/hanzoai/cloud/apps/principal"
 	tasksui "github.com/hanzoai/cloud/apps/tasks/ui"
+	"github.com/hanzoai/cloud/openapi"
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
 	"github.com/zap-proto/zip"
 )
+
+// bare is the whole answer at /v1/tasks, on every method: the engine's ServeMux
+// derives a subtree redirect from its /v1/tasks/ pattern before any handler runs,
+// so the address is a signpost rather than a resource. TestBareNounIsARedirect
+// measures it.
+const bare = "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. " +
+	"The redirect is a routing fact derived from the engine's subtree, decided before any " +
+	"handler runs, so it is the same on every method.\n\n"
+
+// engine is the sentence the five operations at /v1/tasks/* share: what the one
+// wildcard actually fronts, and the gate in front of it.
+const engine = "\n\nThis single address fronts the whole durable-workflow engine — namespaces, " +
+	"workflows, schedules, batches, deployments, nexus, task queues, workers, activities and " +
+	"the rest — matched by path segment inside the engine's own router, which is why the " +
+	"document publishes one wildcard rather than sixty-four operations.\n\n" +
+	"Most of it requires a validated principal and is refused 403 otherwise; the settings and " +
+	"cluster probes are open, because capability flags and cluster health carry no tenant " +
+	"data. A principal that is validated but carries NO org is refused too — that request " +
+	"would otherwise read the shared unscoped store instead of anyone's shard, so it fails " +
+	"closed. Admitted, the org, project and user are threaded into the engine, and every read " +
+	"and write lands in that tenant's own shard.\n\n" +
+	"Two things about the answers differ from the rest of this API and will bite a generic " +
+	"client: errors here carry `code` as a NUMBER rather than the usual `status`, and the " +
+	"address serves several content types — JSON, plain-text refusals, and an event stream at " +
+	"the events path. Until the engine is wired the whole surface answers 503."
+
+// spa is the sentence the ten operations on the two UI addresses share.
+const spa = "\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET " +
+	"and HEAD are served; every other method is refused 405. Hashed assets are returned " +
+	"immutable and cached for a year, while the shell is always revalidated, so a new " +
+	"deployment replaces a stale console on the next request."
+
+// The prose for the twenty operations these four mounts publish. Not one of them
+// is a typed op, and each is refused for a fact typed_wire_test.go MEASURES
+// rather than for want of an edit — see Mount's note. That leaves openapi.Describe
+// as the seam: it declares the prose beside the wire fact, keyed on (method,
+// path), rendering only while the router serves the route. It does not make these
+// typed, and the place they become typed is still hanzoai/tasks; it does mean the
+// document, the generated SDKs and the spec-derived CLI stop offering twenty calls
+// they cannot explain.
+func init() {
+	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		openapi.Describe("/v1/tasks", m,
+			"Redirect to the tasks API root",
+			bare+"A 307 preserves both the method and the body, so a client that follows "+
+				"redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A "+
+				"client that does NOT follow redirects sees only the 307 and performs no work — "+
+				"address /v1/tasks/ directly and the hop disappears.")
+	}
+
+	openapi.Describe("/v1/tasks/*", http.MethodGet,
+		"Read workflow state from the durable engine",
+		"Reads from the durable engine: list namespaces, workflows, schedules, batches, "+
+			"deployments, task queues, workers and search attributes, fetch one workflow with "+
+			"its history, or subscribe to the realtime event stream. The cluster and settings "+
+			"probes are on this method too."+engine)
+	openapi.Describe("/v1/tasks/*", http.MethodPost,
+		"Start workflows and act on running ones",
+		"Everything that changes the engine's state: register a namespace, start a workflow "+
+			"or signal-with-start one, and signal, query, cancel, terminate or reset a workflow "+
+			"that is already running. The MCP tool surface is on this method as well, and is "+
+			"the one part of it that refuses a non-POST with a plain-text 405.\n\n"+
+			"The engine is event-sourced and exactly-once, so an action is durable once it is "+
+			"accepted and survives a process crash — a started workflow resumes rather than "+
+			"restarts."+engine)
+	openapi.Describe("/v1/tasks/*", http.MethodDelete,
+		"Delete an engine resource",
+		"Removes a resource the engine owns — a namespace and the like — inside the caller's "+
+			"own tenant shard.\n\n"+
+			"It is the narrowest of the three working methods: most of the engine's surface is "+
+			"read on GET and acted on with POST, so a delete that finds no route for its path "+
+			"answers the same plain-text 404 any unrouted path does."+engine)
+	openapi.Describe("/v1/tasks/*", http.MethodPut,
+		"Not served by the engine",
+		"Published because this address accepts every method, but the engine routes no PUT: "+
+			"the answer is a plain-text 404, not a 405, and no state changes.\n\n"+
+			"Nothing here is updated by replacement. The engine is event-sourced — a workflow "+
+			"is changed by signalling, cancelling, terminating or resetting it, all of which "+
+			"are POST — so a client reaching for PUT wants POST."+engine)
+	openapi.Describe("/v1/tasks/*", http.MethodPatch,
+		"Not served by the engine",
+		"Published because this address accepts every method, but the engine routes no "+
+			"PATCH: the answer is a plain-text 404, not a 405, and no state changes.\n\n"+
+			"There is no partial update on this surface. State advances by appending events, so "+
+			"the operations that change a running workflow — signal, cancel, terminate, reset — "+
+			"are all POST."+engine)
+
+	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		openapi.Describe("/tasks", m,
+			"The tasks console",
+			"Serves the console's application shell on GET, which is the entry point a browser "+
+				"loads before it calls anything under /v1/tasks/."+spa)
+		openapi.Describe("/tasks/*", m,
+			"The tasks console's assets and client-side routes",
+			"Serves the console's static assets on GET, and returns the application shell for "+
+				"any path that is not a file — client-side routing means a deep link into the "+
+				"console is a shell load, not a 404.\n\n"+
+				"A path that looks like a missing asset therefore answers 200 with HTML rather "+
+				"than 404; look at the content type, not the status, when a resource seems to be "+
+				"missing."+spa)
+	}
+	// The methods left over. This address is bound with All(), so it publishes every
+	// method this generator knows and the ones above are only the ones that DO
+	// something. DescribeRest covers the remainder from the generator's own set, so a
+	// method added there is covered the day it appears rather than published bare —
+	// which is what a hand-copied list here had already produced for OPTIONS and TRACE.
+	for _, p := range []string{"/v1/tasks", "/v1/tasks/*", "/tasks", "/tasks/*"} {
+		openapi.DescribeRest(p,
+			"Not routed by the durable engine",
+			"Published because this address accepts every method, but the engine routes nothing "+
+				"here: the request arrives as an unrouted path and no workflow is read or started.")
+	}
+
+}
 
 // Mount adapts the shared engine's HTTP surface + the static UI onto app. It
 // creates NO engine — the ONE engine lives in cloud.EmbeddedTasks (durable.go).

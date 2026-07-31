@@ -61,6 +61,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/fleet"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -258,6 +259,122 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 	// own envelope, dropping the report.
 	gml.Get("/health", health(s, "ml", isvcGVR))
 	gtrain.Get("/health", health(s, "train", trainjobGVR, experimentGVR))
+}
+
+// The prose for the seven routes above that are untyped BY DESIGN. Their reasons
+// are stated at each registration, and they share one consequence: zipdoc lifts
+// prose from a typed handler's doc comment, and none of these is one — so without
+// a Describe each publishes an operationId and nothing else. Declared beside the
+// wire facts they belong to.
+func init() {
+	// --- creates: the three that carry the in-band billing denial ---
+	openapi.Describe("/v1/ml/models", http.MethodPost,
+		"Deploy an inference model",
+		"Deploys a model into the caller's own tenant namespace and answers the created "+
+			"resource, 201. The spec is the kserve InferenceService spec, relayed as given, so "+
+			"anything kserve serves is deployable here without this layer knowing what it "+
+			"is.\n\n"+
+			"THE BALANCE GATE RUNS FIRST, before a namespace or a resource exists, so an "+
+			"unfunded org cannot start GPU compute and then be billed for it. It fails CLOSED: "+
+			"a commerce that cannot be reached refuses rather than admits. The refusal carries "+
+			"the fleet's nested error body — the 402 shape a funded-balance client already "+
+			"parses — which is precisely why this route is not a typed op. On success the "+
+			"submission fee is debited from the caller org's own ledger, asynchronously and "+
+			"best-effort; ongoing GPU-hour cost is metered elsewhere.\n\n"+
+			"The tenant namespace is derived from the VALIDATED org and project — never from a "+
+			"field — and the mapping is injective in both, so two tenants can never land in "+
+			"one namespace. An unvalidated caller is refused before any of that. The name must "+
+			"be a DNS-1123 label; a name already taken in the tenant's namespace is a 409.")
+	openapi.Describe("/v1/train/jobs", http.MethodPost,
+		"Submit a training job",
+		"Submits a training job into the caller's own tenant namespace and answers the "+
+			"created resource, 201. The spec is the Kubeflow TrainJob spec, relayed as given, "+
+			"so the trainer's full surface is reachable without this layer modelling it.\n\n"+
+			"THE BALANCE GATE RUNS FIRST, before the namespace or the job is created, and it "+
+			"fails CLOSED — an unreachable commerce refuses rather than admits. That is what "+
+			"keeps an unfunded org from starting GPU compute. The refusal carries the fleet's "+
+			"nested error body, which is why this route is not a typed op. On success the "+
+			"submission fee is debited from the caller org's own ledger, asynchronously and "+
+			"best-effort.\n\n"+
+			"Submitting is not finishing: the answer is the job as accepted, not a result — "+
+			"poll the job read for status. The tenant namespace comes from the validated org "+
+			"and project, never from a field; an unvalidated caller is refused. The name must "+
+			"be a DNS-1123 label, and a name already in use is a 409.")
+	openapi.Describe("/v1/train/experiments", http.MethodPost,
+		"Start a hyperparameter-tuning experiment",
+		"Starts a katib hyperparameter search in the caller's own tenant namespace and "+
+			"answers the created Experiment, 201. The spec is katib's own, relayed as given, "+
+			"so the whole search-algorithm surface is available without this layer enumerating "+
+			"it.\n\n"+
+			"One experiment fans out into many Trials, and each trial is real compute — so the "+
+			"BALANCE GATE RUNS FIRST, before anything is created, and fails CLOSED when "+
+			"commerce cannot be reached. The refusal carries the fleet's nested error body, "+
+			"which is why this is not a typed op. The submission fee is debited from the "+
+			"caller org's own ledger on success, asynchronously and best-effort.\n\n"+
+			"The trials the search creates are read through the experiment's own trials list. "+
+			"Tenant namespace from the validated org and project, never a field; an "+
+			"unvalidated caller is refused. DNS-1123 name, and a duplicate is a 409.")
+
+	// --- the verbatim merge patch ---
+	openapi.Describe("/v1/ml/models/:name", http.MethodPatch,
+		"Change a deployed model in place",
+		"Applies a JSON merge patch to one of the caller org's deployed models and answers "+
+			"the updated resource — the way to change a model's image, replica count or "+
+			"resource requests without tearing the deployment down.\n\n"+
+			"The body is relayed to Kubernetes VERBATIM. That is deliberate and it is why this "+
+			"route is not a typed op: re-encoding a merge patch changes what it means, because "+
+			"an integer that round-trips through a generic decoder comes back a float. Merge-"+
+			"patch semantics apply as written — a null removes a field, and a list is replaced "+
+			"whole rather than merged.\n\n"+
+			"Scoped to the caller's own tenant namespace, resolved from the validated org and "+
+			"project; a name the caller's tenant does not hold is a 404, never another "+
+			"tenant's resource. An empty body is refused, and a patch Kubernetes rejects comes "+
+			"back 422 with its reason rather than being silently dropped.")
+
+	// --- the inference proxy ---
+	openapi.Describe("/v1/ml/models/:name/predict", http.MethodPost,
+		"Run inference against one of your deployed models",
+		"Sends the request body to the named model's predictor and answers the predictor's "+
+			"reply — its status code, its body bytes and its Content-Type, all unchanged. This "+
+			"is the inference call itself, not a description of one.\n\n"+
+			"VERBATIM IS THE CONTRACT, and it is why this route is not a typed op: a model-"+
+			"side error has to surface as the model's own error, not as this layer's "+
+			"paraphrase of it. The body shape is the kserve v2 inference protocol's, which "+
+			"means the runtime decides it, not this API. The v2 model name defaults to the "+
+			"resource name — kserve's single-model convention — and a multi-model runtime "+
+			"selects one with the `model` query parameter.\n\n"+
+			"A model that exists but has no serving address yet answers 503 'not ready' rather "+
+			"than a confusing connection error: deployed is not the same as serving. Scoped to "+
+			"the caller's own tenant namespace from the validated org and project, so a name "+
+			"another tenant owns is simply a 404. The predictor's response body is read up to "+
+			"a fixed ceiling.")
+
+	// --- the two real probes ---
+	openapi.Describe("/v1/ml/health", http.MethodGet,
+		"Whether model serving can actually work right now",
+		"Reports whether the model-serving plane is genuinely usable: that the Kubernetes "+
+			"API answers, and that the InferenceService CRD is actually served by this "+
+			"cluster. It is a REAL probe, not status theatre — it makes a live call rather "+
+			"than reporting a flag set at boot.\n\n"+
+			"200 only when everything checks out. Otherwise 503 CARRYING THE REPORT — which "+
+			"component failed, and the real error — and that body is the reason this is not a "+
+			"typed op: a typed op reaches a non-2xx by returning an error, and the envelope "+
+			"that produces would drop exactly the detail the probe exists to deliver.\n\n"+
+			"It answers about the cluster, not about a tenant, so it takes no org and reveals "+
+			"no tenant data. A cluster with no kserve CRD reports degraded honestly rather "+
+			"than failing later at the first deploy.")
+	openapi.Describe("/v1/train/health", http.MethodGet,
+		"Whether training and tuning can actually work right now",
+		"Reports whether the training plane is genuinely usable: that the Kubernetes API "+
+			"answers, and that BOTH the TrainJob and the Experiment CRDs are served by this "+
+			"cluster. A live check, not a flag read back.\n\n"+
+			"200 only when all of it checks out; otherwise 503 carrying the per-CRD report and "+
+			"the real error. That body is why this is not a typed op — the error envelope a "+
+			"typed refusal renders would drop it.\n\n"+
+			"It names each CRD separately on purpose: a cluster can serve training but not "+
+			"tuning, and the difference decides whether a job submission or only an experiment "+
+			"will fail. Answers about the cluster, not a tenant, so it takes no org and reveals "+
+			"no tenant data.")
 }
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────

@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -63,6 +64,113 @@ func upstream() string {
 		return v
 	}
 	return defaultUpstream
+}
+
+// prose is what each owned prefix IS, for the exact path and for the subtree
+// below it. Keyed by the same `prefixes` entries the mount reads, so the two
+// cannot address different surfaces; the init below refuses a prefix with no
+// entry, which is what keeps a route added to the mount from publishing an
+// operationId and nothing else.
+type prose struct {
+	summary, description       string // the exact path, e.g. /v1/exec
+	subSummary, subDescription string // the subtree, e.g. /v1/exec/*
+}
+
+// relay is the half that is true of all 56 operations, because all 56 are one
+// reverse proxy: the wire is the executor's and the credential is a service key.
+// Stated once and appended, rather than reworded eight times.
+const relay = "\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte " +
+	"for byte and forwards its answer back the same way — the status, the Content-Type and " +
+	"every field are the executor's, including fields this repo has never named and including " +
+	"its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation " +
+	"boundary, and cloud adds only the credential check and the single public address.\n\n" +
+	"AUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The " +
+	"chat server calls this server-side on a user's behalf, so this surface carries no org scope " +
+	"and no per-user identity; separation between callers is the executor's session, not this " +
+	"edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than " +
+	"open.\n\n" +
+	"One registration owns this address for every method, so which methods actually answer is " +
+	"the executor's decision, not this edge's."
+
+// surfaces is the prose for the four prefixes, and the CLOSED source the init
+// below reads. A prefix added to `prefixes` with no entry here panics at init
+// rather than publishing a bare operationId.
+var surfaces = map[string]prose{
+	"/v1/exec": {
+		summary: "Run a code snippet in a sandboxed interpreter",
+		description: "The code-interpreter entry point: a snippet with its language, plus any " +
+			"files already uploaded to the session, runs in an isolated executor and comes back " +
+			"as the session id, stdout, stderr and the files the run produced. This is what a " +
+			"chat agent's code tool calls.",
+		subSummary: "The interpreter's own execution subpaths",
+		subDescription: "Whatever the executor serves below /exec, addressed verbatim — " +
+			"/exec/programmatic is the one this repo names, and the rest of that tree is the " +
+			"executor's to define. It is deliberately ONE greedy route: enumerating the " +
+			"executor's subpaths here would 404 every one left out of the list, so cloud carries " +
+			"the whole tree rather than a guess at it.",
+	},
+	"/v1/upload": {
+		summary: "Upload a file into an execution session",
+		description: "Takes a multipart upload and puts the file into the session the " +
+			"interpreter runs against, so a later run can read it. The multipart envelope and " +
+			"its content type reach the executor untouched — this address is not JSON and " +
+			"nothing here parses it.",
+		subSummary: "The upload surface's own subpaths",
+		subDescription: "Whatever the executor serves below /upload, addressed verbatim. One " +
+			"greedy route rather than an enumeration this repo has never made: a listed subtree " +
+			"would 404 everything left out of it.",
+	},
+	"/v1/download": {
+		summary: "The artifact download surface",
+		description: "The root of the executor's download surface. The contract addresses an " +
+			"artifact by id one segment down (/v1/download/{id}); this bare address is served " +
+			"because one registration owns the whole prefix, and what it answers is the " +
+			"executor's to decide.",
+		subSummary: "Download a file a run produced",
+		subDescription: "Fetches an artifact by id — a plot, a generated CSV, whatever a run " +
+			"wrote. This is the ONE address whose success body is not JSON: the artifact's BYTES " +
+			"come back under the executor's own Content-Type, so a client reads it as a stream " +
+			"and must not try to decode it.",
+	},
+	"/v1/files": {
+		summary: "The session file surface",
+		description: "The root of the executor's session-file surface. The contract addresses a " +
+			"session's files one segment down (/v1/files/{session_id}); this bare address is " +
+			"served because one registration owns the whole prefix, and what it answers is the " +
+			"executor's to decide.",
+		subSummary: "List the files in an execution session",
+		subDescription: "Lists what a session holds, addressed by session id — the uploads a run " +
+			"can read and the artifacts it produced, each then fetched from /v1/download. The " +
+			"listing's shape is the executor's own; this module names only that the address is " +
+			"keyed by session id.",
+	},
+}
+
+// The whole surface's prose, declared beside the wire facts that keep it untyped.
+//
+// None of these 56 operations can be a typed op (see the note in Mount and the
+// closed ledger in typed_wire_test.go), so zipdoc has no doc comment to lift from
+// any of them and the document would otherwise publish 56 operationIds and nothing
+// else — 56 SDK methods that cannot explain themselves and 56 CLI commands with no
+// help text. openapi.Describe is the seam for exactly that, and it keeps the
+// drift-proof property: a description whose route is not in the router never
+// renders, so this adds prose to operations that exist and cannot invent one.
+//
+// It loops over the SAME `prefixes` the mount reads and over exactly the methods
+// the document publishes (openapi.Methods), so the prose covers the published
+// surface exactly — no operation left bare, and none described that nobody serves.
+func init() {
+	for _, p := range prefixes {
+		s, ok := surfaces[p]
+		if !ok {
+			panic("exec: no prose for prefix " + p + " — a published operation that states " +
+				"nothing is an SDK method that cannot explain itself; add it to surfaces")
+		}
+		for _, m := range openapi.Methods() {
+			openapi.Describe(p, m, s.summary, s.description+relay)
+			openapi.Describe(p+"/*", m, s.subSummary, s.subDescription+relay)
+		}
+	}
 }
 
 // apiKey is the shared service key the chat server presents on X-API-Key. It is
@@ -147,12 +255,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// row 142 vs ai's 182), so these specific paths win over ai's bare /v1/* glob.
 	//
 	// UNTYPED BY DESIGN — all 56 operations these 8 registrations publish. A typed
-	// op (zip.Get/Post/...) is the only thing that carries schema, prose, an MCP
-	// tool, a CLI command and an SDK method, and NONE of these can be one: the
-	// request shape, the response shape, the Content-Type and the status code all
-	// live in the executor, and zip's typed path answers its own declared status
-	// with a marshalled Go value. Typing any of them would move the wire, which a
-	// description task may not do. The refusal is a GATE, not a promise:
+	// op (zip.Get/Post/...) is the only thing that carries schema, an MCP tool, a
+	// CLI command and an SDK method, and NONE of these can be one: the request
+	// shape, the response shape, the Content-Type and the status code all live in
+	// the executor, and zip's typed path answers its own declared status with a
+	// marshalled Go value. Typing any of them would move the wire, which a
+	// description task may not do. PROSE is not part of that cost — openapi.Describe
+	// declares it beside these wire facts (surfaces + init above), so all 56 explain
+	// themselves in the document, the SDKs and the CLI without one byte of the wire
+	// moving. The refusal is a GATE, not a promise:
 	// typed_wire_test.go holds the closed ledger (untypedPaths x servedMethods)
 	// plus the eight measurements that prove each wire fact, so a route added here
 	// is typed by default and a stale reason goes red.

@@ -69,6 +69,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/treasury"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -335,6 +336,147 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Post("/v1/admin/affiliates/:id/suspend", cloud.Handle(s, adminSuspend))
 	app.Post("/v1/admin/affiliates/:id/rate", cloud.Handle(s, adminSetRate))
 	app.Post("/v1/admin/affiliates/:id/payout", cloud.Handle(s, adminPayout))
+}
+
+// Every route here is a raw handler over cloud.Handle, so zipdoc has no doc
+// comment to lift and the prose is declared beside the handlers instead. Money
+// surface: each description below names WHOSE ledger is read or written and in
+// what denomination. This program books integer CENTS end to end — its own store
+// and the commerce payout seam both — which is why every amount here is spelled
+// `…Cents` and never a decimal string.
+func init() {
+	openapi.Describe("/v1/affiliates", http.MethodGet,
+		"Your org's affiliate standing and commission dashboard",
+		"Answers the caller org's OWN affiliate standing: status, referral code and share "+
+			"link, commission rate, how many orgs it has referred, and its lifetime accrued, "+
+			"still-pending and already-paid commission in integer cents, with its payout "+
+			"history.\n\n"+
+			"An org that never applied gets an honest `isAffiliate:false` and the default rate "+
+			"rather than a 404 — the console renders the apply form off that answer.\n\n"+
+			"The affiliate is resolved from the VALIDATED org, never from a field, so this can "+
+			"only ever read the caller's own row; without a principal it is refused. For an "+
+			"approved affiliate the read first runs the accrual sweep over its own downline, so "+
+			"the dashboard is self-updating — bounded and best-effort, so a commerce hiccup "+
+			"shows slightly stale numbers instead of failing the page. Commission is earned on "+
+			"Hanzo's MARGIN, never on the referred customer's bill, so nothing here changes "+
+			"what that customer pays.")
+	openapi.Describe("/v1/affiliates/me", http.MethodGet,
+		"Your affiliate self-view, with the downline broken out by level",
+		"The richer self-view: the same lifetime accrued, pending and paid commission and "+
+			"payout history, plus the caller's downline broken out by upline LEVEL — direct, "+
+			"second, third — each with the rate paid at that level and how many orgs sit "+
+			"there.\n\n"+
+			"Commission is MULTI-LEVEL: a referred org's spend pays up its referral chain, "+
+			"three levels deep and no further. The direct level is the affiliate's own "+
+			"negotiated rate; the second and third are platform-wide switches, read live, so "+
+			"the schedule shown is the one actually in force rather than one compiled in. A "+
+			"caller that has not applied still gets that schedule alongside "+
+			"`isAffiliate:false`, so the console can show what it would earn.\n\n"+
+			"Scoped to the validated org and nothing else, and refused without a principal. An "+
+			"approved affiliate's figures are refreshed by a bounded, best-effort sweep before "+
+			"the read.")
+	openapi.Describe("/v1/affiliates/apply", http.MethodPost,
+		"Enroll your org in the partner program",
+		"Enrolls the caller's OWN org as an affiliate at status `applied`, optionally "+
+			"requesting a vanity code, and answers the record — 201 on the first apply, 200 "+
+			"with `created:false` afterwards.\n\n"+
+			"IDEMPOTENT, first apply wins: one affiliate per org, so re-applying never creates "+
+			"a second row and never resets an existing approval. Applying is not joining — no "+
+			"code is minted and nothing accrues until staff approve, which is where both the "+
+			"code and the commission rate come from.\n\n"+
+			"The org is the validated caller's, never a field. A malformed vanity code is "+
+			"refused up front; the code is only REQUESTED here, and approval may mint a "+
+			"different one if the requested code is taken.")
+	openapi.Describe("/v1/affiliates/attribute", http.MethodPost,
+		"Record that your org arrived through an affiliate's code",
+		"Records the first-touch edge every later commission is computed from: the caller's "+
+			"org was referred by the affiliate that owns this code.\n\n"+
+			"The REFERRED org is the validated caller, never a field. A caller that could name "+
+			"the referred org could attach itself to somebody else's revenue. The affiliate is "+
+			"resolved from the code, and only an APPROVED affiliate's code resolves.\n\n"+
+			"FIRST TOUCH WINS, set once: one affiliate per referred org, so a re-post answers "+
+			"the existing edge with `created:false` rather than moving the attribution. "+
+			"Self-attribution is refused, and so is a code that would make a cycle in the "+
+			"upline chain. An unknown code is a 404, deliberately: an affiliate code IS a "+
+			"public shareable link, so whether one is real is public by design, and the caller "+
+			"legitimately needs to know its link resolved.\n\n"+
+			"A user-level mirror of the edge is written best-effort; a conflict there never "+
+			"fails the org attribution, which is the money-bearing one.")
+
+	// --- admin surface: platform sudo, cross-tenant, fail-closed ---
+	openapi.Describe("/v1/admin/affiliates", http.MethodGet,
+		"Every affiliate in the fleet, with a summary",
+		"Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary "+
+			"of lifetime accrued, still-pending and paid commission in integer cents.\n\n"+
+			"PLATFORM SUDO ONLY, and a non-admin is refused outright. This is the cross-tenant "+
+			"view and it names orgs — exactly what the partner-facing leaderboard refuses to "+
+			"do. There is deliberately no org-scoped variant of this read; a partner sees its "+
+			"own standing through its own dashboard. Bounded per request.")
+	openapi.Describe("/v1/admin/referrals", http.MethodGet,
+		"Referral analytics: top referrers, conversion, and liability",
+		"The referral board: the top referrers by lifetime commission, the funnel conversion "+
+			"rate (referred orgs that have actually produced commission, over all referred "+
+			"orgs), and the accrual LIABILITY the platform owes, broken out by upline "+
+			"level.\n\n"+
+			"Read the liability figure carefully — it is commission accrued and NOT yet paid, "+
+			"so it is money owed, not money spent, and the per-level split says how much of it "+
+			"comes from direct referrals versus the second and third levels.\n\n"+
+			"PLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single "+
+			"attribution spine the accrual itself walks, so the board and the ledger cannot "+
+			"disagree. Amounts are integer cents.")
+	openapi.Describe("/v1/admin/affiliates/sweep", http.MethodPost,
+		"Accrue this period's commission for every referred org",
+		"Runs the accrual: for each referred org it reads that org's metered spend for the "+
+			"current period and accrues commission to every affiliate up its referral chain, "+
+			"then answers how many sources were swept and how many NEW accruals landed.\n\n"+
+			"This is the cron path, and it is LATCHED at most once per affiliate, source org "+
+			"and period — so re-running it inside the same period accrues nothing further. "+
+			"Safe to retry, and safe to run by hand beside the schedule.\n\n"+
+			"Commission is a rate of Hanzo's MARGIN on that spend, never of the customer's "+
+			"gross bill, so every level's share summed over one source event stays within the "+
+			"margin actually earned and the customer's charge is untouched. Nothing accrues "+
+			"past the third upline level, and only an APPROVED affiliate accrues at all.\n\n"+
+			"The same spend read drives the OSS author royalty — one read, both programs — so "+
+			"the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded per "+
+			"run; a source whose spend cannot be read is skipped and picked up next time, never "+
+			"half-accrued.")
+	openapi.Describe("/v1/admin/affiliates/:id/approve", http.MethodPost,
+		"Approve an affiliate and mint its code",
+		"Approves an affiliate and MINTS its referral code — the moment the partner has a "+
+			"working share link and starts accruing.\n\n"+
+			"The code is taken from the body if one is given, else the vanity code the "+
+			"applicant requested, else a slug derived for them. Codes are ONE global "+
+			"namespace, so a taken code is a 409 and nothing is approved. The minted code is "+
+			"also mirrored as a link row so click tracking is uniform across every code the "+
+			"affiliate holds; that mirror is best-effort and its failure never fails the "+
+			"approval.\n\n"+
+			"Approval is what makes an affiliate eligible: before it, attribution against its "+
+			"code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY. Audited.")
+	openapi.Describe("/v1/admin/affiliates/:id/suspend", http.MethodPost,
+		"Suspend an affiliate",
+		"Suspends an affiliate: it stops accruing on the next sweep, and its code stops "+
+			"resolving for new attributions.\n\n"+
+			"It CLAWS NOTHING BACK. Commission already accrued stays accrued and stays "+
+			"payable, and existing attribution edges are left standing — suspension ends "+
+			"earning, it does not unwind history. PLATFORM SUDO ONLY. Audited.")
+	openapi.Describe("/v1/admin/affiliates/:id/payout", http.MethodPost,
+		"Pay out an affiliate's accrued commission",
+		"Pays out accrued commission and answers the payout row with the affiliate's updated "+
+			"balances.\n\n"+
+			"TWO reservations guard it, both taken before any money moves. First the amount is "+
+			"reserved atomically against the affiliate's PENDING commission — accrued minus "+
+			"paid — so a payout can never exceed what is owed. Then it must be BACKED by the "+
+			"platform treasury reserve; if it is not, the pending reservation is voided and the "+
+			"call is refused with the available reserve quoted, so an unbacked payout leaves "+
+			"neither a row nor a phantom liability.\n\n"+
+			"The METHOD decides whether money actually moves. `credits` issues a commerce grant "+
+			"into the affiliate ORG's own wallet, tagged so the ledger can tell an affiliate "+
+			"payout apart from an admin or referral grant. Every other method — wire, paypal "+
+			"and the rest — is RECORD-ONLY: the payout row and the balances move, the cash is "+
+			"disbursed out of band.\n\n"+
+			"The amount is integer cents and must be positive. A grant that fails after both "+
+			"reservations is logged loudly and never silently retried; the payout row and the "+
+			"audit entry are what an operator reconciles from. PLATFORM SUDO ONLY.")
 }
 
 // ── customer surface ─────────────────────────────────────────────────────────

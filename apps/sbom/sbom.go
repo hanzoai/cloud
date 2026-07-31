@@ -51,6 +51,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -142,6 +143,32 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// would carry a trailing slash for a path this API has never served.
 	zip.Post(app.Group("/v1"), "/sbom", o.ingest, zip.WithStatus(http.StatusCreated))
 	g.Get("/*", cloud.Handle(s, resolve))
+}
+
+// The resolve route is the one operation here that cannot be a typed op — see
+// resolve for the three published facts a typed op would have to change. zipdoc
+// lifts prose from the two typed ops beside it and has nothing to lift from a raw
+// handler, so this route's prose is declared next to the route table instead, and
+// reaches the document, the generated SDKs and the spec-derived CLI the same way.
+func init() {
+	openapi.Describe("/v1/sbom/*", http.MethodGet,
+		"Resolve everything inside a container image",
+		"Answers with the component set of one container image — each component's name, "+
+			"version, type, package URL and license — addressed by either the image digest "+
+			"or the image ref. The captured segment is greedy and percent-decoded, so a ref "+
+			"carrying slashes and a tag is passed whole.\n\n"+
+			"This read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials "+
+			"belongs to a content-addressed digest rather than to an org, so every caller "+
+			"deploying the same image resolves the same components, and nothing tenant-owned "+
+			"is exposed by it. Ingest is the gated half of the pair.\n\n"+
+			"A miss is not the end of the lookup. The registry is the source of truth, so an "+
+			"unmaterialized ref is pulled from the SBOM attached to that image, persisted, and "+
+			"answered from the store — the first read of a freshly built image pays for the "+
+			"pull, later ones do not. A bare digest with no repository is not pullable and "+
+			"answers an honest 404, as does a ref with no attached document. Repeated ingests "+
+			"collapse to the latest, components come back ordered by type then name, and a "+
+			"result over 5000 components is capped with `truncated` set. When the datastore "+
+			"is not connected the answer is 503 rather than a fabricated empty image.")
 }
 
 // requireDatastore returns the honest 503 when the datastore store is not

@@ -179,8 +179,26 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 // DestinationStatus card every other route answers with. Without this the
 // document said POST /v1/destinations/{platform} takes NO body, which is the one
 // thing it cannot work without.
+// The PROSE goes here for the same reason and by the same rule: a typed op's
+// prose is lifted from its doc comment by zipdoc, and this route has no typed op
+// to lift from, so without a Describe it publishes an operationId and nothing
+// else — an SDK method that cannot explain itself and a CLI command with no help
+// text.
 func init() {
 	openapi.Register("/v1/destinations/:platform", "POST", map[string]any{}, DestinationStatus{})
+	openapi.Describe("/v1/destinations/:platform", http.MethodPost,
+		"Connect one conversion destination for your org, or update the one you have",
+		"Stores the addressed platform's non-secret ids (its measurement, pixel or dataset ids) "+
+			"and seals its API credential into KMS under a path scoped to the caller's own org, then "+
+			"answers the same status card the read routes do — with live telling you whether the "+
+			"credential actually resolves right now. The body's property NAMES are the platform's "+
+			"own: each field the platform declares, plus each secret under its camelCase name, so "+
+			"the accepted keys differ per platform and a missing REQUIRED field is refused. "+
+			"Connecting is an ORG ADMIN action — a validated member without the admin bit gets 403 — "+
+			"and it fails closed with 503 when the KMS master key is unavailable rather than "+
+			"persisting a destination whose secret was never sealed. The secret itself never appears "+
+			"in the response, in the store, or in a log line; only its NAME is ever published. Set "+
+			"enabled to false to keep the connection but stop the analytics fan-out to it.")
 }
 
 // ops binds the service to the typed ops. A TypedHandler takes no service

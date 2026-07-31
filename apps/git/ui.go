@@ -30,8 +30,97 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// uiAccess is the read rule every repo-addressed page shares, because they all
+// go through uiRepoAccess. Stated once so six descriptions cannot become six
+// accounts of one gate.
+const uiAccess = " A public repository is readable by anyone; a private one only " +
+	"by its own org. A repository that does not exist and one belonging to another " +
+	"org answer the SAME 404, so the page is never an existence oracle."
+
+// uiHTML is the fact an SDK or CLI consumer most needs about these twelve
+// operations and cannot see from the operationId: they are pages, not data.
+const uiHTML = " This is a server-rendered browser page, not JSON — the console " +
+	"repo-browser reads the same repository through the JSON ops under /v1/git. " +
+	"Repository names, paths and file contents all render through auto-escaping " +
+	"templates rather than being concatenated into HTML."
+
+// The two mounts, one handler set. Which mount a page is on is a real difference
+// in who can reach it, so each says which it is.
+const (
+	uiEverywhere = " Served on every host, which is how the console embeds the git " +
+		"browser under /git."
+	uiGitHostOnly = " Served only on the dedicated git host, where a browse URL " +
+		"matches the clone URL; on the API and console hosts it falls through to " +
+		"their own routes, so it can never shadow them."
+)
+
+// The prose for git's twelve browser pages. They are HTML handlers, so no typed
+// op can carry them and zipdoc has nothing to lift — left bare, every one of them
+// reached the published document as an operationId and a tag, indistinguishable
+// from a JSON route that takes no input. openapi.Describe attaches prose to a
+// route the router already carries; it can no more add a page than Register can
+// add an operation.
+//
+// One table, two mounts: the SAME six handlers answer under /git on every host
+// and at the root on the git host, so the descriptions are generated in pairs
+// from one row and cannot drift apart.
+func init() {
+	for _, p := range []struct{ embedded, root, summary, lead string }{
+		{"/git", "/", "Browse your org's repositories",
+			"The repository list for the signed-in caller's org — each repo with its " +
+				"description, default branch, size and last update. SIGNED OUT it renders " +
+				"the public explore page instead of refusing, because most Hanzo repos are " +
+				"open source and the open face is the default one; signed in, the caller's " +
+				"own org shows its private repositories alongside its public ones."},
+		{"/git/explore", "/explore", "Discover public repositories across every org",
+			"The open, unauthenticated face of the git host: every PUBLIC repository in " +
+				"the fleet, org-qualified, so a project can be found and cloned with no " +
+				"account at all — signing in is for private repos and for writes. " +
+				"Repositories live in per-org stores with no global index, so this unions " +
+				"each org's public rows and is bounded to a fixed number of stores per " +
+				"request, keeping discovery quick however many orgs exist. A fleet with no " +
+				"orgs yet is an empty page, not an error."},
+		{"/git/:org/:repo", "/:org/:repo", "Open a repository's home page",
+			"A repository at a glance: its branches, the tree at the tip, its most recent " +
+				"commits, its README rendered, and the HTTPS and SSH clone URLs. `?ref=` " +
+				"selects a branch, tag or commit; the default branch is used when it is " +
+				"omitted. A repository with no commits yet renders its clone instructions " +
+				"rather than an error, which is what a caller who has just created one " +
+				"needs to see."},
+		{"/git/:org/:repo/tree/*", "/:org/:repo/tree/*", "Browse a directory inside a repository",
+			"The contents of one directory at one revision, with breadcrumbs back up and " +
+				"links onward into subdirectories and files. The path after /tree/ is the " +
+				"directory and `?ref=` selects the branch, tag or commit, defaulting to the " +
+				"repository's own default branch. An unknown ref is 404, as is a repository " +
+				"with no commits."},
+		{"/git/:org/:repo/blob/*", "/:org/:repo/blob/*", "View a file in a repository",
+			"One file's contents at one revision, with its size and line count. A BINARY " +
+				"file is reported as binary rather than dumped into the page. The path " +
+				"after /blob/ is the file and `?ref=` selects the branch, tag or commit. An " +
+				"unknown ref or a path that is not a file in it is 404."},
+		{"/git/:org/:repo/commits", "/:org/:repo/commits", "Read a repository's commit log",
+			"The hundred most recent commits on one ref, each with its author, message " +
+				"and date. `?ref=` selects the branch, tag or commit, defaulting to the " +
+				"repository's default branch; an unknown one is 404."},
+	} {
+		openapi.Describe(p.embedded, http.MethodGet, p.summary, p.lead+access(p.embedded)+uiHTML+uiEverywhere)
+		openapi.Describe(p.root, http.MethodGet, p.summary, p.lead+access(p.root)+uiHTML+uiGitHostOnly)
+	}
+}
+
+// access returns the read rule for a page, which applies to exactly the pages
+// that address a repository — the two listing pages gate per ROW instead, so
+// claiming the repo rule on them would be false.
+func access(path string) string {
+	if strings.Contains(path, ":repo") {
+		return uiAccess
+	}
+	return ""
+}
 
 // uiRoutes registers the browser UI. Called from routes() in git.go.
 //

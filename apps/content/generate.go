@@ -59,9 +59,9 @@ type GenerateInput struct {
 
 // GenerateResult is the created draft's identity.
 type GenerateResult struct {
-	DocType string `json:"doctype"`
-	Name    string `json:"name"`
-	Status  string `json:"status"`
+	DocType string `json:"doctype"` // the marketing type the draft was filed as
+	Name    string `json:"name"`    // the new document's name — its address for every later call
+	Status  string `json:"status"`  // always "draft"; the lifecycle owns the initial state
 }
 
 // Generator drafts content field data for a marketing DocType. Implementations are

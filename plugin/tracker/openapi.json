@@ -42,6 +42,8 @@
       },
       "post": {
         "operationId": "post_v1_tracker_projects",
+        "summary": "Open a tracker board in your org",
+        "description": "Creates a board and returns it, including the KEY that will prefix every issue identifier filed under it — the same key GET, PATCH and DELETE address the board by, and the ENG in ENG-14.\n\n`name` is required. `key` is optional and is UPPERCASED: omit it and one is derived from the name — its first four letters and digits, or PRJ when that yields nothing usable. A key that is not 2-8 characters starting with a letter is 400.\n\nTHE KEY IS UNIQUE PER ORG AND A COLLISION IS REFUSED, NOT MERGED: a second board on a key already taken is 409, and the derived key is not made unique for you, so two similarly named boards collide and the second caller must name a key. Re-POSTing is therefore not idempotent — it fails rather than returning the existing board.\n\nThe org is the validated bearer's own, never a client header, and the board is stored under the caller's selected IAM PROJECT: the same key in two IAM projects is two unrelated boards. 403 without a validated org.\n\nFree by default. The create runs the shared per-org balance gate at a fee of zero unless a deployment prices it, and a priced deployment out of balance refuses with the nested {\"error\":{\"code\",\"message\"}} body at 402/503 rather than a flat error.",
         "tags": [
           "tracker"
         ]
@@ -224,6 +226,8 @@
       },
       "post": {
         "operationId": "post_v1_tracker_projects_by_key_issues",
+        "summary": "File an issue on a tracker board",
+        "description": "Files a work item on one board and returns it, carrying the `identifier` — KEY-\u003cnumber\u003e — it will be known by everywhere else.\n\nTHE NUMBER IS THE SERVER'S TO ASSIGN and is not accepted from the caller: it is the board's highest plus one, taken inside the insert's own transaction, and it counts PER BOARD — ENG-1 and OPS-1 are different issues.\n\n`title` is required; everything else is optional and defaults. `kind` (issue, pr, epic) says what the item IS, `source` (team, git, crm, helpdesk, cms, agent) says which surface OPENED it, and the two are orthogonal — an issue escalated from support is kind=issue\u0026source=helpdesk. `status` defaults to backlog, `priority` to none. A value outside one of these closed sets is 400, never silently defaulted. `labels` may not contain a comma, the storage separator.\n\n`repo` and `extRef` RECORD an external binding; they do not create one. Filing here writes to your tracker and reaches no external system — nothing is pushed to GitHub. The GitHub integration runs the other way, mirroring upstream issues INTO this tracker.\n\n404 when the caller's org has no board under that key. The org is the validated bearer's own and the board is resolved within the caller's selected IAM project; 403 without a validated org. Free by default, on the same balance gate as the board create — an epic, a pull request and an issue are priced identically, since the fee is per work item rather than per kind.",
         "tags": [
           "tracker"
         ],

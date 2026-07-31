@@ -30,8 +30,44 @@ package o11y
 import (
 	"net/http"
 
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// Both builder routes are reverse proxies — request body, query string, upstream
+// status, headers and body all ride through untouched — so there is no Go type
+// for "whatever the runtime answered" and they cannot be typed ops
+// (typed_wire_test.go's untypedByDesign). zipdoc has nothing to lift; the prose is
+// declared here, beside the path pin that is the whole reason the route exists.
+func init() {
+	openapi.Describe("/v1/o11y/query", http.MethodPost,
+		"Run one builder query against the caller's telemetry",
+		"Runs the console's composite builder query and answers the engine's own response "+
+			"untouched — body, status and headers ride through both ways, because the shape "+
+			"here is the query engine's, not this layer's.\n\n"+
+			"This flat path is the ONE canonical public address for the builder query, and "+
+			"pinning it server-side is the point: the version-less alias resolves to the "+
+			"engine's highest version, which rejects the v3-shaped composite payload the "+
+			"console speaks. So the engine version is resolved INSIDE the handler and the "+
+			"client never names one — a caller that spells a version into the path is coupling "+
+			"itself to an internal detail that is free to move.\n\n"+
+			"Requires a validated principal, and the tenant is the principal's own org, pinned "+
+			"server-side from the validated claim; there is no org selector in the payload or "+
+			"the query string that could widen it. Before the runtime is initialized this "+
+			"answers 503 rather than an empty result.")
+	openapi.Describe("/v1/o11y/query_range", http.MethodPost,
+		"Run one ranged builder query against the caller's telemetry",
+		"Runs the console's composite builder query over a time range — the list and series "+
+			"the trace, log and metric explorers render — and answers the engine's own "+
+			"response untouched, body, status and headers alike.\n\n"+
+			"Same pin as the instant form and for the same reason: the flat path resolves to a "+
+			"specific engine version INSIDE the handler, because the version-less alias "+
+			"resolves to one that rejects the composite payload the console sends. The client "+
+			"speaks only this path.\n\n"+
+			"Requires a validated principal, and the tenant is that principal's own org, pinned "+
+			"server-side; nothing in the request can widen it. Before the runtime is "+
+			"initialized this answers 503.")
+}
 
 // builderQueryHandler returns the flat builder-query route handler for `resource`
 // ("query" or "query_range"). It delegates to the SAME gated runtime handler the

@@ -62,6 +62,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -124,6 +125,28 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Get("/sbom", cloud.Handle(s, sbomRead))
 	// Collection root stays flat — Group("/v1/blueprint").Get("") yields "/v1/blueprint/".
 	zip.Get(zapp, "/v1/blueprint", o.list)
+}
+
+// The sbom read's prose. Every other blueprint op is a typed op, so zipdoc lifts
+// its doc comment; this one is untyped for the reason stated at its registration
+// above, which leaves it nothing to lift from. Declared through the same registry
+// the router projection consults, so it renders only while the route is served —
+// and the generated SDKs and the spec-derived CLI carry it like any other.
+func init() {
+	openapi.Describe("/v1/blueprint/sbom", http.MethodGet,
+		"A blueprint's bill of images and what running it costs",
+		"Answers a blueprint's SBOM — the container images its compose stack runs, each with the "+
+			"CPU/memory footprint that was applied to it — together with the compute cost that "+
+			"footprint prices out to on the active rate card.\n\n"+
+			"ONE address, TWO shapes at 200: `?template=<id>` returns that blueprint's Estimate "+
+			"alone (404 on an id no embedded blueprint carries), and no `template` returns "+
+			"`{data:[Estimate]}` for every blueprint — the batch the console's template gallery "+
+			"reads in one round-trip.\n\n"+
+			"The blueprints are reference content embedded in the binary and validated at mount, "+
+			"so this read is the same for every caller and is scoped to no tenant. The per-hour "+
+			"figure it returns is the one the deploy path meters the deploying org on and the 20% "+
+			"author royalty is taken from; GET /v1/blueprint/health echoes the rate card it was "+
+			"priced from.")
 }
 
 // blueprintOps binds the service to the typed blueprint ops. A TypedHandler takes

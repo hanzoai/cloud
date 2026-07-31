@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -116,6 +117,33 @@ func actor(ctx context.Context) string {
 }
 
 // ---- public intake ----
+
+// The intake's prose is declared beside the wire fact, because this is the one
+// route in crm that is not a typed op (routes() says why: the rate limit and the
+// body cap are HTTP middleware a typed op's MCP and CLI projections would not
+// run). zipdoc has no doc comment to lift from a raw handler, so without this the
+// operation publishes an operationId and nothing else.
+func init() {
+	openapi.Describe("/v1/crm/applications", http.MethodPost,
+		"Apply to the Startup Program from the public form",
+		"Files an application to the Startup Program and answers the id and pipeline stage it "+
+			"landed at.\n\n"+
+			"This is the ONE unauthenticated route in crm. It takes no principal and never reads "+
+			"a caller org: the application is filed against the DEPLOYMENT's own program org — "+
+			"the brand, hanzo unless white-labelled — so there is no tenant to name and none to "+
+			"leak. Reading the application back is staff-only and lives elsewhere.\n\n"+
+			"company, contactName and a parseable email are required; everything else is optional "+
+			"context. Re-submitting the same (email, company) REFRESHES the existing application "+
+			"instead of filing a second one, so an impatient applicant cannot duplicate their own "+
+			"lead — that is a 200 where a first submission is a 201. A filled `hp` honeypot field "+
+			"is answered exactly like a success and stored nowhere, so a bot cannot tell a drop "+
+			"from an accept.\n\n"+
+			"Filing is not screening: the application lands at stage `applied` with its AI screen "+
+			"still pending, and the screen runs afterwards on its own clock. A company and contact "+
+			"are also projected into the program org's ordinary CRM lists, best-effort — that "+
+			"projection failing does not fail the application. Bodies over 64 KiB are refused, and "+
+			"submissions are rate-limited.")
+}
 
 // apply is the UNAUTHENTICATED public application endpoint. It validates, drops
 // honeypot hits, dedups on (email, company), writes the Application (+ a

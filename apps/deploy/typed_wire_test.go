@@ -229,12 +229,31 @@ func TestPostsStayRawBecauseZipDecodesTheBodyFirst(t *testing.T) {
 // value the MCP tool and the generated SDK method read. It also states, in one
 // place, the addresses that are deliberately NOT typed and the wire fact that
 // keeps each one raw — so a refusal cannot outlive its reason unnoticed.
+//
+// TYPED-NESS IS READ FROM THE TYPED REGISTRY, NOT FROM THE PROSE. This test used
+// to assert that a deliberately-raw address carries NO description, because
+// before openapi.Describe existed the two were the same fact: prose reached the
+// document only by zipdoc lifting a typed op's doc comment, so "described" ⟺
+// "typed". Describe broke that equivalence on purpose — it is the seam that gives
+// an untyped route prose WITHOUT typing it — and an assertion resting on the old
+// equivalence would now forbid exactly the thing the seam exists to do, failing
+// on prose while a route that genuinely became typed slipped past unnoticed.
+// openapi.Typed is the honest signal: a typed op is one zip has in its registry.
+//
+// So the invariant is strictly stronger than it was: every operation the plane
+// serves is EITHER a typed op whose doc comment was lifted, OR a recorded raw
+// address whose prose was declared beside its wire fact — and either way it
+// carries prose. Nothing on this plane publishes an operationId and nothing else.
 func TestEveryTypedOpIsInTheDocumentWithProse(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, fakeService())
 	doc, err := openapi.Spec(app, openapi.Info{Title: "deploy", Version: "v1"})
 	if err != nil {
 		t.Fatalf("openapi.Spec: %v", err)
+	}
+	reg, err := openapi.Typed(app)
+	if err != nil {
+		t.Fatalf("openapi.Typed: %v", err)
 	}
 
 	typed := []string{
@@ -287,6 +306,10 @@ func TestEveryTypedOpIsInTheDocumentWithProse(t *testing.T) {
 			t.Errorf("%s is not served — the typed op moved or was dropped", at)
 			continue
 		}
+		if reg.Ops[at] == nil {
+			t.Errorf("%s is recorded as a typed op but zip's typed registry does not hold it — it was "+
+				"un-typed without this list being updated", at)
+		}
 		if !described[at] {
 			t.Errorf("%s carries no description: zipdoc did not lift its doc comment, so it reaches no SDK and no MCP tool", at)
 		}
@@ -296,8 +319,15 @@ func TestEveryTypedOpIsInTheDocumentWithProse(t *testing.T) {
 			t.Errorf("%s is not served, but is recorded as deliberately untyped (%s) — fix the record", at, why)
 			continue
 		}
-		if described[at] {
-			t.Errorf("%s now carries a description, so it is typed — delete its entry: %s", at, why)
+		if reg.Ops[at] != nil {
+			t.Errorf("%s is now a typed op, so delete its entry: %s", at, why)
+		}
+		// A raw address is exempt from being TYPED, never from explaining itself:
+		// its prose is declared beside the wire fact instead of being lifted.
+		if !described[at] {
+			t.Errorf("%s carries no description: it is deliberately raw (%s), so zipdoc has nothing to "+
+				"lift and its prose must be declared with openapi.Describe — without it the operation "+
+				"publishes an operationId and nothing else", at, why)
 		}
 	}
 	if got, want := len(served), len(typed)+len(raw); got != want {

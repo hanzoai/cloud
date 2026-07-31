@@ -46,6 +46,7 @@ import (
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel"
@@ -740,7 +741,49 @@ func (o agentOps) del(ctx context.Context, in *agentRef) (*noContent, error) {
 }
 
 type runReq struct {
+	// Input is the caller's message for this run, composed with the agent's stored
+	// instructions as the system prompt. Capped at 128 KiB.
 	Input string `json:"input"`
+}
+
+// The run's prose, declared beside the wire fact that keeps it untyped (the
+// registration above says why it cannot be a typed op: a 502 answers with the
+// RECORDED RUN as its body and a balance denial answers the fleet-wide
+// cloud.DenyResource envelope, and zip's error type can express neither). zipdoc
+// lifts a typed op's prose from its doc comment; there is no typed op here, so
+// without this the one operation that spends money publishes an operationId and
+// nothing else.
+func init() {
+	openapi.Describe("/v1/agents/:ref/run", http.MethodPost,
+		"Run one of your org's agents and get the recorded run back.",
+		"Composes the agent's stored instructions with the caller's `input`, executes one real "+
+			"chat completion through the same in-process AI client the rest of the console uses, "+
+			"and answers with the run that was recorded: its id, status, model, output, duration "+
+			"and error. Every run this returns reflects an execution that actually happened — a "+
+			"model failure is recorded and reported, never hidden and never fabricated. A "+
+			"transient upstream failure (429, 5xx, empty choices) is retried up to three times "+
+			"with jittered backoff, and a configured failover model is tried before the run is "+
+			"called an error.\n\n"+
+			"`ref` is the agent's public `agent_…` id or its org-unique name; either resolves the "+
+			"same agent, and it must belong to the caller's org, so an agent in another tenant is "+
+			"a 404 exactly like one that does not exist. A validated principal is required and "+
+			"the check is made twice on purpose: this route MOVES MONEY, so the debit's principal "+
+			"requirement is asserted where the money moves rather than inherited from the tenant "+
+			"lookup.\n\n"+
+			"The org's balance is authorized BEFORE any inference, so an unfunded tenant gets 402 "+
+			"and no free compute, and a billing plane that cannot answer gets 503 rather than a "+
+			"free run. The flat per-run fee is an operator knob; setting it to zero makes runs "+
+			"free and removes the balance gate with them. Only a SUCCESSFUL run is billed, "+
+			"attributed to the model actually used — a failover run bills the model it fell over "+
+			"to, not the one it started on. A deployment with no inference wired answers 503 "+
+			"before any of this.\n\n"+
+			"THE RULE A READER GETS WRONG: a failed run is a 502 whose body is the RUN, not an "+
+			"error envelope. The execution happened, the run was persisted to this agent's "+
+			"history, and its `error` field is the product — so a client that treats every "+
+			"non-2xx as an opaque failure throws away the only account of what went wrong. Each "+
+			"run also opens a root session in the live session registry, best-effort: a "+
+			"bookkeeping failure there never fails the run, because the run and its billing "+
+			"already happened.")
 }
 
 // run executes the agent: it composes the agent's instructions with the caller

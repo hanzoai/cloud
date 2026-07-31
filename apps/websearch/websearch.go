@@ -67,7 +67,9 @@
 //
 // The route that unblocks the first is a typed `All` in zip; the second needs a
 // body-TOLERANT op. Until then this subsystem is honestly untyped: eight operations,
-// no prose, no MCP tool, no SDK method.
+// no MCP tool, no SDK method. Their PROSE is not part of that cost — it is declared
+// through openapi.Describe beside the route table (Mount, below), which is the seam
+// for exactly the operations the wire refuses to type.
 package websearch
 
 import (
@@ -82,6 +84,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -261,4 +264,94 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	logger.Info("web search surface mounted (native searxng-compat meta-search + firecrawl-compat scrape, both in-process)")
 	return nil
+}
+
+// searchPath is the address the meta-search answers at, spelled once: Mount hangs
+// the handler on it and the prose below is keyed by it, so the described operation
+// is the served one by construction.
+const searchPath = "/v1/websearch/search"
+
+// allMethods are the methods the document publishes for an `All` route, and
+// therefore the methods search's prose has to cover. SEVEN, not the five a REST
+// reader counts — OPTIONS and TRACE are published too, and describing five would
+// leave two operations carrying an operationId and nothing else, which is the exact
+// hole this prose closes.
+var allMethods = []string{
+	http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch,
+	http.MethodDelete, http.MethodOptions, http.MethodTrace,
+}
+
+// The prose for both surfaces, declared beside the wire facts that keep them
+// untyped (see the package doc for why neither can be a typed op). zipdoc lifts an
+// op's prose from its handler's doc comment and there is no typed op here to lift
+// from, so without this the eight operations publish an operationId and nothing
+// else: eight SDK methods that cannot explain themselves and eight CLI commands
+// with no help text.
+//
+// Search states ONE fact seven times because it IS one handler answering every
+// method, and saying it seven different ways would be seven chances to be wrong.
+func init() {
+	for _, method := range allMethods {
+		openapi.Describe(searchPath, method,
+			"Keyless web meta-search, in the SearXNG JSON envelope.",
+			"Answers {query, number_of_results, results:[{url, title, content, engine}]} — the "+
+				"exact /search?format=json contract a SearXNG client decodes, so an agent tool "+
+				"configured against SearXNG reaches this with no change. `q` is the query and "+
+				"`language` narrows it; both are read from the QUERY STRING.\n\n"+
+
+				"Served in-process by a Go meta-search over keyless public engines, never a "+
+				"third-party search API and never a search key. The enabled engines run "+
+				"concurrently and their hits are merged, deduplicated by normalised URL (host and "+
+				"path, trailing slash and fragment dropped, query kept — distinct queries are "+
+				"distinct results) and capped at 20. Ranking is deterministic rather than scored: "+
+				"the first configured engine's hits lead.\n\n"+
+
+				"TWO WAYS IN, one-way equivalent, and no third: a validated principal — the same "+
+				"gate the whole data plane uses — passes straight through, and a caller without "+
+				"one must present the shared service key as X-API-Key, compared in constant time. "+
+				"A deployment with no key configured answers 503 rather than opening the surface "+
+				"to everyone, and a missing or wrong key is 401. It is never an open proxy. There "+
+				"is no tenant scoping beyond that gate, and there is nothing to scope: the results "+
+				"are public web pages, identical for every caller.\n\n"+
+
+				"It fails SOFT on the engines and closed only on the gate. An engine that errors "+
+				"or is served a bot-challenge page contributes zero results and never fails the "+
+				"request, so an empty `results` is a real answer — nothing was found — and not an "+
+				"outage. The array is always present, never null.\n\n"+
+
+				"The one thing to get right: every method answers identically. This is one "+
+				"handler registered for all of them, and it reads only the query string, so a body "+
+				"sent on the write verbs is ignored rather than refused.")
+	}
+
+	openapi.Describe("/v1/scrape", http.MethodPost,
+		"Fetch one page and get its extracted markdown, in the firecrawl envelope.",
+		"Takes {url} and answers {success, data:{markdown, metadata}} — the exact contract a "+
+			"firecrawl client decodes. The fetch, extraction and optional browser render run "+
+			"in-process; there is no crawler pod to be down.\n\n"+
+
+			"The shared service key is required as an Authorization Bearer, compared in constant "+
+			"time: unset on the deployment is 503, missing or wrong is 401. Unlike search, a "+
+			"validated principal does NOT substitute for it — this is the service-to-service door.\n\n"+
+
+			"A page is archived under the caller's own org and project, taken from the verified "+
+			"principal when there is one, so a scrape lands in the same corpus /v1/crawl fills and "+
+			"a URL already read under that scope is answered from the archive without touching the "+
+			"network. A service caller carrying no principal shares the unscoped prefix.\n\n"+
+
+			"The URL is caller-supplied and fetched from INSIDE the cluster, which makes this a "+
+			"request-forgery primitive by construction: in-namespace service DNS and a cloud "+
+			"metadata endpoint that hands credentials to anyone who asks are both a resolution "+
+			"away. Only http and https are accepted, and every address actually dialled must be "+
+			"public unicast — loopback, link-local, private and multicast are refused. The check "+
+			"lives in the DIALER rather than on the hostname, because resolving a name to validate "+
+			"it and then letting the transport resolve it again is a gap DNS rebinding walks "+
+			"straight through; redirects re-enter the same dialer, so a public URL that bounces to "+
+			"the metadata address is refused at the hop that matters.\n\n"+
+
+			"The one thing to get right: FAILURE IS 200. A missing or unparseable url, a body over "+
+			"the 1 MiB read cap, and a fetch that could not be completed all answer HTTP 200 with "+
+			"success:false and a reason — a firecrawl client reads data.success, not the status "+
+			"line. Only the two auth refusals use a status code, so a caller that branches on HTTP "+
+			"status alone will read every failed scrape as a success.")
 }

@@ -4,8 +4,28 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// A reverse proxy has no Go type for "whatever the runtime answered", which is why
+// this stays untyped (typed_wire_test.go's untypedByDesign) and why zipdoc has no
+// doc comment to lift. The prose is declared beside the wire fact.
+func init() {
+	openapi.Describe("/v1/o11y/sessions", http.MethodGet,
+		"List the caller org's LLM sessions",
+		"Answers the caller org's LLM-observability sessions — traces grouped by session id "+
+			"on the gen_ai span plane — paged by limit and offset, in the runtime's own "+
+			"envelope, passed through unchanged.\n\n"+
+			"An org-less caller is refused HERE, at the cloud boundary, before the request "+
+			"reaches the runtime, and the org the runtime then scopes on is that SAME validated "+
+			"tenant. The two cannot disagree: the tenant is minted from the principal's own "+
+			"claim at ingress and a client copy never survives it.\n\n"+
+			"There is deliberately no session-detail route to pair with this. The runtime serves "+
+			"the list only; detail is composed client-side from this list plus the traces "+
+			"filtered by session, so a caller looking for one is looking for something that was "+
+			"never served rather than something that broke.")
+}
 
 // GET /v1/o11y/sessions — the flat, org-gated public path for the LLM-obs sessions
 // list (traces grouped by session.id on the gen_ai span plane). The console's

@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -104,6 +105,40 @@ func (o ops) adminCatalog(ctx context.Context, _ *pricingNoInput) (*adminCatalog
 		Providers: VisibleProviders(pwrap.Providers, snap, "", true),
 		Updated:   mp.Updated,
 	}, nil
+}
+
+// The prose for the one operation on this surface that cannot be a typed op.
+// The other thirty-one carry theirs in a doc comment zipdoc lifts; this one is
+// pinned raw by the greedy wildcard (ops.go says why, typed_wire_test.go proves
+// it), so there is no comment for anything to lift and the operation would
+// publish an operationId and nothing else — an SDK method and a CLI command
+// that cannot explain themselves. Declared through the same registry Register
+// uses, so it renders only while the router actually serves the route, and the
+// key is the fiber pattern the router carries (`…/models/*`), not the template
+// the document renders it as.
+func init() {
+	openapi.Describe("/v1/admin/catalog/models/*", http.MethodPatch,
+		"Turn one model off, into beta for named orgs, or generally available",
+		"Sets one model's availability overlay — and the price overrides applied on top of the "+
+			"catalog — then answers the new effective overlay, so a console needs no second read. "+
+			"The model id is the whole remaining path, so a slashed id like "+
+			"`anthropic/claude-opus-4.6` addresses intact.\n\n"+
+			"SuperAdmin only; every other caller is 403, decided before the body is read. The "+
+			"overlay is PLATFORM-WIDE — this is the catalog every org prices against, not a "+
+			"per-org setting — and `betaOrgs` is what narrows a beta to named orgs.\n\n"+
+			"Only the fields the patch names change; an entry with no overlay yet starts from the "+
+			"catalog default, which is enabled. `state` is the coherent tri-state setter "+
+			"(`off`|`beta`|`ga`) and the low-level `enabled`/`beta` flags are applied AFTER it, so "+
+			"they win where both are sent; anything else in `state` is 400. A field sent as an "+
+			"explicit `null` arrives indistinguishable from an absent one, so null does not clear "+
+			"anything.\n\n"+
+			"The rule worth reading twice: a disabled entry that still carries beta orgs IS a beta "+
+			"— `{\"enabled\":false,\"betaOrgs\":[\"acme\"]}` leaves acme seeing the model. Only an "+
+			"explicit `off` (or `beta:false`) with an empty list is the absolute kill switch that a "+
+			"user's own beta opt-in can never re-open.\n\n"+
+			"`overrides` is an RFC 7386 merge patch, stored and echoed back verbatim; it must be a "+
+			"JSON object or null — an array or a scalar is refused — and is bounded in size and "+
+			"nesting depth. An uninitialised overlay store answers 503.")
 }
 
 // adminPatchModel upserts the overlay for one model id. The id is a greedy
