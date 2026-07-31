@@ -20,6 +20,27 @@
 //
 // Open fails CLOSED: a bind/start error aborts boot rather than serving a phantom
 // messaging plane.
+//
+// # THE BUS KNOB
+//
+// URL is where every app in this process reaches that plane, and it is the ONE
+// knob for all of them — analytics publishing the event plane, webhooks consuming
+// it, the Kafka facade bridging it. It defaults to the LOOPBACK address of the
+// server this same binary just bound, so the default needs no configuration and
+// cannot disagree with the server: both read CLOUD_PUBSUB_PORT.
+//
+//	CLOUD_PUBSUB_URL   full dial URL; set ONLY to point this process at a bus
+//	                   other than its own embedded one.
+//	CLOUD_PUBSUB_PORT  the port the embedded server binds AND the port the
+//	                   default URL dials. Default 4222.
+//	CLOUD_PUBSUB_HOST  the bind address of the embedded server (default
+//	                   0.0.0.0). It is NOT a dial address: URL always dials
+//	                   127.0.0.1, because 0.0.0.0 names every interface to a
+//	                   listener and none to a client.
+//
+// There is deliberately no per-app URL variable and no "off". Mount fails boot
+// closed, so a cloud that is up HAS a bus; an app that made its bus optional
+// would silently ship with its half of the platform disconnected.
 package pubsub
 
 import (
@@ -42,6 +63,45 @@ import (
 // srv holds the running embedded server so shutdown can stop it. Set once by Mount.
 var srv *psembed.Server
 
+// The bus knob, in one place. See the package doc.
+const (
+	urlEnv      = "CLOUD_PUBSUB_URL"
+	portEnv     = "CLOUD_PUBSUB_PORT"
+	defaultPort = 4222
+)
+
+// URL is THE bus address for every app in this process. Callers dial it; nobody
+// reads an environment variable of their own to find the bus.
+//
+// It never fails and it is never empty: a malformed port is Mount's error to
+// report (it aborts boot), so by the time an app dials, the port either parsed or
+// the process is gone — and a caller reached before Mount gets the default rather
+// than an empty string it would have to branch on.
+func URL() string {
+	if u := strings.TrimSpace(os.Getenv(urlEnv)); u != "" {
+		return u
+	}
+	port, err := clientPort()
+	if err != nil {
+		port = defaultPort
+	}
+	return "nats://" + net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+}
+
+// clientPort resolves the port the embedded server binds and the default URL dials —
+// ONE parse, so the server and its clients cannot land on different ports.
+func clientPort() (int, error) {
+	v := strings.TrimSpace(os.Getenv(portEnv))
+	if v == "" {
+		return defaultPort, nil
+	}
+	p, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("bad %s %q: %w", portEnv, v, err)
+	}
+	return p, nil
+}
+
 // Mount starts the embedded PubSub server, binding NATS + JetStream in-process.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
@@ -57,13 +117,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("pubsub.Mount: store dir %s: %w", dataDir, err)
 	}
 
-	port := 4222
-	if v := strings.TrimSpace(os.Getenv("CLOUD_PUBSUB_PORT")); v != "" {
-		p, err := strconv.Atoi(v)
-		if err != nil {
-			return fmt.Errorf("pubsub.Mount: bad CLOUD_PUBSUB_PORT %q: %w", v, err)
-		}
-		port = p
+	port, err := clientPort()
+	if err != nil {
+		return fmt.Errorf("pubsub.Mount: %w", err)
 	}
 
 	// The bus's message-body ceiling. Zero means the embed default (8 MiB), which
