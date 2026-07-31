@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package share fronts the zrok controller so a Hanzo org can publish a local service to a public https://\u003ctoken\u003e.share.hanzo.ai URL — \"ngrok on our own stack\" — folded into the ONE cloud binary.",
+    "description": "Package share is a public URL for a service on your own machine, and a list of what you have open.",
     "version": "v1"
   },
   "servers": [

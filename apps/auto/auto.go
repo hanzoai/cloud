@@ -1,5 +1,8 @@
-// Package auto is Hanzo Auto: durable workflow automation — flows built from
-// trigger/action pieces, executed as durable runs on the hanzo tasks plane.
+// Package auto is Hanzo Auto: build a flow from triggers and actions, publish it,
+// and watch every run.
+//
+// It is durable workflow automation — flows built from trigger/action pieces,
+// executed as durable runs on the hanzo tasks plane.
 //
 // PRODUCT-REPO MODEL. The product lives in github.com/hanzoai/auto (native Go:
 // hanzoai/base for storage+HTTP, hanzoai/tasks for durable execution, an

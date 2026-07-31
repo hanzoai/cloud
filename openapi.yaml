@@ -50676,8 +50676,8 @@ tags:
     you get paid.'
   name: authors
 - name: authz
-- description: 'Package auto is Hanzo Auto: durable workflow automation — flows built
-    from trigger/action pieces, executed as durable runs on the hanzo tasks plane.'
+- description: 'Package auto is Hanzo Auto: build a flow from triggers and actions,
+    publish it, and watch every run.'
   name: auto
 - description: Package automations is workflows that run themselves, on a schedule
     or a webhook.
@@ -50767,8 +50767,8 @@ tags:
 - name: edge
 - name: embed-status
 - name: enablement
-- description: 'Package engine is Hanzo Engine: the serving runtime behind Hanzo''s
-    models — what it serves and what it runs on, read through /v1/engine.'
+- description: 'Package engine is Hanzo Engine: which models the serving runtime has
+    loaded, and the GPUs under it.'
   name: engine
 - description: 'Package entitlements is what your org may run: what the plan grants,
     and which of those products are switched on.'
@@ -50794,8 +50794,8 @@ tags:
     who you pick.'
   name: flags
 - name: fleet
-- description: 'Package flow is Hanzo Flow: visual AI workflow orchestration — build,
-    manage, and run agent workflows on the unified /v1 plane.'
+- description: 'Package flow is Hanzo Flow: build an agent workflow on a visual canvas,
+    run it, and read every run.'
   name: flow
 - description: 'Package framework is document types you define: describe a record
     once, then create, list, submit and cancel documents against it.'
@@ -50859,10 +50859,8 @@ tags:
 - description: 'Package ml is model serving and training: deploy a model behind an
     endpoint, run a training job, tune it with experiments.'
   name: ml
-- description: 'Package mq is Hanzo MQ, the managed message-queue product: org-scoped
-    administration of durable JetStream queues on the platform message plane — streams,
-    their messages, pull consumers and delivery — served at /v1/mq over the broker
-    apps/pubsub embeds.'
+- description: 'Package mq is queue and stream admin for your org: create them, watch
+    them drain, ack what you pulled.'
   name: mq
 - name: networks
 - description: Package notify is transactional email and SMS, sent through your org's
@@ -50894,17 +50892,14 @@ tags:
 - description: Package prompts is your prompt library, versioned, so nothing changes
     silently.
   name: prompts
-- description: 'Package pubsub is the platform message bus: publish/subscribe messaging,
-    durable JetStream streams and consumers, and a key-value store, served to tenants
-    at /v1/pubsub over the embedded Hanzo PubSub (NATS + JetStream) node this same
-    package runs.'
+- description: 'Package pubsub is your message bus: publish, subscribe, and durable
+    streams your apps read at their own pace.'
   name: pubsub
 - description: Package referrals is credit for both sides when someone you refer actually
     spends.
   name: referrals
-- description: 'Package registry is Hanzo Registry: the management plane over the
-    platform''s artifact registries — list projects, container images, tags and npm
-    packages, and mint scoped pull tokens, on the unified /v1 plane.'
+- description: 'Package registry is your container and package registry: push images,
+    pull them back, see what you store.'
   name: registry
 - name: releases
 - description: Package research is every experiment you have ever run, kept and comparable.
@@ -50925,9 +50920,8 @@ tags:
 - description: Package settings is how an org configures each product it uses, secret
     fields included.
   name: settings
-- description: Package share fronts the zrok controller so a Hanzo org can publish
-    a local service to a public https://<token>.share.hanzo.ai URL — "ngrok on our
-    own stack" — folded into the ONE cloud binary.
+- description: Package share is a public URL for a service on your own machine, and
+    a list of what you have open.
   name: share
 - name: sites
 - name: skills

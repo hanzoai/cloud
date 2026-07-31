@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package pubsub is the platform message bus: publish/subscribe messaging, durable JetStream streams and consumers, and a key-value store, served to tenants at /v1/pubsub over the embedded Hanzo PubSub (NATS + JetStream) node this same package runs.",
+    "description": "Package pubsub is your message bus: publish, subscribe, and durable streams your apps read at their own pace.",
     "version": "v1"
   },
   "servers": [

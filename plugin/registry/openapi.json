@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package registry is Hanzo Registry: the management plane over the platform's artifact registries — list projects, container images, tags and npm packages, and mint scoped pull tokens, on the unified /v1 plane.",
+    "description": "Package registry is your container and package registry: push images, pull them back, see what you store.",
     "version": "v1"
   },
   "servers": [
