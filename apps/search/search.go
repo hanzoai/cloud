@@ -1,7 +1,9 @@
-// Package search answers "what is RELEVANT" over a tenant's own data: it owns no
-// store and fuses the two retrieval stores the platform already runs — the lexical
-// index (apps/index) and the vector index (apps/knowledge) — into one ranked
-// result set.
+// Package search is one ranked result set over everything your org has stored.
+//
+// It answers "what is RELEVANT" over a tenant's own data: it owns no store and
+// fuses the two retrieval stores the platform already runs — the lexical index
+// (apps/index) and the vector index (apps/knowledge) — into one ranked result
+// set.
 //
 // IT IS NOT MOUNTED. There is no manifest row and no plugin/search binary, so
 // Mount below is never called and its POST /v1/search never reaches the wire —

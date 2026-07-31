@@ -1,6 +1,7 @@
-// Package index mounts the Hanzo Cloud /v1/index/* surface: a native-Go,
-// multi-tenant full-text index on Base/SQLite that speaks the Meilisearch REST
-// dialect.
+// Package index is fast full-text search over your own data, typos forgiven.
+//
+// A native-Go, multi-tenant full-text index on Base/SQLite that speaks the
+// Meilisearch REST dialect.
 //
 // It is the in-binary replacement for the standalone Meilisearch containers.
 // Search is a subsystem of the one cloud binary like every other client, so it

@@ -1,5 +1,6 @@
-// Package templates mounts /v1/templates — the Hanzo starter-kit gallery, in TWO
-// layers that never mix:
+// Package templates is a gallery of starter kits you can deploy as they come.
+//
+// The Hanzo starter-kit gallery at /v1/templates, in TWO layers that never mix:
 //
 //   - the PUBLIC catalog: deployable app/site scaffolds (source of truth:
 //     hanzoai/gallery), vendored so the unified `cloud` binary ships it with no

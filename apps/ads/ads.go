@@ -1,6 +1,8 @@
-// Package ads is paid advertising: ad campaigns with an objective, a budget and
-// reported spend, launched and paused on Meta, Google, TikTok, Reddit, LinkedIn or
-// Microsoft with the org's own connector token.
+// Package ads is your paid ad campaigns, launched and paused from one place.
+//
+// A campaign carries an objective, a budget and reported spend, and runs on
+// Meta, Google, TikTok, Reddit, LinkedIn or Microsoft with the org's own
+// connector token.
 //
 // It is also the PAID executor of the go-to-market plane: apps/campaign fans its
 // paid channel out to LaunchPaid/PaidSpend/PausePaid (provider.go), and this

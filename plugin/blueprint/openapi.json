@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package blueprint mounts the Hanzo Cloud /v1/blueprint/* surface: the compute-cost basis for the OSS-template economy.",
+    "description": "Package blueprint is what a template costs to run, worked out before you deploy.",
     "version": "v1"
   },
   "servers": [

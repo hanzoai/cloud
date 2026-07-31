@@ -1,5 +1,7 @@
-// Package guide mounts the Hanzo Cloud /v1/guide/* surface: the Business AI Guide,
-// an interactive launch checklist every org completes on-site.
+// Package guide is a step-by-step checklist that gets your business running on AI.
+//
+// The Business AI Guide: an interactive launch checklist every org completes
+// on-site.
 //
 // It is three orthogonal things composed:
 //

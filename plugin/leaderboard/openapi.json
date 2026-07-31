@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package leaderboard ranks AI usage: who leads inside an org, which orgs lead globally, and a GitHub-style per-day contribution graph for one subject — all opt-in for public listing.",
+    "description": "Package leaderboard is the ranking of who uses AI most, in your org and globally.",
     "version": "v1"
   },
   "servers": [

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package catalog is the CROSS-ORG discovery lens: one place to find every project, app and site the fleet has built, whichever org built it.",
+    "description": "Package catalog is one place to browse every project, app and site built here.",
     "version": "v1"
   },
   "servers": [

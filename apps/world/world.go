@@ -1,9 +1,11 @@
-// Package world mounts the Hanzo Cloud "World" news data plane: a per-org,
-// per-project intelligence feed that normalizes GDELT + host-allowlisted RSS/Atom
-// into one NewsItem stream, applies the project's keyword/region/source filter,
-// and serves it over REST + SSE. It is the Go backend for the World monitor
-// frontend (hanzoai/world), replacing that app's Vercel edge functions
-// (api/gdelt-doc.js, api/rss-proxy.js) with an org-scoped, in-binary subsystem.
+// Package world is a live news feed filtered to what your project cares about.
+//
+// A per-org, per-project intelligence feed that normalizes GDELT +
+// host-allowlisted RSS/Atom into one NewsItem stream, applies the project's
+// keyword/region/source filter, and serves it over REST + SSE. It is the Go
+// backend for the World monitor frontend (hanzoai/world), replacing that app's
+// Vercel edge functions (api/gdelt-doc.js, api/rss-proxy.js) with an
+// org-scoped, in-binary subsystem.
 //
 // Surface (all org/project-scoped; /v1 only):
 //

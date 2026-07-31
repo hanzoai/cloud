@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package templates mounts /v1/templates — the Hanzo starter-kit gallery, in TWO layers that never mix:",
+    "description": "Package templates is a gallery of starter kits you can deploy as they come.",
     "version": "v1"
   },
   "servers": [

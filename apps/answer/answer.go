@@ -1,5 +1,8 @@
-// Package answer is the native answer engine: the bounded plan → search → read →
-// rank → synthesize → cite → follow-up loop behind POST /v1/ask when a `mode`
+// Package answer is a researched answer to a hard question, with its sources
+// cited.
+//
+// It is the native answer engine: the bounded plan → search → read → rank →
+// synthesize → cite → follow-up loop behind POST /v1/ask when a `mode`
 // (search|news|research|deep) selects web grounding. It is a clean-room Hanzo
 // implementation (NOT derived from any AGPL reference).
 //

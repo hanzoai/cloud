@@ -1,6 +1,6 @@
-// Package crm is the sales pipeline: companies, the contacts who work at them, and
-// the opportunities being worked — plus the Startup Program intake that lands as a
-// scored application.
+// Package crm is your sales pipeline: the companies, the people, the deals in play.
+//
+// Plus the Startup Program intake, which lands as a scored application.
 //
 // The three core entities are faithful to Twenty's `company` / `person` /
 // `opportunity` standard objects, with Twenty's composite fields (FULL_NAME,

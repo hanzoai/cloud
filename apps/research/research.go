@@ -1,9 +1,10 @@
-// Package research mounts the Hanzo Cloud /v1/research/* surface: the R&D EVIDENCE
-// plane (HIP-0512 §"Hanzo Research"). Every experiment across every product — a
-// benchmark run is ONE kind; kernel-perf (hanzo-engine), training (hanzo-ml),
-// ablations, and policy-evals are the others — accrues here as VERSIONED, append-only
-// evidence under one discriminator, kind ∈ benchmark | kernel-perf | training |
-// ablation | policy-eval.
+// Package research is every experiment you have ever run, kept and comparable.
+//
+// The R&D EVIDENCE plane (HIP-0512 §"Hanzo Research"). Every experiment across
+// every product — a benchmark run is ONE kind; kernel-perf (hanzo-engine),
+// training (hanzo-ml), ablations, and policy-evals are the others — accrues
+// here as VERSIONED, append-only evidence under one discriminator, kind ∈
+// benchmark | kernel-perf | training | ablation | policy-eval.
 //
 // Two planes, never one (HIP-0512): each org's transactional SQLite (store.go, per
 // HIP-0302, physically file-isolated) is the local source of truth; it rolls up into

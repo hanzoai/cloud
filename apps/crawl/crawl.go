@@ -1,5 +1,7 @@
-// Package crawl is Hanzo Crawl: fetch one URL and return its readable content as
-// markdown, in-process, in Go.
+// Package crawl is any web page turned into clean markdown a model can read.
+//
+// Hanzo Crawl: fetch one URL and return its readable content as markdown,
+// in-process, in Go.
 //
 // It replaces the dial to a separate Crawl4AI deployment. That service was named
 // in config but did not exist — crawl.hanzo.svc.cluster.local was NXDOMAIN — so
