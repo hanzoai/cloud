@@ -20,6 +20,7 @@
 // Every handler resolves its tenant through principal.Org (the ONE boundary) and
 // scopes strictly to that org — a caller can only ever search or connect its own
 // knowledge.
+
 package knowledge
 
 import (

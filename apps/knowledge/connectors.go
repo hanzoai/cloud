@@ -18,6 +18,7 @@
 //     not from a client header and not from the provider — which defeats the
 //     login-CSRF / mix-up class (an attacker cannot bind their provider account to a
 //     victim org, nor steer a victim's callback to a foreign org).
+
 package knowledge
 
 import (
