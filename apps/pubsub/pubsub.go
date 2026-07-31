@@ -1,7 +1,9 @@
-// Package pubsub is the platform message bus: publish/subscribe messaging,
-// durable JetStream streams and consumers, and a key-value store, served to
-// tenants at /v1/pubsub over the embedded Hanzo PubSub (NATS + JetStream) node
-// this same package runs.
+// Package pubsub is your message bus: publish, subscribe, and durable streams
+// your apps read at their own pace.
+//
+// It is the platform message bus: publish/subscribe messaging, durable JetStream
+// streams and consumers, and a key-value store, served to tenants at /v1/pubsub
+// over the embedded Hanzo PubSub (NATS + JetStream) node this same package runs.
 //
 // The node binds the NATS client port (default :4222) and serves JetStream
 // over the cloud data dir — the ONE durable log every other app publishes

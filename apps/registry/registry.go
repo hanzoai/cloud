@@ -1,6 +1,9 @@
-// Package registry is Hanzo Registry: the management plane over the platform's
-// artifact registries — list projects, container images, tags and npm packages,
-// and mint scoped pull tokens, on the unified /v1 plane.
+// Package registry is your container and package registry: push images, pull them
+// back, see what you store.
+//
+// It is Hanzo Registry: the management plane over the platform's artifact
+// registries — list projects, container images, tags and npm packages, and mint
+// scoped pull tokens, on the unified /v1 plane.
 //
 // PRODUCT-REPO MODEL. The registries themselves are running products: the OCI
 // registry at oci.hanzo.ai (github.com/hanzoai/registry — CNCF distribution,

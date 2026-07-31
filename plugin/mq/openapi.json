@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package mq is Hanzo MQ, the managed message-queue product: org-scoped administration of durable JetStream queues on the platform message plane — streams, their messages, pull consumers and delivery — served at /v1/mq over the broker apps/pubsub embeds.",
+    "description": "Package mq is queue and stream admin for your org: create them, watch them drain, ack what you pulled.",
     "version": "v1"
   },
   "servers": [
