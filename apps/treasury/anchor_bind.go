@@ -11,8 +11,8 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// bindData is the wallet that will sign the next anchor.
-type bindData struct {
+// signerData is the wallet that will sign the next anchor.
+type signerData struct {
 	// BoundAnchorSigner is the EVM address now signing anchors. Fund it for gas.
 	BoundAnchorSigner string `json:"boundAnchorSigner"`
 	// ChainID is the EVM chain the signer is bound for.
@@ -21,23 +21,24 @@ type bindData struct {
 	Org string `json:"org"`
 }
 
-// bindOut is bindData in the admin envelope.
-type bindOut struct {
+// signerOut is signerData in the admin envelope.
+type signerOut struct {
 	// Status is "ok" on success.
 	Status string `json:"status"`
 	// Msg carries an operator-facing note; empty on success.
 	Msg string `json:"msg"`
 	// Data is the bound signer.
-	Data bindData `json:"data"`
+	Data signerData `json:"data"`
 }
 
-// BindTreasuryAnchorSigner makes the reserve's threshold MPC wallet the signer
+// adminSetAnchorSigner installs the reserve's threshold MPC wallet as the signer
 // for on-chain anchors, and returns its EVM address so an operator can fund it
 // for gas. It provisions-or-resolves the caller org's treasury wallet on the
 // deployed MPC ring and installs it, so every later anchor commits the ledger
-// root SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent: a
-// repeat resolves the same wallet. SuperAdmin only.
-func (o ops) adminBindAnchor(ctx context.Context, _ *noInput) (*bindOut, error) {
+// root SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent — a
+// repeat resolves the same wallet, which is why the address is a PUT. SuperAdmin
+// only.
+func (o ops) adminSetAnchorSigner(ctx context.Context, _ *noInput) (*signerOut, error) {
 	if _, err := admin(ctx); err != nil {
 		return nil, err
 	}
@@ -53,7 +54,7 @@ func (o ops) adminBindAnchor(ctx context.Context, _ *noInput) (*bindOut, error) 
 	}
 	BindAnchorSigner(common.HexToAddress(addr), sign)
 	o.s.Log.Info("treasury: bound MPC anchor signer", "org", org, "address", addr, "chainId", o.s.State.anchor.chainID)
-	return &bindOut{Status: "ok", Data: bindData{
+	return &signerOut{Status: "ok", Data: signerData{
 		BoundAnchorSigner: addr,
 		ChainID:           o.s.State.anchor.chainID,
 		Org:               org,
