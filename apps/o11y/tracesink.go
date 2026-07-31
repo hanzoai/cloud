@@ -31,6 +31,7 @@
 //     spans on the wire path — activating this can never take cloud down.
 //   - Shutdown deregisters the handler (host falls back to the wire) then flushes
 //     the exporter's sending queue to datastore before exit.
+
 package o11y
 
 import (

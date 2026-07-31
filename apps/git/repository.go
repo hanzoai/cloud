@@ -19,6 +19,7 @@
 // through the git CLI; they are git-by-definition and each sits at its own slot.
 // Adding hg or svn means adding a backend beside gitbackend.go plus its own
 // adapter — it does not mean touching a single reader.
+
 package git
 
 import (

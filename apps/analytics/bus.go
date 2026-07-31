@@ -45,6 +45,7 @@
 // is NATS, DURABLE is JetStream. This is the durable rung. Publishing to the log is not
 // an RPC to another plugin — it is the write that makes the fact survive this process,
 // which is precisely what no direct call can do.
+
 package analytics
 
 import (

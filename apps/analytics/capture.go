@@ -37,6 +37,7 @@
 // ONE datastore client: writes ride apps/datastore — the SAME pooled,
 // KMS-credentialed connection the read side queries through — so there is no
 // second transport, pool, or credential path.
+
 package analytics
 
 import (

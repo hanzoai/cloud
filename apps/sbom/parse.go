@@ -17,6 +17,7 @@
 // tests drive it with inline documents — no datastore needed — exactly as the
 // analytics lens proves out its assemblers. The handlers (sbom.go) are the thin
 // orchestration that persists these rows and reads them back.
+
 package sbom
 
 import (

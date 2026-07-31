@@ -60,6 +60,7 @@
 // route is written by hand at all: doors below declares them and both the router and
 // the site-host carve derive from it. One write path, many doors, ONE admission
 // decision.
+
 package analytics
 
 import (

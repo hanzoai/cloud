@@ -31,6 +31,7 @@
 // A pull failure is NON-FATAL to the caller: pull-on-miss simply falls back to the
 // honest 404. Nothing here fabricates components — a document must parse as
 // CycloneDX or it is ignored.
+
 package sbom
 
 import (

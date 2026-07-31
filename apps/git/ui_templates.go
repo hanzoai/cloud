@@ -2,6 +2,7 @@
 // helper, and the html/template set (chrome + pages). Kept apart from ui.go so
 // the handlers read as flow and the markup lives in one place. All dynamic
 // values pass through html/template auto-escaping — the XSS boundary.
+
 package git
 
 import (

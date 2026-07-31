@@ -26,6 +26,7 @@
 // IDOR-safe: the subject is derived from the VALIDATED identity (resolveCaller →
 // principal.Validated / c.Org() / c.User()), NEVER a client-supplied userId/org. A
 // bearer-less request with a forged X-Org-Id has no validated principal and is refused.
+
 package account
 
 import (
