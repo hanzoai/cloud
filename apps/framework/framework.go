@@ -42,6 +42,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/openapi"
 	engine "github.com/hanzoai/framework"
 	"github.com/zap-proto/zip"
 )
@@ -151,6 +152,70 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// The prose for the two document WRITES, declared beside the wire fact that keeps
+// them raw (the note in Mount, and rawRoutes in ops_projection_test.go).
+//
+// zipdoc lifts prose off a typed op's doc comment; these two are not typed ops, so
+// there is nothing for it to lift and openapi.Describe is the seam. rawRoutes
+// measured what staying raw costs — "route-only entries: path parameters, no
+// requestBody, no responses, no prose". The first two are the schema half and wait
+// on zip; the prose half does not, and leaving it unpaid publishes the two calls a
+// document surface exists FOR as an operationId and nothing else.
+//
+// The descriptions carry what the missing requestBody would otherwise have said —
+// that the body is the document's own field data — because that sentence is the
+// whole reason an SDK user cannot read the shape off the schema.
+func init() {
+	openapi.Describe("/v1/framework/:doctype", http.MethodPost,
+		"Create one document of a DocType, from that DocType's own fields.",
+		"The body is the DOCUMENT'S field data: a flat JSON object whose properties are the "+
+			"fieldnames the DocType declares, not a fixed envelope. That is why this operation "+
+			"publishes no request schema — the shape is metadata the DocType defines at run time, "+
+			"and no Go struct both accepts it verbatim and describes it, so nothing is asserted "+
+			"rather than something false.\n\n"+
+			"The engine validates and coerces every field against the DocType, runs the "+
+			"before_insert and before_save hooks (either may reject the write), stores the "+
+			"document, then runs the after hooks. It answers 201 with the stored document: the "+
+			"field data plus the managed envelope — `name`, `doctype`, `docstatus`, `createdAt`, "+
+			"`updatedAt`. A Password field comes back as a fixed redaction marker and is dropped "+
+			"when empty; its stored value is never returned by this or any other read on this "+
+			"surface.\n\n"+
+			"`name` in the body is the REQUESTED DOCUMENT NAME, not a data field. A DocType with "+
+			"an autoname rule names the document itself and ignores it; a prompt-named DocType "+
+			"takes it. This collision is also why the two path segments cannot be folded into the "+
+			"body, and so why the route stays untyped.\n\n"+
+			"Scoped to the org of the validated principal, and the engine's own permission "+
+			"calculus decides the rest: the caller needs create rights on this DocType through a "+
+			"role it holds, or a platform admin bit. A caller with no validated principal reaches "+
+			"the engine as the zero Caller and is refused before any store is opened — a forged "+
+			"org header alone buys nothing.\n\n"+
+			"A DocType declared Single has exactly ONE document per org, so this writes that one "+
+			"instance instead of adding a row. The body is size-bounded by the engine, the same "+
+			"bound on every host.")
+
+	openapi.Describe("/v1/framework/:doctype/:name", http.MethodPut,
+		"Replace a draft document's field data wholesale.",
+		"PUT semantics: the stored field data BECOMES the body, so a field the body omits is not "+
+			"left at its previous value. The body is the document's own field data — the same "+
+			"metadata-defined open object the create takes, and the same reason this operation "+
+			"publishes no request schema.\n\n"+
+			"Only a DRAFT can be edited. A document that has been submitted or cancelled is "+
+			"immutable and the write is refused as a conflict, so the submit lifecycle cannot be "+
+			"bypassed by a plain update — cancel it first, and note that a cancelled document can "+
+			"be deleted but never re-submitted or re-edited. The engine validates the new data "+
+			"against the DocType, runs before_save (which may reject), writes, then runs the after "+
+			"hooks, and answers 200 with the stored document plus its managed envelope, Password "+
+			"fields redacted.\n\n"+
+			"The document name in the path is percent-decoded before it is matched, so a name "+
+			"containing a space is addressed as it is stored. An unknown DocType or document is "+
+			"not found, and the same answer covers a document that exists in another tenant: the "+
+			"org comes from the validated principal and is part of the store key, so a caller "+
+			"cannot learn that another org's document exists. Write rights on the DocType are "+
+			"required, decided by the engine's permission calculus.\n\n"+
+			"For a Single DocType the path name is ignored — there is one instance per org and "+
+			"this writes it.")
+}
 
 // Shutdown closes the engine. Idempotent.
 func Shutdown() error {

@@ -124,8 +124,23 @@ type askAnswer struct {
 // is what buys that back. The RESPONSE is deliberately NOT declared: it is the
 // polymorphic half above, and a single declared shape would be a false statement
 // about the other branch, which is worse than saying nothing.
+// The PROSE is declared beside the wire fact, for the same reason and by the same
+// rule: this route cannot be a typed op, so zipdoc has no doc comment to lift, and
+// without a Describe the document publishes an operationId and nothing else — an SDK
+// method that cannot explain itself and a CLI command with no help. Describe is the
+// seam for exactly the operations the wire refuses to type.
 func init() {
 	openapi.Register("/v1/ask", http.MethodPost, askRequest{}, nil)
+	openapi.Describe("/v1/ask", http.MethodPost,
+		"Ask a grounded question about your own org",
+		"Answers a natural-language question about the CALLER'S OWN org, from real figures "+
+			"rather than from the model's memory.\n\n"+
+			"The question is classified to a grounded domain, that domain's read runs IN-PROCESS "+
+			"under the caller's own credentials, and only then is the result narrated. So the "+
+			"figures and their sources are the domain's, resolved before any model call and never "+
+			"altered by one — a wrong answer is a wrong query, never an invention.\n\n"+
+			"Domains: books (the org's ledger) and web (search, news, research, deep). A validated "+
+			"principal is required; the answer is scoped to that principal's org and nothing else.")
 }
 
 // Mount wires POST /v1/ask into cloud, building the contributor registry (books today) over the

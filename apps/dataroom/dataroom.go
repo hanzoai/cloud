@@ -56,6 +56,7 @@ import (
 	hcloud "github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -160,6 +161,200 @@ func routes(app hcloud.Router, s *hcloud.Service[state]) {
 	g.Post("/view/:linkId/authenticate", viewer(s, "view.authenticate", true))
 	g.Post("/view/:linkId/pageview", viewer(s, "view.recordPage", true))
 	g.Get("/view/:linkId/document/:documentId/file", hcloud.Handle(s, viewerDownload))
+}
+
+// The document's prose for this surface. NONE of the routes above can be a typed
+// op — a typed op's prose is lifted from its handler's doc comment by zipdoc, and
+// every route here is an untyped relay: the domain logic is the goja bundle, so
+// the answer is opaque bundle bytes (or, for the two file routes, a byte stream
+// off the object-storage seam) that no Go In/Out pair describes. Declared through
+// the same registry the projector reads, keyed by the fiber pattern verbatim, so
+// prose renders only while the router actually serves the route and every consumer
+// of the document — the generated SDKs, the MCP tool list, the spec-derived CLI —
+// carries it. Without it the surface publishes an operationId and nothing else.
+func init() {
+	openapi.Describe("/v1/dataroom/health", http.MethodGet,
+		"Liveness of the dataroom subsystem",
+		"Answers {service, status} unconditionally — no principal, no tenant. It is registered "+
+			"BEFORE the bundle, the link index and the object-storage seam are wired, so it keeps "+
+			"answering when any of those fail and the subsystem degrades to health-only. That is "+
+			"the point, and the limit: a 200 here says the process is alive, never that a data "+
+			"room can be read or written.")
+
+	// --- admin surface (validated principal → org) ---------------------------
+	openapi.Describe("/v1/dataroom/documents", http.MethodGet,
+		"List the org's documents, newest first",
+		"Returns every document in the caller's own tenant store — name, opaque storage key, "+
+			"content type, page count, size and timestamps — ordered newest first.\n\n"+
+			"Requires a validated principal; 403 without one. Tenant isolation is the per-org "+
+			"store itself: there is one SQLite file per org and the org is never a parameter, so "+
+			"no input the caller controls can address another tenant's documents. Metadata only — "+
+			"the bytes come from the file route.")
+
+	openapi.Describe("/v1/dataroom/documents", http.MethodPost,
+		"Upload a document's bytes and record it",
+		"Takes the file ITSELF as the raw request body — not a JSON envelope, not multipart — "+
+			"stores it on the object-storage seam, and records the metadata row, answering with "+
+			"the new document. `?name=` names it (default \"document\"), the request's "+
+			"Content-Type becomes the recorded mime type, and `?numPages=` is optional.\n\n"+
+			"Requires a validated principal; 403 without one. An empty body is 400 and anything "+
+			"over 64 MiB is 413 — a data room holds decks and PDFs, not a media library.\n\n"+
+			"The storage key is 128 random bits under the tenant's own key prefix, minted before "+
+			"the bytes are written: if the system's randomness is unavailable the upload fails 500 "+
+			"rather than fall back to a predictable key that could overwrite another document's "+
+			"bytes. A storage write that fails is 502 and no metadata row is recorded, so a "+
+			"document never exists without its file.")
+
+	openapi.Describe("/v1/dataroom/documents/:id", http.MethodGet,
+		"Read one document's metadata",
+		"Returns the document's name, opaque storage key, content type, page count, size and "+
+			"timestamps.\n\n"+
+			"Requires a validated principal; 403 without one. The lookup runs in the caller's own "+
+			"tenant store, so an id belonging to another org is a 404 exactly like one that never "+
+			"existed. Metadata only — the bytes are a separate read.")
+
+	openapi.Describe("/v1/dataroom/documents/:id/file", http.MethodGet,
+		"Download a document's bytes as its owner",
+		"Streams the stored file back under its recorded content type, falling back to "+
+			"application/octet-stream when none was recorded.\n\n"+
+			"Requires a validated principal; 403 without one, and the document is resolved in the "+
+			"caller's own tenant store, so another org's id is a 404. This is the OWNER's path and "+
+			"applies no link gate at all — the per-link password, email and download controls live "+
+			"on the viewer surface, not here. Bytes that cannot be fetched from object storage are "+
+			"502, never a truncated or empty file.")
+
+	openapi.Describe("/v1/dataroom/datarooms", http.MethodGet,
+		"List the org's data rooms, newest first",
+		"Returns every data room in the caller's own tenant store with its short public id, "+
+			"name, description and timestamps, newest first.\n\n"+
+			"Requires a validated principal; 403 without one. Documents are not included — a "+
+			"room's contents come from the single-room read.")
+
+	openapi.Describe("/v1/dataroom/datarooms", http.MethodPost,
+		"Create a data room",
+		"Creates an empty data room from {name, description} and answers with it, including the "+
+			"short public id it is addressed by.\n\n"+
+			"Requires a validated principal; 403 without one. `name` is required; without it the "+
+			"call is 400 and the tenant store is untouched, because a dispatch answering 4xx rolls "+
+			"its transaction back. A new room holds no documents and is reachable by nobody until "+
+			"a share link is created over it.")
+
+	openapi.Describe("/v1/dataroom/datarooms/:id", http.MethodGet,
+		"Read one data room with its documents in display order",
+		"Returns the room and every document attached to it, each carrying its membership id and "+
+			"order index, sorted by that index with unordered documents last and creation time "+
+			"breaking ties — the same order a link's visitor sees.\n\n"+
+			"Requires a validated principal; 403 without one, and a room id outside the caller's "+
+			"own tenant store is a 404.")
+
+	openapi.Describe("/v1/dataroom/datarooms/:id/documents", http.MethodPost,
+		"Attach an existing document to a data room",
+		"Adds an already-uploaded document to the room by {documentId} and answers with the new "+
+			"membership id. An optional `orderIndex` fixes its place in the viewer's list.\n\n"+
+			"Requires a validated principal; 403 without one. Both the room and the document must "+
+			"exist in the caller's own tenant store — either missing is a 404 — and a document "+
+			"already in the room is a 409 rather than a duplicate row. It attaches, it never "+
+			"uploads: the bytes must already be stored.")
+
+	openapi.Describe("/v1/dataroom/links", http.MethodGet,
+		"List the org's live share links and the gates they enforce",
+		"Returns every non-archived link with the controls a visitor will meet: whether an "+
+			"address is required, whether a password is set, the allow and deny lists, whether "+
+			"download is permitted, and when the link expires.\n\n"+
+			"Requires a validated principal; 403 without one. Archived links are omitted entirely. "+
+			"A link reports only THAT a password is set — the stored form is a bcrypt hash and no "+
+			"route returns it.")
+
+	openapi.Describe("/v1/dataroom/links", http.MethodPost,
+		"Create a share link with its access controls",
+		"Mints a public link over one data room (`dataroomId`) or one document (`documentId`) — "+
+			"one of the two is required — and answers with it. The controls are declared here and "+
+			"enforced only on the viewer surface: `password` is hashed with bcrypt before storage "+
+			"and is never readable back, `emailProtected` (on by default) makes a visitor state an "+
+			"address, `allowList`/`denyList` narrow which addresses pass, `allowDownload` (off by "+
+			"default) governs downloads, and `expiresAt` closes the link.\n\n"+
+			"Requires a validated principal; 403 without one, and the target room or document must "+
+			"exist in the caller's own tenant store or it is a 404.\n\n"+
+			"Creating a link also writes dataroom's ONE cross-tenant row: the link id to owning org "+
+			"mapping an anonymous visitor is routed through. That write is part of the operation — "+
+			"if it fails the call is 500, so a link that no visitor could open is never handed "+
+			"back as usable.")
+
+	openapi.Describe("/v1/dataroom/analytics/link/:linkId", http.MethodGet,
+		"Per-page view analytics for one share link",
+		"Returns how the link was actually read: total viewing sessions, total page views, and "+
+			"per page the view count, the summed dwell measure and its average.\n\n"+
+			"Requires a validated principal; 403 without one. The link is resolved in the caller's "+
+			"OWN tenant store, so another org's link id is a 404 — knowing a link id is enough to "+
+			"open the room it shares, and never enough to read who has been reading it.")
+
+	openapi.Describe("/v1/dataroom/analytics/dataroom/:dataroomId", http.MethodGet,
+		"Per-page view analytics for a data room, across all its links",
+		"Rolls up every link pointing at the room: session and page-view totals for the room, "+
+			"plus the same per-page breakdown for each link beneath it.\n\n"+
+			"Requires a validated principal; 403 without one, and a room id outside the caller's "+
+			"own tenant store is a 404. Only links that NAME the room are counted — a link created "+
+			"over a single document contributes nothing here, even when that document also sits in "+
+			"the room.")
+
+	// --- viewer surface (public; org resolved from the link index) -----------
+	openapi.Describe("/v1/dataroom/view/:linkId", http.MethodGet,
+		"What a share link's visitor sees before authenticating",
+		"Answers the pre-auth face of a link to anyone holding its id: name and type, which gates "+
+			"apply (whether an address is required, whether a password is set), whether download is "+
+			"permitted, whether it has expired, and the name and description of the room behind it "+
+			"— or, for a single-document link, that document's name and page count.\n\n"+
+			"No principal is involved: the owning org is resolved from the link id through "+
+			"dataroom's one cross-tenant routing table, and an unknown or archived link is a 404.\n\n"+
+			"It is metadata only — a room's document list and every file stay behind the "+
+			"authenticate step. An expired link is REPORTED as expired here rather than refused, "+
+			"so a visitor learns why the next step will fail; nothing about the password beyond "+
+			"its existence is disclosed.")
+
+	openapi.Describe("/v1/dataroom/view/:linkId/authenticate", http.MethodPost,
+		"Pass a share link's gates and open a viewing session",
+		"Clears the link's access controls and answers with the viewing session — a `viewId`, "+
+			"whether download is permitted, and the documents behind the link — which every later "+
+			"viewer call is authorised by.\n\n"+
+			"No principal: the visitor is whoever holds the link id, and the org is resolved from "+
+			"it. The gates run in a fixed order and each is a flat refusal, never a hint. An "+
+			"archived or unknown link is 404 and an expired one 403. A missing address on an "+
+			"email-protected link is 401. An address on the deny list is 403, checked BEFORE the "+
+			"allow list so deny always wins. An address the allow list does not admit is 403 — an "+
+			"EMPTY allow list admits everyone, so a link with no list enforces the email gate "+
+			"alone. A wrong or absent password is 401, decided against the stored bcrypt hash.\n\n"+
+			"The address is taken as stated and recorded UNVERIFIED: it names a viewer for "+
+			"analytics and repeat visits from it reuse one viewer record, but it proves nothing "+
+			"about who is on the other end. A link gated only by email is openable by anyone the "+
+			"link reaches.")
+
+	openapi.Describe("/v1/dataroom/view/:linkId/pageview", http.MethodPost,
+		"Record one page-view against an open viewing session",
+		"Appends a single per-page analytics event — {viewId, pageNumber, documentId, "+
+			"versionNumber, duration} — and answers with its id. These events are what the owner's "+
+			"analytics count.\n\n"+
+			"No principal: the `viewId` from the authenticate step IS the authorisation, and it "+
+			"must belong to THIS link or the call is 404, so a session opened on one link cannot "+
+			"write events onto another. `pageNumber` is required (400 without it); `documentId` "+
+			"falls back to the document the session was opened on, and `duration` is the caller's "+
+			"own dwell measure, summed per page by analytics.\n\n"+
+			"Events are additive: the same page reported twice is two views, which is the metric's "+
+			"whole point.")
+
+	openapi.Describe("/v1/dataroom/view/:linkId/document/:documentId/file", http.MethodGet,
+		"Read a document's bytes as an authorised link visitor",
+		"Streams a document's bytes under its recorded content type to a visitor holding an open "+
+			"viewing session.\n\n"+
+			"No principal: `?viewId=` from the authenticate step is the authorisation and must "+
+			"belong to this link, or the call is 403 — holding the link id alone gets no bytes. "+
+			"The document must be reachable THROUGH this link (a member of the room the link "+
+			"opens, or the single document the link names), so a visitor cannot walk to an "+
+			"unrelated document by guessing an id; anything else is a 404, as is an unknown or "+
+			"archived link. Bytes that cannot be fetched from object storage are 502.\n\n"+
+			"`?download=1` additionally requires the link's `allowDownload` and is 403 when the "+
+			"owner did not permit it. Read that flag precisely: it gates the DOWNLOAD intent, not "+
+			"access to the bytes — without the parameter an authorised visitor is served the file "+
+			"for in-place viewing whether or not downloads are allowed.")
 }
 
 // === admin dispatch (validated principal) ====================================

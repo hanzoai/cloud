@@ -16,6 +16,7 @@ import (
 	"github.com/hanzoai/cloud/apps/idv"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -108,6 +109,36 @@ func kmsGetter(deps cloud.Deps) idv.SecretFn {
 // apps/compliance openapi` and by the per-app build chain.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// The prose for the ONE operation on this surface zipdoc cannot reach. Every
+// other route is a typed op whose doc comment is lifted; the webhook stays an
+// untyped handler for the two wire facts routes() states, and Go drops the
+// comment on an untyped handler at compile time. Left bare it published an
+// operationId and nothing else, so the generated SDKs offered a call named
+// "verifications webhook" with no way to learn that it authenticates by
+// signature rather than by a principal. Declared through the same registry
+// openapi.Register uses, so it renders only while the router serves the route.
+func init() {
+	openapi.Describe(routePrefix+"/verifications/webhook", http.MethodPost,
+		"Provider push that settles a verification, authenticated by HMAC signature",
+		"The external PUSH reconcile: a verification provider (or a Hanzo relay) "+
+			"signals that a check settled, and the reconciled check comes back. It "+
+			"authenticates by an HMAC SIGNATURE over the RAW body bytes rather than by a "+
+			"principal — an external caller has no validated org — and the org is then "+
+			"resolved FROM the record the signed provider reference matches, so a call can "+
+			"only ever touch the one tenant that owns that reference.\n\n"+
+			"The body carries NO trusted decision. A valid signature cannot force a "+
+			"status: the reference only says WHICH check to re-read, and the status is "+
+			"then pulled from the wired provider, which stays the source of truth. With "+
+			"no real provider configured a check stays pending, and the only route to a "+
+			"passing status is the role-gated, attributed reviewer decision.\n\n"+
+			"An unknown reference is a benign 200 `{\"ignored\": ...}` no-op, not an error, "+
+			"so a provider replaying stale events neither retry-storms nor learns whether "+
+			"a reference exists in some other tenant. Fails closed otherwise: 501 unless a "+
+			"webhook secret is configured, 401 on a signature that does not verify, 400 "+
+			"with no provider reference, 413 over 1 MiB, and 502 if the secret or the "+
+			"provider is unreachable.")
+}
 
 // routes registers the compliance surface. Static + collection routes register
 // before :id params so an id can never shadow a sibling route (Fiber first-match).

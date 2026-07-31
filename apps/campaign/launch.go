@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -16,6 +17,48 @@ import (
 // connector was missing. The org is passed verbatim to every executor, which
 // resolves ITS OWN org's connector token (integrations.TokenFor) — the fan-out
 // itself never sees a credential.
+
+// The prose for the two operations here that cannot be typed ops. Every other route
+// in campaign is typed and zipdoc lifts its doc comment into zipdoc_gen.go; the
+// launch and the pause stay raw handlers (routes says why — neither has ever read a
+// request body, and typing them would turn today's 200 into a 400 for a caller that
+// posts junk to a route that ignores it), so there is no comment for anything to
+// lift and the published document would carry an operationId and nothing else — an
+// SDK method and a CLI command that cannot explain themselves. These two are the
+// ones that MOVE MONEY on a provider, so a caller reading only the document has to
+// be told what a partial outcome means. Declared through the same registry Register
+// uses, so it renders only while the router actually serves the route.
+func init() {
+	openapi.Describe("/v1/campaign/:id/launch", http.MethodPost,
+		"Launch a campaign across every channel it declares",
+		"Pushes the campaign live on each of its channels through that channel's executor and "+
+			"answers the whole campaign with the per-channel outcome written back onto it.\n\n"+
+			"The fan-out is BEST-EFFORT PER CHANNEL, and the honest reading of the result is the "+
+			"rule most callers get wrong: one channel failing never aborts the others, so each "+
+			"channel row carries its own `live`, `failed` or `unavailable` status and detail, and "+
+			"a paid launch can be live while an email launch failed. The campaign itself is `live` "+
+			"when AT LEAST ONE channel launched and `failed` only when none did — `live` is not a "+
+			"claim that every channel launched. Repeating the call is safe: a channel already live "+
+			"is skipped, never re-launched. A campaign carrying more than one creative has its "+
+			"variant assigned here by the experiment seam and tagged as `utm_content`.\n\n"+
+			"Org-scoped and fails closed: a valid bearer is required (403 without one), the "+
+			"campaign is read under the caller's OWN org so another tenant's id is a 404, and a "+
+			"campaign with no channels is a 400 — there is nothing to launch. Each executor "+
+			"resolves its own org's connector token from the org passed to it, so a launch can "+
+			"never spend through another tenant's connector.")
+	openapi.Describe("/v1/campaign/:id/pause", http.MethodPost,
+		"Pause every live channel on a campaign at its provider",
+		"Pauses each live channel on its provider and answers the whole campaign, moved to "+
+			"`paused`, with the per-channel outcome written back onto it.\n\n"+
+			"Only channels that are live and carry a provider reference are touched; a channel "+
+			"whose executor is no longer wired is marked `unavailable` and one whose pause errored "+
+			"is marked `failed`, with the reason on the row. The campaign still reports `paused` "+
+			"in both cases, and that is deliberate rather than sloppy: no live channel remains "+
+			"that this process will meter, and the rows say exactly which provider was not "+
+			"reached so it can be settled by hand.\n\n"+
+			"Org-scoped and fails closed: a valid bearer is required (403 without one) and the "+
+			"campaign is read under the caller's OWN org, so another tenant's id is a 404.")
+}
 
 // launchCampaign fans a campaign out to its channels. A campaign with no channels
 // is a 400 (nothing to launch). After the fan-out the campaign is live when at

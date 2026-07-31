@@ -58,6 +58,7 @@ import (
 	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -190,6 +191,131 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// finance.hanzo.ai + console Finance surfaces). It reuses this package's commerceProxy
 	// + per-org subject-pinning; the treasury lane owns /v1/finance/treasury alongside it.
 	mountFinance(s, app)
+}
+
+// The PROSE for the routes above. Not one of them can be a typed op — each is a raw
+// *zip.Ctx handler that forwards commerce's body and STATUS verbatim (a 402 decline
+// keeps its reason) or writes an envelope built to match commerce's wire, and a typed
+// op's only refusal is a returned error. zipdoc lifts prose from a typed op's doc
+// comment, so these have nowhere else to state it, and without a Describe the document
+// publishes an operationId and NOTHING else — an SDK method for a MONEY endpoint that
+// cannot say whose ledger it reads, and a CLI command with no help.
+//
+// Declared through the same registry Register uses, so a description renders only while
+// the router actually serves the route: prose is additive metadata on routes that
+// exist, never an operation the registry invented.
+func init() {
+	openapi.Describe("/v1/billing/balance", http.MethodGet,
+		"Prepaid credit the caller's org can still spend",
+		"Answers the spendable prepaid balance of the wallet this caller bills from — the same "+
+			"wallet the AI prepaid gate reads before admitting a paid request, the edge meter "+
+			"debits, and a top-up credits.\n\n"+
+			"The wallet is an ADDRESS, not an org: `account` echoes the key resolved within the "+
+			"ledger — the org's shared pool for a tenant org, a personal account for a member of "+
+			"the shared signup org. The echo is the point. A browser could only GUESS its own "+
+			"payer by decoding its own token, and a guess that disagrees with the server is how "+
+			"money lands in an account the gate never reads.\n\n"+
+			"`balance`, `holds` and `available` are whole USD cents, ROUNDED from the ledger's "+
+			"exact 18-decimal value. On the co-resident ledger `holds` is 0 and `available` "+
+			"equals `balance`: the gate's reservations live in its own pod and are never posted, "+
+			"so the settled balance IS the spendable one.\n\n"+
+			"The ledger is the caller's own org, taken from the VALIDATED IAM owner claim and "+
+			"never from a client header. No validated principal is 401 — with one exception, the "+
+			"trusted in-process service token the AI gate itself presents, which reads the "+
+			"gateway-pinned org and nothing it could name. A balance that cannot be READ is 502, "+
+			"never 0: unknown is not broke.")
+
+	openapi.Describe("/v1/billing/usage", http.MethodGet,
+		"Every billed call the caller's org made, attributed to a product",
+		"Answers one row per BILLED call against the caller's org — transaction id, amount, "+
+			"timestamp and the metered unit. This is the raw charged ledger, not a rollup.\n\n"+
+			"Each row is stamped with a canonical `metadata.product` derived from what the meter "+
+			"persisted: `agent` becomes agents, `provisioning` becomes the provisioned kind, a "+
+			"token-metered row becomes inference, anything else keeps its metering surface. The "+
+			"ledger has no product field of its own, so this read is where that dimension is made "+
+			"real — from the SAME charged rows, never a second meter. A row that already carries "+
+			"its own product WINS, so the derivation stops the day the meter records one.\n\n"+
+			"`product=<id>` filters to one product server-side. `groupBy=product` reduces to "+
+			"`{product,requests,amountCents}` rollups instead of rows.\n\n"+
+			"`amount` is whole USD cents, ROUNDED; `decimal` beside it is the SAME debit exact, "+
+			"as an 18-decimal USD string. Sum `decimal`. A page of sub-cent token calls totals "+
+			"correctly there and totals ZERO in `amount` — that difference is real money.\n\n"+
+			"Scoped to the caller's own org's books, where the org's ledger file IS the tenant "+
+			"boundary; no client-supplied subject is ever forwarded. 401 without a validated "+
+			"principal. The co-resident read returns the 2000 most recent debits, newest first; "+
+			"`start` and `end` narrow the window only on the split-deploy upstream.")
+
+	openapi.Describe("/v1/billing/gpu-eligibility", http.MethodGet,
+		"Whether the caller's org may launch a GPU right now, and what is missing",
+		"Answers `eligible` plus the exact `reason` — `ok`, `card_required` or "+
+			"`insufficient_prepaid` — with the org's prepaid available, whether a card is on "+
+			"file, and the cents required. It answers 200 in EVERY case: a no is data the launch "+
+			"UI renders as a remedy, never a 402.\n\n"+
+			"Eligibility is prepaid REAL money and a chargeable card, both. `creditsRemaining` is "+
+			"reported and is NOT usable — a GPU debit is gpu-tagged and drawn from the prepaid "+
+			"bucket — so an org sitting on grant credit with zero prepaid is refused, "+
+			"deliberately.\n\n"+
+			"`amountCents` is the immediate charge and `minPrepaidCents` the 24h floor GPU policy "+
+			"requires; the gate needs prepaid available >= the larger of the two. Both default to "+
+			"0, so asking with neither answers whether a card exists, not whether a launch is "+
+			"affordable.\n\n"+
+			"The wallet is pinned server-side to the caller's own org, so this reads exactly the "+
+			"wallet a charge debits — the gate and the debit can never address two wallets. 401 "+
+			"without a validated principal.")
+
+	openapi.Describe("/v1/billing/gpu-charge", http.MethodPost,
+		"Debit the caller's org prepaid balance for a GPU",
+		"Records a gpu-tagged withdrawal against the caller's own org and answers 201 with the "+
+			"transaction id and the prepaid balance left. This is the ONE endpoint on the customer "+
+			"billing surface that moves an org's ledger.\n\n"+
+			"THE PAYER IS NOT A FIELD. Every billing-subject key in the body — `user`, `userId`, "+
+			"`customerId` — is overwritten server-side with the caller's own org before the "+
+			"request leaves, so a forged body can never charge another tenant; a body that is not "+
+			"an object is replaced by the pinned subject alone. `amountCents`, `currency`, "+
+			"`requestId` and `tag` pass through, and `tag` is FORCED into the gpu bucket so this "+
+			"can never mint a credit-eligible withdrawal.\n\n"+
+			"Two gates upstream, both fail-closed: a chargeable card on file (402 `card_required`) "+
+			"and prepaid alone covering the amount (402 `insufficient_prepaid`) — credits are "+
+			"never consulted, so a GPU cannot draw on a grant. Both statuses forward VERBATIM, "+
+			"because the launch UI shows the remedy and a money verdict must never be "+
+			"500-masked.\n\n"+
+			"IT IS NOT IDEMPOTENT. `requestId` is recorded on the transaction and deduplicates "+
+			"NOTHING, and no idempotency key is carried upstream: two identical posts are two "+
+			"debits. Retry safety belongs to the caller.\n\n"+
+			"401 without a validated principal — a customer charging its OWN wallet, so an absent "+
+			"identity is not signed in, never not authorized.")
+
+	openapi.Describe("/v1/billing/payment-methods", http.MethodGet,
+		"Cards saved against the caller's org, masked",
+		"Answers the org's saved payment methods as the portal holds them — brand, last four, "+
+			"expiry, default flag. This is what the GPU launch gate's card-on-file check reads.\n\n"+
+			"NO CARD DATA IS HELD HERE. What the fleet stores is the masked descriptor plus the "+
+			"PROCESSOR's reusable card reference; the number and the CVV live at the processor and "+
+			"never enter this system, so there is nothing here to un-mask.\n\n"+
+			"The customer filter is pinned server-side to the caller's own ORG slug — the upstream "+
+			"400s without one, and this always supplies it — so a caller sees only its own org's "+
+			"methods. A card is SAVED under that same org key, so this list is the one that always "+
+			"matches what was saved; the /v1/finance/payment-methods sibling keys the same store "+
+			"on the resolved WALLET instead, which differs wherever the payer is a person rather "+
+			"than the org pool.\n\n"+
+			"401 without a validated principal. The upstream status forwards verbatim and an "+
+			"unreachable upstream is 502 — never an empty list, because no cards and could not ask "+
+			"must not look alike.")
+
+	openapi.Describe("/v1/billing/payment-methods", http.MethodPost,
+		"Save a card on file for the caller's org",
+		"Vaults the single-use card token the browser produced with the payment processor and "+
+			"attaches the REUSABLE reference it returns to the caller's org, so a later charge — a "+
+			"top-up, auto-recharge, a GPU launch — has something to bill.\n\n"+
+			"WHAT IS STORED IS NOT A CARD. The processor exchanges the one-time token for a "+
+			"card-on-file id; this system keeps that id, the masked brand/last4/expiry the browser "+
+			"sent, and a billing address if one was supplied. No PAN and no CVV, ever.\n\n"+
+			"The owning customer is pinned server-side to the caller's own org on every billing "+
+			"subject key, so a forged body can never attach a card to another tenant. Vaulting "+
+			"VALIDATES the card with the processor, so a card the bank refuses comes back 402 "+
+			"carrying the processor's own reason — forwarded verbatim, because insufficient funds "+
+			"and a wrong security code are different remedies for the customer.\n\n"+
+			"401 without a validated principal.")
 }
 
 // billingSubjectKeys — every query/body param through which a commerce billing endpoint

@@ -19,6 +19,8 @@
     "/v1/deploy/account/can-i/{wildcard1}": {
       "get": {
         "operationId": "get_v1_deploy_account_can-i_by_wildcard1",
+        "summary": "Compatibility answer the console UI asks before enabling its buttons",
+        "description": "Always answers `yes`, whatever resource, action or subresource the path names. It exists for the ArgoCD-compatible console, which asks this before enabling a control, and it is NOT the authorization decision: nothing downstream consults it, and every route that returns fleet data or mutates a CR carries its own gate. Reaching it at all already requires SuperAdmin, so a caller who can read the `yes` is one for whom it is true.",
         "tags": [
           "deploy"
         ],
@@ -167,6 +169,8 @@
     "/v1/deploy/applications/{name}/rollback": {
       "post": {
         "operationId": "post_v1_deploy_applications_by_name_rollback",
+        "summary": "The console's rollback control — today it requests a reconcile, nothing more",
+        "description": "Performs exactly what the sync action performs: it stamps the sync-requested timestamp onto the application's App CR and answers the application re-projected. It does NOT select, pin or revert to a prior image tag, and that is the one thing to know before wiring anything to it — the name is the console's, the behaviour is the sync. Pinning a previous release rides the release seam, which this address does not call yet.\n\nSuperAdmin-only and fail-closed, reading no request body, with an unknown application name a 404 and no cluster client a 503 — the same gate and the same failures as the sync it shares a handler with.",
         "tags": [
           "deploy"
         ],
@@ -185,6 +189,8 @@
     "/v1/deploy/applications/{name}/sync": {
       "post": {
         "operationId": "post_v1_deploy_applications_by_name_sync",
+        "summary": "Ask the operator to reconcile one application now",
+        "description": "Requests an immediate reconcile of one application by stamping a sync-requested timestamp onto its App CR, which the operator's watch observes, and answers the application re-projected. It ASKS, it does not apply: the operator performs the reconcile on its own clock, so a 200 means the request landed, not that the rollout finished — the returned row's running version still lags until it does. The CR is the desired source today, so this is a nudge; when git becomes the source the same address becomes apply-from-git.\n\nSuperAdmin-only and fail-closed — a non-SuperAdmin is refused before any cluster object is read or patched, and the write surface stays admin-only while the tenant surface is read-only reflection. It reads no request body. An unknown application name is a 404; no cluster client configured is a 503.",
         "tags": [
           "deploy"
         ],
@@ -236,6 +242,8 @@
     "/v1/deploy/callback": {
       "get": {
         "operationId": "get_v1_deploy_callback",
+        "summary": "Finish the sign-in round trip and mint the console session",
+        "description": "Completes the redirect from IAM: it validates `state` against the single-use flow cookie in constant time, redeems the authorization code with the PKCE verifier, and then VERIFIES the resulting token exactly as this deployment's identity boundary will on every later request — so a token that would be refused next request fails here with the real reason instead of producing a sign-in loop. On success it sets the session cookie, bounded by the token's own expiry, and redirects to the validated return path.\n\nIt fails closed, and closes on the ADMIN ORG: a principal whose verified owner claim is not the reserved admin org is told plainly that it lacks the role (403) and no cookie is minted for it. That check is not the authorization decision — every gated route re-derives SuperAdmin from the verified JWT — it exists so nobody is handed a session that silently 403s everything. No flow in progress, or a mismatched `state`, is a 400; a refused or unexchangeable code is a 401.",
         "tags": [
           "deploy"
         ]
@@ -288,6 +296,8 @@
     "/v1/deploy/health": {
       "get": {
         "operationId": "get_v1_deploy_health",
+        "summary": "Whether this control plane can actually reach the cluster it deploys to",
+        "description": "Reports the plane's real reachability: 200 only when the Kubernetes API server answers AND the App CRD is served, 503 with the same body shape otherwise, so a caller reads the same `k8s` and `crd` booleans either way rather than parsing an error envelope. It is a genuine dependency probe, not a process liveness ping — a running plane with no cluster behind it reports degraded.\n\nThis is the ONE unauthenticated route that reports state, because liveness must be probe-able without a JWT. It therefore discloses booleans only: the underlying failure — the API server address, an RBAC refusal — is logged server-side and never put on the wire.",
         "tags": [
           "deploy"
         ]
@@ -296,6 +306,8 @@
     "/v1/deploy/login": {
       "get": {
         "operationId": "get_v1_deploy_login",
+        "summary": "Start the sign-in round trip for this console",
+        "description": "Redirects the browser to IAM's authorize endpoint, having minted a nonce and a PKCE verifier into a short-lived, single-use flow cookie. The nonce comes back as `state` and is what proves the code belongs to the round trip THIS browser started; the verifier never appears in the address bar.\n\nNecessarily public — this is how a browser gets a principal for this host in the first place — and it grants nothing by itself. An optional `returnTo` names where to land afterwards and is run through the open-redirect guard, so only a same-host path survives. A deployment with no sign-in configured answers 503 rather than redirecting nowhere.",
         "tags": [
           "deploy"
         ]
@@ -304,6 +316,8 @@
     "/v1/deploy/logout": {
       "post": {
         "operationId": "post_v1_deploy_logout",
+        "summary": "End the console session on this host",
+        "description": "Clears this console's session cookie and answers the signed-out state with the sign-in URL to start again. IAM's own session is untouched — this ends the console session only, so signing back in may not prompt for credentials.\n\nIt is a POST because it changes state. As a GET it was reachable by a cross-site top-level navigation, which a SameSite=Lax cookie still rides, so any page could sign a SuperAdmin out; a POST is not carried cross-site by that cookie.",
         "tags": [
           "deploy"
         ]
@@ -334,6 +348,8 @@
     "/v1/deploy/reconcile": {
       "post": {
         "operationId": "post_v1_deploy_reconcile",
+        "summary": "Render the configured git source and apply it to the cluster, once",
+        "description": "Runs one full GitOps sync through the embedded engine — render the configured repo, ref and path, then three-way server-side apply with scoped prune — and answers the revision it applied, the source it came from, the declared/synced/pruned/failed counts and a per-resource result. This is the WRITE half of the plane: it mutates live cluster objects and, with prune enabled, deletes objects the source no longer declares.\n\nSuperAdmin-only and fail-closed — a non-SuperAdmin is refused before any cluster object is read or touched. The git source is read AS THE CALLER, so the source plane scopes the answer itself rather than trusting this one to have scoped it. It reads no request body; the source is configuration, not a parameter. A deployment with the engine switched off, or with no usable cluster config, answers 503; a failure to start, render or sync is a 502.",
         "tags": [
           "deploy"
         ]
@@ -386,6 +402,8 @@
     "/v1/deploy/stream/applications": {
       "get": {
         "operationId": "get_v1_deploy_stream_applications",
+        "summary": "Live application fleet updates as Server-Sent Events",
+        "description": "Holds the connection open as text/event-stream and pushes one watch event per application change. It opens with an `ADDED` frame for every application currently present — the same projection the applications list serves, so a client renders a complete fleet from the stream alone — and then forwards `ADDED`, `MODIFIED` and `DELETED` as they happen, with a keep-alive every 25 seconds that is also how a vanished client is noticed and its watch torn down.\n\nRead-only and TENANT-SCOPED, fail-closed: a platform SuperAdmin streams the whole fleet, a validated org member streams only its own org's applications, anyone else gets 403 and no stream. No cluster client configured is 503. If the deployment is not granted the watch verb the stream degrades to keep-alives only — the initial state still renders, it simply stops updating — rather than failing the connection.",
         "tags": [
           "deploy"
         ]
@@ -394,6 +412,8 @@
     "/v1/deploy/stream/applications/{name}/resource-tree": {
       "get": {
         "operationId": "get_v1_deploy_stream_applications_by_name_resource-tree",
+        "summary": "Live resource tree for one application, as Server-Sent Events",
+        "description": "Holds the connection open as text/event-stream and pushes the application's whole resource tree — its live child objects and each one's derived health — once immediately and again on every keep-alive tick, so a client always has a current picture without polling. The refresh IS the keep-alive: it is a cheap rebuild rather than a watch, so there is no multi-resource watch to leak.\n\nTENANT-SCOPED and fail-closed BEFORE the stream opens, which is the rule that matters: the caller's scope and the application's namespace are resolved first, so an unvalidated caller gets a plain 403 and an application belonging to another tenant gets a plain 404 — never an opened stream that emits nothing. A SuperAdmin reaches the whole fleet, an org member only its own org's applications. No cluster client configured is 503.",
         "tags": [
           "deploy"
         ],

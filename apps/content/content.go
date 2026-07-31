@@ -14,6 +14,7 @@ import (
 	"github.com/hanzoai/cloud/apps/framework"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -123,6 +124,52 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/generate", cloud.Handle(s, postGenerate))
 	zip.Post(g, "/publish", o.postPublish)
 	zip.Post(g, "/:doctype/:name/transition", o.postTransition)
+}
+
+// The generate op's prose, declared beside the wire fact that keeps it raw.
+//
+// Every other op on this surface is typed, so zipdoc lifts its prose off the
+// handler's doc comment. This one cannot be typed (the resource-deny envelope, in
+// the comment above), and zipdoc can lift nothing from a raw handler — so without
+// this declaration the ONE agentic call in the content loop publishes an
+// operationId and nothing else: an SDK method that cannot say what it drafts or
+// what it costs, and a CLI command with no help. Keyed by the fiber pattern
+// verbatim, so the prose renders only while the router serves the route.
+func init() {
+	openapi.Describe("/v1/content/generate", http.MethodPost,
+		"Draft a piece of marketing content and file it in the CMS as a draft.",
+		"Answers 201 with the created draft's identity — {doctype, name, status} — and the "+
+			"document itself lands in the CMS through the SAME validate and lifecycle-hook "+
+			"pipeline an ordinary create runs. This is a WRITE, not a preview: there is no "+
+			"dry-run, and every call that succeeds leaves a document behind.\n\n"+
+
+			"`doctype` picks which of two generation planes runs, and they are the only two. "+
+			"Campaign and SocialPost are drafted as brand COPY on the platform AI plane (zen5 by "+
+			"default, overridable per request with `model` or per deployment); Asset is a studio "+
+			"image render the AI plane never sees. Everything else about the call is identical.\n\n"+
+
+			"MONEY, metered in exactly one place per mode and never both. Copy rides the "+
+			"platform's own inference meter — the org's balance is authorised before the model "+
+			"call and debited at the exact token cost after — so content never re-bills it. A "+
+			"studio render is invisible to that meter, so content is the sole meter for it: the "+
+			"org is gated BEFORE the GPU compute and refused 402 when out of funds or over its "+
+			"spend cap, and the debit is recorded only once the render actually returns, because "+
+			"the billable event is the consumed compute and not the CMS row. `project` rides the "+
+			"BODY rather than a server-minted identity claim, so it attributes spend but a "+
+			"project-scoped cap stays soft on it — the org is the value that is enforced.\n\n"+
+
+			"The org is the caller's own, resolved once from the validated principal and never "+
+			"read from the body; a caller without one is refused 403. Status is not the "+
+			"generator's to choose: a generated item is ALWAYS a draft, and the storage-boundary "+
+			"hook enforces that a second time.\n\n"+
+
+			"It fails closed rather than inventing anything. An unknown content type is 404 and a "+
+			"deployment whose marketing module is not installed is 409 naming the install call. "+
+			"An AI plane or studio that is unconfigured or unreachable, a graph the studio "+
+			"rejects, and a render that does not return in time all degrade to 503 — never "+
+			"fabricated copy, never a fake render. A `source_media` that fails the SSRF and "+
+			"traversal validator is 400 raised before the billing gate and before the studio is "+
+			"contacted, so a hostile source never costs the caller anything.")
 }
 
 // Shutdown releases the mounted singleton. Idempotent; content owns no store, so this

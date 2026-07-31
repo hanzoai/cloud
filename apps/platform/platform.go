@@ -260,19 +260,352 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/runner/releases/:id", cloud.Handle(s, getSelfRelease))
 }
 
-// The platform surface's declared bodies, adjacent to the route table above so
-// path and payload are read (and changed) together. Each entry names the exact
-// struct the matching handler binds or serves — openapi reflects the schema from
-// it, so the published contract follows the code. A declaration renders only
-// while its route is live (openapi.Register), so this list can never add a path.
+// The platform surface's declared bodies AND its prose, in the route table's own
+// order so path, payload and meaning are read (and changed) together. Register
+// names the exact struct the matching handler binds or serves — openapi reflects
+// the schema from it, so the published contract follows the code. Describe states
+// what a CALLER gets, which no reflection can derive: none of these routes is a
+// typed op, so there is no doc comment for zipdoc to lift, and a bare operation
+// publishes an operationId and NOTHING else — an SDK method that cannot explain
+// itself and a CLI command with no help text. Both halves render only while the
+// route is live, so this list can never add a path.
 func init() {
 	openapi.Register("/v1/platform/projects", "GET", nil, []projectView{})
+	openapi.Describe("/v1/platform/projects", "GET",
+		"Your org's projects, each with how many apps live under it",
+		"Lists the caller org's projects with the number of platform applications in each. A "+
+			"project is IAM's resource — it is created and deleted at /v1/iam/projects, never here "+
+			"— so this is the ONE projection IAM cannot serve: the project plus what the platform "+
+			"has put under it.\n\n"+
+			"Requires a validated principal; 403 without one, and the org comes from that validated "+
+			"identity rather than a request header. This is the console's first authenticated read, "+
+			"so a project store that is not yet initialised degrades to an EMPTY list rather than a "+
+			"500 — a new org genuinely has zero projects — and the real cause is surfaced to "+
+			"operators instead of to the caller.")
+
 	openapi.Register("/v1/platform/projects/:project", "GET", nil, projectView{})
+	openapi.Describe("/v1/platform/projects/:project", "GET",
+		"One project and its app count",
+		"Returns a single project of the caller's org with the number of platform applications "+
+			"under it. A project this org does not have is 404, which is also what another tenant's "+
+			"project looks like from here. Requires a validated principal; 403 without one.")
+
 	openapi.Register("/v1/platform/projects/:project/apps", "GET", nil, []appView{})
+	openapi.Describe("/v1/platform/projects/:project/apps", "GET",
+		"The applications in one project, with what the cluster says about them",
+		"Lists the caller org's applications under one project. Each row carries the stored record "+
+			"and, for an app that is live or deploying, the LIVE phase and health read from its "+
+			"operator Service CR; an app with sealed env also carries its secret-sync state. Those "+
+			"cluster reads are best-effort — an unreachable cluster leaves those fields empty and "+
+			"never blocks the listing.\n\n"+
+			"The project must exist in IAM for this org, or the answer is 404; the `default` "+
+			"project is implicit and always accepted, because it is part of what an org IS. "+
+			"Requires a validated principal; 403 without one.")
+
 	openapi.Register("/v1/platform/projects/:project/apps", "POST", createAppReq{}, appView{})
+	openapi.Describe("/v1/platform/projects/:project/apps", "POST",
+		"Create an application from a git repo or a container image",
+		"Registers a new application under one of the caller org's projects and answers 201 with "+
+			"it. Creating does NOT deploy: the app lands in `draft` and nothing reaches the cluster "+
+			"until /deploy.\n\n"+
+			"`source` is `git` — which requires `repo.url` — or `image`, which requires "+
+			"`image.repository`; anything else is 400. A git app builds with zero-config `pack` by "+
+			"default and may opt into `dockerfile`; an image app never builds. The repo URL and "+
+			"Dockerfile path are validated here against the SAME allowlist the privileged build "+
+			"enforces, so an unsafe source is refused before it is ever persisted.\n\n"+
+			"The `slug` is the app's identity in the cluster: given or derived from `name`, it must "+
+			"match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, and a slug already used in this project "+
+			"is 409. `replicas` and `storageGb` are clamped to the deployment's limits rather than "+
+			"refused.\n\n"+
+			"Env keys must match `^[A-Za-z_][A-Za-z0-9_]*$`. A variable marked `secret: true` is "+
+			"SEALED into KMS and its plaintext is never written to the database — and if KMS is "+
+			"unavailable the create fails 503 rather than falling back to storing a secret in the "+
+			"clear.\n\n"+
+			"The app is seeded with its canonical default host, so it has a working HTTPS URL the "+
+			"moment it deploys. A bare custom domain cannot be attached here — it has to go through "+
+			"add-domain and DNS verification first. Requires a validated principal; 403 without "+
+			"one, and every cluster object it will later create lands in that org's own "+
+			"`tenant-<org>` namespace.")
+
 	openapi.Register("/v1/platform/projects/:project/apps/:app", "GET", nil, appView{})
+	openapi.Describe("/v1/platform/projects/:project/apps/:app", "GET",
+		"One application, with its live phase, health and secret sync",
+		"Returns a single application of the caller's org together with what the cluster currently "+
+			"reports for it: the operator Service CR's phase and health, and whether its sealed env "+
+			"has synced. An app this org and project do not have is 404. Requires a validated "+
+			"principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app", "DELETE",
+		"Delete an application and tear down what it runs",
+		"Removes the application record and tears down what it owns in the org's tenant namespace "+
+			"— its operator Service CR and its KMSSecret — then answers 204. An app this org and "+
+			"project do not have is 404, never a silent success.\n\n"+
+			"Teardown is best-effort by design: a cluster that refuses or is unreachable does not "+
+			"block the delete, so the record cannot be left orphaned behind a broken cluster; the "+
+			"failure is logged for operators and the orphan reaper reconciles it. Requires a "+
+			"validated principal; 403 without one.")
+
 	openapi.Register("/v1/platform/projects/:project/apps/:app/env", "PUT", setEnvReq{}, appView{})
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/env", "PUT",
+		"Replace an app's environment variables",
+		"Writes the app's whole environment set and answers the updated application. This is the "+
+			"one post-create write path for env, and it REPLACES rather than merges: a variable "+
+			"absent from the body is gone, and a secret dropped from the set leaves the app's "+
+			"Secret on its next deploy.\n\n"+
+			"Keys must match `^[A-Za-z_][A-Za-z0-9_]*$`. A value marked `secret: true` is sealed "+
+			"into KMS and blanked in the database, so plaintext is never persisted — and the write "+
+			"fails 503 if KMS is unavailable rather than storing one in the clear.\n\n"+
+			"The rule worth knowing: this does not restart anything. Once the app has been deployed "+
+			"the secret sync is re-declared immediately so the operator re-materialises the Secret, "+
+			"but RUNNING pods keep the environment they started with until their next deploy or "+
+			"restart. Requires a validated principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/deploy", "POST",
+		"Deploy the app — build it first if it comes from git",
+		"Starts a new, monotonically versioned deployment of the app and answers 202 with the "+
+			"deployment record. A 202 is an ACCEPTED deployment, not a live one.\n\n"+
+			"An IMAGE app deploys the tag you name (falling back to the app's tag, then `latest`) "+
+			"by writing its operator Service CR; the operator reconciles it to running. A GIT app "+
+			"launches an in-cluster BuildKit Job at `commit` — or the app's branch — and comes back "+
+			"in `building`; the Service CR is applied later, by the reconciler, once the Job "+
+			"succeeds. The reconciler is restart-safe, so a build in flight survives a cloud "+
+			"restart.\n\n"+
+			"Deploys are bounded per org: over the concurrent-deploy cap is 429 and NOTHING is "+
+			"recorded, so a rejected deploy leaves no phantom in the history. An unreachable "+
+			"cluster is 503 but still records an honest `error` deployment, because a deploy that "+
+			"was attempted and failed must not be indistinguishable from one never made. Every "+
+			"other failure is likewise recorded in its real terminal state.\n\n"+
+			"This is metered work: a git build is billed to the org's ledger in wall-clock build "+
+			"minutes once the Job finishes, and the running deployment is billed for its compute "+
+			"per tick for as long as it stays live. Requires a validated principal; 403 without "+
+			"one, and everything is written into that org's own `tenant-<org>` namespace.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/stop", "POST",
+		"Stop an app without deleting it",
+		"Scales the app's Service to zero replicas and marks it stopped, answering the updated "+
+			"application. Nothing else is removed — the record, its env, its domains and its "+
+			"deployment history all survive, and /start brings it back at the same replica count."+
+			"\n\n"+
+			"An app that is not deployed has no Service CR to scale and is 404. An unreachable "+
+			"cluster is 503 and a cluster that refuses the scale is 502. Because the pods stop, so "+
+			"does the compute metering. Requires a validated principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/start", "POST",
+		"Start a stopped app back up",
+		"Scales the app's Service back to its configured replica count and marks it live, "+
+			"answering the updated application. It does not redeploy: the image already on the "+
+			"Service CR is what comes back.\n\n"+
+			"The billing watermark is reset to now as part of starting, so the org is charged for "+
+			"THIS live span and never for the gap the app spent stopped. An app with no Service CR "+
+			"is 404, an unreachable cluster is 503, and a cluster that refuses the scale is 502. "+
+			"Requires a validated principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/deployments", "GET",
+		"An app's deployment history",
+		"Lists every deployment recorded for one of the caller org's applications, newest version "+
+			"first, each with its version, status, source, commit and image. Failed and superseded "+
+			"attempts are included — that is the point of a history. Requires a validated "+
+			"principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/deployments/:id", "GET",
+		"One deployment of one app",
+		"Returns a single deployment by id, scoped to the named application of the caller's org — "+
+			"so an id belonging to another app or another tenant is 404, not a read. Requires a "+
+			"validated principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/deployments/:id/logs", "GET",
+		"Real logs for a deployment — the build's, then the app's",
+		"Returns the deployment's recorded status timeline together with LIVE pod logs pulled from "+
+			"the cluster: the build pod's output while a git build is running, and the running "+
+			"app's output once it is deployed. The `source` field says which of the two the body "+
+			"is — `build`, `app` or `none` — so a console can label the pane honestly.\n\n"+
+			"It never fabricates log content. When no pod exists yet, or the cluster is "+
+			"unreachable, it degrades to the recorded timeline and says so. Every cluster read is "+
+			"confined to the caller org's own namespaces and time-boxed. Requires a validated "+
+			"principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/preview", "POST",
+		"Put a branch on its own URL",
+		"Deploys an already-built `image` to a per-branch preview and answers its URL, the branch, "+
+			"the preview's slug and the deployment. The preview is a FIRST-CLASS application named "+
+			"`<app>-<branch>` in the same project and tenant namespace, with its own default host — "+
+			"so it is completely isolated from production while reusing the same deploy mechanic. "+
+			"Re-previewing a branch converges that same target in place rather than stacking "+
+			"another one.\n\n"+
+			"It carries NO environment variables, deliberately: a preview never inherits "+
+			"production's secrets. It also does not build — `image` is required and must already "+
+			"exist, and `branch` defaults to the parent app's. A branch that does not resolve to a "+
+			"valid slug distinct from the parent's is 400. Requires a validated principal; 403 "+
+			"without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/promote", "POST",
+		"Promote an already-built release to the app",
+		"Redeploys an image that already exists — named either by `deploymentId`, which promotes "+
+			"that deployment's exact built image, or by `tag`, resolved the same way a deploy "+
+			"resolves one. One of the two is required; neither is 400.\n\n"+
+			"Promotion never builds. A deployment that carries no built image cannot be promoted "+
+			"and is 400, and a deployment id outside this app is 404. It runs through the same "+
+			"deploy core as everything else, so it takes a NEW version number and is subject to the "+
+			"same per-org concurrency cap. Requires a validated principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/rollback", "POST",
+		"Go back to the previous release",
+		"Redeploys a prior image: the one named by `deploymentId`, or — with no body — the newest "+
+			"earlier deployment that carries a real built image and did not error, skipping the "+
+			"release currently live. An app with nothing earlier to return to is 400.\n\n"+
+			"A rollback is a deploy of an old image, not a rewind: it takes a NEW version number "+
+			"and appends to the history rather than erasing what came after. Both lookups are "+
+			"scoped to this app and org, so another tenant's image can never be rolled in. "+
+			"Requires a validated principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/domains", "GET",
+		"Every hostname this app answers on",
+		"Lists the app's hosts: the permanent default host it was born with, any org-subtree hosts "+
+			"attached to it, and every custom host claimed for it with its verification state and, "+
+			"while pending, the DNS challenge records to publish. Live endpoint status for each "+
+			"host is observed from the cluster. Requires a validated principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/domains", "POST",
+		"Attach a hostname — instantly if you already own it, otherwise with a DNS challenge",
+		"Attaches `host` to the app, and which of two things happens depends on who owns the name. "+
+			"A host inside the caller org's own subtree is structurally owned, so it goes ACTIVE "+
+			"immediately and answers 201. A bring-your-own host is claimed as PENDING and answers "+
+			"the DNS challenge records to publish; it is NOT rendered into the app's ingress until "+
+			"/verify passes.\n\n"+
+			"Claims are globally unique. A host already claimed by another organization is 409, and "+
+			"so is one claimed by a different app in your own; re-adding this app's OWN claim is "+
+			"idempotent and answers its current state at 200. The default host is always attached "+
+			"and re-adding it is 409. A host under the platform's shared apex that is not the "+
+			"caller's own subtree is 403 — it belongs to whoever owns that subtree and can never be "+
+			"grabbed through the custom path.\n\n"+
+			"`host` must be a valid DNS hostname; anything else is 400. Requires a validated "+
+			"principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/domains/:host/verify", "POST",
+		"Check a custom domain's DNS and turn it on if it passes",
+		"Runs the DNS challenge check for a pending custom host and, when it passes, marks the "+
+			"host verified and renders it into the app's ingress so it starts serving.\n\n"+
+			"A check that RAN and did not pass is not an error: it answers 200 with the host still "+
+			"pending and the reason in `detail`, so a console can show the operator what DNS is "+
+			"actually returning. An already-verified host answers as-is without re-checking. A host "+
+			"not claimed by this app is 404. Requires a validated principal; 403 without one.")
+
+	openapi.Describe("/v1/platform/projects/:project/apps/:app/domains/:host", "DELETE",
+		"Detach a hostname and release the claim",
+		"Drops the host from the app's ingress and releases any custom claim on it, so the name "+
+			"becomes claimable again — by this org or any other. Answers 204.\n\n"+
+			"The default host is permanent and cannot be removed: that is 400, not 404. A host that "+
+			"is neither attached nor claimed here is 404. Requires a validated principal; 403 "+
+			"without one.")
+
+	openapi.Describe("/v1/platform/health", "GET",
+		"Whether this control plane can actually deploy anything",
+		"A real probe, not a status page. It answers 200 only when the metadata store is open AND "+
+			"the cluster is genuinely reachable — proved by LISTING the operator App CRD, which "+
+			"settles reachability and CRD presence in one bounded call, and which is the exact "+
+			"question every deploy depends on. Anything else is 503 carrying the real reason and "+
+			"whether the CRD was found.\n\n"+
+			"A constructed cluster client proves nothing — it is built from a kubeconfig, not from "+
+			"a reachable apiserver — so this deliberately spends a round trip rather than reporting "+
+			"`ok` while every deploy fails. Not admin-gated: liveness has to be probe-able without "+
+			"a credential.")
+
 	openapi.Register("/v1/run", "POST", runReq{}, runView{})
+	openapi.Describe("/v1/run", "POST",
+		"Run a container image and get back a URL",
+		"The one-call shortcut over project → app → deploy: give it a `name` and an `image` and it "+
+			"creates or updates an image-source application in your org's DEFAULT project, deploys "+
+			"it through the same operator Service-CR writer everything else uses, and answers its "+
+			"id, name, live URL, status and shape. Re-running the same name UPDATES it in place, so "+
+			"the call is idempotent by name.\n\n"+
+			"What it produces is a first-class application, not a special object: it is listable, "+
+			"stoppable and redeployable through the /v1/platform routes like any other app.\n\n"+
+			"`minScale` is the replica floor. `maxScale` above it declares an autoscaling ceiling; "+
+			"`maxScale: 0` means no autoscaler at all — a fixed run at the floor. Both are clamped "+
+			"to the deployment's limits. `runtime` and `shape` are accepted for the client contract "+
+			"and echoed back: the image is the runtime unit and sizing is the operator's default.\n\n"+
+			"It is BILLING-GATED before it touches the cluster: a flat per-run fee is authorized "+
+			"against the org's own prepaid balance first, so an org that cannot pay is refused "+
+			"without anything being created. An unreachable cluster is 503 — a run never reports a "+
+			"URL it did not create. Secret env is sealed into KMS and fails closed without it.\n\n"+
+			"Requires a validated principal; 403 without one. The org is resolved from that "+
+			"validated identity and is what both pays and owns the namespace — it is never read "+
+			"from the body.")
+
+	openapi.Describe("/v1/environments", "GET",
+		"Your deploy targets, and what is running on each",
+		"Returns the org's environments — the distinct deploy targets its applications name, "+
+			"`production` for anything that names none — each aggregating the apps that target it, "+
+			"a rolled-up status and when it last changed.\n\n"+
+			"An environment is DERIVED, not stored: there is nothing to create or delete here, and "+
+			"an environment exists exactly as long as an app points at it. Requires a validated "+
+			"principal; 403 without one.")
+
+	openapi.Describe("/v1/pipelines", "GET",
+		"One build-and-deploy pipeline per app, with its latest run",
+		"Returns one pipeline per application in the caller's org — its repo or image source, its "+
+			"current status, and when its most recent deployment ran and how long it took. A "+
+			"pipeline is a PROJECTION of an app plus its newest deployment, not a separate record: "+
+			"it comes into existence with the app and is triggered only through /deploy, never "+
+			"here. Requires a validated principal; 403 without one.")
+
+	openapi.Describe("/v1/builds", "GET",
+		"Real build records for your org",
+		"Lists the org's BuildKit build records — the git build step behind a deploy — each with "+
+			"the repo it built, the short commit, its status, when it started and how long it took. "+
+			"These are real records or an honest empty list; a build appears here because one ran, "+
+			"never because a page needed a row. Builds are created only by /deploy and the "+
+			"push-to-deploy hook. Requires a validated principal; 403 without one.")
+
+	openapi.Describe("/v1/releases", "GET",
+		"The versions that actually reached the cluster",
+		"Lists the org's releases: the deployments that were genuinely applied to the cluster, with "+
+			"the app they belong to, their version, environment, status and when they were "+
+			"released. A deployment that failed or is still building is NOT a release and is "+
+			"excluded — reaching the cluster is what makes one. Requires a validated principal; 403 "+
+			"without one.")
+
+	openapi.Describe("/v1/runner", "POST",
+		"Trigger a native build — an image, or the binaries a repo declares",
+		"The fabric's own build trigger, and what `hanzo build`, git-push-to-deploy and cloud's own "+
+			"self-release all call. It answers 202 with the build job id: a queued build, not a "+
+			"pushed artifact.\n\n"+
+			"Two lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and the "+
+			"output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane takes "+
+			"`binaries` — the same recipe the repo's hanzo.yml declares — and publishes to object "+
+			"storage instead; it must carry no `image`, because a build produces binaries or an "+
+			"image, never both. `release: true` is the third mode: cloud self-publishing its own "+
+			"image, version computed, built, smoke-tested, tagged and announced.\n\n"+
+			"PRIVILEGED, with exactly two credentials and never a third: the shared build-callback "+
+			"token compared in constant time — the machine path, which a user never holds — or a "+
+			"validated IAM principal who is an ADMIN of their org, which is the `hanzo build` user "+
+			"path and means one IAM login authorizes a build with no separate build token. A plain "+
+			"member is refused.\n\n"+
+			"Both paths are bounded the same way: the output must push to a registry the fabric "+
+			"owns, and on the IAM path the image's registry namespace must MATCH the caller's own "+
+			"validated org — so an org admin can only publish into their own brand and can never "+
+			"overwrite another's through the shared push credential. The same confinement applies "+
+			"to the artifact lane's repo owner. Cutting a release is IAM's decision alone: the "+
+			"build token may enqueue a build but may not cut one.\n\n"+
+			"The output image is parsed and validated as a single well-formed OCI ref before any "+
+			"authorization decision reads it, so a crafted ref cannot smuggle a build-exporter "+
+			"attribute past the check.")
+
+	openapi.Describe("/v1/runner/releases", "GET",
+		"Self-publish releases this process has run",
+		"Lists the platform's own release runs with their current state, so a release that answered "+
+			"202 with an id can be followed to its end. SuperAdmin only — this is the platform's "+
+			"own publishing record, not a tenant surface.\n\n"+
+			"The record lives in THIS process's memory, so it covers the releases this instance "+
+			"started and does not survive a restart.")
+
+	openapi.Describe("/v1/runner/releases/:id", "GET",
+		"One self-publish release by the id its 202 returned",
+		"Returns the state of one release run — which is the whole reason the trigger answers with "+
+			"an id, because without this a release that died in the detached pipeline would look "+
+			"exactly like one still in flight. SuperAdmin only.\n\n"+
+			"A 404 means the id is unknown OR has aged out of this process's in-memory record. That "+
+			"is the honest answer either way: the process genuinely cannot tell the two apart.")
 }
 
 // ── tenancy ──────────────────────────────────────────────────────────────────

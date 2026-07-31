@@ -32,13 +32,52 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"path"
 	"regexp"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// The prose for both discovery routes. Neither can be a typed op (see below), so
+// zipdoc has no doc comment to lift for them and the document would otherwise
+// publish an operationId and nothing else. Declared through the same registry the
+// router projection consults, so it renders only while the routes are served, and
+// the generated SDKs and the spec-derived CLI carry it.
+func init() {
+	openapi.Describe(wellKnown+"/index.json", http.MethodGet,
+		"The brand's master catalogue of agent skills",
+		"The Agent Skills Discovery catalogue an AI client reads to learn what this deployment "+
+			"can do: every skill, with the sha256 of the SKILL.md that is actually served for it, "+
+			"so a client can verify the document it then fetches.\n\n"+
+			"The catalogue is GENERATED from the per-service OpenAPI specs and embedded in the "+
+			"binary; this route serves those bytes verbatim and never re-derives them, which is "+
+			"what makes the digests hold. Which brand's catalogue you get is decided per request "+
+			"from the Host — api.hanzo.ai answers the Hanzo catalogue, api.lux.network the Lux "+
+			"one, api.zoo.ngo the Zoo one — never one brand's skills on another's surface; a Host "+
+			"whose brand has no embedded catalogue falls back to the deployment brand, then to "+
+			"hanzo.\n\n"+
+			"Public by design: the discovery surface carries no secrets, so there is no bearer "+
+			"and no tenant scope. Answers `Cache-Control: public, max-age=300`, and a catalogue "+
+			"that is not embedded is `{\"error\":…}` at 404.")
+
+	openapi.Describe(wellKnown+"/:skill/SKILL.md", http.MethodGet,
+		"One skill's document, as markdown",
+		"Serves a single agent skill's SKILL.md as text/markdown — the instructions a client "+
+			"follows once index.json has told it the skill exists, and byte for byte the document "+
+			"that index.json's sha256 for that skill was computed over.\n\n"+
+			"The skill segment is a flat, service-prefixed id (`ai_models`): one path segment with "+
+			"no separators, so a request can never address anything outside the embedded "+
+			"catalogue. An id of any other shape, or a skill the serving brand does not carry, is "+
+			"`{\"error\":…}` at 404 — the same answer, so a probe learns nothing about which is "+
+			"which.\n\n"+
+			"Brand resolution and caching are index.json's: the Host picks the catalogue, and the "+
+			"response is `Cache-Control: public, max-age=300`. Public — no bearer, no tenant "+
+			"scope.")
+}
 
 // Regenerate the FULL embedded catalog from the openapi SOT (delegates to the
 // one Makefile target so there is a single regen command). `make agentskills`.
@@ -87,10 +126,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// encoding/json and always answers application/json; this surface serves EMBEDDED
 	// BYTES verbatim, one of them as text/markdown, both under a Cache-Control the
 	// discovery convention depends on. Typing either would change what the wire
-	// carries, so the cost of staying raw is paid knowingly: no prose, no MCP tool,
-	// no CLI command, no typed SDK method for these two addresses. The catalogue
-	// itself IS the machine-readable description, which is what makes that cost
-	// bearable here and nowhere else in this partition.
+	// carries, so the cost of staying raw is paid knowingly: no MCP tool, no CLI
+	// command, no typed SDK method for these two addresses. Their PROSE is not part
+	// of that cost — openapi.Describe declares it beside the wire fact (init above),
+	// so the document, the generated SDKs and the spec-derived CLI can still explain
+	// what these two addresses are. The catalogue itself IS the machine-readable
+	// description, which is what makes the remaining cost bearable here and nowhere
+	// else in this partition.
 	app.Get(wellKnown+"/index.json", h.serveIndex)
 	app.Get(wellKnown+"/:skill/SKILL.md", h.serveSkill)
 

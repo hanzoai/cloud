@@ -22,6 +22,8 @@
     "/v1/billing/balance": {
       "get": {
         "operationId": "get_v1_billing_balance",
+        "summary": "Prepaid credit the caller's org can still spend",
+        "description": "Answers the spendable prepaid balance of the wallet this caller bills from — the same wallet the AI prepaid gate reads before admitting a paid request, the edge meter debits, and a top-up credits.\n\nThe wallet is an ADDRESS, not an org: `account` echoes the key resolved within the ledger — the org's shared pool for a tenant org, a personal account for a member of the shared signup org. The echo is the point. A browser could only GUESS its own payer by decoding its own token, and a guess that disagrees with the server is how money lands in an account the gate never reads.\n\n`balance`, `holds` and `available` are whole USD cents, ROUNDED from the ledger's exact 18-decimal value. On the co-resident ledger `holds` is 0 and `available` equals `balance`: the gate's reservations live in its own pod and are never posted, so the settled balance IS the spendable one.\n\nThe ledger is the caller's own org, taken from the VALIDATED IAM owner claim and never from a client header. No validated principal is 401 — with one exception, the trusted in-process service token the AI gate itself presents, which reads the gateway-pinned org and nothing it could name. A balance that cannot be READ is 502, never 0: unknown is not broke.",
         "tags": [
           "billing"
         ]
@@ -30,6 +32,8 @@
     "/v1/billing/gpu-charge": {
       "post": {
         "operationId": "post_v1_billing_gpu-charge",
+        "summary": "Debit the caller's org prepaid balance for a GPU",
+        "description": "Records a gpu-tagged withdrawal against the caller's own org and answers 201 with the transaction id and the prepaid balance left. This is the ONE endpoint on the customer billing surface that moves an org's ledger.\n\nTHE PAYER IS NOT A FIELD. Every billing-subject key in the body — `user`, `userId`, `customerId` — is overwritten server-side with the caller's own org before the request leaves, so a forged body can never charge another tenant; a body that is not an object is replaced by the pinned subject alone. `amountCents`, `currency`, `requestId` and `tag` pass through, and `tag` is FORCED into the gpu bucket so this can never mint a credit-eligible withdrawal.\n\nTwo gates upstream, both fail-closed: a chargeable card on file (402 `card_required`) and prepaid alone covering the amount (402 `insufficient_prepaid`) — credits are never consulted, so a GPU cannot draw on a grant. Both statuses forward VERBATIM, because the launch UI shows the remedy and a money verdict must never be 500-masked.\n\nIT IS NOT IDEMPOTENT. `requestId` is recorded on the transaction and deduplicates NOTHING, and no idempotency key is carried upstream: two identical posts are two debits. Retry safety belongs to the caller.\n\n401 without a validated principal — a customer charging its OWN wallet, so an absent identity is not signed in, never not authorized.",
         "tags": [
           "billing"
         ]
@@ -38,6 +42,8 @@
     "/v1/billing/gpu-eligibility": {
       "get": {
         "operationId": "get_v1_billing_gpu-eligibility",
+        "summary": "Whether the caller's org may launch a GPU right now, and what is missing",
+        "description": "Answers `eligible` plus the exact `reason` — `ok`, `card_required` or `insufficient_prepaid` — with the org's prepaid available, whether a card is on file, and the cents required. It answers 200 in EVERY case: a no is data the launch UI renders as a remedy, never a 402.\n\nEligibility is prepaid REAL money and a chargeable card, both. `creditsRemaining` is reported and is NOT usable — a GPU debit is gpu-tagged and drawn from the prepaid bucket — so an org sitting on grant credit with zero prepaid is refused, deliberately.\n\n`amountCents` is the immediate charge and `minPrepaidCents` the 24h floor GPU policy requires; the gate needs prepaid available \u003e= the larger of the two. Both default to 0, so asking with neither answers whether a card exists, not whether a launch is affordable.\n\nThe wallet is pinned server-side to the caller's own org, so this reads exactly the wallet a charge debits — the gate and the debit can never address two wallets. 401 without a validated principal.",
         "tags": [
           "billing"
         ]
@@ -46,12 +52,16 @@
     "/v1/billing/payment-methods": {
       "get": {
         "operationId": "get_v1_billing_payment-methods",
+        "summary": "Cards saved against the caller's org, masked",
+        "description": "Answers the org's saved payment methods as the portal holds them — brand, last four, expiry, default flag. This is what the GPU launch gate's card-on-file check reads.\n\nNO CARD DATA IS HELD HERE. What the fleet stores is the masked descriptor plus the PROCESSOR's reusable card reference; the number and the CVV live at the processor and never enter this system, so there is nothing here to un-mask.\n\nThe customer filter is pinned server-side to the caller's own ORG slug — the upstream 400s without one, and this always supplies it — so a caller sees only its own org's methods. A card is SAVED under that same org key, so this list is the one that always matches what was saved; the /v1/finance/payment-methods sibling keys the same store on the resolved WALLET instead, which differs wherever the payer is a person rather than the org pool.\n\n401 without a validated principal. The upstream status forwards verbatim and an unreachable upstream is 502 — never an empty list, because no cards and could not ask must not look alike.",
         "tags": [
           "billing"
         ]
       },
       "post": {
         "operationId": "post_v1_billing_payment-methods",
+        "summary": "Save a card on file for the caller's org",
+        "description": "Vaults the single-use card token the browser produced with the payment processor and attaches the REUSABLE reference it returns to the caller's org, so a later charge — a top-up, auto-recharge, a GPU launch — has something to bill.\n\nWHAT IS STORED IS NOT A CARD. The processor exchanges the one-time token for a card-on-file id; this system keeps that id, the masked brand/last4/expiry the browser sent, and a billing address if one was supplied. No PAN and no CVV, ever.\n\nThe owning customer is pinned server-side to the caller's own org on every billing subject key, so a forged body can never attach a card to another tenant. Vaulting VALIDATES the card with the processor, so a card the bank refuses comes back 402 carrying the processor's own reason — forwarded verbatim, because insufficient funds and a wrong security code are different remedies for the customer.\n\n401 without a validated principal.",
         "tags": [
           "billing"
         ]
@@ -60,6 +70,8 @@
     "/v1/billing/usage": {
       "get": {
         "operationId": "get_v1_billing_usage",
+        "summary": "Every billed call the caller's org made, attributed to a product",
+        "description": "Answers one row per BILLED call against the caller's org — transaction id, amount, timestamp and the metered unit. This is the raw charged ledger, not a rollup.\n\nEach row is stamped with a canonical `metadata.product` derived from what the meter persisted: `agent` becomes agents, `provisioning` becomes the provisioned kind, a token-metered row becomes inference, anything else keeps its metering surface. The ledger has no product field of its own, so this read is where that dimension is made real — from the SAME charged rows, never a second meter. A row that already carries its own product WINS, so the derivation stops the day the meter records one.\n\n`product=\u003cid\u003e` filters to one product server-side. `groupBy=product` reduces to `{product,requests,amountCents}` rollups instead of rows.\n\n`amount` is whole USD cents, ROUNDED; `decimal` beside it is the SAME debit exact, as an 18-decimal USD string. Sum `decimal`. A page of sub-cent token calls totals correctly there and totals ZERO in `amount` — that difference is real money.\n\nScoped to the caller's own org's books, where the org's ledger file IS the tenant boundary; no client-supplied subject is ever forwarded. 401 without a validated principal. The co-resident read returns the 2000 most recent debits, newest first; `start` and `end` narrow the window only on the split-deploy upstream.",
         "tags": [
           "billing"
         ]
@@ -68,6 +80,8 @@
     "/v1/billing/usage/accounts": {
       "get": {
         "operationId": "get_v1_billing_usage_accounts",
+        "summary": "Traffic through the accounts the CALLER linked, per account",
+        "description": "Answers per-account totals for the linked provider accounts the gateway ROUTED this caller's traffic through — requests, prompt and completion tokens, recorded cost — plus their honest sum.\n\nThis is the one read in the billing namespace scoped to the PERSON, not the org. Rows are keyed on (validated org, validated user), so a caller sees the accounts THEY linked and never a colleague's, even inside one org — everything else under /v1/billing is org-wide. Neither key is ever read from the request.\n\nIt is a ROUTING counter, not the money ledger. `costCents` is 0 for an account billed by its own subscription (`billing: \"plan\"`), where the plan pays the provider directly, so these totals do not reconcile against what the org was charged. /v1/billing/usage is the charged ledger.\n\n401 without a validated principal. Where the linked-account plane is not resident the answer is an honest 501 — never an empty breakdown, which would read as no usage.",
         "tags": [
           "billing"
         ]
@@ -76,6 +90,8 @@
     "/v1/finance/balance": {
       "get": {
         "operationId": "get_v1_finance_balance",
+        "summary": "Spendable prepaid for the caller's org, in the finance shape",
+        "description": "Answers the org's spendable prepaid balance typed for the finance surfaces: `availableCents`, `pendingCents`, `dueCents` and the `asOf` instant it was read.\n\nIt is the SAME wallet read /v1/billing/balance answers — one function, called by both, so the two surfaces cannot drift into disagreeing about a customer's money. Reshaped, never re-metered. Co-resident the number comes straight out of the org's own double-entry ledger file.\n\n`dueCents` is a structural 0: this is a PREPAID wallet with no open-invoice debt, so nothing is ever owed and a non-zero value here would be an invention. `pendingCents` is 0 on the co-resident ledger, where authorization holds are never posted; only a split-deploy upstream reports holds, and there spendable is the balance NET of them, floored at 0 — a fully-held wallet reports 0 rather than money the gate would refuse.\n\nCents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own org from the validated IAM owner claim; 401 without a validated principal, and a balance that cannot be read is 502 — never 0, because unknown is not broke.",
         "tags": [
           "finance"
         ]
@@ -84,6 +100,8 @@
     "/v1/finance/credits": {
       "get": {
         "operationId": "get_v1_finance_credits",
+        "summary": "Credit grants and top-ups on the caller's org wallet",
+        "description": "Answers the money PUT IN to the org's wallet — each staff grant, promo and settled top-up as a positive row with its id, label, cents and grant time.\n\nSpend is not a credit. A posting counts here only when its type is `deposit`; withdrawals belong to /v1/finance/usage (aggregated) and /v1/finance/ledger (signed). All three project ONE read of the same ledger, so they cannot disagree about a row.\n\n`label` falls back through the posting's notes, then its tags, then a bare Credit — it is a description, never an identifier. `remainingCents` is OMITTED: the wallet is one running balance, not per-grant buckets, so no grant has a remainder to report and spend cannot be attributed to the credit that funded it.\n\nCents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own org; 401 without a validated principal. An org with no grants gets an empty array — honest, never a fabricated figure.",
         "tags": [
           "finance"
         ]
@@ -92,6 +110,8 @@
     "/v1/finance/invoices": {
       "get": {
         "operationId": "get_v1_finance_invoices",
+        "summary": "Issued invoices — none exist, and that is the honest answer",
+        "description": "Answers an empty typed array, always. The fleet bills a PREPAID wallet — money in, metered debits out — and issues no customer invoices, so there is no invoice ledger to project. Nothing here is a fabricated figure and nothing is hidden behind a filter.\n\nThe shape is fixed, so the finance UI renders this lane today and the day an invoice ledger exists it fills with ZERO client change. Spend that actually happened is /v1/finance/usage; money in and out is /v1/finance/ledger; what is left to spend is /v1/finance/balance.\n\nThe gate is real even though the body is empty: 401 without a validated principal. It is the only finance read that touches no store, so it is also the only one that cannot 502.",
         "tags": [
           "finance"
         ]
@@ -100,6 +120,8 @@
     "/v1/finance/ledger": {
       "get": {
         "operationId": "get_v1_finance_ledger",
+        "summary": "Money in and out of the caller's org wallet, signed",
+        "description": "Answers the org's own postings inside `range=`, each as a signed entry: a `deposit` CREDITS the wallet (positive, account `credits:\u003corg\u003e`) and every other posting DEBITS it (negative, account `usage:\u003corg\u003e`), described by its notes or its tags.\n\nThis is the closest projection of the truth. The org's double-entry postings are the source of record — balanced, only ever appended, one file per org — and this lane is that list, widest of the three: /v1/finance/credits is its deposit half and /v1/finance/usage is its withdrawal half rolled up. All three come from ONE read, which is why they cannot contradict each other, and all three answer 501 where no commerce link is configured rather than reporting an empty wallet.\n\n`range` is 24h, 7d, 30d or 90d, defaulting to 30d. A row whose timestamp will not parse is KEPT rather than dropped — a malformed date must show up in a money list, not vanish from it. `balanceCents` is omitted: these are MOVEMENTS, and the standing balance is /v1/finance/balance.\n\nCents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own org, where the org's ledger file is the tenant boundary; 401 without a validated principal.",
         "tags": [
           "finance"
         ]
@@ -108,6 +130,8 @@
     "/v1/finance/payment-methods": {
       "get": {
         "operationId": "get_v1_finance_payment-methods",
+        "summary": "Saved cards for the wallet the caller pays from",
+        "description": "Answers the masked card descriptors for the caller's resolved WALLET — id, brand, last four, expiry, default flag — reshaped into the finance contract.\n\nIt re-masks defensively: whatever the upstream sends, at most the trailing four DIGITS survive into `last4`. No card number, no security code and no processor token exists in this shape at all, so an over-returning upstream still cannot leak one through this lane.\n\nRead the sibling difference before trusting a mismatch. This keys the store on the resolved wallet; /v1/billing/payment-methods keys it on the org SLUG, which is also the key a card is SAVED under — identical for an org paying from its shared pool, different wherever the payer is a person. When the two lists disagree, the billing one is what was saved.\n\n401 without a validated principal. An upstream that answers non-2xx or cannot be reached is 502 — never an empty list, because no cards and could not ask must not look alike.",
         "tags": [
           "finance"
         ]
@@ -116,6 +140,8 @@
     "/v1/finance/usage": {
       "get": {
         "operationId": "get_v1_finance_usage",
+        "summary": "What the caller's org spent over a window, as a series and by tag",
+        "description": "Answers metered spend inside `range=`: the window total, a time series to plot, and one line per usage TAG. Aggregated from the same charged ledger the balance comes off — projected, never re-metered.\n\nOnly WITHDRAW postings count; deposits are credits and are excluded. `range` is 24h, 7d, 30d or 90d, and anything else — including absent — is 30d, so a typo silently widens the window to a month rather than failing. Buckets are hourly at 24h and daily otherwise, in UTC; a posting whose timestamp will not parse is dropped rather than mis-bucketed.\n\nLines group by the posting's tag (`Usage` where it carries none) and `units` counts POSTINGS, not tokens. The dimensions here are time and tag. For per-request rows and a per-PRODUCT breakdown, read /v1/billing/usage instead — the same money, cut a different way.\n\nCents are ROUNDED from the ledger's exact 18-decimal USD, so a window made of sub-cent token calls totals LOW here. Scoped to the caller's own org; 401 without a validated principal.",
         "tags": [
           "finance"
         ]

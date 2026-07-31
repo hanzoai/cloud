@@ -41,6 +41,8 @@
     "/v1/bots/run": {
       "post": {
         "operationId": "post_v1_bots_run",
+        "summary": "Reserved address for launching a bot run — not implemented, always 501",
+        "description": "Answers 501 to every call. The bot runtime exposes no launch operation, so nothing here can start a sandbox, and this address is published rather than dropped because it is reserved: routes resolve by specificity, so the `run` literal can never bind as a run id against its neighbour `/v1/bots/:runId/stop`.\n\nThe refusal is total and takes no input. The handler never reads the body, so any bytes at all — malformed JSON included — get the same 501; no run id is minted, no session URL is handed back, and no per-run fee is charged. That is the point: the earlier version minted an id the runtime had never heard of, pointed it at a VNC node that did not exist, and took real money for it.\n\nListing and stopping runs are live and org-scoped. Only the launch is missing, and it returns in the same change that can prove a bot boots.",
         "tags": [
           "bots"
         ]

@@ -32,8 +32,69 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// dnsRoute is the ONE address this subsystem answers on, written as the WHOLE
+// fiber pattern Mount's group and leaf compose — which is the form the prose
+// registry keys on, and the form a description that names the group leaf alone
+// would silently miss.
+const dnsRoute = "/v1/dns/*"
+
+// dnsRelay is the half of every verb's prose that is identical for every verb,
+// because the HANDLER is identical for every verb: one registration serves them
+// all. Stated once so five descriptions cannot drift into five accounts of one
+// forward.
+const dnsRelay = " The plane owns the authoritative zone and record store behind " +
+	"every name pointed at Hanzo; this head keeps none of it. The sub-path after " +
+	"/v1/dns and the query string ARE the plane's own API address, relayed verbatim, " +
+	"and the plane's answer comes back unchanged — its status code, its Content-Type, " +
+	"and its Location on a redirect this head never follows.\n\n" +
+	"It travels under the CALLER'S OWN identity and substitutes no service " +
+	"credential, which would collapse tenants: the caller's validated session bearer " +
+	"goes upstream as Authorization and the server-validated org as X-Org-Id, so a " +
+	"caller in one org reaches only that org's zones, exactly as if it had called the " +
+	"plane directly. The upstream host comes only from deployment config, never from " +
+	"the request, so no path can re-target another host.\n\n" +
+	"Fails closed before a byte leaves cloud: no validated principal is 403; an API " +
+	"key is 401, because an hk-/sk- key is not a JWT the OIDC-gated plane can " +
+	"validate and there is no substitute credential to send in its place; a path that " +
+	"normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one " +
+	"decode, is 400; an unconfigured plane is 503 and an unreachable one 502."
+
+// The prose for this subsystem's ONE route, stated once per verb the document
+// renders. Mount explains why the route cannot be a typed op; the consequence was
+// that the WHOLE subsystem published five operationIds and nothing else — five SDK
+// methods and five CLI commands that could not say what reaches the DNS plane, or
+// under whose identity. Declared through the same registry openapi.Register uses,
+// so it renders only while the router actually serves the route.
+func init() {
+	for _, d := range []struct{ method, summary, lead string }{
+		{http.MethodGet, "Read your org's DNS zones and records",
+			"Reads DNS state — a zone, a record, a listing — from the Hanzo DNS control plane."},
+		{http.MethodPost, "Create a DNS zone or record",
+			"Creates DNS state — a zone, a record — on the Hanzo DNS control plane."},
+		{http.MethodPut, "Replace a DNS zone or record",
+			"Replaces a DNS zone or record on the Hanzo DNS control plane."},
+		{http.MethodPatch, "Amend a DNS zone or record",
+			"Amends a DNS zone or record on the Hanzo DNS control plane."},
+		{http.MethodDelete, "Delete a DNS zone or record",
+			"Removes a DNS zone or record from the Hanzo DNS control plane."},
+	} {
+		openapi.Describe(dnsRoute, d.method, d.summary, d.lead+dnsRelay)
+	}
+	// The methods left over. This address is bound with All(), so it publishes every
+	// method this generator knows and the ones above are only the ones that DO
+	// something. DescribeRest covers the remainder from the generator's own set, so a
+	// method added there is covered the day it appears rather than published bare —
+	// which is what a hand-copied list here had already produced for OPTIONS and TRACE.
+	openapi.DescribeRest(dnsRoute,
+		"Not served by the DNS surface",
+		"Published because this address accepts every method, but the DNS surface routes "+
+			"nothing here: no zone or record is read or changed."+dnsRelay)
+
+}
 
 // defaultDNSURL is the in-cluster DNS control-plane API -- the operator's
 // DNSConnector default endpoint (the API listens on :8443). Used when HANZO_DNS_URL

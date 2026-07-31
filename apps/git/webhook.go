@@ -79,10 +79,41 @@ const (
 //     openapi.Binary is request-only by design, and a text/html response is the
 //     second half it deliberately does not invent.
 //
+// The PROSE those same routes were also missing is a separate seam
+// (openapi.Describe) and lives beside each route's own registration, not here:
+// the twelve smart-HTTP operations in smart_http.go, the five ZAP procedures in
+// zap.go, the twelve pages in ui.go. Only the webhook's prose is stated here,
+// because this is where the webhook is declared. Splitting a family's prose by
+// which half of it happens to have a declarable body would put one thing in two
+// places; a Register and a Describe for the SAME route stay together.
+//
 // init, not routes(): Register panics on a duplicate declaration and routes()
 // runs once per Mount.
 func init() {
 	openapi.Register("/v1/git/webhook", "POST", pushEvent{}, nil)
+	openapi.Describe("/v1/git/webhook", "POST",
+		"Receive a push from the canonical forge and trigger its build",
+		"The canonical forge's push-to-deploy door. git.hanzo.ai runs as a SEPARATE "+
+			"process, so its pushes never reach this binary's receive-pack; without this "+
+			"a push to the host we call canonical would build nothing. A verified push is "+
+			"handed to the same single trigger the embedded git server and the GitHub App "+
+			"fire, and the build decision itself stays downstream in the one place that "+
+			"knows what a push means.\n\n"+
+			"PUBLIC at the JWT layer, because the forge carries no Hanzo session: "+
+			"AUTHENTICATION IS THE SIGNATURE. The HMAC covers the raw bytes and is "+
+			"verified BEFORE the payload is parsed, so an unauthenticated body is never "+
+			"decoded — which is also why this cannot be a typed op, since a typed op "+
+			"decodes first. An UNSET webhook secret refuses every delivery rather than "+
+			"trusting it: a door that starts builds fails closed. A bad signature is 401, "+
+			"a payload over 8 MiB is 413, and a malformed one 400.\n\n"+
+			"Every success answers 204 and no body, including the deliveries it "+
+			"deliberately ignores: a non-push event, a payload whose ref is not a ref, a "+
+			"ref DELETE (a zero `after` has no commit to build), and a BOT-authored push "+
+			"— release automation pushes as the forge's own actions user, and a release "+
+			"must never rebuild itself. Every other ref reaches the builder, branches and "+
+			"tags alike, because releases are cut by tag and filtering here would silently "+
+			"stop publishing. A trigger that fails is logged rather than returned, so a "+
+			"push that already landed on the forge is not retried against us.")
 
 	openapi.Register("/v1/git/zap/createRepo", "POST", zapProcReq{}, nil)
 	openapi.Register("/v1/git/zap/getRepo", "POST", zapProcReq{}, nil)

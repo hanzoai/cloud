@@ -48,8 +48,54 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// The forward's prose. Both addresses are All() registrations relaying another
+// deployment's wire verbatim, so neither can be a typed op and zipdoc has no doc
+// comment to lift — without this the fourteen operations they publish would carry
+// an operationId and nothing else. Declared beside the wire fact, over exactly the
+// methods the document renders (openapi.Methods); a description whose route is not
+// in the router never renders, so it stays additive metadata on live operations.
+func init() {
+	const shared = "The path is forwarded to the managed Base unchanged and its answer comes " +
+		"back verbatim, so the schema, the records and every refusal are the managed Base's " +
+		"own.\n\n" +
+		"AUTH is one credential, forwarded and never minted: cloud validates the caller's " +
+		"hanzo.id bearer and passes THAT SAME token on, because the managed Base scopes each " +
+		"row by the token's own subject. A caller with no validated principal is refused here, " +
+		"before the request leaves the process, and the org header that rides along is the one " +
+		"cloud validated — a client-forged org was stripped upstream.\n\n" +
+		"This is a COLLECTIONS proxy, not a Base tunnel: only the collections data plane is " +
+		"admitted, and everything else the managed Base mounts — settings, backups, logs — is " +
+		"404 here whatever the caller's rights on that deployment are.\n\n" +
+		"One registration owns this address for every method, so which methods answer is the " +
+		"managed Base's decision, not this edge's."
+
+	describeCollections("/v1/collections",
+		"The org's Base content types",
+		"Lists the content types in the org's managed Base, and creates one. This is what "+
+			"the console's Bases manager reads to render the schema.\n\n"+shared)
+
+	describeCollections("/v1/collections/*",
+		"One Base content type, and its records",
+		"Reads and writes below the collections root: `meta/scaffolds` is the field-template "+
+			"palette a new content type is built from, `<name>` is one content type (view, "+
+			"update, delete), `<name>/records` is that type's rows (list, create) and "+
+			"`<name>/records/<id>` is one row (get, update, delete). This is the data plane "+
+			"behind the console's Records browser.\n\n"+
+			"Any other shape below /v1/collections is refused with 404 before it is forwarded, "+
+			"so the wildcard admits exactly those five addresses and nothing more.\n\n"+shared)
+}
+
+// describeCollections states one path's prose at every method the document
+// publishes — the shape All() forces, since it binds them all at one address.
+func describeCollections(path, summary, description string) {
+	for _, m := range openapi.Methods() {
+		openapi.Describe(path, m, summary, description)
+	}
+}
 
 // defaultOrchestrator is the in-cluster Service of the managed Base (base.hanzo.ai)
 // that holds the org Bases registry. In-cluster (never the public host) so the DOKS

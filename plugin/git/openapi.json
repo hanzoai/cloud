@@ -18,27 +18,37 @@
   "paths": {
     "/": {
       "get": {
-        "operationId": "get"
+        "operationId": "get",
+        "summary": "Browse your org's repositories",
+        "description": "The repository list for the signed-in caller's org — each repo with its description, default branch, size and last update. SIGNED OUT it renders the public explore page instead of refusing, because most Hanzo repos are open source and the open face is the default one; signed in, the caller's own org shows its private repositories alongside its public ones. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served only on the dedicated git host, where a browse URL matches the clone URL; on the API and console hosts it falls through to their own routes, so it can never shadow them."
       }
     },
     "/explore": {
       "get": {
-        "operationId": "get_explore"
+        "operationId": "get_explore",
+        "summary": "Discover public repositories across every org",
+        "description": "The open, unauthenticated face of the git host: every PUBLIC repository in the fleet, org-qualified, so a project can be found and cloned with no account at all — signing in is for private repos and for writes. Repositories live in per-org stores with no global index, so this unions each org's public rows and is bounded to a fixed number of stores per request, keeping discovery quick however many orgs exist. A fleet with no orgs yet is an empty page, not an error. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served only on the dedicated git host, where a browse URL matches the clone URL; on the API and console hosts it falls through to their own routes, so it can never shadow them."
       }
     },
     "/git": {
       "get": {
-        "operationId": "get_git"
+        "operationId": "get_git",
+        "summary": "Browse your org's repositories",
+        "description": "The repository list for the signed-in caller's org — each repo with its description, default branch, size and last update. SIGNED OUT it renders the public explore page instead of refusing, because most Hanzo repos are open source and the open face is the default one; signed in, the caller's own org shows its private repositories alongside its public ones. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served on every host, which is how the console embeds the git browser under /git."
       }
     },
     "/git/explore": {
       "get": {
-        "operationId": "get_git_explore"
+        "operationId": "get_git_explore",
+        "summary": "Discover public repositories across every org",
+        "description": "The open, unauthenticated face of the git host: every PUBLIC repository in the fleet, org-qualified, so a project can be found and cloned with no account at all — signing in is for private repos and for writes. Repositories live in per-org stores with no global index, so this unions each org's public rows and is bounded to a fixed number of stores per request, keeping discovery quick however many orgs exist. A fleet with no orgs yet is an empty page, not an error. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served on every host, which is how the console embeds the git browser under /git."
       }
     },
     "/git/{org}/{repo}": {
       "get": {
         "operationId": "get_git_by_org_by_repo",
+        "summary": "Open a repository's home page",
+        "description": "A repository at a glance: its branches, the tree at the tip, its most recent commits, its README rendered, and the HTTPS and SSH clone URLs. `?ref=` selects a branch, tag or commit; the default branch is used when it is omitted. A repository with no commits yet renders its clone instructions rather than an error, which is what a caller who has just created one needs to see. A public repository is readable by anyone; a private one only by its own org. A repository that does not exist and one belonging to another org answer the SAME 404, so the page is never an existence oracle. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served on every host, which is how the console embeds the git browser under /git.",
         "parameters": [
           {
             "name": "org",
@@ -62,6 +72,8 @@
     "/git/{org}/{repo}/blob/{wildcard1}": {
       "get": {
         "operationId": "get_git_by_org_by_repo_blob_by_wildcard1",
+        "summary": "View a file in a repository",
+        "description": "One file's contents at one revision, with its size and line count. A BINARY file is reported as binary rather than dumped into the page. The path after /blob/ is the file and `?ref=` selects the branch, tag or commit. An unknown ref or a path that is not a file in it is 404. A public repository is readable by anyone; a private one only by its own org. A repository that does not exist and one belonging to another org answer the SAME 404, so the page is never an existence oracle. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served on every host, which is how the console embeds the git browser under /git.",
         "parameters": [
           {
             "name": "org",
@@ -93,6 +105,8 @@
     "/git/{org}/{repo}/commits": {
       "get": {
         "operationId": "get_git_by_org_by_repo_commits",
+        "summary": "Read a repository's commit log",
+        "description": "The hundred most recent commits on one ref, each with its author, message and date. `?ref=` selects the branch, tag or commit, defaulting to the repository's default branch; an unknown one is 404. A public repository is readable by anyone; a private one only by its own org. A repository that does not exist and one belonging to another org answer the SAME 404, so the page is never an existence oracle. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served on every host, which is how the console embeds the git browser under /git.",
         "parameters": [
           {
             "name": "org",
@@ -116,6 +130,8 @@
     "/git/{org}/{repo}/tree/{wildcard1}": {
       "get": {
         "operationId": "get_git_by_org_by_repo_tree_by_wildcard1",
+        "summary": "Browse a directory inside a repository",
+        "description": "The contents of one directory at one revision, with breadcrumbs back up and links onward into subdirectories and files. The path after /tree/ is the directory and `?ref=` selects the branch, tag or commit, defaulting to the repository's own default branch. An unknown ref is 404, as is a repository with no commits. A public repository is readable by anyone; a private one only by its own org. A repository that does not exist and one belonging to another org answer the SAME 404, so the page is never an existence oracle. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served on every host, which is how the console embeds the git browser under /git.",
         "parameters": [
           {
             "name": "org",
@@ -1240,6 +1256,8 @@
     "/v1/git/webhook": {
       "post": {
         "operationId": "post_v1_git_webhook",
+        "summary": "Receive a push from the canonical forge and trigger its build",
+        "description": "The canonical forge's push-to-deploy door. git.hanzo.ai runs as a SEPARATE process, so its pushes never reach this binary's receive-pack; without this a push to the host we call canonical would build nothing. A verified push is handed to the same single trigger the embedded git server and the GitHub App fire, and the build decision itself stays downstream in the one place that knows what a push means.\n\nPUBLIC at the JWT layer, because the forge carries no Hanzo session: AUTHENTICATION IS THE SIGNATURE. The HMAC covers the raw bytes and is verified BEFORE the payload is parsed, so an unauthenticated body is never decoded — which is also why this cannot be a typed op, since a typed op decodes first. An UNSET webhook secret refuses every delivery rather than trusting it: a door that starts builds fails closed. A bad signature is 401, a payload over 8 MiB is 413, and a malformed one 400.\n\nEvery success answers 204 and no body, including the deliveries it deliberately ignores: a non-push event, a payload whose ref is not a ref, a ref DELETE (a zero `after` has no commit to build), and a BOT-authored push — release automation pushes as the forge's own actions user, and a release must never rebuild itself. Every other ref reaches the builder, branches and tags alike, because releases are cut by tag and filtering here would silently stop publishing. A trigger that fails is logged rather than returned, so a push that already landed on the forge is not retried against us.",
         "tags": [
           "git"
         ],
@@ -1257,6 +1275,8 @@
     "/v1/git/zap/createRepo": {
       "post": {
         "operationId": "post_v1_git_zap_createrepo",
+        "summary": "Create a repository over the ZAP transport",
+        "description": "Creates a repository in the caller's org and project scope and answers with its record. `name` is required and `description` is optional; `project` narrows the scope within the org. A name already taken in that scope is a 409 envelope and an invalid name a 400.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
           "git"
         ],
@@ -1274,6 +1294,8 @@
     "/v1/git/zap/deleteRepo": {
       "post": {
         "operationId": "post_v1_git_zap_deleterepo",
+        "summary": "Delete a repository over the ZAP transport",
+        "description": "Deletes the repository named by `name` and answers with the deleted name. A repository outside the caller's org and project scope is a 404 envelope, so a delete can never reach another tenant's repository.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
           "git"
         ],
@@ -1291,6 +1313,8 @@
     "/v1/git/zap/getRepo": {
       "post": {
         "operationId": "post_v1_git_zap_getrepo",
+        "summary": "Read one repository over the ZAP transport",
+        "description": "Answers a single repository's record, named by `name`. A repository outside the caller's org and project scope is a 404 envelope, the same answer one that does not exist gets.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
           "git"
         ],
@@ -1308,6 +1332,8 @@
     "/v1/git/zap/listRepos": {
       "post": {
         "operationId": "post_v1_git_zap_listrepos",
+        "summary": "List your repositories over the ZAP transport",
+        "description": "Answers every repository in the caller's org and project scope. It reads NO body — the scope is entirely the caller's identity — so a request with an empty object is correct.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
           "git"
         ]
@@ -1316,6 +1342,8 @@
     "/v1/git/zap/usage": {
       "post": {
         "operationId": "post_v1_git_zap_usage",
+        "summary": "Report your org's git storage footprint over the ZAP transport",
+        "description": "Answers every repository in the caller's org with its size in bytes, plus the org's total — what git storage is actually being used, and by which repository. It reads NO body, and it is scoped to the caller's own org, so it is that org's footprint and never the fleet's.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
           "git"
         ]
@@ -1324,6 +1352,8 @@
     "/v1/git/{org}/{project}/{repo}/git-receive-pack": {
       "post": {
         "operationId": "post_v1_git_by_org_by_project_by_repo_git-receive-pack",
+        "summary": "Accept a push, and turn it into a build",
+        "description": "The pack-transfer phase of a push, and the point at which a push becomes an EVENT. NEVER ANONYMOUS: a push always requires an authenticated org, and the org in the path must equal it.\n\nOnce the pack is on disk the repository's storage usage is metered and a build is fired for every branch whose tip actually moved, computed from the before/after branch diff rather than from what the client claimed. That runs on a cancel-immune context, so a client that hangs up the moment its push lands still gets its build, and it runs even when git itself exited non-zero — the refs on disk are the ground truth. Repacking housekeeping is detached and never blocks the response.\n\nA Content-Type other than `application/x-git-receive-pack-request` is 400. Addressed under the API prefix, with the PROJECT as a middle path segment: project scope otherwise rides a header a git client cannot send, so this path is the only usable remote for a project-scoped repository. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
           "git"
         ],
@@ -1368,6 +1398,8 @@
     "/v1/git/{org}/{project}/{repo}/git-upload-pack": {
       "post": {
         "operationId": "post_v1_git_by_org_by_project_by_repo_git-upload-pack",
+        "summary": "Serve a clone or fetch",
+        "description": "The pack-transfer phase of a clone or fetch: the request and the response are git's binary pack protocol, streamed straight through git itself — request body to git's stdin, git's stdout to the response — so a multi-gigabyte clone never lands in this process's memory.\n\nA PUBLIC repository is fetched anonymously; a private one requires its own org, and a wrong or absent org is 404 rather than a hint that the repository exists. A Content-Type other than `application/x-git-upload-pack-request` is 400. Addressed under the API prefix, with the PROJECT as a middle path segment: project scope otherwise rides a header a git client cannot send, so this path is the only usable remote for a project-scoped repository. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
           "git"
         ],
@@ -1412,6 +1444,8 @@
     "/v1/git/{org}/{project}/{repo}/info/refs": {
       "get": {
         "operationId": "get_v1_git_by_org_by_project_by_repo_info_refs",
+        "summary": "Advertise a repository's refs to a git client",
+        "description": "The ref-advertisement phase of git's smart-HTTP protocol — the first request a clone, a fetch and a push all make. `?service=` selects which: `git-upload-pack` advertises for a fetch, `git-receive-pack` for a push, and any other value is 400.\n\nANONYMOUS ONLY FOR FETCH, AND ONLY ON A PUBLIC REPOSITORY. The push advertisement always requires an authenticated org, and where a path org is present it must equal the authenticated one. A private repository reached without its org is 404, indistinguishable from one that does not exist. Addressed under the API prefix, with the PROJECT as a middle path segment: project scope otherwise rides a header a git client cannot send, so this path is the only usable remote for a project-scoped repository. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
           "git"
         ],
@@ -1446,6 +1480,8 @@
     "/v1/git/{org}/{repo}/git-receive-pack": {
       "post": {
         "operationId": "post_v1_git_by_org_by_repo_git-receive-pack",
+        "summary": "Accept a push, and turn it into a build",
+        "description": "The pack-transfer phase of a push, and the point at which a push becomes an EVENT. NEVER ANONYMOUS: a push always requires an authenticated org, and the org in the path must equal it.\n\nOnce the pack is on disk the repository's storage usage is metered and a build is fired for every branch whose tip actually moved, computed from the before/after branch diff rather than from what the client claimed. That runs on a cancel-immune context, so a client that hangs up the moment its push lands still gets its build, and it runs even when git itself exited non-zero — the refs on disk are the ground truth. Repacking housekeeping is detached and never blocks the response.\n\nA Content-Type other than `application/x-git-receive-pack-request` is 400. Addressed under the API prefix, so `git clone https://\u003chost\u003e/v1/git/\u003corg\u003e/\u003crepo\u003e.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
           "git"
         ],
@@ -1482,6 +1518,8 @@
     "/v1/git/{org}/{repo}/git-upload-pack": {
       "post": {
         "operationId": "post_v1_git_by_org_by_repo_git-upload-pack",
+        "summary": "Serve a clone or fetch",
+        "description": "The pack-transfer phase of a clone or fetch: the request and the response are git's binary pack protocol, streamed straight through git itself — request body to git's stdin, git's stdout to the response — so a multi-gigabyte clone never lands in this process's memory.\n\nA PUBLIC repository is fetched anonymously; a private one requires its own org, and a wrong or absent org is 404 rather than a hint that the repository exists. A Content-Type other than `application/x-git-upload-pack-request` is 400. Addressed under the API prefix, so `git clone https://\u003chost\u003e/v1/git/\u003corg\u003e/\u003crepo\u003e.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
           "git"
         ],
@@ -1518,6 +1556,8 @@
     "/v1/git/{org}/{repo}/info/refs": {
       "get": {
         "operationId": "get_v1_git_by_org_by_repo_info_refs",
+        "summary": "Advertise a repository's refs to a git client",
+        "description": "The ref-advertisement phase of git's smart-HTTP protocol — the first request a clone, a fetch and a push all make. `?service=` selects which: `git-upload-pack` advertises for a fetch, `git-receive-pack` for a push, and any other value is 400.\n\nANONYMOUS ONLY FOR FETCH, AND ONLY ON A PUBLIC REPOSITORY. The push advertisement always requires an authenticated org, and where a path org is present it must equal the authenticated one. A private repository reached without its org is 404, indistinguishable from one that does not exist. Addressed under the API prefix, so `git clone https://\u003chost\u003e/v1/git/\u003corg\u003e/\u003crepo\u003e.git` works on any host the binary serves. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "tags": [
           "git"
         ],
@@ -1544,6 +1584,8 @@
     "/{org}/{project}/{repo}/git-receive-pack": {
       "post": {
         "operationId": "post_by_org_by_project_by_repo_git-receive-pack",
+        "summary": "Accept a push, and turn it into a build",
+        "description": "The pack-transfer phase of a push, and the point at which a push becomes an EVENT. NEVER ANONYMOUS: a push always requires an authenticated org, and the org in the path must equal it.\n\nOnce the pack is on disk the repository's storage usage is metered and a build is fired for every branch whose tip actually moved, computed from the before/after branch diff rather than from what the client claimed. That runs on a cancel-immune context, so a client that hangs up the moment its push lands still gets its build, and it runs even when git itself exited non-zero — the refs on disk are the ground truth. Repacking housekeeping is detached and never blocks the response.\n\nA Content-Type other than `application/x-git-receive-pack-request` is 400. Addressed at the git host's root with the PROJECT as a middle path segment — the canonical-URL form of the project-scoped remote, since a git client has no header to carry a project. Served only on the dedicated git host; elsewhere it falls through. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "parameters": [
           {
             "name": "org",
@@ -1585,6 +1627,8 @@
     "/{org}/{project}/{repo}/git-upload-pack": {
       "post": {
         "operationId": "post_by_org_by_project_by_repo_git-upload-pack",
+        "summary": "Serve a clone or fetch",
+        "description": "The pack-transfer phase of a clone or fetch: the request and the response are git's binary pack protocol, streamed straight through git itself — request body to git's stdin, git's stdout to the response — so a multi-gigabyte clone never lands in this process's memory.\n\nA PUBLIC repository is fetched anonymously; a private one requires its own org, and a wrong or absent org is 404 rather than a hint that the repository exists. A Content-Type other than `application/x-git-upload-pack-request` is 400. Addressed at the git host's root with the PROJECT as a middle path segment — the canonical-URL form of the project-scoped remote, since a git client has no header to carry a project. Served only on the dedicated git host; elsewhere it falls through. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "parameters": [
           {
             "name": "org",
@@ -1626,6 +1670,8 @@
     "/{org}/{project}/{repo}/info/refs": {
       "get": {
         "operationId": "get_by_org_by_project_by_repo_info_refs",
+        "summary": "Advertise a repository's refs to a git client",
+        "description": "The ref-advertisement phase of git's smart-HTTP protocol — the first request a clone, a fetch and a push all make. `?service=` selects which: `git-upload-pack` advertises for a fetch, `git-receive-pack` for a push, and any other value is 400.\n\nANONYMOUS ONLY FOR FETCH, AND ONLY ON A PUBLIC REPOSITORY. The push advertisement always requires an authenticated org, and where a path org is present it must equal the authenticated one. A private repository reached without its org is 404, indistinguishable from one that does not exist. Addressed at the git host's root with the PROJECT as a middle path segment — the canonical-URL form of the project-scoped remote, since a git client has no header to carry a project. Served only on the dedicated git host; elsewhere it falls through. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "parameters": [
           {
             "name": "org",
@@ -1657,6 +1703,8 @@
     "/{org}/{repo}": {
       "get": {
         "operationId": "get_by_org_by_repo",
+        "summary": "Open a repository's home page",
+        "description": "A repository at a glance: its branches, the tree at the tip, its most recent commits, its README rendered, and the HTTPS and SSH clone URLs. `?ref=` selects a branch, tag or commit; the default branch is used when it is omitted. A repository with no commits yet renders its clone instructions rather than an error, which is what a caller who has just created one needs to see. A public repository is readable by anyone; a private one only by its own org. A repository that does not exist and one belonging to another org answer the SAME 404, so the page is never an existence oracle. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served only on the dedicated git host, where a browse URL matches the clone URL; on the API and console hosts it falls through to their own routes, so it can never shadow them.",
         "parameters": [
           {
             "name": "org",
@@ -1680,6 +1728,8 @@
     "/{org}/{repo}/blob/{wildcard1}": {
       "get": {
         "operationId": "get_by_org_by_repo_blob_by_wildcard1",
+        "summary": "View a file in a repository",
+        "description": "One file's contents at one revision, with its size and line count. A BINARY file is reported as binary rather than dumped into the page. The path after /blob/ is the file and `?ref=` selects the branch, tag or commit. An unknown ref or a path that is not a file in it is 404. A public repository is readable by anyone; a private one only by its own org. A repository that does not exist and one belonging to another org answer the SAME 404, so the page is never an existence oracle. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served only on the dedicated git host, where a browse URL matches the clone URL; on the API and console hosts it falls through to their own routes, so it can never shadow them.",
         "parameters": [
           {
             "name": "org",
@@ -1711,6 +1761,8 @@
     "/{org}/{repo}/commits": {
       "get": {
         "operationId": "get_by_org_by_repo_commits",
+        "summary": "Read a repository's commit log",
+        "description": "The hundred most recent commits on one ref, each with its author, message and date. `?ref=` selects the branch, tag or commit, defaulting to the repository's default branch; an unknown one is 404. A public repository is readable by anyone; a private one only by its own org. A repository that does not exist and one belonging to another org answer the SAME 404, so the page is never an existence oracle. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served only on the dedicated git host, where a browse URL matches the clone URL; on the API and console hosts it falls through to their own routes, so it can never shadow them.",
         "parameters": [
           {
             "name": "org",
@@ -1734,6 +1786,8 @@
     "/{org}/{repo}/git-receive-pack": {
       "post": {
         "operationId": "post_by_org_by_repo_git-receive-pack",
+        "summary": "Accept a push, and turn it into a build",
+        "description": "The pack-transfer phase of a push, and the point at which a push becomes an EVENT. NEVER ANONYMOUS: a push always requires an authenticated org, and the org in the path must equal it.\n\nOnce the pack is on disk the repository's storage usage is metered and a build is fired for every branch whose tip actually moved, computed from the before/after branch diff rather than from what the client claimed. That runs on a cancel-immune context, so a client that hangs up the moment its push lands still gets its build, and it runs even when git itself exited non-zero — the refs on disk are the ground truth. Repacking housekeeping is detached and never blocks the response.\n\nA Content-Type other than `application/x-git-receive-pack-request` is 400. Addressed at the git host's root, so `git clone https://\u003cgit-host\u003e/\u003corg\u003e/\u003crepo\u003e.git` works with the canonical URL and no prefix. Served ONLY on the dedicated git host; on the API and console hosts it falls through, so a bare /:org/:repo can never shadow another surface. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "parameters": [
           {
             "name": "org",
@@ -1767,6 +1821,8 @@
     "/{org}/{repo}/git-upload-pack": {
       "post": {
         "operationId": "post_by_org_by_repo_git-upload-pack",
+        "summary": "Serve a clone or fetch",
+        "description": "The pack-transfer phase of a clone or fetch: the request and the response are git's binary pack protocol, streamed straight through git itself — request body to git's stdin, git's stdout to the response — so a multi-gigabyte clone never lands in this process's memory.\n\nA PUBLIC repository is fetched anonymously; a private one requires its own org, and a wrong or absent org is 404 rather than a hint that the repository exists. A Content-Type other than `application/x-git-upload-pack-request` is 400. Addressed at the git host's root, so `git clone https://\u003cgit-host\u003e/\u003corg\u003e/\u003crepo\u003e.git` works with the canonical URL and no prefix. Served ONLY on the dedicated git host; on the API and console hosts it falls through, so a bare /:org/:repo can never shadow another surface. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "parameters": [
           {
             "name": "org",
@@ -1800,6 +1856,8 @@
     "/{org}/{repo}/info/refs": {
       "get": {
         "operationId": "get_by_org_by_repo_info_refs",
+        "summary": "Advertise a repository's refs to a git client",
+        "description": "The ref-advertisement phase of git's smart-HTTP protocol — the first request a clone, a fetch and a push all make. `?service=` selects which: `git-upload-pack` advertises for a fetch, `git-receive-pack` for a push, and any other value is 400.\n\nANONYMOUS ONLY FOR FETCH, AND ONLY ON A PUBLIC REPOSITORY. The push advertisement always requires an authenticated org, and where a path org is present it must equal the authenticated one. A private repository reached without its org is 404, indistinguishable from one that does not exist. Addressed at the git host's root, so `git clone https://\u003cgit-host\u003e/\u003corg\u003e/\u003crepo\u003e.git` works with the canonical URL and no prefix. Served ONLY on the dedicated git host; on the API and console hosts it falls through, so a bare /:org/:repo can never shadow another surface. This is git's own wire protocol, not an API call to make by hand: point a git client at the clone URL and it makes this request itself.",
         "parameters": [
           {
             "name": "org",
@@ -1823,6 +1881,8 @@
     "/{org}/{repo}/tree/{wildcard1}": {
       "get": {
         "operationId": "get_by_org_by_repo_tree_by_wildcard1",
+        "summary": "Browse a directory inside a repository",
+        "description": "The contents of one directory at one revision, with breadcrumbs back up and links onward into subdirectories and files. The path after /tree/ is the directory and `?ref=` selects the branch, tag or commit, defaulting to the repository's own default branch. An unknown ref is 404, as is a repository with no commits. A public repository is readable by anyone; a private one only by its own org. A repository that does not exist and one belonging to another org answer the SAME 404, so the page is never an existence oracle. This is a server-rendered browser page, not JSON — the console repo-browser reads the same repository through the JSON ops under /v1/git. Repository names, paths and file contents all render through auto-escaping templates rather than being concatenated into HTML. Served only on the dedicated git host, where a browse URL matches the clone URL; on the API and console hosts it falls through to their own routes, so it can never shadow them.",
         "parameters": [
           {
             "name": "org",
