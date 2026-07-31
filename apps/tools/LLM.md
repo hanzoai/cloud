@@ -73,13 +73,14 @@ is what upstream publishes. **Nothing here runs one.** There is no
 `POST /v1/tools/catalog/{id}/run`, and there is no stub of one: a route that
 answered would be a lie about a capability the fleet does not have.
 
-What was checked, and what is actually there:
+What was checked, and what is actually there. Lines are as of `c7a82cd1`; the
+SYMBOL is the durable handle, because a doc commit moves every number below it:
 
-| seam | file:line | verdict |
+| seam | where | verdict |
 |---|---|---|
-| org-scoped container launch | `apps/platform/run.go:61` → `apps/platform/k8s.go:602` `applyService` → `:627` `Create` on `k8s.Apps` | REAL. Billing-gated, KMS-sealed env, `tenant-<org>` namespace. |
-| the CR it writes | `apps/platform/k8s.go:523` `serviceCR` | **No `command`, no `args`.** It carries `image`, `replicas`, `ports`, `imagePullSecrets`, optional `env`/`volumes`/`ingress`/`autoscaling` — nothing else. |
-| arbitrary-argv execution | `apps/platform/k8s.go:844` (BuildKit Job), `:1102`, `:1178` | REAL `batchv1` Jobs, but platform-internal: build/smoke, `buildNS`, not an org-addressable workload. |
+| org-scoped container launch | `apps/platform/platform.go:236` routes `POST /v1/run` → `apps/platform/run.go:62` `run` → `k8s.go:603` `applyService` → `k8s.go:628` `Create` on `k8s.Apps` | REAL. Billing-gated, KMS-sealed env, `tenant-<org>` namespace. |
+| the CR it writes | `apps/platform/k8s.go:524` `serviceCR` | **No `command`, no `args`.** It carries `image`, `replicas`, `ports`, `imagePullSecrets`, optional `env`/`volumes`/`ingress`/`autoscaling` — nothing else. |
+| arbitrary-argv execution | `apps/platform/k8s.go:845`, `:1103`, `:1179` — `Resource(jobsGVR).Namespace(k.buildNS).Create` | REAL `batchv1` Jobs, but platform-internal: build/smoke, `buildNS`, not an org-addressable workload. |
 | user code execution | `apps/functions/invoke.go:39` `CODE_EXEC_UPSTREAM`, POST `/exec` | A PROXY. The executor is another repo; unset ⇒ 503. `runtime:"container"` is accepted and `image` is stored, but neither is read at invoke time. |
 | in-process execution | `apps/connectorruntime/runtime.go` (goja), `apps/goja` | REAL but JS-only: no filesystem, no process spawn. |
 | stdio ↔ HTTP MCP bridge | — | **Does not exist.** No `stdio`, `npx`, `uvx` or `streamable` in any non-CLI Go path. |
@@ -90,7 +91,7 @@ So the missing pieces are four, and three are outside this repo:
 
 1. **A `command`/`args` path on the App CR.** `serviceCR` can grow the fields in an
    afternoon; the `hanzo.ai/v1` CRD and the operator that reconciles it are a
-   separate repo (referenced at `apps/platform/k8s.go:41`). Until the operator
+   separate repo (`apps/platform/k8s.go:3-4` names it). Until the operator
    accepts them, writing them is writing into a field nothing reads.
 2. **A bridge image.** `ghcr.io/hanzoai/mcp-bridge` does not exist: a container
    that takes `{registry, identifier, version, runtime, args, env}`, spawns the
