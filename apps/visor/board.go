@@ -24,6 +24,7 @@
 //
 // ISOLATION: principal.Org is the ONLY tenant key, taken from the validated IAM
 // claim (never a client field) and passed to each source's own org-scoped read.
+
 package visor
 
 import (

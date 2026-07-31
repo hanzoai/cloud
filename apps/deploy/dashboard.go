@@ -23,6 +23,7 @@
 // argocd UI's own auth is disabled because IAM owns identity at the edge (the SPA is
 // public static assets, the data is scoped). AppProject → IAM/Org (no argocd RBAC):
 // projects are REFLECTED read-only from the IAM-owned (org,name) Project resource.
+
 package deploy
 
 import (

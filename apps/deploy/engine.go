@@ -17,6 +17,7 @@
 // first deploy of this binary is inert for the reconcile path, so it ships
 // dark and is turned on deliberately after the shadow proof — mirroring the
 // operator's gate discipline and the argocd shadow-then-flip cutover.
+
 package deploy
 
 import (

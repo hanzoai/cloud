@@ -1,6 +1,7 @@
-// Package ai wires the hanzoai/ai module into a cloud binary: it installs the
-// money, ingest and telemetry callbacks cloud BUILDS but cannot INSTALL, then
-// mounts ai.
+// Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+// /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+// a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS
+// but cannot INSTALL.
 //
 // It cannot live in package cloud — github.com/hanzoai/ai imports
 // github.com/hanzoai/cloud, so that direction is an import cycle. It lived in

@@ -8,7 +8,7 @@
 // products compose (buy here, manage records there).
 //
 // Wholesale is resold from a registrar behind the Registrar interface (name.com Core
-// API v4 today, clients/domain/namecom). The core here is transport-free: it
+// API v4 today, apps/domain/namecom). The core here is transport-free: it
 // orchestrates availability → price → authorize → register → provision-zone →
 // capture → record over four interfaces (Registrar, Biller, Zones, Store), so the
 // policy is unit-testable with no HTTP/registrar/billing backend. mount.go is the thin
