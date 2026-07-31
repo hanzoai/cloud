@@ -207,6 +207,12 @@ func run(addr, zapAddr, enable string) error {
 		return fmt.Errorf("console: %w", err)
 	}
 
+	// The start door, AFTER the mount loops so the plugin table it starts from is
+	// the finished one, and before anything listens so no child can ask before it
+	// is there. Without it every internal call to a lazy app dials a socket that
+	// no request has ever caused to exist (wake.go).
+	defer func() { _ = serveWake(app)() }()
+
 	// SIGTERM must reach the children. zip drains its shutdown hooks LIFO, and
 	// every Load registered one that stops its process, so this is what keeps a
 	// rollout from leaving orphans behind. (On Linux each child also carries
