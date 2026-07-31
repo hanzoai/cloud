@@ -34,7 +34,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// object.InitTelemetry (run inside ai.Mount, just below) finds no exporter
 	// endpoint — in-process mode sets none and Serve clears the OTLP env — and
 	// DISABLES its emit, which is exactly why the gen_ai plane was dark while
-	// cloud's own /v1/* request spans reached o11y_traces.
+	// cloud's own /v1/* request spans reached the span store.
 	//
 	// Gated on the provider actually being installed: adopting the global NO-OP
 	// provider would latch ai "telemetry ready" against something that discards

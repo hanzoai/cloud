@@ -37,14 +37,30 @@
     "/v1/deploy/applications": {
       "get": {
         "operationId": "get_v1_deploy_applications",
+        "summary": "applications lists the caller's applications, projected from the operator App CRs.\nA SuperAdmin sees the whole fleet; a validated org member sees only its own\norg's apps.",
+        "description": "applications lists the caller's applications, projected from the operator App CRs.\nA SuperAdmin sees the whole fleet; a validated org member sees only its own\norg's apps. Nothing is read from a stored argocd Application — every item is\nsynthesized from the App CR that actually runs.",
         "tags": [
           "deploy"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/argoAppList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/applications/{name}": {
       "get": {
-        "operationId": "get_v1_deploy_applications_by_name",
+        "operationId": "get_v1_deploy_applications_name",
+        "summary": "application returns one projected application, with its reconciled resources.",
+        "description": "application returns one projected application, with its reconciled resources.\nA name another org owns is reported as not found, never as forbidden, so the\ndetail route leaks no cross-tenant existence oracle.",
         "tags": [
           "deploy"
         ],
@@ -53,16 +69,32 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the application name from the path; a DNS-1123 label.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cloud"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/argoApp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/applications/{name}/resource-tree": {
       "get": {
-        "operationId": "get_v1_deploy_applications_by_name_resource-tree",
+        "operationId": "get_v1_deploy_applications_name_resource-tree",
+        "summary": "resourceTree returns one application's live resource tree, node by node.",
+        "description": "resourceTree returns one application's live resource tree, node by node.\nThe tree is built from what the cluster actually runs; a name another org owns\nis reported as not found.",
         "tags": [
           "deploy"
         ],
@@ -71,16 +103,32 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the application name from the path; a DNS-1123 label.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cloud"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/argoTree"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/applications/{name}/revisions/{revision}/metadata": {
       "get": {
-        "operationId": "get_v1_deploy_applications_by_name_revisions_by_revision_metadata",
+        "operationId": "get_v1_deploy_applications_name_revisions_revision_metadata",
+        "summary": "revisionMetadata describes one revision of an application as far as the CR knows.\n\nThe App CR is IMAGE-based: the deploy is pinned to an image tag, not a git commit, and\nthe projection's git source (git.hanzo.ai/hanzoai/universe) is the display-only manifest\nrepo, NOT the app's own source — so there is no in-process commit to resolve a revision\nauthor/date/message from (clients/git exposes CloneURL + VerifyRef only, neither of which\nyields commit metadata for an arbitrary revision).",
+        "description": "revisionMetadata describes one revision of an application as far as the CR knows.\n\nThe App CR is IMAGE-based: the deploy is pinned to an image tag, not a git commit, and\nthe projection's git source (git.hanzo.ai/hanzoai/universe) is the display-only manifest\nrepo, NOT the app's own source — so there is no in-process commit to resolve a revision\nauthor/date/message from (clients/git exposes CloneURL + VerifyRef only, neither of which\nyields commit metadata for an arbitrary revision). Rather than 404 (the toast) or\nfabricate a git author, this returns an HONEST minimal RevisionMetadata: message = the\nrevision (HEAD resolves to the CR's declared image tag), date = when the app was declared\n(the CR creation time), author = \"\" (none). Real git enrichment is a follow-on gated on\nthe CR carrying a real git source + a clients/git CommitMetadata export.",
         "tags": [
           "deploy"
         ],
@@ -89,24 +137,42 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the application name from the path; a DNS-1123 label.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cloud"
           },
           {
             "name": "revision",
             "in": "path",
             "required": true,
+            "description": "Revision is the revision from the path; \"\" or \"HEAD\" resolves to the CR's tag.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "HEAD"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/argoRevisionMetadata"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/applications/{name}/rollback": {
       "post": {
-        "operationId": "post_v1_deploy_applications_by_name_rollback",
+        "operationId": "post_v1_deploy_applications_name_rollback",
+        "summary": "rollback requests the same operator reconcile sync does, for the UI's Rollback action.\nRollback-by-revision is the image-pin follow-on; today both actions mean\n\"reconcile this App now\".",
+        "description": "rollback requests the same operator reconcile sync does, for the UI's Rollback action.\nRollback-by-revision is the image-pin follow-on; today both actions mean\n\"reconcile this App now\". SuperAdmin only.",
         "tags": [
           "deploy"
         ],
@@ -115,16 +181,45 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the application name from the path; a DNS-1123 label.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cloud"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/appRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/argoApp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/applications/{name}/sync": {
       "post": {
-        "operationId": "post_v1_deploy_applications_by_name_sync",
+        "operationId": "post_v1_deploy_applications_name_sync",
+        "summary": "sync requests an operator reconcile of one application, and returns it projected.\nThe App CR is the source of truth, so a sync is an annotation bump the operator\nacts on — nothing is applied from this plane.",
+        "description": "sync requests an operator reconcile of one application, and returns it projected.\nThe App CR is the source of truth, so a sync is an annotation bump the operator\nacts on — nothing is applied from this plane. SuperAdmin only.",
         "tags": [
           "deploy"
         ],
@@ -133,16 +228,45 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the application name from the path; a DNS-1123 label.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cloud"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/appRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/argoApp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/applications/{name}/syncwindows": {
       "get": {
-        "operationId": "get_v1_deploy_applications_by_name_syncwindows",
+        "operationId": "get_v1_deploy_applications_name_syncwindows",
+        "summary": "syncWindows reports whether one application may be synced right now.",
+        "description": "syncWindows reports whether one application may be synced right now.\nThis plane declares no blackout windows, so the answer is always yes — but the\napp must exist AND belong to the caller, or the read is a 404.",
         "tags": [
           "deploy"
         ],
@@ -151,11 +275,25 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the application name from the path; a DNS-1123 label.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cloud"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/argoSyncWindows"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/callback": {
@@ -169,17 +307,45 @@
     "/v1/deploy/clusters": {
       "get": {
         "operationId": "get_v1_deploy_clusters",
+        "summary": "clusters lists the destination clusters the caller's applications reconcile into.",
+        "description": "clusters lists the destination clusters the caller's applications reconcile into.\nThe in-cluster destination is always present, only the caller's own apps are\ncounted (a SuperAdmin counts the fleet), and no cluster credential can leak —\nthe projected cluster carries no config field at all.",
         "tags": [
           "deploy"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/argoClusterList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/gitops": {
       "get": {
         "operationId": "get_v1_deploy_gitops",
+        "summary": "gitops reports the CD plane's own state: its git source, the commit it last\napplied, and its deploy history.",
+        "description": "gitops reports the CD plane's own state: its git source, the commit it last\napplied, and its deploy history. Fleet infrastructure with no tenant dimension,\nso it is SuperAdmin-only. A cluster with no Hanzo CD installed answers\ninstalled=false with the reason, never an error.",
         "tags": [
           "deploy"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitOpsPlane"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/health": {
@@ -201,41 +367,122 @@
     "/v1/deploy/logout": {
       "post": {
         "operationId": "post_v1_deploy_logout",
+        "summary": "logout clears the session cookie for this host.",
+        "description": "logout clears the session cookie for this host. IAM's own session is untouched —\nthis ends the console session only.\n\nIt is a POST because it CHANGES STATE. As a GET it was reachable by a cross-site\ntop-level navigation (an \u003cimg\u003e or a link on any page), which a SameSite=Lax cookie\nstill rides, so any site could sign a SuperAdmin out at will. A nuisance rather\nthan a compromise, but a state-changing GET is a bug regardless; POST is not\ncarried cross-site by a Lax cookie, so the class is closed.\nlogout clears the console session cookie and reports the caller signed out.\nPOST, not GET: signing out changes state, and a state-changing GET is reachable\nby a cross-site top-level navigation a SameSite=Lax cookie still rides.",
         "tags": [
           "deploy"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "loggedIn": false,
+                  "loginUrl": "/v1/deploy/login"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/userInfoView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/projects": {
       "get": {
         "operationId": "get_v1_deploy_projects",
+        "summary": "projects lists the caller's IAM projects, reflected read-only as AppProjects.\nIAM is the one source of truth for the (org, name) Project resource: a normal\norg sees only its own organization's projects, a SuperAdmin every org's, and\n\"default\" always resolves.",
+        "description": "projects lists the caller's IAM projects, reflected read-only as AppProjects.\nIAM is the one source of truth for the (org, name) Project resource: a normal\norg sees only its own organization's projects, a SuperAdmin every org's, and\n\"default\" always resolves. When the embedded IAM store is unreachable a\nSuperAdmin still sees real argoproj.io/v1alpha1 AppProject CRs if that CRD is\nserved, else one permissive project per distinct App-CR project name.",
         "tags": [
           "deploy"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/argoProjectList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/reconcile": {
       "post": {
         "operationId": "post_v1_deploy_reconcile",
+        "summary": "reconcile renders the configured git source and applies it to the cluster once.\nIt is the SuperAdmin-gated write half that replaces universe-crs: a three-way\nserver-side apply through the embedded gitops-engine, with a scoped prune and\nper-resource health.",
+        "description": "reconcile renders the configured git source and applies it to the cluster once.\nIt is the SuperAdmin-gated write half that replaces universe-crs: a three-way\nserver-side apply through the embedded gitops-engine, with a scoped prune and\nper-resource health. Disabled unless DEPLOY_ENGINE_ENABLED is set.",
         "tags": [
           "deploy"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reconcileView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/session/userinfo": {
       "get": {
         "operationId": "get_v1_deploy_session_userinfo",
+        "summary": "userInfo reports whether this browser is signed in, and where to sign in if not.\nIt is the ONE route here that answers an anonymous caller, because a 403 to\nthat question is unanswerable for an XHR client.",
+        "description": "userInfo reports whether this browser is signed in, and where to sign in if not.\nIt is the ONE route here that answers an anonymous caller, because a 403 to\nthat question is unanswerable for an XHR client. The predicate is the same\nSuperAdmin fact every other route gates on, so a validated-but-not-SuperAdmin\ncaller is reported as not logged in — the truth as this console defines it.",
         "tags": [
           "deploy"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "groups": [],
+                  "iss": "argocd",
+                  "loggedIn": true,
+                  "logoutUrl": "/v1/deploy/logout",
+                  "username": "z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/userInfoView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/settings": {
       "get": {
         "operationId": "get_v1_deploy_settings",
+        "summary": "settings returns the fixed bootstrap configuration the dashboard SPA reads first.",
+        "description": "settings returns the fixed bootstrap configuration the dashboard SPA reads first.\nNothing here is per-request or per-tenant: this plane runs no OIDC/Dex of its\nown (IAM gates identity at the edge) and offers no exec, plugins or badges.",
         "tags": [
           "deploy"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/authSettings"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/deploy/stream/applications": {
@@ -267,9 +514,866 @@
     "/v1/deploy/version": {
       "get": {
         "operationId": "get_v1_deploy_version",
+        "summary": "version identifies this plane to the dashboard SPA as a projection.",
+        "description": "version identifies this plane to the dashboard SPA as a projection.\nIt is not a real argocd server and says so; the toolchain is never disclosed.",
         "tags": [
           "deploy"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/versionMessage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GitOpsApp": {
+        "properties": {
+          "automated": {
+            "type": "boolean"
+          },
+          "health": {
+            "description": "Healthy|Degraded|Progressing|…",
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/GitOpsDeploy"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/GitOpsOperation"
+          },
+          "path": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "reconciledAt": {
+            "type": "string"
+          },
+          "repoURL": {
+            "type": "string"
+          },
+          "resources": {
+            "type": "integer"
+          },
+          "revision": {
+            "description": "the commit last applied",
+            "type": "string"
+          },
+          "selfHeal": {
+            "type": "boolean"
+          },
+          "sync": {
+            "description": "Synced|OutOfSync|Unknown",
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitOpsDeploy": {
+        "properties": {
+          "automated": {
+            "type": "boolean"
+          },
+          "deployedAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitOpsOperation": {
+        "properties": {
+          "finishedAt": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitOpsPlane": {
+        "properties": {
+          "applications": {
+            "items": {
+              "$ref": "#/components/schemas/GitOpsApp"
+            },
+            "type": "array"
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "appRef": {
+        "properties": {
+          "name": {
+            "description": "Name is the application name from the path; a DNS-1123 label.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoApp": {
+        "properties": {
+          "apiVersion": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/argoMeta"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/argoSpec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/argoStatus"
+          }
+        },
+        "type": "object"
+      },
+      "argoAppList": {
+        "properties": {
+          "apiVersion": {
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/argoApp"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/argoListMeta"
+          }
+        },
+        "type": "object"
+      },
+      "argoCluster": {
+        "properties": {
+          "connectionState": {
+            "$ref": "#/components/schemas/argoConnectionState"
+          },
+          "info": {
+            "$ref": "#/components/schemas/argoClusterInfo"
+          },
+          "name": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoClusterInfo": {
+        "properties": {
+          "applicationsCount": {
+            "type": "integer"
+          },
+          "connectionState": {
+            "$ref": "#/components/schemas/argoConnectionState"
+          },
+          "serverVersion": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoClusterList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/argoCluster"
+            },
+            "type": "array"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/argoListMeta"
+          }
+        },
+        "type": "object"
+      },
+      "argoConnectionState": {
+        "properties": {
+          "attemptedAt": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoDestination": {
+        "properties": {
+          "name": {
+            "description": "ArgoCD allows a destination by cluster name; omitted for the in-cluster projection.",
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoGroupKind": {
+        "properties": {
+          "group": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoHealth": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoInfoItem": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoListMeta": {
+        "properties": {
+          "resourceVersion": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoMeta": {
+        "properties": {
+          "creationTimestamp": {
+            "type": "string"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoNode": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "health": {
+            "$ref": "#/components/schemas/argoHealth"
+          },
+          "images": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "info": {
+            "items": {
+              "$ref": "#/components/schemas/argoInfoItem"
+            },
+            "type": "array"
+          },
+          "parentRefs": {
+            "items": {
+              "$ref": "#/components/schemas/argoResourceRef"
+            },
+            "type": "array"
+          },
+          "resourceVersion": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoProject": {
+        "properties": {
+          "apiVersion": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/argoMeta"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/argoProjectSpec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/argoProjectStat"
+          }
+        },
+        "type": "object"
+      },
+      "argoProjectList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/argoProject"
+            },
+            "type": "array"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/argoListMeta"
+          }
+        },
+        "type": "object"
+      },
+      "argoProjectSpec": {
+        "properties": {
+          "clusterResourceWhitelist": {
+            "items": {
+              "$ref": "#/components/schemas/argoGroupKind"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "destinations": {
+            "items": {
+              "$ref": "#/components/schemas/argoDestination"
+            },
+            "type": "array"
+          },
+          "sourceRepos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "argoProjectStat": {
+        "properties": {},
+        "type": "object"
+      },
+      "argoResourceRef": {
+        "properties": {
+          "group": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoResourceStatus": {
+        "properties": {
+          "group": {
+            "type": "string"
+          },
+          "health": {
+            "$ref": "#/components/schemas/argoHealth"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoRevisionMetadata": {
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "signatureInfo": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "argoSource": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "repoURL": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoSpec": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/argoDestination"
+          },
+          "project": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/argoSource"
+          }
+        },
+        "type": "object"
+      },
+      "argoStatus": {
+        "properties": {
+          "health": {
+            "$ref": "#/components/schemas/argoHealth"
+          },
+          "reconciledAt": {
+            "type": "string"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/argoResourceStatus"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/argoSummary"
+          },
+          "sync": {
+            "$ref": "#/components/schemas/argoSyncStatus"
+          }
+        },
+        "type": "object"
+      },
+      "argoSummary": {
+        "properties": {
+          "images": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "argoSyncStatus": {
+        "properties": {
+          "revision": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "argoSyncWindows": {
+        "properties": {
+          "activeWindows": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "assignedWindows": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "canSync": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "argoTree": {
+        "properties": {
+          "hosts": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/argoNode"
+            },
+            "type": "array"
+          },
+          "orphanedNodes": {
+            "items": {
+              "$ref": "#/components/schemas/argoNode"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "authSettings": {
+        "properties": {
+          "appsInAnyNamespaceEnabled": {
+            "description": "AppsInAnyNamespaceEnabled is always false.",
+            "type": "boolean"
+          },
+          "dexConfig": {
+            "$ref": "#/components/schemas/settingsDex",
+            "description": "DexConfig carries an empty connector list, for the same reason."
+          },
+          "execEnabled": {
+            "description": "ExecEnabled is always false: no pod exec from this console.",
+            "type": "boolean"
+          },
+          "googleAnalytics": {
+            "$ref": "#/components/schemas/settingsAnalytics",
+            "description": "GoogleAnalytics is off, with user anonymization on."
+          },
+          "help": {
+            "$ref": "#/components/schemas/settingsHelp",
+            "description": "Help carries no chat or binary download links."
+          },
+          "hydratorEnabled": {
+            "description": "HydratorEnabled is always false.",
+            "type": "boolean"
+          },
+          "kustomizeVersions": {
+            "description": "KustomizeVersions is always empty.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "oidcConfig": {
+            "description": "OIDCConfig is always null: IAM gates identity at the edge, not here.",
+            "type": "object"
+          },
+          "plugins": {
+            "description": "Plugins is always empty: no plugin runs on this plane.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "statusBadgeEnabled": {
+            "description": "StatusBadgeEnabled is always false: this plane serves no badges.",
+            "type": "boolean"
+          },
+          "statusBadgeRootUrl": {
+            "description": "StatusBadgeRootURL is always empty, for the same reason.",
+            "type": "string"
+          },
+          "syncWithReplaceAllowed": {
+            "description": "SyncWithReplaceAllowed is always false: replace-on-sync is never offered.",
+            "type": "boolean"
+          },
+          "uiBannerContent": {
+            "description": "UIBannerContent is always empty (no banner).",
+            "type": "string"
+          },
+          "uiCssURL": {
+            "description": "UICSSURL is always empty (no injected stylesheet).",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the console's own base URL.",
+            "type": "string"
+          },
+          "userLoginsDisabled": {
+            "description": "UserLoginsDisabled is always true: the SPA never renders its own login form.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "reconcileResult": {
+        "properties": {
+          "message": {
+            "description": "Message is the engine's detail for that outcome; empty when it succeeded cleanly.",
+            "type": "string"
+          },
+          "resource": {
+            "description": "Resource is the object key (group/kind/namespace/name) that was applied.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the engine's outcome: Synced, Pruned, SyncFailed or Unknown.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reconcileSource": {
+        "properties": {
+          "path": {
+            "description": "Path is the directory within the repo that was rendered.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the branch or tag that was rendered.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the git repository the manifests were rendered from.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reconcileView": {
+        "properties": {
+          "declared": {
+            "description": "Declared is how many objects the source rendered.",
+            "type": "integer"
+          },
+          "failed": {
+            "description": "Failed is how many objects the apply rejected.",
+            "type": "integer"
+          },
+          "instance": {
+            "description": "Instance is the tracking instance the applied objects are labelled with.",
+            "type": "string"
+          },
+          "prune": {
+            "description": "Prune reports whether objects absent from the source were deleted.",
+            "type": "boolean"
+          },
+          "pruned": {
+            "description": "Pruned is how many objects were deleted.",
+            "type": "integer"
+          },
+          "results": {
+            "description": "Results is the per-resource outcome.",
+            "items": {
+              "$ref": "#/components/schemas/reconcileResult"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "description": "Revision is the commit that was rendered and applied.",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/reconcileSource",
+            "description": "Source is the git source the revision came from."
+          },
+          "synced": {
+            "description": "Synced is how many objects were applied.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "settingsAnalytics": {
+        "properties": {
+          "anonymizeUsers": {
+            "description": "AnonymizeUsers is always true.",
+            "type": "boolean"
+          },
+          "trackingID": {
+            "description": "TrackingID is always empty: no analytics is wired.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "settingsDex": {
+        "properties": {
+          "connectors": {
+            "description": "Connectors is always empty.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "settingsHelp": {
+        "properties": {
+          "binaryUrls": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "BinaryURLs is always empty.",
+            "type": "object"
+          },
+          "chatText": {
+            "description": "ChatText is always empty.",
+            "type": "string"
+          },
+          "chatUrl": {
+            "description": "ChatURL is always empty.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "userInfoView": {
+        "properties": {
+          "groups": {
+            "description": "Groups is the signed-in operator's group list, always empty here; absent\nfor an anonymous caller.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "iss": {
+            "description": "Iss is the issuer the SPA checks before offering an SSO redirect; absent\nfor an anonymous caller.",
+            "type": "string"
+          },
+          "loggedIn": {
+            "description": "LoggedIn reports whether the caller may use this console at all.",
+            "type": "boolean"
+          },
+          "loginUrl": {
+            "description": "LoginURL is where an anonymous caller signs in; absent once signed in.",
+            "type": "string"
+          },
+          "logoutUrl": {
+            "description": "LogoutURL is where the signed-in operator signs out; absent when anonymous.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Username is the signed-in operator; absent for an anonymous caller.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "versionMessage": {
+        "properties": {
+          "BuildDate": {
+            "description": "BuildDate is the moment this answer was produced, RFC3339 UTC.",
+            "type": "string"
+          },
+          "Compiler": {
+            "description": "Compiler is always \"gc\".",
+            "type": "string"
+          },
+          "GoVersion": {
+            "description": "GoVersion is always empty: this plane discloses no toolchain.",
+            "type": "string"
+          },
+          "Platform": {
+            "description": "Platform is always \"linux/amd64\".",
+            "type": "string"
+          },
+          "Version": {
+            "description": "Version names this plane as a projection, not a real argocd server.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

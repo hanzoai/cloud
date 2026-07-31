@@ -6,10 +6,10 @@
 package analytics
 
 import (
-	"encoding/json"
-	"github.com/hanzoai/cloud"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud"
 )
 
 // The ONE publishable spelling is IAM's pk-, and cloud only validates it. Cloud
@@ -30,55 +30,90 @@ func TestPublishablePrefixIsTheIAMFamily(t *testing.T) {
 	}
 }
 
-// foldException lifts a type:'error' event's exception into properties.$exception
-// and defaults the type, so the write core stores it as event_type='error'.
-func TestFoldException(t *testing.T) {
+// An event carrying an exception becomes an ERROR FACT: it routes to the error signal
+// (so it lands in event.error), and the exception becomes that table's own columns
+// rather than a property blob. This used to be a fold that mutated the event mid-
+// pipeline; it is now a property of the pure route + normalize pair.
+func TestErrorEventBecomesErrorColumns(t *testing.T) {
 	handled := false
 	e := CaptureEvent{
-		Error: &Exception{Type: "TypeError", Message: "x is not a function", Stack: "at f()", Handled: &handled},
+		Error: &Exception{Type: "TypeError", Message: "x is not a function", Stack: "at f (a.js:1:2)", Handled: &handled},
 	}
-	got := foldException(e)
-	if got.Type != "error" {
-		t.Fatalf("type = %q, want error", got.Type)
-	}
-	if got.Error != nil {
-		t.Fatalf("error object must be lifted out (nil after fold), got %+v", got.Error)
-	}
-	ex, ok := got.Properties["$exception"]
+	f, ok := normalize("acme", time.Now().UTC(), e)
 	if !ok {
-		t.Fatal("properties.$exception missing after fold")
+		t.Fatal("normalize dropped an error event")
 	}
-	b, _ := json.Marshal(ex)
-	var back Exception
-	if json.Unmarshal(b, &back) != nil || back.Message != "x is not a function" {
-		t.Fatalf("lifted exception malformed: %s", b)
+	if f.signal != signalError {
+		t.Fatalf("signal = %q, want %q", f.signal, signalError)
 	}
-
-	// normalizeEvent must then store event_type='error'.
-	row, ok := normalizeEvent("acme", time.Now().UTC(), got)
-	if !ok {
-		t.Fatal("normalize dropped a folded error event")
+	if f.fault == nil {
+		t.Fatal("no error body")
 	}
-	if row.eventType != "error" || row.event != "$error" {
-		t.Fatalf("stored type/event = %q/%q, want error/$error", row.eventType, row.event)
+	if f.fault.class != "TypeError" || f.fault.message != "x is not a function" {
+		t.Fatalf("class/message = %q/%q", f.fault.class, f.fault.message)
 	}
-
-	// A non-error event is untouched.
-	plain := CaptureEvent{Event: "click"}
-	if foldException(plain).Type != "" {
-		t.Fatal("non-error event was mutated by foldException")
+	if f.fault.handled {
+		t.Fatal("handled=false on the wire must survive as false")
+	}
+	// The name defaults to the exception's class when the caller named nothing.
+	if f.name != "TypeError" {
+		t.Fatalf("name = %q, want the exception class", f.name)
+	}
+	// The caller's struct is never mutated.
+	if e.Error == nil || e.Error.Message != "x is not a function" {
+		t.Fatalf("normalize mutated the caller's event: %+v", e.Error)
+	}
+	// A non-error event routes as a tracked product event.
+	if got := routeOf(CaptureEvent{Event: "click"}); got.signal != signalEvent || got.kind != kindTrack {
+		t.Fatalf("a plain event routed to %+v", got)
 	}
 }
 
-// canonicalType now recognizes error as first-class (still folds unknowns).
-func TestCanonicalTypeError(t *testing.T) {
-	if canonicalType("error") != "error" {
-		t.Fatal("error must canonicalize to error")
+// TestFingerprintIsStableAndDiscriminating: `group` leads event.error's ORDER BY after
+// org, so it must be a pure, stable function of the failure's shape — the same failure
+// always groups together, a different one does not.
+func TestFingerprintIsStableAndDiscriminating(t *testing.T) {
+	at := func(msg, stack string) string {
+		f, ok := normalize("acme", time.Now(), CaptureEvent{Error: &Exception{Type: "TypeError", Message: msg, Stack: stack}})
+		if !ok || f.fault == nil {
+			t.Fatal("want an error fact")
+		}
+		return f.fault.group
 	}
-	if canonicalType("ERROR") != "error" {
-		t.Fatal("error canonicalization must be case-insensitive")
+	const stack = "at render (https://app.test/main.js:10:5)"
+	if a, b := at("boom", stack), at("boom", stack); a != b {
+		t.Fatalf("the same failure produced two groups: %q vs %q", a, b)
 	}
-	if canonicalType("weird") != "event" {
-		t.Fatal("unknown type must still fold to event")
+	if a, b := at("boom", stack), at("boom", "at other (https://app.test/other.js:1:1)"); a == b {
+		t.Fatal("two different first-party frames collapsed into one group")
+	}
+	// The variable parts of a message must not split one issue into many.
+	if a, b := at("user 41 not found", ""), at("user 907 not found", ""); a != b {
+		t.Fatalf("one issue split by its message ids: %q vs %q", a, b)
+	}
+	if a, b := at("user 41 not found", ""), at("disk full", ""); a == b {
+		t.Fatal("two unrelated messages collapsed into one group")
+	}
+}
+
+// TestVendorFramesAreNotOurs: a browser extension injecting into the page is the single
+// loudest source of noise in a real issue list, so it must not be the frame an issue is
+// named and grouped by.
+func TestVendorFramesAreNotOurs(t *testing.T) {
+	f, ok := normalize("acme", time.Now(), CaptureEvent{Error: &Exception{
+		Type:  "TypeError",
+		Stack: "at connect (chrome-extension://abcd/inpage.js:7:84179)\n  at boot (https://app.test/main.js:2:3)",
+	}})
+	if !ok || f.fault == nil || len(f.fault.frames) != 2 {
+		t.Fatalf("want 2 parsed frames, got %+v", f.fault)
+	}
+	if f.fault.frames[0].own {
+		t.Errorf("an extension frame was marked first-party: %+v", f.fault.frames[0])
+	}
+	if !f.fault.frames[1].own {
+		t.Errorf("an app frame was not marked first-party: %+v", f.fault.frames[1])
+	}
+	if got := f.fault.frames[1]; got.file != "https://app.test/main.js" || got.line != 2 || got.column != 3 {
+		t.Errorf("frame parsed wrong: %+v", got)
 	}
 }

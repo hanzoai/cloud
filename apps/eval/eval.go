@@ -56,7 +56,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +65,8 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 // Run sizing: a synchronous run is bounded so one request cannot fan out into
 // thousands of paired LLM calls.
@@ -187,38 +188,69 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 
-	// Static sub-routes are registered before any :name param route so a real
-	// dataset name can never shadow a collection route.
-	g := app.Group("/v1/evals")
-	g.Post("/datasets", s.createDataset)
-	g.Get("/datasets", s.listDatasets)
-	g.Get("/datasets/:name", s.getDataset)
-	g.Delete("/datasets/:name", s.deleteDataset)
+	if err := routes(app, s); err != nil {
+		return err
+	}
 
-	g.Post("/dataset-items", s.createItem)
-	g.Get("/dataset-items", s.listItems)
+	log.Info("evals surface mounted (native)", "brand", deps.Brand, "telemetry", tel != nil)
+	return nil
+}
 
-	g.Post("/evaluators", s.createEvaluator)
-	g.Get("/evaluators", s.listEvaluators)
+// routes registers the /v1/evals/* surface. Static sub-routes register before any
+// :name param route so a real dataset name can never shadow a collection route.
+func routes(app cloud.Router, s *service) error {
+	z := cloud.ZipApp(app)
+	if z == nil {
+		return fmt.Errorf("eval.routes: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	// The bridge FIRST — a typed op is handed only a context, so the request its
+	// validated org, project scope and bearer are read from is parked there. Bounded
+	// to the subsystem's own prefix; Serve installs one app-wide too, harmlessly.
+	app.Use(cloud.Bridge())
 
-	g.Post("/score-configs", s.createScoreConfig)
-	g.Get("/score-configs", s.listScoreConfigs)
+	zip.Post(z, "/v1/evals/datasets", s.createDataset, opID("createDataset"), zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/evals/datasets", s.listDatasets, opID("listDatasets"))
+	zip.Get(z, "/v1/evals/datasets/:name", s.getDataset, opID("getDataset"))
+	zip.Delete(z, "/v1/evals/datasets/:name", s.deleteDataset, opID("deleteDataset"))
 
-	g.Post("/scores", s.createScore)
-	g.Get("/scores", s.listScores)
+	zip.Post(z, "/v1/evals/dataset-items", s.createItem, opID("createDatasetItem"), zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/evals/dataset-items", s.listItems, opID("listDatasetItems"))
 
-	g.Get("/traces", s.listTraces)
+	zip.Post(z, "/v1/evals/evaluators", s.createEvaluator, opID("createEvaluator"), zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/evals/evaluators", s.listEvaluators, opID("listEvaluators"))
+
+	zip.Post(z, "/v1/evals/score-configs", s.createScoreConfig, opID("createScoreConfig"), zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/evals/score-configs", s.listScoreConfigs, opID("listScoreConfigs"))
+
+	zip.Post(z, "/v1/evals/scores", s.createScore, opID("createScore"), zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/evals/scores", s.listScores, opID("listScores"))
+
+	zip.Get(z, "/v1/evals/traces", s.listTraces, opID("listTraces"))
 
 	// AI observability dashboard (the native Langfuse home): per-org / per-project
 	// counts, cost, tokens, error & success rate, and latency percentiles over a
 	// window — aggregated from the SAME cloud_usage ledger + GenAI spans.
-	g.Get("/metrics", s.metricsBoard)
+	zip.Get(z, "/v1/evals/metrics", s.metricsBoard, opID("evalMetrics"))
 
-	g.Post("/runs", s.runHandler)
-	g.Get("/runs", s.listRuns)
-
-	log.Info("evals surface mounted (native)", "brand", deps.Brand, "telemetry", tel != nil)
+	// POST /v1/evals/runs stays an untyped handler: it answers the SAME run summary
+	// under 200 or 502 depending on whether anything scored, and an op declares ONE
+	// success status — typing it would either publish a status it does not always
+	// send or drop the summary from the nothing-scored answer.
+	app.Post("/v1/evals/runs", s.runHandler)
+	zip.Get(z, "/v1/evals/runs", s.listRuns, opID("listRuns"))
 	return nil
+}
+
+// opID is the per-route stable operation id — the name the OpenAPI document, the MCP
+// tool and the CLI command all take. The summary is NOT set here: cmd/zipdoc lifts it
+// from each handler's own doc comment.
+func opID(id string) zip.OpOption { return zip.WithOperationID(id) }
+
+// Page is the bound every eval list shares.
+type Page struct {
+	// Limit caps the rows returned; 0 or below means the default and anything
+	// above the maximum is clamped to it.
+	Limit int `json:"limit"`
 }
 
 // Shutdown releases the eval stores. Idempotent.
@@ -267,9 +299,36 @@ func Shutdown() error {
 // returns 403 — never a fake success, never another org's data.
 func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
+// caller is tenant() for a typed op: the request a typed handler cannot see is parked
+// on its context by cloud.Bridge. Fails CLOSED off the HTTP path, where there is no
+// validated principal to derive a tenant from.
+func caller(ctx context.Context) (*zip.Ctx, string, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, "", zip.ErrForbidden("X-Org-Id required")
+	}
+	org, ok := tenant(c)
+	if !ok {
+		return nil, "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return c, org, nil
+}
+
+// pageLimit clamps a caller-supplied page size to the surface's bounds. It is
+// listLimit for a typed op, reading the decoded input instead of the query string.
+func pageLimit(n int) int {
+	if n <= 0 {
+		return defaultListLimit
+	}
+	if n > maxListLimit {
+		return maxListLimit
+	}
+	return n
+}
+
 // ── HTTP shapes (the contract the FE port consumes) ──────────────────────────
 
-type datasetView struct {
+type DatasetView struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Metadata    map[string]any `json:"metadata"`
@@ -278,7 +337,7 @@ type datasetView struct {
 	UpdatedAt   string         `json:"updatedAt"`
 }
 
-type itemView struct {
+type ItemView struct {
 	ID        string         `json:"id"`
 	Dataset   string         `json:"datasetName"`
 	Input     any            `json:"input"`
@@ -289,7 +348,7 @@ type itemView struct {
 	UpdatedAt string         `json:"updatedAt"`
 }
 
-type evaluatorView struct {
+type EvaluatorView struct {
 	Name      string `json:"name"`
 	Model     string `json:"model"`
 	Criteria  string `json:"criteria"`
@@ -298,7 +357,7 @@ type evaluatorView struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
-type scoreConfigView struct {
+type ScoreConfigView struct {
 	Name       string   `json:"name"`
 	DataType   string   `json:"dataType"`
 	MinValue   *float64 `json:"minValue,omitempty"`
@@ -308,7 +367,7 @@ type scoreConfigView struct {
 	UpdatedAt  string   `json:"updatedAt"`
 }
 
-type scoreView struct {
+type ScoreView struct {
 	ID          string  `json:"id"`
 	Name        string  `json:"name"`
 	TraceID     string  `json:"traceId,omitempty"`
@@ -320,7 +379,7 @@ type scoreView struct {
 	Timestamp   string  `json:"timestamp"`
 }
 
-type traceView struct {
+type TraceView struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	ProjectID string `json:"projectId,omitempty"`
@@ -343,364 +402,473 @@ type traceView struct {
 
 // ── datasets ─────────────────────────────────────────────────────────────────
 
-type datasetReq struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Metadata    map[string]any `json:"metadata"`
+// DatasetInput is the definition a caller submits to create a dataset.
+type DatasetInput struct {
+	// Name is the dataset name, unique within the org.
+	Name string `json:"name"`
+	// Description is free text describing what the dataset holds.
+	Description string `json:"description"`
+	// Metadata is an arbitrary JSON object stored alongside the dataset.
+	Metadata map[string]any `json:"metadata"`
 }
 
-func (s *service) createDataset(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body datasetReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name, err := requireName(body.Name)
+// DatasetList is the caller org's datasets.
+type DatasetList struct {
+	// Data is the datasets, newest first. Item counts are omitted here — read one
+	// dataset to get its count.
+	Data []DatasetView `json:"data"`
+}
+
+// DatasetRef addresses one dataset by its path name.
+type DatasetRef struct {
+	// Name is the dataset name from the path.
+	Name string `json:"name"`
+}
+
+// createDataset registers a dataset in the caller's org and answers 201. The name must
+// be a slug and unique within the org; a repeat upserts the description and metadata
+// rather than duplicating the row.
+//
+// Example: {"name": "support-golden", "description": "Golden answers for support triage", "metadata": {"owner": "support"}}
+func (s *service) createDataset(ctx context.Context, in *DatasetInput) (*DatasetView, error) {
+	_, org, err := caller(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	meta, err := encodeMeta(body.Metadata)
+	name, err := requireName(in.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if len(body.Description) > maxContent {
-		return zip.ErrBadRequest("description too large")
+	meta, err := encodeMeta(in.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	if len(in.Description) > maxContent {
+		return nil, zip.ErrBadRequest("description too large")
 	}
 	id, err := genID("ds")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
-	d, err := s.store.UpsertDataset(c.Context(), Dataset{
-		ID: id, Org: org, Name: name, Description: body.Description, Metadata: meta, UpdatedAt: now,
+	d, err := s.store.UpsertDataset(ctx, Dataset{
+		ID: id, Org: org, Name: name, Description: in.Description, Metadata: meta, UpdatedAt: now,
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toDatasetView(d, 0))
+	v := toDatasetView(d, 0)
+	return &v, nil
 }
 
-func (s *service) listDatasets(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.store.ListDatasets(c.Context(), org, listLimit(c))
+// listDatasets returns the caller org's datasets. Item counts are not computed here —
+// read one dataset for its count.
+func (s *service) listDatasets(ctx context.Context, in *Page) (*DatasetList, error) {
+	_, org, err := caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	out := make([]datasetView, 0, len(rows))
+	rows, err := s.store.ListDatasets(ctx, org, pageLimit(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	out := make([]DatasetView, 0, len(rows))
 	for _, d := range rows {
 		out = append(out, toDatasetView(d, 0))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &DatasetList{Data: out}, nil
 }
 
-func (s *service) getDataset(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// getDataset returns one of the caller org's datasets with its live item count. A
+// dataset belonging to another org reads as not found.
+//
+// Example: {"name": "support-golden"}
+func (s *service) getDataset(ctx context.Context, in *DatasetRef) (*DatasetView, error) {
+	_, org, err := caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	name := strings.TrimSpace(c.Param("name"))
-	d, err := s.store.GetDataset(c.Context(), org, name)
+	name := strings.TrimSpace(in.Name)
+	d, err := s.store.GetDataset(ctx, org, name)
 	if err == errNotFound {
-		return zip.ErrNotFound("dataset not found")
+		return nil, zip.ErrNotFound("dataset not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	n, err := s.store.CountItems(c.Context(), org, name)
+	n, err := s.store.CountItems(ctx, org, name)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "items: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "items: %v", err)
 	}
-	return c.JSON(http.StatusOK, toDatasetView(d, n))
+	v := toDatasetView(d, n)
+	return &v, nil
 }
 
-func (s *service) deleteDataset(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	name := strings.TrimSpace(c.Param("name"))
-	deleted, err := s.store.DeleteDataset(c.Context(), org, name)
+// deleteDataset removes one of the caller org's datasets and answers 204. A dataset
+// belonging to another org reads as not found and is left untouched.
+//
+// Example: {"name": "support-golden"}
+func (s *service) deleteDataset(ctx context.Context, in *DatasetRef) (*struct{}, error) {
+	_, org, err := caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := s.store.DeleteDataset(ctx, org, strings.TrimSpace(in.Name))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("dataset not found")
+		return nil, zip.ErrNotFound("dataset not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ── dataset items ────────────────────────────────────────────────────────────
 
-type itemReq struct {
-	ID       string          `json:"id"`
-	Dataset  string          `json:"datasetName"`
-	Input    json.RawMessage `json:"input"`
+// ItemInput is one dataset row a caller submits.
+type ItemInput struct {
+	// ID is the item id; empty mints one. Must be a slug when given.
+	ID string `json:"id"`
+	// Dataset is the name of the dataset the item belongs to. Required, and it
+	// must already exist in the caller's org.
+	Dataset string `json:"datasetName"`
+	// Input is the arbitrary JSON the model under test is given.
+	Input json.RawMessage `json:"input"`
+	// Expected is the arbitrary JSON golden answer.
 	Expected json.RawMessage `json:"expectedOutput"`
-	Metadata map[string]any  `json:"metadata"`
-	Status   string          `json:"status"`
+	// Metadata is an arbitrary JSON object stored alongside the item.
+	Metadata map[string]any `json:"metadata"`
+	// Status is ACTIVE or ARCHIVED; empty means ACTIVE. Only ACTIVE items are run.
+	Status string `json:"status"`
 }
 
-func (s *service) createItem(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// ItemQuery selects which dataset's items to list.
+type ItemQuery struct {
+	// Dataset is the dataset name to read. Required.
+	Dataset string `json:"datasetName" validate:"required"`
+	// Limit caps the rows returned.
+	Limit int `json:"limit"`
+}
+
+// ItemList is one dataset's rows.
+type ItemList struct {
+	// Data is the items, newest first.
+	Data []ItemView `json:"data"`
+}
+
+// createItem adds one row to a dataset and answers 201. The dataset must already exist
+// in the caller's org — an item can never be attached to a dataset the caller does not
+// own. An id already used by a different dataset is a conflict.
+//
+// Example: {"datasetName": "support-golden", "input": {"question": "how do I reset my key?"}, "expectedOutput": {"answer": "rotate it in the console"}, "status": "ACTIVE"}
+func (s *service) createItem(ctx context.Context, in *ItemInput) (*ItemView, error) {
+	_, org, err := caller(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body itemReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	dataset := strings.TrimSpace(body.Dataset)
+	dataset := strings.TrimSpace(in.Dataset)
 	if dataset == "" {
-		return zip.ErrBadRequest("datasetName is required")
+		return nil, zip.ErrBadRequest("datasetName is required")
 	}
 	// The dataset MUST exist for THIS org — an item can never be attached to a
 	// dataset the caller doesn't own (a real 404, not a silent create).
-	if _, err := s.store.GetDataset(c.Context(), org, dataset); err == errNotFound {
-		return zip.ErrNotFound("dataset not found")
+	if _, err := s.store.GetDataset(ctx, org, dataset); err == errNotFound {
+		return nil, zip.ErrNotFound("dataset not found")
 	} else if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "dataset: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "dataset: %v", err)
 	}
-	input, err := rawJSON(body.Input, "input")
+	input, err := rawJSON(in.Input, "input")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	expected, err := rawJSON(body.Expected, "expectedOutput")
+	expected, err := rawJSON(in.Expected, "expectedOutput")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	meta, err := encodeMeta(body.Metadata)
+	meta, err := encodeMeta(in.Metadata)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	status := strings.ToUpper(strings.TrimSpace(body.Status))
+	status := strings.ToUpper(strings.TrimSpace(in.Status))
 	if status == "" {
 		status = "ACTIVE"
 	}
 	if status != "ACTIVE" && status != "ARCHIVED" {
-		return zip.ErrBadRequest("status must be ACTIVE or ARCHIVED")
+		return nil, zip.ErrBadRequest("status must be ACTIVE or ARCHIVED")
 	}
-	id := strings.TrimSpace(body.ID)
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
 		if id, err = genID("item"); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 		}
 	} else if !nameRE.MatchString(id) {
-		return zip.ErrBadRequest("id must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("id must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 	now := time.Now().Unix()
-	it, err := s.store.PutItem(c.Context(), DatasetItem{
+	it, err := s.store.PutItem(ctx, DatasetItem{
 		ID: id, Org: org, Dataset: dataset, Input: input, Expected: expected,
 		Metadata: meta, Status: status, UpdatedAt: now,
 	})
 	if err == errConflict {
-		return zip.ErrConflict("item id already exists in a different dataset")
+		return nil, zip.ErrConflict("item id already exists in a different dataset")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toItemView(it))
+	v := toItemView(it)
+	return &v, nil
 }
 
-func (s *service) listItems(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	dataset := strings.TrimSpace(c.Query("datasetName"))
-	if dataset == "" {
-		return zip.ErrBadRequest("datasetName query param is required")
-	}
-	items, err := s.store.ListItems(c.Context(), org, dataset, false, listLimit(c))
+// listItems returns one dataset's rows, active and archived alike. The dataset is
+// resolved within the caller's org, so another org's dataset reads as empty.
+//
+// Example: {"datasetName": "support-golden", "limit": 100}
+func (s *service) listItems(ctx context.Context, in *ItemQuery) (*ItemList, error) {
+	_, org, err := caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	out := make([]itemView, 0, len(items))
+	dataset := strings.TrimSpace(in.Dataset)
+	if dataset == "" {
+		return nil, zip.ErrBadRequest("datasetName query param is required")
+	}
+	items, err := s.store.ListItems(ctx, org, dataset, false, pageLimit(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	out := make([]ItemView, 0, len(items))
 	for _, it := range items {
 		out = append(out, toItemView(it))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &ItemList{Data: out}, nil
 }
 
 // ── evaluators ───────────────────────────────────────────────────────────────
 
-type evaluatorReq struct {
-	Name      string `json:"name"`
-	Model     string `json:"model"`
-	Criteria  string `json:"criteria"`
+// EvaluatorInput is an LLM-as-judge definition.
+type EvaluatorInput struct {
+	// Name is the evaluator name, unique within the org.
+	Name string `json:"name"`
+	// Model is the judge model id.
+	Model string `json:"model"`
+	// Criteria is the judging rubric handed to the judge model.
+	Criteria string `json:"criteria"`
+	// ScoreName is the score this evaluator writes; empty means the evaluator name.
 	ScoreName string `json:"scoreName"`
 }
 
-func (s *service) createEvaluator(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body evaluatorReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name, err := requireName(body.Name)
+// EvaluatorList is the caller org's evaluators.
+type EvaluatorList struct {
+	// Data is the evaluators, newest first.
+	Data []EvaluatorView `json:"data"`
+}
+
+// createEvaluator registers an LLM-as-judge in the caller's org, answering 201.
+// An evaluator is a judge model plus the rubric it scores against; a repeat with
+// the same name upserts.
+//
+// Example: {"name": "helpfulness", "model": "zen5-pro", "criteria": "Score 1 if the answer resolves the question, else 0.", "scoreName": "helpfulness"}
+func (s *service) createEvaluator(ctx context.Context, in *EvaluatorInput) (*EvaluatorView, error) {
+	_, org, err := caller(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if len(body.Criteria) > maxContent {
-		return zip.ErrBadRequest("criteria too large")
+	name, err := requireName(in.Name)
+	if err != nil {
+		return nil, err
 	}
-	scoreName := strings.TrimSpace(body.ScoreName)
+	if len(in.Criteria) > maxContent {
+		return nil, zip.ErrBadRequest("criteria too large")
+	}
+	scoreName := strings.TrimSpace(in.ScoreName)
 	if scoreName == "" {
 		scoreName = name
 	} else if !nameRE.MatchString(scoreName) {
-		return zip.ErrBadRequest("scoreName must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("scoreName must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 	id, err := genID("eval")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
-	e, err := s.store.UpsertEvaluator(c.Context(), Evaluator{
-		ID: id, Org: org, Name: name, Model: strings.TrimSpace(body.Model),
-		Criteria: body.Criteria, ScoreName: scoreName, UpdatedAt: now,
+	e, err := s.store.UpsertEvaluator(ctx, Evaluator{
+		ID: id, Org: org, Name: name, Model: strings.TrimSpace(in.Model),
+		Criteria: in.Criteria, ScoreName: scoreName, UpdatedAt: now,
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toEvaluatorView(e))
+	v := toEvaluatorView(e)
+	return &v, nil
 }
 
-func (s *service) listEvaluators(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.store.ListEvaluators(c.Context(), org, listLimit(c))
+// listEvaluators returns the caller org's LLM-as-judge definitions.
+func (s *service) listEvaluators(ctx context.Context, in *Page) (*EvaluatorList, error) {
+	_, org, err := caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	out := make([]evaluatorView, 0, len(rows))
+	rows, err := s.store.ListEvaluators(ctx, org, pageLimit(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	out := make([]EvaluatorView, 0, len(rows))
 	for _, e := range rows {
 		out = append(out, toEvaluatorView(e))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &EvaluatorList{Data: out}, nil
 }
 
 // ── score configs ────────────────────────────────────────────────────────────
 
-type scoreConfigReq struct {
-	Name       string   `json:"name"`
-	DataType   string   `json:"dataType"`
-	MinValue   *float64 `json:"minValue"`
-	MaxValue   *float64 `json:"maxValue"`
+// ScoreConfigInput declares what a score named Name is allowed to carry.
+type ScoreConfigInput struct {
+	// Name is the score name this config governs, unique within the org.
+	Name string `json:"name"`
+	// DataType is NUMERIC, CATEGORICAL or BOOLEAN; empty means NUMERIC.
+	DataType string `json:"dataType"`
+	// MinValue and MaxValue bound a NUMERIC score. Null leaves that end unbounded.
+	MinValue *float64 `json:"minValue"`
+	MaxValue *float64 `json:"maxValue"`
+	// Categories is the allowed label set; required for CATEGORICAL.
 	Categories []string `json:"categories"`
 }
 
-func (s *service) createScoreConfig(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body scoreConfigReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name, err := requireName(body.Name)
+// ScoreConfigList is the caller org's score configs.
+type ScoreConfigList struct {
+	// Data is the configs, newest first.
+	Data []ScoreConfigView `json:"data"`
+}
+
+// createScoreConfig declares what a score of this name may carry. That is its type
+// plus its numeric bounds or its allowed labels, and it answers 201. Once a config
+// exists it is AUTHORITATIVE: a later score of that name is validated against it and
+// cannot claim a different type.
+//
+// Example: {"name": "helpfulness", "dataType": "NUMERIC", "minValue": 0, "maxValue": 1}
+func (s *service) createScoreConfig(ctx context.Context, in *ScoreConfigInput) (*ScoreConfigView, error) {
+	_, org, err := caller(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	dt := strings.ToUpper(strings.TrimSpace(body.DataType))
+	name, err := requireName(in.Name)
+	if err != nil {
+		return nil, err
+	}
+	dt := strings.ToUpper(strings.TrimSpace(in.DataType))
 	if dt == "" {
 		dt = "NUMERIC"
 	}
 	if !validDataTypes[dt] {
-		return zip.ErrBadRequest("dataType must be NUMERIC, CATEGORICAL, or BOOLEAN")
+		return nil, zip.ErrBadRequest("dataType must be NUMERIC, CATEGORICAL, or BOOLEAN")
 	}
-	if body.MinValue != nil && !finite(*body.MinValue) {
-		return zip.ErrBadRequest("minValue must be finite")
+	if in.MinValue != nil && !finite(*in.MinValue) {
+		return nil, zip.ErrBadRequest("minValue must be finite")
 	}
-	if body.MaxValue != nil && !finite(*body.MaxValue) {
-		return zip.ErrBadRequest("maxValue must be finite")
+	if in.MaxValue != nil && !finite(*in.MaxValue) {
+		return nil, zip.ErrBadRequest("maxValue must be finite")
 	}
-	if body.MinValue != nil && body.MaxValue != nil && *body.MinValue > *body.MaxValue {
-		return zip.ErrBadRequest("minValue must not exceed maxValue")
+	if in.MinValue != nil && in.MaxValue != nil && *in.MinValue > *in.MaxValue {
+		return nil, zip.ErrBadRequest("minValue must not exceed maxValue")
 	}
-	cats := cleanCategories(body.Categories)
+	cats := cleanCategories(in.Categories)
 	if dt == "CATEGORICAL" && len(cats) == 0 {
-		return zip.ErrBadRequest("CATEGORICAL config requires at least one category")
+		return nil, zip.ErrBadRequest("CATEGORICAL config requires at least one category")
 	}
 	id, err := genID("sc")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
-	cfg, err := s.store.UpsertScoreConfig(c.Context(), ScoreConfig{
+	cfg, err := s.store.UpsertScoreConfig(ctx, ScoreConfig{
 		ID: id, Org: org, Name: name, DataType: dt,
-		MinValue: body.MinValue, MaxValue: body.MaxValue, Categories: cats, UpdatedAt: now,
+		MinValue: in.MinValue, MaxValue: in.MaxValue, Categories: cats, UpdatedAt: now,
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toScoreConfigView(cfg))
+	v := toScoreConfigView(cfg)
+	return &v, nil
 }
 
-func (s *service) listScoreConfigs(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.store.ListScoreConfigs(c.Context(), org, listLimit(c))
+// listScoreConfigs returns the caller org's score configs — the rules every recorded
+// score of that name is validated against.
+func (s *service) listScoreConfigs(ctx context.Context, in *Page) (*ScoreConfigList, error) {
+	_, org, err := caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	out := make([]scoreConfigView, 0, len(rows))
+	rows, err := s.store.ListScoreConfigs(ctx, org, pageLimit(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	out := make([]ScoreConfigView, 0, len(rows))
 	for _, cfg := range rows {
 		out = append(out, toScoreConfigView(cfg))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &ScoreConfigList{Data: out}, nil
 }
 
 // ── scores (telemetry events) ────────────────────────────────────────────────
 
-type scoreReq struct {
-	Name        string   `json:"name"`
-	TraceID     string   `json:"traceId"`
-	RunName     string   `json:"runName"`
-	Dataset     string   `json:"datasetName"`
-	ItemID      string   `json:"datasetItemId"`
-	DataType    string   `json:"dataType"`
-	Value       *float64 `json:"value"`
-	StringValue string   `json:"stringValue"`
-	Comment     string   `json:"comment"`
+// ScoreInput is one score event a caller records.
+type ScoreInput struct {
+	// Name is the score name; a score config of this name, if any, governs it.
+	Name string `json:"name"`
+	// TraceID ties the score to one trace.
+	TraceID string `json:"traceId"`
+	// RunName ties the score to one eval run.
+	RunName string `json:"runName"`
+	// Dataset and ItemID tie the score to one dataset row.
+	Dataset string `json:"datasetName"`
+	ItemID  string `json:"datasetItemId"`
+	// DataType is NUMERIC, CATEGORICAL or BOOLEAN; a configured score overrides it.
+	DataType string `json:"dataType"`
+	// Value is the numeric score. Required for NUMERIC (finite) and BOOLEAN (0 or 1).
+	Value *float64 `json:"value"`
+	// StringValue is the label. Required for CATEGORICAL, and it must be in the
+	// configured category set.
+	StringValue string `json:"stringValue"`
+	// Comment is free text stored with the score.
+	Comment string `json:"comment"`
 }
 
-func (s *service) createScore(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// ScoreList is the caller org's recorded scores.
+type ScoreList struct {
+	// Data is the score events, newest first.
+	Data []ScoreView `json:"data"`
+}
+
+// createScore records one score event against a trace, run or dataset item. It
+// answers 201. Score integrity is enforced here: the value must be finite, and when a
+// score config of this name exists it is authoritative — the value must sit inside its
+// bounds, the label inside its category set, and a caller cannot claim a different
+// type than the org configured. Requires telemetry; without a datastore the score has
+// nowhere durable to land, so the call fails closed rather than reporting a score it
+// did not store.
+//
+// Example: {"name": "helpfulness", "traceId": "tr_9f2a1c7d4e8b0a6f", "runName": "run-20260729T101500Z", "value": 1, "comment": "resolved the question"}
+func (s *service) createScore(ctx context.Context, in *ScoreInput) (*ScoreView, error) {
+	_, org, err := caller(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if s.tel == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
 	}
-	var body scoreReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name, err := requireName(body.Name)
+	name, err := requireName(in.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ev, err := s.validateScore(c.Context(), org, name, body)
+	ev, err := s.validateScore(ctx, org, name, *in)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := s.tel.RecordScore(c.Context(), ev); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "record score: %v", err)
+	if err := s.tel.RecordScore(ctx, ev); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "record score: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toScoreView(ev))
+	v := toScoreView(ev)
+	return &v, nil
 }
 
 // validateScore turns a score request into a validated, org-stamped ScoreEvent.
@@ -709,7 +877,7 @@ func (s *service) createScore(c *zip.Ctx) error {
 // [min,max]; CATEGORICAL in the allowed set; BOOLEAN 0/1). No config ⇒ a numeric
 // score defaults to a finite float. This is the choke point Red will attack for
 // NaN/Inf/out-of-range/label-forgery, so it fails closed on every violation.
-func (s *service) validateScore(ctx context.Context, org, name string, body scoreReq) (ScoreEvent, error) {
+func (s *service) validateScore(ctx context.Context, org, name string, body ScoreInput) (ScoreEvent, error) {
 	dt := strings.ToUpper(strings.TrimSpace(body.DataType))
 	cfg, cfgErr := s.store.GetScoreConfig(ctx, org, name)
 	hasCfg := cfgErr == nil
@@ -777,55 +945,96 @@ func (s *service) validateScore(ctx context.Context, org, name string, body scor
 	return ev, nil
 }
 
-func (s *service) listScores(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// ScoreQuery narrows the recorded scores.
+type ScoreQuery struct {
+	// Name narrows to one score name.
+	Name string `json:"name"`
+	// RunName narrows to one eval run.
+	RunName string `json:"runName"`
+	// TraceID narrows to one trace.
+	TraceID string `json:"traceId"`
+	// Limit caps the rows returned.
+	Limit int `json:"limit"`
+}
+
+// listScores returns the caller org's recorded scores, newest first. The org is read
+// from the validated principal, never a client header, so the filters narrow within
+// one tenant and can never widen past it. Requires telemetry.
+//
+// Example: {"runName": "run-20260729T101500Z", "limit": 100}
+func (s *service) listScores(ctx context.Context, in *ScoreQuery) (*ScoreList, error) {
+	_, org, err := caller(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if s.tel == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
 	}
-	scores, err := s.tel.ListScores(c.Context(), ScoreFilter{
+	scores, err := s.tel.ListScores(ctx, ScoreFilter{
 		Org:     org, // authoritative — never a client header
-		Name:    strings.TrimSpace(c.Query("name")),
-		RunName: strings.TrimSpace(c.Query("runName")),
-		TraceID: strings.TrimSpace(c.Query("traceId")),
-		Limit:   listLimit(c),
+		Name:    strings.TrimSpace(in.Name),
+		RunName: strings.TrimSpace(in.RunName),
+		TraceID: strings.TrimSpace(in.TraceID),
+		Limit:   pageLimit(in.Limit),
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list scores: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list scores: %v", err)
 	}
-	out := make([]scoreView, 0, len(scores))
+	out := make([]ScoreView, 0, len(scores))
 	for _, sc := range scores {
 		out = append(out, toScoreView(sc))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &ScoreList{Data: out}, nil
 }
 
-func (s *service) listTraces(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// TraceQuery narrows the trace feed.
+type TraceQuery struct {
+	// SessionID narrows to one session.
+	SessionID string `json:"sessionId"`
+	// RunName narrows to one eval run.
+	RunName string `json:"runName"`
+	// Dataset narrows to the traces of one dataset's items.
+	Dataset string `json:"datasetName"`
+	// Limit caps the rows returned.
+	Limit int `json:"limit"`
+}
+
+// TraceList is the caller org's traces.
+type TraceList struct {
+	// Data is the traces, newest first.
+	Data []TraceView `json:"data"`
+}
+
+// listTraces returns the caller org's traces, newest first. Both tenant keys are
+// server-side: the org from the validated principal and the project from its minted
+// scope, so a caller cannot read another tenant's or another project's traces.
+// Requires telemetry.
+//
+// Example: {"runName": "run-20260729T101500Z", "limit": 50}
+func (s *service) listTraces(ctx context.Context, in *TraceQuery) (*TraceList, error) {
+	c, org, err := caller(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if s.tel == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
 	}
-	traces, err := s.tel.ListTraces(c.Context(), TraceFilter{
+	traces, err := s.tel.ListTraces(ctx, TraceFilter{
 		Org:       org,                       // authoritative
 		ProjectID: principal.ProjectScope(c), // server-minted; "" for the default project (whole org)
-		SessionID: strings.TrimSpace(c.Query("sessionId")),
-		RunName:   strings.TrimSpace(c.Query("runName")),
-		Dataset:   strings.TrimSpace(c.Query("datasetName")),
-		Limit:     listLimit(c),
+		SessionID: strings.TrimSpace(in.SessionID),
+		RunName:   strings.TrimSpace(in.RunName),
+		Dataset:   strings.TrimSpace(in.Dataset),
+		Limit:     pageLimit(in.Limit),
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list traces: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list traces: %v", err)
 	}
-	out := make([]traceView, 0, len(traces))
+	out := make([]TraceView, 0, len(traces))
 	for _, tr := range traces {
 		out = append(out, toTraceView(tr))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &TraceList{Data: out}, nil
 }
 
 // ── run orchestration ────────────────────────────────────────────────────────
@@ -1033,73 +1242,112 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 	return res
 }
 
-func (s *service) listRuns(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	runs, err := s.store.ListRuns(c.Context(), org, strings.TrimSpace(c.Query("datasetName")), listLimit(c))
+// RunView is one durable eval-run record.
+type RunView struct {
+	// Dataset is the dataset the run scored.
+	Dataset string `json:"dataset"`
+	// RunName is the run's name — the key scores and traces are tagged with.
+	RunName string `json:"runName"`
+	// Model is the model under test; JudgeModel is the LLM-as-judge that scored it.
+	Model      string `json:"model"`
+	JudgeModel string `json:"judgeModel"`
+	// Items is how many dataset rows the run attempted, Scored how many produced a
+	// real score — the two differ whenever items errored.
+	Items  int `json:"items"`
+	Scored int `json:"scored"`
+	// AvgScore is the mean over the scored items only.
+	AvgScore float64 `json:"avgScore"`
+	// CreatedAt and UpdatedAt are RFC3339 timestamps.
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
+// RunQuery narrows the run history.
+type RunQuery struct {
+	// Dataset narrows to one dataset's runs.
+	Dataset string `json:"datasetName"`
+	// Limit caps the rows returned.
+	Limit int `json:"limit"`
+}
+
+// RunList is the caller org's run history.
+type RunList struct {
+	// Data is the runs, newest first.
+	Data []RunView `json:"data"`
+}
+
+// listRuns returns the caller org's eval-run history. Each row carries what was
+// scored, by which judge, and the mean over the items that actually scored. Read
+// from the metastore, so it is available whether or not telemetry is wired.
+//
+// Example: {"datasetName": "support-golden", "limit": 50}
+func (s *service) listRuns(ctx context.Context, in *RunQuery) (*RunList, error) {
+	_, org, err := caller(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list runs: %v", err)
+		return nil, err
 	}
-	out := make([]map[string]any, 0, len(runs))
+	runs, err := s.store.ListRuns(ctx, org, strings.TrimSpace(in.Dataset), pageLimit(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list runs: %v", err)
+	}
+	out := make([]RunView, 0, len(runs))
 	for _, r := range runs {
-		out = append(out, map[string]any{
-			"dataset":    r.Dataset,
-			"runName":    r.Name,
-			"model":      r.Model,
-			"judgeModel": r.JudgeModel,
-			"items":      r.Items,
-			"scored":     r.Scored,
-			"avgScore":   r.AvgScore,
-			"createdAt":  rfc3339(r.CreatedAt),
-			"updatedAt":  rfc3339(r.UpdatedAt),
+		out = append(out, RunView{
+			Dataset:    r.Dataset,
+			RunName:    r.Name,
+			Model:      r.Model,
+			JudgeModel: r.JudgeModel,
+			Items:      r.Items,
+			Scored:     r.Scored,
+			AvgScore:   r.AvgScore,
+			CreatedAt:  rfc3339(r.CreatedAt),
+			UpdatedAt:  rfc3339(r.UpdatedAt),
 		})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &RunList{Data: out}, nil
 }
 
 // ── view converters ──────────────────────────────────────────────────────────
 
-func toDatasetView(d Dataset, items int) datasetView {
-	return datasetView{
+func toDatasetView(d Dataset, items int) DatasetView {
+	return DatasetView{
 		Name: d.Name, Description: d.Description, Metadata: decodeMeta(d.Metadata), Items: items,
 		CreatedAt: rfc3339(d.CreatedAt), UpdatedAt: rfc3339(d.UpdatedAt),
 	}
 }
 
-func toItemView(it DatasetItem) itemView {
-	return itemView{
+func toItemView(it DatasetItem) ItemView {
+	return ItemView{
 		ID: it.ID, Dataset: it.Dataset, Input: decodeAny(it.Input), Expected: decodeAny(it.Expected),
 		Metadata: decodeMeta(it.Metadata), Status: it.Status,
 		CreatedAt: rfc3339(it.CreatedAt), UpdatedAt: rfc3339(it.UpdatedAt),
 	}
 }
 
-func toEvaluatorView(e Evaluator) evaluatorView {
-	return evaluatorView{
+func toEvaluatorView(e Evaluator) EvaluatorView {
+	return EvaluatorView{
 		Name: e.Name, Model: e.Model, Criteria: e.Criteria, ScoreName: e.ScoreName,
 		CreatedAt: rfc3339(e.CreatedAt), UpdatedAt: rfc3339(e.UpdatedAt),
 	}
 }
 
-func toScoreConfigView(c ScoreConfig) scoreConfigView {
-	return scoreConfigView{
+func toScoreConfigView(c ScoreConfig) ScoreConfigView {
+	return ScoreConfigView{
 		Name: c.Name, DataType: c.DataType, MinValue: c.MinValue, MaxValue: c.MaxValue,
 		Categories: c.Categories, CreatedAt: rfc3339(c.CreatedAt), UpdatedAt: rfc3339(c.UpdatedAt),
 	}
 }
 
-func toScoreView(sc ScoreEvent) scoreView {
-	return scoreView{
+func toScoreView(sc ScoreEvent) ScoreView {
+	return ScoreView{
 		ID: sc.ID, Name: sc.Name, TraceID: sc.TraceID, RunName: sc.RunName, DataType: sc.DataType,
 		Value: sc.Value, StringValue: sc.StringValue, Comment: sc.Comment,
 		Timestamp: sc.Timestamp.UTC().Format(time.RFC3339),
 	}
 }
 
-func toTraceView(tr Trace) traceView {
-	v := traceView{
+func toTraceView(tr Trace) TraceView {
+	v := TraceView{
 		ID: tr.ID, Name: tr.Name, ProjectID: tr.ProjectID, SessionID: tr.SessionID,
 		Dataset: tr.Dataset, ItemID: tr.ItemID, RunName: tr.RunName,
 		Model: tr.Model, Input: decodeAny(tr.Input), Output: tr.Output,
@@ -1258,18 +1506,6 @@ func normalizeJudge(j *judgeSpec, model string) judgeSpec {
 		}
 	}
 	return out
-}
-
-// listLimit reads a bounded ?limit from the request (metastore lists).
-func listLimit(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
-		return defaultListLimit
-	}
-	if n > maxListLimit {
-		return maxListLimit
-	}
-	return n
 }
 
 // genID returns a prefixed, collision-resistant id (prefix + 128 random bits).

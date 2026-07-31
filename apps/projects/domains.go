@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -74,11 +75,11 @@ func ours(s *cloud.Service[state], host string) bool {
 		host == s.State.apex || strings.HasSuffix(host, "."+s.State.apex)
 }
 
-// domainView is one row of a site's domains panel.
+// hostClaim is one row of a site's domains panel.
 //
 //	live     the edge answers for this host now
 //	pending  claimed, awaiting DNS proof; Records is exactly what to publish
-type domainView struct {
+type hostClaim struct {
 	Host      string        `json:"host"`
 	Status    string        `json:"status"`
 	Verified  bool          `json:"verified"`
@@ -90,8 +91,8 @@ type domainView struct {
 
 // view renders a claim, attaching the challenge records a pending one still owes.
 // target is the site's own Hanzo host — the CNAME the customer points at.
-func view(h HostClaim, target string) domainView {
-	v := domainView{Host: h.Host, URL: "https://" + h.Host, CreatedAt: h.CreatedAt}
+func view(h HostClaim, target string) hostClaim {
+	v := hostClaim{Host: h.Host, URL: "https://" + h.Host, CreatedAt: h.CreatedAt}
 	if h.Status == HostVerified {
 		v.Status, v.Verified = "live", true
 		return v
@@ -103,12 +104,48 @@ func view(h HostClaim, target string) domainView {
 }
 
 type setDomainsReq struct {
+	// Slug is the project slug from the path — which site to bind the hosts to.
+	Slug string `json:"slug"`
+	// Domains are the custom hostnames to attach. At least one is required.
 	Domains []string `json:"domains"`
 }
 
-// setDomains attaches one or more CUSTOM public hostnames to this org's static
-// site. Binding a host you do not own would let you shadow it at the edge, so
-// which outcome you get depends on whether ownership is already established:
+// domainRef addresses one host of one project.
+type domainRef struct {
+	// Slug is the project slug from the path.
+	Slug string `json:"slug"`
+	// Host is the custom hostname from the path.
+	Host string `json:"host"`
+}
+
+// boundDomains is what setDomains answers with: the claims it just made plus the
+// site's verified hosts.
+type boundDomains struct {
+	// Slug is the site the hosts were bound to.
+	Slug string `json:"slug"`
+	// Org is the owning tenant.
+	Org string `json:"org"`
+	// Bound is one claim view per host in the request, with its DNS challenge.
+	Bound []hostClaim `json:"bound"`
+	// Domains are the site's hosts that are verified and routing.
+	Domains []string `json:"domains"`
+}
+
+// siteDomains is what listDomains answers with: the routing hosts plus every claim.
+type siteDomains struct {
+	// Slug is the site the hosts belong to.
+	Slug string `json:"slug"`
+	// Org is the owning tenant.
+	Org string `json:"org"`
+	// Domains are the hosts that are verified and routing.
+	Domains []string `json:"domains"`
+	// Claims is every host on record, verified or still pending its DNS challenge.
+	Claims []hostClaim `json:"claims"`
+}
+
+// setDomains attaches custom public hostnames to this org's static site. Binding a
+// host you do not own would let you shadow it at the edge, so which outcome you get
+// depends on whether ownership is already established:
 //
 //   - SuperAdmin or the platform-operator org → bound VERIFIED immediately. The
 //     operator manages customer DNS, so its bind is itself the vouch.
@@ -124,79 +161,74 @@ type setDomainsReq struct {
 // idempotent for the same (org, slug) — a redeploy or repeat call is safe, and a
 // re-claim returns the SAME token rather than invalidating a record the customer
 // has already published.
-func setDomains(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+// Example: {"slug": "spring-launch", "domains": ["launch.example.com"]}
+func (o ops) setDomains(ctx context.Context, in *setDomainsReq) (*boundDomains, error) {
+	c, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	var body setDomainsReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	s := o.s
+	p, err := o.project(ctx, c, org, in.Slug)
+	if err != nil {
+		return nil, err
 	}
+	body := *in
 	if len(body.Domains) == 0 {
-		return zip.ErrBadRequest("no domains to bind")
+		return nil, zip.ErrBadRequest("no domains to bind")
 	}
 	vouched := c.IsAdmin() || s.State.operatorOrgs[org]
 	now := time.Now().Unix()
 	target := publicHost(s, p.Slug)
 
-	out := make([]domainView, 0, len(body.Domains))
+	out := make([]hostClaim, 0, len(body.Domains))
 	for _, d := range body.Domains {
 		host := fqdn.Clean(d)
 		if host == "" {
 			continue
 		}
 		if !fqdn.Valid(host) {
-			return zip.ErrBadRequest("invalid domain: " + d)
+			return nil, zip.ErrBadRequest("invalid domain: " + d)
 		}
 		if !vouched && ours(s, host) {
-			return zip.Errorf(http.StatusForbidden,
+			return nil, zip.Errorf(http.StatusForbidden,
 				"%s is a host we operate; those are assigned by the platform, not claimed", host)
 		}
 
 		var bindErr error
 		if vouched {
-			bindErr = s.State.store.BindHost(c.Context(), host, org, p.Slug, now)
+			bindErr = s.State.store.BindHost(ctx, host, org, p.Slug, now)
 		} else {
 			token, err := fqdn.Token()
 			if err != nil {
-				return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+				return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 			}
-			bindErr = s.State.store.ClaimHost(c.Context(), host, org, p.Slug, token, now)
+			bindErr = s.State.store.ClaimHost(ctx, host, org, p.Slug, token, now)
 		}
 		switch {
 		case errors.Is(bindErr, errHostTaken):
-			return zip.ErrConflict("domain " + host + " is already bound to another site")
+			return nil, zip.ErrConflict("domain " + host + " is already bound to another site")
 		case errors.Is(bindErr, errReservedHost):
-			return zip.ErrBadRequest("domain " + host + " is a reserved label")
+			return nil, zip.ErrBadRequest("domain " + host + " is a reserved label")
 		case bindErr != nil:
-			return zip.Errorf(http.StatusInternalServerError, "bind %q: %v", host, bindErr)
+			return nil, zip.Errorf(http.StatusInternalServerError, "bind %q: %v", host, bindErr)
 		}
 
-		claim, err := s.State.store.HostClaimFor(c.Context(), host, org, p.Slug)
+		claim, err := s.State.store.HostClaimFor(ctx, host, org, p.Slug)
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "read claim %q: %v", host, err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "read claim %q: %v", host, err)
 		}
 		out = append(out, view(claim, target))
 	}
 	// Purge the edge cache-tag so a newly-VERIFIED host serves the current build
 	// immediately. A pending claim routes nothing, so it has nothing to purge.
-	purgeTag(s, c.Context(), org, p.Slug)
-	hosts, _ := s.State.store.ListHostsForProject(c.Context(), org, p.Slug)
-	return c.JSON(http.StatusOK, map[string]any{
-		"slug": p.Slug, "org": org, "bound": out, "domains": hosts,
-	})
+	purgeTag(s, ctx, org, p.Slug)
+	hosts, _ := s.State.store.ListHostsForProject(ctx, org, p.Slug)
+	return &boundDomains{Slug: p.Slug, Org: org, Bound: out, Domains: hosts}, nil
 }
 
-// releaseDomain gives a host back. A claim is FIRST-COME and global, so until this
-// existed a bound or merely pending host was held forever: setDomains only ever adds
+// releaseDomain gives a custom host back so it can be reused. A claim is FIRST-COME
+// and global, so until this existed a bound or merely pending host was held
+// forever: setDomains only ever adds
 // (an empty list is a 400, not a clear), delete-project unbinds the site's own bare
 // slug and nothing else, and there was no third writer. A customer who mistyped a
 // domain, or claimed one they later moved elsewhere, could neither reuse it nor let
@@ -208,95 +240,95 @@ func setDomains(s *cloud.Service[state], c *zip.Ctx) error {
 // — the host is unique — but the scoping states the guarantee). Idempotent: releasing
 // a host we do not hold is a clean 204, never a 404 that would let a caller probe
 // which hosts other tenants hold.
-func releaseDomain(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+// Example: {"slug": "spring-launch", "host": "launch.example.com"}
+func (o ops) releaseDomain(ctx context.Context, in *domainRef) (*struct{}, error) {
+	c, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	host := fqdn.Clean(c.Param("host"))
+	s := o.s
+	p, err := o.project(ctx, c, org, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+	host := fqdn.Clean(in.Host)
 	if host == "" {
-		return zip.ErrBadRequest("host is required")
+		return nil, zip.ErrBadRequest("host is required")
 	}
-	if err := s.State.store.UnbindHost(c.Context(), host, org, p.Slug); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "release %q: %v", host, err)
+	if err := s.State.store.UnbindHost(ctx, host, org, p.Slug); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "release %q: %v", host, err)
 	}
 	// The host stops routing here, so drop anything the edge still holds for it.
-	purgeTag(s, c.Context(), org, p.Slug)
+	purgeTag(s, ctx, org, p.Slug)
 	s.Log.Info("site custom domain released", "org", org, "slug", p.Slug, "host", host)
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
-// verifyDomain resolves the DNS challenge for a pending claim. On success the
-// host is promoted and begins routing at the edge. On not-yet it returns the
-// honest still-pending view rather than an error — the check ran, it simply did
-// not find the record, and the customer retries once DNS propagates.
-func verifyDomain(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// verifyDomain resolves the DNS challenge for a pending custom-host claim. On
+// success the host is promoted and begins routing at the edge; on not-yet it
+// returns the honest still-pending view rather than an error, because the check
+// ran and simply did not find the record, so the customer retries once DNS
+// propagates.
+// Example: {"slug": "spring-launch", "host": "launch.example.com"}
+func (o ops) verifyDomain(ctx context.Context, in *domainRef) (*hostClaim, error) {
+	c, org, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
+	s := o.s
+	p, err := o.project(ctx, c, org, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+	host := fqdn.Clean(in.Host)
+	claim, err := s.State.store.HostClaimFor(ctx, host, org, p.Slug)
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
+		return nil, zip.ErrNotFound("domain not claimed by this site")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-	}
-	host := fqdn.Clean(c.Param("host"))
-	claim, err := s.State.store.HostClaimFor(c.Context(), host, org, p.Slug)
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("domain not claimed by this site")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "read claim: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "read claim: %v", err)
 	}
 	target := publicHost(s, p.Slug)
 	if claim.Status == HostVerified {
-		return c.JSON(http.StatusOK, view(claim, target))
+		out := view(claim, target)
+		return &out, nil
 	}
-	if err := fqdn.Verify(c.Context(), dns(s), host, claim.Token); err != nil {
+	if err := fqdn.Verify(ctx, dns(s), host, claim.Token); err != nil {
 		v := view(claim, target)
 		v.Detail = err.Error()
-		return c.JSON(http.StatusOK, v) // honest "still pending" — the check ran
+		return &v, nil // honest "still pending" — the check ran
 	}
 	now := time.Now().Unix()
-	if err := s.State.store.VerifyHost(c.Context(), host, org, p.Slug, now); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "verify: %v", err)
+	if err := s.State.store.VerifyHost(ctx, host, org, p.Slug, now); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "verify: %v", err)
 	}
 	s.Log.Info("site custom domain verified", "org", org, "slug", p.Slug, "host", host)
 	// It routes as of now, so clear any edge cache held against the site.
-	purgeTag(s, c.Context(), org, p.Slug)
+	purgeTag(s, ctx, org, p.Slug)
 	claim.Status, claim.Token, claim.VerifiedAt = HostVerified, "", now
-	return c.JSON(http.StatusOK, view(claim, target))
+	out := view(claim, target)
+	return &out, nil
 }
 
-// listDomains returns every host this site holds: the live ones, plus any pending
-// claim with the records it still owes.
-func listDomains(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+// listDomains returns every host this site holds. The live ones come back beside
+// any pending claim with the DNS records it still owes.
+// Example: {"slug": "spring-launch"}
+func (o ops) listDomains(ctx context.Context, in *projectRef) (*siteDomains, error) {
+	c, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	claims, err := s.State.store.ListHostClaims(c.Context(), org, p.Slug)
+	s := o.s
+	p, err := o.project(ctx, c, org, in.Slug)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list domains: %v", err)
+		return nil, err
+	}
+	claims, err := s.State.store.ListHostClaims(ctx, org, p.Slug)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list domains: %v", err)
 	}
 	target := publicHost(s, p.Slug)
-	out := make([]domainView, 0, len(claims))
+	out := make([]hostClaim, 0, len(claims))
 	hosts := make([]string, 0, len(claims))
 	for _, h := range claims {
 		out = append(out, view(h, target))
@@ -304,7 +336,5 @@ func listDomains(s *cloud.Service[state], c *zip.Ctx) error {
 			hosts = append(hosts, h.Host)
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"slug": p.Slug, "org": org, "domains": hosts, "claims": out,
-	})
+	return &siteDomains{Slug: p.Slug, Org: org, Domains: hosts, Claims: out}, nil
 }

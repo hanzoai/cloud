@@ -19,47 +19,569 @@
     "/v1/usage/activity": {
       "get": {
         "operationId": "get_v1_usage_activity",
+        "summary": "activity returns the per-day usage contribution series for one subject.",
+        "description": "activity returns the per-day usage contribution series for one subject. It is the\nheatmap and timeline behind a profile, and authorization is resolved server-side\nfrom the validated principal, so a caller can never widen scope; subject=project is\nan honest empty because the usage ledger records no project attribution yet.",
         "tags": [
           "usage"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "subject",
+            "in": "query",
+            "required": false,
+            "description": "Subject is what the series covers: user, org or project. Empty means user.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "user"
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "description": "ID names the subject; empty means yourself (or your own org). Another user needs\norg-admin rights and must be in your org; another org needs SuperAdmin.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "From is the first day of the range, YYYY-MM-DD. Empty means 90 days back.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-01-01"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the last day of the range, YYYY-MM-DD. Empty means today.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-03-31"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/usage/leaderboard": {
       "get": {
         "operationId": "get_v1_usage_leaderboard",
+        "summary": "leaderboard returns the ranked usage board for one scope, metric and period.",
+        "description": "leaderboard returns the ranked usage board for one scope, metric and period. Peers\nare anonymized unless they opted into public listing (an org admin sees their own\norg's members named), cross-org cost is SuperAdmin-only, and the caller's own rank\nis always included even when it falls outside the page. A warehouse that is not\nconnected answers available:false rather than a fabricated rank.",
         "tags": [
           "usage"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "description": "Scope is personal (your rank among your org), org (your org's board) or global\n(the top orgs). Empty means personal.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "org"
+          },
+          {
+            "name": "metric",
+            "in": "query",
+            "required": false,
+            "description": "Metric is what the board ranks on: tokens, requests or cost. Empty means tokens.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "tokens"
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "Period is the window: day, week, month or all.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "week"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned, clamped to 1..100. 0 means 10.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/usage/leaderboard/optin": {
       "get": {
         "operationId": "get_v1_usage_leaderboard_optin",
+        "summary": "getOptin returns the caller's own public-listing preference and their org's.",
+        "description": "getOptin returns the caller's own public-listing preference and their org's. canSet\nand canManage say whether this caller may change each one, so a console renders the\ncontrols it is actually allowed to use.",
         "tags": [
           "usage"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "org": {
+                    "canManage": false,
+                    "display": "",
+                    "listed": false
+                  },
+                  "user": {
+                    "canSet": true,
+                    "handle": "sam",
+                    "listed": true
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/optinView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_usage_leaderboard_optin",
+        "summary": "putUserOptin sets the caller's own public-listing preference.",
+        "description": "putUserOptin sets the caller's own public-listing preference. Self only — the key is\nthe caller's validated ledger id, never a body or query value — and opting in with\nno handle defaults to the caller's username so an opted-in row never reads\n\"Anonymous\".",
         "tags": [
           "usage"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "handle": "sam",
+                "listed": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/userOptinReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/userOptinView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/usage/leaderboard/optin/org": {
       "put": {
         "operationId": "put_v1_usage_leaderboard_optin_org",
+        "summary": "putOrgOptin sets the org's listing on the cross-org public board.",
+        "description": "putOrgOptin sets the org's listing on the cross-org public board. Only an admin OF\nthe caller's org (org admin or SuperAdmin) may set it, and the org key is the\ncaller's validated org, never a body value.",
         "tags": [
           "usage"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "display": "Acme",
+                "listed": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/orgOptinReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/orgOptinView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/usage/rollup/backfill": {
       "post": {
         "operationId": "post_v1_usage_rollup_backfill",
+        "summary": "backfill seeds the derived usage rollup from pre-materialized-view ledger history.",
+        "description": "backfill seeds the derived usage rollup from pre-materialized-view ledger history.\nSuperAdmin only, and meant to run ONCE: because the\nrollup accumulates, a second run would double a day, so it refuses with 409 against\na non-empty rollup unless force is set.",
         "tags": [
           "usage"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "before": "2026-01-01T00:00:00Z"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/BackfillReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "forced": false,
+                  "seededBefore": "2026-01-01T00:00:00Z",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActivityPoint": {
+        "properties": {
+          "costCents": {
+            "type": "integer"
+          },
+          "day": {
+            "description": "\"2006-01-02\"",
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ActivityTotals": {
+        "properties": {
+          "activeDays": {
+            "description": "days with any usage",
+            "type": "integer"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "maxRequests": {
+            "type": "integer"
+          },
+          "maxTokens": {
+            "description": "busiest day's tokens (heatmap intensity ceiling)",
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ActivityView": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityPoint"
+            },
+            "type": "array"
+          },
+          "from": {
+            "type": "string"
+          },
+          "id": {
+            "description": "resolved subject id (echoed)",
+            "type": "string"
+          },
+          "note": {
+            "description": "honest note (e.g. project attribution not in the ledger)",
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "subject": {
+            "description": "user|org|project",
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ActivityTotals"
+          }
+        },
+        "type": "object"
+      },
+      "BackfillReq": {
+        "properties": {
+          "before": {
+            "description": "Before bounds the seed to rows older than this RFC3339 instant; empty means now.\nUse the materialized view's creation instant so the seed and the live view never overlap.",
+            "type": "string"
+          },
+          "force": {
+            "description": "Force must be the exact string \"true\" to re-run against a non-empty rollup, which\nWILL double-count. Anything else refuses with 409.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BackfillResult": {
+        "properties": {
+          "forced": {
+            "description": "Forced is whether the non-empty-rollup guard was overridden.",
+            "type": "boolean"
+          },
+          "seededBefore": {
+            "description": "SeededBefore is the RFC3339 bound the seed actually used.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is ok when the seed ran.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "LeaderboardRow": {
+        "properties": {
+          "anonymous": {
+            "type": "boolean"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "handle": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "integer"
+          },
+          "rank": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "self": {
+            "type": "boolean"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "LeaderboardView": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "end": {
+            "type": "string"
+          },
+          "metric": {
+            "description": "tokens|requests|cost",
+            "type": "string"
+          },
+          "period": {
+            "description": "day|week|month|all|custom",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardRow"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "description": "personal|org|global",
+            "type": "string"
+          },
+          "self": {
+            "$ref": "#/components/schemas/SelfRank"
+          },
+          "source": {
+            "type": "string"
+          },
+          "start": {
+            "description": "\"\" for all",
+            "type": "string"
+          },
+          "subject": {
+            "description": "user|org",
+            "type": "string"
+          },
+          "total": {
+            "description": "ranked subjects in the window",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SelfRank": {
+        "properties": {
+          "costCents": {
+            "type": "integer"
+          },
+          "handle": {
+            "type": "string"
+          },
+          "listed": {
+            "description": "is the caller publicly listed (opted in)",
+            "type": "boolean"
+          },
+          "metric": {
+            "type": "integer"
+          },
+          "ofTotal": {
+            "type": "integer"
+          },
+          "rank": {
+            "type": "integer"
+          },
+          "ranked": {
+            "type": "boolean"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "optinView": {
+        "properties": {
+          "org": {
+            "$ref": "#/components/schemas/orgOptinView",
+            "description": "Org is the caller's org's public-board listing state."
+          },
+          "user": {
+            "$ref": "#/components/schemas/userOptinView",
+            "description": "User is the caller's own public-listing state."
+          }
+        },
+        "type": "object"
+      },
+      "orgOptinReq": {
+        "properties": {
+          "display": {
+            "description": "Display is the org name to show; empty while listing defaults to the org id.",
+            "type": "string"
+          },
+          "listed": {
+            "description": "Listed is whether the org appears on the cross-org public board.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "orgOptinView": {
+        "properties": {
+          "canManage": {
+            "description": "CanManage is whether this caller may change the org's listing.",
+            "type": "boolean"
+          },
+          "display": {
+            "description": "Display is the org name shown when listed.",
+            "type": "string"
+          },
+          "listed": {
+            "description": "Listed is whether this org appears on the cross-org public board.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "userOptinReq": {
+        "properties": {
+          "handle": {
+            "description": "Handle is the display name to show; empty while listing defaults to your username.",
+            "type": "string"
+          },
+          "listed": {
+            "description": "Listed is whether to show this user by name to other people on the board.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "userOptinView": {
+        "properties": {
+          "canSet": {
+            "description": "CanSet is false when the caller's identity cannot be resolved, so the preference is unwritable.",
+            "type": "boolean"
+          },
+          "handle": {
+            "description": "Handle is the display name shown when listed.",
+            "type": "string"
+          },
+          "listed": {
+            "description": "Listed is whether this user is shown by name to other people on the board.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
       }
     }
   }

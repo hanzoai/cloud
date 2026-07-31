@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -25,8 +26,10 @@ func mountSettings(t *testing.T, kms cloudKMS) (*zip.App, *service) {
 	t.Cleanup(func() { _ = store.Close() })
 	s := &service{store: store, kms: kms, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Get("/v1/settings/:product", s.getSettings)
-	app.Put("/v1/settings/:product", s.putSettings)
+	// The same two registrations Mount makes, over the same bridge: a typed op
+	// reads its request off the context the bridge parks.
+	app.Group("/v1/settings").Use(cloud.Bridge())
+	routes(app, s)
 	return app, s
 }
 

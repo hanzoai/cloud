@@ -1,18 +1,17 @@
 package o11y
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -21,7 +20,7 @@ import (
 // surface the console's AnnotationQueuesModule consumes. The o11y span plane has
 // flat annotations but no queue entity, so this is a cloud-native relational
 // feature (annotation_store.go) registered BEFORE the hanzoai/o11y wildcard
-// (inside MountO11y, order 69) so Fiber's in-order match gives it precedence.
+// (inside Mount, order 69) so Fiber's in-order match gives it precedence.
 //
 //	GET    /v1/o11y/annotation-queues              list queues (org+project scoped)
 //	POST   /v1/o11y/annotation-queues              create a queue
@@ -33,9 +32,10 @@ import (
 //	PATCH  /v1/o11y/annotation-queues/:id/items/:itemId  update item status/assignee
 //
 // Lists return the console REST envelope {data:[…], meta:{page,limit,totalItems,
-// totalPages}}. Tenant isolation is principal.Org (the validated tenant) on EVERY
-// handler; principal.ProjectScope narrows within the org. A cross-org id is a 404,
-// never a cross-tenant read.
+// totalPages}}. Every route is a TYPED op, so tenant isolation is tenantOf (the
+// validated org, off the context cloud.Bridge parked it on — never an In field)
+// on EVERY handler, and callerProject narrows within the org. Both live in
+// typed.go. A cross-org id is a 404, never a cross-tenant read.
 
 const (
 	statusPending   = "PENDING"
@@ -60,8 +60,18 @@ var annQueueNameRE = regexp.MustCompile(`^[\P{Cc}]{1,128}$`)
 // validObjectType is the closed set an item may reference.
 var validObjectType = map[string]bool{objectTrace: true, objectObservation: true, objectSession: true}
 
+// The annotation-queue paths, composed from o11yPrefix ONCE so the route, the
+// op's identity in every projection and the key cmd/zipdoc files its prose under
+// are the same constant and cannot drift.
+const (
+	annQueuesRoute = o11yPrefix + "/annotation-queues"
+	annQueueRoute  = annQueuesRoute + "/:id"
+	annItemsRoute  = annQueueRoute + "/items"
+	annItemRoute   = annItemsRoute + "/:itemId"
+)
+
 // annService owns the annotation-queue store + logger. Package-scoped so
-// ShutdownO11y can close the store; nil when the mount is skipped.
+// Shutdown can close the store; nil when the mount is skipped.
 type annService struct {
 	store *annStore
 	log   luxlog.Logger
@@ -70,7 +80,7 @@ type annService struct {
 var annQueues *annService
 
 // mountAnnotationQueues opens the queue metastore and registers the routes. Called
-// by MountO11y inside the one order-69 mount, so every route precedes the order-70
+// by Mount inside the one order-69 mount, so every route precedes the order-70
 // wildcard. A store-open failure fails the mount (a broken data plane must not
 // silently serve empty queues).
 func mountAnnotationQueues(a cloud.Router, deps cloud.Deps) error {
@@ -85,16 +95,26 @@ func mountAnnotationQueues(a cloud.Router, deps cloud.Deps) error {
 	s := &annService{store: store, log: log}
 	annQueues = s
 
-	// Static collection routes register before the :id param routes so an id can
-	// never shadow a collection route (the eval discipline).
-	a.Get("/v1/o11y/annotation-queues", s.listQueues)
-	a.Post("/v1/o11y/annotation-queues", s.createQueue)
-	a.Get("/v1/o11y/annotation-queues/:id", s.getQueue)
-	a.Patch("/v1/o11y/annotation-queues/:id", s.updateQueue)
-	a.Delete("/v1/o11y/annotation-queues/:id", s.deleteQueue)
-	a.Get("/v1/o11y/annotation-queues/:id/items", s.listItems)
-	a.Post("/v1/o11y/annotation-queues/:id/items", s.addItems)
-	a.Patch("/v1/o11y/annotation-queues/:id/items/:itemId", s.updateItem)
+	// TYPED ops on the REGISTRY, each with its WHOLE path spelled as a constant:
+	// that path is the identity every projection (document, MCP tool, CLI command,
+	// SDK method) keys on, AND the key cmd/zipdoc writes the doc comments below
+	// under. The router composes a group's prefix into the op's path; the
+	// extractor reads the literal it was handed, so a group-relative registration
+	// files its prose under a path no projection ever asks for. Static collection
+	// routes register before the :id param routes so an id can never shadow a
+	// collection route (the eval discipline).
+	z := cloud.ZipApp(a)
+	if z == nil {
+		return fmt.Errorf("o11y.mountAnnotationQueues: router carries no typed-op registry")
+	}
+	zip.Get(z, annQueuesRoute, s.listQueues)
+	zip.Post(z, annQueuesRoute, s.createQueue, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, annQueueRoute, s.getQueue)
+	zip.Patch(z, annQueueRoute, s.updateQueue)
+	zip.Delete(z, annQueueRoute, s.deleteQueue)
+	zip.Get(z, annItemsRoute, s.listItems)
+	zip.Post(z, annItemsRoute, s.addItems, zip.WithStatus(http.StatusCreated))
+	zip.Patch(z, annItemRoute, s.updateItem)
 
 	log.Info("o11y annotation-queues surface mounted (native)")
 	return nil
@@ -112,35 +132,88 @@ func shutdownAnnotationQueues() error {
 
 // ── views + envelope ──────────────────────────────────────────────────────────
 
+// NOTHING here EMBEDS. Go's encoding/json flattens an embedded struct, but zip's
+// schema builder walks reflect fields and skips the ones it cannot name, so an
+// embedded shape is published as a schema MISSING every field it carries — a
+// document that lies about the wire, and a generated SDK type with holes in it.
+// Written flat, the schema and the bytes agree.
+
 type annQueueView struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Description    string   `json:"description,omitempty"`
+	// ID is the queue's id.
+	ID string `json:"id"`
+	// Name is its display handle.
+	Name string `json:"name"`
+	// Description is its free text, omitted when empty.
+	Description string `json:"description,omitempty"`
+	// ScoreConfigIDs are the eval score-configs reviewers grade against.
 	ScoreConfigIDs []string `json:"scoreConfigIds"`
-	CreatedAt      string   `json:"createdAt"`
-	UpdatedAt      string   `json:"updatedAt"`
+	// CreatedAt is when it was created, RFC3339 in UTC.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is when it last changed, RFC3339 in UTC.
+	UpdatedAt string `json:"updatedAt"`
 }
 
+// annQueueDetailView is one queue plus its review progress. It repeats
+// annQueueView's fields IN ORDER rather than embedding it — see the note above —
+// so the bytes are what they always were and the schema says so.
 type annQueueDetailView struct {
-	annQueueView
-	PendingCount   int           `json:"pendingCount"`
-	CompletedCount int           `json:"completedCount"`
-	Items          []annItemView `json:"items"`
+	// ID is the queue's id.
+	ID string `json:"id"`
+	// Name is its display handle.
+	Name string `json:"name"`
+	// Description is its free text, omitted when empty.
+	Description string `json:"description,omitempty"`
+	// ScoreConfigIDs are the eval score-configs reviewers grade against.
+	ScoreConfigIDs []string `json:"scoreConfigIds"`
+	// CreatedAt is when it was created, RFC3339 in UTC.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is when it last changed, RFC3339 in UTC.
+	UpdatedAt string `json:"updatedAt"`
+	// PendingCount is how many of its items are still awaiting review.
+	PendingCount int `json:"pendingCount"`
+	// CompletedCount is how many have been reviewed.
+	CompletedCount int `json:"completedCount"`
+	// Items is the queue's first page of items (up to 100).
+	Items []annItemView `json:"items"`
 }
 
 type annItemView struct {
-	ID            string `json:"id"`
-	QueueID       string `json:"queueId"`
-	ObjectType    string `json:"objectType"`
-	ObjectID      string `json:"objectId"`
-	TraceID       string `json:"traceId,omitempty"`
+	// ID is the item's id.
+	ID string `json:"id"`
+	// QueueID is the queue it belongs to.
+	QueueID string `json:"queueId"`
+	// ObjectType is what it references: TRACE, OBSERVATION or SESSION.
+	ObjectType string `json:"objectType"`
+	// ObjectID is the referenced object's id.
+	ObjectID string `json:"objectId"`
+	// TraceID echoes objectId when objectType is TRACE.
+	TraceID string `json:"traceId,omitempty"`
+	// ObservationID echoes objectId when objectType is OBSERVATION.
 	ObservationID string `json:"observationId,omitempty"`
-	SessionID     string `json:"sessionId,omitempty"`
-	Status        string `json:"status"`
-	Assignee      string `json:"assignee,omitempty"`
-	CreatedAt     string `json:"createdAt"`
-	UpdatedAt     string `json:"updatedAt"`
-	CompletedAt   string `json:"completedAt,omitempty"`
+	// SessionID echoes objectId when objectType is SESSION.
+	SessionID string `json:"sessionId,omitempty"`
+	// Status is PENDING or COMPLETED.
+	Status string `json:"status"`
+	// Assignee is the reviewer it is for, omitted when unassigned.
+	Assignee string `json:"assignee,omitempty"`
+	// CreatedAt is when it was enqueued, RFC3339 in UTC.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is when it last changed, RFC3339 in UTC.
+	UpdatedAt string `json:"updatedAt"`
+	// CompletedAt is when it was reviewed, omitted while pending.
+	CompletedAt string `json:"completedAt,omitempty"`
+}
+
+// toQueueDetailView projects one queue + its progress into the detail response,
+// so the flat repetition of annQueueView's fields is written in exactly one
+// place.
+func toQueueDetailView(q annQueue, pending, completed int, items []annItemView) annQueueDetailView {
+	v := toQueueView(q)
+	return annQueueDetailView{
+		ID: v.ID, Name: v.Name, Description: v.Description, ScoreConfigIDs: v.ScoreConfigIDs,
+		CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		PendingCount: pending, CompletedCount: completed, Items: items,
+	}
 }
 
 func toQueueView(q annQueue) annQueueView {
@@ -175,326 +248,450 @@ func toItemView(it annItem) annItemView {
 }
 
 type listMeta struct {
-	Page       int `json:"page"`
-	Limit      int `json:"limit"`
+	// Page is the 1-based page this response is.
+	Page int `json:"page"`
+	// Limit is how many rows one page holds.
+	Limit int `json:"limit"`
+	// TotalItems is how many rows match in total.
 	TotalItems int `json:"totalItems"`
+	// TotalPages is ceil(totalItems/limit), at least 1.
 	TotalPages int `json:"totalPages"`
 }
 
-func listEnvelope(data any, page, limit, total int) map[string]any {
-	return map[string]any{
-		"data": data,
-		"meta": listMeta{Page: page, Limit: limit, TotalItems: total, TotalPages: totalPages(total, limit)},
-	}
+func newListMeta(page, limit, total int) listMeta {
+	return listMeta{Page: page, Limit: limit, TotalItems: total, TotalPages: totalPages(total, limit)}
+}
+
+// ── the typed shapes (the published contract) ─────────────────────────────────
+
+// annPage is the paging a list route reads off the query string.
+type annPage struct {
+	// Page is the 1-based page to read. Default 1.
+	Page int `json:"page"`
+	// Limit is how many rows to return. Default 20, capped at 100.
+	Limit int `json:"limit"`
+}
+
+// annQueueRef addresses one queue. The id is the path segment: the URL is the
+// addressing authority, so it binds from there whatever a body says.
+type annQueueRef struct {
+	// ID is the annotation queue to act on, from the path.
+	ID string `json:"id"`
+}
+
+// annQueueList is a page of the caller org+project's annotation queues, in the
+// console REST envelope.
+type annQueueList struct {
+	// Data is the page of queues.
+	Data []annQueueView `json:"data"`
+	// Meta is the paging that produced it.
+	Meta listMeta `json:"meta"`
+}
+
+// annItemList is a page of one queue's items, in the console REST envelope.
+type annItemList struct {
+	// Data is the page of items.
+	Data []annItemView `json:"data"`
+	// Meta is the paging that produced it.
+	Meta listMeta `json:"meta"`
+}
+
+// annQueueDeleted acknowledges a queue deletion.
+type annQueueDeleted struct {
+	// Deleted is true when the queue (and its items) were removed.
+	Deleted bool `json:"deleted"`
 }
 
 // ── handlers ──────────────────────────────────────────────────────────────────
 
-func (s *annService) listQueues(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	page, limit := pageLimit(c)
-	rows, total, err := s.store.ListQueues(c.Context(), org, principal.ProjectScope(c), limit, (page-1)*limit)
+// ListAnnotationQueues returns a page of the caller org's human-review queues,
+// newest first, narrowed to the caller's project. Another org's queues are never
+// visible.
+//
+// Example: {"page": 1, "limit": 20}
+func (s *annService) listQueues(ctx context.Context, in *annPage) (*annQueueList, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list queues: %v", err)
+		return nil, err
+	}
+	page, limit := pageLimit(in.Page, in.Limit)
+	rows, total, err := s.store.ListQueues(ctx, org, callerProject(ctx), limit, (page-1)*limit)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list queues: %v", err)
 	}
 	out := make([]annQueueView, 0, len(rows))
 	for _, q := range rows {
 		out = append(out, toQueueView(q))
 	}
-	return c.JSON(http.StatusOK, listEnvelope(out, page, limit, total))
+	return &annQueueList{Data: out, Meta: newListMeta(page, limit, total)}, nil
 }
 
 type createQueueReq struct {
-	Name           string   `json:"name"`
-	Description    string   `json:"description"`
+	// Name is the queue's display handle, 1–128 printable characters. It must be
+	// unique within the org's project. Required.
+	Name string `json:"name"`
+	// Description is optional free text, up to 512 characters.
+	Description string `json:"description"`
+	// ScoreConfigIDs are the eval score-configs reviewers grade against.
 	ScoreConfigIDs []string `json:"scoreConfigIds"`
 }
 
-func (s *annService) createQueue(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// CreateAnnotationQueue creates a human-review queue in the caller's org and
+// project. A name already used by another queue in the same project is a 409.
+//
+// Example: {"name": "hallucination review", "scoreConfigIds": ["quality"]}
+func (s *annService) createQueue(ctx context.Context, in *createQueueReq) (*annQueueView, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body createQueueReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	name := strings.TrimSpace(body.Name)
 	if !annQueueNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name is required (1–128 printable chars)")
+		return nil, zip.ErrBadRequest("name is required (1–128 printable chars)")
 	}
 	if len(body.Description) > maxAnnFieldLen {
-		return zip.ErrBadRequest("description too long")
+		return nil, zip.ErrBadRequest("description too long")
 	}
 	ids, err := cleanScoreConfigIDs(body.ScoreConfigIDs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	id, err := genID("annq")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
-	q, err := s.store.CreateQueue(c.Context(), annQueue{
-		ID: id, Org: org, Project: principal.ProjectScope(c), Name: name,
+	q, err := s.store.CreateQueue(ctx, annQueue{
+		ID: id, Org: org, Project: callerProject(ctx), Name: name,
 		Description: strings.TrimSpace(body.Description), ScoreConfigIDs: ids,
 		CreatedAt: now, UpdatedAt: now,
 	})
 	if err == errQueueConflict {
-		return zip.Errorf(http.StatusConflict, "a queue named %q already exists in this project", name)
+		return nil, zip.Errorf(http.StatusConflict, "a queue named %q already exists in this project", name)
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "create queue: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "create queue: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toQueueView(q))
+	v := toQueueView(q)
+	return &v, nil
 }
 
-func (s *annService) getQueue(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// GetAnnotationQueue returns one review queue with its pending and completed
+// counts and its first page of items. A queue id belonging to another org is a
+// 404, never a cross-tenant read.
+//
+// Example: {"id": "annq_1"}
+func (s *annService) getQueue(ctx context.Context, in *annQueueRef) (*annQueueDetailView, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
-	q, err := s.store.GetQueue(c.Context(), org, id)
+	id := strings.TrimSpace(in.ID)
+	q, err := s.store.GetQueue(ctx, org, id)
 	if err == errQueueNotFound {
-		return zip.ErrNotFound("annotation queue not found")
+		return nil, zip.ErrNotFound("annotation queue not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get queue: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get queue: %v", err)
 	}
-	pending, completed, err := s.store.QueueCounts(c.Context(), org, id)
+	pending, completed, err := s.store.QueueCounts(ctx, org, id)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "queue counts: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "queue counts: %v", err)
 	}
-	items, _, err := s.store.ListItems(c.Context(), org, id, "", annDetailItems, 0)
+	items, _, err := s.store.ListItems(ctx, org, id, "", annDetailItems, 0)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "queue items: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "queue items: %v", err)
 	}
 	iv := make([]annItemView, 0, len(items))
 	for _, it := range items {
 		iv = append(iv, toItemView(it))
 	}
-	return c.JSON(http.StatusOK, annQueueDetailView{
-		annQueueView: toQueueView(q), PendingCount: pending, CompletedCount: completed, Items: iv,
-	})
+	v := toQueueDetailView(q, pending, completed, iv)
+	return &v, nil
 }
 
-type updateQueueReq struct {
-	Name           *string   `json:"name"`
-	Description    *string   `json:"description"`
+// updateQueueIn is a partial update. Every field is optional — a field the
+// request omits is left alone — and the id comes from the path.
+type updateQueueIn struct {
+	// ID is the annotation queue to update, from the path.
+	ID string `json:"id"`
+	// Name replaces the queue's display handle when present, 1–128 printable
+	// characters and unique within the project.
+	Name *string `json:"name"`
+	// Description replaces the free text when present, up to 512 characters.
+	Description *string `json:"description"`
+	// ScoreConfigIDs replaces the whole score-config set when present.
 	ScoreConfigIDs *[]string `json:"scoreConfigIds"`
 }
 
-func (s *annService) updateQueue(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// UpdateAnnotationQueue changes a review queue's name, description or
+// score-config set. A field the request omits is left alone. A name another
+// queue in the same project already uses is a 409; a queue id belonging to
+// another org is a 404.
+//
+// Example: {"id": "annq_1", "name": "hallucination review v2"}
+func (s *annService) updateQueue(ctx context.Context, in *updateQueueIn) (*annQueueView, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
-	var body updateQueueReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	cur, err := s.store.GetQueue(c.Context(), org, id)
+	id := strings.TrimSpace(in.ID)
+	body := in
+	cur, err := s.store.GetQueue(ctx, org, id)
 	if err == errQueueNotFound {
-		return zip.ErrNotFound("annotation queue not found")
+		return nil, zip.ErrNotFound("annotation queue not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get queue: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get queue: %v", err)
 	}
 	if body.Name != nil {
 		name := strings.TrimSpace(*body.Name)
 		if !annQueueNameRE.MatchString(name) {
-			return zip.ErrBadRequest("name must be 1–128 printable chars")
+			return nil, zip.ErrBadRequest("name must be 1–128 printable chars")
 		}
 		cur.Name = name
 	}
 	if body.Description != nil {
 		if len(*body.Description) > maxAnnFieldLen {
-			return zip.ErrBadRequest("description too long")
+			return nil, zip.ErrBadRequest("description too long")
 		}
 		cur.Description = strings.TrimSpace(*body.Description)
 	}
 	if body.ScoreConfigIDs != nil {
 		ids, err := cleanScoreConfigIDs(*body.ScoreConfigIDs)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		cur.ScoreConfigIDs = ids
 	}
 	cur.UpdatedAt = time.Now().Unix()
-	q, err := s.store.UpdateQueue(c.Context(), cur)
+	q, err := s.store.UpdateQueue(ctx, cur)
 	if err == errQueueConflict {
-		return zip.Errorf(http.StatusConflict, "a queue named %q already exists in this project", cur.Name)
+		return nil, zip.Errorf(http.StatusConflict, "a queue named %q already exists in this project", cur.Name)
 	}
 	if err == errQueueNotFound {
-		return zip.ErrNotFound("annotation queue not found")
+		return nil, zip.ErrNotFound("annotation queue not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "update queue: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update queue: %v", err)
 	}
-	return c.JSON(http.StatusOK, toQueueView(q))
+	v := toQueueView(q)
+	return &v, nil
 }
 
-func (s *annService) deleteQueue(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	id := strings.TrimSpace(c.Param("id"))
-	existed, err := s.store.DeleteQueue(c.Context(), org, id)
+// DeleteAnnotationQueue removes one review queue and every item in it. A queue
+// id belonging to another org answers the same 404 an unknown id does, so a
+// probe learns nothing about what exists.
+//
+// Example: {"id": "annq_1"}
+func (s *annService) deleteQueue(ctx context.Context, in *annQueueRef) (*annQueueDeleted, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete queue: %v", err)
+		return nil, err
+	}
+	id := strings.TrimSpace(in.ID)
+	existed, err := s.store.DeleteQueue(ctx, org, id)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete queue: %v", err)
 	}
 	if !existed {
-		return zip.ErrNotFound("annotation queue not found")
+		return nil, zip.ErrNotFound("annotation queue not found")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"deleted": true})
+	return &annQueueDeleted{Deleted: true}, nil
 }
 
-func (s *annService) listItems(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// listItemsIn is a page of one queue's items, optionally filtered by status.
+type listItemsIn struct {
+	// ID is the annotation queue whose items to list, from the path.
+	ID string `json:"id"`
+	// Status filters to PENDING or COMPLETED items. Absent returns both.
+	Status string `json:"status"`
+	// Page is the 1-based page to read. Default 1.
+	Page int `json:"page"`
+	// Limit is how many rows to return. Default 20, capped at 100.
+	Limit int `json:"limit"`
+}
+
+// ListAnnotationQueueItems returns a page of one review queue's items, newest
+// first, optionally filtered to PENDING or COMPLETED. A queue id belonging to
+// another org is a 404, never a cross-tenant list.
+//
+// Example: {"id": "annq_1", "status": "PENDING"}
+func (s *annService) listItems(ctx context.Context, in *listItemsIn) (*annItemList, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
+	id := strings.TrimSpace(in.ID)
 	// The queue must exist in THIS org (a real 404, never a cross-tenant list).
-	if _, err := s.store.GetQueue(c.Context(), org, id); err == errQueueNotFound {
-		return zip.ErrNotFound("annotation queue not found")
+	if _, err := s.store.GetQueue(ctx, org, id); err == errQueueNotFound {
+		return nil, zip.ErrNotFound("annotation queue not found")
 	} else if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get queue: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get queue: %v", err)
 	}
-	status, err := parseStatusFilter(c.Query("status"))
+	status, err := parseStatusFilter(in.Status)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	page, limit := pageLimit(c)
-	rows, total, err := s.store.ListItems(c.Context(), org, id, status, limit, (page-1)*limit)
+	page, limit := pageLimit(in.Page, in.Limit)
+	rows, total, err := s.store.ListItems(ctx, org, id, status, limit, (page-1)*limit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list items: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list items: %v", err)
 	}
 	out := make([]annItemView, 0, len(rows))
 	for _, it := range rows {
 		out = append(out, toItemView(it))
 	}
-	return c.JSON(http.StatusOK, listEnvelope(out, page, limit, total))
+	return &annItemList{Data: out, Meta: newListMeta(page, limit, total)}, nil
 }
 
 type itemInput struct {
-	ObjectType    string `json:"objectType"`
-	ObjectID      string `json:"objectId"`
-	TraceID       string `json:"traceId"`
+	// ObjectType is TRACE, OBSERVATION or SESSION — the generic form, paired
+	// with objectId.
+	ObjectType string `json:"objectType"`
+	// ObjectID is the referenced object's id, paired with objectType.
+	ObjectID string `json:"objectId"`
+	// TraceID references a trace — the console-friendly form of
+	// objectType=TRACE.
+	TraceID string `json:"traceId"`
+	// ObservationID references an observation — the console-friendly form of
+	// objectType=OBSERVATION.
 	ObservationID string `json:"observationId"`
-	SessionID     string `json:"sessionId"`
-	Assignee      string `json:"assignee"`
+	// SessionID references a session — the console-friendly form of
+	// objectType=SESSION.
+	SessionID string `json:"sessionId"`
+	// Assignee is the reviewer this item is for, up to 512 characters.
+	Assignee string `json:"assignee"`
 }
 
-type addItemsReq struct {
+// addItemsIn enqueues items on one queue. The queue id comes from the path.
+type addItemsIn struct {
+	// ID is the annotation queue to add to, from the path.
+	ID string `json:"id"`
+	// Items are the objects to enqueue for review, 1–200 per request. Each names
+	// exactly one object.
 	Items []itemInput `json:"items"`
 }
 
-func (s *annService) addItems(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// annItemsCreated is the batch of items one add enqueued.
+type annItemsCreated struct {
+	// Data is every item created by this request, in request order.
+	Data []annItemView `json:"data"`
+}
+
+// AddAnnotationQueueItems enqueues traces, observations or sessions on a review
+// queue. Each item names exactly one object, either by traceId / observationId /
+// sessionId or by objectType plus objectId; every item enters PENDING. A queue
+// id belonging to another org is a 404.
+//
+// Example: {"id": "annq_1", "items": [{"traceId": "tr_1"}]}
+func (s *annService) addItems(ctx context.Context, in *addItemsIn) (*annItemsCreated, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
-	q, err := s.store.GetQueue(c.Context(), org, id)
+	id := strings.TrimSpace(in.ID)
+	q, err := s.store.GetQueue(ctx, org, id)
 	if err == errQueueNotFound {
-		return zip.ErrNotFound("annotation queue not found")
+		return nil, zip.ErrNotFound("annotation queue not found")
 	} else if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get queue: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get queue: %v", err)
 	}
-	var body addItemsReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	if len(in.Items) == 0 {
+		return nil, zip.ErrBadRequest("items is required (1 or more)")
 	}
-	if len(body.Items) == 0 {
-		return zip.ErrBadRequest("items is required (1 or more)")
-	}
-	if len(body.Items) > maxAnnItemsBatch {
-		return zip.Errorf(http.StatusRequestEntityTooLarge, "too many items (max %d)", maxAnnItemsBatch)
+	if len(in.Items) > maxAnnItemsBatch {
+		return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "too many items (max %d)", maxAnnItemsBatch)
 	}
 	now := time.Now().Unix()
-	items := make([]annItem, 0, len(body.Items))
-	for _, in := range body.Items {
-		objType, objID, err := resolveObject(in)
+	items := make([]annItem, 0, len(in.Items))
+	for _, item := range in.Items {
+		objType, objID, err := resolveObject(item)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if len(in.Assignee) > maxAnnFieldLen {
-			return zip.ErrBadRequest("assignee too long")
+		if len(item.Assignee) > maxAnnFieldLen {
+			return nil, zip.ErrBadRequest("assignee too long")
 		}
 		itemID, err := genID("annqi")
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 		}
 		items = append(items, annItem{
 			ID: itemID, Org: org, Project: q.Project, QueueID: id,
 			ObjectType: objType, ObjectID: objID, Status: statusPending,
-			Assignee: strings.TrimSpace(in.Assignee), CreatedAt: now, UpdatedAt: now,
+			Assignee: strings.TrimSpace(item.Assignee), CreatedAt: now, UpdatedAt: now,
 		})
 	}
-	if err := s.store.AddItems(c.Context(), items); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "add items: %v", err)
+	if err := s.store.AddItems(ctx, items); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "add items: %v", err)
 	}
 	out := make([]annItemView, 0, len(items))
 	for _, it := range items {
 		out = append(out, toItemView(it))
 	}
-	return c.JSON(http.StatusCreated, map[string]any{"data": out})
+	return &annItemsCreated{Data: out}, nil
 }
 
-type updateItemReq struct {
-	Status   string `json:"status"`
+// updateItemIn addresses one item of one queue. Both ids come from the path.
+type updateItemIn struct {
+	// ID is the annotation queue the item belongs to, from the path.
+	ID string `json:"id"`
+	// ItemID is the item to update, from the path.
+	ItemID string `json:"itemId"`
+	// Status is the item's new review state: PENDING or COMPLETED. Required.
+	Status string `json:"status"`
+	// Assignee replaces the reviewer this item is for, up to 512 characters.
 	Assignee string `json:"assignee"`
 }
 
-func (s *annService) updateItem(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED
+// and sets its assignee. Completing an item stamps its completedAt. An item that
+// exists under a different queue answers the same 404 an unknown item does, and
+// so does a queue belonging to another org.
+//
+// Example: {"id": "annq_1", "itemId": "annqi_1", "status": "COMPLETED"}
+func (s *annService) updateItem(ctx context.Context, in *updateItemIn) (*annItemView, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	queueID := strings.TrimSpace(c.Param("id"))
-	itemID := strings.TrimSpace(c.Param("itemId"))
+	queueID := strings.TrimSpace(in.ID)
+	itemID := strings.TrimSpace(in.ItemID)
 	// The queue must be owned by this org before its items are mutated.
-	if _, err := s.store.GetQueue(c.Context(), org, queueID); err == errQueueNotFound {
-		return zip.ErrNotFound("annotation queue not found")
+	if _, err := s.store.GetQueue(ctx, org, queueID); err == errQueueNotFound {
+		return nil, zip.ErrNotFound("annotation queue not found")
 	} else if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get queue: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get queue: %v", err)
 	}
-	var body updateItemReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := in
 	status := strings.ToUpper(strings.TrimSpace(body.Status))
 	if status != statusPending && status != statusCompleted {
-		return zip.ErrBadRequest("status must be PENDING or COMPLETED")
+		return nil, zip.ErrBadRequest("status must be PENDING or COMPLETED")
 	}
 	if len(body.Assignee) > maxAnnFieldLen {
-		return zip.ErrBadRequest("assignee too long")
+		return nil, zip.ErrBadRequest("assignee too long")
 	}
 	now := time.Now().Unix()
 	var completedAt int64
 	if status == statusCompleted {
 		completedAt = now
 	}
-	it, err := s.store.UpdateItem(c.Context(), org, itemID, status, strings.TrimSpace(body.Assignee), completedAt, now)
+	it, err := s.store.UpdateItem(ctx, org, itemID, status, strings.TrimSpace(body.Assignee), completedAt, now)
 	if err == errItemNotFound {
-		return zip.ErrNotFound("annotation queue item not found")
+		return nil, zip.ErrNotFound("annotation queue item not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "update item: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update item: %v", err)
 	}
 	if it.QueueID != queueID {
 		// The item exists in this org but under a DIFFERENT queue — treat as not
 		// found for this queue rather than reveal it.
-		return zip.ErrNotFound("annotation queue item not found")
+		return nil, zip.ErrNotFound("annotation queue item not found")
 	}
-	return c.JSON(http.StatusOK, toItemView(it))
+	v := toItemView(it)
+	return &v, nil
 }
 
 // ── validation helpers ────────────────────────────────────────────────────────
@@ -562,16 +759,18 @@ func parseStatusFilter(raw string) (string, error) {
 	return s, nil
 }
 
-// pageLimit resolves the 1-based page + bounded limit from the query. Defaults:
-// page 1, limit 20; limit is clamped to [1, annMaxLimit].
-func pageLimit(c *zip.Ctx) (page, limit int) {
+// pageLimit bounds the 1-based page + limit the caller asked for. Defaults:
+// page 1, limit 20; limit is clamped to [1, annMaxLimit]. A missing or
+// unparseable query value arrives as 0 and takes the default — the same branch
+// a malformed string took when this parsed the query itself.
+func pageLimit(rawPage, rawLimit int) (page, limit int) {
 	page = 1
-	if p, err := strconv.Atoi(strings.TrimSpace(c.Query("page"))); err == nil && p > 1 {
-		page = p
+	if rawPage > 1 {
+		page = rawPage
 	}
 	limit = annDefaultLimit
-	if l, err := strconv.Atoi(strings.TrimSpace(c.Query("limit"))); err == nil && l > 0 {
-		limit = l
+	if rawLimit > 0 {
+		limit = rawLimit
 	}
 	if limit > annMaxLimit {
 		limit = annMaxLimit

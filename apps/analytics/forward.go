@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// forward.go is the fan-out seam of the canonical event plane. After the ONE write
-// core (ingestEvents) commits a batch to hanzo.events, it hands a COPY of that batch
+// forward.go is the OUTBOUND fan-out seam. After the ONE ingest core (ingestEvents)
+// publishes a batch to the plane, it hands a COPY of that batch
 // to an optional downstream sink — the destinations subsystem — which translates and
 // forwards each event to the org's connected ad/analytics platforms (GA4, Meta CAPI,
 // …). The seam is:
@@ -62,7 +62,7 @@ func SetSink(fn func(org string, evs []SinkEvent)) { sink = fn }
 
 // fanOut hands the accepted batch to the sink, detached and fail-soft. org is the
 // SERVER-resolved tenant (already an owned copy from principal.Org). It builds
-// SinkEvents from the RAW events (skipping unroutable ones, mirroring the write
+// SinkEvents from the RAW events (skipping unroutable ones, mirroring the ingest
 // core's drop rule) and, if any remain and a sink is installed, dispatches them on a
 // panic-guarded goroutine so ingest is never blocked or failed by a destination.
 func fanOut(org string, evs []CaptureEvent) {
@@ -82,9 +82,9 @@ func fanOut(org string, evs []CaptureEvent) {
 	now := time.Now()
 	out := make([]SinkEvent, 0, len(evs))
 	for _, e := range evs {
-		name := resolveEventName(e)
+		name := resolveName(routeOf(e), e)
 		if name == "" {
-			continue // unroutable — the write core dropped it too
+			continue // unroutable — the ingest core dropped it too
 		}
 		out = append(out, SinkEvent{
 			MessageID:   firstNonEmptyStr(trim(e.MessageID), randID()),

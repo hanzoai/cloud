@@ -29,22 +29,11 @@ func mountApp(t *testing.T) (*zip.App, *service) {
 	s := &service{store: store, tel: newMemTelemetry(), runner: stubRunner{}, log: luxlog.New("test")}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Post("/v1/evals/datasets", s.createDataset)
-	app.Get("/v1/evals/datasets", s.listDatasets)
-	app.Get("/v1/evals/datasets/:name", s.getDataset)
-	app.Delete("/v1/evals/datasets/:name", s.deleteDataset)
-	app.Post("/v1/evals/dataset-items", s.createItem)
-	app.Get("/v1/evals/dataset-items", s.listItems)
-	app.Post("/v1/evals/evaluators", s.createEvaluator)
-	app.Get("/v1/evals/evaluators", s.listEvaluators)
-	app.Post("/v1/evals/score-configs", s.createScoreConfig)
-	app.Get("/v1/evals/score-configs", s.listScoreConfigs)
-	app.Post("/v1/evals/scores", s.createScore)
-	app.Get("/v1/evals/scores", s.listScores)
-	app.Get("/v1/evals/traces", s.listTraces)
-	app.Get("/v1/evals/metrics", s.metricsBoard)
-	app.Post("/v1/evals/runs", s.runHandler)
-	app.Get("/v1/evals/runs", s.listRuns)
+	// The SAME registration Mount runs, so the tests drive the real typed ops (and
+	// the request bridge they read their identity from), never a parallel table.
+	if err := routes(app, s); err != nil {
+		t.Fatalf("routes: %v", err)
+	}
 	return app, s
 }
 
@@ -165,7 +154,7 @@ func TestHTTPDatasetLifecycleAndIsolation(t *testing.T) {
 	// maxpower lists its one dataset.
 	code, body := do(t, app, http.MethodGet, "/v1/evals/datasets", "maxpower", nil)
 	var listed struct {
-		Data []datasetView `json:"data"`
+		Data []DatasetView `json:"data"`
 	}
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Data) != 1 || listed.Data[0].Name != "qa" {
@@ -241,7 +230,7 @@ func TestHTTPScoreIntegrity(t *testing.T) {
 	// Scores are org-scoped: another org sees none of o's scores.
 	code, body := do(t, app, http.MethodGet, "/v1/evals/scores", "o", nil)
 	var listed struct {
-		Data []scoreView `json:"data"`
+		Data []ScoreView `json:"data"`
 	}
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Data) != 2 { // 0.9 numeric + good categorical
@@ -306,7 +295,7 @@ func TestHTTPRunRequiresAuthAndOwnDataset(t *testing.T) {
 	// The stub judge wrote 2 score events into telemetry, readable by o only.
 	code, body = do(t, app, http.MethodGet, "/v1/evals/scores", "o", nil)
 	var scores struct {
-		Data []scoreView `json:"data"`
+		Data []ScoreView `json:"data"`
 	}
 	_ = json.Unmarshal(body, &scores)
 	if code != http.StatusOK || len(scores.Data) != 2 {

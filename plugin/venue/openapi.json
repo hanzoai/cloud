@@ -19,22 +19,52 @@
     "/v1/cloud": {
       "get": {
         "operationId": "get_v1_cloud",
+        "summary": "listProviders returns the cloud providers an org can connect and the credential\nfields each one needs.",
+        "description": "listProviders returns the cloud providers an org can connect and the credential\nfields each one needs. Keyless providers take no stored secret.",
         "tags": [
           "cloud"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/providerList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloud/accounts": {
       "get": {
         "operationId": "get_v1_cloud_accounts",
+        "summary": "listAccounts returns the caller org's linked cloud accounts across every",
+        "description": "listAccounts returns the caller org's linked cloud accounts across every\nprovider — metadata only; a sealed credential never appears in a response.",
         "tags": [
           "cloud"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/accountList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloud/{provider}/accounts": {
       "post": {
-        "operationId": "post_v1_cloud_by_provider_accounts",
+        "operationId": "post_v1_cloud_provider_accounts",
+        "summary": "linkAccount links a labeled cloud account: it verifies the credential LIVE,\nseals it in the org's KMS namespace, then discovers the account's Kubernetes\nclusters and folds each into the org's fleet.",
+        "description": "linkAccount links a labeled cloud account: it verifies the credential LIVE,\nseals it in the org's KMS namespace, then discovers the account's Kubernetes\nclusters and folds each into the org's fleet. Fail-closed — a credential that\ndoes not verify is refused and NOTHING is stored. Org admin only.",
         "tags": [
           "cloud"
         ],
@@ -43,16 +73,47 @@
             "name": "provider",
             "in": "path",
             "required": true,
+            "description": "Provider is the cloud slug from the path: digitalocean, aws, gcp or azure.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "digitalocean"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "label": "team-a",
+                "provider": "digitalocean",
+                "token": "dop_v1_…"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/linkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/accountResult"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/cloud/{provider}/accounts/{label}": {
       "delete": {
-        "operationId": "delete_v1_cloud_by_provider_accounts_by_label",
+        "operationId": "delete_v1_cloud_provider_accounts_label",
+        "summary": "unlinkAccount detaches every cluster the account folded, forgets the sealed\ncredential and drops the index row.",
+        "description": "unlinkAccount detaches every cluster the account folded, forgets the sealed\ncredential and drops the index row. Idempotent — unlinking an account that is\nnot linked succeeds. Org admin only.",
         "tags": [
           "cloud"
         ],
@@ -61,24 +122,42 @@
             "name": "provider",
             "in": "path",
             "required": true,
+            "description": "Provider is the cloud slug from the path: digitalocean, aws, gcp or azure.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "digitalocean"
           },
           {
             "name": "label",
             "in": "path",
             "required": true,
+            "description": "Label names the account within that provider; empty means \"default\".",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "team-a"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/unlinkResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/cloud/{provider}/accounts/{label}/sync": {
       "post": {
-        "operationId": "post_v1_cloud_by_provider_accounts_by_label_sync",
+        "operationId": "post_v1_cloud_provider_accounts_label_sync",
+        "summary": "syncAccount re-discovers and re-folds an already linked account: kubeconfigs are\nrefreshed, clusters deleted upstream are detached, new ones are folded.\nIdempotent.",
+        "description": "syncAccount re-discovers and re-folds an already linked account: kubeconfigs are\nrefreshed, clusters deleted upstream are detached, new ones are folded.\nIdempotent. Org admin only.",
         "tags": [
           "cloud"
         ],
@@ -87,19 +166,260 @@
             "name": "provider",
             "in": "path",
             "required": true,
+            "description": "Provider is the cloud slug from the path: digitalocean, aws, gcp or azure.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "digitalocean"
           },
           {
             "name": "label",
             "in": "path",
             "required": true,
+            "description": "Label names the account within that provider; empty means \"default\".",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "team-a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "label": "team-a",
+                "provider": "digitalocean"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/accountRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/accountResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "accountList": {
+        "properties": {
+          "accounts": {
+            "description": "Accounts is the index (metadata only — a credential is never in a response).",
+            "items": {
+              "$ref": "#/components/schemas/accountView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "accountRef": {
+        "properties": {
+          "label": {
+            "description": "Label names the account within that provider; empty means \"default\".",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the cloud slug from the path: digitalocean, aws, gcp or azure.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "accountResult": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/accountView",
+            "description": "Account is the account's non-secret index record."
+          },
+          "clusters": {
+            "description": "Clusters is one row per discovered cluster: folded, or the reason it was not.",
+            "items": {
+              "$ref": "#/components/schemas/clusterResult"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "accountView": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "clusters": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "linkedAt": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "syncedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "clusterResult": {
+        "properties": {
+          "amdGpu": {
+            "type": "integer"
+          },
+          "cluster": {
+            "description": "fold name (fleet)",
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "folded": {
+            "type": "boolean"
+          },
+          "nodes": {
+            "type": "integer"
+          },
+          "nvidiaGpu": {
+            "type": "integer"
+          },
+          "region": {
+            "type": "string"
+          },
+          "source": {
+            "description": "provider cluster name",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "linkRequest": {
+        "properties": {
+          "clientId": {
+            "description": "ClientID is the Azure AAD application. Azure only.",
+            "type": "string"
+          },
+          "clientSecret": {
+            "description": "ClientSecret selects the Azure service-principal flow; omitting it selects\nkeyless Workload Identity Federation.",
+            "type": "string"
+          },
+          "credentialJson": {
+            "description": "CredentialJSON is a Google credentials JSON — an external_account (keyless\nWorkload Identity Federation) or a service_account key. GCP only.",
+            "type": "string"
+          },
+          "externalId": {
+            "description": "ExternalID pins the AWS role assumption to Hanzo (confused-deputy protection).",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label names this account within the provider; empty means \"default\".",
+            "type": "string"
+          },
+          "projectIds": {
+            "description": "ProjectIDs bounds the GCP container.clusters.list sweep.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "provider": {
+            "description": "Provider is the cloud slug from the path: digitalocean, aws, gcp or azure.",
+            "type": "string"
+          },
+          "regions": {
+            "description": "Regions bounds the AWS eks:ListClusters sweep.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "roleArn": {
+            "description": "RoleARN is the AWS role Hanzo assumes cross-account (no stored keys). AWS only.",
+            "type": "string"
+          },
+          "subscriptionIds": {
+            "description": "SubscriptionIDs bounds the Azure managedClusters sweep.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tenantId": {
+            "description": "TenantID is the Azure AAD tenant. Azure only.",
+            "type": "string"
+          },
+          "token": {
+            "description": "Token is the DigitalOcean personal access token. DigitalOcean only.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "providerCard": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "keyless": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "requires": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "providerList": {
+        "properties": {
+          "providers": {
+            "description": "Providers is one card per cloud venue can link, with the fields each needs.",
+            "items": {
+              "$ref": "#/components/schemas/providerCard"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "unlinkResult": {
+        "properties": {
+          "unlinked": {
+            "description": "Unlinked is always true — unlinking an account that is not linked is a no-op.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
       }
     }
   }

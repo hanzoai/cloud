@@ -9,6 +9,7 @@ package cloudflare
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
@@ -16,13 +17,14 @@ import (
 	"net/textproto"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
 // WorkerScriptPut is the upload request for a Workers module script. Script is the
 // ES-module source; MainModule names the entry file (default "worker.js").
-// CompatibilityDate/Flags and Bindings ride the multipart metadata part.
+// CompatibilityDate/Flags and Bindings ride the multipart metadata part. It is the
+// struct the handler binds AND what the document declares for the route
+// (openapi.Register, cloudflare.go), so the published contract follows the code.
 type WorkerScriptPut struct {
 	Script             string          `json:"script"`
 	MainModule         string          `json:"mainModule,omitempty"`
@@ -31,24 +33,27 @@ type WorkerScriptPut struct {
 	Bindings           json.RawMessage `json:"bindings,omitempty"`
 }
 
-// WorkerRouteCreate binds a Worker script to a URL pattern within a zone.
-type WorkerRouteCreate struct {
-	Pattern string `json:"pattern"`
-	Script  string `json:"script,omitempty"`
-}
-
 // ── scripts ─────────────────────────────────────────────────────────────────────
 
-func workersScriptList(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctClient(s, c)
+// WorkersScriptList lists the Worker scripts on the org's Cloudflare account. Any
+// org member may read.
+func (o ops) workersScriptList(ctx context.Context, _ *noInput) (*cfResult, error) {
+	cl, acct, err := o.acctClient(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return cl.pass(c, http.MethodGet, "/accounts/"+acct+"/workers/scripts", nil)
+	return cl.relay(ctx, http.MethodGet, "/accounts/"+acct+"/workers/scripts", nil)
 }
 
-func workersScriptPut(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// workersScriptPut uploads (or replaces) a module Worker script. Requires org admin.
+//
+// NOT a typed op: the path names the script (`:script`) and the body field `script`
+// carries the module SOURCE. zip's URL binder matches a path param to the In field
+// of the same name and gives the URL the last word, so a typed In would overwrite
+// the source with the script name. Renaming either side would move the wire.
+func (o ops) workersScriptPut(c *zip.Ctx) error {
+	ctx := c.Context()
+	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
 		return err
 	}
@@ -68,22 +73,32 @@ func workersScriptPut(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest(err.Error())
 	}
 	var out json.RawMessage
-	if err := cl.cfUpload(c.Context(), http.MethodPut, "/accounts/"+acct+"/workers/scripts/"+name, contentType, body, &out); err != nil {
+	if err := cl.cfUpload(ctx, http.MethodPut, "/accounts/"+acct+"/workers/scripts/"+name, contentType, body, &out); err != nil {
 		return cfErr(err)
 	}
 	return writeResult(c, out)
 }
 
-func workersScriptDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// scriptRef addresses one Worker script by name, from the path.
+type scriptRef struct {
+	// Script is the Worker script name.
+	Script string `json:"script"`
+}
+
+// WorkersScriptDelete removes a Worker script from the org's Cloudflare account.
+// Requires org admin. Routes bound to the script stop serving it.
+//
+// Example: {"script": "edge-router"}
+func (o ops) workersScriptDelete(ctx context.Context, in *scriptRef) (*cfResult, error) {
+	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	name, err := pathSeg(c, "script", nameRE)
+	name, err := seg("script", in.Script, nameRE)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return cl.pass(c, http.MethodDelete, "/accounts/"+acct+"/workers/scripts/"+name, nil)
+	return cl.relay(ctx, http.MethodDelete, "/accounts/"+acct+"/workers/scripts/"+name, nil)
 }
 
 // buildWorkerUpload builds the Cloudflare multipart/form-data body for a module
@@ -145,84 +160,120 @@ func buildWorkerUpload(in WorkerScriptPut) ([]byte, string, error) {
 
 // ── workers.dev subdomain ───────────────────────────────────────────────────────
 
-func workersSubdomainGet(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctClient(s, c)
+// WorkersSubdomainGet reads the org account's workers.dev subdomain — the name
+// under which every subdomain-enabled script is served. Any org member may read.
+func (o ops) workersSubdomainGet(ctx context.Context, _ *noInput) (*cfResult, error) {
+	cl, acct, err := o.acctClient(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return cl.pass(c, http.MethodGet, "/accounts/"+acct+"/workers/subdomain", nil)
+	return cl.relay(ctx, http.MethodGet, "/accounts/"+acct+"/workers/subdomain", nil)
 }
 
-// workersScriptSubdomainSet enables/disables a script on the account workers.dev
-// subdomain (POST .../scripts/{script}/subdomain {enabled}).
-func workersScriptSubdomainSet(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// subdomainSetIn toggles one script on the account workers.dev subdomain.
+type subdomainSetIn struct {
+	// Script is the Worker script name, from the path.
+	Script string `json:"script"`
+	// Enabled publishes the script on <script>.<subdomain>.workers.dev when true,
+	// and withdraws it when false.
+	Enabled bool `json:"enabled"`
+}
+
+// WorkersScriptSubdomainSet publishes or withdraws one Worker script on the
+// account's workers.dev subdomain. Requires org admin.
+//
+// Example: {"script": "edge-router", "enabled": true}
+func (o ops) workersScriptSubdomainSet(ctx context.Context, in *subdomainSetIn) (*cfResult, error) {
+	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	name, err := pathSeg(c, "script", nameRE)
+	name, err := seg("script", in.Script, nameRE)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var in struct {
-		Enabled bool `json:"enabled"`
-	}
-	if err := json.Unmarshal(c.Body(), &in); err != nil {
-		return zip.ErrBadRequest("invalid request body")
-	}
-	return cl.pass(c, http.MethodPost, "/accounts/"+acct+"/workers/scripts/"+name+"/subdomain", map[string]bool{"enabled": in.Enabled})
+	return cl.relay(ctx, http.MethodPost, "/accounts/"+acct+"/workers/scripts/"+name+"/subdomain",
+		map[string]bool{"enabled": in.Enabled})
 }
 
 // ── zone routes ─────────────────────────────────────────────────────────────────
 
-func workersRouteList(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+// WorkersRouteList lists the Worker routes bound within one zone — the URL
+// patterns that dispatch to a script. Any org member may read. Routes are
+// zone-scoped, so no account is resolved.
+//
+// Example: {"zone": "0123456789abcdef0123456789abcdef"}
+func (o ops) workersRouteList(ctx context.Context, in *zoneRef) (*cfResult, error) {
+	cl, _, err := o.authClient(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	zone, err := pathSeg(c, "zone", idRE)
+	zone, err := seg("zone", in.Zone, idRE)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return cl.pass(c, http.MethodGet, "/zones/"+zone+"/workers/routes", nil)
+	return cl.relay(ctx, http.MethodGet, "/zones/"+zone+"/workers/routes", nil)
 }
 
-func workersRouteCreate(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authWrite(s, c)
+// routeCreateIn binds a Worker script to a URL pattern within a zone.
+type routeCreateIn struct {
+	// Zone is the 32-hex Cloudflare zone id, from the path.
+	Zone string `json:"zone"`
+	// Pattern is the URL pattern to bind, e.g. "acme.com/api/*".
+	Pattern string `json:"pattern"`
+	// Script is the Worker script to dispatch to. Omit it to leave the pattern
+	// bound to no script, which is how Cloudflare expresses "bypass the Worker here".
+	Script string `json:"script"`
+}
+
+// WorkersRouteCreate binds a URL pattern in a zone to a Worker script. Requires
+// org admin — a route is what puts a script in front of live traffic.
+//
+// Example: {"zone": "0123456789abcdef0123456789abcdef", "pattern": "acme.com/api/*", "script": "edge-router"}
+func (o ops) workersRouteCreate(ctx context.Context, in *routeCreateIn) (*cfResult, error) {
+	cl, _, err := o.authWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	zone, err := pathSeg(c, "zone", idRE)
+	zone, err := seg("zone", in.Zone, idRE)
 	if err != nil {
-		return err
-	}
-	var in WorkerRouteCreate
-	if err := json.Unmarshal(c.Body(), &in); err != nil {
-		return zip.ErrBadRequest("invalid request body")
+		return nil, err
 	}
 	pattern := strings.TrimSpace(in.Pattern)
 	if pattern == "" {
-		return zip.ErrBadRequest("route pattern is required")
+		return nil, zip.ErrBadRequest("route pattern is required")
 	}
 	body := map[string]string{"pattern": pattern}
 	if sc := strings.TrimSpace(in.Script); sc != "" {
 		body["script"] = sc
 	}
-	return cl.pass(c, http.MethodPost, "/zones/"+zone+"/workers/routes", body)
+	return cl.relay(ctx, http.MethodPost, "/zones/"+zone+"/workers/routes", body)
 }
 
-func workersRouteDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authWrite(s, c)
+// routeRef addresses one Worker route within one zone, both from the path.
+type routeRef struct {
+	// Zone is the 32-hex Cloudflare zone id.
+	Zone string `json:"zone"`
+	// Route is the 32-hex Cloudflare route id.
+	Route string `json:"route"`
+}
+
+// WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching to a
+// script. Requires org admin.
+//
+// Example: {"zone": "0123456789abcdef0123456789abcdef", "route": "fedcba9876543210fedcba9876543210"}
+func (o ops) workersRouteDelete(ctx context.Context, in *routeRef) (*cfResult, error) {
+	cl, _, err := o.authWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	zone, err := pathSeg(c, "zone", idRE)
+	zone, err := seg("zone", in.Zone, idRE)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	route, err := pathSeg(c, "route", idRE)
+	route, err := seg("route", in.Route, idRE)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return cl.pass(c, http.MethodDelete, "/zones/"+zone+"/workers/routes/"+route, nil)
+	return cl.relay(ctx, http.MethodDelete, "/zones/"+zone+"/workers/routes/"+route, nil)
 }

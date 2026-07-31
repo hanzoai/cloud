@@ -21,7 +21,7 @@
       "name": "kv"
     },
     {
-      "name": "s3"
+      "name": "object"
     },
     {
       "name": "search"
@@ -37,20 +37,66 @@
     "/v1/datastore": {
       "get": {
         "operationId": "get_v1_datastore",
+        "summary": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway.",
+        "description": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway. Never a password.",
         "tags": [
           "datastore"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/listItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_datastore",
+        "summary": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key.",
+        "description": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key. instance is accepted and has no\n    effect: there is no per-org backend for an app to be pointed at.",
         "tags": [
           "datastore"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "orders"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/createResp"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/datastore/{name}": {
       "delete": {
-        "operationId": "delete_v1_datastore_by_name",
+        "operationId": "delete_v1_datastore_name",
+        "summary": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204.",
+        "description": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204. An\ninstance-bound add-on is reverted to Base FIRST, so no app is ever left\npointing at a deleted backend. The data is not recoverable.",
         "tags": [
           "datastore"
         ],
@@ -59,14 +105,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_datastore_by_name",
+        "operationId": "get_v1_datastore_name",
+        "summary": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it.",
+        "description": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it. A dedicated instance's status is reconciled against its\nlive cluster state first, so \"ready\" is never fabricated. Never a password —\nthat was returned once at create.",
         "tags": [
           "datastore"
         ],
@@ -75,30 +130,90 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/docdb": {
       "get": {
         "operationId": "get_v1_docdb",
+        "summary": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway.",
+        "description": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway. Never a password.",
         "tags": [
           "docdb"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/listItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_docdb",
+        "summary": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key.",
+        "description": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key. instance is accepted and has no\n    effect: there is no per-org backend for an app to be pointed at.",
         "tags": [
           "docdb"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "orders"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/createResp"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/docdb/{name}": {
       "delete": {
-        "operationId": "delete_v1_docdb_by_name",
+        "operationId": "delete_v1_docdb_name",
+        "summary": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204.",
+        "description": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204. An\ninstance-bound add-on is reverted to Base FIRST, so no app is ever left\npointing at a deleted backend. The data is not recoverable.",
         "tags": [
           "docdb"
         ],
@@ -107,14 +222,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_docdb_by_name",
+        "operationId": "get_v1_docdb_name",
+        "summary": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it.",
+        "description": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it. A dedicated instance's status is reconciled against its\nlive cluster state first, so \"ready\" is never fabricated. Never a password —\nthat was returned once at create.",
         "tags": [
           "docdb"
         ],
@@ -123,30 +247,90 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kv": {
       "get": {
         "operationId": "get_v1_kv",
+        "summary": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway.",
+        "description": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway. Never a password.",
         "tags": [
           "kv"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/listItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_kv",
+        "summary": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key.",
+        "description": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key. instance is accepted and has no\n    effect: there is no per-org backend for an app to be pointed at.",
         "tags": [
           "kv"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "orders"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/createResp"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/kv/{name}": {
       "delete": {
-        "operationId": "delete_v1_kv_by_name",
+        "operationId": "delete_v1_kv_name",
+        "summary": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204.",
+        "description": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204. An\ninstance-bound add-on is reverted to Base FIRST, so no app is ever left\npointing at a deleted backend. The data is not recoverable.",
         "tags": [
           "kv"
         ],
@@ -155,14 +339,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_kv_by_name",
+        "operationId": "get_v1_kv_name",
+        "summary": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it.",
+        "description": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it. A dedicated instance's status is reconciled against its\nlive cluster state first, so \"ready\" is never fabricated. Never a password —\nthat was returned once at create.",
         "tags": [
           "kv"
         ],
@@ -171,78 +364,207 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
-    "/v1/s3": {
+    "/v1/object": {
       "get": {
-        "operationId": "get_v1_s3",
+        "operationId": "get_v1_object",
+        "summary": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway.",
+        "description": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway. Never a password.",
         "tags": [
-          "s3"
-        ]
+          "object"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/listItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_s3",
+        "operationId": "post_v1_object",
+        "summary": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key.",
+        "description": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key. instance is accepted and has no\n    effect: there is no per-org backend for an app to be pointed at.",
         "tags": [
-          "s3"
-        ]
+          "object"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "orders"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/createResp"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
-    "/v1/s3/{name}": {
+    "/v1/object/{name}": {
       "delete": {
-        "operationId": "delete_v1_s3_by_name",
+        "operationId": "delete_v1_object_name",
+        "summary": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204.",
+        "description": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204. An\ninstance-bound add-on is reverted to Base FIRST, so no app is ever left\npointing at a deleted backend. The data is not recoverable.",
         "tags": [
-          "s3"
+          "object"
         ],
         "parameters": [
           {
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_s3_by_name",
+        "operationId": "get_v1_object_name",
+        "summary": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it.",
+        "description": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it. A dedicated instance's status is reconciled against its\nlive cluster state first, so \"ready\" is never fabricated. Never a password —\nthat was returned once at create.",
         "tags": [
-          "s3"
+          "object"
         ],
         "parameters": [
           {
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/search": {
       "get": {
         "operationId": "get_v1_search",
+        "summary": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway.",
+        "description": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway. Never a password.",
         "tags": [
           "search"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/listItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_search",
+        "summary": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key.",
+        "description": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key. instance is accepted and has no\n    effect: there is no per-org backend for an app to be pointed at.",
         "tags": [
           "search"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "orders"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/createResp"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/search/{name}": {
       "delete": {
-        "operationId": "delete_v1_search_by_name",
+        "operationId": "delete_v1_search_name",
+        "summary": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204.",
+        "description": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204. An\ninstance-bound add-on is reverted to Base FIRST, so no app is ever left\npointing at a deleted backend. The data is not recoverable.",
         "tags": [
           "search"
         ],
@@ -251,14 +573,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_search_by_name",
+        "operationId": "get_v1_search_name",
+        "summary": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it.",
+        "description": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it. A dedicated instance's status is reconciled against its\nlive cluster state first, so \"ready\" is never fabricated. Never a password —\nthat was returned once at create.",
         "tags": [
           "search"
         ],
@@ -267,30 +598,90 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/sql": {
       "get": {
         "operationId": "get_v1_sql",
+        "summary": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway.",
+        "description": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway. Never a password.",
         "tags": [
           "sql"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/listItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_sql",
+        "summary": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key.",
+        "description": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key. instance is accepted and has no\n    effect: there is no per-org backend for an app to be pointed at.",
         "tags": [
           "sql"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "orders"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/createResp"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/sql/{name}": {
       "delete": {
-        "operationId": "delete_v1_sql_by_name",
+        "operationId": "delete_v1_sql_name",
+        "summary": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204.",
+        "description": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204. An\ninstance-bound add-on is reverted to Base FIRST, so no app is ever left\npointing at a deleted backend. The data is not recoverable.",
         "tags": [
           "sql"
         ],
@@ -299,14 +690,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_sql_by_name",
+        "operationId": "get_v1_sql_name",
+        "summary": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it.",
+        "description": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it. A dedicated instance's status is reconciled against its\nlive cluster state first, so \"ready\" is never fabricated. Never a password —\nthat was returned once at create.",
         "tags": [
           "sql"
         ],
@@ -315,30 +715,90 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/vector": {
       "get": {
         "operationId": "get_v1_vector",
+        "summary": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway.",
+        "description": "list returns every resource of this kind the caller's org has, with the endpoint\nthat actually routes to each — a dedicated instance's own in-cluster address, a\nshared-logical resource's public api.hanzo.ai gateway. Never a password.",
         "tags": [
           "vector"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/listItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_vector",
+        "summary": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key.",
+        "description": "create provisions a resource of this kind for the caller's org and answers 201\nwith a routable connection string.\n\nTwo strategies share one preamble (auth, name validation, billing gate, dedup),\nand which one a kind takes decides the rest of the answer:\n\n  - DEDICATED (sql, kv, docdb, datastore) launches the org's OWN instance, so it\n    answers status \"provisioning\" at that instance's in-cluster address, and its\n    admin password is returned exactly ONCE here and is never readable again.\n    Naming an instance ALSO wires the DSN into that app's addons as \u003cKIND\u003e_URL,\n    switching it off Base onto this backend.\n  - SHARED-logical (vector, search, s3) creates a logical resource inside an\n    already-live shared backend, so it answers status \"ready\" at the public\n    api.hanzo.ai gateway, with no per-resource password — those backends\n    authenticate with an out-of-band key. instance is accepted and has no\n    effect: there is no per-org backend for an app to be pointed at.",
         "tags": [
           "vector"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "orders"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/createResp"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/vector/{name}": {
       "delete": {
-        "operationId": "delete_v1_vector_by_name",
+        "operationId": "delete_v1_vector_name",
+        "summary": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204.",
+        "description": "drop destroys one of the caller org's resources of this kind — the backend\nresource, its sealed secret and its metadata row — and answers 204. An\ninstance-bound add-on is reverted to Base FIRST, so no app is ever left\npointing at a deleted backend. The data is not recoverable.",
         "tags": [
           "vector"
         ],
@@ -347,14 +807,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_vector_by_name",
+        "operationId": "get_v1_vector_name",
+        "summary": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it.",
+        "description": "get returns one of the caller org's resources of this kind, at the endpoint that\nactually routes to it. A dedicated instance's status is reconciled against its\nlive cluster state first, so \"ready\" is never fabricated. Never a password —\nthat was returned once at create.",
         "tags": [
           "vector"
         ],
@@ -363,11 +832,160 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's name within the caller's org, as create was given it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "createReq": {
+        "properties": {
+          "instance": {
+            "description": "Instance binds a DEDICATED add-on (sql, kv, docdb, datastore) to the app\ninstance whose \u003cinstance\u003e-addons Secret receives the \u003cKIND\u003e_URL (e.g.\n\"commerce\"). Empty means not bound: the connection string is returned once and\nwired by the caller. The shared-logical kinds (vector, search, s3) validate it\nand ignore it — they have no per-org endpoint to point an app at.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the resource's name within the caller's org, a DNS-safe slug\n(^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$). The physical name on the backend is\nderived from it and the caller's org server-side.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "createResp": {
+        "properties": {
+          "connectionString": {
+            "description": "ConnectionString is the routable DSN. A shared-logical resource's is remapped\nonto the public endpoint; a dedicated instance's names its own in-cluster\nService, which is the address the org's app dials.",
+            "type": "string"
+          },
+          "database": {
+            "description": "Database is the logical database, index, collection or bucket that was made.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the CUSTOMER-facing host — never the internal admin address.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the resource's cloud id, \"rs_\" plus a random token.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is which add-on this is: sql, vector, datastore, kv, search, s3 or docdb.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the resource's name within the caller's org.",
+            "type": "string"
+          },
+          "password": {
+            "description": "Password is the generated credential, returned exactly ONCE here and never\nreadable again. Absent for a backend that mints no per-resource password.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the customer-facing port for Host.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"ready\" for a shared-logical resource, \"provisioning\" for a\ndedicated instance still coming up.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Username is the resource's own account, when the backend mints one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "getResp": {
+        "properties": {
+          "database": {
+            "description": "Database is the logical database, index, collection or bucket.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the customer-facing host.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the resource's cloud id.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is which add-on this is.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the resource's name within the caller's org.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the customer-facing port.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"ready\" or \"provisioning\"; a dedicated instance is reconciled\nagainst its live cluster state before it is reported.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Username is the resource's own account, when the backend mints one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "listItem": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the resource was provisioned, unix seconds.",
+            "type": "integer"
+          },
+          "host": {
+            "description": "Host is the customer-facing host.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the resource's cloud id.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is which add-on this is.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the resource's name within the caller's org.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the customer-facing port.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"ready\" or \"provisioning\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

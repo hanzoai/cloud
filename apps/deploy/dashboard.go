@@ -47,8 +47,15 @@ const dashPrefix = "/v1/deploy"
 // registerDashboardRoutes wires the ArgoCD-UI-compatible API surface (no FE —
 // the SPA is a separate hanzoai/spa App). Called from routes() (deploy.go).
 func registerDashboardRoutes(app cloud.Router, s *cloud.Service[state]) {
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The two gates, as the middleware a typed op is declared through: `su` is the
+	// SuperAdmin gate guard() applies, `tenant` the scope gate every read resolves.
+	// Both refuse BEFORE the op runs, which is what lets a refusal still be a 302
+	// to sign-in (see scope.go).
+	su, tenant := z.With(admitted), z.With(scoped)
 	// Bootstrap (the SPA awaits settings + userinfo before first render).
-	app.Get(dashPrefix+"/settings", guard(s, cloud.Handle(s, dashSettings)))
+	zip.Get(su, dashPrefix+"/settings", o.settings)
 	// userinfo is the ONE deliberately PUBLIC bootstrap route: it is how the SPA
 	// asks "am I signed in?", and a 403 to that question is unanswerable — the SPA
 	// is an XHR client, so the document bounce in guard() never fires for it and it
@@ -56,22 +63,27 @@ func registerDashboardRoutes(app cloud.Router, s *cloud.Service[state]) {
 	// {loggedIn:false} and the sign-in URL; nothing else. It discloses no identity,
 	// no cluster state, and no configuration, and it is NOT a gate: every route
 	// that returns fleet data or mutates a CR stays guard()ed.
-	app.Get(dashPrefix+"/session/userinfo", cloud.Handle(s, dashUserInfo))
-	app.Get(dashPrefix+"/version", guard(s, cloud.Handle(s, dashVersion)))
+	zip.Get(z, dashPrefix+"/session/userinfo", o.userInfo)
+	zip.Get(su, dashPrefix+"/version", o.version)
+	// UNTYPED: the path ends in a WILDCARD (/account/can-i/<resource>/<action>/<sub>).
+	// A typed op's path may carry no wildcard — the two path translations disagree on
+	// it and the whole app's document would fail to project.
 	app.Get(dashPrefix+"/account/can-i/*", guard(s, cloud.Handle(s, dashCanI)))
 
 	// Applications projection (read). TENANT-SCOPED, not blanket-guard()ed: each handler
 	// resolves the request's scope (resolveScope) and fails closed — a SuperAdmin sees the
 	// whole fleet, a validated org member sees ONLY its own org's apps, anyone else 403s.
-	app.Get(dashPrefix+"/applications", cloud.Handle(s, dashAppList))
-	app.Get(dashPrefix+"/applications/:name", cloud.Handle(s, dashApp))
-	app.Get(dashPrefix+"/applications/:name/resource-tree", cloud.Handle(s, dashResourceTree))
+	zip.Get(tenant, dashPrefix+"/applications", o.applications)
+	zip.Get(tenant, dashPrefix+"/applications/:name", o.application)
+	zip.Get(tenant, dashPrefix+"/applications/:name/resource-tree", o.resourceTree)
 	// Per-app detail projections the SPA's application view calls (detail.go). Same tenant
 	// scope as dashApp: resolveScope + findNamespace, a cross-tenant name 404s.
-	app.Get(dashPrefix+"/applications/:name/syncwindows", cloud.Handle(s, dashSyncWindows))
-	app.Get(dashPrefix+"/applications/:name/revisions/:revision/metadata", cloud.Handle(s, dashRevisionMetadata))
+	zip.Get(tenant, dashPrefix+"/applications/:name/syncwindows", o.syncWindows)
+	zip.Get(tenant, dashPrefix+"/applications/:name/revisions/:revision/metadata", o.revisionMetadata)
 	// Applications watch (Server-Sent Events) — the live stream the applications
 	// view opens; see stream.go. Same tenant scope as the list.
+	// UNTYPED (both streams): the response is an open Server-Sent-Events body, not a
+	// JSON value — a typed op answers exactly one document and cannot express a stream.
 	app.Get(dashPrefix+"/stream/applications", cloud.Handle(s, dashStreamApps))
 	// Per-app live resource-tree stream (detail.go) — the detail view's tree watch, same
 	// tenant scope: the scope gate runs before any SSE frame is emitted.
@@ -80,55 +92,78 @@ func registerDashboardRoutes(app cloud.Router, s *cloud.Service[state]) {
 	// Destination clusters + AppProjects — the two lists the applications view
 	// resolves alongside the fleet (Destination column + project filter). Tenant-scoped:
 	// clusters count only the caller's apps; projects reflect the caller's IAM projects.
-	app.Get(dashPrefix+"/clusters", cloud.Handle(s, dashClusters))
-	app.Get(dashPrefix+"/projects", cloud.Handle(s, dashProjects))
+	zip.Get(tenant, dashPrefix+"/clusters", o.clusters)
+	zip.Get(tenant, dashPrefix+"/projects", o.projects)
 
 	// The CD plane's own state (gitops.go) — the git source it polls, the commit it
 	// last applied, and its deploy history. Fleet infrastructure with no tenant
 	// dimension, so SuperAdmin-only rather than scope-resolved.
-	app.Get(dashPrefix+"/gitops", guard(s, cloud.Handle(s, gitOps)))
+	zip.Get(su, dashPrefix+"/gitops", o.gitops)
 
 	// Actions → App-CR reconcile ops. STILL SuperAdmin-only (guard): write-back to the
 	// fleet is a follow-on; this plane's tenant surface is read-only reflection for now.
-	app.Post(dashPrefix+"/applications/:name/sync", guard(s, cloud.Handle(s, dashSync)))
-	app.Post(dashPrefix+"/applications/:name/rollback", guard(s, cloud.Handle(s, dashSync)))
+	zip.Post(su, dashPrefix+"/applications/:name/sync", o.sync)
+	zip.Post(su, dashPrefix+"/applications/:name/rollback", o.rollback)
+}
+
+// ops binds the service to deploy's typed handlers: a typed handler takes only a
+// context and its decoded In, so the service arrives as a RECEIVER.
+type ops struct{ s *cloud.Service[state] }
+
+// appRef addresses one projected Application.
+type appRef struct {
+	// Name is the application name from the path; a DNS-1123 label.
+	Name string `json:"name"`
+}
+
+// revisionRef addresses one revision of one Application.
+type revisionRef struct {
+	// Name is the application name from the path; a DNS-1123 label.
+	Name string `json:"name"`
+	// Revision is the revision from the path; "" or "HEAD" resolves to the CR's tag.
+	Revision string `json:"revision"`
 }
 
 // ── clusters + projects projection ───────────────────────────────────────────
 
-// dashClusters is GET /v1/deploy/clusters — the ArgoCD ClusterList of the
-// destinations the fleet reconciles into (always ≥ the in-cluster destination),
-// read from the SAME App-CR source dashAppList uses. It NEVER surfaces a cluster
-// credential (argoCluster has no config field — see projection.go).
-func dashClusters(s *cloud.Service[state], c *zip.Ctx) error {
-	sc, ok := resolveScope(c)
-	if !ok {
-		return refuse(c)
+// clusters lists the destination clusters the caller's applications reconcile into.
+// The in-cluster destination is always present, only the caller's own apps are
+// counted (a SuperAdmin counts the fleet), and no cluster credential can leak —
+// the projected cluster carries no config field at all.
+func (o ops) clusters(ctx context.Context, _ *struct{}) (*argoClusterList, error) {
+	s := o.s
+	sc, err := scopeFrom(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := ready(s); err != nil {
-		return err
+		return nil, err
 	}
 	// Only the caller's own apps are counted (SuperAdmin: the whole fleet). The in-cluster
 	// destination is always present (projectClusters), and no cluster credential can leak
 	// (argoCluster has no config field) — so a tenant view is still credential-free.
-	crs, err := sc.appCRs(s, c.Context())
+	crs, err := sc.appCRs(s, ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, projectClusters(crs))
+	out := projectClusters(crs)
+	return &out, nil
 }
 
-// dashProjects is GET /v1/deploy/projects — the ArgoCD AppProjectList. It PREFERS
-// real argoproj.io/v1alpha1 AppProject CRs when that CRD is served; otherwise it
-// synthesizes one permissive project per distinct App-CR project name (default
-// always present). Read-only, from the same App-CR source.
-func dashProjects(s *cloud.Service[state], c *zip.Ctx) error {
-	sc, ok := resolveScope(c)
-	if !ok {
-		return refuse(c)
+// projects lists the caller's IAM projects, reflected read-only as AppProjects.
+// IAM is the one source of truth for the (org, name) Project resource: a normal
+// org sees only its own organization's projects, a SuperAdmin every org's, and
+// "default" always resolves. When the embedded IAM store is unreachable a
+// SuperAdmin still sees real argoproj.io/v1alpha1 AppProject CRs if that CRD is
+// served, else one permissive project per distinct App-CR project name.
+func (o ops) projects(ctx context.Context, _ *struct{}) (*argoProjectList, error) {
+	s := o.s
+	sc, err := scopeFrom(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := ready(s); err != nil {
-		return err
+		return nil, err
 	}
 	// IAM is the ONE source of truth for the (org,name) Project resource. Reflect it: a
 	// normal org sees ONLY its own organization's projects, a SuperAdmin sees every org's.
@@ -139,12 +174,12 @@ func dashProjects(s *cloud.Service[state], c *zip.Ctx) error {
 		// cluster-wide/unscoped, so it is a SuperAdmin-only path, NEVER a tenant's), else
 		// synthesize from the fleet's distinct App-CR project names. Keeps the SuperAdmin view
 		// populated even before IAM is reachable (e.g. in a unit test with no embedded store).
-		if real, served := listAppProjects(s, c.Context()); served {
-			return c.JSON(http.StatusOK, argoProjectList{Metadata: argoListMeta{}, Items: real})
+		if real, served := listAppProjects(s, ctx); served {
+			return &argoProjectList{Metadata: argoListMeta{}, Items: real}, nil
 		}
-		crs, err := sc.appCRs(s, c.Context())
+		crs, err := sc.appCRs(s, ctx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, name := range projectedProjectNames(crs) {
 			items = append(items, synthProject(name))
@@ -152,7 +187,7 @@ func dashProjects(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	// "default" always resolves (every projected app's spec.project falls back to it), which
 	// also holds the e2e invariant that the projects list contains 'default'.
-	return c.JSON(http.StatusOK, argoProjectList{Metadata: argoListMeta{}, Items: ensureDefault(items)})
+	return &argoProjectList{Metadata: argoListMeta{}, Items: ensureDefault(items)}, nil
 }
 
 // listAppProjects lists real argoproj.io/v1alpha1 AppProject CRs cluster-wide. It
@@ -173,67 +208,160 @@ func listAppProjects(s *cloud.Service[state], ctx context.Context) ([]argoProjec
 
 // ── bootstrap ────────────────────────────────────────────────────────────────
 
-func dashSettings(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]any{
-		"url":                       "https://cd.hanzo.ai",
-		"statusBadgeEnabled":        false,
-		"statusBadgeRootUrl":        "",
-		"oidcConfig":                nil,
-		"dexConfig":                 map[string]any{"connectors": []any{}},
-		"googleAnalytics":           map[string]any{"trackingID": "", "anonymizeUsers": true},
-		"help":                      map[string]any{"chatUrl": "", "chatText": "", "binaryUrls": map[string]any{}},
-		"plugins":                   []any{},
-		"userLoginsDisabled":        true,
-		"kustomizeVersions":         []any{},
-		"uiCssURL":                  "",
-		"uiBannerContent":           "",
-		"execEnabled":               false,
-		"appsInAnyNamespaceEnabled": false,
-		"hydratorEnabled":           false,
-		"syncWithReplaceAllowed":    false,
-	})
+// authSettings is the bootstrap configuration the dashboard SPA reads before its
+// first render. Every value is FIXED: this plane runs no OIDC/Dex of its own —
+// IAM owns identity at the edge — and exposes no exec, no plugins, no badges.
+type authSettings struct {
+	// URL is the console's own base URL.
+	URL string `json:"url"`
+	// StatusBadgeEnabled is always false: this plane serves no badges.
+	StatusBadgeEnabled bool `json:"statusBadgeEnabled"`
+	// StatusBadgeRootURL is always empty, for the same reason.
+	StatusBadgeRootURL string `json:"statusBadgeRootUrl"`
+	// OIDCConfig is always null: IAM gates identity at the edge, not here.
+	OIDCConfig any `json:"oidcConfig"`
+	// DexConfig carries an empty connector list, for the same reason.
+	DexConfig settingsDex `json:"dexConfig"`
+	// GoogleAnalytics is off, with user anonymization on.
+	GoogleAnalytics settingsAnalytics `json:"googleAnalytics"`
+	// Help carries no chat or binary download links.
+	Help settingsHelp `json:"help"`
+	// Plugins is always empty: no plugin runs on this plane.
+	Plugins []any `json:"plugins"`
+	// UserLoginsDisabled is always true: the SPA never renders its own login form.
+	UserLoginsDisabled bool `json:"userLoginsDisabled"`
+	// KustomizeVersions is always empty.
+	KustomizeVersions []any `json:"kustomizeVersions"`
+	// UICSSURL is always empty (no injected stylesheet).
+	UICSSURL string `json:"uiCssURL"`
+	// UIBannerContent is always empty (no banner).
+	UIBannerContent string `json:"uiBannerContent"`
+	// ExecEnabled is always false: no pod exec from this console.
+	ExecEnabled bool `json:"execEnabled"`
+	// AppsInAnyNamespaceEnabled is always false.
+	AppsInAnyNamespaceEnabled bool `json:"appsInAnyNamespaceEnabled"`
+	// HydratorEnabled is always false.
+	HydratorEnabled bool `json:"hydratorEnabled"`
+	// SyncWithReplaceAllowed is always false: replace-on-sync is never offered.
+	SyncWithReplaceAllowed bool `json:"syncWithReplaceAllowed"`
 }
 
-// dashUserInfo answers "is this browser signed in, and if not where does it sign
-// in?" — the SPA's bootstrap question, and the only route on this plane that
-// answers for an anonymous caller.
+// settingsDex is the (always empty) connector list of authSettings.dexConfig.
+type settingsDex struct {
+	// Connectors is always empty.
+	Connectors []any `json:"connectors"`
+}
+
+// settingsAnalytics is authSettings.googleAnalytics.
+type settingsAnalytics struct {
+	// TrackingID is always empty: no analytics is wired.
+	TrackingID string `json:"trackingID"`
+	// AnonymizeUsers is always true.
+	AnonymizeUsers bool `json:"anonymizeUsers"`
+}
+
+// settingsHelp is authSettings.help.
+type settingsHelp struct {
+	// ChatURL is always empty.
+	ChatURL string `json:"chatUrl"`
+	// ChatText is always empty.
+	ChatText string `json:"chatText"`
+	// BinaryURLs is always empty.
+	BinaryURLs map[string]any `json:"binaryUrls"`
+}
+
+// settings returns the fixed bootstrap configuration the dashboard SPA reads first.
+// Nothing here is per-request or per-tenant: this plane runs no OIDC/Dex of its
+// own (IAM gates identity at the edge) and offers no exec, plugins or badges.
+func (o ops) settings(ctx context.Context, _ *struct{}) (*authSettings, error) {
+	return &authSettings{
+		URL:                       "https://cd.hanzo.ai",
+		StatusBadgeEnabled:        false,
+		StatusBadgeRootURL:        "",
+		OIDCConfig:                nil,
+		DexConfig:                 settingsDex{Connectors: []any{}},
+		GoogleAnalytics:           settingsAnalytics{TrackingID: "", AnonymizeUsers: true},
+		Help:                      settingsHelp{ChatURL: "", ChatText: "", BinaryURLs: map[string]any{}},
+		Plugins:                   []any{},
+		UserLoginsDisabled:        true,
+		KustomizeVersions:         []any{},
+		UICSSURL:                  "",
+		UIBannerContent:           "",
+		ExecEnabled:               false,
+		AppsInAnyNamespaceEnabled: false,
+		HydratorEnabled:           false,
+		SyncWithReplaceAllowed:    false,
+	}, nil
+}
+
+// userInfoView answers "is this browser signed in, and if not where does it sign
+// in?". The anonymous form carries loggedIn:false and loginUrl and NOTHING else:
+// no username, no org, no issuer, no hint about who the caller might be.
+type userInfoView struct {
+	// LoggedIn reports whether the caller may use this console at all.
+	LoggedIn bool `json:"loggedIn"`
+	// LoginURL is where an anonymous caller signs in; absent once signed in.
+	LoginURL string `json:"loginUrl,omitempty"`
+	// Username is the signed-in operator; absent for an anonymous caller.
+	Username string `json:"username,omitempty"`
+	// Iss is the issuer the SPA checks before offering an SSO redirect; absent
+	// for an anonymous caller.
+	Iss string `json:"iss,omitempty"`
+	// Groups is the signed-in operator's group list, always empty here; absent
+	// for an anonymous caller.
+	Groups *[]string `json:"groups,omitempty"`
+	// LogoutURL is where the signed-in operator signs out; absent when anonymous.
+	LogoutURL string `json:"logoutUrl,omitempty"`
+}
+
+// userInfo reports whether this browser is signed in, and where to sign in if not.
+// It is the ONE route here that answers an anonymous caller, because a 403 to
+// that question is unanswerable for an XHR client. The predicate is the same
+// SuperAdmin fact every other route gates on, so a validated-but-not-SuperAdmin
+// caller is reported as not logged in — the truth as this console defines it.
 //
-// The anonymous branch carries loggedIn:false and a URL, and NOTHING else: no
-// username, no org, no groups, no issuer, no hint about who the caller might be or
-// what exists in the cluster. Answering it costs nothing (the caller already knows
-// whether it holds a cookie) and withholding it costs the whole sign-in journey.
-//
-// The predicate is c.IsAdmin() — the SAME SuperAdmin fact guard() gates on, minted
-// by SanitizeIdentity from a validated principal whose org is the reserved admin
-// org. So a validated-but-not-SuperAdmin caller is reported as NOT logged in here,
-// which is the truth as this console defines it: they cannot use it.
-func dashUserInfo(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return c.JSON(http.StatusOK, map[string]any{
-			"loggedIn": false,
-			"loginUrl": loginPath,
-		})
+// Response: {"loggedIn": true, "username": "z", "iss": "argocd", "groups": [], "logoutUrl": "/v1/deploy/logout"}
+func (o ops) userInfo(ctx context.Context, _ *struct{}) (*userInfoView, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok || !c.IsAdmin() {
+		return &userInfoView{LoggedIn: false, LoginURL: loginPath}, nil
 	}
 	user := c.User()
 	if user == "" {
 		user = "admin"
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"loggedIn":  true,
-		"username":  user,
-		"iss":       "argocd", // keep == argocd so the UI never triggers an SSO redirect
-		"groups":    []string{},
-		"logoutUrl": logoutPath,
-	})
+	groups := []string{}
+	return &userInfoView{
+		LoggedIn:  true,
+		Username:  user,
+		Iss:       "argocd", // keep == argocd so the UI never triggers an SSO redirect
+		Groups:    &groups,
+		LogoutURL: logoutPath,
+	}, nil
 }
 
-func dashVersion(s *cloud.Service[state], c *zip.Ctx) error {
-	// PascalCase keys (VersionMessage wire shape).
-	return c.JSON(http.StatusOK, map[string]any{
-		"Version":   "hanzo-cd (projection)",
-		"BuildDate": time.Now().UTC().Format(time.RFC3339),
-		"GoVersion": "", "Compiler": "gc", "Platform": "linux/amd64",
-	})
+// versionMessage is the VersionMessage wire shape, PascalCase keys and all.
+type versionMessage struct {
+	// Version names this plane as a projection, not a real argocd server.
+	Version string `json:"Version"`
+	// BuildDate is the moment this answer was produced, RFC3339 UTC.
+	BuildDate string `json:"BuildDate"`
+	// GoVersion is always empty: this plane discloses no toolchain.
+	GoVersion string `json:"GoVersion"`
+	// Compiler is always "gc".
+	Compiler string `json:"Compiler"`
+	// Platform is always "linux/amd64".
+	Platform string `json:"Platform"`
+}
+
+// version identifies this plane to the dashboard SPA as a projection.
+// It is not a real argocd server and says so; the toolchain is never disclosed.
+func (o ops) version(ctx context.Context, _ *struct{}) (*versionMessage, error) {
+	return &versionMessage{
+		Version:   "hanzo-cd (projection)",
+		BuildDate: time.Now().UTC().Format(time.RFC3339),
+		GoVersion: "", Compiler: "gc", Platform: "linux/amd64",
+	}, nil
 }
 
 func dashCanI(s *cloud.Service[state], c *zip.Ctx) error {
@@ -243,21 +371,26 @@ func dashCanI(s *cloud.Service[state], c *zip.Ctx) error {
 
 // ── applications projection ──────────────────────────────────────────────────
 
-func dashAppList(s *cloud.Service[state], c *zip.Ctx) error {
-	sc, ok := resolveScope(c)
-	if !ok {
-		return refuse(c)
+// applications lists the caller's applications, projected from the operator App CRs.
+// A SuperAdmin sees the whole fleet; a validated org member sees only its own
+// org's apps. Nothing is read from a stored argocd Application — every item is
+// synthesized from the App CR that actually runs.
+func (o ops) applications(ctx context.Context, _ *struct{}) (*argoAppList, error) {
+	s := o.s
+	sc, err := scopeFrom(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := ready(s); err != nil {
-		return err
+		return nil, err
 	}
 	list := argoAppList{APIVersion: "argoproj.io/v1alpha1", Kind: "ApplicationList", Metadata: argoListMeta{}, Items: []argoApp{}}
 	for _, ns := range sc.namespaces() {
-		crs, err := listAppCRs(s, c.Context(), ns)
+		crs, err := listAppCRs(s, ctx, ns)
 		if err != nil {
-			return k8sErr(s, "list", err)
+			return nil, k8sErr(s, "list", err)
 		}
-		running := runningVersions(s, c.Context(), ns)
+		running := runningVersions(s, ctx, ns)
 		for i := range crs {
 			if !sc.allows(&crs[i]) {
 				continue // cross-tenant CR — never projected to this scope
@@ -265,97 +398,141 @@ func dashAppList(s *cloud.Service[state], c *zip.Ctx) error {
 			list.Items = append(list.Items, projectApp(&crs[i], ns, running[crs[i].GetName()]))
 		}
 	}
-	return c.JSON(http.StatusOK, list)
+	return &list, nil
 }
 
-func dashApp(s *cloud.Service[state], c *zip.Ctx) error {
-	sc, ok := resolveScope(c)
-	if !ok {
-		return refuse(c)
+// application returns one projected application, with its reconciled resources.
+// A name another org owns is reported as not found, never as forbidden, so the
+// detail route leaks no cross-tenant existence oracle.
+//
+// Example: {"name": "cloud"}
+func (o ops) application(ctx context.Context, in *appRef) (*argoApp, error) {
+	s := o.s
+	sc, err := scopeFrom(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := ready(s); err != nil {
-		return err
+		return nil, err
 	}
-	name := reqName(c)
-	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must be a DNS-1123 label")
+	name, err := appName(in.Name)
+	if err != nil {
+		return nil, err
 	}
 	// findNamespace 404s a cross-tenant name (org A's app requested by org B) — no oracle.
-	ns, err := sc.findNamespace(s, c, name)
+	ns, err := sc.findNamespace(s, ctx, name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cr, _, err := getAppCR(s, c.Context(), ns, name)
+	cr, _, err := getAppCR(s, ctx, ns, name)
 	if err != nil {
-		return k8sErr(s, "get", err)
+		return nil, k8sErr(s, "get", err)
 	}
-	running := runningVersions(s, c.Context(), ns)
+	running := runningVersions(s, ctx, ns)
 	app := projectApp(cr, ns, running[name])
 	// Detail view: populate status.resources from the reconciled tree.
-	tree := projectTree(buildTree(s, c.Context(), ns, name, cr))
+	tree := projectTree(buildTree(s, ctx, ns, name, cr))
 	for _, n := range tree.Nodes {
 		app.Status.Resources = append(app.Status.Resources, argoResourceStatus{
 			Group: n.Group, Version: n.Version, Kind: n.Kind, Namespace: n.Namespace,
 			Name: n.Name, Status: app.Status.Sync.Status, Health: n.Health,
 		})
 	}
-	return c.JSON(http.StatusOK, app)
+	return &app, nil
 }
 
-func dashResourceTree(s *cloud.Service[state], c *zip.Ctx) error {
-	sc, ok := resolveScope(c)
-	if !ok {
-		return refuse(c)
+// appName normalizes and bounds the {name} path segment. A value the router
+// carried that is not a DNS-1123 label is refused before any cluster read.
+func appName(raw string) (string, error) {
+	name := regexpLower(raw)
+	if !appNameRE.MatchString(name) {
+		return "", zip.ErrBadRequest("name must be a DNS-1123 label")
+	}
+	return name, nil
+}
+
+// resourceTree returns one application's live resource tree, node by node.
+// The tree is built from what the cluster actually runs; a name another org owns
+// is reported as not found.
+//
+// Example: {"name": "cloud"}
+func (o ops) resourceTree(ctx context.Context, in *appRef) (*argoTree, error) {
+	s := o.s
+	sc, err := scopeFrom(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := ready(s); err != nil {
-		return err
+		return nil, err
 	}
-	name := reqName(c)
-	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must be a DNS-1123 label")
-	}
-	ns, err := sc.findNamespace(s, c, name)
+	name, err := appName(in.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cr, _, err := getAppCR(s, c.Context(), ns, name)
+	ns, err := sc.findNamespace(s, ctx, name)
 	if err != nil {
-		return k8sErr(s, "get", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, projectTree(buildTree(s, c.Context(), ns, name, cr)))
+	cr, _, err := getAppCR(s, ctx, ns, name)
+	if err != nil {
+		return nil, k8sErr(s, "get", err)
+	}
+	tree := projectTree(buildTree(s, ctx, ns, name, cr))
+	return &tree, nil
 }
 
-// dashSync requests an operator reconcile of the App CR (the sync + rollback UI
-// actions both map to "reconcile this App now" — the App CR is the source of
-// truth; rollback-by-revision is the image-pin follow-on). Returns the projected
-// Application (the UI only checks for a non-error response).
-func dashSync(s *cloud.Service[state], c *zip.Ctx) error {
-	// Reached only through guard() (SuperAdmin-only), so the scope is always whole-fleet;
+// sync requests an operator reconcile of one application, and returns it projected.
+// The App CR is the source of truth, so a sync is an annotation bump the operator
+// acts on — nothing is applied from this plane. SuperAdmin only.
+//
+// Example: {"name": "cloud"}
+func (o ops) sync(ctx context.Context, in *appRef) (*argoApp, error) {
+	return o.reconcileApp(ctx, in.Name)
+}
+
+// rollback requests the same operator reconcile sync does, for the UI's Rollback action.
+// Rollback-by-revision is the image-pin follow-on; today both actions mean
+// "reconcile this App now". SuperAdmin only.
+//
+// Example: {"name": "cloud"}
+func (o ops) rollback(ctx context.Context, in *appRef) (*argoApp, error) {
+	return o.reconcileApp(ctx, in.Name)
+}
+
+// reconcileApp is the ONE sync/rollback path: resolve, annotate, project.
+func (o ops) reconcileApp(ctx context.Context, raw string) (*argoApp, error) {
+	s := o.s
+	// Reached only through the SuperAdmin gate, so the scope is always whole-fleet;
 	// resolving it keeps ONE namespace-resolution path (findNamespace) across the plane.
-	sc, ok := resolveScope(c)
-	if !ok {
-		return refuse(c)
+	sc, err := scopeFrom(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := ready(s); err != nil {
-		return err
+		return nil, err
 	}
-	name := reqName(c)
-	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must be a DNS-1123 label")
-	}
-	ns, err := sc.findNamespace(s, c, name)
+	name, err := appName(raw)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cr, gvr, err := getAppCR(s, c.Context(), ns, name)
+	ns, err := sc.findNamespace(s, ctx, name)
 	if err != nil {
-		return k8sErr(s, "get", err)
+		return nil, err
+	}
+	cr, gvr, err := getAppCR(s, ctx, ns, name)
+	if err != nil {
+		return nil, k8sErr(s, "get", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	patch, _ := json.Marshal(map[string]any{"metadata": map[string]any{"annotations": map[string]any{syncAnnotation: now}}})
-	if _, err := s.State.dyn.Resource(gvr).Namespace(ns).Patch(c.Context(), name, k8stypes.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
-		return k8sErr(s, "patch", err)
+	if _, err := s.State.dyn.Resource(gvr).Namespace(ns).Patch(ctx, name, k8stypes.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+		return nil, k8sErr(s, "patch", err)
 	}
-	s.Log.Info("dashboard sync requested", "app", name, "namespace", ns, "actor", c.User())
-	return c.JSON(http.StatusOK, projectApp(cr, ns, runningVersions(s, c.Context(), ns)[name]))
+	actor := ""
+	if c, ok := cloud.Request(ctx); ok {
+		actor = c.User()
+	}
+	s.Log.Info("dashboard sync requested", "app", name, "namespace", ns, "actor", actor)
+	app := projectApp(cr, ns, runningVersions(s, ctx, ns)[name])
+	return &app, nil
 }

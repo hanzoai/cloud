@@ -3,9 +3,9 @@
 // mapping between them. The view JSON keys mirror the console modules EXACTLY so the
 // Networks, Service Mesh and Edge pages render with no front-end change:
 //
-//   - networkView  -> console NetworksModule.tsx   BootnodeNetwork {id,name,chain,status,nodes,rpc}
-//   - meshView     -> console ServiceMeshModule.tsx MeshService     {id,service,namespace,mtls,requests,status}
-//   - edgeNodeView -> console EdgeModule.tsx        EdgeNode        {id,name,region,status,requests,latency}
+//   - Network  -> console NetworksModule.tsx   BootnodeNetwork {id,name,chain,status,nodes,rpc}
+//   - MeshService     -> console ServiceMeshModule.tsx MeshService     {id,service,namespace,mtls,requests,status}
+//   - EdgeNode -> console EdgeModule.tsx        EdgeNode        {id,name,region,status,requests,latency}
 //
 // Every field is a REAL ZT value or an honest omission. Telemetry ZT's management
 // API does not carry (per-service request counts, per-router latency) is left off
@@ -68,35 +68,48 @@ type ztEdgeRouter struct {
 
 // ---- console view structs ----
 
-// networkView is the shape console NetworksModule (BootnodeNetwork) consumes. It
+// Network is the shape console NetworksModule (BootnodeNetwork) consumes. It
 // represents the org's slice of the ZT overlay — one network whose nodes are the
 // org's edge-routers. chain/rpc are honestly omitted (a ZT overlay is not a
 // blockchain with an RPC), so those columns render blank rather than fabricated.
-type networkView struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
+type Network struct {
+	// ID is the overlay network id, "org-<org>" for the caller's org.
+	ID string `json:"id"`
+	// Name is the display label for the org's overlay.
+	Name string `json:"name"`
+	// Status is active when any of the org's edge-routers is online, else degraded.
 	Status string `json:"status"`
-	Nodes  int    `json:"nodes"`
+	// Nodes counts the org's edge-routers on the fabric.
+	Nodes int `json:"nodes"`
 }
 
-// meshView is the shape console ServiceMeshModule (MeshService) consumes — one row
+// MeshService is the shape console ServiceMeshModule (MeshService) consumes — one row
 // per ZT edge service. mtls reflects the service's E2E encryption requirement;
 // requests is omitted (the management API carries no per-service metrics).
-type meshView struct {
-	ID      string `json:"id"`
+type MeshService struct {
+	// ID is the ZT edge-service id.
+	ID string `json:"id"`
+	// Service is the edge service's name.
 	Service string `json:"service"`
-	Mtls    string `json:"mtls"`
-	Status  string `json:"status"`
+	// Mtls is enabled when the service requires end-to-end encryption, else disabled.
+	Mtls string `json:"mtls"`
+	// Status is active for any listed service.
+	Status string `json:"status"`
 }
 
-// edgeNodeView is the shape console EdgeModule (EdgeNode) consumes — one row per ZT
+// EdgeNode is the shape console EdgeModule (EdgeNode) consumes — one row per ZT
 // edge-router. status is the REAL online/disabled/offline signal; region is filled
 // only from a "region-<slug>" role attribute (honest "—" otherwise); requests and
 // latency are omitted (no per-router telemetry in the management API).
-type edgeNodeView struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
+type EdgeNode struct {
+	// ID is the ZT edge-router id.
+	ID string `json:"id"`
+	// Name is the edge-router's name.
+	Name string `json:"name"`
+	// Region comes from a "region-<slug>" role attribute; absent when the router
+	// carries none, never invented.
 	Region string `json:"region,omitempty"`
+	// Status is the controller's real signal: online, offline or disabled.
 	Status string `json:"status"`
 }
 
@@ -142,12 +155,12 @@ func filterRouters(all []ztEdgeRouter, org string) []ztEdgeRouter {
 // when the service mandates end-to-end encryption, else "enabled" (the Ziti fabric
 // always mutually authenticates every link — it is never truly off). status is
 // "active": a listed service is a configured, dialable mesh entry.
-func toMeshView(s ztService) meshView {
+func toMeshView(s ztService) MeshService {
 	mtls := "enabled"
 	if s.EncryptionRequired {
 		mtls = "required"
 	}
-	return meshView{
+	return MeshService{
 		ID:      s.ID,
 		Service: s.Name,
 		Mtls:    mtls,
@@ -183,12 +196,12 @@ func regionOf(r ztEdgeRouter) string {
 }
 
 // toEdgeNodeView maps a ZT edge-router to the console edge row.
-func toEdgeNodeView(r ztEdgeRouter) edgeNodeView {
+func toEdgeNodeView(r ztEdgeRouter) EdgeNode {
 	name := r.Name
 	if name == "" {
 		name = r.ID
 	}
-	return edgeNodeView{
+	return EdgeNode{
 		ID:     r.ID,
 		Name:   name,
 		Region: regionOf(r),
@@ -202,7 +215,7 @@ func toEdgeNodeView(r ztEdgeRouter) edgeNodeView {
 // "connected" when at least one router is online, else "provisioning" (routers
 // exist but none has dialed home yet). id/name are derived deterministically from
 // the org so /v1/networks/:id round-trips.
-func networkFromRouters(org string, routers []ztEdgeRouter) *networkView {
+func networkFromRouters(org string, routers []ztEdgeRouter) *Network {
 	if len(routers) == 0 {
 		return nil
 	}
@@ -213,7 +226,7 @@ func networkFromRouters(org string, routers []ztEdgeRouter) *networkView {
 			break
 		}
 	}
-	return &networkView{
+	return &Network{
 		ID:     networkID(org),
 		Name:   org,
 		Status: status,

@@ -19,23 +19,81 @@
     "/v1/agents": {
       "get": {
         "operationId": "get_v1_agents",
+        "summary": "listAgents returns every agent in the caller's org with its run count.",
+        "description": "listAgents returns every agent in the caller's org with its run count.\nThe count is of runs actually recorded, so it matches what the run history\nwill show.",
         "tags": [
           "agents"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/agentList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_agents",
+        "summary": "createAgent registers a new agent in the caller's org and answers 201.",
+        "description": "createAgent registers a new agent in the caller's org and answers 201.\nThe name must be unique in the org, and the model is checked against the\nmodels this gateway actually serves, so an unservable model is refused here\nrather than failing at the first run.\nA long-running agent needs a cron schedule, and the org's long-running\nagents are capped.",
         "tags": [
           "agents"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "executionMode": "on-demand",
+                "instructions": "Triage inbound support mail.",
+                "model": "zen",
+                "name": "triage"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/agentView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/agents/activity": {
       "get": {
         "operationId": "get_v1_agents_activity",
+        "summary": "agentActivity serves the org-wide recent-activity feed, newest first.",
+        "description": "agentActivity serves the org-wide recent-activity feed, newest first.\nEvery event is real — a recorded run becomes an invoked or failed event, and\nan agent's own timestamps become created and updated events.\nAn org with no agents and no runs gets an empty feed.",
         "tags": [
           "agents"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/activityFeed"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/agents/builds": {
@@ -75,23 +133,141 @@
     "/v1/agents/metrics": {
       "get": {
         "operationId": "get_v1_agents_metrics",
+        "summary": "agentMetrics serves the org's invocations-over-time histogram.",
+        "description": "agentMetrics serves the org's invocations-over-time histogram.\nThere is one series line per agent that ran in the window, and every point is\na real count of recorded runs in that bucket — an org with no activity gets\nan empty series, never a synthesized trend.\nThe resource rollup is all-null because this store meters no CPU, memory,\nstorage or cost, so the console renders a dash rather than a fabricated\nfigure.",
         "tags": [
           "agents"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the window to bucket over: 24H, 7D or 30D (the default).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7D"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/metricsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/agents/sessions": {
       "get": {
         "operationId": "get_v1_agents_sessions",
+        "summary": "listSessions returns the caller org's agent sessions, newest first.",
+        "description": "listSessions returns the caller org's agent sessions, newest first.\nIt narrows by flow (root), by direct parent, by status, by the product a\nsession built, or by any combination of those.\nEach row carries its event and child counts and its most recent event, so a\nboard can render a flow without a second read per session.",
         "tags": [
           "agents"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "root",
+            "in": "query",
+            "required": false,
+            "description": "Root narrows to one flow: every session sharing this root id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "required": false,
+            "description": "Parent narrows to the direct children of one session.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows to running, paused, done or error.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "running"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows to the sessions that built one product.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sessionList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_agents_sessions",
+        "summary": "registerSession opens a session — one agent run, recorded as it happens.",
+        "description": "registerSession opens a session — one agent run, recorded as it happens.\nA session with a parentSessionId joins that parent's flow and inherits its\nroot, so a subagent tree is one addressable unit; the parent must be in the\ncaller's OWN org, so a tree can never cross a tenant boundary.\nStatus defaults to running, actor defaults to the validated caller, and a\nsession that names a target must name one registered to the same org.",
         "tags": [
           "agents"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "agent": "triage",
+                "repo": "hanzoai/cloud",
+                "title": "Fix the flaky import test"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/registerReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sessionView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/agents/sessions/stream": {
@@ -104,7 +280,9 @@
     },
     "/v1/agents/sessions/{id}": {
       "get": {
-        "operationId": "get_v1_agents_sessions_by_id",
+        "operationId": "get_v1_agents_sessions_id",
+        "summary": "getSession returns one session with its direct children and recent events.",
+        "description": "getSession returns one session with its direct children and recent events.\nA session in another org reads as not-found, so a probe learns nothing about\nwhat exists elsewhere.",
         "tags": [
           "agents"
         ],
@@ -113,14 +291,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the session to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sess_1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sessionDetail"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
-        "operationId": "patch_v1_agents_sessions_by_id",
+        "operationId": "patch_v1_agents_sessions_id",
+        "summary": "patchSession updates one session in place, leaving every omitted field alone.",
+        "description": "patchSession updates one session in place, leaving every omitted field alone.\nA finished session stays finished: reopening a done or error run would\nfabricate liveness, so a status change away from a terminal state is refused.\nPublishing requires the session to name the product it built, because the\npublic build route is keyed on (org, project), and a target must be one\nregistered to the caller's own org.",
         "tags": [
           "agents"
         ],
@@ -129,11 +323,40 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the session to update, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sess_1"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "sess_1",
+                "published": true,
+                "status": "done"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/patchSessionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sessionView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/agents/sessions/{id}/control": {
@@ -246,7 +469,9 @@
     },
     "/v1/agents/sessions/{id}/tree": {
       "get": {
-        "operationId": "get_v1_agents_sessions_by_id_tree",
+        "operationId": "get_v1_agents_sessions_id_tree",
+        "summary": "sessionTree returns the subagent tree rooted at one session.",
+        "description": "sessionTree returns the subagent tree rooted at one session.\nEvery node carries its own event count and fan-out, so a flow renders from one\nread; the whole tree is pulled by a single indexed query on the shared root id\nand assembled in memory.",
         "tags": [
           "agents"
         ],
@@ -255,30 +480,89 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the session to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sess_1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/treeNode"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/agents/targets": {
       "get": {
         "operationId": "get_v1_agents_targets",
+        "summary": "listTargets returns every machine registered to the caller's org.",
+        "description": "listTargets returns every machine registered to the caller's org.\nRows come newest first, each carrying the machine's spec, its last\nutilisation sample and the live session load dispatched to it.",
         "tags": [
           "agents"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/targetList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_agents_targets",
+        "summary": "registerTarget registers a machine as an agent target, or re-links one.",
+        "description": "registerTarget registers a machine as an agent target, or re-links one.\nRe-linking is idempotent and keyed on org+host+owner, so a machine that\nreconnects refreshes its own row rather than piling up duplicates; it answers\n200, while a first registration answers 201.\nThe registering principal owns the machine — only it, or an org admin, may\nlater patch, claim or remove it.",
         "tags": [
           "agents"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "host": "gpu-01",
+                "kind": "gpu",
+                "label": "workshop"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/targetReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/targetView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/agents/targets/{id}": {
       "delete": {
-        "operationId": "delete_v1_agents_targets_by_id",
+        "operationId": "delete_v1_agents_targets_id",
+        "summary": "deleteTarget deregisters one machine.",
+        "description": "deleteTarget deregisters one machine.\nOnly its owner, or an org admin, may remove it; an unknown id, a cross-org id\nand a machine owned by someone else all answer the same not-found, so a probe\nlearns nothing about what exists.",
         "tags": [
           "agents"
         ],
@@ -287,14 +571,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the target to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "tgt_1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/targetDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_agents_targets_by_id",
+        "operationId": "get_v1_agents_targets_id",
+        "summary": "getTarget returns one registered machine with its live session load.",
+        "description": "getTarget returns one registered machine with its live session load.\nAn id from another org reads as not-found, so a probe learns nothing about\nwhat exists elsewhere.",
         "tags": [
           "agents"
         ],
@@ -303,14 +603,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the target to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "tgt_1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/targetView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
-        "operationId": "patch_v1_agents_targets_by_id",
+        "operationId": "patch_v1_agents_targets_id",
+        "summary": "patchTarget updates one machine in place, leaving every omitted field alone.",
+        "description": "patchTarget updates one machine in place, leaving every omitted field alone.\nA metrics patch IS a heartbeat — the server stamps its own clock, so a client\ncan neither forge nor backdate staleness.\nOnly the machine's owner, or an org admin, may patch it; anyone else gets the\nsame not-found an unknown id gives.",
         "tags": [
           "agents"
         ],
@@ -319,11 +635,39 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the target to update, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "tgt_1"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "tgt_1",
+                "status": "draining"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/patchTargetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/targetView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/agents/targets/{id}/claim": {
@@ -390,7 +734,9 @@
     },
     "/v1/agents/{ref}": {
       "delete": {
-        "operationId": "delete_v1_agents_by_ref",
+        "operationId": "delete_v1_agents_ref",
+        "summary": "deleteAgent removes one agent and its recorded run history, answering 204.",
+        "description": "deleteAgent removes one agent and its recorded run history, answering 204.\nThe ref resolves by public id or org-unique name.\nAn agent in another org, or one already gone, reads as not-found.",
         "tags": [
           "agents"
         ],
@@ -399,14 +745,23 @@
             "name": "ref",
             "in": "path",
             "required": true,
+            "description": "Ref is the agent's public id or its org-unique name, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "triage"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_agents_by_ref",
+        "operationId": "get_v1_agents_ref",
+        "summary": "getAgent returns one agent's configuration and its 20 most recent runs.",
+        "description": "getAgent returns one agent's configuration and its 20 most recent runs.\nThe ref is the agent's public id or its org-unique name — either resolves.\nAn agent in another org reads as not-found.",
         "tags": [
           "agents"
         ],
@@ -415,14 +770,30 @@
             "name": "ref",
             "in": "path",
             "required": true,
+            "description": "Ref is the agent's public id or its org-unique name, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "triage"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/agentDetail"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
-        "operationId": "patch_v1_agents_by_ref",
+        "operationId": "patch_v1_agents_ref",
+        "summary": "updateAgent changes one agent in place, leaving every omitted field alone.",
+        "description": "updateAgent changes one agent in place, leaving every omitted field alone.\nThe resulting mode and schedule are re-validated together, so a partial\nupdate can never leave a long-running agent without a cron the scheduler can\nread, and a move INTO long-running is held to the same per-org cap as a\ncreate.",
         "tags": [
           "agents"
         ],
@@ -431,11 +802,40 @@
             "name": "ref",
             "in": "path",
             "required": true,
+            "description": "Ref is the agent to update: its public id or its org-unique name, from\nthe path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "triage"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "executionMode": "long-running",
+                "ref": "triage",
+                "schedule": "0 * * * *"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/updateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/agentView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/agents/{ref}/run": {
@@ -458,7 +858,9 @@
     },
     "/v1/agents/{ref}/runs": {
       "get": {
-        "operationId": "get_v1_agents_by_ref_runs",
+        "operationId": "get_v1_agents_ref_runs",
+        "summary": "listAgentRuns returns one agent's recorded run history, newest first.",
+        "description": "listAgentRuns returns one agent's recorded run history, newest first.\nEvery row is an execution that really happened — a run whose model failed is\nrecorded with status error and its upstream message, never dropped.",
         "tags": [
           "agents"
         ],
@@ -467,11 +869,728 @@
             "name": "ref",
             "in": "path",
             "required": true,
+            "description": "Ref is the agent whose runs to read: its public id or its org-unique\nname, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "triage"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the runs returned; 0 means 50.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 20
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GPU": {
+        "properties": {
+          "memory": {
+            "description": "VRAM bytes, 0 = unknown",
+            "type": "integer"
+          },
+          "model": {
+            "description": "\"GB10\", \"8060S\", \"RTX 4090\"",
+            "type": "string"
+          },
+          "vendor": {
+            "description": "nvidia | amd | apple | intel | ...",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Metrics": {
+        "properties": {
+          "at": {
+            "description": "unix seconds, server-stamped",
+            "type": "integer"
+          },
+          "gpuUtil": {
+            "description": "0..1 aggregate utilization",
+            "type": "number"
+          },
+          "load1": {
+            "type": "number"
+          },
+          "load15": {
+            "type": "number"
+          },
+          "load5": {
+            "type": "number"
+          },
+          "memFree": {
+            "description": "bytes",
+            "type": "integer"
+          },
+          "memUsed": {
+            "description": "bytes",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Spec": {
+        "properties": {
+          "arch": {
+            "description": "amd64 | arm64 | ...",
+            "type": "string"
+          },
+          "cpus": {
+            "description": "logical cores",
+            "type": "integer"
+          },
+          "gpus": {
+            "items": {
+              "$ref": "#/components/schemas/GPU"
+            },
+            "type": "array"
+          },
+          "memory": {
+            "description": "total RAM, bytes",
+            "type": "integer"
+          },
+          "os": {
+            "description": "linux | darwin | windows",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "activityFeed": {
+        "properties": {
+          "activity": {
+            "description": "Activity is the merged event feed, newest first and capped at 50.",
+            "items": {
+              "$ref": "#/components/schemas/activityView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "activityView": {
+        "properties": {
+          "agent": {
+            "description": "agent name",
+            "type": "string"
+          },
+          "at": {
+            "description": "RFC3339 UTC",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "invoked|failed|created|updated (from real events)",
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "agentDetail": {
+        "properties": {
+          "instructions": {
+            "type": "string"
+          },
+          "recentRuns": {
+            "items": {
+              "$ref": "#/components/schemas/runView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "agentList": {
+        "properties": {
+          "agents": {
+            "description": "Agents is the org's agents, each with its recorded run count.",
+            "items": {
+              "$ref": "#/components/schemas/agentView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "agentView": {
+        "properties": {
+          "computeRef": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "executionMode": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "runs": {
+            "type": "integer"
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "serviceAccountId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "createReq": {
+        "properties": {
+          "computeRef": {
+            "description": "ComputeRef names the compute target runs are dispatched to.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is a human note about what the agent is for.",
+            "type": "string"
+          },
+          "executionMode": {
+            "description": "ExecutionMode is how the agent runs: on-demand, or long-running on a cron\nschedule.",
+            "type": "string"
+          },
+          "instructions": {
+            "description": "Instructions is the agent's system prompt, prepended to every run input.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the model the agent runs on. It is validated against the\ngateway's served catalog; omitted, it falls back to the deployment\ndefault.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the agent's org-unique handle; it must match\n^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. Required.",
+            "type": "string"
+          },
+          "schedule": {
+            "description": "Schedule is the cron cadence a long-running agent runs on. Required when\nexecutionMode is long-running.",
+            "type": "string"
+          },
+          "serviceAccountId": {
+            "description": "ServiceAccountID names the identity the agent acts as.",
+            "type": "string"
+          },
+          "tools": {
+            "description": "Tools names the tools the agent may call.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "eventView": {
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "payload": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "lastEventView": {
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "metricsView": {
+        "properties": {
+          "range": {
+            "description": "echoes the requested window (24H|7D|30D)",
+            "type": "string"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/resourceUsage"
+          },
+          "series": {
+            "description": "per-agent invocation histogram (real)",
+            "items": {
+              "$ref": "#/components/schemas/seriesLine"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "patchSessionIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the session to update, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patchTargetIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the target to update, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "registerReq": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "host": {
+            "description": "Execution context — where this session runs (all optional).",
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "project": {
+            "description": "The readable build (provenance.go): which product this session builds, and\nwhether its story may be read by the world.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Account tag — the linked AI account this session ran under (login manager).",
+            "type": "string"
+          },
+          "published": {
+            "type": "boolean"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "taskRunId": {
+            "type": "string"
+          },
+          "taskWorkflowId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "resourceUsage": {
+        "properties": {
+          "costCents": {
+            "type": "number"
+          },
+          "cpuVcpuHours": {
+            "type": "number"
+          },
+          "memGbHours": {
+            "type": "number"
+          },
+          "storageIoBytes": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "runList": {
+        "properties": {
+          "runs": {
+            "description": "Runs is the agent's recorded runs, newest first. Every row is a run that\nactually executed — a failed run is recorded as one, never hidden.",
+            "items": {
+              "$ref": "#/components/schemas/runView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "runView": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "seriesLine": {
+        "properties": {
+          "key": {
+            "description": "agent name",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/seriesPoint"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "seriesPoint": {
+        "properties": {
+          "t": {
+            "description": "bucket start, RFC3339 UTC",
+            "type": "string"
+          },
+          "v": {
+            "description": "real invocation count in the bucket",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sessionDetail": {
+        "properties": {
+          "childSessions": {
+            "items": {
+              "$ref": "#/components/schemas/sessionView"
+            },
+            "type": "array"
+          },
+          "recentEvents": {
+            "items": {
+              "$ref": "#/components/schemas/eventView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "sessionList": {
+        "properties": {
+          "sessions": {
+            "description": "Sessions is the matching sessions, each with its event and child counts\nand its most recent event.",
+            "items": {
+              "$ref": "#/components/schemas/sessionView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "sessionView": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "children": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "endedAt": {
+            "type": "string"
+          },
+          "events": {
+            "type": "integer"
+          },
+          "host": {
+            "description": "Execution context (mission-control): the machine/repo/cwd a card shows and\nthe run-target a session is dispatched to. Omitted when a surface didn't report it.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lastEvent": {
+            "$ref": "#/components/schemas/lastEventView",
+            "description": "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail."
+          },
+          "org": {
+            "description": "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "project": {
+            "description": "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "published": {
+            "type": "boolean"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "rootSessionId": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "taskRunId": {
+            "type": "string"
+          },
+          "taskWorkflowId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "targetDeleted": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is true when the target was removed.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the target that was removed.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "targetList": {
+        "properties": {
+          "targets": {
+            "description": "Targets is every target registered to the caller's org.",
+            "items": {
+              "$ref": "#/components/schemas/targetView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "targetReq": {
+        "properties": {
+          "capacity": {
+            "description": "Capacity is a free-text note about how much work the machine can take.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the machine's stable hostname. It is the re-link key: a machine\nthat reconnects under the same host refreshes its own row.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what the machine is: laptop, cloud, gpu, cluster or machine\n(the default).",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the machine's display name in mission control. Required.",
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/Metrics",
+            "description": "Metrics is a live utilisation sample. Sending one registers a heartbeat;\nthe server stamps its own clock, so staleness cannot be forged."
+          },
+          "spec": {
+            "$ref": "#/components/schemas/Spec",
+            "description": "Spec is the machine's hardware — cpu, memory, gpus."
+          },
+          "status": {
+            "description": "Status is the dispatch state: online (the default), offline or draining.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "targetView": {
+        "properties": {
+          "capacity": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/Metrics"
+          },
+          "metricsAt": {
+            "type": "string"
+          },
+          "running": {
+            "type": "integer"
+          },
+          "sessions": {
+            "type": "integer"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/Spec"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "treeNode": {
+        "properties": {
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/treeNode"
+            },
+            "type": "array"
+          },
+          "session": {
+            "$ref": "#/components/schemas/sessionView"
+          }
+        },
+        "type": "object"
+      },
+      "updateIn": {
+        "properties": {
+          "ref": {
+            "description": "Ref is the agent to update: its public id or its org-unique name, from\nthe path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

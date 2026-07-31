@@ -170,8 +170,8 @@ func providerBurnCents(ctx context.Context) map[string]int64 {
 	return burn
 }
 
-// ProvidersCredit serves GET /v1/admin/providers/credit — the per-provider upstream
-// credit ledger. SuperAdmin-guarded (see Routes).
+// ProvidersCredit reads the per-provider upstream credit ledger. SuperAdmin-guarded
+// (see Routes).
 func (o ops) ProvidersCredit(ctx context.Context, _ *core.None) (*ProvidersCreditOut, error) {
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
@@ -229,9 +229,9 @@ type UsageFundingOut struct {
 	Data   []UsageFundingRow `json:"data"`
 }
 
-// UsageFunding splits our upstream AI usage by how it was FUNDED: one row per (provider,
-// model) over the window, tagged credit (provider grant still remaining), paid (grant
-// exhausted) or paid_only (no grant at all).
+// UsageFunding splits our upstream AI usage by how it was FUNDED. It returns one row per
+// (provider, model) over the window, tagged credit (provider grant still remaining), paid
+// (grant exhausted) or paid_only (no grant at all).
 //
 // The class is resolved at the PROVIDER level from the credit ledger, not per call — the
 // per-call split, and the `byo` class, arrive when the metering write stamps a funding

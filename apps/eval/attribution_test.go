@@ -77,7 +77,7 @@ func TestTraceAttributionRecorded(t *testing.T) {
 		t.Fatalf("list traces: %d %s", code, body)
 	}
 	var listed struct {
-		Data []traceView `json:"data"`
+		Data []TraceView `json:"data"`
 	}
 	if err := json.Unmarshal(body, &listed); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -167,13 +167,13 @@ func TestHashCredential(t *testing.T) {
 	}
 }
 
-func unmarshalTraces(t *testing.T, code int, body []byte) []traceView {
+func unmarshalTraces(t *testing.T, code int, body []byte) []TraceView {
 	t.Helper()
 	if code != http.StatusOK {
 		t.Fatalf("list traces: %d %s", code, body)
 	}
 	var listed struct {
-		Data []traceView `json:"data"`
+		Data []TraceView `json:"data"`
 	}
 	if err := json.Unmarshal(body, &listed); err != nil {
 		t.Fatalf("unmarshal: %v", err)

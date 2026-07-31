@@ -55,7 +55,10 @@
 // resolves immediately rather than never.
 package index
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -150,7 +153,18 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// This subsystem sets OwnsHealth, so it serves its own health: Meilisearch's
 	// {"status":"available"} body, failing closed when the store is unreadable.
 	app.Get("/v1/index/health", cloud.Handle(s, health))
-	app.Get("/v1/index/version", cloud.Handle(s, version))
+
+	// version is the ONE route on this surface that can be a TYPED op — the one
+	// registration the OpenAPI document, the MCP tool list and the CLI are all
+	// projected from. Every other route here answers failures in Meilisearch's
+	// {message, code, type, link} body, which the JS client BRANCHES on
+	// (index_not_found is how mongoMeili decides to create an index), and a typed
+	// handler's error is rendered in cloud's shape instead — so typing them would
+	// keep the document honest at the cost of the dialect this surface exists to
+	// speak. They stay untyped, and undeclared, deliberately.
+	if zapp := cloud.ZipApp(app); zapp != nil {
+		zip.Get(zapp, "/v1/index/version", version)
+	}
 
 	g := app.Group("/v1/index")
 
@@ -186,13 +200,29 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "available"})
 }
 
-// version reports Meilisearch's version shape. commitSha names the
-// implementation rather than a build hash, so a client logging it says which
-// server answered instead of implying a Meilisearch release.
-func version(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]string{
-		"pkgVersion": Version, "commitSha": "hanzo-cloud", "commitDate": "",
-	})
+// none is the input of an op that takes none: no body, no query, no path param.
+type none struct{}
+
+// versionView is Meilisearch's version shape.
+type versionView struct {
+	// PkgVersion names the DIALECT implementation, not a Meilisearch release.
+	PkgVersion string `json:"pkgVersion"`
+	// CommitSha names the implementation rather than a build hash, so a client
+	// logging it says which server answered.
+	CommitSha string `json:"commitSha"`
+	// CommitDate is always empty: there is no upstream build to date.
+	CommitDate string `json:"commitDate"`
+}
+
+// version reports which server answered, in the shape a Meilisearch client
+// expects. It names the dialect implementation rather than a Meilisearch release,
+// so a client logging it is not misled about what it is talking to. It reads no
+// store and takes no tenant, which is why it is the one route here that always
+// answers.
+//
+// Response: {"pkgVersion": "1.0.0", "commitSha": "hanzo-cloud", "commitDate": ""}
+func version(_ context.Context, _ *none) (*versionView, error) {
+	return &versionView{PkgVersion: Version, CommitSha: "hanzo-cloud"}, nil
 }
 
 // ---- indexes --------------------------------------------------------------

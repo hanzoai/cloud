@@ -42,7 +42,12 @@ func init() {
 	zip.Describe("GET /v1/git/keys", zip.Doc{
 		Description: "listKeys returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@<host>:<org>/<repo>.git`. Keys are org-scoped\non read even though the fingerprint index is global, so one org never sees\nanother's.",
 		Fields: map[string]string{
-			"keyList.data": "Data holds the org's keys.",
+			"keyList.data":        "Data holds the org's keys.",
+			"keyView.createdAt":   "CreatedAt is RFC 3339 UTC.",
+			"keyView.fingerprint": "Fingerprint is the key's SHA256 fingerprint (\"SHA256:…\"), globally unique\nand the handle SSH auth resolves a presented key by.",
+			"keyView.id":          "ID is the key's identifier (\"gitkey_…\"), the handle to delete it by.",
+			"keyView.publicKey":   "PublicKey is the canonical OpenSSH authorized-key line as stored.",
+			"keyView.title":       "Title is the key's label — the caller's, or the comment on the key line.",
 		},
 		Example:  json.RawMessage(`{}`),
 		Response: json.RawMessage(`{"data":[{"id":"gitkey_4a1b","title":"laptop","publicKey":"ssh-ed25519 AAAAC3Nz…","fingerprint":"SHA256:9pQ…","createdAt":"2026-07-01T10:00:00Z"}]}`),
@@ -244,6 +249,43 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","public":true}`),
 	})
+	zip.Describe("POST /v1/git/keys", zip.Doc{
+		Description: "registerKey registers an SSH public key so it can authenticate `git clone\ngit@<host>:<org>/<repo>.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
+		Fields: map[string]string{
+			"keyView.createdAt":        "CreatedAt is RFC 3339 UTC.",
+			"keyView.fingerprint":      "Fingerprint is the key's SHA256 fingerprint (\"SHA256:…\"), globally unique\nand the handle SSH auth resolves a presented key by.",
+			"keyView.id":               "ID is the key's identifier (\"gitkey_…\"), the handle to delete it by.",
+			"keyView.publicKey":        "PublicKey is the canonical OpenSSH authorized-key line as stored.",
+			"keyView.title":            "Title is the key's label — the caller's, or the comment on the key line.",
+			"registerKeyReq.publicKey": "PublicKey is one OpenSSH authorized-key line (\"ssh-ed25519 AAAA… you@host\").\nRequired; a line that does not parse is refused and never stored.",
+			"registerKeyReq.title":     "Title labels the key in the console. Max 256 chars; when omitted the\ncomment on the key line is used.",
+		},
+		Example: json.RawMessage(`{"title":"laptop","publicKey":"ssh-ed25519 AAAAC3Nz… z@hanzo.ai"}`),
+	})
+	zip.Describe("POST /v1/git/repos", zip.Doc{
+		Description: "createRepo provisions an empty bare repository in the caller's scope and\nreturns it with its clone URLs. Answers 201. The name must be unique within\nthe scope — a repeat is a 409, never a silent overwrite of an existing repo.\nThe org comes from the validated principal, so a repo is always born owned by\nthe caller's own tenant.",
+		Fields: map[string]string{
+			"createReq.description":  "Description is a free-form blurb, max 4KiB.",
+			"createReq.name":         "Name is the repo's handle, unique within the scope, and the last segment of\nboth clone URLs. Must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$; a trailing\n\".git\" is stripped first. Required.",
+			"createReq.project":      "Project narrows the repo to a sub-scope of the org. Omit it to use the\ncaller's own X-Project-Id scope; it can never widen past the caller's org.",
+			"createReq.public":       "Public grants ANONYMOUS read (fetch) only; push and the whole control plane\nstay org-authed. Defaults to false.",
+			"repoView.branches":      "Branches are the repo's branch names. Read live, so the detail view carries\nthem and a list row does not.",
+			"repoView.cloneUrl":      "CloneURL is the HTTPS smart-HTTP remote `git clone` takes.",
+			"repoView.createdAt":     "CreatedAt is RFC 3339 UTC.",
+			"repoView.defaultBranch": "DefaultBranch is where HEAD points on a fresh repo (\"main\").",
+			"repoView.description":   "Description is the caller-supplied blurb (max 4KiB).",
+			"repoView.head":          "Head is the resolved HEAD commit, empty on an empty repo.",
+			"repoView.id":            "ID is the repo's stable, prefixed identifier (\"repo_\" + 128 random bits).",
+			"repoView.name":          "Name is the org-unique handle, and the last path segment of both URLs below.",
+			"repoView.org":           "Org owns the repo — the gateway-minted X-Org-Id, and the isolation key.",
+			"repoView.project":       "Project is the optional sub-scope the repo lives in; absent for the org's\ndefault scope.",
+			"repoView.public":        "Public grants ANONYMOUS read (fetch) only; push and the whole control plane\nstay org-authed.",
+			"repoView.sizeBytes":     "SizeBytes is the repo's measured on-disk size, re-measured on create, after\neach push, and after a gc. This is the number billing meters.",
+			"repoView.sshUrl":        "SSHURL is the scp-style SSH remote (git@host:org/repo.git).",
+			"repoView.updatedAt":     "UpdatedAt is RFC 3339 UTC, empty until the first write.",
+		},
+		Example: json.RawMessage(`{"name":"widgets","description":"the widget service"}`),
+	})
 	zip.Describe("POST /v1/git/repos/:name/gc", zip.Doc{
 		Description: "gc repacks a repo into one bitmapped pack and rewrites its commit-graph, so\nthe next clone reuses the bitmap instead of walking the whole object graph.\nIdempotent, and safe to interrupt — git swaps both artifacts atomically. It\nruns under one pack slot with the same memory bounds as a clone, so it can\nblock behind heavy pack traffic rather than compete with it. Storage usage is\nre-measured afterwards, since a repack reclaims space.",
 		Fields: map[string]string{
@@ -278,6 +320,20 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","source":"https://github.com/acme/widgets.git"}`),
 	})
+	zip.Describe("POST /v1/git/repos/:name/mirrors", zip.Doc{
+		Description: "addMirror registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
+		Fields: map[string]string{
+			"mirrorTargetReq.host":       "Host is an optional assertion of the target's hostname. The authoritative\nhost is the one in URL; a value that disagrees with it is refused.",
+			"mirrorTargetReq.name":       "Name is the repo whose advanced refs are pushed downstream, from the :name\npath segment.",
+			"mirrorTargetReq.url":        "URL is the downstream https git remote. Must be https to an allowlisted\nhost (github.com / gitlab.com); any embedded credentials are stripped.\nRequired.",
+			"mirrorTargetView.createdAt": "CreatedAt is RFC 3339 UTC.",
+			"mirrorTargetView.host":      "Host is the target's lowercased hostname, taken from URL and never the body.",
+			"mirrorTargetView.id":        "ID is the target's identifier (\"mir_…\"), the handle to remove it by.",
+			"mirrorTargetView.repo":      "Repo is the repo whose advanced refs are pushed downstream.",
+			"mirrorTargetView.url":       "URL is the canonical https remote, with any embedded credentials stripped.",
+		},
+		Example: json.RawMessage(`{"name":"widgets","url":"https://github.com/acme/widgets.git"}`),
+	})
 	zip.Describe("POST /v1/git/repos/:name/push", zip.Doc{
 		Description: "pushFiles lands a set of files as one commit without a git client — the\nhanzo.app builder's push. The repo is CREATED on first push, the files are\nmerged onto the branch tip (unlisted files survive), and the same\npush-to-deploy hook a real receive-pack fires is fired, so downstream this is\nindistinguishable from a `git push`.",
 		Fields: map[string]string{
@@ -295,5 +351,19 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"name":"widgets","branch":"main","message":"generated build","files":[{"path":"index.html","content":"<h1>hi</h1>"}]}`),
 		Response: json.RawMessage(`{"commit":"a1b2c3d4e5f6","branch":"main","cloneUrl":"https://api.hanzo.ai/v1/git/acme/widgets.git","sshUrl":"git@git.hanzo.ai:acme/widgets.git"}`),
+	})
+	zip.Describe("POST /v1/git/repos/:name/subscriptions", zip.Doc{
+		Description: "subscribe binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there. Answers 201. The same channel twice\non one repo is a 409; a repo outside the caller's scope is a 404, exactly as\nreading it is.",
+		Fields: map[string]string{
+			"subscribeReq.channel":       "Channel is the Slack channel the notifier posts to — an id (C…/G…), a\n#name, or a bare name. Required.",
+			"subscribeReq.events":        "Events narrows delivery to these lifecycle kinds (push.landed,\ndeploy.live, deploy.failed). Omit it to receive every deliverable kind; a\nkind that is never posted to Slack is refused rather than silently dropped.",
+			"subscribeReq.name":          "Name is the repo to subscribe, from the :name path segment.",
+			"subscriptionView.channel":   "Channel is the Slack channel id or name the notifier posts to.",
+			"subscriptionView.createdAt": "CreatedAt is RFC 3339 UTC.",
+			"subscriptionView.events":    "Events is the kind filter; absent means every deliverable kind.",
+			"subscriptionView.id":        "ID is the subscription's identifier (\"sub_…\"), the handle to delete it by.",
+			"subscriptionView.repo":      "Repo is the repo whose lifecycle events are delivered.",
+		},
+		Example: json.RawMessage(`{"name":"widgets","channel":"#builds","events":["push.landed"]}`),
 	})
 }

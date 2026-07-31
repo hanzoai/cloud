@@ -12,18 +12,18 @@ import (
 // SAME interface (the clients/finance per-org ledger pattern); nothing else changes.
 type MemStore struct {
 	mu   sync.RWMutex
-	rows map[string]Record // key = org + "\x00" + domain
+	rows map[string]Ownership // key = org + "\x00" + domain
 }
 
 // NewMemStore builds an empty in-memory store.
-func NewMemStore() *MemStore { return &MemStore{rows: map[string]Record{}} }
+func NewMemStore() *MemStore { return &MemStore{rows: map[string]Ownership{}} }
 
 func memKey(org, domainName string) string {
 	return strings.ToLower(org) + "\x00" + strings.ToLower(domainName)
 }
 
 // Put upserts a record.
-func (s *MemStore) Put(rec Record) error {
+func (s *MemStore) Put(rec Ownership) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.rows[memKey(rec.Org, rec.Domain)] = rec
@@ -31,7 +31,7 @@ func (s *MemStore) Put(rec Record) error {
 }
 
 // Get returns the record for (org, domain) and whether it exists.
-func (s *MemStore) Get(org, domainName string) (Record, bool, error) {
+func (s *MemStore) Get(org, domainName string) (Ownership, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rec, ok := s.rows[memKey(org, domainName)]
@@ -39,11 +39,11 @@ func (s *MemStore) Get(org, domainName string) (Record, bool, error) {
 }
 
 // ListByOrg returns every domain the org holds, newest registration first.
-func (s *MemStore) ListByOrg(org string) ([]Record, error) {
+func (s *MemStore) ListByOrg(org string) ([]Ownership, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	prefix := strings.ToLower(org) + "\x00"
-	out := make([]Record, 0)
+	out := make([]Ownership, 0)
 	for k, rec := range s.rows {
 		if strings.HasPrefix(k, prefix) {
 			out = append(out, rec)

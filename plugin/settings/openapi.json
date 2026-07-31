@@ -18,7 +18,9 @@
   "paths": {
     "/v1/settings/{product}": {
       "get": {
-        "operationId": "get_v1_settings_by_product",
+        "operationId": "get_v1_settings_product",
+        "summary": "settings returns one product's configuration for the caller's org.",
+        "description": "settings returns one product's configuration for the caller's org.\n\nSecret fields are reported by NAME only, in secretKeys; their values live in\nKMS and are never returned.\nA product the org has never configured reads an empty config rather than a\n404, because the console's Settings tab has to render either way.",
         "tags": [
           "settings"
         ],
@@ -27,14 +29,41 @@
             "name": "product",
             "in": "path",
             "required": true,
+            "description": "Product is the console catalog slug from the :product path segment.\nIt must match ^[a-z0-9][a-z0-9._-]{0,62}$ — it becomes a store key and a\nKMS ref segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "gateway"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "config": {
+                    "region": "sfo3"
+                  },
+                  "createdAt": "2026-07-01T00:00:00Z",
+                  "product": "gateway",
+                  "secretKeys": [
+                    "api-token"
+                  ],
+                  "updatedAt": "2026-07-29T00:00:00Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/settingsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_settings_by_product",
+        "operationId": "put_v1_settings_product",
+        "summary": "saveSettings writes one product's configuration for the caller's org.",
+        "description": "saveSettings writes one product's configuration for the caller's org.\n\nNon-secret config is stored verbatim within a 64KiB cap.\nEvery provided secret VALUE is routed to KMS at orgs/{org}/settings/{product}/{key}\nand never touches SQLite, so with no KMS configured the whole write fails\nclosed rather than persisting a secret in plaintext.\nA secret omitted from the body, or echoed back as the mask the read returned,\nkeeps its stored value.",
         "tags": [
           "settings"
         ],
@@ -43,11 +72,102 @@
             "name": "product",
             "in": "path",
             "required": true,
+            "description": "Product is the console catalog slug from the :product path segment.\nIt must match ^[a-z0-9][a-z0-9._-]{0,62}$ — it becomes a store key and a\nKMS ref segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "gateway"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "config": {
+                  "region": "sfo3"
+                },
+                "product": "gateway",
+                "secrets": {
+                  "api-token": "hk-live-..."
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/settingsReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/settingsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "settingsReq": {
+        "properties": {
+          "config": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Config is the non-secret configuration, stored verbatim and capped at 64KiB.\nOmit it to store an empty object; it REPLACES what was there.",
+            "type": "object"
+          },
+          "product": {
+            "description": "Product is the console catalog slug from the :product path segment.\nIt must match ^[a-z0-9][a-z0-9._-]{0,62}$ — it becomes a store key and a\nKMS ref segment.",
+            "type": "string"
+          },
+          "secrets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Secrets carries secret fields by name.\nEach VALUE is routed to KMS and never reaches SQLite; a key omitted here\nkeeps its stored value, and sending back the mask the read returned means\n\"unchanged\".",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "settingsView": {
+        "properties": {
+          "config": {
+            "description": "Config is the stored non-secret configuration, verbatim.\nA product with no override yet reads an empty object, not a 404.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "createdAt": {
+            "description": "CreatedAt is RFC 3339, empty until the first write.",
+            "type": "string"
+          },
+          "product": {
+            "description": "Product is the console catalog slug this configuration belongs to.",
+            "type": "string"
+          },
+          "secretKeys": {
+            "description": "SecretKeys names the secret fields that are SET.\nOnly the names appear here; a secret's value lives in KMS and is never\nreturned by any read.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is RFC 3339, empty until the first write.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

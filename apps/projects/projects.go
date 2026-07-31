@@ -45,6 +45,8 @@
 // host; GitHub export is an optional second step that never blocks going live.
 package projects
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"errors"
@@ -125,19 +127,19 @@ var mounted *cloud.Service[state]
 
 // ---- HTTP response shapes (the published contract) ----
 
-type repoView struct {
+type siteRepo struct {
 	URL      string `json:"url,omitempty"`
 	Branch   string `json:"branch,omitempty"`
 	Provider string `json:"provider,omitempty"`
 }
 
-type projectView struct {
+type siteProject struct {
 	ID                  string   `json:"id"`
 	Org                 string   `json:"org"`
 	Slug                string   `json:"slug"`
 	Name                string   `json:"name"`
 	Description         string   `json:"description,omitempty"`
-	Repo                repoView `json:"repo"`
+	Repo                siteRepo `json:"repo"`
 	Framework           string   `json:"framework"`
 	Status              string   `json:"status"`
 	LiveURL             string   `json:"liveUrl,omitempty"`
@@ -175,10 +177,10 @@ type projectView struct {
 	UpdatedAt int64  `json:"updatedAt"`
 }
 
-func toProjectView(p Project) projectView {
-	return projectView{
+func toProjectView(p Project) siteProject {
+	return siteProject{
 		ID: p.ID, Org: p.Org, Slug: p.Slug, Name: p.Name, Description: p.Description,
-		Repo:      repoView{URL: p.RepoURL, Branch: p.RepoBranch, Provider: p.RepoProvider},
+		Repo:      siteRepo{URL: p.RepoURL, Branch: p.RepoBranch, Provider: p.RepoProvider},
 		Framework: p.Framework, Status: p.Status, LiveURL: p.LiveURL, Bucket: p.Bucket,
 		CurrentDeploymentID: p.CurrentDeploy, CacheControl: p.CacheControl, LastPurgeAt: p.LastPurgeAt,
 		Analytics: p.Analytics, Space: p.SpaceId,
@@ -189,7 +191,7 @@ func toProjectView(p Project) projectView {
 	}
 }
 
-type deploymentView struct {
+type siteDeployment struct {
 	ID        string `json:"id"`
 	ProjectID string `json:"projectId"`
 	Version   int    `json:"version"`
@@ -212,8 +214,8 @@ type deploymentView struct {
 	Upload *uploadGrant `json:"upload,omitempty"`
 }
 
-func toDeploymentView(d Deployment) deploymentView {
-	return deploymentView{
+func toDeploymentView(d Deployment) siteDeployment {
+	return siteDeployment{
 		ID: d.ID, ProjectID: d.ProjectID, Version: d.Version, Status: d.Status, Source: d.Source,
 		Commit: d.Commit, LiveURL: d.LiveURL, Bucket: d.Bucket, Prefix: d.Prefix,
 		Files: d.Files, Bytes: d.Bytes, Message: d.Message, CreatedAt: d.CreatedAt, UpdatedAt: d.UpdatedAt,
@@ -281,24 +283,50 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the projects surface and the mirrored /v1/platform/sites surface.
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Post("/v1/projects", cloud.Handle(s, create))
-	app.Post("/v1/projects/fork", cloud.Handle(s, fork))
-	app.Get("/v1/projects", cloud.Handle(s, list))
-	app.Get("/v1/projects/:slug", cloud.Handle(s, get))
-	app.Patch("/v1/projects/:slug", cloud.Handle(s, update))
-	app.Delete("/v1/projects/:slug", cloud.Handle(s, del))
+// ops binds the projects state to the typed handlers. A zip TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so the
+// service arrives as a RECEIVER and every op is a method value.
+type ops struct{ s *cloud.Service[state] }
 
+// created marks the ops that answer 201 so the document says what the wire sends.
+func created() zip.OpOption { return zip.WithStatus(http.StatusCreated) }
+
+// routes registers the projects surface and the mirrored /v1/platform/sites surface.
+//
+// Most routes are zip TYPED ops, so the REST route, the OpenAPI document, the MCP
+// tool and the CLI command all derive from ONE declaration. Five handlers stay
+// untyped and are noted where they are registered: deploy takes a RAW zip/tar body
+// (typing it would promise a JSON request the route does not accept), and the four
+// billed write paths answer a denied hosting gate with a STRUCTURED 402/503 body
+// (cloud.DenyResource) that callers branch on — a typed op declares exactly one
+// response, so that body has nowhere to live.
+func routes(app cloud.Router, s *cloud.Service[state]) {
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every op below resolves
+	// its tenant through the request it parks.
+	app.Group("/v1/projects").Use(cloud.Bridge())
+	app.Group("/v1/sites").Use(cloud.Bridge())
+	app.Group("/v1/platform/sites").Use(cloud.Bridge())
+
+	zip.Post(z, "/v1/projects", o.create, created())
+	zip.Post(z, "/v1/projects/fork", o.fork, created())
+	zip.Get(z, "/v1/projects", o.list)
+	zip.Get(z, "/v1/projects/:slug", o.get)
+	zip.Patch(z, "/v1/projects/:slug", o.update)
+	zip.Delete(z, "/v1/projects/:slug", o.del)
+
+	// deploy: RAW artifact body (zip/tar, multipart or bare) — see the note above.
 	app.Post("/v1/projects/:slug/deploy", cloud.Handle(s, deploy))
-	app.Post("/v1/projects/:slug/purge", cloud.Handle(s, purge))
-	app.Get("/v1/projects/:slug/deployments", cloud.Handle(s, listDeployments))
-	app.Get("/v1/projects/:slug/deployments/:id", cloud.Handle(s, getDeployment))
-	app.Post("/v1/projects/:slug/deployments/:id/complete", cloud.Handle(s, completeDeployment))
-	app.Get("/v1/projects/:slug/domains", cloud.Handle(s, listDomains))
-	app.Post("/v1/projects/:slug/domains", cloud.Handle(s, setDomains))
-	app.Post("/v1/projects/:slug/domains/:host/verify", cloud.Handle(s, verifyDomain))
-	app.Delete("/v1/projects/:slug/domains/:host", cloud.Handle(s, releaseDomain))
+	zip.Post(z, "/v1/projects/:slug/purge", o.purge)
+	zip.Get(z, "/v1/projects/:slug/deployments", o.listDeployments)
+	zip.Get(z, "/v1/projects/:slug/deployments/:id", o.getDeployment)
+	zip.Post(z, "/v1/projects/:slug/deployments/:id/complete", o.completeDeployment)
+	zip.Get(z, "/v1/projects/:slug/domains", o.listDomains)
+	zip.Post(z, "/v1/projects/:slug/domains", o.setDomains)
+	zip.Post(z, "/v1/projects/:slug/domains/:host/verify", o.verifyDomain)
+	zip.Delete(z, "/v1/projects/:slug/domains/:host", o.releaseDomain)
 
 	// /v1/sites — the surface-agnostic deploy_site capability, shared with agents.
 	// /v1/sites builds a responsive static site from a brief and deploys it;
@@ -306,9 +334,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// publishSite core as the tar path, so there is one deploy pipeline, one host
 	// binding, one metering. Org scope is the IAM-minted X-Org-Id, exactly as
 	// /v1/projects.
+	// buildSite + deploySiteFiles: billed write paths whose denied-gate 402/503 body
+	// is the contract — see the note above.
 	app.Post("/v1/sites", cloud.Handle(s, buildSite))
 	app.Post("/v1/sites/deploy", cloud.Handle(s, deploySiteFiles))
-	app.Get("/v1/sites", cloud.Handle(s, listSites))
+	zip.Get(z, "/v1/sites", o.listSites)
 
 	// Releases — how content GETS to a site's serving prefix (release.go). The
 	// builder's build output already lives in OUR object store, so publishing is a
@@ -317,6 +347,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// credential. /publish is create+activate (the 99% path); the two halves stay
 	// separable for a staged rollout, and activate doubles as the free rollback.
 	siteReleases(app, s, "/v1/sites")
+	// The two READ/POINTER release ops are spelled with LITERAL paths, not built
+	// from the base: cmd/zipdoc needs a constant path argument to give an op an
+	// identity to document, so a computed path silently costs both surfaces their
+	// prose. Two lines per surface is the price of a documented route.
+	zip.Get(z, "/v1/sites/:slug/releases", o.listReleases)
+	zip.Post(z, "/v1/sites/:slug/releases/:release/activate", o.activateRelease)
 
 	// /v1/platform/sites — the PaaS static-site surface. Static sites are the
 	// S3-backed part of the platform (container apps live at /v1/platform/projects,
@@ -325,20 +361,23 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// tar.gz) → bind a custom domain → live. Org/project scope is the IAM-minted
 	// X-Org-Id, exactly as the /v1/projects surface. hanzo.app's upload UI posts a
 	// zip to POST /v1/platform/sites/:slug/deploy.
-	app.Post("/v1/platform/sites", cloud.Handle(s, create))
-	app.Get("/v1/platform/sites", cloud.Handle(s, list))
-	app.Get("/v1/platform/sites/:slug", cloud.Handle(s, get))
-	app.Patch("/v1/platform/sites/:slug", cloud.Handle(s, update))
-	app.Delete("/v1/platform/sites/:slug", cloud.Handle(s, del))
+	zip.Post(z, "/v1/platform/sites", o.create, created())
+	zip.Get(z, "/v1/platform/sites", o.list)
+	zip.Get(z, "/v1/platform/sites/:slug", o.get)
+	zip.Patch(z, "/v1/platform/sites/:slug", o.update)
+	zip.Delete(z, "/v1/platform/sites/:slug", o.del)
+	// deploy: RAW artifact body — see the note above.
 	app.Post("/v1/platform/sites/:slug/deploy", cloud.Handle(s, deploy))
-	app.Post("/v1/platform/sites/:slug/purge", cloud.Handle(s, purge))
-	app.Get("/v1/platform/sites/:slug/deployments", cloud.Handle(s, listDeployments))
-	app.Get("/v1/platform/sites/:slug/deployments/:id", cloud.Handle(s, getDeployment))
-	app.Get("/v1/platform/sites/:slug/domains", cloud.Handle(s, listDomains))
-	app.Post("/v1/platform/sites/:slug/domains", cloud.Handle(s, setDomains))
-	app.Post("/v1/platform/sites/:slug/domains/:host/verify", cloud.Handle(s, verifyDomain))
-	app.Delete("/v1/platform/sites/:slug/domains/:host", cloud.Handle(s, releaseDomain))
+	zip.Post(z, "/v1/platform/sites/:slug/purge", o.purge)
+	zip.Get(z, "/v1/platform/sites/:slug/deployments", o.listDeployments)
+	zip.Get(z, "/v1/platform/sites/:slug/deployments/:id", o.getDeployment)
+	zip.Get(z, "/v1/platform/sites/:slug/domains", o.listDomains)
+	zip.Post(z, "/v1/platform/sites/:slug/domains", o.setDomains)
+	zip.Post(z, "/v1/platform/sites/:slug/domains/:host/verify", o.verifyDomain)
+	zip.Delete(z, "/v1/platform/sites/:slug/domains/:host", o.releaseDomain)
 	siteReleases(app, s, "/v1/platform/sites")
+	zip.Get(z, "/v1/platform/sites/:slug/releases", o.listReleases)
+	zip.Post(z, "/v1/platform/sites/:slug/releases/:release/activate", o.activateRelease)
 }
 
 // siteReleases registers the release routes under a site-surface base path. Both
@@ -346,15 +385,17 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // get the same four routes from this one registration — a release published on
 // one is visible and activatable on the other because there is only one store.
 func siteReleases(app cloud.Router, s *cloud.Service[state], base string) {
+	// publish + create: billed write paths whose denied-gate 402/503 body is the
+	// contract — see the note on routes. Their paths stay computed because an
+	// untyped route needs no constant to be documented; the typed pair beside each
+	// call site does, and is spelled out there.
 	app.Post(base+"/:slug/publish", cloud.Handle(s, publishSiteRelease))
 	app.Post(base+"/:slug/releases", cloud.Handle(s, createRelease))
-	app.Get(base+"/:slug/releases", cloud.Handle(s, listReleases))
-	app.Post(base+"/:slug/releases/:release/activate", cloud.Handle(s, activateRelease))
 }
 
 // ---- handlers ----
 
-type createReq struct {
+type siteCreate struct {
 	Name        string `json:"name"`
 	Slug        string `json:"slug"`
 	Description string `json:"description"`
@@ -383,60 +424,92 @@ type createReq struct {
 	ForkedFrom string `json:"-"`
 }
 
-func create(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
+// begin resolves the request and the caller's org in ONE place. The org NEVER
+// comes from an In field — an In field is caller-supplied, so a tenant key read
+// from one is a cross-tenant read the caller asserted for itself. It comes from
+// the request cloud.Bridge parked; off the HTTP path there is none, so the op
+// refuses. The request is returned alongside for the helpers that still take it
+// (the billing gate, the admin predicate, the edge purge).
+func (o ops) begin(ctx context.Context) (*zip.Ctx, string, error) {
+	c, ok := cloud.Request(ctx)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return nil, "", zip.ErrForbidden("X-Org-Id required")
 	}
-	var body createReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	v, ok := org(c)
+	if !ok {
+		return nil, "", zip.ErrForbidden("X-Org-Id required")
 	}
-	return createProject(s, c, org, body)
+	return c, v, nil
 }
 
-// createProject is the ONE path that validates a createReq and persists a
+// project resolves the caller's own project by the slug in the path. A slug in
+// another org is reported not-found, so the slug space leaks no existence.
+func (o ops) project(ctx context.Context, c *zip.Ctx, org, slug string) (Project, error) {
+	p, err := o.s.State.store.GetProject(ctx, org, normalizeSlug(slug))
+	if errors.Is(err, errNotFound) {
+		return Project{}, zip.ErrNotFound("project not found")
+	}
+	if err != nil {
+		return Project{}, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	return p, nil
+}
+
+// create registers a new project (a static site) in the caller's org. The slug is
+// derived from the name when omitted, must be free in this org, and becomes the
+// project's public subdomain, so a reserved label is refused.
+//
+// Example: {"name": "Spring Launch", "slug": "spring-launch", "description": "campaign microsite", "framework": "next", "visibility": "private"}
+func (o ops) create(ctx context.Context, in *siteCreate) (*siteProject, error) {
+	c, org, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return createProject(o.s, c, org, *in)
+}
+
+// createProject is the ONE path that validates a siteCreate and persists a
 // Project. Both POST /v1/projects and POST /v1/projects/fork funnel through here,
 // so slug/framework validation, ID minting, and conflict mapping live in exactly
-// one place. It returns 201 with the project view on success.
-func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createReq) error {
+// one place. It returns the project view; the callers declare the 201.
+func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body siteCreate) (*siteProject, error) {
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	slug := strings.ToLower(strings.TrimSpace(body.Slug))
 	if slug == "" {
 		slug = slugify(name)
 	}
 	if !slugRE.MatchString(slug) {
-		return zip.ErrBadRequest("slug must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+		return nil, zip.ErrBadRequest("slug must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 	}
 	// A reserved label (api, admin, login, a brand term, …) may never become a
 	// project slug — so it can never be published to <slug>.hanzo.app and shadow a
 	// real app/api host. ONE reserved-list source (clients/sites/reserved.go),
 	// enforced here at create AND at BindHost.
 	if sites.IsReserved(slug) {
-		return zip.ErrBadRequest("slug is a reserved subdomain and cannot be used")
+		return nil, zip.ErrBadRequest("slug is a reserved subdomain and cannot be used")
 	}
 	framework := strings.ToLower(strings.TrimSpace(body.Framework))
 	if framework == "" {
 		framework = "static"
 	}
 	if !frameworks[framework] {
-		return zip.ErrBadRequest("unsupported framework")
+		return nil, zip.ErrBadRequest("unsupported framework")
 	}
 
 	// Resolved BEFORE the row is built, so an unfunded org asking for private is
 	// refused without a half-created project left behind.
 	vis, err := resolve(s, c, body.Visibility)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	now := time.Now().Unix()
 	id, err := genID("proj")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	p := Project{
 		ID: id, Org: org, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
@@ -457,9 +530,9 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 	setProjectDefaults(&p, body.Analytics)
 	if err := s.State.store.CreateProject(c.Context(), p); err != nil {
 		if errors.Is(err, errConflict) {
-			return zip.ErrConflict("project slug already exists in this org")
+			return nil, zip.ErrConflict("project slug already exists in this org")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
 	// Best-effort provision the Base data space (form/forum/data submissions). Runs
 	// only after a successful persist so a conflicting create provisions nothing;
@@ -468,7 +541,8 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 	// Give it a canonical repo at git.hanzo.ai, world-readable exactly when the
 	// project is.
 	share(s, c.Context(), p)
-	return c.JSON(http.StatusCreated, toProjectView(p))
+	out := toProjectView(p)
+	return &out, nil
 }
 
 // setProjectDefaults applies the wired-by-default project settings to a NEW
@@ -502,38 +576,55 @@ func provisionSpace(s *cloud.Service[state], ctx context.Context, p *Project) {
 	}
 }
 
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.ListProjects(c.Context(), org)
+// projectList is the project index — a bare array, as the console reads it.
+type projectList = []siteProject
+
+// list lists every project the caller's org owns, newest first. Org is the bound
+// isolation boundary, so another tenant's projects are never returned.
+//
+// Response: [{"id": "prj_8a1b", "slug": "spring-launch", "name": "Spring Launch", "status": "live", "url": "https://spring-launch.hanzo.app", "visibility": "private"}]
+func (o ops) list(ctx context.Context, _ *struct{}) (*projectList, error) {
+	_, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	out := make([]projectView, 0, len(rows))
+	rows, err := o.s.State.store.ListProjects(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	out := make(projectList, 0, len(rows))
 	for _, p := range rows {
 		out = append(out, toProjectView(p))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
-func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+// projectRef addresses one project by its slug.
+type projectRef struct {
+	// Slug is the project slug from the path.
+	Slug string `json:"slug"`
+}
+
+// get reads one project of the caller's org. It returns the status, live URL,
+// framework and linked repo, and a slug in another org is reported not-found.
+//
+// Example: {"slug": "spring-launch"}
+func (o ops) get(ctx context.Context, in *projectRef) (*siteProject, error) {
+	c, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, toProjectView(p))
+	p, err := o.project(ctx, c, org, in.Slug)
+	if err != nil {
+		return nil, err
+	}
+	out := toProjectView(p)
+	return &out, nil
 }
 
-type updateReq struct {
+type siteUpdate struct {
+	// Slug is the project slug from the path — which project to edit.
+	Slug         string  `json:"slug"`
 	Name         *string `json:"name"`
 	Description  *string `json:"description"`
 	Framework    *string `json:"framework"`
@@ -570,26 +661,26 @@ func credit(s string) string {
 	return s
 }
 
-func update(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+// update edits one project of the caller's org. Every field is a pointer, so an
+// absent one is left alone and an explicit null or empty clears it; hidden and
+// hiddenReason are moderation and are ignored unless the caller is an operator.
+//
+// Example: {"slug": "spring-launch", "description": "campaign microsite", "visibility": "public", "upstream": "UI8 — Fitness Pro Website UI Kit"}
+func (o ops) update(ctx context.Context, in *siteUpdate) (*siteProject, error) {
+	c, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	var body updateReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	s := o.s
+	p, err := o.project(ctx, c, org, in.Slug)
+	if err != nil {
+		return nil, err
 	}
+	body := *in
 	if body.Name != nil {
 		n := strings.TrimSpace(*body.Name)
 		if n == "" {
-			return zip.ErrBadRequest("name cannot be empty")
+			return nil, zip.ErrBadRequest("name cannot be empty")
 		}
 		p.Name = n
 	}
@@ -599,17 +690,17 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 	if body.Framework != nil {
 		f := strings.ToLower(strings.TrimSpace(*body.Framework))
 		if !frameworks[f] {
-			return zip.ErrBadRequest("unsupported framework")
+			return nil, zip.ErrBadRequest("unsupported framework")
 		}
 		p.Framework = f
 	}
 	if body.CacheControl != nil {
 		cc := strings.TrimSpace(*body.CacheControl)
 		if len(cc) > 256 {
-			return zip.ErrBadRequest("cacheControl too long")
+			return nil, zip.ErrBadRequest("cacheControl too long")
 		}
 		if strings.ContainsAny(cc, "\r\n") {
-			return zip.ErrBadRequest("cacheControl must not contain newlines")
+			return nil, zip.ErrBadRequest("cacheControl must not contain newlines")
 		}
 		p.CacheControl = cc
 	}
@@ -624,7 +715,7 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 	if body.Visibility != nil {
 		vis, err := resolve(s, c, *body.Visibility)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		p.Visibility = vis
 	}
@@ -645,38 +736,45 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 		p.License = credit(*body.License)
 	}
 	p.UpdatedAt = time.Now().Unix()
-	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
+	if err := s.State.store.UpdateProject(ctx, p); err != nil {
 		if errors.Is(err, errNotFound) {
-			return zip.ErrNotFound("project not found")
+			return nil, zip.ErrNotFound("project not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
 	// Reconcile the repo to whatever this update settled on — including a
 	// moderation, which must reach the source and not just the listing.
-	share(s, c.Context(), p)
-	return c.JSON(http.StatusOK, toProjectView(p))
+	share(s, ctx, p)
+	out := toProjectView(p)
+	return &out, nil
 }
 
-func del(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	slug := slugParam(c)
-	p, deleted, err := s.State.store.DeleteProject(c.Context(), org, slug)
+// del deletes one project of the caller's org and everything it published. The
+// subdomain binding, the release history and the object-store content all go, so
+// the slug is free to reclaim and a reclaimed slug inherits no rollback menu.
+//
+// Example: {"slug": "spring-launch"}
+func (o ops) del(ctx context.Context, in *projectRef) (*struct{}, error) {
+	_, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	s := o.s
+	slug := normalizeSlug(in.Slug)
+	p, deleted, err := s.State.store.DeleteProject(ctx, org, slug)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("project not found")
+		return nil, zip.ErrNotFound("project not found")
 	}
 	// Release the public subdomain binding so the slug is free to reclaim.
-	if uErr := s.State.store.UnbindHost(c.Context(), p.Slug, org, p.Slug); uErr != nil {
+	if uErr := s.State.store.UnbindHost(ctx, p.Slug, org, p.Slug); uErr != nil {
 		s.Log.Warn("unbind host failed (continuing)", "org", org, "slug", p.Slug, "err", uErr)
 	}
 	// Drop the release rows so a reclaimed slug never inherits the previous
 	// owner's rollback menu.
-	if rErr := s.State.store.DeleteReleases(c.Context(), org, p.Slug); rErr != nil {
+	if rErr := s.State.store.DeleteReleases(ctx, org, p.Slug); rErr != nil {
 		s.Log.Warn("delete releases failed (continuing)", "org", org, "slug", p.Slug, "err", rErr)
 	}
 	// Best-effort purge of the live site; metadata is already gone, so a purge
@@ -686,7 +784,7 @@ func del(s *cloud.Service[state], c *zip.Ctx) error {
 	if s.State.blob.configured() {
 		if cli, cErr := s.State.blob.client(); cErr == nil {
 			for _, prefix := range []string{sitePrefix(org, p.Slug), releaseSpace(org) + "/" + p.Slug} {
-				if pErr := purgePrefix(c.Context(), cli, s.State.blob.bucket, prefix); pErr != nil {
+				if pErr := purgePrefix(ctx, cli, s.State.blob.bucket, prefix); pErr != nil {
 					s.Log.Warn("purge site failed (continuing)", "org", org, "slug", p.Slug, "prefix", prefix, "err", pErr)
 				}
 			}
@@ -694,13 +792,17 @@ func del(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	// Purge the edge cache-tag so the deleted project stops serving stale copies
 	// from the edge; its metadata and S3 origin are already gone.
-	purgeTag(s, c.Context(), org, p.Slug)
-	return c.NoContent(http.StatusNoContent)
+	purgeTag(s, ctx, org, p.Slug)
+	return nil, nil
 }
 
 // ---- helpers ----
 
-func slugParam(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Param("slug"))) }
+func slugParam(c *zip.Ctx) string { return normalizeSlug(c.Param("slug")) }
+
+// normalizeSlug is the ONE slug normalization both the untyped deploy handler and
+// every typed op apply, so a slug means the same thing however it arrived.
+func normalizeSlug(raw string) string { return strings.ToLower(strings.TrimSpace(raw)) }
 
 // org resolves the org for a request — the tenant-isolation KEY, and also an
 // S3-key segment (sitePrefix = org+"/"+slug). Empty org is allowed only for a

@@ -19,20 +19,76 @@
     "/v1/s3/buckets": {
       "get": {
         "operationId": "get_v1_s3_buckets",
+        "summary": "listBuckets returns the caller org's buckets by their friendly names.",
+        "description": "listBuckets returns the caller org's buckets by their friendly names.",
         "tags": [
           "s3"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "buckets": [
+                    {
+                      "createdAt": 1780000000,
+                      "name": "photos"
+                    }
+                  ],
+                  "total": 1
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/bucketList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_s3_buckets",
+        "summary": "createBucket makes a new bucket in the caller org's namespace and answers 201.",
+        "description": "createBucket makes a new bucket in the caller org's namespace and answers 201.",
         "tags": [
           "s3"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "photos"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createBucketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "createdAt": 1780000000,
+                  "name": "photos"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/bucketItem"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/s3/buckets/{bucket}": {
       "delete": {
-        "operationId": "delete_v1_s3_buckets_by_bucket",
+        "operationId": "delete_v1_s3_buckets_bucket",
+        "summary": "deleteBucket removes an EMPTY bucket of the caller's org and answers 204.",
+        "description": "deleteBucket removes an EMPTY bucket of the caller's org and answers 204. A\nbucket that still holds objects is refused rather than cascaded.",
         "tags": [
           "s3"
         ],
@@ -41,16 +97,25 @@
             "name": "bucket",
             "in": "path",
             "required": true,
+            "description": "Bucket is the friendly bucket name from the path, as listBuckets returns it.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "photos"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       }
     },
     "/v1/s3/buckets/{bucket}/objects": {
       "get": {
-        "operationId": "get_v1_s3_buckets_by_bucket_objects",
+        "operationId": "get_v1_s3_buckets_bucket_objects",
+        "summary": "listObjects lists one folder level of a bucket, keys relative to the prefix.",
+        "description": "listObjects lists one folder level of a bucket, keys relative to the prefix.\nThe page is capped at 1000 entries, so a huge bucket cannot exhaust memory.",
         "tags": [
           "s3"
         ],
@@ -59,14 +124,63 @@
             "name": "bucket",
             "in": "path",
             "required": true,
+            "description": "Bucket is the friendly bucket name from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "photos"
+          },
+          {
+            "name": "prefix",
+            "in": "query",
+            "required": false,
+            "description": "Prefix scopes the listing to a sub-folder; empty lists the bucket root. An\nabsolute or traversing prefix is coerced to the root rather than refused.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026/"
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "required": false,
+            "description": "Recursive lists every key flat under prefix instead of one folder level.",
+            "schema": {
+              "type": "boolean"
+            },
+            "example": false
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bucket": "photos",
+                  "objects": [
+                    {
+                      "isDir": true,
+                      "key": "may/",
+                      "lastModified": 0,
+                      "size": 0
+                    }
+                  ],
+                  "prefix": "2026/",
+                  "total": 1
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/objectList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_s3_buckets_by_bucket_objects",
+        "operationId": "post_v1_s3_buckets_bucket_objects",
+        "summary": "presignUpload mints a short-lived presigned PUT URL so the browser uploads",
+        "description": "presignUpload mints a short-lived presigned PUT URL so the browser uploads\nstraight to the object store — no body through this binary, and the admin\ncredential never leaves the server.",
         "tags": [
           "s3"
         ],
@@ -75,11 +189,45 @@
             "name": "bucket",
             "in": "path",
             "required": true,
+            "description": "Bucket is the friendly bucket name from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "photos"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "bucket": "photos",
+                "key": "2026/may/cover.jpg"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/presignUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "expiresIn": 300,
+                  "key": "2026/may/cover.jpg",
+                  "method": "PUT",
+                  "url": "https://s3.hanzo.ai/o1234-photos/2026/may/cover.jpg?X-Amz-Signature=..."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/presignResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/s3/buckets/{bucket}/objects/{wildcard1}": {
@@ -138,6 +286,131 @@
         "tags": [
           "s3"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "bucketItem": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the bucket was made, unix seconds.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the bucket's FRIENDLY name — what the tenant created it as, with the\nserver-side org prefix stripped.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "bucketList": {
+        "properties": {
+          "buckets": {
+            "description": "Buckets is every bucket in the caller's org namespace; another tenant's\nbuckets are invisible rather than forbidden.",
+            "items": {
+              "$ref": "#/components/schemas/bucketItem"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many buckets came back — the listing is not paginated.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "createBucketRequest": {
+        "properties": {
+          "name": {
+            "description": "Name is the friendly bucket name, lowercase DNS-style\n(^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$). The physical name is derived from the\ncaller's org server-side.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "objectItem": {
+        "properties": {
+          "etag": {
+            "description": "ETag is the store's entity tag, quotes stripped; absent for a folder.",
+            "type": "string"
+          },
+          "isDir": {
+            "description": "IsDir is true for a folder (an S3 common prefix), false for a real object.",
+            "type": "boolean"
+          },
+          "key": {
+            "description": "Key is the object key RELATIVE to the requested prefix, so a UI can render a\nbreadcrumb without re-splitting the full key.",
+            "type": "string"
+          },
+          "lastModified": {
+            "description": "LastModified is unix seconds; 0 for a folder.",
+            "type": "integer"
+          },
+          "size": {
+            "description": "Size is the object's bytes; 0 for a folder.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "objectList": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket is the friendly bucket name that was listed.",
+            "type": "string"
+          },
+          "objects": {
+            "description": "Objects is the folder's entries, at most 1000 per call.",
+            "items": {
+              "$ref": "#/components/schemas/objectItem"
+            },
+            "type": "array"
+          },
+          "prefix": {
+            "description": "Prefix is the folder that was listed, after normalization.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is how many entries came back.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "presignResponse": {
+        "properties": {
+          "expiresIn": {
+            "description": "Expiry is how many seconds the URL stays valid.",
+            "type": "integer"
+          },
+          "key": {
+            "description": "Key is the object key the URL addresses, after cleaning.",
+            "type": "string"
+          },
+          "method": {
+            "description": "Method is the verb the URL is signed for: PUT to upload, GET to download.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the presigned URL the browser follows directly, signed against the\nPUBLIC endpoint and scoped to this exact bucket and key.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "presignUploadRequest": {
+        "properties": {
+          "bucket": {
+            "description": "Bucket is the friendly bucket name from the path.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the object key to upload, relative to the bucket root. It may contain\n\"/\" but must not be absolute, empty, a folder marker or traverse with \"..\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

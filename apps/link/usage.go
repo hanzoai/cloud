@@ -1,6 +1,7 @@
 package link
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -59,11 +60,11 @@ func resolveRange(label string, now time.Time) (from, to time.Time, err error) {
 
 // ── views ────────────────────────────────────────────────────────────────────
 
-// sampleView is one window instance on the wire. Unknown values are OMITTED rather
+// windowView is one window instance on the wire. Unknown values are OMITTED rather
 // than sent as zero, and `confidence` says whether the counters that remain mean
 // anything — so a console renders "—" where the meter knew nothing, and never a
 // fabricated 0.
-type sampleView struct {
+type windowView struct {
 	Lane          string  `json:"lane"`
 	Window        string  `json:"window"`
 	WindowMinutes int32   `json:"windowMinutes,omitempty"`
@@ -88,8 +89,8 @@ type sampleView struct {
 	Machine string `json:"machine,omitempty"`
 }
 
-func toSampleView(x Sample) sampleView {
-	return sampleView{
+func toSampleView(x Sample) windowView {
+	return windowView{
 		Lane: x.Lane, Window: x.Window, WindowMinutes: x.WindowMinutes,
 		WindowStart: rfc3339Of(x.WindowStart), ResetsAt: rfc3339Of(x.ResetsAt),
 		UsedPct: x.UsedPct, Confidence: x.Confidence, Synthetic: x.Synthetic,
@@ -426,7 +427,7 @@ func freshest(group []Sample, window string) (Sample, bool) {
 
 // ── reads ────────────────────────────────────────────────────────────────────
 
-type dashResp struct {
+type planDash struct {
 	Provider  string       `json:"provider"`
 	Account   string       `json:"account,omitempty"`
 	Range     string       `json:"range"`
@@ -435,8 +436,8 @@ type dashResp struct {
 	Source    string       `json:"source"`    // account — the provider's own meter
 	Scope     string       `json:"scope"`     // user
 	Available bool         `json:"available"` // false = warehouse unavailable, NOT "no usage"
-	Current   []sampleView `json:"current"`   // the live state of each lane: the dash headline
-	Windows   []sampleView `json:"windows"`   // every instance in range, newest first
+	Current   []windowView `json:"current"`   // the live state of each lane: the dash headline
+	Windows   []windowView `json:"windows"`   // every instance in range, newest first
 }
 
 // usageDash is the PER-PROVIDER view: one connected account's own consumption of
@@ -444,43 +445,61 @@ type dashResp struct {
 //
 // `current` is the newest instance of each lane (the headline); `windows` is the
 // history behind it. Both are computed from ONE deduped read — no second query.
-func usageDash(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// dashQuery selects which connected account's plan consumption to show.
+type dashQuery struct {
+	// Provider is the account's provider, e.g. anthropic or openai. Required.
+	Provider string `json:"provider"`
+	// Account narrows to one account of that provider; empty covers them all.
+	Account string `json:"account"`
+	// Window narrows to one window class: 6h, day, week or month.
+	Window string `json:"window"`
+	// Range is the history period to read, e.g. 24h; empty means 24h.
+	Range string `json:"range"`
+}
+
+// usageDash reports one connected account's consumption of its OWN provider plan. It
+// says how far through the current window it is and when that resets: current is the
+// live state of each lane, windows is the history behind it, and available:false
+// means the warehouse could not be read, which is not the same as no usage.
+//
+// Example: {"provider": "anthropic", "account": "z@hanzo.ai", "window": "6h", "range": "24h"}
+func (o ops) usageDash(ctx context.Context, in *dashQuery) (*planDash, error) {
+	org, user, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
 	}
-	provider := trim(c.Query("provider"))
+	provider := trim(in.Provider)
 	if provider == "" {
-		return zip.ErrBadRequest("provider is required")
+		return nil, zip.ErrBadRequest("provider is required")
 	}
 	if len(provider) > maxProvider {
-		return zip.ErrBadRequest("provider too long")
+		return nil, zip.ErrBadRequest("provider too long")
 	}
-	acct := trim(c.Query("account"))
+	acct := trim(in.Account)
 	if len(acct) > maxAccount {
-		return zip.ErrBadRequest("account too long")
+		return nil, zip.ErrBadRequest("account too long")
 	}
-	window := trim(c.Query("window"))
+	window := trim(in.Window)
 	if window != "" && !validWindow(window) {
-		return zip.ErrBadRequest("window must be one of 6h, day, week, month")
+		return nil, zip.ErrBadRequest("window must be one of 6h, day, week, month")
 	}
-	rangeLabel := trim(c.Query("range"))
+	rangeLabel := trim(in.Range)
 	from, to, err := resolveRange(rangeLabel, time.Now())
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	if rangeLabel == "" {
 		rangeLabel = Range24h
 	}
-	out := dashResp{
+	out := planDash{
 		Provider: provider, Account: acct, Range: rangeLabel,
 		From: rfc3339Of(from), To: rfc3339Of(to),
 		Source: SourceAccount, Scope: ScopeUser,
-		Current: []sampleView{}, Windows: []sampleView{},
+		Current: []windowView{}, Windows: []windowView{},
 	}
-	rows, ok := s.State.store.Series(c.Context(), org, user, provider, acct, window, from, to)
+	rows, ok := o.s.State.store.Series(ctx, org, user, provider, acct, window, from, to)
 	if !ok {
-		return c.JSON(http.StatusOK, out) // Available=false: honest "unavailable"
+		return &out, nil // Available=false: honest "unavailable"
 	}
 	out.Available = true
 	for _, x := range rows {
@@ -489,7 +508,7 @@ func usageDash(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, x := range currentOf(rows) {
 		out.Current = append(out.Current, toSampleView(x))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
 // currentOf picks the newest instance of each lane — the live state. Rows arrive
@@ -542,15 +561,28 @@ type sourceState struct {
 //     other half into zeros
 //   - both sides resolve the SAME [from, to) from ONE resolver, so the comparison
 //     is over one period
-func usageSummary(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// rangeQuery bounds a usage read to one period.
+type rangeQuery struct {
+	// Range is the period to total over, e.g. 24h; empty means 24h.
+	Range string `json:"range"`
+}
+
+// usageSummary totals the caller's provider accounts beside their org's Hanzo usage.
+// Both sides land on one board for one period and each reports its own availability,
+// so half a warehouse never turns the other half into zeros, and both resolve the
+// SAME window from one resolver.
+//
+// Example: {"range": "24h"}
+func (o ops) usageSummary(ctx context.Context, in *rangeQuery) (*summaryResp, error) {
+	org, user, errBegin := o.begin(ctx)
+	if errBegin != nil {
+		return nil, errBegin
 	}
-	rangeLabel := trim(c.Query("range"))
+	s := o.s
+	rangeLabel := trim(in.Range)
 	from, to, err := resolveRange(rangeLabel, time.Now())
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	if rangeLabel == "" {
 		rangeLabel = Range24h
@@ -562,17 +594,17 @@ func usageSummary(s *cloud.Service[state], c *zip.Ctx) error {
 		Hanzo: sourceState{Scope: ScopeOrg, Source: cloudUsageTable,
 			Note: "your org's Hanzo-routed inference; cost of record"},
 	}
-	if rows, ok := s.State.store.AccountTotals(c.Context(), org, user, from, to); ok {
+	if rows, ok := s.State.store.AccountTotals(ctx, org, user, from, to); ok {
 		out.Account.Available = true
 		for _, t := range rows {
 			out.Rows = append(out.Rows, toTotalView(t))
 		}
 	}
-	if rows, ok := s.State.store.HanzoTotals(c.Context(), org, from, to); ok {
+	if rows, ok := s.State.store.HanzoTotals(ctx, org, from, to); ok {
 		out.Hanzo.Available = true
 		for _, t := range rows {
 			out.Rows = append(out.Rows, toTotalView(t))
 		}
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }

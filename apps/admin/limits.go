@@ -50,10 +50,10 @@ type capIn struct {
 	ID string `json:"id"`
 }
 
-// getPromo reads the current platform plan promo — the singleton discount offer, e.g.
-// the 50%-off launch promo. Commerce stores it in the reserved platform namespace, so
-// the org sent with the read is the admin org and the service token is what passes
-// commerce's own platform-admin gate.
+// getPromo reads the current platform plan promo. The promo is the singleton discount
+// offer, e.g. the 50%-off launch promo. Commerce stores it in the reserved platform
+// namespace, so the org sent with the read is the admin org and the service token is
+// what passes commerce's own platform-admin gate.
 //
 // Response: {"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z",
 // "end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"data2":0}
@@ -66,7 +66,7 @@ func (o ops) getPromo(ctx context.Context, _ *core.None) (*rawOut, error) {
 	return relay(raw, status, err)
 }
 
-// putPromo upserts the platform plan promo — the ONE place the offer is configured.
+// putPromo upserts the platform plan promo. It is the ONE place the offer is configured.
 //
 // The body is commerce's own promo contract and is forwarded BYTE-FOR-BYTE, so no field
 // commerce accepts is dropped in transit. promoIn names its documented fields.
@@ -125,9 +125,9 @@ func (o ops) listSpendCaps(ctx context.Context, in *capIn) (*rawOut, error) {
 	return relay(raw, status, err)
 }
 
-// createSpendCap sets a usage cap on one org — a platform override of a customer budget,
-// written to the customer's own spend-alert rows. The body is commerce's spend-alert
-// contract, forwarded byte-for-byte.
+// createSpendCap sets a usage cap on one org. It is a platform override of a customer
+// budget, written to the customer's own spend-alert rows. The body is commerce's
+// spend-alert contract, forwarded byte-for-byte.
 //
 // Example: {"org":"acme","limitCents":100000,"enforce":true}
 // Response: {"status":"ok","msg":"","data":{"id":"cap_1","limitCents":100000,

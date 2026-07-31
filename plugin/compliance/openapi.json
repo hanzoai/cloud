@@ -19,20 +19,77 @@
     "/v1/compliance/accreditation": {
       "get": {
         "operationId": "get_v1_compliance_accreditation",
+        "summary": "listAccreditation returns the caller org's accreditation records with their",
+        "description": "listAccreditation returns the caller org's accreditation records with their\nmethod, basis and current state.",
         "tags": [
           "compliance"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means the store's own default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccreditationList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_compliance_accreditation",
+        "summary": "createAccreditation records an ASSERTED accreditation state for one of the org's\nsubjects.",
+        "description": "createAccreditation records an ASSERTED accreditation state for one of the org's\nsubjects. A create can only ever record an assertion — every confirmed, rejected\nor expired state goes through the decision endpoint, so it always names the\nreviewer who recorded it.",
         "tags": [
           "compliance"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "basis": "income",
+                "method": "self_attested",
+                "subjectId": "sub_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AccreditationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccreditationView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/compliance/accreditation/{id}": {
       "get": {
-        "operationId": "get_v1_compliance_accreditation_by_id",
+        "operationId": "get_v1_compliance_accreditation_id",
+        "summary": "getAccreditation returns one of the caller org's accreditation records.",
+        "description": "getAccreditation returns one of the caller org's accreditation records.",
         "tags": [
           "compliance"
         ],
@@ -41,16 +98,32 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the accreditation id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccreditationView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/compliance/accreditation/{id}/decision": {
       "post": {
-        "operationId": "post_v1_compliance_accreditation_by_id_decision",
+        "operationId": "post_v1_compliance_accreditation_id_decision",
+        "summary": "decideAccreditation records a reviewer's decision on an accreditation record and\nattributes it to them.",
+        "description": "decideAccreditation records a reviewer's decision on an accreditation record and\nattributes it to them. It requires an org admin or platform reviewer: the\nplatform never confirms on its own, and even a provider_verified state carries\nthe reviewer who recorded the evidence.",
         "tags": [
           "compliance"
         ],
@@ -59,62 +132,242 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the accreditation id from the path; a body value is ignored.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "acc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a",
+                "status": "reviewer_confirmed"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AccreditationDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccreditationView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/compliance/audit": {
       "get": {
         "operationId": "get_v1_compliance_audit",
+        "summary": "auditRead returns the caller org's compliance actions from the shared\ntamper-evident audit trail — who started or decided what, and when.",
+        "description": "auditRead returns the caller org's compliance actions from the shared\ntamper-evident audit trail — who started or decided what, and when. The org is\npinned to the caller's own; 501 when no audit store is configured.",
         "tags": [
           "compliance"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "result",
+            "in": "query",
+            "required": false,
+            "description": "Result keeps only rows with that outcome (success, denied, ...).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "success"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditTrail"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/compliance/health": {
       "get": {
         "operationId": "get_v1_compliance_health",
+        "summary": "health reports that the compliance surface is serving and which identity\nprovider is wired.",
+        "description": "health reports that the compliance surface is serving and which identity\nprovider is wired. It does NOT probe that provider — a provider outage must not\nfail liveness.",
         "tags": [
           "compliance"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "provider": "manual",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderHealth"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/compliance/records": {
       "get": {
         "operationId": "get_v1_compliance_records",
+        "summary": "listRecords returns the caller org's verifications and accreditation records\ntogether.",
+        "description": "listRecords returns the caller org's verifications and accreditation records\ntogether. Every row carries opaque ids and statuses only — subject PII stays in\nthe subject store.",
         "tags": [
           "compliance"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means the store's own default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Records"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/compliance/status": {
       "get": {
         "operationId": "get_v1_compliance_status",
+        "summary": "status returns the org's compliance posture: the wired provider and the count of\nits verifications per provider-reported status.",
+        "description": "status returns the org's compliance posture: the wired provider and the count of\nits verifications per provider-reported status. It is deliberately NOT a boolean\n\"compliant\" — the platform reports what providers said, nothing more.",
         "tags": [
           "compliance"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "disclaimer": "...",
+                  "provider": "manual",
+                  "verifications": {
+                    "byStatus": {
+                      "pending": 2
+                    },
+                    "total": 2
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Posture"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/compliance/subjects": {
       "get": {
         "operationId": "get_v1_compliance_subjects",
+        "summary": "listSubjects returns the caller org's subjects without their contact PII: a row",
+        "description": "listSubjects returns the caller org's subjects without their contact PII: a row\nsays whether an email is on file, never what it is.",
         "tags": [
           "compliance"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means the store's own default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_compliance_subjects",
+        "summary": "createSubject records a person or business to verify.",
+        "description": "createSubject records a person or business to verify. It needs an email or the\norg's own ref. Contact PII is sealed at rest and never returned by a list read.",
         "tags": [
           "compliance"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "email": "ada@acme.com",
+                "kind": "individual",
+                "name": "Ada Lovelace",
+                "ref": "cust_814"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/SubjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Subject"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/compliance/subjects/{id}": {
       "get": {
-        "operationId": "get_v1_compliance_subjects_by_id",
+        "operationId": "get_v1_compliance_subjects_id",
+        "summary": "getSubject returns one of the caller org's subjects INCLUDING its contact PII.",
+        "description": "getSubject returns one of the caller org's subjects INCLUDING its contact PII.\nThis is the only surface that discloses it, and only to the owning org.",
         "tags": [
           "compliance"
         ],
@@ -123,25 +376,94 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the subject id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sub_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Subject"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/compliance/verifications": {
       "get": {
         "operationId": "get_v1_compliance_verifications",
+        "summary": "listVerifications returns the caller org's verifications, each with its",
+        "description": "listVerifications returns the caller org's verifications, each with its\nprovider-reported status and no subject PII.",
         "tags": [
           "compliance"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means the store's own default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_compliance_verifications",
+        "summary": "startVerification opens a KYC/KYB verification for a subject through the wired\nprovider, creating the subject inline when no subjectId is given.",
+        "description": "startVerification opens a KYC/KYB verification for a subject through the wired\nprovider, creating the subject inline when no subjectId is given. A start is\nnever a decision: the record comes back pending even if the provider reports\notherwise, so no path here yields a verified check.",
         "tags": [
           "compliance"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "email": "ada@acme.com",
+                "kind": "individual",
+                "name": "Ada Lovelace"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/StartVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/compliance/verifications/webhook": {
@@ -154,7 +476,9 @@
     },
     "/v1/compliance/verifications/{id}": {
       "get": {
-        "operationId": "get_v1_compliance_verifications_by_id",
+        "operationId": "get_v1_compliance_verifications_id",
+        "summary": "getVerification returns one of the caller org's verifications with its current",
+        "description": "getVerification returns one of the caller org's verifications with its current\nrecorded status.",
         "tags": [
           "compliance"
         ],
@@ -163,16 +487,32 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the verification id from the path, as returned by start.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "chk_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/compliance/verifications/{id}/decision": {
       "post": {
-        "operationId": "post_v1_compliance_verifications_by_id_decision",
+        "operationId": "post_v1_compliance_verifications_id_decision",
+        "summary": "decideVerification records a reviewer's manual decision on a verification — the\nhuman-in-the-loop path, and the only route to a passing status when no real\nprovider is wired.",
+        "description": "decideVerification records a reviewer's manual decision on a verification — the\nhuman-in-the-loop path, and the only route to a passing status when no real\nprovider is wired. It requires an org admin or platform reviewer and is\nattributed to them, and it can only record reviewer_confirmed or manual_review.",
         "tags": [
           "compliance"
         ],
@@ -181,16 +521,46 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the verification id from the path; a body value is ignored.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "chk_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "chk_4c1e9b7a2d6f0538e4a7c9b1d3f5027a",
+                "status": "reviewer_confirmed"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CheckDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/compliance/verifications/{id}/refresh": {
       "post": {
-        "operationId": "post_v1_compliance_verifications_by_id_refresh",
+        "operationId": "post_v1_compliance_verifications_id_refresh",
+        "summary": "refreshVerification is the internal PULL reconcile: an org member triggers a poll of\nthe wired provider for the current decision.",
+        "description": "refreshVerification is the internal PULL reconcile: an org member triggers a poll of\nthe wired provider for the current decision. For the Manual provider this stays\npending; for a hosted provider it reflects the provider's settled status,\nprovider-attributed. A poll error is a 502, never a verification.\nrefreshVerification polls the wired provider for a verification's current\ndecision and records it, attributed to the provider. With the manual provider it\nstays pending; a poll error is a 502 and never a verification.",
         "tags": [
           "compliance"
         ],
@@ -199,11 +569,502 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the verification id from the path, as returned by start.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "chk_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "chk_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CheckRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccreditationDecision": {
+        "properties": {
+          "id": {
+            "description": "ID is the accreditation id from the path; a body value is ignored.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status must be reviewer_confirmed, provider_verified, rejected or expired.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AccreditationList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per accreditation record.",
+            "items": {
+              "$ref": "#/components/schemas/AccreditationView"
+            },
+            "type": "array"
+          },
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AccreditationRequest": {
+        "properties": {
+          "basis": {
+            "description": "Basis is what qualifies the subject: income, net_worth,\nprofessional_license or entity.",
+            "type": "string"
+          },
+          "evidenceDocId": {
+            "description": "EvidenceDocID references the supporting document, if any.",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "ExpiresAt is the unix second the assertion lapses, 0 for none.",
+            "type": "integer"
+          },
+          "method": {
+            "description": "Method is how the state was established: self_attested, third_party_letter\nor provider_verified.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is a non-PII operator note.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status may only be asserted (or empty, which means asserted). Every\nconfirmed, rejected or expired state is set through the decision endpoint,\nso it always carries the reviewer who recorded it.",
+            "type": "string"
+          },
+          "subjectId": {
+            "description": "SubjectID is the subject the assertion is about; it must exist in the org.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AccreditationView": {
+        "properties": {
+          "basis": {
+            "description": "Basis is what qualifies the subject.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is the unix second the record was created.",
+            "type": "integer"
+          },
+          "evidenceDocId": {
+            "description": "EvidenceDocID references the supporting document, when one is named.",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "ExpiresAt is the unix second the record lapses, when one is set.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the accreditation id.",
+            "type": "string"
+          },
+          "method": {
+            "description": "Method is how the state was established.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is a non-PII operator note, when one is set.",
+            "type": "string"
+          },
+          "reviewerSub": {
+            "description": "ReviewerSub is the org user who recorded the decision, once decided.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the tracked state: asserted until a reviewer decides.",
+            "type": "string"
+          },
+          "subjectId": {
+            "description": "SubjectID is the opaque subject the record is about.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the unix second of the last recorded change.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AuditTrail": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per privileged compliance action: who started or decided\nwhat, and when. It is pinned to the caller's own org.",
+            "items": {
+              "$ref": "#/components/schemas/Wire"
+            },
+            "type": "array"
+          },
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CheckDecision": {
+        "properties": {
+          "id": {
+            "description": "ID is the verification id from the path; a body value is ignored.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status must be reviewer_confirmed (a pass) or manual_review (withhold). A\nprovider_verified or provider_rejected status is the provider's to report and\nis refused here.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CheckRef": {
+        "properties": {
+          "id": {
+            "description": "ID is the verification id from the path, as returned by start.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CheckView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the unix second the verification was started.",
+            "type": "integer"
+          },
+          "decidedAt": {
+            "description": "DecidedAt is the unix second it reached a terminal status.",
+            "type": "integer"
+          },
+          "decidedBy": {
+            "description": "DecidedBy names who settled it: the provider, or the reviewer's user id.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the verification id.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is individual or business.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the identity provider that holds the verification.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is provider-reported or pending — never platform-asserted.",
+            "type": "string"
+          },
+          "subjectId": {
+            "description": "SubjectID is the opaque subject this verifies.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the unix second of the last recorded change.",
+            "type": "integer"
+          },
+          "verifyUrl": {
+            "description": "VerifyURL is where the subject completes verification, while one is open.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Posture": {
+        "properties": {
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire: Hanzo records what\nlicensed providers report; it does not itself determine compliance.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the wired identity-verification provider.",
+            "type": "string"
+          },
+          "verifications": {
+            "$ref": "#/components/schemas/VerificationTally",
+            "description": "Verifications is the per-status tally of the org's verifications."
+          }
+        },
+        "type": "object"
+      },
+      "ProviderHealth": {
+        "properties": {
+          "provider": {
+            "description": "Provider is the wired identity-verification provider.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" while the surface is serving.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Records": {
+        "properties": {
+          "accreditation": {
+            "description": "Accreditation is the org's accreditation records, tracked.",
+            "items": {
+              "$ref": "#/components/schemas/AccreditationView"
+            },
+            "type": "array"
+          },
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          },
+          "verifications": {
+            "description": "Verifications are the org's KYC/KYB checks, provider-reported.",
+            "items": {
+              "$ref": "#/components/schemas/CheckView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "StartVerificationRequest": {
+        "properties": {
+          "email": {
+            "description": "Email is contact PII, for an inline subject; sealed at rest.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is individual or business, for an inline subject.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is contact PII, for an inline subject; sealed at rest.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the org's own opaque external id, for an inline subject.",
+            "type": "string"
+          },
+          "subjectId": {
+            "description": "SubjectID verifies an existing subject. When empty, one is created inline\nfrom kind/ref/email/name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Subject": {
+        "properties": {
+          "createdAt": {
+            "type": "integer"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "ref": {
+            "description": "the org's own opaque external id for this subject",
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SubjectList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per subject. It carries no name or email — only whether an\nemail is on file — so a list read never sprays PII.",
+            "items": {
+              "$ref": "#/components/schemas/subjectSummary"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SubjectRequest": {
+        "properties": {
+          "email": {
+            "description": "Email is contact PII, sealed at rest and returned only on a single-subject\nread to the owning org. Required when no ref is given.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is individual or business, required.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is contact PII, sealed at rest.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the org's own opaque external id; required when no email is given.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "VerificationList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per verification, each carrying only opaque ids and the\nprovider-reported status — never subject PII.",
+            "items": {
+              "$ref": "#/components/schemas/CheckView"
+            },
+            "type": "array"
+          },
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "VerificationTally": {
+        "properties": {
+          "byStatus": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "ByStatus is the count per status, one key per status seen.",
+            "type": "object"
+          },
+          "total": {
+            "description": "Total is the sum across statuses.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Wire": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "authMethod": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "home": {
+            "type": "string"
+          },
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "method": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "prevHash": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "resourceId": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "sourceIp": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "sub": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "userAgent": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "subjectSummary": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the unix second the subject was recorded.",
+            "type": "integer"
+          },
+          "hasEmail": {
+            "description": "HasEmail reports whether contact email is on file, without disclosing it.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the subject id, the value every verification and accreditation names.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is individual or business.",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is the org's own opaque external id for this subject.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

@@ -8,7 +8,7 @@ import (
 )
 
 // TestCampaignWhere_BindsOrgAndCampaignPositionally is the tenancy-invariant test
-// for the campaign-metrics seam: the org (tenant_id) and campaign (utm_campaign)
+// for the campaign-metrics seam: the org and campaign (attributes['utm_campaign'])
 // are ALWAYS bound parameters, never interpolated, so a caller can only read its
 // own org's campaign and a hostile campaign id can never escape into SQL.
 func TestCampaignWhere_BindsOrgAndCampaignPositionally(t *testing.T) {
@@ -16,7 +16,7 @@ func TestCampaignWhere_BindsOrgAndCampaignPositionally(t *testing.T) {
 	end := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 	where, args := campaignWhere("acme", "cmp_1", "", start, end)
 
-	if !strings.Contains(where, "tenant_id = ?") || !strings.Contains(where, "utm_campaign = ?") {
+	if !strings.Contains(where, "org = ?") || !strings.Contains(where, "attributes['utm_campaign'] = ?") {
 		t.Fatalf("org + campaign must be bound placeholders, got %q", where)
 	}
 	if strings.Contains(where, "utm_content") {
@@ -38,7 +38,7 @@ func TestCampaignWhere_VariantAppended(t *testing.T) {
 	start := time.Unix(0, 0).UTC()
 	end := time.Unix(1000, 0).UTC()
 	where, args := campaignWhere("acme", "cmp_1", "hero-b", start, end)
-	if !strings.Contains(where, "utm_content = ?") {
+	if !strings.Contains(where, "attributes['utm_content'] = ?") {
 		t.Fatalf("variant must add a bound utm_content clause, got %q", where)
 	}
 	if len(args) != 5 || args[4] != "hero-b" {

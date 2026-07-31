@@ -30,8 +30,15 @@
 // shared attribution spine; this package owns the one-time-bonus ledger at
 // /v1/admin/referrals/bonuses so the two admin surfaces compose without colliding.
 //
+// EVERY ROUTE IS A TYPED OP (zip.Get/Post with concrete In/Out structs), so the
+// surface is ONE registry the REST route, the OpenAPI document, the MCP tool list
+// and the CLI are all projections of; each handler's doc comment is lifted into
+// the spec by the build-time cmd/zipdoc pass.
+//
 // serve.go auto-registers GET /v1/referrals/health.
 package referrals
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
 	"context"
@@ -42,7 +49,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -118,37 +124,91 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		auditStore: deps.Audit,
 	}}
 	mounted = s
-	routes(app, s)
+	if err := routes(app, s); err != nil {
+		return err
+	}
 	s.Log.Info("referrals mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "commerce", s.State.commerce.configured())
 	return nil
 }
 
 // routes registers the referrals surface.
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/referrals", cloud.Handle(s, myReferrals))
-	app.Post("/v1/referrals/claim", cloud.Handle(s, claim))
+func routes(app cloud.Router, s *cloud.Service[state]) error {
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("referrals.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	o := ops{s: s}
+	// The bridge FIRST — fiber runs middleware in registration order — on each of
+	// the two subtrees this surface owns, so every op below resolves its tenant
+	// (and the admin ops their request) through it.
+	app.Group("/v1/referrals").Use(cloud.Bridge())
+	app.Group("/v1/admin/referrals").Use(cloud.Bridge())
+
+	zip.Get(zapp, "/v1/referrals", o.myReferrals)
+	zip.Post(zapp, "/v1/referrals/claim", o.claim)
 	// The one-time-bonus ledger board. The cross-tenant analytics board at
 	// GET /v1/admin/referrals is owned by clients/affiliates (shared spine).
-	app.Get("/v1/admin/referrals/bonuses", cloud.Handle(s, adminList))
-	app.Post("/v1/admin/referrals/sweep", cloud.Handle(s, adminSweep))
+	zip.Get(zapp, "/v1/admin/referrals/bonuses", o.adminList)
+	zip.Post(zapp, "/v1/admin/referrals/sweep", o.adminSweep)
+	return nil
+}
+
+// ops binds the service to referrals's typed handlers: a TypedHandler is
+// func(context.Context, *In) (*Out, error) with no parameter for the service, so
+// it arrives as a RECEIVER — also the one bound form cmd/zipdoc lifts prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// None is the input of an op that takes none: no body, no query, no path param.
+type None struct{}
+
+// admit is the SuperAdmin gate for the two /v1/admin/referrals ops. It reads the
+// request cloud.Bridge parked, so it fails closed off the HTTP path (the CLI
+// projection has no request and no identity to admit).
+func admit(ctx context.Context) error {
+	c, ok := cloud.Request(ctx)
+	if !ok || !c.IsAdmin() {
+		return zip.ErrForbidden("SuperAdmin required")
+	}
+	return nil
 }
 
 // ── customer surface ─────────────────────────────────────────────────────────
 
-// myReferrals answers GET /v1/referrals for the validated caller: their stable
-// code + link, the referrals they've made (with status + credit earned), and the
-// total credit earned. It ALSO opportunistically runs the qualify check for the
-// caller's own pending referees, so the referrer's page is self-updating.
-func myReferrals(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// MyReferrals is the referrer's own view of the loop: their stable code and link,
+// the standing bonus amounts, what they have earned, and every referral they made.
+type MyReferrals struct {
+	// Code is the caller org's stable referral code.
+	Code string `json:"code"`
+	// Link is the shareable signup link carrying that code.
+	Link string `json:"link"`
+	// ReferrerBonusCents is what the referrer earns per qualified referee.
+	ReferrerBonusCents int64 `json:"referrerBonusCents"`
+	// RefereeBonusCents is what the referee earns on qualification.
+	RefereeBonusCents int64 `json:"refereeBonusCents"`
+	// CreditsEarnedCents is the promo credit this org has earned in total.
+	CreditsEarnedCents int64 `json:"creditsEarnedCents"`
+	// Counts tallies the caller's referrals by status.
+	Counts statusCounts `json:"counts"`
+	// Referrals is the caller's referrals, one row per referee.
+	Referrals []myReferralView `json:"referrals"`
+}
+
+// myReferrals returns the caller org's referral code and link, the standing bonus
+// amounts, the credit earned so far, and every referral they have made. It also
+// opportunistically qualify-checks the caller's own pending referees, so the page
+// is self-updating.
+//
+// Response: {"code": "ACME1234", "link": "https://hanzo.ai/?ref=ACME1234", "referrerBonusCents": 1000, "refereeBonusCents": 500, "creditsEarnedCents": 1000, "counts": {"total": 1, "signedUp": 0, "qualified": 0, "credited": 1}, "referrals": []}
+func (o ops) myReferrals(ctx context.Context, _ *None) (*MyReferrals, error) {
+	s := o.s
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to view referrals")
+		return nil, zip.ErrForbidden("sign in to view referrals")
 	}
-	ctx := c.Context()
 
 	code, err := s.State.store.EnsureCode(ctx, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "referral code: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "referral code: %v", err)
 	}
 
 	// Lazy qualify sweep for MY referees (bounded, best-effort — a commerce hiccup
@@ -163,7 +223,7 @@ func myReferrals(s *cloud.Service[state], c *zip.Ctx) error {
 
 	rows, err := s.State.store.ListByReferrer(ctx, org, listLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list referrals: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list referrals: %v", err)
 	}
 
 	views := make([]myReferralView, 0, len(rows))
@@ -179,89 +239,128 @@ func myReferrals(s *cloud.Service[state], c *zip.Ctx) error {
 		})
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
-		"code":               code,
-		"link":               s.State.linkBase + "/?ref=" + code,
-		"referrerBonusCents": referrerBonusCents,
-		"refereeBonusCents":  refereeBonusCents,
-		"creditsEarnedCents": earned,
-		"counts":             counts,
-		"referrals":          views,
-	})
+	return &MyReferrals{
+		Code:               code,
+		Link:               s.State.linkBase + "/?ref=" + code,
+		ReferrerBonusCents: referrerBonusCents,
+		RefereeBonusCents:  refereeBonusCents,
+		CreditsEarnedCents: earned,
+		Counts:             counts,
+		Referrals:          views,
+	}, nil
 }
 
-// claimRequest is the POST /v1/referrals/claim body: the referrer's code the
+// ClaimRequest is the POST /v1/referrals/claim body: the referrer's code the
 // referee arrived with (from a ?ref= link, stashed at signup).
-type claimRequest struct {
+type ClaimRequest struct {
+	// Code is the referrer's referral code, as carried by the ?ref= link.
 	Code string `json:"code"`
 }
 
-// claim records a referral. The REFEREE is the validated caller (never client-
-// supplied); the referrer is resolved from the code. Idempotent (one per referee,
-// first-touch wins), self-referral blocked, unknown code rejected.
-func claim(s *cloud.Service[state], c *zip.Ctx) error {
-	refereeOrg, ok := principal.Org(c)
+// ClaimResult is the recorded referral edge.
+type ClaimResult struct {
+	// ID is the referral id.
+	ID string `json:"id"`
+	// Code is the referrer code the referral was recorded against.
+	Code string `json:"code"`
+	// Status is the referral's lifecycle state, signed_up on a fresh claim.
+	Status string `json:"status"`
+	// Created is false when the caller had already claimed a referral; the
+	// first-touch row is returned unchanged and the response is 200, not 201.
+	Created bool `json:"created"`
+	// CreatedAt is the unix second the referral was first recorded.
+	CreatedAt int64 `json:"createdAt"`
+}
+
+// claim records a referral from a referrer's code. The REFEREE is the validated
+// caller (never client-supplied); the referrer is resolved from the code. It is
+// idempotent — one referral per referee ever, first touch wins — and refuses a
+// self-referral or an unknown code.
+//
+// Example: {"code": "ACME1234"}
+// Response: {"id": "ref_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "code": "ACME1234", "status": "signed_up", "created": true, "createdAt": 1780000000}
+func (o ops) claim(ctx context.Context, in *ClaimRequest) (*ClaimResult, error) {
+	s := o.s
+	refereeOrg, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to claim a referral")
+		return nil, zip.ErrForbidden("sign in to claim a referral")
 	}
-	var body claimRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	code := normalizeCode(body.Code)
+	code := normalizeCode(in.Code)
 	if code == "" {
-		return zip.ErrBadRequest("code is required")
+		return nil, zip.ErrBadRequest("code is required")
 	}
-	ctx := c.Context()
 
 	referrerOrg, err := s.State.store.OrgForCode(ctx, code)
 	if err != nil {
 		if err == errUnknownCode {
-			return zip.ErrNotFound("unknown referral code")
+			return nil, zip.ErrNotFound("unknown referral code")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "resolve code: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "resolve code: %v", err)
 	}
 	if referrerOrg == refereeOrg {
-		return zip.ErrBadRequest("cannot refer yourself")
+		return nil, zip.ErrBadRequest("cannot refer yourself")
 	}
 
 	id, err := genID("ref")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	ref, created, err := s.State.store.Claim(ctx, id, referrerOrg, refereeOrg, code)
 	if err != nil {
 		switch err {
 		case errSelfReferral:
-			return zip.ErrBadRequest("cannot refer yourself")
+			return nil, zip.ErrBadRequest("cannot refer yourself")
 		default:
-			return zip.Errorf(http.StatusInternalServerError, "claim: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "claim: %v", err)
 		}
 	}
-	status := http.StatusOK
+	// 201 only for a FRESH edge; an idempotent replay stays 200. The status is
+	// per-request, not per-op, so it cannot be declared with zip.WithStatus.
 	if created {
-		status = http.StatusCreated
+		cloud.Created(ctx)
 	}
-	return c.JSON(status, map[string]any{
-		"id":        ref.ID,
-		"code":      ref.Code,
-		"status":    ref.Status,
-		"created":   created,
-		"createdAt": ref.CreatedAt,
-	})
+	return &ClaimResult{ID: ref.ID, Code: ref.Code, Status: ref.Status, Created: created, CreatedAt: ref.CreatedAt}, nil
 }
 
 // ── admin surface (SuperAdmin, fail-closed) ────────────────────────────────
 
-// adminList answers GET /v1/admin/referrals — every referral (both orgs exposed)
-// + a fleet summary. SuperAdmin only.
-func adminList(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// BonusBoard is the SuperAdmin ledger of one-time referral bonuses.
+type BonusBoard struct {
+	// Referrals is every referral row, both orgs exposed.
+	Referrals []adminReferralView `json:"referrals"`
+	// Summary is the fleet tally, including total promo credit granted.
+	Summary adminSummary `json:"summary"`
+}
+
+// BonusBoardEnvelope is the { status, msg, data } envelope the console's admin
+// proxy unwraps.
+type BonusBoardEnvelope struct {
+	// Status is "ok" on success; the transport surfaces anything else as an error.
+	Status string `json:"status"`
+	// Msg carries the failure text when status is not ok.
+	Msg string `json:"msg"`
+	// Data is the bonus board.
+	Data BonusBoard `json:"data"`
+}
+
+// AdminPage bounds an admin list read.
+type AdminPage struct {
+	// Limit caps the rows returned; 0 means 500 and nothing above 1000 is honoured.
+	Limit int `json:"limit"`
+}
+
+// adminList returns every one-time referral bonus — both orgs, grant amounts and
+// ledger transaction ids — plus a fleet summary. SuperAdmin only.
+//
+// Example: {"limit": 500}
+func (o ops) adminList(ctx context.Context, in *AdminPage) (*BonusBoardEnvelope, error) {
+	s := o.s
+	if err := admit(ctx); err != nil {
+		return nil, err
 	}
-	rows, err := s.State.store.ListAll(c.Context(), adminLimitOf(c))
+	rows, err := s.State.store.ListAll(ctx, adminLimitOf(in.Limit))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list referrals: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list referrals: %v", err)
 	}
 	views := make([]adminReferralView, 0, len(rows))
 	sum := adminSummary{}
@@ -276,20 +375,41 @@ func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	// Envelope { status, msg, data } — the /v1/admin/* convention the console's
 	// admin-aggregate proxy + originGet read (same as clients/admin).
-	return adminOK(c, map[string]any{"referrals": views, "summary": sum})
+	return &BonusBoardEnvelope{Status: "ok", Data: BonusBoard{Referrals: views, Summary: sum}}, nil
 }
 
-// adminSweep answers POST /v1/admin/referrals/sweep — the periodic qualify path
-// (a cron/o11y hits it, or an operator on demand). It qualify-checks every
-// pending referral and grants the ones that now qualify. SuperAdmin only.
-func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// SweepResult reports what one qualify sweep did.
+type SweepResult struct {
+	// Swept is how many pending referrals were qualify-checked.
+	Swept int `json:"swept"`
+	// Credited is how many of them qualified and were granted on this pass.
+	Credited int `json:"credited"`
+}
+
+// SweepEnvelope is the { status, msg, data } envelope the console's admin proxy
+// unwraps.
+type SweepEnvelope struct {
+	// Status is "ok" on success; the transport surfaces anything else as an error.
+	Status string `json:"status"`
+	// Msg carries the failure text when status is not ok.
+	Msg string `json:"msg"`
+	// Data is the sweep result.
+	Data SweepResult `json:"data"`
+}
+
+// adminSweep qualify-checks every pending referral and grants the bonuses that
+// now qualify — the periodic path a cron or an operator drives. The grant is
+// latched at-most-once, so a re-run never double-pays. SuperAdmin only.
+//
+// Response: {"status": "ok", "msg": "", "data": {"swept": 12, "credited": 3}}
+func (o ops) adminSweep(ctx context.Context, _ *None) (*SweepEnvelope, error) {
+	s := o.s
+	if err := admit(ctx); err != nil {
+		return nil, err
 	}
-	ctx := c.Context()
 	pending, err := s.State.store.ListPending(ctx, "", sweepLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list pending: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list pending: %v", err)
 	}
 	swept, credited := 0, 0
 	for _, r := range pending {
@@ -303,15 +423,7 @@ func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 			credited++
 		}
 	}
-	return adminOK(c, map[string]any{"swept": swept, "credited": credited})
-}
-
-// adminOK writes the { status:"ok", msg, data } envelope the console's admin
-// surface (originGet/originPost via app/admin/aggregate) unwraps — identical to
-// clients/admin's ok(). The customer /v1/referrals surface stays bare JSON (read
-// via the /cloud proxy + restGet), matching clients/crm.
-func adminOK(c *zip.Ctx, data any) error {
-	return cloud.OK(c, data)
+	return &SweepEnvelope{Status: "ok", Data: SweepResult{Swept: swept, Credited: credited}}, nil
 }
 
 // ── qualify → grant core (the ONE credit path, shared by sweep + lazy read) ───
@@ -496,9 +608,10 @@ func genID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
-func adminLimitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
+// adminLimitOf bounds an admin list read: absent or non-positive means listLimit,
+// and nothing above maxAdminLimit is honoured.
+func adminLimitOf(n int) int {
+	if n <= 0 {
 		return listLimit
 	}
 	if n > maxAdminLimit {

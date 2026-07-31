@@ -46,6 +46,8 @@
 // read from the environment, or logged.
 package notify
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"crypto/rand"
@@ -100,7 +102,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s.send = s.sendReal
 
 	g := app.Group("/v1/notify")
-	g.Get("/health", s.health)
+	// Health is a zip TYPED op — one declaration the router, the OpenAPI
+	// document, the MCP tool list and the CLI all read.
+	zip.Get(cloud.ZipApp(app), "/v1/notify/health", s.health)
+	// The three send routes stay RAW handlers. Dispatch is gated on the URL —
+	// ?sync=true, the one mode this fold serves — and zip declares query
+	// parameters only on the bodyless methods, so a typed POST would publish a
+	// shape whose every generated call 503s for want of a parameter the document
+	// never mentioned. See handleSend.
 	g.Post("/send", s.handleSend(""))
 	g.Post("/send/sms", s.handleSend(string(ntypes.ChannelSMS)))
 	g.Post("/send/email", s.handleSend(string(ntypes.ChannelEmail)))
@@ -111,15 +120,38 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// health mirrors notifyd's GET /v1/notify/health body verbatim so probes and
-// clients that keyed on it keep working unchanged.
-func (s *service) health(c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]string{"service": "notify", "status": "ok"})
+// notifyHealth is notifyd's health body verbatim, so probes and clients that
+// keyed on it keep working unchanged.
+type notifyHealth struct {
+	// Service is always "notify" — which subsystem answered.
+	Service string `json:"service"`
+	// Status is always "ok": the route answers 200 whenever the process is alive.
+	Status string `json:"status"`
+}
+
+// noInput is the In of an op that takes nothing off the wire.
+type noInput struct{}
+
+// health reports that the notify send surface is alive.
+//
+// It is a pure liveness probe, taking no credential and reading no provider.
+// The body mirrors notifyd's own verbatim, so probes that keyed on it keep
+// working unchanged.
+//
+// Response: {"service": "notify", "status": "ok"}
+func (s *service) health(context.Context, *noInput) (*notifyHealth, error) {
+	return &notifyHealth{Service: "notify", Status: "ok"}, nil
 }
 
 // handleSend returns the POST /v1/notify/send handler. pinnedChannel is set on the
 // per-channel convenience routes (/send/sms, /send/email) and left empty on the
 // generic route, which reads the channel from the body.
+//
+// It stays a RAW handler for two reasons a typed op cannot state. Dispatch is
+// gated on ?sync=true, a QUERY parameter zip declares only on bodyless methods —
+// so a typed POST would publish a shape whose every generated call 503s. And the
+// success body is a UNION: one recipient answers a bare SendResponse, several
+// answer {items:[…]}, which is one route with two response schemas.
 func (s *service) handleSend(pinnedChannel string) zip.Handler {
 	return func(c *zip.Ctx) error {
 		// The org is the VALIDATED principal, never a client header — the whole

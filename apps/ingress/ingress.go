@@ -56,7 +56,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,7 +120,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	s := &cloud.Service[state]{Base: b, State: state{store: store, engine: newEngine(log), edgeCfg: ecfg, role: role}}
 	mounted = s
-	mountRoutes(s, app)
+	if err := mountRoutes(s, app); err != nil {
+		return err
+	}
 
 	// Compile the persisted config into the engine before the edge serves it. A
 	// reload failure is logged, not fatal — the edge serves an empty table until
@@ -161,40 +162,84 @@ func Shutdown(ctx context.Context) error {
 	return err
 }
 
-// mountRoutes registers the /v1/ingress control-plane surface. routes/services/
-// middlewares share uniform CRUD (list/get/delete keyed by kind); create+update
-// share one handler per kind (POST and PUT both land there).
-func mountRoutes(s *cloud.Service[state], app cloud.Router) {
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// mountRoutes registers the /v1/ingress control plane as TYPED ops. routes,
+// services and middlewares share uniform CRUD (list/get/put/delete keyed by
+// kind); create and update are ONE op per kind, because they are one behaviour —
+// POST mints the id, PUT takes it from the URL — and zip binds the path over the
+// body, which is exactly the precedence the untyped handler spelled out by hand.
+func mountRoutes(s *cloud.Service[state], app cloud.Router) error {
 	g := app.Group("/v1/ingress")
-	g.Get("/status", cloud.Handle(s, status))
-	g.Get("/tls", cloud.Handle(s, getTLS))
-	g.Put("/tls", cloud.Handle(s, putTLS))
+	// Bridge FIRST. A typed op receives only a context, so the REQUEST its
+	// SuperAdmin gate reads — admin-ness lives in a header, which
+	// principal.OrgFrom does not carry — has to be parked there. fiber runs
+	// middleware in registration order, so this must precede the leaves below; it
+	// is prefix-scoped, and nesting under Serve's own Bridge is harmless (the
+	// inner one is what the handler sees). Same shape apps/agents, apps/search
+	// and apps/integrations already use.
+	g.Use(cloud.Bridge())
+	// TYPED ops declared on the APP with the full path spelled, never on the
+	// group: the registry keys an op on the group-JOINED path while cmd/zipdoc
+	// keys its extraction on the path LITERAL at the call site, so a
+	// group-relative declaration lifts prose under a key no operation ever looks
+	// up — the comments below would be written, generated, and silently never
+	// rendered in the document, the MCP tool list, the CLI or the SDK.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("ingress.mountRoutes: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	o := ops{s: s}
+	zip.Get(zapp, "/v1/ingress/status", o.status)
+	zip.Get(zapp, "/v1/ingress/tls", o.getTLS)
+	zip.Put(zapp, "/v1/ingress/tls", o.putTLS)
 
-	g.Get("/routes", list(s, KindRoute))
-	g.Get("/routes/:id", getObj(s, KindRoute))
-	g.Post("/routes", cloud.Handle(s, putRoute))
-	g.Put("/routes/:id", cloud.Handle(s, putRoute))
-	g.Delete("/routes/:id", del(s, KindRoute))
+	zip.Get(zapp, "/v1/ingress/routes", o.listRoutes)
+	zip.Get(zapp, "/v1/ingress/routes/:id", o.getRoute)
+	zip.Post(zapp, "/v1/ingress/routes", o.putRoute)
+	zip.Put(zapp, "/v1/ingress/routes/:id", o.putRoute)
+	zip.Delete(zapp, "/v1/ingress/routes/:id", o.deleteRoute)
 
-	g.Get("/services", list(s, KindService))
-	g.Get("/services/:id", getObj(s, KindService))
-	g.Post("/services", cloud.Handle(s, putService))
-	g.Put("/services/:id", cloud.Handle(s, putService))
-	g.Delete("/services/:id", del(s, KindService))
+	zip.Get(zapp, "/v1/ingress/services", o.listServices)
+	zip.Get(zapp, "/v1/ingress/services/:id", o.getService)
+	zip.Post(zapp, "/v1/ingress/services", o.putService)
+	zip.Put(zapp, "/v1/ingress/services/:id", o.putService)
+	zip.Delete(zapp, "/v1/ingress/services/:id", o.deleteService)
 
-	g.Get("/middlewares", list(s, KindMiddleware))
-	g.Get("/middlewares/:id", getObj(s, KindMiddleware))
-	g.Post("/middlewares", cloud.Handle(s, putMiddleware))
-	g.Put("/middlewares/:id", cloud.Handle(s, putMiddleware))
-	g.Delete("/middlewares/:id", del(s, KindMiddleware))
+	zip.Get(zapp, "/v1/ingress/middlewares", o.listMiddlewares)
+	zip.Get(zapp, "/v1/ingress/middlewares/:id", o.getMiddleware)
+	zip.Post(zapp, "/v1/ingress/middlewares", o.putMiddleware)
+	zip.Put(zapp, "/v1/ingress/middlewares/:id", o.putMiddleware)
+	zip.Delete(zapp, "/v1/ingress/middlewares/:id", o.deleteMiddleware)
+	return nil
 }
 
-// admin resolves the SuperAdmin tenant for an edge-config request. The edge is
+// ops binds the service to the typed control-plane ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — it has no parameter for the service
+// — so the service arrives as a RECEIVER and every op is a method value
+// (o.putRoute), which is also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// admin resolves the SuperAdmin tenant for an edge-config op. The edge is
 // PLATFORM infrastructure (AC-6 least privilege): every /v1/ingress op requires
 // SuperAdmin (owner=="admin" ⇒ c.IsAdmin(), the same predicate admin-guard and
 // clients/admin enforce), and storage is scoped to that validated admin org. A
 // non-admin — or a forged, unvalidated principal — is refused 403.
-func admin(s *cloud.Service[state], c *zip.Ctx) (string, error) {
+//
+// It needs the REQUEST rather than only the tenant: admin-ness lives in a header
+// (X-User-IsAdmin) that principal.OrgFrom does not carry. cloud.Bridge parks the
+// request and cloud.Request takes it back off. FAIL CLOSED off the HTTP path —
+// a CLI LocalInvoke has no request, so it is refused by this same line, with no
+// second gate to keep in sync.
+func admin(ctx context.Context) (string, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("ingress edge config requires SuperAdmin")
+	}
 	if !c.IsAdmin() {
 		return "", zip.ErrForbidden("ingress edge config requires SuperAdmin")
 	}
@@ -205,219 +250,419 @@ func admin(s *cloud.Service[state], c *zip.Ctx) (string, error) {
 	return org, nil
 }
 
-// ── object CRUD ───────────────────────────────────────────────────────────────
+// ── the shapes the ops take and give ─────────────────────────────────────────
 
-func list(s *cloud.Service[state], kind string) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org, err := admin(s, c)
-		if err != nil {
-			return err
-		}
-		objs, err := s.State.store.List(c.Context(), org, kind)
-		if err != nil {
-			return zip.ErrInternal("list " + kind + ": " + err.Error())
-		}
-		items := make([]json.RawMessage, 0, len(objs))
-		for _, o := range objs {
-			items = append(items, json.RawMessage(o.Doc))
-		}
-		return c.JSON(http.StatusOK, map[string]any{kind + "s": items})
-	}
+// noInput is the In of an op that takes nothing off the wire — no body, no query
+// parameter, no path segment. Its whole input is the caller's validated principal.
+type noInput struct{}
+
+// objRef addresses one stored object. The id is the path segment: the URL is the
+// addressing authority, so it binds from there whatever a body says.
+type objRef struct {
+	// ID is the object to act on, from the path.
+	ID string `json:"id"`
 }
 
-func getObj(s *cloud.Service[state], kind string) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org, err := admin(s, c)
-		if err != nil {
-			return err
-		}
-		doc, found, err := s.State.store.Get(c.Context(), org, kind, c.Param("id"))
-		if err != nil {
-			return zip.ErrInternal("get " + kind + ": " + err.Error())
-		}
-		if !found {
-			return zip.ErrNotFound(kind + " not found")
-		}
-		return c.JSON(http.StatusOK, json.RawMessage(doc))
-	}
+// A typed op's Go type name IS its schema name, and the fleet's schema namespace
+// is FLAT — openapi.Weave refuses one name with two shapes across apps, because a
+// generated SDK would bind whichever it read last. So the values below carry the
+// product the namespace cannot: the obvious "serviceList" is already apps/admin's
+// launch board, and the weave refused this package until these were qualified. The
+// domain nouns (Route, Service, Middleware, Backend, TLSConfig) stay unqualified
+// — they are ingress's published nouns and unique today, and the weave is the
+// gate if that ever stops being true.
+
+// ingressRoutes is every route the caller's org has configured.
+type ingressRoutes struct {
+	// Routes is the org's routes, ordered by id.
+	Routes []Route `json:"routes"`
 }
 
-func del(s *cloud.Service[state], kind string) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org, err := admin(s, c)
-		if err != nil {
-			return err
-		}
-		ok, err := s.State.store.Delete(c.Context(), org, kind, c.Param("id"))
-		if err != nil {
-			return zip.ErrInternal("delete " + kind + ": " + err.Error())
-		}
-		if !ok {
-			return zip.ErrNotFound(kind + " not found")
-		}
-		if err := reload(s, c.Context()); err != nil {
-			return zip.ErrInternal("reload: " + err.Error())
-		}
-		return c.NoContent(http.StatusNoContent)
-	}
+// ingressServices is every backend pool the caller's org has configured.
+type ingressServices struct {
+	// Services is the org's services, ordered by id.
+	Services []Service `json:"services"`
 }
 
-func putRoute(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := admin(s, c)
+// ingressMiddlewares is every edge transform the caller's org has configured.
+type ingressMiddlewares struct {
+	// Middlewares is the org's middlewares, ordered by id.
+	Middlewares []Middleware `json:"middlewares"`
+}
+
+// ingressStatus is the edge's live posture: what this instance is configured to be,
+// and what its compiled route table currently serves.
+type ingressStatus struct {
+	// Role is "edge" when CLOUD_INGRESS_EDGE_ENABLED is set, else "app".
+	Role string `json:"role"`
+	// EdgeEnabled is true when the edge listeners are actually bound.
+	EdgeEnabled bool `json:"edgeEnabled"`
+	// HTTPAddr is the address the ACME HTTP-01 + HTTP router listens on.
+	HTTPAddr string `json:"httpAddr"`
+	// HTTPSAddr is the address the SNI TLS terminator listens on.
+	HTTPSAddr string `json:"httpsAddr"`
+	// ACMEStaging is true when certificates are issued from Let's Encrypt staging.
+	ACMEStaging bool `json:"acmeStaging"`
+	// ACMECacheDir is where autocert persists accounts and certificates.
+	ACMECacheDir string `json:"acmeCacheDir"`
+	// LiveHosts is how many hosts the compiled table routes.
+	LiveHosts int `json:"liveHosts"`
+	// TLSHosts is how many hosts the ACME HostPolicy will issue a certificate
+	// for. NOT a subset of LiveHosts: an extraHost owns no route, and a TLS route
+	// naming a missing service is skipped while its host still wants a cert.
+	TLSHosts int `json:"tlsHosts"`
+	// Proxy names the reverse-proxy implementation behind every route.
+	Proxy string `json:"proxy"`
+}
+
+// ingressTLS is the caller org's ACME intent plus the edge-wide TLS facts that
+// intent lands in.
+type ingressTLS struct {
+	// Config is the caller org's stored ACME intent.
+	Config TLSConfig `json:"config"`
+	// Role is "edge" when this instance binds the listeners, else "app".
+	Role string `json:"role"`
+	// EdgeEnabled is true when the edge listeners are actually bound.
+	EdgeEnabled bool `json:"edgeEnabled"`
+	// ManagedHosts is every host the ACME HostPolicy will issue a certificate for
+	// — the union across ALL orgs of TLS-marked routes and configured extraHosts,
+	// because one process holds one certificate cache.
+	ManagedHosts []string `json:"managedHosts"`
+	// ACMEDirectory is the ACME endpoint in use: the staging URL, or
+	// "letsencrypt-production".
+	ACMEDirectory string `json:"acmeDirectory"`
+	// ACMEEmail is the account email the PROCESS was started with
+	// (CLOUD_INGRESS_ACME_EMAIL), not the stored config's.
+	ACMEEmail string `json:"acmeEmail"`
+	// Note states which fields hot-apply and which need an edge restart.
+	Note string `json:"note"`
+}
+
+// ── object CRUD (one behaviour per verb, three kinds) ────────────────────────
+//
+// The four helpers below are the ONE implementation behind the twelve CRUD ops:
+// a kind is a parameter, an object type is a type parameter, and each op is the
+// name that binds both. They are functions rather than the closures they replace
+// because a typed op must be a METHOD — a closure returned by a helper is a call
+// expression with no doc comment for cmd/zipdoc to lift.
+
+// listOf reads every object of kind for the caller's org and decodes each stored
+// doc into T. A doc that will not decode is an internal error, never a silently
+// dropped row: the store only ever holds what putOf marshalled into it, so an
+// undecodable doc means corruption the caller must hear about.
+func listOf[T any](ctx context.Context, s *cloud.Service[state], kind string) ([]T, error) {
+	org, err := admin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	objs, err := s.State.store.List(ctx, org, kind)
+	if err != nil {
+		return nil, zip.ErrInternal("list " + kind + ": " + err.Error())
+	}
+	items := make([]T, 0, len(objs))
+	for _, o := range objs {
+		var v T
+		if err := json.Unmarshal([]byte(o.Doc), &v); err != nil {
+			return nil, zip.ErrInternal("decode " + kind + " " + o.ID + ": " + err.Error())
+		}
+		items = append(items, v)
+	}
+	return items, nil
+}
+
+// getOf reads one (org, kind, id) object and decodes it into T. An id this org
+// does not hold — including one another org does — is 404.
+func getOf[T any](ctx context.Context, s *cloud.Service[state], kind, id string) (*T, error) {
+	org, err := admin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	doc, found, err := s.State.store.Get(ctx, org, kind, id)
+	if err != nil {
+		return nil, zip.ErrInternal("get " + kind + ": " + err.Error())
+	}
+	if !found {
+		return nil, zip.ErrNotFound(kind + " not found")
+	}
+	var v T
+	if err := json.Unmarshal([]byte(doc), &v); err != nil {
+		return nil, zip.ErrInternal("decode " + kind + ": " + err.Error())
+	}
+	return &v, nil
+}
+
+// putOf validates, persists and hot-applies one object. id comes from the URL
+// when the route has one and from the body otherwise; an object that names
+// neither gets a fresh one. host is the route's globally-unique DNS claim ("" for
+// the kinds that make none).
+func putOf[T interface{ validate() error }](ctx context.Context, s *cloud.Service[state], kind string, v T, id *string, host string) error {
+	org, err := admin(ctx)
 	if err != nil {
 		return err
 	}
-	var r Route
-	if err := c.Bind(&r); err != nil {
-		return zip.ErrBadRequest("invalid route: " + err.Error())
+	if *id == "" {
+		*id = genID()
 	}
-	if id := c.Param("id"); id != "" {
-		r.ID = id
-	}
-	if r.ID == "" {
-		r.ID = genID()
-	}
-	if err := r.validate(); err != nil {
+	if err := v.validate(); err != nil {
 		return zip.ErrBadRequest(err.Error())
 	}
-	doc, _ := json.Marshal(r)
-	if err := s.State.store.Put(c.Context(), org, KindRoute, r.ID, string(doc), r.Host, now()); err != nil {
+	doc, _ := json.Marshal(v)
+	if err := s.State.store.Put(ctx, org, kind, *id, string(doc), host, now()); err != nil {
 		if errors.Is(err, ErrHostTaken) {
-			return zip.ErrConflict("host already claimed: " + r.Host)
+			return zip.ErrConflict("host already claimed: " + host)
 		}
-		return zip.ErrInternal("persist route: " + err.Error())
+		return zip.ErrInternal("persist " + kind + ": " + err.Error())
 	}
-	if err := reload(s, c.Context()); err != nil {
+	if err := reload(s, ctx); err != nil {
 		return zip.ErrInternal("reload: " + err.Error())
 	}
-	return c.JSON(http.StatusOK, r)
+	return nil
 }
 
-func putService(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := admin(s, c)
+// deleteOf removes one (org, kind, id) object and hot-applies the shrunken
+// table. A nil result is the 204 every delete has always answered.
+func deleteOf(ctx context.Context, s *cloud.Service[state], kind, id string) (*struct{}, error) {
+	org, err := admin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var svcObj Service
-	if err := c.Bind(&svcObj); err != nil {
-		return zip.ErrBadRequest("invalid service: " + err.Error())
+	ok, err := s.State.store.Delete(ctx, org, kind, id)
+	if err != nil {
+		return nil, zip.ErrInternal("delete " + kind + ": " + err.Error())
 	}
-	if id := c.Param("id"); id != "" {
-		svcObj.ID = id
+	if !ok {
+		return nil, zip.ErrNotFound(kind + " not found")
 	}
-	if svcObj.ID == "" {
-		svcObj.ID = genID()
+	if err := reload(s, ctx); err != nil {
+		return nil, zip.ErrInternal("reload: " + err.Error())
 	}
-	if err := svcObj.validate(); err != nil {
-		return zip.ErrBadRequest(err.Error())
-	}
-	doc, _ := json.Marshal(svcObj)
-	if err := s.State.store.Put(c.Context(), org, KindService, svcObj.ID, string(doc), "", now()); err != nil {
-		return zip.ErrInternal("persist service: " + err.Error())
-	}
-	if err := reload(s, c.Context()); err != nil {
-		return zip.ErrInternal("reload: " + err.Error())
-	}
-	return c.JSON(http.StatusOK, svcObj)
+	return nil, nil
 }
 
-func putMiddleware(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := admin(s, c)
+// ── routes ───────────────────────────────────────────────────────────────────
+
+// ListRoutes returns every routing rule the caller's org has configured, ordered
+// by id. A route maps an exact Host (and optional path prefix) to a service.
+func (o ops) listRoutes(ctx context.Context, _ *noInput) (*ingressRoutes, error) {
+	items, err := listOf[Route](ctx, o.s, KindRoute)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var m Middleware
-	if err := c.Bind(&m); err != nil {
-		return zip.ErrBadRequest("invalid middleware: " + err.Error())
+	return &ingressRoutes{Routes: items}, nil
+}
+
+// GetRoute returns one of the caller org's routing rules by id.
+//
+// Example: {"id": "a1b2c3d4e5f60718"}
+func (o ops) getRoute(ctx context.Context, in *objRef) (*Route, error) {
+	return getOf[Route](ctx, o.s, KindRoute, in.ID)
+}
+
+// PutRoute creates or replaces one routing rule and hot-applies the new table —
+// there is no config file and no restart. POST mints an id when the body omits
+// one; PUT takes the id from the URL, which wins over any id in the body. A
+// route's host is a GLOBALLY unique DNS claim: a host another org's route already
+// holds is refused 409, so no tenant can hijack another's hostname.
+//
+// Example: {"id": "web", "host": "app.example.com", "service": "app-pool", "tls": true}
+func (o ops) putRoute(ctx context.Context, in *Route) (*Route, error) {
+	r := *in
+	if err := putOf(ctx, o.s, KindRoute, &r, &r.ID, normalizeHost(r.Host)); err != nil {
+		return nil, err
 	}
-	if id := c.Param("id"); id != "" {
-		m.ID = id
+	return &r, nil
+}
+
+// DeleteRoute removes one of the caller org's routing rules and hot-applies the
+// shrunken table, freeing its host for another claim. Answers 204; an id this org
+// does not hold is 404.
+//
+// Example: {"id": "web"}
+func (o ops) deleteRoute(ctx context.Context, in *objRef) (*struct{}, error) {
+	return deleteOf(ctx, o.s, KindRoute, in.ID)
+}
+
+// ── services ─────────────────────────────────────────────────────────────────
+
+// ListServices returns every backend pool the caller's org has configured,
+// ordered by id. A service is the weighted round-robin target a route dispatches
+// to.
+func (o ops) listServices(ctx context.Context, _ *noInput) (*ingressServices, error) {
+	items, err := listOf[Service](ctx, o.s, KindService)
+	if err != nil {
+		return nil, err
 	}
-	if m.ID == "" {
-		m.ID = genID()
+	return &ingressServices{Services: items}, nil
+}
+
+// GetService returns one of the caller org's backend pools by id.
+//
+// Example: {"id": "app-pool"}
+func (o ops) getService(ctx context.Context, in *objRef) (*Service, error) {
+	return getOf[Service](ctx, o.s, KindService, in.ID)
+}
+
+// PutService creates or replaces one backend pool and hot-applies it. POST mints
+// an id when the body omits one; PUT takes the id from the URL, which wins over
+// any id in the body. A pool needs at least one backend and every backend URL
+// must be http(s)://host[:port].
+//
+// Example: {"id": "app-pool", "backends": [{"url": "http://10.0.0.7:8000", "weight": 1}]}
+func (o ops) putService(ctx context.Context, in *Service) (*Service, error) {
+	svcObj := *in
+	// A service claims no host: the globally-unique DNS index is the route's.
+	if err := putOf(ctx, o.s, KindService, &svcObj, &svcObj.ID, ""); err != nil {
+		return nil, err
 	}
-	if err := m.validate(); err != nil {
-		return zip.ErrBadRequest(err.Error())
+	return &svcObj, nil
+}
+
+// DeleteService removes one of the caller org's backend pools and hot-applies the
+// change. Routes still pointing at it stop being served (they compile as skipped)
+// until they name a pool that exists. Answers 204; an id this org does not hold
+// is 404.
+//
+// Example: {"id": "app-pool"}
+func (o ops) deleteService(ctx context.Context, in *objRef) (*struct{}, error) {
+	return deleteOf(ctx, o.s, KindService, in.ID)
+}
+
+// ── middlewares ──────────────────────────────────────────────────────────────
+
+// ListMiddlewares returns every edge transform the caller's org has configured,
+// ordered by id. A route names the ones it wants, in order.
+func (o ops) listMiddlewares(ctx context.Context, _ *noInput) (*ingressMiddlewares, error) {
+	items, err := listOf[Middleware](ctx, o.s, KindMiddleware)
+	if err != nil {
+		return nil, err
 	}
-	doc, _ := json.Marshal(m)
-	if err := s.State.store.Put(c.Context(), org, KindMiddleware, m.ID, string(doc), "", now()); err != nil {
-		return zip.ErrInternal("persist middleware: " + err.Error())
+	return &ingressMiddlewares{Middlewares: items}, nil
+}
+
+// GetMiddleware returns one of the caller org's edge transforms by id.
+//
+// Example: {"id": "strip-api"}
+func (o ops) getMiddleware(ctx context.Context, in *objRef) (*Middleware, error) {
+	return getOf[Middleware](ctx, o.s, KindMiddleware, in.ID)
+}
+
+// PutMiddleware creates or replaces one edge transform and hot-applies it. POST
+// mints an id when the body omits one; PUT takes the id from the URL, which wins
+// over any id in the body. type must be one of redirectScheme, stripPrefix,
+// addPrefix or headers, and stripPrefix/addPrefix each require their config key.
+//
+// Example: {"id": "strip-api", "type": "stripPrefix", "config": {"prefixes": "/api"}}
+func (o ops) putMiddleware(ctx context.Context, in *Middleware) (*Middleware, error) {
+	m := *in
+	// A middleware claims no host: the globally-unique DNS index is the route's.
+	if err := putOf(ctx, o.s, KindMiddleware, &m, &m.ID, ""); err != nil {
+		return nil, err
 	}
-	if err := reload(s, c.Context()); err != nil {
-		return zip.ErrInternal("reload: " + err.Error())
-	}
-	return c.JSON(http.StatusOK, m)
+	return &m, nil
+}
+
+// DeleteMiddleware removes one of the caller org's edge transforms and hot-applies
+// the change. Routes still naming it stop being served (they compile as skipped)
+// until they name a transform that exists. Answers 204; an id this org does not
+// hold is 404.
+//
+// Example: {"id": "strip-api"}
+func (o ops) deleteMiddleware(ctx context.Context, in *objRef) (*struct{}, error) {
+	return deleteOf(ctx, o.s, KindMiddleware, in.ID)
 }
 
 // ── TLS / ACME config ─────────────────────────────────────────────────────────
 
-func getTLS(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := admin(s, c)
+// GetTLS returns the caller org's ACME intent and the edge-wide TLS facts it lands in.
+// Those are: which role this instance runs in, whether its listeners are bound, every
+// host the ACME HostPolicy will issue a certificate for (the union across ALL orgs of
+// TLS-marked routes and configured extraHosts, because one process holds one
+// certificate cache), and the ACME directory and account email the process was
+// started with.
+func (o ops) getTLS(ctx context.Context, _ *noInput) (*ingressTLS, error) {
+	org, err := admin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	t, err := orgTLS(s, c.Context(), org)
+	t, err := orgTLS(o.s, ctx, org)
 	if err != nil {
-		return zip.ErrInternal("load tls: " + err.Error())
+		return nil, zip.ErrInternal("load tls: " + err.Error())
 	}
-	hosts, err := tlsHostSet(s, c.Context())
+	hosts, err := tlsHostSet(o.s, ctx)
 	if err != nil {
-		return zip.ErrInternal("tls hosts: " + err.Error())
+		return nil, zip.ErrInternal("tls hosts: " + err.Error())
 	}
 	directory := "letsencrypt-production"
-	if s.State.edgeCfg.staging {
+	if o.s.State.edgeCfg.staging {
 		directory = leStagingDirectory
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"config":        t,
-		"role":          s.State.role,
-		"edgeEnabled":   s.State.edge != nil,
-		"managedHosts":  sortedKeys(hosts),
-		"acmeDirectory": directory,
-		"acmeEmail":     s.State.edgeCfg.email,
-		"note":          "acmeEmail/staging apply on edge (re)start; extraHosts + route.tls hot-apply on reload",
-	})
+	return &ingressTLS{
+		Config:        t,
+		Role:          o.s.State.role,
+		EdgeEnabled:   o.s.State.edge != nil,
+		ManagedHosts:  sortedKeys(hosts),
+		ACMEDirectory: directory,
+		ACMEEmail:     o.s.State.edgeCfg.email,
+		Note:          tlsNote,
+	}, nil
 }
 
-func putTLS(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := admin(s, c)
+// PutTLS replaces the caller org's ACME intent and hot-applies what can be
+// hot-applied. extraHosts are normalized and validated, then feed the ACME
+// HostPolicy on the reload this op performs, alongside the per-route tls flags.
+// acmeEmail and staging bind an ACME account for the lifetime of an edge process,
+// so they only take effect when the edge (re)starts — the returned note says so.
+//
+// Example: {"extraHosts": ["www.example.com"]}
+func (o ops) putTLS(ctx context.Context, in *TLSConfig) (*TLSConfig, error) {
+	org, err := admin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var t TLSConfig
-	if err := c.Bind(&t); err != nil {
-		return zip.ErrBadRequest("invalid tls config: " + err.Error())
-	}
+	t := *in
 	if err := t.normalize(); err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	doc, _ := json.Marshal(t)
-	if err := s.State.store.PutTLS(c.Context(), org, string(doc), now()); err != nil {
-		return zip.ErrInternal("persist tls: " + err.Error())
+	if err := o.s.State.store.PutTLS(ctx, org, string(doc), now()); err != nil {
+		return nil, zip.ErrInternal("persist tls: " + err.Error())
 	}
-	if err := reload(s, c.Context()); err != nil {
-		return zip.ErrInternal("reload: " + err.Error())
+	if err := reload(o.s, ctx); err != nil {
+		return nil, zip.ErrInternal("reload: " + err.Error())
 	}
-	return c.JSON(http.StatusOK, t)
+	return &t, nil
 }
 
-func status(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, err := admin(s, c); err != nil {
-		return err
+// ── status ────────────────────────────────────────────────────────────────────
+
+// Status reports the ingress edge's live posture.
+// That is the role this instance runs in (app or edge), whether its listeners are
+// bound and on which addresses, the ACME posture (staging flag and certificate cache
+// directory), how many hosts the compiled route table currently serves, and how many
+// the ACME HostPolicy will issue a certificate for.
+func (o ops) status(ctx context.Context, _ *noInput) (*ingressStatus, error) {
+	if _, err := admin(ctx); err != nil {
+		return nil, err
 	}
-	hosts, tlsHosts := s.State.engine.counts()
-	return c.JSON(http.StatusOK, map[string]any{
-		"role":         s.State.role,
-		"edgeEnabled":  s.State.edge != nil,
-		"httpAddr":     s.State.edgeCfg.httpAddr,
-		"httpsAddr":    s.State.edgeCfg.httpsAddr,
-		"acmeStaging":  s.State.edgeCfg.staging,
-		"acmeCacheDir": s.State.edgeCfg.cacheDir,
-		"liveHosts":    hosts,
-		"tlsHosts":     tlsHosts,
-		"proxy":        "github.com/vulcand/oxy/v2 (weighted round-robin, Traefik lineage)",
-	})
+	hosts, tlsHosts := o.s.State.engine.counts()
+	return &ingressStatus{
+		Role:         o.s.State.role,
+		EdgeEnabled:  o.s.State.edge != nil,
+		HTTPAddr:     o.s.State.edgeCfg.httpAddr,
+		HTTPSAddr:    o.s.State.edgeCfg.httpsAddr,
+		ACMEStaging:  o.s.State.edgeCfg.staging,
+		ACMECacheDir: o.s.State.edgeCfg.cacheDir,
+		LiveHosts:    hosts,
+		TLSHosts:     tlsHosts,
+		Proxy:        proxyImpl,
+	}, nil
 }
+
+// The two constant strings the status/tls views report verbatim.
+const (
+	proxyImpl = "github.com/vulcand/oxy/v2 (weighted round-robin, Traefik lineage)"
+	tlsNote   = "acmeEmail/staging apply on edge (re)start; extraHosts + route.tls hot-apply on reload"
+)
 
 // ── reload (hot-apply) ────────────────────────────────────────────────────────
 

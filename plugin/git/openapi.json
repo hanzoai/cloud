@@ -178,9 +178,37 @@
       },
       "post": {
         "operationId": "post_v1_git_keys",
+        "summary": "registerKey registers an SSH public key so it can authenticate `git clone\ngit@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git` for the caller's org.",
+        "description": "registerKey registers an SSH public key so it can authenticate `git clone\ngit@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
         "tags": [
           "git"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "publicKey": "ssh-ed25519 AAAAC3Nz… z@hanzo.ai",
+                "title": "laptop"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/registerKeyReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/keyView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/git/keys/{id}": {
@@ -255,9 +283,37 @@
       },
       "post": {
         "operationId": "post_v1_git_repos",
+        "summary": "createRepo provisions an empty bare repository in the caller's scope and\nreturns it with its clone URLs.",
+        "description": "createRepo provisions an empty bare repository in the caller's scope and\nreturns it with its clone URLs. Answers 201. The name must be unique within\nthe scope — a repeat is a 409, never a silent overwrite of an existing repo.\nThe org comes from the validated principal, so a repo is always born owned by\nthe caller's own tenant.",
         "tags": [
           "git"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "the widget service",
+                "name": "widgets"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/repoView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/git/repos/{name}": {
@@ -708,7 +764,9 @@
         }
       },
       "post": {
-        "operationId": "post_v1_git_repos_by_name_mirrors",
+        "operationId": "post_v1_git_repos_name_mirrors",
+        "summary": "addMirror registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here.",
+        "description": "addMirror registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
         "tags": [
           "git"
         ],
@@ -717,11 +775,39 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the repo whose advanced refs are pushed downstream, from the :name\npath segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "widgets",
+                "url": "https://github.com/acme/widgets.git"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/mirrorTargetReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mirrorTargetView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/git/repos/{name}/mirrors/{id}": {
@@ -969,7 +1055,9 @@
         }
       },
       "post": {
-        "operationId": "post_v1_git_repos_by_name_subscriptions",
+        "operationId": "post_v1_git_repos_name_subscriptions",
+        "summary": "subscribe binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there.",
+        "description": "subscribe binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there. Answers 201. The same channel twice\non one repo is a 409; a repo outside the caller's scope is a 404, exactly as\nreading it is.",
         "tags": [
           "git"
         ],
@@ -978,11 +1066,42 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the repo to subscribe, from the :name path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "channel": "#builds",
+                "events": [
+                  "push.landed"
+                ],
+                "name": "widgets"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/subscribeReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/subscriptionView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/git/repos/{name}/subscriptions/{id}": {
@@ -1144,7 +1263,16 @@
         "operationId": "post_v1_git_zap_createrepo",
         "tags": [
           "git"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/zapProcReq"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/git/zap/deleteRepo": {
@@ -1152,7 +1280,16 @@
         "operationId": "post_v1_git_zap_deleterepo",
         "tags": [
           "git"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/zapProcReq"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/git/zap/getRepo": {
@@ -1160,7 +1297,16 @@
         "operationId": "post_v1_git_zap_getrepo",
         "tags": [
           "git"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/zapProcReq"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/git/zap/listRepos": {
@@ -1507,6 +1653,27 @@
         },
         "type": "object"
       },
+      "createReq": {
+        "properties": {
+          "description": {
+            "description": "Description is a free-form blurb, max 4KiB.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the repo's handle, unique within the scope, and the last segment of\nboth clone URLs. Must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$; a trailing\n\".git\" is stripped first. Required.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project narrows the repo to a sub-scope of the org. Omit it to use the\ncaller's own X-Project-Id scope; it can never widen past the caller's org.",
+            "type": "string"
+          },
+          "public": {
+            "description": "Public grants ANONYMOUS read (fetch) only; push and the whole control plane\nstay org-authed. Defaults to false.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "fileJSON": {
         "properties": {
           "content": {
@@ -1580,18 +1747,23 @@
       "keyView": {
         "properties": {
           "createdAt": {
+            "description": "CreatedAt is RFC 3339 UTC.",
             "type": "string"
           },
           "fingerprint": {
+            "description": "Fingerprint is the key's SHA256 fingerprint (\"SHA256:…\"), globally unique\nand the handle SSH auth resolves a presented key by.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the key's identifier (\"gitkey_…\"), the handle to delete it by.",
             "type": "string"
           },
           "publicKey": {
+            "description": "PublicKey is the canonical OpenSSH authorized-key line as stored.",
             "type": "string"
           },
           "title": {
+            "description": "Title is the key's label — the caller's, or the comment on the key line.",
             "type": "string"
           }
         },
@@ -1621,6 +1793,23 @@
           },
           "source": {
             "description": "Source is the http(s) git URL to fetch from. The host is SSRF-guarded and\nthe shared mirror credential is only sent to allowlisted hosts.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "mirrorTargetReq": {
+        "properties": {
+          "host": {
+            "description": "Host is an optional assertion of the target's hostname. The authoritative\nhost is the one in URL; a value that disagrees with it is refused.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the repo whose advanced refs are pushed downstream, from the :name\npath segment.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the downstream https git remote. Must be https to an allowlisted\nhost (github.com / gitlab.com); any embedded credentials are stripped.\nRequired.",
             "type": "string"
           }
         },
@@ -1783,6 +1972,19 @@
         },
         "type": "object"
       },
+      "registerKeyReq": {
+        "properties": {
+          "publicKey": {
+            "description": "PublicKey is one OpenSSH authorized-key line (\"ssh-ed25519 AAAA… you@host\").\nRequired; a line that does not parse is refused and never stored.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title labels the key in the console. Max 256 chars; when omitted the\ncomment on the key line is used.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "repoList": {
         "properties": {
           "data": {
@@ -1863,6 +2065,26 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is RFC 3339 UTC, empty until the first write.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "subscribeReq": {
+        "properties": {
+          "channel": {
+            "description": "Channel is the Slack channel the notifier posts to — an id (C…/G…), a\n#name, or a bare name. Required.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Events narrows delivery to these lifecycle kinds (push.landed,\ndeploy.live, deploy.failed). Omit it to receive every deliverable kind; a\nkind that is never posted to Slack is refused rather than silently dropped.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the repo to subscribe, from the :name path segment.",
             "type": "string"
           }
         },
@@ -1981,6 +2203,20 @@
           }
         },
         "type": "object"
+      },
+      "zapProcReq": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        }
       }
     }
   }

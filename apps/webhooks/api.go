@@ -8,11 +8,11 @@ package webhooks
 // SQLite makes cross-tenant access impossible).
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -85,17 +85,76 @@ type testResult struct {
 	Error      string `json:"error,omitempty"`
 }
 
-// endpointInput is the create/update request body. Secret/id/timestamps are
+// endpointInput is the create request body. Secret, id and timestamps are
 // server-owned and ignored if a client sends them.
 type endpointInput struct {
-	URL         string   `json:"url"`
-	Events      []string `json:"events"`
-	Status      string   `json:"status"`
-	Description string   `json:"description"`
+	// URL is the https:// address deliveries are POSTed to. Required; cleartext http is refused.
+	URL string `json:"url" validate:"required"`
+	// Events is the subject patterns to subscribe to, NATS wildcard syntax. Empty means every event.
+	Events []string `json:"events"`
+	// Status is active or disabled. Empty means active.
+	Status string `json:"status"`
+	// Description is a free-text label for the endpoint.
+	Description string `json:"description"`
+}
+
+// endpointUpdate is the update request body plus the endpoint id the PATH names. It
+// carries the same editable fields as a create; the secret, the timestamps and the
+// usage counters stay server-owned.
+type endpointUpdate struct {
+	// ID is the endpoint id from the path.
+	ID string `json:"id"`
+	// URL is the https:// address deliveries are POSTed to. Required; cleartext http is refused.
+	URL string `json:"url" validate:"required"`
+	// Events is the subject patterns to subscribe to, NATS wildcard syntax. Empty means every event.
+	Events []string `json:"events"`
+	// Status is active or disabled. Empty means active.
+	Status string `json:"status"`
+	// Description is a free-text label for the endpoint.
+	Description string `json:"description"`
+}
+
+// endpointRef addresses one registered endpoint.
+type endpointRef struct {
+	// ID is the endpoint id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// deliveryQuery pages one endpoint's delivery log.
+type deliveryQuery struct {
+	// ID is the endpoint id from the path.
+	ID string `json:"id"`
+	// Status narrows the log to one outcome: ok, retrying or failed.
+	Status string `json:"status"`
+	// Limit caps the attempts returned; 0 means 50 and nothing above 200 is honoured.
+	Limit int `json:"limit"`
+}
+
+// endpointList is an org's registered endpoints.
+type endpointList struct {
+	// Data is the endpoints, each with its trailing-7-day delivery counters and no secret.
+	Data []Endpoint `json:"data"`
+}
+
+// deliveryList is one endpoint's delivery log.
+type deliveryList struct {
+	// Data is the attempts, newest first.
+	Data []DeliveryRow `json:"data"`
 }
 
 // tenant resolves the caller's org from the validated principal, 401 otherwise —
 // the same gate clients/notify applies (Validated ⇒ trusted org, else unauthenticated).
+// tenant resolves the caller's org for a typed op, through the request cloud.Bridge
+// parked. Off the HTTP path there is no principal at all, which is the same refusal a
+// missing one gets.
+func (o ops) tenant(ctx context.Context) (string, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return "", zip.ErrUnauthorized("webhooks: authentication required")
+	}
+	return tenant(c)
+}
+
 func tenant(c *zip.Ctx) (string, error) {
 	if !principal.Validated(c) {
 		return "", zip.ErrUnauthorized("webhooks: authentication required")
@@ -109,59 +168,63 @@ func tenant(c *zip.Ctx) (string, error) {
 
 func (s *state) storeFor(org string) (*store, error) { return s.stores.For(org, "") }
 
-// listEndpoints returns the org's endpoints (secret redacted).
-func listEndpoints(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// listEndpoints returns the caller org's registered webhook endpoints. Each carries its
+// trailing-7-day delivery and failure counts, and signing secrets are never included — a
+// secret leaves the server only on create and on rotate.
+//
+// Response: {"data": [{"id": "wh_4c1e9b7a", "org": "acme", "url": "https://acme.example/hooks", "events": ["commerce.>"], "status": "active", "created": "2026-01-01T00:00:00Z", "updated": "2026-01-01T00:00:00Z", "deliveries7d": 412, "failures7d": 3}]}
+func (o ops) listEndpoints(ctx context.Context, _ *struct{}) (*endpointList, error) {
+	s := o.s
+	org, err := o.tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	st, err := s.State.storeFor(org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	eps, err := st.list(c.Context())
+	eps, err := st.list(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
-	usage, err := st.usage(c.Context(), windowStart())
+	usage, err := st.usage(ctx, windowStart())
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "usage: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "usage: %v", err)
 	}
 	for i := range eps {
 		eps[i].Secret = ""
 		u := usage[eps[i].ID] // zero value when the endpoint has no delivery history
 		eps[i].Deliveries7d, eps[i].Failures7d = u.Deliveries, u.Failures
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": eps})
+	return &endpointList{Data: eps}, nil
 }
 
-// createEndpoint registers a new endpoint and returns it WITH the freshly-minted
-// signing secret — the only response that ever carries it.
-func createEndpoint(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// createEndpoint registers a webhook endpoint and reveals its signing secret. This is one of only two responses that ever carry the secret (the
+// other is rotate), so a caller that does not store it here must rotate to get another.
+//
+// Example: {"url": "https://acme.example/hooks", "events": ["commerce.>"], "status": "active", "description": "billing events"}
+func (o ops) createEndpoint(ctx context.Context, in *endpointInput) (*Endpoint, error) {
+	s := o.s
+	org, err := o.tenant(ctx)
 	if err != nil {
-		return err
-	}
-	var in endpointInput
-	if err := c.Bind(&in); err != nil {
-		return zip.ErrBadRequest("malformed request body")
+		return nil, err
 	}
 	url, verr := validateURL(in.URL)
 	if verr != nil {
-		return verr
+		return nil, verr
 	}
 	events, verr := validateEvents(in.Events)
 	if verr != nil {
-		return verr
+		return nil, verr
 	}
 	status, verr := validateStatus(in.Status, "active")
 	if verr != nil {
-		return verr
+		return nil, verr
 	}
 
 	st, err := s.State.storeFor(org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	e := Endpoint{
@@ -175,134 +238,146 @@ func createEndpoint(s *cloud.Service[*state], c *zip.Ctx) error {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := st.create(c.Context(), e); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "create: %v", err)
+	if err := st.create(ctx, e); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "create: %v", err)
 	}
-	return c.JSON(http.StatusCreated, e)
+	return &e, nil
 }
 
-// getEndpoint returns one endpoint (secret redacted).
-func getEndpoint(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// getEndpoint returns one of the caller org's endpoints with its 7-day counters. The
+// signing secret is never included, and another org's id is a 404.
+//
+// Example: {"id": "wh_4c1e9b7a2d6f0538"}
+func (o ops) getEndpoint(ctx context.Context, in *endpointRef) (*Endpoint, error) {
+	s := o.s
+	org, err := o.tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	st, err := s.State.storeFor(org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	e, err := st.get(c.Context(), idParam(c))
+	e, err := st.get(ctx, strings.TrimSpace(in.ID))
 	if err != nil {
-		return notFoundOr(err)
+		return nil, notFoundOr(err)
 	}
 	e.Secret = ""
-	usage, err := st.usage(c.Context(), windowStart())
+	usage, err := st.usage(ctx, windowStart())
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "usage: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "usage: %v", err)
 	}
 	u := usage[e.ID]
 	e.Deliveries7d, e.Failures7d = u.Deliveries, u.Failures
-	return c.JSON(http.StatusOK, e)
+	return &e, nil
 }
 
-// updateEndpoint edits url/events/status/description (secret + created immutable).
-func updateEndpoint(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// updateEndpoint replaces one endpoint's url, events, status and description. It is a
+// full write, not a patch: an omitted field is cleared. The signing secret and the
+// creation time are immutable, and the endpoint updated is the one the PATH names.
+//
+// Example: {"id": "wh_4c1e9b7a2d6f0538", "url": "https://acme.example/hooks/v2", "events": ["commerce.invoice.>"], "status": "disabled"}
+func (o ops) updateEndpoint(ctx context.Context, in *endpointUpdate) (*Endpoint, error) {
+	s := o.s
+	org, err := o.tenant(ctx)
 	if err != nil {
-		return err
-	}
-	var in endpointInput
-	if err := c.Bind(&in); err != nil {
-		return zip.ErrBadRequest("malformed request body")
+		return nil, err
 	}
 	url, verr := validateURL(in.URL)
 	if verr != nil {
-		return verr
+		return nil, verr
 	}
 	events, verr := validateEvents(in.Events)
 	if verr != nil {
-		return verr
+		return nil, verr
 	}
 	status, verr := validateStatus(in.Status, "active")
 	if verr != nil {
-		return verr
+		return nil, verr
 	}
 	st, err := s.State.storeFor(org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	e, err := st.update(c.Context(), idParam(c), url, events, status, clip(in.Description, maxDescription), now)
+	e, err := st.update(ctx, strings.TrimSpace(in.ID), url, events, status, clip(in.Description, maxDescription), now)
 	if err != nil {
-		return notFoundOr(err)
+		return nil, notFoundOr(err)
 	}
 	e.Secret = ""
-	return c.JSON(http.StatusOK, e)
+	return &e, nil
 }
 
-// deleteEndpoint removes an endpoint.
-func deleteEndpoint(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// deleteEndpoint unregisters one endpoint and answers 204. Delivery stops immediately;
+// the recorded delivery log goes with it.
+//
+// Example: {"id": "wh_4c1e9b7a2d6f0538"}
+func (o ops) deleteEndpoint(ctx context.Context, in *endpointRef) (*struct{}, error) {
+	s := o.s
+	org, err := o.tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	st, err := s.State.storeFor(org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	ok, err := st.del(c.Context(), idParam(c))
+	ok, err := st.del(ctx, strings.TrimSpace(in.ID))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !ok {
-		return zip.ErrNotFound("endpoint not found")
+		return nil, zip.ErrNotFound("endpoint not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
-// listDeliveries returns an endpoint's per-attempt delivery log, newest first. It is
-// org-scoped exactly like every other handler: get() only ever finds THIS org's endpoint
-// (physical per-org store), so another org's id is a 404 — never a window onto its logs.
-// ?limit (default 50, max 200) pages the result; ?status=failed narrows it to one status.
-func listDeliveries(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// listDeliveries returns one endpoint's per-attempt delivery log, newest first. It is
+// org-scoped like every other read — another org's id is a 404, never a window onto its
+// logs — and each row carries the attempt number, HTTP status, duration and any error.
+// Example: {"id": "wh_4c1e9b7a2d6f0538", "status": "failed", "limit": 100}
+func (o ops) listDeliveries(ctx context.Context, in *deliveryQuery) (*deliveryList, error) {
+	s := o.s
+	org, err := o.tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	st, err := s.State.storeFor(org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	id := idParam(c)
-	if _, err := st.get(c.Context(), id); err != nil {
-		return notFoundOr(err) // 404 for a missing id (or another org's id)
+	id := strings.TrimSpace(in.ID)
+	if _, err := st.get(ctx, id); err != nil {
+		return nil, notFoundOr(err) // 404 for a missing id (or another org's id)
 	}
-	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
-	rows, err := st.deliveries(c.Context(), id, parseLimit(c.Query("limit")), status)
+	status := strings.ToLower(strings.TrimSpace(in.Status))
+	rows, err := st.deliveries(ctx, id, parseLimit(in.Limit), status)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "deliveries: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "deliveries: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	return &deliveryList{Data: rows}, nil
 }
 
-// testEndpoint synchronously sends ONE signed test event to the endpoint THROUGH THE SAME
-// attempt path the dispatcher uses (single attempt, 10s timeout, no retry ladder), records
-// the delivery row, and returns the outcome inline so the console can show it immediately.
-// It works even for a DISABLED endpoint — validating an endpoint you have paused is the
-// whole point: get() returns it regardless of status, and only the bus dispatcher skips
-// disabled ones.
-func testEndpoint(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// testEndpoint sends one signed test event and reports the outcome inline. It runs the
+// same attempt path the dispatcher uses — single attempt, 10s timeout, no retry ladder —
+// and records the delivery row, so the result is exactly what a real event would see. It
+// works on a DISABLED endpoint too, since validating an endpoint you have paused is the
+// whole point.
+// Example: {"id": "wh_4c1e9b7a2d6f0538"}
+// Response: {"delivered": true, "httpStatus": 200, "durationMs": 84}
+func (o ops) testEndpoint(ctx context.Context, in *endpointRef) (*testResult, error) {
+	s := o.s
+	org, err := o.tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	st, err := s.State.storeFor(org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	e, err := st.get(c.Context(), idParam(c))
+	e, err := st.get(ctx, strings.TrimSpace(in.ID))
 	if err != nil {
-		return notFoundOr(err)
+		return nil, notFoundOr(err)
 	}
 	payload, _ := json.Marshal(map[string]any{
 		"type":     testSubject,
@@ -312,38 +387,38 @@ func testEndpoint(s *cloud.Service[*state], c *zip.Ctx) error {
 		"note":     "test delivery from /v1/webhooks",
 	})
 	job := deliveryJob{org: org, endpointID: e.ID, url: e.URL, secret: e.Secret, subject: testSubject, delivery: newUUID(), body: payload}
-	res := s.State.disp.attempt(c.Context(), job)
-	s.State.disp.recordAttempt(c.Context(), job, 1, statusLabel(res.ok, false), res) // single attempt ⇒ terminal
-	return c.JSON(http.StatusOK, testResult{
+	res := s.State.disp.attempt(ctx, job)
+	s.State.disp.recordAttempt(ctx, job, 1, statusLabel(res.ok, false), res) // single attempt ⇒ terminal
+	return &testResult{
 		Delivered:  res.ok,
 		HTTPStatus: res.httpStatus,
 		DurationMs: res.duration.Milliseconds(),
 		Error:      res.err,
-	})
+	}, nil
 }
 
-// rotateSecret mints a NEW signing secret for the endpoint and returns it ONCE — the same
-// reveal-once contract as create (this is the only other response that ever carries a
-// secret). The old secret is invalid the instant this returns: every subsequent delivery
-// (and test) signs with the new secret, with no overlap window. A subscriber rotates by
-// updating its verifier to the value returned here, so it should call this when it is
-// ready to swap the secret on its side.
-func rotateSecret(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, err := tenant(c)
+// rotateSecret mints a new signing secret and reveals it once. The old secret is invalid
+// the instant this returns — every subsequent delivery and test signs with the new one,
+// with no overlap window — so a subscriber should call this only when it is ready to
+// swap the secret on its own side.
+// Example: {"id": "wh_4c1e9b7a2d6f0538"}
+func (o ops) rotateSecret(ctx context.Context, in *endpointRef) (*Endpoint, error) {
+	s := o.s
+	org, err := o.tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	st, err := s.State.storeFor(org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	e, err := st.setSecret(c.Context(), idParam(c), newSecret(), now)
+	e, err := st.setSecret(ctx, strings.TrimSpace(in.ID), newSecret(), now)
 	if err != nil {
-		return notFoundOr(err)
+		return nil, notFoundOr(err)
 	}
 	// e.Secret is intentionally NOT redacted — this IS the reveal-once response.
-	return c.JSON(http.StatusOK, e)
+	return &e, nil
 }
 
 // ---- validation + helpers ----
@@ -404,13 +479,10 @@ func notFoundOr(err error) error {
 	return zip.Errorf(http.StatusInternalServerError, "%v", err)
 }
 
-func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
-
-// parseLimit clamps the ?limit query value to (0, maxDeliveryLimit], defaulting a missing
-// or invalid value to defaultDeliveryLimit.
-func parseLimit(raw string) int {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n <= 0 {
+// parseLimit clamps the requested page size to (0, maxDeliveryLimit], defaulting a
+// missing or unparseable value to defaultDeliveryLimit.
+func parseLimit(n int) int {
+	if n <= 0 {
 		return defaultDeliveryLimit
 	}
 	if n > maxDeliveryLimit {

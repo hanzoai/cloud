@@ -22,33 +22,400 @@
     "/v1/admin/referrals/bonuses": {
       "get": {
         "operationId": "get_v1_admin_referrals_bonuses",
+        "summary": "adminList returns every one-time referral bonus — both orgs, grant amounts and\nledger transaction ids — plus a fleet summary.",
+        "description": "adminList returns every one-time referral bonus — both orgs, grant amounts and\nledger transaction ids — plus a fleet summary. SuperAdmin only.",
         "tags": [
           "admin"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means 500 and nothing above 1000 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 500
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BonusBoardEnvelope"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/referrals/sweep": {
       "post": {
         "operationId": "post_v1_admin_referrals_sweep",
+        "summary": "adminSweep qualify-checks every pending referral and grants the bonuses that\nnow qualify — the periodic path a cron or an operator drives.",
+        "description": "adminSweep qualify-checks every pending referral and grants the bonuses that\nnow qualify — the periodic path a cron or an operator drives. The grant is\nlatched at-most-once, so a re-run never double-pays. SuperAdmin only.",
         "tags": [
           "admin"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/None"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "credited": 3,
+                    "swept": 12
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/SweepEnvelope"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/referrals": {
       "get": {
         "operationId": "get_v1_referrals",
+        "summary": "myReferrals returns the caller org's referral code and link, the standing bonus\namounts, the credit earned so far, and every referral they have made.",
+        "description": "myReferrals returns the caller org's referral code and link, the standing bonus\namounts, the credit earned so far, and every referral they have made. It also\nopportunistically qualify-checks the caller's own pending referees, so the page\nis self-updating.",
         "tags": [
           "referrals"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "ACME1234",
+                  "counts": {
+                    "credited": 1,
+                    "qualified": 0,
+                    "signedUp": 0,
+                    "total": 1
+                  },
+                  "creditsEarnedCents": 1000,
+                  "link": "https://hanzo.ai/?ref=ACME1234",
+                  "refereeBonusCents": 500,
+                  "referrals": [],
+                  "referrerBonusCents": 1000
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/MyReferrals"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/referrals/claim": {
       "post": {
         "operationId": "post_v1_referrals_claim",
+        "summary": "claim records a referral from a referrer's code.",
+        "description": "claim records a referral from a referrer's code. The REFEREE is the validated\ncaller (never client-supplied); the referrer is resolved from the code. It is\nidempotent — one referral per referee ever, first touch wins — and refuses a\nself-referral or an unknown code.",
         "tags": [
           "referrals"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "code": "ACME1234"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "ACME1234",
+                  "created": true,
+                  "createdAt": 1780000000,
+                  "id": "ref_4c1e9b7a2d6f0538e4a7c9b1d3f5027a",
+                  "status": "signed_up"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BonusBoard": {
+        "properties": {
+          "referrals": {
+            "description": "Referrals is every referral row, both orgs exposed.",
+            "items": {
+              "$ref": "#/components/schemas/adminReferralView"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/adminSummary",
+            "description": "Summary is the fleet tally, including total promo credit granted."
+          }
+        },
+        "type": "object"
+      },
+      "BonusBoardEnvelope": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BonusBoard",
+            "description": "Data is the bonus board."
+          },
+          "msg": {
+            "description": "Msg carries the failure text when status is not ok.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success; the transport surfaces anything else as an error.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ClaimRequest": {
+        "properties": {
+          "code": {
+            "description": "Code is the referrer's referral code, as carried by the ?ref= link.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ClaimResult": {
+        "properties": {
+          "code": {
+            "description": "Code is the referrer code the referral was recorded against.",
+            "type": "string"
+          },
+          "created": {
+            "description": "Created is false when the caller had already claimed a referral; the\nfirst-touch row is returned unchanged and the response is 200, not 201.",
+            "type": "boolean"
+          },
+          "createdAt": {
+            "description": "CreatedAt is the unix second the referral was first recorded.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the referral id.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the referral's lifecycle state, signed_up on a fresh claim.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MyReferrals": {
+        "properties": {
+          "code": {
+            "description": "Code is the caller org's stable referral code.",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/statusCounts",
+            "description": "Counts tallies the caller's referrals by status."
+          },
+          "creditsEarnedCents": {
+            "description": "CreditsEarnedCents is the promo credit this org has earned in total.",
+            "type": "integer"
+          },
+          "link": {
+            "description": "Link is the shareable signup link carrying that code.",
+            "type": "string"
+          },
+          "refereeBonusCents": {
+            "description": "RefereeBonusCents is what the referee earns on qualification.",
+            "type": "integer"
+          },
+          "referrals": {
+            "description": "Referrals is the caller's referrals, one row per referee.",
+            "items": {
+              "$ref": "#/components/schemas/myReferralView"
+            },
+            "type": "array"
+          },
+          "referrerBonusCents": {
+            "description": "ReferrerBonusCents is what the referrer earns per qualified referee.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "None": {
+        "properties": {},
+        "type": "object"
+      },
+      "SweepEnvelope": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SweepResult",
+            "description": "Data is the sweep result."
+          },
+          "msg": {
+            "description": "Msg carries the failure text when status is not ok.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success; the transport surfaces anything else as an error.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SweepResult": {
+        "properties": {
+          "credited": {
+            "description": "Credited is how many of them qualified and were granted on this pass.",
+            "type": "integer"
+          },
+          "swept": {
+            "description": "Swept is how many pending referrals were qualify-checked.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "adminReferralView": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "creditedAt": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "qualifiedAt": {
+            "type": "integer"
+          },
+          "refereeGrantCents": {
+            "type": "integer"
+          },
+          "refereeOrg": {
+            "type": "string"
+          },
+          "refereeTxn": {
+            "type": "string"
+          },
+          "referrerGrantCents": {
+            "type": "integer"
+          },
+          "referrerOrg": {
+            "type": "string"
+          },
+          "referrerTxn": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "adminSummary": {
+        "properties": {
+          "credited": {
+            "type": "integer"
+          },
+          "grantedCents": {
+            "type": "integer"
+          },
+          "qualified": {
+            "type": "integer"
+          },
+          "signedUp": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "myReferralView": {
+        "properties": {
+          "createdAt": {
+            "type": "integer"
+          },
+          "creditedAt": {
+            "type": "integer"
+          },
+          "creditsCents": {
+            "description": "what I earned from this referral",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "qualifiedAt": {
+            "type": "integer"
+          },
+          "referee": {
+            "description": "the org that signed up via my code",
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "statusCounts": {
+        "properties": {
+          "credited": {
+            "type": "integer"
+          },
+          "qualified": {
+            "type": "integer"
+          },
+          "signedUp": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

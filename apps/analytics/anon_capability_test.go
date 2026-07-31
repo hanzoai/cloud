@@ -36,7 +36,7 @@ import (
 //
 // The observable, as everywhere in this package: 503 ⇒ the event was ADMITTED and
 // reached requireDatastore (no warehouse in the harness) — i.e. it would have become a
-// row. 200 with {accepted:0,dropped:N} ⇒ the projection refused it before the write
+// fact. 200 with {accepted:0,dropped:N} ⇒ the projection refused it before the write
 // core. 403 ⇒ refused at the gate. So "must not become a row" is exactly "must not 503".
 
 // commerceWire is the attack payload on the canonical/Segment wire: every field that
@@ -112,7 +112,7 @@ func TestAnonCommerce_RefusedAtSiteHostDoor(t *testing.T) {
 	for _, door := range doors {
 		code, body := postHostBody(t, app, "yadota.hanzo.app", door.path, commerceFor(t, door))
 		if code == http.StatusServiceUnavailable {
-			t.Errorf("site-host POST %s: reached the write core at FULL capability — "+
+			t.Errorf("site-host POST %s: reached the ingest core at FULL capability — "+
 				"a Host header alone let a stranger write revenue/groupId/personId into the site's org", door.path)
 			continue
 		}
@@ -133,7 +133,7 @@ func TestAnonCommerce_RefusedOnBoundCustomDomain(t *testing.T) {
 	app := carveApp(t, "yadota")
 	code, body := postHostBody(t, app, "yadota.tech", "/v1/event", commerceWire)
 	if code == http.StatusServiceUnavailable {
-		t.Fatalf("custom-domain beacon reached the write core at FULL capability")
+		t.Fatalf("custom-domain beacon reached the ingest core at FULL capability")
 	}
 	if code != http.StatusOK {
 		t.Fatalf("custom-domain anonymous commerce = %d (%s), want 200 all-dropped", code, body)

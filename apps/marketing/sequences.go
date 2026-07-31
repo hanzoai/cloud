@@ -830,8 +830,8 @@ func (o ops) enroll(ctx context.Context, in *EnrollInput) (*EnrollResult, error)
 	return &out, nil
 }
 
-// listEnrollments returns who is walking one sequence, most recently enrolled
-// first, with each walk's current step and next due time.
+// listEnrollments returns who is walking one sequence, most recently enrolled first.
+// Each walk carries its current step and next due time.
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "limit": 100}
 func (o ops) listEnrollments(ctx context.Context, in *EnrollmentQuery) (*EnrollmentList, error) {

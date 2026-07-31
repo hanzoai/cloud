@@ -19,7 +19,7 @@ func main() {
 	if err := cloud.Serve([]cloud.Plugin{{
 		Name:  "account",
 		Price: cloud.Free,
-		Mount: account.MountAccount,
+		Mount: account.Mount,
 	}}, []string{"account"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

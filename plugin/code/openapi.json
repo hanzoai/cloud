@@ -18,56 +18,599 @@
   "paths": {
     "/v1/code/ask": {
       "get": {
-        "operationId": "get_v1_code_ask",
+        "operationId": "askCode",
+        "summary": "askByQuery answers a question about the org's code from the URL, with citations.",
+        "description": "askByQuery answers a question about the org's code from the URL, with citations.\n\nIt is the GET form of ask: the question rides `?q=` instead of a body, and the\nanswer is identical.",
         "tags": [
           "code"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q is the question to answer. Required, max 4000 chars.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "how does hello work"
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo narrows the retrieval to one indexed repo; empty searches all of them.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "svc"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskAnswer"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_code_ask",
+        "operationId": "askCodePost",
+        "summary": "ask answers a question about the org's code, with citations into the index.",
+        "description": "ask answers a question about the org's code, with citations into the index.\n\nRetrieval runs over the caller org's index and the answer is synthesised from\nwhat it found, so every claim carries the span it came from.\nA synthesis outage answers 200 with degraded true and no citations, never a 5xx.",
         "tags": [
           "code"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "query": "how does hello work",
+                "repo": "svc"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskAnswer"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/code/context": {
       "post": {
-        "operationId": "post_v1_code_context",
+        "operationId": "packCodeContext",
+        "summary": "context packs the org's index into a token-budgeted bundle for one question.",
+        "description": "context packs the org's index into a token-budgeted bundle for one question.\n\nIt is THE agent primitive: retrieval, ranking and packing in one call, so an\nagent spends its context window on the spans most likely to answer the query.\nA retrieval outage answers 200 with an empty bundle rather than a 5xx.",
         "tags": [
           "code"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budgetTokens": 4000,
+                "query": "how does hello work",
+                "repo": "svc"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ContextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextBundle"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/code/file": {
       "get": {
-        "operationId": "get_v1_code_file",
+        "operationId": "codeFile",
+        "summary": "file returns the INDEXED content of one file, as the search tiers hold it.",
+        "description": "file returns the INDEXED content of one file, as the search tiers hold it.\n\nIt is a fast \"show the code the index knows\" for context, and it is NOT\nbyte-verbatim: the git object plane is the source of record for exact bytes,\nhistory and blame.\nA file absent from the index is a 404, so an agent can tell \"not indexed\" from\nan empty file.",
         "tags": [
           "code"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo is the repo the file belongs to. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "svc"
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "description": "Path is the file's repo-relative path. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "greeter.go"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileContent"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/code/index": {
       "post": {
-        "operationId": "post_v1_code_index",
+        "operationId": "indexCode",
+        "summary": "index (re)indexes a repo for the caller org, skipping files whose content is unchanged.",
+        "description": "index (re)indexes a repo for the caller org, skipping files whose content is unchanged.\n\nThe pass is incremental by content hash, and prune makes it a full-tree\nreconcile: files absent from the payload leave the index.",
         "tags": [
           "code"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "files": [
+                  {
+                    "content": "package svc",
+                    "path": "greeter.go"
+                  }
+                ],
+                "prune": true,
+                "repo": "svc"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/IndexRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "chunks": 1,
+                  "files": 1,
+                  "indexed": 1,
+                  "pruned": 0,
+                  "repo": "svc",
+                  "semantic": true,
+                  "skipped": 0,
+                  "symbols": 2,
+                  "vectors": 1
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/IndexReport"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/code/search": {
       "get": {
-        "operationId": "get_v1_code_search",
+        "operationId": "searchCode",
+        "summary": "search runs one hybrid search over the caller org's code index.",
+        "description": "search runs one hybrid search over the caller org's code index.\n\nThe tier is chosen by type — text, regex, symbol, semantic or hybrid (the\ndefault, which fuses all three with reciprocal-rank fusion).\nA retrieval outage answers 200 with an empty result and degraded true, never a\n5xx to the agent; only a malformed regex is a 400.",
         "tags": [
           "code"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q is the search query. Required, max 4000 chars.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Type selects the tier: text, regex, symbol, semantic or hybrid (the default,\nand what any unknown value falls back to).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo narrows the search to one indexed repo; empty searches all of them.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the spans returned; 0 means 20 and nothing above 100 is honoured.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "query": "greet",
+                  "results": [],
+                  "type": "hybrid"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/code/tree": {
       "get": {
-        "operationId": "get_v1_code_tree",
+        "operationId": "codeTree",
+        "summary": "tree returns a repo's indexed file structure with per-file symbol counts.",
+        "description": "tree returns a repo's indexed file structure with per-file symbol counts.\n\nIt is get_repo_structure over the org's OWN indexed corpus — no git checkout.\nA repo that has not been indexed returns an empty tree, never an error.",
         "tags": [
           "code"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo is the repo label to inspect. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "svc"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "files": [],
+                  "repo": "svc"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Tree"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AskAnswer": {
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "type": "array"
+          },
+          "degraded": {
+            "type": "boolean"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AskRequest": {
+        "properties": {
+          "query": {
+            "description": "Query is the question to answer. Required, max 4000 chars.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo narrows the retrieval to one indexed repo; empty searches all of them.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Citation": {
+        "properties": {
+          "endLine": {
+            "type": "integer"
+          },
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ContextBundle": {
+        "properties": {
+          "budgetTokens": {
+            "type": "integer"
+          },
+          "query": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "spans": {
+            "items": {
+              "$ref": "#/components/schemas/Span"
+            },
+            "type": "array"
+          },
+          "usedTokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ContextRequest": {
+        "properties": {
+          "budgetTokens": {
+            "description": "BudgetTokens caps the bundle; 0 means 4000, and it is clamped to 256..32000.",
+            "type": "integer"
+          },
+          "query": {
+            "description": "Query is what the bundle is packed to answer. Required, max 4000 chars.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo narrows the search to one indexed repo; empty searches all of them.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "File": {
+        "properties": {
+          "content": {
+            "description": "Content is the file's text.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the file's repo-relative path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "FileContent": {
+        "properties": {
+          "content": {
+            "description": "Content is the indexed text, reassembled from the file's chunks.",
+            "type": "string"
+          },
+          "lang": {
+            "description": "Lang is the language the parser detected.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path echoes the file's repo-relative path.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo echoes the repo the file belongs to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "IndexReport": {
+        "properties": {
+          "chunks": {
+            "description": "Chunks is the repo's total chunk count after the pass.",
+            "type": "integer"
+          },
+          "files": {
+            "description": "Files is the repo's total indexed file count after the pass.",
+            "type": "integer"
+          },
+          "indexed": {
+            "description": "Indexed counts the files this pass wrote.",
+            "type": "integer"
+          },
+          "pruned": {
+            "description": "Pruned counts the indexed files removed because the payload omitted them.",
+            "type": "integer"
+          },
+          "repo": {
+            "description": "Repo echoes the repo that was indexed.",
+            "type": "string"
+          },
+          "semantic": {
+            "description": "Semantic is whether the embedder was enabled for this pass.",
+            "type": "boolean"
+          },
+          "skipped": {
+            "description": "Skipped counts the files whose content hash was unchanged.",
+            "type": "integer"
+          },
+          "symbols": {
+            "description": "Symbols is the repo's total symbol count after the pass.",
+            "type": "integer"
+          },
+          "vectors": {
+            "description": "Vectors is the repo's total embedded-chunk count after the pass.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "IndexRequest": {
+        "properties": {
+          "files": {
+            "description": "Files are the files to index; at most 20000, 1 MiB each, 1 GiB in total.",
+            "items": {
+              "$ref": "#/components/schemas/File"
+            },
+            "type": "array"
+          },
+          "prune": {
+            "description": "Prune removes indexed files absent from this payload, making the pass a\nfull-tree reconcile.",
+            "type": "boolean"
+          },
+          "repo": {
+            "description": "Repo is the repo label the files are indexed under. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SearchResults": {
+        "properties": {
+          "degraded": {
+            "description": "Degraded is true when retrieval failed and the empty result is an outage,\nnot an absence of matches.",
+            "type": "boolean"
+          },
+          "query": {
+            "description": "Query echoes the query that was run.",
+            "type": "string"
+          },
+          "results": {
+            "description": "Results are the matching spans, ranked; empty when nothing matched.",
+            "items": {
+              "$ref": "#/components/schemas/Span"
+            },
+            "type": "array"
+          },
+          "type": {
+            "description": "Type echoes the tier that was run, after defaulting.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Span": {
+        "properties": {
+          "endLine": {
+            "type": "integer"
+          },
+          "file": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "role": {
+            "description": "context: match | definition | caller",
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Tree": {
+        "properties": {
+          "files": {
+            "description": "Files is one entry per indexed file, with its per-file symbol count; empty\nfor a repo that has not been indexed.",
+            "items": {
+              "$ref": "#/components/schemas/TreeEntry"
+            },
+            "type": "array"
+          },
+          "repo": {
+            "description": "Repo echoes the repo the tree is of.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TreeEntry": {
+        "properties": {
+          "lang": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "symbols": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

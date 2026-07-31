@@ -18,7 +18,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -36,9 +35,14 @@ type AccountsTotal struct {
 // this is the gateway's own routed ledger, distinct from the device collector's plan
 // snapshots (/v1/links/usage/summary) and from the org money ledger
 // (/v1/billing/usage). Scope is always "user": the caller's own linked accounts.
+//
+// The fields carry NO per-field doc comments on purpose. clients/billing serves this
+// same Go type from its own surface, and a field description generated here but not
+// there makes ONE schema name describe two shapes, which the fleet weave refuses.
+// The prose lives on the type, where both projections read the same thing: nothing.
 type AccountsUsage struct {
-	Scope    string        `json:"scope"`  // user
-	Source   string        `json:"source"` // routed
+	Scope    string        `json:"scope"`
+	Source   string        `json:"source"`
 	Total    AccountsTotal `json:"total"`
 	Accounts []RoutedUsage `json:"accounts"`
 }
@@ -61,18 +65,22 @@ func routedAccountsView(rows []RoutedUsage) AccountsUsage {
 	return out
 }
 
-// usageAccounts serves GET /v1/links/usage/accounts: the caller's own per-account
-// routed-usage breakdown.
-func usageAccounts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.RoutedTotals(c.Context(), org, user)
+// usageAccounts breaks the caller's Hanzo-ROUTED usage down per linked account.
+// This is what Hanzo itself served and charged for, not what a provider's own plan
+// metered; it answers only for the calling subject.
+//
+// Response: {"scope": "user", "source": "routed", "total": {"accounts": 1, "requests": 128, "promptTokens": 41200, "completionTokens": 9800, "totalTokens": 51000, "costCents": 316}, "accounts": []}
+func (o ops) usageAccounts(ctx context.Context, _ *struct{}) (*AccountsUsage, error) {
+	org, user, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "routed usage: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, routedAccountsView(rows))
+	rows, err := o.s.State.store.RoutedTotals(ctx, org, user)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "routed usage: %v", err)
+	}
+	out := routedAccountsView(rows)
+	return &out, nil
 }
 
 // RoutedBreakdown is the package-level read the billing surface (clients/billing)

@@ -63,9 +63,9 @@ type RevenueData struct {
 	Sources            []core.SourceStatus `json:"sources"`
 }
 
-// Revenue is the fleet money board: total prepaid balances held, total realized spend,
-// MRR, ARPU, a per-customer table sorted highest-revenue first, and a real 30-day spend
-// trend from the usage ledger.
+// Revenue is the fleet money board. It reports total prepaid balances held, total
+// realized spend, MRR, ARPU, a per-customer table sorted highest-revenue first, and a
+// real 30-day spend trend from the usage ledger.
 //
 // ORTHOGONAL to /v1/admin/finance, which is the COGS/margin view of what WE pay vendors.
 // This is the customer side: what each customer holds, spends and subscribes to.

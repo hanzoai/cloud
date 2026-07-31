@@ -1,10 +1,10 @@
 package functions
 
 import (
+	"context"
 	"net/http"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -99,23 +99,31 @@ func buildMetrics(invs []Invocation, spec metricsRange, now time.Time) metricsVi
 	return metricsView{Series: series, Status: st, CostCents: nil}
 }
 
-func metrics(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// metricsQuery selects the chart window of the invocation metrics read.
+type metricsQuery struct {
+	// Range is the window: 1H, 6H, 24H, 7D or 30D. Anything else means 24H.
+	Range string `json:"range"`
+}
+
+// metrics buckets the caller org's real invocation rows into a per-function series.
+// Every point is a COUNT of rows that fell in that bucket — nothing is
+// interpolated. costCents is null: there is no per-invocation cost source.
+//
+// Example: {"range": "24H"}
+func (o ops) metrics(ctx context.Context, in *metricsQuery) (*metricsView, error) {
+	orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	spec, ok := rangeSpecs[c.Query("range")]
+	spec, ok := rangeSpecs[in.Range]
 	if !ok {
 		spec = rangeSpecs["24H"]
 	}
 	since := time.Now().Add(-spec.dur).Unix()
-	invs, err := store.InvocationsSince(c.Context(), org, since, 5000)
+	invs, err := store.InvocationsSince(ctx, orgID, since, 5000)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
 	}
-	return c.JSON(http.StatusOK, buildMetrics(invs, spec, time.Now()))
+	out := buildMetrics(invs, spec, time.Now())
+	return &out, nil
 }

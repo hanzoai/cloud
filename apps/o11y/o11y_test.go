@@ -60,3 +60,49 @@ func TestUpstreamDefault(t *testing.T) {
 		t.Fatalf("upstream() = %q, want override", got)
 	}
 }
+
+// A health endpoint must answer without a principal, or a readiness probe turns
+// into a 403 and the pod never reports ready. /v1/o11y/health regressed exactly
+// that way: isHealthPath enumerated only the runtime's own /api/… paths, so the
+// generic HIP-0106 route fell through to the principal gate.
+func TestGateServesHealthWithoutPrincipal(t *testing.T) {
+	served := false
+	h := gate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		served = true
+		_, _ = io.WriteString(w, `{"status":"ok"}`)
+	}))
+
+	for _, p := range []string{
+		"/v1/o11y/health", "/v1/o11y/health/", "/v1/sentry/health", "/health",
+		"/v1/o11y/api/v1/health", "/v1/o11y/api/v2/healthz",
+		"/v1/o11y/api/v2/readyz", "/v1/o11y/api/v2/livez",
+	} {
+		served = false
+		rec := httptest.NewRecorder()
+		// No X-User-Id: exactly what a kubelet or an external uptime check sends.
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai"+p, nil))
+		if rec.Code != http.StatusOK || !served {
+			t.Errorf("%s: got %d served=%v, want 200 served=true (health must be public)", p, rec.Code, served)
+		}
+	}
+}
+
+// The inverse, and the reason the gate exists: DATA reads stay principal-gated.
+// A fix that opens health must not open telemetry.
+func TestGateStillRefusesDataReadsWithoutPrincipal(t *testing.T) {
+	h := gate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("%s reached the handler without a principal", r.URL.Path)
+	}))
+
+	for _, p := range []string{
+		"/v1/o11y/api/v1/query_range", "/v1/o11y/api/v3/query_range",
+		"/v1/o11y/api/v1/logs", "/v1/sentry/issues",
+		"/v1/o11y/healthcheck", "/v1/o11y/api/v1/health/detail",
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai"+p, nil))
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("%s: got %d, want 403 (data reads stay gated)", p, rec.Code)
+		}
+	}
+}

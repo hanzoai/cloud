@@ -19,14 +19,63 @@
     "/v1/help/articles": {
       "get": {
         "operationId": "get_v1_help_articles",
+        "summary": "listArticles returns the help center's published, public articles without bodies.",
+        "description": "listArticles returns the help center's published, public articles without bodies. The\ntenant is fixed at mount and the published/public filter is server-set, so a caller\ncan widen neither.",
         "tags": [
           "help"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Category narrows the list to one knowledge-base section, by category name.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "billing"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the articles returned; 0 means 50 and nothing above 200 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "category": "accounts",
+                      "excerpt": "Use the reset link on the sign-in page.",
+                      "slug": "reset-my-password",
+                      "title": "Reset my password",
+                      "updatedAt": 1780000000
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/help/articles/{slug}": {
       "get": {
-        "operationId": "get_v1_help_articles_by_slug",
+        "operationId": "get_v1_help_articles_slug",
+        "summary": "getArticle returns one published, public article by slug.",
+        "description": "getArticle returns one published, public article by slug. The article's document name\nIS its slug, and a missing, Draft, or internal (non-public) article is 404 —\nfail-closed, no existence oracle beyond \"published + public\".",
         "tags": [
           "help"
         ],
@@ -35,27 +84,238 @@
             "name": "slug",
             "in": "path",
             "required": true,
+            "description": "Slug is the article's URL slug, which is also its document name.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "reset-my-password"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "body": "\u003cp\u003eOpen the sign-in page…\u003c/p\u003e",
+                  "category": "accounts",
+                  "excerpt": "Use the reset link on the sign-in page.",
+                  "slug": "reset-my-password",
+                  "title": "Reset my password",
+                  "updatedAt": 1780000000
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Article"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/help/categories": {
       "get": {
         "operationId": "get_v1_help_categories",
+        "summary": "listCategories returns the knowledge-base sections that front a public article.",
+        "description": "listCategories returns the knowledge-base sections that front a public article. Only\nsections carrying at least one Published + public article are listed, so an internal\n(agent-only) category name or description never leaks; an org with no public articles\nhas no sections (empty, not an error).",
         "tags": [
           "help"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "description": "Signing in and account settings.",
+                      "name": "accounts"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/help/tickets": {
       "post": {
         "operationId": "post_v1_help_tickets",
+        "summary": "fileTicket opens a support ticket from an anonymous customer submission.",
+        "description": "fileTicket opens a support ticket from an anonymous customer submission. The ticket is\ncreated status Open, source portal, with the customer's message on the description,\nand that message is then recorded as the opening conversation entry — the description\ncarries it regardless, so failing to write the entry loses nothing.",
         "tags": [
           "help"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "The reset link 404s.",
+                "email": "sam@example.com",
+                "priority": "high",
+                "subject": "Cannot sign in"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/TicketIntake"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "Open",
+                  "ticket": "tkt_4c1e9b7a2d6f0538e4a7c9b1"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/TicketReceipt"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Article": {
+        "properties": {
+          "body": {
+            "description": "Body is the rendered article text.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category is the knowledge-base section the article sits in.",
+            "type": "string"
+          },
+          "excerpt": {
+            "description": "Excerpt is the short summary shown in a list.",
+            "type": "string"
+          },
+          "slug": {
+            "description": "Slug is the article's URL slug.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the article headline.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the last edit, as a unix timestamp in seconds.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ArticleCard": {
+        "properties": {
+          "category": {
+            "description": "Category is the knowledge-base section the article sits in.",
+            "type": "string"
+          },
+          "excerpt": {
+            "description": "Excerpt is the short summary shown in a list.",
+            "type": "string"
+          },
+          "slug": {
+            "description": "Slug is the article's URL slug.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the article headline.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the last edit, as a unix timestamp in seconds.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ArticleList": {
+        "properties": {
+          "data": {
+            "description": "Data is the published, public articles, newest content first as the store returns them.",
+            "items": {
+              "$ref": "#/components/schemas/ArticleCard"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "CategoryCard": {
+        "properties": {
+          "description": {
+            "description": "Description is the section blurb.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the section's name, which is also its document name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CategoryList": {
+        "properties": {
+          "data": {
+            "description": "Data is the sections that front at least one published, public article.",
+            "items": {
+              "$ref": "#/components/schemas/CategoryCard"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "TicketIntake": {
+        "properties": {
+          "description": {
+            "description": "Description is the customer's message. Clipped to 16 KiB.",
+            "type": "string"
+          },
+          "email": {
+            "description": "Email is the customer's address, and the party the ticket is filed against. Required.",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority is one of low, medium, high or urgent; anything else means medium.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the one-line summary. Required; clipped to 300 characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "email"
+        ],
+        "type": "object"
+      },
+      "TicketReceipt": {
+        "properties": {
+          "status": {
+            "description": "Status is the ticket's lifecycle state, always Open on intake.",
+            "type": "string"
+          },
+          "ticket": {
+            "description": "Ticket is the opaque customer-facing reference; the internal ticket number is not disclosed.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

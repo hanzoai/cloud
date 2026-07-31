@@ -18,10 +18,227 @@
   "paths": {
     "/v1/audit": {
       "get": {
-        "operationId": "get_v1_audit",
+        "operationId": "auditTrail",
+        "summary": "list reads the caller's OWN org audit trail, newest first.",
+        "description": "list reads the caller's OWN org audit trail, newest first. Every row carries its\nown hash-chain linkage.\n\nThe org is the validated principal's, pinned server-side, so a caller can only\never read its own tenant. Answers 501 when no local tamper-evident store is\nconfigured, rather than falling back to a different trail.",
         "tags": [
           "audit"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sub",
+            "in": "query",
+            "required": false,
+            "description": "Sub restricts the trail to one actor — the validated subject that made the\nrequest.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "description": "Action restricts it to one action name, e.g. \"kms.secret.read\".",
+            "schema": {
+              "type": "string"
+            },
+            "example": "kms.secret.read"
+          },
+          {
+            "name": "resource",
+            "in": "query",
+            "required": false,
+            "description": "Resource restricts it to one resource kind, e.g. \"secret\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resourceId",
+            "in": "query",
+            "required": false,
+            "description": "ResourceID restricts it to one resource instance.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "required": false,
+            "description": "Result restricts it to \"success\", \"deny\" or \"error\".",
+            "schema": {
+              "type": "string"
+            },
+            "example": "deny"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Since is the inclusive lower time bound, RFC3339. An unparseable value is\nignored rather than refused — one malformed filter must not hide the trail.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-07-01T00:00:00Z"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "description": "Until is the upper time bound, RFC3339, with the same tolerance.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "description": "PageSize is rows per page; absent or non-positive means 100.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          },
+          {
+            "name": "p",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page number, driving the offset.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "action": "kms.secret.read",
+                      "hash": "9f2c",
+                      "isAdmin": false,
+                      "org": "acme",
+                      "prevHash": "41ab",
+                      "resource": "secret",
+                      "result": "deny",
+                      "seq": 41,
+                      "status": 403,
+                      "sub": "z@hanzo.ai",
+                      "time": "2026-07-26T18:00:00.123456789Z"
+                    }
+                  ],
+                  "data2": 1,
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Trail"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Trail": {
+        "properties": {
+          "data": {
+            "description": "Data is the page of records, newest first. Never null; [] when the org has no\nmatching events.",
+            "items": {
+              "$ref": "#/components/schemas/Wire"
+            },
+            "type": "array"
+          },
+          "data2": {
+            "description": "Data2 is the total number of matching records, before paging.",
+            "type": "integer"
+          },
+          "msg": {
+            "description": "Msg is empty on a served read.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on a served read.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Wire": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "authMethod": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "home": {
+            "type": "string"
+          },
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "method": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "prevHash": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "resourceId": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "sourceIp": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "sub": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "userAgent": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

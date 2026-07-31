@@ -3960,7 +3960,7 @@ components:
         latencyP99Ms:
           type: number
         logVolume:
-          description: Logs (distributed_logs_v2), fleet volume over the window.
+          description: Logs (event.log), fleet volume over the window.
           type: integer
         models:
           type: integer
@@ -3976,7 +3976,7 @@ components:
         tokens:
           type: integer
         traceCount:
-          description: Traces (o11y_index_v3), all services.
+          description: Spans (event.span), all services.
           type: integer
         traceErrorRate:
           description: percent (0..100)

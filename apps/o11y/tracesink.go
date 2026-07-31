@@ -3,34 +3,37 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-// In-process trace sink — the CONSUMER half of cloud's own span path.
+// In-process trace sink — the SAME-PROCESS rung of the span ladder.
 //
-// The host owns the tracer provider and the one Send that leaves it
-// (cloud/telemetry.go). This file is what makes that Send free when o11y is
-// linked into the same binary: it registers a handler on the host's trace
-// destination, receives the LIVE span batch by value — zero encode, zero socket,
-// no second collector hop — and writes it to o11y_traces through the REAL
-// dstraces exporter, the one writer that produces the o11y_index_v3 schema the
-// embedded query plane reads.
+// Every cloud process owns a tracer provider and one Send that leaves it
+// (cloud/telemetry.go). This file is what makes that Send free IN THE O11Y
+// BINARY: it registers a handler on the trace destination, receives the LIVE span
+// batch by value — zero encode, zero socket, no collector hop — and writes it
+// through the REAL dstraces exporter, the one writer the embedded query plane
+// reads behind.
 //
-// Registration is process-local, and that is the entire deployment story: linked
-// in, this handler exists and the host's router prefers it; as a plugin, this
-// handler exists in the CHILD, the host's router has no route, and the host's
-// identical Send falls through to the ZAP wire — which lands on the collector
-// this same package mounts (ingest.go). One producer, one call site, both
-// topologies.
+// Registration is process-local, and that is the WHOLE transport decision. This
+// package is linked only into plugin/o11y, so this handler exists in exactly one
+// process: o11y's own spans take the Cost-0 leg, and the host's and every sibling
+// plugin's fall through to the wire — the loopback hop to the receiver ingest.go
+// mounts, one rung down the ladder. Nothing branches on where o11y lives; the
+// routing table answers it.
 //
 // The pdata conversion (spanconv.go) lives HERE and not in the host on purpose:
-// it is coupled to the datastore exporter's schema, and hoisting it would drag
+// it is coupled to the warehouse exporter's schema, and hoisting it would drag
 // go.opentelemetry.io/collector into every package that imports cloud for Deps.
 //
 // Safety posture (this feeds a LIVE, SHARED telemetry store):
-//   - OPT-IN: mounts only when O11Y_TRACES_ZAP_INPROCESS is truthy AND a datastore
-//     DSN is set. Inert until the flag flips (verify-then-cutover).
-//   - Fail-soft: any construction error logs and returns nil, leaving cloud's
-//     spans on the wire path — activating this can never take cloud down.
-//   - Shutdown deregisters the handler (host falls back to the wire) then flushes
-//     the exporter's sending queue to datastore before exit.
+//   - Bound by CAPABILITY, not by a flag: it mounts exactly when a warehouse DSN
+//     is configured, because the DSN is the thing it writes to — the same rule
+//     ingest.go states next door, and for the same reason. The env flag that used
+//     to gate it asserted "o11y is in this process", which the router already
+//     knows for certain and which one shared environment made true in 112
+//     processes and true-in-fact in one.
+//   - Fail-soft: any construction error logs and returns nil, leaving these spans
+//     on the wire path — mounting this can never take o11y down.
+//   - Shutdown deregisters the handler (the Send falls back to the wire) then
+//     flushes the exporter's sending queue before exit.
 package o11y
 
 import (
@@ -54,34 +57,30 @@ import (
 // flush it, mirroring embeddedIngest.
 var traceExporter exporter.Traces
 
-// mountTraceSink builds the dstraces exporter and registers it as the host's
+// mountTraceSink builds the dstraces exporter and registers it as this process's
 // co-resident trace sink. Called by mountO11y (o11y.go). It registers no
 // /v1/o11y/* Fiber route, so it is order-independent. Fail-soft at every branch:
-// a disabled flag, a missing DSN, or a construction error all return nil,
-// leaving cloud's spans on the wire path.
+// a missing DSN or a construction error returns nil, leaving these spans on the
+// wire path.
 func mountTraceSink(deps cloud.Deps) error {
 	log := deps.Logger.New("subsystem", "o11y-trace-inproc")
 
-	if !cloud.TraceInprocEnabled() {
-		log.Info("in-process trace sink disabled (set O11Y_TRACES_ZAP_INPROCESS=true to route cloud's own spans in-process)")
-		return nil
-	}
 	dsn := embeddedDSN()
 	if dsn == "" {
-		log.Warn("in-process trace sink enabled but no datastore DSN; cloud's spans stay on the wire path (needs O11Y_TELEMETRYSTORE_DATASTORE_DSN)")
+		log.Warn("in-process trace sink not mounted: no warehouse DSN; o11y's own spans stay on the wire path (needs O11Y_TELEMETRYSTORE_DATASTORE_DSN)")
 		return nil
 	}
 
 	exp, err := buildTraceExporter(context.Background(), dsn)
 	if err != nil {
-		log.Warn("in-process trace sink init failed; cloud's spans stay on the wire path", "err", err)
+		log.Warn("in-process trace sink init failed; o11y's own spans stay on the wire path", "err", err)
 		return nil // fail-soft
 	}
 	traceExporter = exp
 
 	cloud.RegisterTraceSink(traceSink(exp))
 
-	log.Info("in-process trace sink live: cloud's own spans -> o11y_traces (Cost-0, no socket)")
+	log.Info("in-process trace sink live: o11y's own spans stay in-process (Cost-0, no socket)")
 	return nil
 }
 
@@ -133,7 +132,7 @@ func buildTraceExporter(ctx context.Context, dsn string) (exporter.Traces, error
 		},
 		BuildInfo: component.BuildInfo{
 			Command:     "hanzo-cloud-trace-inproc",
-			Description: "Hanzo Cloud in-process trace sink (cloud's own spans -> o11y_traces)",
+			Description: "Hanzo Cloud in-process trace sink (o11y's own spans, no socket)",
 			Version:     "embedded",
 		},
 	}

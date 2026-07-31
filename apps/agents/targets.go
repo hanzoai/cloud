@@ -530,16 +530,101 @@ func toTargetView(t Target, load TargetLoad) targetView {
 	return v
 }
 
+// targetOps binds the service to the typed target ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value (o.registerTarget), which
+// is also the only bound form cmd/zipdoc can lift prose from.
+type targetOps struct{ s *cloud.Service[state] }
+
+// targetCaller is caller() for a typed op: the validated principal that owns a
+// machine it registers. Empty off the HTTP path, where there is no request and
+// therefore no caller — which fails closed, since an empty owner never satisfies
+// the ownership arm of targetOwns.
+func targetCaller(ctx context.Context) string {
+	if c, ok := cloud.Request(ctx); ok {
+		return caller(c)
+	}
+	return ""
+}
+
+// targetOwns is ownsTarget() for a typed op. It needs the REQUEST rather than the
+// tenant because org-admin-ness lives in a header (X-User-IsOrgAdmin) that
+// principal.OrgFrom does not carry. False off the HTTP path: no request, no
+// attested caller, no management rights.
+func targetOwns(ctx context.Context, t Target) bool {
+	if c, ok := cloud.Request(ctx); ok {
+		return ownsTarget(c, t)
+	}
+	return false
+}
+
+// tenantOf is the validated org for a typed op — the one the gateway asserted and
+// cloud.Bridge parked on the context, never a field of In. An In field is
+// caller-supplied, so a tenant key read from one is a cross-tenant read the
+// caller asserted for itself.
+func tenantOf(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
+}
+
+// targetRef addresses one target. The id is the path segment: the URL is the
+// addressing authority, so it binds from there whatever a body says.
+type targetRef struct {
+	// ID is the target to act on, from the path.
+	ID string `json:"id"`
+}
+
+// targetList is a page of the caller org's targets.
+type targetList struct {
+	// Targets is every target registered to the caller's org.
+	Targets []targetView `json:"targets"`
+}
+
+// targetDeleted acknowledges a deregistration.
+type targetDeleted struct {
+	// Deleted is true when the target was removed.
+	Deleted bool `json:"deleted"`
+	// ID is the target that was removed.
+	ID string `json:"id"`
+}
+
+// patchTargetIn is a partial update. Every field is optional — a nil field is
+// left alone — and the id comes from the path.
+type patchTargetIn struct {
+	// ID is the target to update, from the path.
+	ID string `json:"id"`
+	patchTargetReq
+}
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // mountTargets registers the target routes. Called from Mount BEFORE the
 // /v1/agents/:ref wildcard (Fiber matches in registration order) so "targets" is not
 // captured as a ref. The static /v1/agents/targets precedes /v1/agents/targets/:id.
-func mountTargets(s *cloud.Service[state], app cloud.Router) {
-	g := app.Group("/v1/agents")
-	g.Post("/targets", cloud.Handle(s, registerTarget))
-	g.Get("/targets", cloud.Handle(s, listTargets))
-	g.Get("/targets/:id", cloud.Handle(s, getTarget))
-	g.Patch("/targets/:id", cloud.Handle(s, patchTarget))
-	g.Delete("/targets/:id", cloud.Handle(s, deleteTarget))
+func mountTargets(s *cloud.Service[state], app cloud.Router, zapp *zip.App) {
+	// Bridge FIRST: a typed op receives only a context, so the validated org
+	// reaches it by being parked there — never as an In field, which is
+	// caller-supplied and would be a cross-tenant read the caller asserted for
+	// itself. fiber runs middleware in registration order, so this must precede
+	// the leaves below; it is prefix-scoped, and nesting under Serve's own Bridge
+	// is harmless (the inner one is what the handler sees).
+	app.Group("/v1/agents").Use(cloud.Bridge())
+	// TYPED ops, on the ABSOLUTE path: the registry keys on it, and cmd/zipdoc at
+	// the pinned zip reads the path argument literally, so a group-relative
+	// registration would document an address that does not exist.
+	o := targetOps{s: s}
+	zip.Post(zapp, "/v1/agents/targets", o.registerTarget)
+	zip.Get(zapp, "/v1/agents/targets", o.listTargets)
+	zip.Get(zapp, "/v1/agents/targets/:id", o.getTarget)
+	zip.Patch(zapp, "/v1/agents/targets/:id", o.patchTarget)
+	zip.Delete(zapp, "/v1/agents/targets/:id", o.deleteTarget)
 	// The #48 route-work machine surface (claim-key, claim long-poll, report)
 	// lives on the same target routes; register after the CRUD so the
 	// extra-segment paths are unambiguous.
@@ -549,55 +634,71 @@ func mountTargets(s *cloud.Service[state], app cloud.Router) {
 // ---- register ----
 
 type targetReq struct {
-	Label    string  `json:"label"`
-	Kind     string  `json:"kind"`
-	Status   string  `json:"status"`
-	Capacity string  `json:"capacity"`
-	Host     string  `json:"host"`
-	Spec     Spec    `json:"spec"`
-	Metrics  Metrics `json:"metrics"`
+	// Label is the machine's display name in mission control. Required.
+	Label string `json:"label"`
+	// Kind is what the machine is: laptop, cloud, gpu, cluster or machine
+	// (the default).
+	Kind string `json:"kind"`
+	// Status is the dispatch state: online (the default), offline or draining.
+	Status string `json:"status"`
+	// Capacity is a free-text note about how much work the machine can take.
+	Capacity string `json:"capacity"`
+	// Host is the machine's stable hostname. It is the re-link key: a machine
+	// that reconnects under the same host refreshes its own row.
+	Host string `json:"host"`
+	// Spec is the machine's hardware — cpu, memory, gpus.
+	Spec Spec `json:"spec"`
+	// Metrics is a live utilisation sample. Sending one registers a heartbeat;
+	// the server stamps its own clock, so staleness cannot be forged.
+	Metrics Metrics `json:"metrics"`
 }
 
-func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// registerTarget registers a machine as an agent target, or re-links one.
+// Re-linking is idempotent and keyed on org+host+owner, so a machine that
+// reconnects refreshes its own row rather than piling up duplicates; it answers
+// 200, while a first registration answers 201.
+// The registering principal owns the machine — only it, or an org admin, may
+// later patch, claim or remove it.
+//
+// Example: {"label": "workshop", "kind": "gpu", "host": "gpu-01"}
+func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetView, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body targetReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	label := strings.TrimSpace(body.Label)
 	if label == "" {
-		return zip.ErrBadRequest("label is required")
+		return nil, zip.ErrBadRequest("label is required")
 	}
 	if len(label) > maxTargetLabel {
-		return zip.ErrBadRequest("label too long")
+		return nil, zip.ErrBadRequest("label too long")
 	}
 	kind := strings.TrimSpace(body.Kind)
 	if kind == "" {
 		kind = TargetMachine
 	}
 	if !validTargetKind(kind) {
-		return zip.ErrBadRequest("kind must be laptop|cloud|gpu|cluster|machine")
+		return nil, zip.ErrBadRequest("kind must be laptop|cloud|gpu|cluster|machine")
 	}
 	status := strings.TrimSpace(body.Status)
 	if status == "" {
 		status = TargetOnline
 	}
 	if !validTargetStatus(status) {
-		return zip.ErrBadRequest("status must be online|offline|draining")
+		return nil, zip.ErrBadRequest("status must be online|offline|draining")
 	}
 	capacity := strings.TrimSpace(body.Capacity)
 	if len(capacity) > maxTargetCapacity {
-		return zip.ErrBadRequest("capacity too long")
+		return nil, zip.ErrBadRequest("capacity too long")
 	}
 	host := strings.TrimSpace(body.Host)
 	if len(host) > maxHost {
-		return zip.ErrBadRequest("host too long")
+		return nil, zip.ErrBadRequest("host too long")
 	}
 	if len(body.Spec.GPUs) > maxGPUs {
-		return zip.ErrBadRequest("too many gpus")
+		return nil, zip.ErrBadRequest("too many gpus")
 	}
 	spec := body.Spec.Sanitize()
 	metrics := body.Metrics.Sanitize()
@@ -610,7 +711,7 @@ func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
 	// The registering principal OWNS this machine (least privilege): only it (or an
 	// org admin) may later mint the claim key, claim runs, report, patch, or delete
 	// it. tenant() already required a validated principal, so this is non-empty.
-	owner := caller(c)
+	owner := targetCaller(ctx)
 
 	// Idempotent re-link: the SAME machine (org+host+owner) refreshes its existing
 	// target rather than piling up duplicates, so mission-control shows one row per
@@ -620,154 +721,186 @@ func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
 	// machine; the caller falls through to create its own. Only an explicit host keys
 	// this — an anonymous target (no host) always creates.
 	if host != "" {
-		if existing, err := s.State.store.GetLinkableTargetByHost(c.Context(), org, host, owner); err == nil {
+		if existing, err := s.State.store.GetLinkableTargetByHost(ctx, org, host, owner); err == nil {
 			existing.Owner = owner // bind an adopted unowned row; no-op if already ours
 			existing.Label, existing.Kind, existing.Status, existing.Capacity = label, kind, status, capacity
 			existing.Spec, existing.Metrics, existing.MetricsAt = spec, metrics, metricsAt
 			existing.UpdatedAt = now
-			if err := s.State.store.UpdateTarget(c.Context(), existing); err != nil {
-				return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+			if err := s.State.store.UpdateTarget(ctx, existing); err != nil {
+				return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 			}
 			recordSample(s, existing) // a re-link carrying metrics IS a heartbeat
-			load, _ := s.State.store.SessionLoad(c.Context(), org, existing.ID, existing.Host)
-			return c.JSON(http.StatusOK, toTargetView(existing, load))
+			load, _ := s.State.store.SessionLoad(ctx, org, existing.ID, existing.Host)
+			v := toTargetView(existing, load)
+			return &v, nil
 		}
 	}
 
 	id, err := genID("tgt")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	t := Target{
 		ID: id, Org: org, Owner: owner, Label: label, Kind: kind, Status: status,
 		Capacity: capacity, Host: host, Spec: spec, Metrics: metrics, MetricsAt: metricsAt,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.State.store.CreateTarget(c.Context(), t); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+	if err := s.State.store.CreateTarget(ctx, t); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
 	recordSample(s, t) // a registration carrying metrics is the target's first sample
-	return c.JSON(http.StatusCreated, toTargetView(t, TargetLoad{}))
+	// 201 only on the CREATE branch — the re-link above answers 200, which is the
+	// correct REST distinction and the reason this op cannot declare a single
+	// zip.WithStatus.
+	cloud.Created(ctx)
+	v := toTargetView(t, TargetLoad{})
+	return &v, nil
 }
 
 // ---- list ----
 
-func listTargets(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.ListTargets(c.Context(), org)
+// listTargets returns every machine registered to the caller's org.
+// Rows come newest first, each carrying the machine's spec, its last
+// utilisation sample and the live session load dispatched to it.
+func (o targetOps) listTargets(ctx context.Context, _ *noInput) (*targetList, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	rows, err := s.State.store.ListTargets(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]targetView, 0, len(rows))
 	for _, t := range rows {
-		load, _ := s.State.store.SessionLoad(c.Context(), org, t.ID, t.Host)
+		load, _ := s.State.store.SessionLoad(ctx, org, t.ID, t.Host)
 		out = append(out, toTargetView(t, load))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"targets": out})
+	return &targetList{Targets: out}, nil
 }
 
 // ---- detail ----
 
-func getTarget(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// getTarget returns one registered machine with its live session load.
+// An id from another org reads as not-found, so a probe learns nothing about
+// what exists elsewhere.
+//
+// Example: {"id": "tgt_1"}
+func (o targetOps) getTarget(ctx context.Context, in *targetRef) (*targetView, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := idParam(c)
+	id := in.ID
 	if len(id) > maxTargetID {
-		return zip.ErrNotFound("target not found")
+		return nil, zip.ErrNotFound("target not found")
 	}
-	t, err := s.State.store.GetTarget(c.Context(), org, id)
+	t, err := s.State.store.GetTarget(ctx, org, id)
 	if err == errTargetNotFound {
-		return zip.ErrNotFound("target not found")
+		return nil, zip.ErrNotFound("target not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	load, _ := s.State.store.SessionLoad(c.Context(), org, t.ID, t.Host)
-	return c.JSON(http.StatusOK, toTargetView(t, load))
+	load, _ := s.State.store.SessionLoad(ctx, org, t.ID, t.Host)
+	v := toTargetView(t, load)
+	return &v, nil
 }
 
 // ---- patch ----
 
 type patchTargetReq struct {
-	Label    *string  `json:"label"`
-	Kind     *string  `json:"kind"`
-	Status   *string  `json:"status"`
-	Capacity *string  `json:"capacity"`
-	Host     *string  `json:"host"`
-	Spec     *Spec    `json:"spec"`
-	Metrics  *Metrics `json:"metrics"` // present => a heartbeat; the server stamps its time
+	// Label renames the machine in mission control; it may not be set empty.
+	Label *string `json:"label"`
+	// Kind re-declares what the machine is: laptop, cloud, gpu, cluster or
+	// machine.
+	Kind *string `json:"kind"`
+	// Status moves the machine between online, offline and draining — draining
+	// is how a machine is retired without killing the work already on it.
+	Status *string `json:"status"`
+	// Capacity re-states how much work the machine can take.
+	Capacity *string `json:"capacity"`
+	// Host re-states the machine's hostname.
+	Host *string `json:"host"`
+	// Spec re-states the machine's hardware.
+	Spec *Spec `json:"spec"`
+	// Metrics is a fresh utilisation sample; sending one IS the heartbeat, and
+	// the server stamps its own clock.
+	Metrics *Metrics `json:"metrics"` // present => a heartbeat; the server stamps its time
 }
 
-func patchTarget(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// patchTarget updates one machine in place, leaving every omitted field alone.
+// A metrics patch IS a heartbeat — the server stamps its own clock, so a client
+// can neither forge nor backdate staleness.
+// Only the machine's owner, or an org admin, may patch it; anyone else gets the
+// same not-found an unknown id gives.
+//
+// Example: {"id": "tgt_1", "status": "draining"}
+func (o targetOps) patchTarget(ctx context.Context, in *patchTargetIn) (*targetView, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := idParam(c)
-	t, err := s.State.store.GetTarget(c.Context(), org, id)
+	id := in.ID
+	t, err := s.State.store.GetTarget(ctx, org, id)
 	if err == errTargetNotFound {
-		return zip.ErrNotFound("target not found")
+		return nil, zip.ErrNotFound("target not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
 	// Only the machine's owner (or an org admin) may mutate it — a member cannot
 	// reconfigure/drain another member's machine. Fail-closed to the SAME not-found
 	// an unknown id gives, so a probe learns nothing about what exists.
-	if !ownsTarget(c, t) {
-		return zip.ErrNotFound("target not found")
+	if !targetOwns(ctx, t) {
+		return nil, zip.ErrNotFound("target not found")
 	}
-	var body patchTargetReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := in.patchTargetReq
 	if body.Label != nil {
 		nl := strings.TrimSpace(*body.Label)
 		if nl == "" {
-			return zip.ErrBadRequest("label cannot be empty")
+			return nil, zip.ErrBadRequest("label cannot be empty")
 		}
 		if len(nl) > maxTargetLabel {
-			return zip.ErrBadRequest("label too long")
+			return nil, zip.ErrBadRequest("label too long")
 		}
 		t.Label = nl
 	}
 	if body.Kind != nil {
 		nk := strings.TrimSpace(*body.Kind)
 		if !validTargetKind(nk) {
-			return zip.ErrBadRequest("kind must be laptop|cloud|gpu|cluster|machine")
+			return nil, zip.ErrBadRequest("kind must be laptop|cloud|gpu|cluster|machine")
 		}
 		t.Kind = nk
 	}
 	if body.Status != nil {
 		ns := strings.TrimSpace(*body.Status)
 		if !validTargetStatus(ns) {
-			return zip.ErrBadRequest("status must be online|offline|draining")
+			return nil, zip.ErrBadRequest("status must be online|offline|draining")
 		}
 		t.Status = ns
 	}
 	if body.Capacity != nil {
 		nc := strings.TrimSpace(*body.Capacity)
 		if len(nc) > maxTargetCapacity {
-			return zip.ErrBadRequest("capacity too long")
+			return nil, zip.ErrBadRequest("capacity too long")
 		}
 		t.Capacity = nc
 	}
 	if body.Host != nil {
 		nh := strings.TrimSpace(*body.Host)
 		if len(nh) > maxHost {
-			return zip.ErrBadRequest("host too long")
+			return nil, zip.ErrBadRequest("host too long")
 		}
 		t.Host = nh
 	}
 	now := time.Now().Unix()
 	if body.Spec != nil {
 		if len(body.Spec.GPUs) > maxGPUs {
-			return zip.ErrBadRequest("too many gpus")
+			return nil, zip.ErrBadRequest("too many gpus")
 		}
 		t.Spec = body.Spec.Sanitize()
 	}
@@ -782,46 +915,54 @@ func patchTarget(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 	t.UpdatedAt = now
-	if err := s.State.store.UpdateTarget(c.Context(), t); err != nil {
+	if err := s.State.store.UpdateTarget(ctx, t); err != nil {
 		if err == errTargetNotFound {
-			return zip.ErrNotFound("target not found")
+			return nil, zip.ErrNotFound("target not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
 	if body.Metrics != nil {
 		recordSample(s, t) // THE heartbeat: append it to the fleet series too
 	}
-	load, _ := s.State.store.SessionLoad(c.Context(), org, t.ID, t.Host)
-	return c.JSON(http.StatusOK, toTargetView(t, load))
+	load, _ := s.State.store.SessionLoad(ctx, org, t.ID, t.Host)
+	v := toTargetView(t, load)
+	return &v, nil
 }
 
 // ---- delete ----
 
-func deleteTarget(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// deleteTarget deregisters one machine.
+// Only its owner, or an org admin, may remove it; an unknown id, a cross-org id
+// and a machine owned by someone else all answer the same not-found, so a probe
+// learns nothing about what exists.
+//
+// Example: {"id": "tgt_1"}
+func (o targetOps) deleteTarget(ctx context.Context, in *targetRef) (*targetDeleted, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := idParam(c)
+	id := in.ID
 	// Resolve + ownership-gate before deleting: only the machine's owner (or an org
 	// admin) may deregister it. A cross-org id, an unknown id, and a non-owned id all
 	// collapse to the same not-found — no oracle.
-	t, err := s.State.store.GetTarget(c.Context(), org, id)
+	t, err := s.State.store.GetTarget(ctx, org, id)
 	if err == errTargetNotFound {
-		return zip.ErrNotFound("target not found")
+		return nil, zip.ErrNotFound("target not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	if !ownsTarget(c, t) {
-		return zip.ErrNotFound("target not found")
+	if !targetOwns(ctx, t) {
+		return nil, zip.ErrNotFound("target not found")
 	}
-	deleted, err := s.State.store.DeleteTarget(c.Context(), org, id)
+	deleted, err := s.State.store.DeleteTarget(ctx, org, id)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("target not found")
+		return nil, zip.ErrNotFound("target not found")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"deleted": true, "id": id})
+	return &targetDeleted{Deleted: true, ID: id}, nil
 }

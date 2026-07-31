@@ -6,7 +6,7 @@
 // run-targets. None of it answers "how hot is this GPU / how loaded is this
 // machine, over time, per org": hanzo.compute_usage is spend/lifecycle-shaped
 // (org, app, project, kind, event, machine_id, size, price_cents, ts) and carries
-// no cpu/mem/gpu, and o11y's samples_v4 carries no org. An agent run-target does
+// no cpu/mem/gpu, and the metric plane's samples carry no org. An agent run-target does
 // carry a real Spec + Metrics, but only the LAST one — a snapshot on the row, not
 // a series. This package is the missing plane, and it is the ONLY one: sources
 // append here rather than growing private telemetry tables.

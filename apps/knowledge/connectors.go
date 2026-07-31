@@ -38,7 +38,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/zap-proto/zip"
 )
@@ -198,26 +197,38 @@ func verifyState(state, provider string) (org string, err error) {
 
 // ---- handlers ----
 
-// connectStart begins an OAuth connection for the caller's org. It returns the
-// provider authorize URL (with an org-bound signed state) for the console to open —
-// no server-side redirect, so the BFF stays in control. The org is the validated
-// tenant, bound into the state, so only THIS org's connection can result.
-func connectStart(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
+// connectStartView carries the provider authorize URL for the console to open —
+// no server-side redirect, so the BFF stays in control. The state inside it is
+// SIGNED and binds the flow to the caller's org, so only THIS org's connection
+// can result and the callback recovers the org without trusting a header.
+type connectStartView struct {
+	// AuthorizeURL is the provider's consent URL, already carrying the signed state.
+	AuthorizeURL string `json:"authorizeUrl"`
+}
+
+// connectStart returns the provider authorize URL the console sends the user to.
+// The state it carries is signed for the CALLER's org, so the token the callback
+// stores can only ever land in that org. Nothing is stored yet.
+//
+// Example: {"provider": "slack"}
+// Response: {"authorizeUrl": "https://slack.com/oauth/v2/authorize?client_id=..."}
+func (o ops) connectStart(ctx context.Context, in *providerRef) (*connectStartView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	provider := c.Param("provider")
+	provider := in.Provider
 	if !providers[provider] {
-		return zip.ErrNotFound("unknown connector")
+		return nil, zip.ErrNotFound("unknown connector")
 	}
 	app, ok := oauthConfig(provider)
 	if !ok {
-		return zip.Errorf(http.StatusServiceUnavailable, "%s connector is not configured", provider)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s connector is not configured", provider)
 	}
 	state, err := signState(org, provider)
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "connector state unavailable")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "connector state unavailable")
 	}
 	q := url.Values{}
 	q.Set("client_id", app.clientID)
@@ -229,54 +240,79 @@ func connectStart(s *cloud.Service[state], c *zip.Ctx) error {
 		q.Set("access_type", "offline")
 		q.Set("prompt", "consent")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"authorizeUrl": app.authURL + "?" + q.Encode()})
+	return &connectStartView{AuthorizeURL: app.authURL + "?" + q.Encode()}, nil
 }
 
-// connectCallback completes OAuth. The org is recovered from the SIGNED state (not a
-// header), the code is exchanged for a token, the token is stored in KMS (never in
-// the doc/logs), and the kb-connector document is upserted to "connected". Because
-// the org is from the state THIS server signed, an attacker cannot land their token
-// in a victim org.
-func connectCallback(s *cloud.Service[state], c *zip.Ctx) error {
-	provider := c.Param("provider")
+// callbackQuery is what the provider redirect carries back.
+type callbackQuery struct {
+	// Provider is the connector id from the path.
+	Provider string `json:"provider"`
+	// Code is the provider's authorization code, exchanged for a token.
+	Code string `json:"code"`
+	// State is the value connect signed; the org is recovered from it, never a header.
+	State string `json:"state"`
+	// Error is set by the provider when the user denied consent.
+	Error string `json:"error"`
+}
+
+// connectionView reports a connector's state after a connect or disconnect.
+type connectionView struct {
+	// Provider is the connector id.
+	Provider string `json:"provider"`
+	// Status is "connected" or "disconnected".
+	Status string `json:"status"`
+	// Account is the connected account label; present only after a connect.
+	Account string `json:"account,omitempty"`
+}
+
+// connectCallback completes the OAuth exchange and records the connection.
+// The org is recovered from the SIGNED state, not a header, so an attacker cannot
+// land their token in a victim org; the token itself goes to KMS, never the
+// document or the logs.
+//
+// Example: {"provider": "slack", "code": "abc123", "state": "signed-state"}
+// Response: {"provider": "slack", "status": "connected", "account": "acme"}
+func (o ops) connectCallback(ctx context.Context, in *callbackQuery) (*connectionView, error) {
+	s := o.s
+	provider := in.Provider
 	if !providers[provider] {
-		return zip.ErrNotFound("unknown connector")
+		return nil, zip.ErrNotFound("unknown connector")
 	}
-	if errParam := c.Query("error"); errParam != "" {
-		return zip.ErrBadRequest("authorization denied: " + errParam)
+	if errParam := in.Error; errParam != "" {
+		return nil, zip.ErrBadRequest("authorization denied: " + errParam)
 	}
-	code := c.Query("code")
-	state := c.Query("state")
+	code := in.Code
+	state := in.State
 	if code == "" || state == "" {
-		return zip.ErrBadRequest("missing code or state")
+		return nil, zip.ErrBadRequest("missing code or state")
 	}
 	org, err := verifyState(state, provider)
 	if err != nil {
 		// A bad state is an attack or a stale link — refuse, do not guess an org.
-		return zip.ErrForbidden("invalid oauth state")
+		return nil, zip.ErrForbidden("invalid oauth state")
 	}
 	app, ok := oauthConfig(provider)
 	if !ok {
-		return zip.Errorf(http.StatusServiceUnavailable, "%s connector is not configured", provider)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s connector is not configured", provider)
 	}
 
-	token, account, err := exchangeCode(c.Context(), provider, app, code, callbackURL(s, provider))
+	token, account, err := exchangeCode(ctx, provider, app, code, callbackURL(s, provider))
 	if err != nil {
 		s.Log.Warn("kb oauth exchange failed", "provider", provider, "org", org, "err", err)
-		return zip.ErrBadRequest("token exchange failed")
+		return nil, zip.ErrBadRequest("token exchange failed")
 	}
 
 	// Store the token in KMS — the ONE place a retrievable secret lives. Never the doc.
 	ref := kmsRef(org, provider)
 	if s.KMS == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "secret store unavailable")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "secret store unavailable")
 	}
-	if err := s.KMS.PutSecret(c.Context(), ref, []byte(token)); err != nil {
+	if err := s.KMS.PutSecret(ctx, ref, []byte(token)); err != nil {
 		s.Log.Warn("kb kms put failed", "provider", provider, "org", org, "err", err)
-		return zip.Errorf(http.StatusServiceUnavailable, "could not persist connector credential")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "could not persist connector credential")
 	}
 
-	if err := upsertConnector(s, c.Context(), org, provider, map[string]any{
+	if err := upsertConnector(s, ctx, org, provider, map[string]any{
 		"provider": provider,
 		"status":   "connected",
 		"account":  account,
@@ -284,74 +320,117 @@ func connectCallback(s *cloud.Service[state], c *zip.Ctx) error {
 		"kms_ref":  ref,
 		"error":    "",
 	}); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "could not record connection")
+		return nil, zip.Errorf(http.StatusInternalServerError, "could not record connection")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"provider": provider, "status": "connected", "account": account})
+	return &connectionView{Provider: provider, Status: "connected", Account: account}, nil
 }
 
-// listConnectors returns the caller org's connections with REAL ingested-doc counts
-// (a live count of kb-source documents from each provider in this org). Providers
-// that are configured but not yet connected appear as "disconnected" so the console
-// can offer a Connect button. No secret is ever returned.
-func listConnectors(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
+// connectorView is one provider's state in the caller's org. account, lastSync and
+// error are POINTERS because they are carried only when a connector document
+// exists: absent means "never connected", an empty string means "connected, with
+// nothing recorded there yet". No secret is ever in this shape.
+type connectorView struct {
+	// Provider is the connector id.
+	Provider string `json:"provider"`
+	// Configured reports whether this deployment holds OAuth credentials for it.
+	Configured bool `json:"configured"`
+	// Status is disconnected | connected | syncing | error.
+	Status string `json:"status"`
+	// DocCount is a live count of this provider's ingested documents in the org.
+	DocCount int `json:"docCount"`
+	// Kind is "native" (a Go connector) or "piece" (an activepieces connector).
+	Kind string `json:"kind"`
+	// Account is the connected account label; absent until first connected.
+	Account *string `json:"account,omitempty"`
+	// LastSync is when the last sync finished; absent until first connected.
+	LastSync *string `json:"lastSync,omitempty"`
+	// Error is the last sync failure; absent until first connected, empty when clean.
+	Error *string `json:"error,omitempty"`
+}
+
+// connectorList is the caller org's connector inventory.
+type connectorList struct {
+	// Connectors is one entry per known provider, connected or not.
+	Connectors []connectorView `json:"connectors"`
+}
+
+// listConnectors lists every connector with the caller org's real ingested-doc count.
+// A provider that is configured but not yet connected appears as "disconnected", so
+// the console can offer a Connect button. No secret is ever returned.
+//
+// Response: {"connectors": [{"provider": "slack", "configured": true, "status": "connected", "docCount": 42, "kind": "native", "account": "acme", "lastSync": "2026-07-29 10:00:00", "error": ""}]}
+func (o ops) listConnectors(ctx context.Context, _ *struct{}) (*connectorList, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	out := make([]map[string]any, 0, len(providers))
+	out := make([]connectorView, 0, len(providers))
 	for provider := range providers {
 		_, configured := oauthConfig(provider)
-		entry := map[string]any{
-			"provider":   provider,
-			"configured": configured,
-			"status":     "disconnected",
-			"docCount":   0,
-			"kind":       kindOf(provider), // "native" | "piece" — one list, badged
+		entry := connectorView{
+			Provider:   provider,
+			Configured: configured,
+			Status:     "disconnected",
+			DocCount:   0,
+			Kind:       kindOf(provider), // "native" | "piece" — one list, badged
 		}
-		if name, _ := framework.FindByField(c.Context(), org, DTConnector, "provider", provider); name != "" {
-			if docs, err := framework.Search(c.Context(), org, DTConnector, map[string]string{"name": name}, 1); err == nil && len(docs) == 1 {
+		if name, _ := framework.FindByField(ctx, org, DTConnector, "provider", provider); name != "" {
+			if docs, err := framework.Search(ctx, org, DTConnector, map[string]string{"name": name}, 1); err == nil && len(docs) == 1 {
 				d := docs[0].Data
-				entry["status"] = str(d["status"])
-				entry["account"] = str(d["account"])
-				entry["lastSync"] = str(d["last_sync"])
-				entry["error"] = str(d["error"])
+				status, account, lastSync, docErr := str(d["status"]), str(d["account"]), str(d["last_sync"]), str(d["error"])
+				entry.Status = status
+				entry.Account, entry.LastSync, entry.Error = &account, &lastSync, &docErr
 			}
 		}
 		// Real count of this provider's ingested docs in this org.
-		if docs, err := framework.Search(c.Context(), org, DTSource, map[string]string{"provider": provider}, maxSyncDocs); err == nil {
-			entry["docCount"] = len(docs)
+		if docs, err := framework.Search(ctx, org, DTSource, map[string]string{"provider": provider}, maxSyncDocs); err == nil {
+			entry.DocCount = len(docs)
 		}
 		out = append(out, entry)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"connectors": out})
+	return &connectorList{Connectors: out}, nil
 }
 
-// syncConnector pulls the provider's documents for the caller's org and files them
-// as kb-source documents (which the after_save hook indexes). The org is the
-// validated tenant; the token is read from KMS. Returns the number ingested.
-func syncConnector(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
+// syncView reports how many documents one sync ingested. The pulled documents are
+// filed as kb-source pages, which the after_save hook indexes.
+type syncView struct {
+	// Provider is the connector that was synced.
+	Provider string `json:"provider"`
+	// Ingested is how many documents this sync filed into the org's knowledge.
+	Ingested int `json:"ingested"`
+}
+
+// syncConnector pulls a provider's documents into the caller org's knowledge.
+// The token is read from KMS and the documents land as kb-source pages the index
+// picks up. A provider-side failure answers 502 and the connector is left in
+// status "error" with the reason recorded.
+//
+// Example: {"provider": "slack"}
+// Response: {"provider": "slack", "ingested": 42}
+func (o ops) syncConnector(ctx context.Context, in *providerRef) (*syncView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	provider := c.Param("provider")
+	provider := in.Provider
 	if !providers[provider] {
-		return zip.ErrNotFound("unknown connector")
+		return nil, zip.ErrNotFound("unknown connector")
 	}
-	if !framework.Installed(c.Context(), org, DTSource) {
-		return zip.ErrBadRequest("install the kb module first (POST /v1/framework/modules/kb/install)")
+	if !framework.Installed(ctx, org, DTSource) {
+		return nil, zip.ErrBadRequest("install the kb module first (POST /v1/framework/modules/kb/install)")
 	}
 	if s.KMS == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "secret store unavailable")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "secret store unavailable")
 	}
-	tokenBytes, err := s.KMS.GetSecret(c.Context(), kmsRef(org, provider))
+	tokenBytes, err := s.KMS.GetSecret(ctx, kmsRef(org, provider))
 	if err != nil || len(tokenBytes) == 0 {
-		return zip.ErrBadRequest("connector not connected")
+		return nil, zip.ErrBadRequest("connector not connected")
 	}
 
-	_ = upsertConnector(s, c.Context(), org, provider, map[string]any{"provider": provider, "status": "syncing"})
+	_ = upsertConnector(s, ctx, org, provider, map[string]any{"provider": provider, "status": "syncing"})
 
-	n, cursor, syncErr := runSync(s, c.Context(), org, provider, string(tokenBytes))
+	n, cursor, syncErr := runSync(s, ctx, org, provider, string(tokenBytes))
 
 	fields := map[string]any{
 		"provider":  provider,
@@ -365,41 +444,46 @@ func syncConnector(s *cloud.Service[state], c *zip.Ctx) error {
 		fields["status"] = "error"
 		fields["error"] = truncate([]byte(syncErr.Error()), 200)
 	}
-	_ = upsertConnector(s, c.Context(), org, provider, fields)
+	_ = upsertConnector(s, ctx, org, provider, fields)
 
 	if syncErr != nil {
 		s.Log.Warn("kb sync failed", "provider", provider, "org", org, "err", syncErr)
-		return zip.Errorf(http.StatusBadGateway, "sync failed: %s", syncErr.Error())
+		return nil, zip.Errorf(http.StatusBadGateway, "sync failed: %s", syncErr.Error())
 	}
-	return c.JSON(http.StatusOK, map[string]any{"provider": provider, "ingested": n})
+	return &syncView{Provider: provider, Ingested: n}, nil
 }
 
-// disconnectConnector revokes a connection: it tombstones the KMS token (overwrite
-// with empty — the KMS client has no delete), removes this provider's ingested
-// points from the org's vector namespace, and sets the connector "disconnected".
-// The ingested kb-source documents are left in the store (the org's own data) but
-// no longer retrievable via vector search once their points are purged; a caller
-// may delete them via the framework CRUD surface. Everything is org-scoped.
-func disconnectConnector(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
+// disconnectConnector revokes a connection and de-indexes what it ingested.
+// The KMS credential is tombstoned (overwritten with empty — the KMS client has
+// no delete) so a later sync cannot reuse it, this provider's points are removed
+// from the org's vector namespace, and the connector document is marked
+// disconnected. The ingested kb-source documents stay in the store — they are the
+// org's own data, deletable through the framework CRUD surface — but are no
+// longer retrievable by search. Everything is org-scoped.
+//
+// Example: {"provider": "slack"}
+// Response: {"provider": "slack", "status": "disconnected"}
+func (o ops) disconnectConnector(ctx context.Context, in *providerRef) (*connectionView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	provider := c.Param("provider")
+	provider := in.Provider
 	if !providers[provider] {
-		return zip.ErrNotFound("unknown connector")
+		return nil, zip.ErrNotFound("unknown connector")
 	}
 	if s.KMS != nil {
 		// Tombstone the credential so a later sync cannot reuse it.
-		_ = s.KMS.PutSecret(c.Context(), kmsRef(org, provider), []byte{})
+		_ = s.KMS.PutSecret(ctx, kmsRef(org, provider), []byte{})
 	}
-	if err := index().deindexProvider(c.Context(), org, provider); err != nil {
+	if err := index().deindexProvider(ctx, org, provider); err != nil {
 		s.Log.Warn("kb deindex provider failed", "provider", provider, "org", org, "err", err)
 	}
-	_ = upsertConnector(s, c.Context(), org, provider, map[string]any{
+	_ = upsertConnector(s, ctx, org, provider, map[string]any{
 		"provider": provider, "status": "disconnected", "kms_ref": "", "cursor": "",
 	})
-	return c.JSON(http.StatusOK, map[string]any{"provider": provider, "status": "disconnected"})
+	return &connectionView{Provider: provider, Status: "disconnected"}, nil
 }
 
 // upsertConnector creates or updates the org's kb-connector document for a provider

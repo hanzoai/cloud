@@ -70,9 +70,9 @@ func waitlistProxy(ctx context.Context, method, target, secret string, body []by
 	return json.RawMessage(raw), resp.StatusCode, nil
 }
 
-// waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine — position,
-// points and referral standing per entry — proxied server-authed with the engine secret,
-// never a client credential.
+// waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine. Each entry
+// carries its position, points and referral standing, proxied server-authed with the
+// engine secret, never a client credential.
 //
 // The engine's payload is forwarded VERBATIM as data; the console normalizes it. When
 // the engine is not configured on this deployment the read still succeeds, with an empty
@@ -144,8 +144,8 @@ type waitlistBoostRequest struct {
 	Reason string `json:"reason"`
 }
 
-// waitlistBoost grants a user waitlist points, moving them up toward the access cutoff.
-// This is the access lever: the cutoff itself does not move, the person does.
+// waitlistBoost grants a user waitlist points, moving them toward the cutoff. It is the
+// access lever: the cutoff itself does not move, the person does.
 //
 // It funnels through the engine's verified grant seam (POST /v1/waitlist/award with
 // source="grant" — the ONE path that honours an explicit points amount) and writes a

@@ -85,7 +85,7 @@ func TestFlowCRUDHTTP(t *testing.T) {
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create flow want 201, got %d (%s)", create.Code, create.Body)
 	}
-	var pf populatedFlow
+	var pf PopulatedFlow
 	if err := json.Unmarshal(create.Body, &pf); err != nil {
 		t.Fatalf("create body: %v (%s)", err, create.Body)
 	}
@@ -139,7 +139,7 @@ func TestOperationsApply(t *testing.T) {
 			"settings": map[string]any{"pieceName": "core", "triggerName": "manual"},
 		},
 	})
-	var pf populatedFlow
+	var pf PopulatedFlow
 	_ = json.Unmarshal(create.Body, &pf)
 	flowID := pf.ID
 

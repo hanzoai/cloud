@@ -73,13 +73,9 @@ func newTestApp(t *testing.T) (*zip.App, *service) {
 	t.Helper()
 	s := newTestService(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Get("/v1/code/search", s.handleSearch)
-	app.Post("/v1/code/context", s.handleContext)
-	app.Get("/v1/code/ask", s.handleAsk)
-	app.Post("/v1/code/ask", s.handleAsk)
-	app.Post("/v1/code/index", s.handleIndex)
-	app.Get("/v1/code/tree", s.handleTree)
-	app.Get("/v1/code/file", s.handleFile)
+	// The ONE registration point, exactly as Mount wires it — a harness that
+	// restated the route table could pass while the real surface was wrong.
+	routes(app, s)
 	return app, s
 }
 
@@ -163,9 +159,9 @@ def make_sound():
     return "roar"
 `
 
-func indexFixtures(t *testing.T, app *zip.App, org, repo string) indexResult {
+func indexFixtures(t *testing.T, app *zip.App, org, repo string) IndexReport {
 	t.Helper()
-	body := indexReq{Repo: repo, Files: []fileInput{
+	body := IndexRequest{Repo: repo, Files: []File{
 		{Path: "greeter.go", Content: goFixture},
 		{Path: "user.ts", Content: tsFixture},
 		{Path: "animal.py", Content: pyFixture},
@@ -174,7 +170,7 @@ func indexFixtures(t *testing.T, app *zip.App, org, repo string) indexResult {
 	if status != http.StatusOK {
 		t.Fatalf("index status=%d body=%s", status, b)
 	}
-	var res indexResult
+	var res IndexReport
 	mustJSON(t, b, &res)
 	return res
 }

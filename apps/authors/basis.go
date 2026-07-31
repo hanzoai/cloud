@@ -189,70 +189,108 @@ func attributionAt(edges []DeployEvent, at int64) []map[string]any {
 	return out
 }
 
-// basis answers GET /v1/authors/basis for the validated caller — the audit trail
-// behind their own royalty, subject resolved from the principal so no id can be
-// supplied. It is a separate endpoint from the dashboard precisely because the
-// dashboard accrues lazily on read: an audit must not move the money it is auditing,
-// so this path never sweeps and calling it N times leaves the balances and the ledger
-// byte-identical.
-func basis(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// AuthorBasisQuery narrows the royalty basis to one accrual period.
+type AuthorBasisQuery struct {
+	// Period is the UTC year-month the accrual latch mints, e.g. "2026-07". Empty is
+	// every period; any other shape is refused.
+	Period string `json:"period"`
+}
+
+// basis reads the audit trail behind the caller's OWN royalty. It answers the current
+// cost model, the immutable ledger rows with the attribution edges that explain each,
+// an account-wide reconciliation, and an honest statement of the slice returned.
+//
+// The subject is the principal's org, so no id can be supplied. It is a separate
+// endpoint from the dashboard precisely because the dashboard accrues lazily on read:
+// an audit must not move the money it is auditing, so this path never sweeps and
+// calling it N times leaves the balances and the ledger byte-identical. An org that
+// is not an author gets {isAuthor:false}, not a 404, which would answer "is this org
+// an author?".
+//
+// The response is the open basis document, not a fixed record: the enrolled and
+// not-enrolled answers carry different keys, and the model, reconciliation and window
+// sections grow with the disclosure.
+//
+// Example: {"period":"2026-07"}
+// Response: {"isAuthor":true,"id":"aut_9f2a","status":"approved","asOf":1780000000,"shareBps":2000,"platformShareBps":8000,"defaultShareBps":2000,"shareSource":"default","settlesTo":"wallet","period":"2026-07","ledger":[],"reconciliation":{"ledgerRows":0,"ledgerEarningCents":0,"accruedCents":0,"paidCents":0,"pendingCents":0,"balanced":true,"consistent":true}}
+func (o ops) basis(ctx context.Context, in *AuthorBasisQuery) (*map[string]any, error) {
+	s := o.s
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to view your royalty basis")
+		return nil, zip.ErrForbidden("sign in to view your royalty basis")
 	}
-	period, err := periodOf(c)
+	period, err := periodOf(in.Period)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ctx := c.Context()
 	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
 		// Honest, not a 404 — a 404 here would answer "is this org an author?".
-		return c.JSON(http.StatusOK, map[string]any{
+		return &map[string]any{
 			"isAuthor":        false,
 			"defaultShareBps": defaultShareBps,
-		})
+		}, nil
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
 	}
 	out, err := basisOf(s, ctx, a, period)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
-// adminBasis answers GET /v1/admin/authors/:id/basis — the same builder, so support
-// sees exactly what the author sees. Additive; the author's own endpoint stays the
-// primary surface. SuperAdmin only.
-func adminBasis(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// AuthorBasisRef addresses one author's royalty basis for the support mirror.
+type AuthorBasisRef struct {
+	// ID is the author id from the path, as returned by the admin directory.
+	ID string `json:"id"`
+	// Period is the UTC year-month, e.g. "2026-07". Empty is every period.
+	Period string `json:"period"`
+}
+
+// AuthorBasisOut is the GET /v1/admin/authors/:id/basis envelope.
+type AuthorBasisOut struct {
+	// Status is "ok".
+	Status string `json:"status"`
+	// Msg is empty on success.
+	Msg string `json:"msg"`
+	// Data is the SAME open basis document the author's own endpoint returns.
+	Data map[string]any `json:"data"`
+}
+
+// adminBasis reads one author's royalty basis. It runs the SAME builder the author's
+// own endpoint runs, so support sees exactly what the author sees. SuperAdmin only.
+//
+// Example: {"id":"aut_9f2a","period":"2026-07"}
+// Response: {"status":"ok","msg":"","data":{"isAuthor":true,"id":"aut_9f2a","status":"approved","shareBps":2000,"platformShareBps":8000,"ledger":[]}}
+func (o ops) adminBasis(ctx context.Context, in *AuthorBasisRef) (*AuthorBasisOut, error) {
+	if err := admit(ctx); err != nil {
+		return nil, err
 	}
-	period, err := periodOf(c)
+	s := o.s
+	period, err := periodOf(in.Period)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ctx := c.Context()
-	a, err := s.State.store.GetByID(ctx, strings.TrimSpace(c.Param("id")))
+	a, err := s.State.store.GetByID(ctx, strings.TrimSpace(in.ID))
 	if err == errNotFound {
-		return zip.ErrNotFound("author not found")
+		return nil, zip.ErrNotFound("author not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
 	}
 	out, err := basisOf(s, ctx, a, period)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
-	return adminOK(c, out)
+	return &AuthorBasisOut{Status: "ok", Data: out}, nil
 }
 
-// periodOf reads the optional ?period= narrowing, accepting only the shape the
+// periodOf validates the optional period narrowing, accepting only the shape the
 // accrual latch mints.
-func periodOf(c *zip.Ctx) (string, error) {
-	p := strings.TrimSpace(c.Query("period"))
+func periodOf(p string) (string, error) {
+	p = strings.TrimSpace(p)
 	if p != "" && !periodShape.MatchString(p) {
 		return "", zip.ErrBadRequest("period must be YYYY-MM")
 	}

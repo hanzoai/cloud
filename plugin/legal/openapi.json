@@ -19,20 +19,79 @@
     "/v1/legal/documents": {
       "get": {
         "operationId": "get_v1_legal_documents",
+        "summary": "listDocuments returns the caller org's generated documents, most recent first,",
+        "description": "listDocuments returns the caller org's generated documents, most recent first,\nwithout their rendered bodies.",
         "tags": [
           "legal"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means the store's own default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_legal_documents",
+        "summary": "generateDocument renders a document from a template and merge data (a pure,",
+        "description": "generateDocument renders a document from a template and merge data (a pure,\ndeterministic render), seals it in the org's store and audits the generation.\nIt fails closed on a missing merge field — no blank contract — and the rendered\nbody carries the counsel-review notice whenever the template requires it.",
         "tags": [
           "legal"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "data": {
+                  "company": "Acme, Inc.",
+                  "counterparty": "Beta LLC"
+                },
+                "templateId": "nda"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratedDocument"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/legal/documents/{id}": {
       "get": {
-        "operationId": "get_v1_legal_documents_by_id",
+        "operationId": "get_v1_legal_documents_id",
+        "summary": "getDocument returns one of the caller org's documents including its rendered\nbody.",
+        "description": "getDocument returns one of the caller org's documents including its rendered\nbody. A document belonging to another org reads as not found.",
         "tags": [
           "legal"
         ],
@@ -41,16 +100,32 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the document id from the path, as returned by generate.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "doc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratedDocument"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/legal/documents/{id}/sign": {
       "post": {
-        "operationId": "post_v1_legal_documents_by_id_sign",
+        "operationId": "post_v1_legal_documents_id_sign",
+        "summary": "requestSign opens an e-signature request over one of the caller org's documents",
+        "description": "requestSign opens an e-signature request over one of the caller org's documents\nthrough the configured provider, and moves the document to out_for_signature.",
         "tags": [
           "legal"
         ],
@@ -59,16 +134,51 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the document id from the path; a body value is ignored.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "doc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "doc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a",
+                "signers": [
+                  {
+                    "email": "ada@acme.com",
+                    "name": "Ada Lovelace"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/SignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignRequested"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/legal/documents/{id}/sign/complete": {
       "post": {
-        "operationId": "post_v1_legal_documents_by_id_sign_complete",
+        "operationId": "post_v1_legal_documents_id_sign_complete",
+        "summary": "completeSign records signature completion for a document that has an open\nrequest — the signal a provider webhook or a reviewer sends.",
+        "description": "completeSign records signature completion for a document that has an open\nrequest — the signal a provider webhook or a reviewer sends. The provider's own\nstatus is checked first; an explicit signed value in the body overrides it.",
         "tags": [
           "legal"
         ],
@@ -77,46 +187,171 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the document id from the path; a body value is ignored.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "doc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "doc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a",
+                "signed": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CompleteSignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "document": {
+                    "id": "doc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a",
+                    "status": "signed"
+                  },
+                  "signed": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/SignResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/legal/filings": {
       "get": {
         "operationId": "get_v1_legal_filings",
+        "summary": "listFilings returns the caller org's filing records, most recent first.",
+        "description": "listFilings returns the caller org's filing records, most recent first.",
         "tags": [
           "legal"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means the store's own default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilingList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_legal_filings",
+        "summary": "createFiling records a filing of one or more of the caller org's documents and\nsubmits it through the filing seam.",
+        "description": "createFiling records a filing of one or more of the caller org's documents and\nsubmits it through the filing seam. The platform does not file autonomously:\nwith no partner wired the honest status is \"manual\".",
         "tags": [
           "legal"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "documentIds": [
+                  "doc_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
+                ],
+                "jurisdiction": "DE"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/FilingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilingResponse"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/legal/health": {
       "get": {
         "operationId": "get_v1_legal_health",
+        "summary": "health reports that the legal surface is serving and how many built-in",
+        "description": "health reports that the legal surface is serving and how many built-in\ntemplates the library ships.",
         "tags": [
           "legal"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "ok",
+                  "templates": 12
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryHealth"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/legal/templates": {
       "get": {
         "operationId": "get_v1_legal_templates",
+        "summary": "listTemplates returns the template library resolved for the caller's org — the",
+        "description": "listTemplates returns the template library resolved for the caller's org — the\nbuiltins with the org's own overrides substituted in — as metadata and merge\nfields, without the template bodies.",
         "tags": [
           "legal"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateCatalog"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/legal/templates/{id}": {
       "get": {
-        "operationId": "get_v1_legal_templates_by_id",
+        "operationId": "get_v1_legal_templates_id",
+        "summary": "getTemplate returns one template resolved for the caller's org — the org's",
+        "description": "getTemplate returns one template resolved for the caller's org — the org's\noverride if it has one, else the builtin — including the template body.",
         "tags": [
           "legal"
         ],
@@ -125,14 +360,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the template id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "nda"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_legal_templates_by_id",
+        "operationId": "put_v1_legal_templates_id",
+        "summary": "overrideTemplate saves an org-specific version of a template (a custom NDA, say)\nand returns it at its new version.",
+        "description": "overrideTemplate saves an org-specific version of a template (a custom NDA, say)\nand returns it at its new version. The body must parse and may reference only\ndeclared fields; a formation or equity template always keeps the counsel-review\nnotice, which an override can raise but never drop.",
         "tags": [
           "legal"
         ],
@@ -141,11 +392,497 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the template id from the path; a body value is ignored.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "nda"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "# NDA for {{.company}}",
+                "fields": [
+                  {
+                    "key": "company",
+                    "label": "Company"
+                  }
+                ],
+                "id": "nda",
+                "title": "Acme NDA"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/OverrideTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CompleteSignRequest": {
+        "properties": {
+          "id": {
+            "description": "ID is the document id from the path; a body value is ignored.",
+            "type": "string"
+          },
+          "signed": {
+            "description": "Signed overrides the provider's own answer when present. Absent, the\nprovider's reported status decides.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "DocumentDetail": {
+        "properties": {
+          "body": {
+            "description": "Body is the rendered document, sealed at rest and returned only to the\nowning org. It carries the counsel-review notice when the template requires it.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category is the template's category.",
+            "type": "string"
+          },
+          "contentType": {
+            "description": "ContentType is the rendered body's media type.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is the unix second the document was generated.",
+            "type": "integer"
+          },
+          "esignProvider": {
+            "description": "EsignProvider is the provider holding the signature request, when one is open.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the document id.",
+            "type": "string"
+          },
+          "signedAt": {
+            "description": "SignedAt is the unix second the signature was recorded, once signed.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the lifecycle state: draft, out_for_signature, signed or voided.",
+            "type": "string"
+          },
+          "templateId": {
+            "description": "TemplateID is the template it was rendered from.",
+            "type": "string"
+          },
+          "templateVersion": {
+            "description": "TemplateVersion is that template's version at render time.",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Title is the document title.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the unix second of the last lifecycle change.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "DocumentFiling": {
+        "properties": {
+          "createdAt": {
+            "type": "integer"
+          },
+          "documentIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "jurisdiction": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "DocumentList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per document, most recent first, without the rendered body.",
+            "items": {
+              "$ref": "#/components/schemas/DocumentView"
+            },
+            "type": "array"
+          },
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DocumentTemplate": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "counselReview": {
+            "type": "boolean"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/MergeField"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "origin": {
+            "description": "builtin | org",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "DocumentView": {
+        "properties": {
+          "category": {
+            "description": "Category is the template's category.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is the unix second the document was generated.",
+            "type": "integer"
+          },
+          "esignProvider": {
+            "description": "EsignProvider is the provider holding the signature request, when one is open.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the document id.",
+            "type": "string"
+          },
+          "signedAt": {
+            "description": "SignedAt is the unix second the signature was recorded, once signed.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the lifecycle state: draft, out_for_signature, signed or voided.\nThere is deliberately no \"valid\" state — validity is counsel's determination.",
+            "type": "string"
+          },
+          "templateId": {
+            "description": "TemplateID is the template it was rendered from.",
+            "type": "string"
+          },
+          "templateVersion": {
+            "description": "TemplateVersion is that template's version at render time, so the document\nis reproducible.",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Title is the document title.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the unix second of the last lifecycle change.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "FilingList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per filing, most recent first.",
+            "items": {
+              "$ref": "#/components/schemas/DocumentFiling"
+            },
+            "type": "array"
+          },
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "FilingRequest": {
+        "properties": {
+          "documentIds": {
+            "description": "DocumentIDs are the documents to file, at least one; each must belong to the\ncaller's org.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "jurisdiction": {
+            "description": "Jurisdiction is the state or agency the filing is for.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "FilingResponse": {
+        "properties": {
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          },
+          "filing": {
+            "$ref": "#/components/schemas/DocumentFiling",
+            "description": "DocumentFiling is the tracking record. Its status is \"manual\" — file through your\nregistered agent — until a filing partner is wired."
+          }
+        },
+        "type": "object"
+      },
+      "GenerateRequest": {
+        "properties": {
+          "data": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Data supplies one value per declared merge field. Every declared field is\nrequired — a missing one is refused rather than rendered as a blank.",
+            "type": "object"
+          },
+          "templateId": {
+            "description": "TemplateID is the template to render, required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GeneratedDocument": {
+        "properties": {
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentDetail",
+            "description": "Document is the rendered document, including its content."
+          }
+        },
+        "type": "object"
+      },
+      "LibraryHealth": {
+        "properties": {
+          "status": {
+            "description": "Status is \"ok\" while the surface is serving.",
+            "type": "string"
+          },
+          "templates": {
+            "description": "Templates is how many built-in templates the library ships.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "MergeField": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "OverrideTemplateRequest": {
+        "properties": {
+          "body": {
+            "description": "Body is the text/template source, required. It may reference only the\ndeclared fields — an undeclared one is refused rather than rendered blank.",
+            "type": "string"
+          },
+          "category": {
+            "description": "Category is the corporate need it serves; inherited from the builtin when\noverriding one, and required otherwise.",
+            "type": "string"
+          },
+          "counselReview": {
+            "description": "CounselReview requests the counsel-review notice. It can be raised but never\nlowered: a formation or equity template always carries the notice.",
+            "type": "boolean"
+          },
+          "fields": {
+            "description": "Fields declares the merge fields the body consumes; all are required at render.",
+            "items": {
+              "$ref": "#/components/schemas/MergeField"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the template id from the path; a body value is ignored.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the template's human title; inherited from the builtin when empty.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SignRequest": {
+        "properties": {
+          "id": {
+            "description": "ID is the document id from the path; a body value is ignored.",
+            "type": "string"
+          },
+          "signers": {
+            "description": "Signers are the parties to sign, at least one.",
+            "items": {
+              "$ref": "#/components/schemas/Signer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SignRequested": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/DocumentView",
+            "description": "Document is the document, now out for signature, without its body."
+          },
+          "esignRef": {
+            "description": "EsignRef is the provider's reference for the open request.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the e-signature provider that holds it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SignResult": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/DocumentView",
+            "description": "Document is the document, without its body."
+          },
+          "signed": {
+            "description": "Signed is true once the signature is recorded; false leaves it out for\nsignature, unchanged.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Signer": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TemplateCatalog": {
+        "properties": {
+          "data": {
+            "description": "Data is every template resolvable for the org: the builtins, with the org's\nown overrides substituted in.",
+            "items": {
+              "$ref": "#/components/schemas/templateView"
+            },
+            "type": "array"
+          },
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire: this is document\ntooling, not legal advice.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TemplateResponse": {
+        "properties": {
+          "disclaimer": {
+            "description": "Disclaimer is the boundary made visible on the wire.",
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/components/schemas/DocumentTemplate",
+            "description": "DocumentTemplate is the resolved template, including its text/template body."
+          }
+        },
+        "type": "object"
+      },
+      "templateView": {
+        "properties": {
+          "category": {
+            "description": "Category is the corporate need the template serves.",
+            "type": "string"
+          },
+          "counselReview": {
+            "description": "CounselReview marks a template whose rendered document carries the mandatory\ncounsel-review notice.",
+            "type": "boolean"
+          },
+          "fields": {
+            "description": "Fields are the merge fields the template consumes; all are required.",
+            "items": {
+              "$ref": "#/components/schemas/MergeField"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the template id, the value every other template route takes.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Origin is \"builtin\" or \"org\".",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the template's human title.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version increments on each org override; a builtin is version 1.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

@@ -17,7 +17,7 @@
 //   - Audiences — who to reach, resolved to real mailboxes through Hanzo IAM
 //     (roster.go): an audience with no event filter is EVERY mailable customer
 //     in the org, and one with an event narrows that roster to the cohort the
-//     analytics warehouse (hanzo.events) selected. Honest-empty when the roster
+//     analytics warehouse (event.event) selected. Honest-empty when the roster
 //     or warehouse cannot be read — never a fabricated number, never a send to
 //     nobody reported as a success.
 //   - Promo codes — the "First 1,000: 90% off month 1" launch promo (discounts.md)
@@ -418,8 +418,8 @@ func (o ops) createCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 	return &saved, nil
 }
 
-// listCampaigns returns the org's campaigns, most recently updated first,
-// optionally narrowed to one lifecycle status.
+// listCampaigns returns the org's campaigns, most recently updated first.
+// It is optionally narrowed to one lifecycle status.
 //
 // Example: {"status": "active", "limit": 25}
 func (o ops) listCampaigns(ctx context.Context, in *CampaignQuery) (*CampaignList, error) {
@@ -532,8 +532,8 @@ func (o ops) scheduleCampaign(ctx context.Context, in *ScheduleInput) (*Campaign
 
 // ---- summary ----
 
-// summary rolls up the caller org's campaigns: how many there are, how many are
-// active, and the summed budget and spend in cents.
+// summary rolls up the caller org's campaigns.
+// It counts them, counts the active ones, and sums budget and spend in cents.
 //
 // Response: {"campaigns": 12, "active": 3, "budget": 500000, "spend": 128400}
 func (o ops) summary(ctx context.Context, _ *struct{}) (*Summary, error) {

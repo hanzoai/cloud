@@ -175,9 +175,9 @@ type NameIn struct {
 
 // --- reads ---------------------------------------------------------------
 
-// list reports what each host is actually running: every loaded plugin with its
-// version, pid, uptime, reload and restart counts, and its measured CPU, RSS,
-// thread and fd cost — read from the kernel, which is only answerable at all
+// list reports what each host is actually running. Every loaded plugin is listed
+// with its version, pid, uptime, reload and restart counts, and its measured CPU,
+// RSS, thread and fd cost — read from the kernel, which is only answerable at all
 // because a plugin is a process.
 //
 // Reading this from deployment config would answer what was INTENDED. Only the
@@ -296,9 +296,9 @@ func (o *ops) reload(ctx context.Context, in *ReloadIn) (*ActionOut, error) {
 	})
 }
 
-// enable brings a stopped or disabled plugin back on the artifact it already
-// has: the zero Plugin names no new artifact, so Reload reuses the loaded spec
-// and clears the disabled flag. Named for what an operator means by it.
+// enable restarts a stopped or disabled plugin on the artifact it already has. The
+// zero Plugin names no new artifact, so Reload reuses the loaded spec and clears
+// the disabled flag. Named for what an operator means by it.
 //
 // Example: {"name":"billing"}
 // Response: {"status":"ok","msg":"billing enabled","data":[{"host":"cloud-0","ok":true}]}

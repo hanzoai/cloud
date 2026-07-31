@@ -19,9 +19,23 @@
     "/v1/automations/connectors": {
       "get": {
         "operationId": "get_v1_automations_connectors",
+        "summary": "connectors returns the connector catalogue — every connector this deployment",
+        "description": "connectors returns the connector catalogue — every connector this deployment\nships, with the actions and triggers each offers.",
         "tags": [
           "automations"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/automations/connectors/{id}/run": {
@@ -45,20 +59,79 @@
     "/v1/automations/flows": {
       "get": {
         "operationId": "get_v1_automations_flows",
+        "summary": "listFlows returns the caller org's flows, most recently updated first.",
+        "description": "listFlows returns the caller org's flows, most recently updated first.",
         "tags": [
           "automations"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means 50 and nothing above 200 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_automations_flows",
+        "summary": "createFlow creates a flow and its initial draft version in one write, and\nreturns the flow with that version.",
+        "description": "createFlow creates a flow and its initial draft version in one write, and\nreturns the flow with that version. The flow starts disabled.",
         "tags": [
           "automations"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "displayName": "Nightly sync",
+                "trigger": {
+                  "name": "cron",
+                  "type": "POLLING"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CreateFlowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PopulatedFlow"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/automations/flows/{id}": {
       "delete": {
-        "operationId": "delete_v1_automations_flows_by_id",
+        "operationId": "delete_v1_automations_flows_id",
+        "summary": "deleteFlow deletes one of the caller org's flows with its versions and runs, and\nanswers 204.",
+        "description": "deleteFlow deletes one of the caller org's flows with its versions and runs, and\nanswers 204. A flow belonging to another org reads as not found.",
         "tags": [
           "automations"
         ],
@@ -67,14 +140,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the flow id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_automations_flows_by_id",
+        "operationId": "get_v1_automations_flows_id",
+        "summary": "getFlow returns one of the caller org's flows together with its latest version —",
+        "description": "getFlow returns one of the caller org's flows together with its latest version —\nthe shape the builder loads.",
         "tags": [
           "automations"
         ],
@@ -83,14 +165,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the flow id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PopulatedFlow"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
-        "operationId": "patch_v1_automations_flows_by_id",
+        "operationId": "patch_v1_automations_flows_id",
+        "summary": "updateFlow updates one of the caller org's flows: its folder, external id,\npublished version or metadata.",
+        "description": "updateFlow updates one of the caller org's flows: its folder, external id,\npublished version or metadata. An absent field is left unchanged, and a\npublished version must name a version of this same flow.",
         "tags": [
           "automations"
         ],
@@ -99,16 +197,46 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the flow id from the path; a body value is ignored.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a",
+                "publishedVersionId": "ver_9b1d3f5027a4c1e9b7a2d6f0538e4a7c"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/PatchFlowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Flow"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/automations/flows/{id}/disable": {
       "post": {
-        "operationId": "post_v1_automations_flows_by_id_disable",
+        "operationId": "post_v1_automations_flows_id_disable",
+        "summary": "disableFlow disables one of the caller org's flows and disarms its trigger, so a",
+        "description": "disableFlow disables one of the caller org's flows and disarms its trigger, so a\ndisabled flow is never a live target.",
         "tags": [
           "automations"
         ],
@@ -117,16 +245,45 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the flow id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/FlowRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Flow"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/automations/flows/{id}/enable": {
       "post": {
-        "operationId": "post_v1_automations_flows_by_id_enable",
+        "operationId": "post_v1_automations_flows_id_enable",
+        "summary": "enableFlow enables one of the caller org's flows and arms its trigger: a polling",
+        "description": "enableFlow enables one of the caller org's flows and arms its trigger: a polling\ntrigger gets a durable schedule, a webhook trigger a subscription in the routing\nindex.",
         "tags": [
           "automations"
         ],
@@ -135,11 +292,38 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the flow id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/FlowRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Flow"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/automations/flows/{id}/operations": {
@@ -162,7 +346,9 @@
     },
     "/v1/automations/flows/{id}/run": {
       "post": {
-        "operationId": "post_v1_automations_flows_by_id_run",
+        "operationId": "post_v1_automations_flows_id_run",
+        "summary": "runFlow starts a durable run of one of the caller org's flows, using its\npublished version when set and its latest otherwise.",
+        "description": "runFlow starts a durable run of one of the caller org's flows, using its\npublished version when set and its latest otherwise. It answers 503 while the\nengine is not ready and 429 when the org is over its concurrency or per-minute\nrun budget — never a run that was silently dropped.",
         "tags": [
           "automations"
         ],
@@ -171,16 +357,45 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the flow id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/FlowRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowRun"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/automations/flows/{id}/versions": {
       "get": {
-        "operationId": "get_v1_automations_flows_by_id_versions",
+        "operationId": "get_v1_automations_flows_id_versions",
+        "summary": "listVersions returns the versions of one of the caller org's flows, most recent",
+        "description": "listVersions returns the versions of one of the caller org's flows, most recent\nfirst.",
         "tags": [
           "automations"
         ],
@@ -189,14 +404,40 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the flow id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means 50 and nothing above 200 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_automations_flows_by_id_versions",
+        "operationId": "post_v1_automations_flows_id_versions",
+        "summary": "createVersion adds a draft version to one of the caller org's flows and returns\nit.",
+        "description": "createVersion adds a draft version to one of the caller org's flows and returns\nit. The version starts as a draft with no steps.",
         "tags": [
           "automations"
         ],
@@ -205,11 +446,43 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the flow id from the path; a body value is ignored.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "displayName": "v2",
+                "id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a",
+                "trigger": {
+                  "name": "cron",
+                  "type": "POLLING"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CreateVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowVersion"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/automations/hooks/{source}/{event}": {
@@ -249,22 +522,74 @@
     "/v1/automations/pieces": {
       "get": {
         "operationId": "get_v1_automations_pieces",
+        "summary": "pieces is the back-compat alias of connectors: the same catalogue at the",
+        "description": "pieces is the back-compat alias of connectors: the same catalogue at the\npre-rename path, so clients pinned to it keep working.",
         "tags": [
           "automations"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/automations/runs": {
       "get": {
         "operationId": "get_v1_automations_runs",
+        "summary": "listRuns returns the caller org's runs, most recent first, optionally narrowed",
+        "description": "listRuns returns the caller org's runs, most recent first, optionally narrowed\nto one flow.",
         "tags": [
           "automations"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "flowId",
+            "in": "query",
+            "required": false,
+            "description": "FlowID keeps only that flow's runs; empty lists the org's runs.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means 50 and nothing above 200 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/automations/runs/{id}": {
       "get": {
-        "operationId": "get_v1_automations_runs_by_id",
+        "operationId": "get_v1_automations_runs_id",
+        "summary": "getRun returns one of the caller org's runs, refreshing a non-terminal status",
+        "description": "getRun returns one of the caller org's runs, refreshing a non-terminal status\nfrom the engine first so the caller sees live progress.",
         "tags": [
           "automations"
         ],
@@ -273,11 +598,25 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the run id from the path, as returned by run.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "run_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowRun"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/automations/runs/{id}/resume": {
@@ -296,6 +635,473 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Catalog": {
+        "properties": {
+          "connectorCount": {
+            "type": "integer"
+          },
+          "connectors": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorMetadata"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ConnectorAction": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "props": {
+            "items": {
+              "$ref": "#/components/schemas/PropSpec"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ConnectorAuth": {
+        "properties": {
+          "required": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ConnectorMetadata": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorAction"
+            },
+            "type": "array"
+          },
+          "auth": {
+            "$ref": "#/components/schemas/ConnectorAuth"
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "triggers": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorTrigger"
+            },
+            "type": "array"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ConnectorTrigger": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "props": {
+            "items": {
+              "$ref": "#/components/schemas/PropSpec"
+            },
+            "type": "array"
+          },
+          "strategy": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CreateFlowRequest": {
+        "properties": {
+          "displayName": {
+            "description": "DisplayName names the initial draft version.",
+            "type": "string"
+          },
+          "externalId": {
+            "description": "ExternalID is the caller's own id for this flow.",
+            "type": "string"
+          },
+          "folderId": {
+            "description": "FolderID groups the flow in the builder.",
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/FlowTrigger",
+            "description": "Trigger is what fires the flow. A version with no trigger is not valid and\ncannot run."
+          }
+        },
+        "type": "object"
+      },
+      "CreateVersionRequest": {
+        "properties": {
+          "displayName": {
+            "description": "DisplayName names the version.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the flow id from the path; a body value is ignored.",
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/FlowTrigger",
+            "description": "Trigger is what fires the flow. A version with no trigger is not valid and\ncannot run."
+          }
+        },
+        "type": "object"
+      },
+      "Flow": {
+        "properties": {
+          "created": {
+            "type": "integer"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "folderId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "metadata": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "projectId": {
+            "description": "projectId == org (server-derived)",
+            "type": "string"
+          },
+          "publishedVersionId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "FlowAction": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nextAction": {
+            "$ref": "#/components/schemas/FlowAction"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/StepSettings"
+          },
+          "skip": {
+            "type": "boolean"
+          },
+          "type": {
+            "description": "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
+            "type": "string"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "FlowList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per flow, without its versions.",
+            "items": {
+              "$ref": "#/components/schemas/Flow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "FlowRef": {
+        "properties": {
+          "id": {
+            "description": "ID is the flow id from the path, as returned by create.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "FlowRun": {
+        "properties": {
+          "created": {
+            "type": "integer"
+          },
+          "finishTime": {
+            "type": "integer"
+          },
+          "flowId": {
+            "type": "string"
+          },
+          "flowVersionId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "FlowTrigger": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nextAction": {
+            "$ref": "#/components/schemas/FlowAction"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/StepSettings"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "type": {
+            "description": "PIECE_TRIGGER | EMPTY",
+            "type": "string"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "FlowVersion": {
+        "properties": {
+          "created": {
+            "type": "integer"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "flowId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "schemaVersion": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/FlowTrigger"
+          },
+          "updated": {
+            "type": "integer"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PatchFlowRequest": {
+        "properties": {
+          "externalId": {
+            "description": "ExternalID resets the caller's own id when present.",
+            "type": "string"
+          },
+          "folderId": {
+            "description": "FolderID regroups the flow when present.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the flow id from the path; a body value is ignored.",
+            "type": "string"
+          },
+          "metadata": {
+            "description": "Metadata replaces the caller's opaque JSON when present.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "publishedVersionId": {
+            "description": "PublishedVersionID selects the version runs execute. It must name a version\nOF THIS FLOW in this org; empty clears it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PopulatedFlow": {
+        "properties": {
+          "created": {
+            "description": "Created is the unix millisecond the flow was created.",
+            "type": "integer"
+          },
+          "externalId": {
+            "description": "ExternalID is the caller's own id for this flow.",
+            "type": "string"
+          },
+          "folderId": {
+            "description": "FolderID groups the flow in the builder.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the flow id.",
+            "type": "string"
+          },
+          "metadata": {
+            "description": "Metadata is the caller's own opaque JSON.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "projectId": {
+            "description": "Org is the owning org, server-derived and never client-supplied.",
+            "type": "string"
+          },
+          "publishedVersionId": {
+            "description": "PublishedVersionID is the version a run executes, when one is published.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is enabled or disabled; a fresh flow is disabled.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is the unix millisecond of the last change.",
+            "type": "integer"
+          },
+          "version": {
+            "$ref": "#/components/schemas/FlowVersion",
+            "description": "Version is the flow's latest version, absent when it has none."
+          }
+        },
+        "type": "object"
+      },
+      "PropSpec": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "type": {
+            "description": "string|number|boolean|object|array",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RunList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per run, most recent first.",
+            "items": {
+              "$ref": "#/components/schemas/FlowRun"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "StepSettings": {
+        "properties": {
+          "actionName": {
+            "type": "string"
+          },
+          "input": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "type": "object"
+          },
+          "pieceName": {
+            "type": "string"
+          },
+          "pieceVersion": {
+            "type": "string"
+          },
+          "triggerName": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "VersionList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per version, most recent first.",
+            "items": {
+              "$ref": "#/components/schemas/FlowVersion"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

@@ -19,28 +19,127 @@
     "/v1/campaign": {
       "get": {
         "operationId": "get_v1_campaign",
+        "summary": "listCampaigns returns the caller org's campaigns, most recently updated first,",
+        "description": "listCampaigns returns the caller org's campaigns, most recently updated first,\noptionally narrowed to one lifecycle status.",
         "tags": [
           "campaign"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows to one lifecycle state (draft, live, paused, failed); empty\nmeans every campaign.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "live"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_campaign",
+        "summary": "createCampaign stores a new campaign in the caller's org as a draft.",
+        "description": "createCampaign stores a new campaign in the caller's org as a draft. Name is\nrequired; every channel kind must be paid, organic or email, and one channel is\nkept per kind. Budget is cents and is clamped to \u003e= 0. The id, status and\ntimestamps of the input are ignored — the server assigns them.",
         "tags": [
           "campaign"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "audience": "signups",
+                "budget": 50000,
+                "channels": [
+                  {
+                    "kind": "paid",
+                    "platform": "meta"
+                  }
+                ],
+                "content": [
+                  "Try it free"
+                ],
+                "name": "Spring Launch"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Campaign"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/campaign/summary": {
       "get": {
         "operationId": "get_v1_campaign_summary",
+        "summary": "summary reports the caller org's campaign counts and total budget, plus which",
+        "description": "summary reports the caller org's campaign counts and total budget, plus which\nchannel kinds this deployment actually has an executor wired for.",
         "tags": [
           "campaign"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "budget": 250000,
+                  "campaigns": 12,
+                  "channels": [
+                    "paid",
+                    "email"
+                  ],
+                  "live": 3
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Summary"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/campaign/{id}": {
       "delete": {
-        "operationId": "delete_v1_campaign_by_id",
+        "operationId": "delete_v1_campaign_id",
+        "summary": "deleteCampaign removes one of the caller org's campaigns and answers 204.",
+        "description": "deleteCampaign removes one of the caller org's campaigns and answers 204. It\ndeletes the record only — a live channel is not paused or retracted first.",
         "tags": [
           "campaign"
         ],
@@ -49,14 +148,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the campaign id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_campaign_by_id",
+        "operationId": "get_v1_campaign_id",
+        "summary": "getCampaign returns one of the caller org's campaigns.",
+        "description": "getCampaign returns one of the caller org's campaigns. A campaign belonging to\nanother org reads as not found.",
         "tags": [
           "campaign"
         ],
@@ -65,14 +173,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the campaign id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_campaign_by_id",
+        "operationId": "put_v1_campaign_id",
+        "summary": "updateCampaign edits a campaign's core fields; name is required.",
+        "description": "updateCampaign edits a campaign's core fields; name is required. Channels are\nreplaced only while the campaign is a draft — once launched they carry provider\nstate, so add and remove them through the channels sub-resource instead and a live\nlaunch is never silently orphaned.",
         "tags": [
           "campaign"
         ],
@@ -83,14 +207,44 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": 75000,
+                "id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60",
+                "name": "Spring Launch"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Campaign"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/campaign/{id}/channels": {
       "post": {
-        "operationId": "post_v1_campaign_by_id_channels",
+        "operationId": "post_v1_campaign_id_channels",
+        "summary": "addChannel adds one fan-out channel to a campaign, replacing any channel already\nregistered for that kind — a campaign runs one executor per kind.",
+        "description": "addChannel adds one fan-out channel to a campaign, replacing any channel already\nregistered for that kind — a campaign runs one executor per kind. The channel\nstarts pending; launching is a separate call.",
         "tags": [
           "campaign"
         ],
@@ -99,16 +253,48 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the campaign id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "account": "act_123",
+                "id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60",
+                "kind": "paid",
+                "platform": "meta"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ChannelInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/campaign/{id}/channels/{kind}": {
       "delete": {
-        "operationId": "delete_v1_campaign_by_id_channels_by_kind",
+        "operationId": "delete_v1_campaign_id_channels_kind",
+        "summary": "removeChannel drops one channel kind from a campaign.",
+        "description": "removeChannel drops one channel kind from a campaign. The channel is removed from\nthe record only — a live execution at the provider is not paused first.",
         "tags": [
           "campaign"
         ],
@@ -117,24 +303,42 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the campaign id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           },
           {
             "name": "kind",
             "in": "path",
             "required": true,
+            "description": "Kind is the channel to remove: paid, organic or email.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "paid"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/campaign/{id}/launch": {
       "post": {
-        "operationId": "post_v1_campaign_by_id_launch",
+        "operationId": "post_v1_campaign_id_launch",
+        "summary": "launchCampaign fans a campaign out to every channel it carries, through that\nchannel's own executor.",
+        "description": "launchCampaign fans a campaign out to every channel it carries, through that\nchannel's own executor. A campaign with no channels is refused. The campaign ends\nlive when at least one channel launched, else failed, and each channel row records\nits own outcome — live, failed, or unavailable when no executor is wired.\nIdempotent: a channel already live is not launched again.",
         "tags": [
           "campaign"
         ],
@@ -143,16 +347,45 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the campaign id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CampaignRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/campaign/{id}/metrics": {
       "get": {
-        "operationId": "get_v1_campaign_by_id_metrics",
+        "operationId": "get_v1_campaign_id_metrics",
+        "summary": "metricsCampaign reports a campaign's results: the analytics funnel (impressions,\nclicks, conversions, revenue, visitors) over the chosen window, each channel's\nconnector-reported spend, and the derived CTR, CVR, CAC and ROAS.",
+        "description": "metricsCampaign reports a campaign's results: the analytics funnel (impressions,\nclicks, conversions, revenue, visitors) over the chosen window, each channel's\nconnector-reported spend, and the derived CTR, CVR, CAC and ROAS. Nothing is\nstored or fabricated — an events warehouse that is not emitting reports\navailable:false rather than failing the read.",
         "tags": [
           "campaign"
         ],
@@ -161,16 +394,60 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the campaign id from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is 24h, 7d, 30d or 90d; empty means 30d. Ignored when start and end are given.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7d"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the RFC3339 window start; honoured only together with end.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the RFC3339 window end; honoured only together with start.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Metrics"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/campaign/{id}/pause": {
       "post": {
-        "operationId": "post_v1_campaign_by_id_pause",
+        "operationId": "post_v1_campaign_id_pause",
+        "summary": "pauseCampaign pauses every live channel at its provider and moves the campaign to\npaused.",
+        "description": "pauseCampaign pauses every live channel at its provider and moves the campaign to\npaused. A channel whose executor is gone, or whose pause errors, is recorded\nhonestly on the channel row; the campaign still reports paused, because no live\nchannel remains that this process will meter.",
         "tags": [
           "campaign"
         ],
@@ -179,11 +456,281 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the campaign id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "cmp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CampaignRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Campaign": {
+        "properties": {
+          "audience": {
+            "description": "segment/audience selector ref",
+            "type": "string"
+          },
+          "budget": {
+            "description": "cents",
+            "type": "integer"
+          },
+          "channels": {
+            "description": "fan-out targets",
+            "items": {
+              "$ref": "#/components/schemas/ChannelSpec"
+            },
+            "type": "array"
+          },
+          "content": {
+            "description": "creative(s)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scheduleAt": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CampaignList": {
+        "properties": {
+          "data": {
+            "description": "Data is the page; an empty array when the org has created no campaign.",
+            "items": {
+              "$ref": "#/components/schemas/Campaign"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "CampaignRef": {
+        "properties": {
+          "id": {
+            "description": "ID is the campaign id from the path, as returned by create.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChannelInput": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider account reference — an ad-account, page or list id.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the campaign id from the path.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the executor family: paid, organic or email. Required.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is the provider within the kind (meta, google, x, a mail provider).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChannelMetric": {
+        "properties": {
+          "externalId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "spendError": {
+            "description": "honest: connector spend read failed",
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChannelSpec": {
+        "properties": {
+          "account": {
+            "description": "provider account ref (ad-account/page/list id)",
+            "type": "string"
+          },
+          "detail": {
+            "description": "honest last-outcome detail (never a secret)",
+            "type": "string"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "paid | organic | email",
+            "type": "string"
+          },
+          "platform": {
+            "description": "meta | google | x | instagram | (email provider)",
+            "type": "string"
+          },
+          "status": {
+            "description": "pending | live | paused | failed | unavailable",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Metrics": {
+        "properties": {
+          "abTest": {
+            "description": "ABTest is the creative A/B analysis from the experiments primitive\n(experiments.Analyze, pull-model), present only when the campaign runs\nmore than one creative and an experiment is wired. Opaque JSON — campaign\nstays decoupled from the experiments analysis type.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "cac": {
+            "description": "spend $ per conversion",
+            "type": "number"
+          },
+          "campaignId": {
+            "type": "string"
+          },
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelMetric"
+            },
+            "type": "array"
+          },
+          "clicks": {
+            "type": "integer"
+          },
+          "conversions": {
+            "type": "integer"
+          },
+          "ctr": {
+            "description": "clicks / impressions",
+            "type": "number"
+          },
+          "cvr": {
+            "description": "conversions / clicks",
+            "type": "number"
+          },
+          "end": {
+            "type": "string"
+          },
+          "impressions": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "range": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "number"
+          },
+          "roas": {
+            "description": "revenue per spend $",
+            "type": "number"
+          },
+          "source": {
+            "type": "string"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "start": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "visitors": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Summary": {
+        "properties": {
+          "budget": {
+            "description": "Budget is the summed budget in cents.",
+            "type": "integer"
+          },
+          "campaigns": {
+            "description": "Campaigns is how many campaigns the org has.",
+            "type": "integer"
+          },
+          "channels": {
+            "description": "Channels are the channel kinds with an executor wired in this deployment.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "live": {
+            "description": "Live is how many of them are currently live.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

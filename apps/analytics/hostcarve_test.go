@@ -190,7 +190,7 @@ func TestMount_HostCarve_IngestsForSiteOrg(t *testing.T) {
 // resolveLivePinned call sites could be swapped to resolveLive with nothing going red.
 func TestMount_HostCarve_FirstPartyHostResolvesPinned(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
-	w := fakeWarehouse(t)
+	w := fakePlane(t)
 	app := firstPartyApp(t)
 	if code := postHost(t, app, "yadota.hanzo.ai", "/v1/event", canonPageview,
 		map[string]string{"X-Org-Id": "attacker"}); code != http.StatusOK {
@@ -228,7 +228,7 @@ func TestMount_HostCarve_AnonymousCapabilityOnly(t *testing.T) {
 
 // TestMount_HostCarve_EmptyBatchOK: an empty beacon batch on the site host is an
 // honest 200 (zero counts) BEFORE the datastore is consulted — proving the carve
-// decodes and funnels through the ONE write core without any principal.
+// decodes and funnels through the ONE ingest core without any principal.
 func TestMount_HostCarve_EmptyBatchOK(t *testing.T) {
 	app := carveApp(t, "hanzo")
 	if code := postHost(t, app, "yadota.hanzo.app", "/v1/analytics", `{"batch":[]}`, nil); code != http.StatusOK {
@@ -243,7 +243,7 @@ func TestMount_HostCarve_EmptyBatchOK(t *testing.T) {
 // That fact is pinned where it is decided: sites.Middleware resolves the host, and
 // clients/sites' TestMiddlewareAnalyticsCarveCustomDomain asserts the org handed to
 // the carve handler is the resolved Site's and that the resolver saw the full host.
-// Everything after that argument — publicIngest → the write core → tenant_id — is the
+// Everything after that argument — publicIngest → the ingest core → the fact's org — is the
 // same code for both host shapes and is pinned end-to-end on the slug host by
 // TestSiteHostLaneWritesTheResolvedSiteOrg, so asserting the row again here would be a
 // second place answering one question.

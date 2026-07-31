@@ -41,6 +41,8 @@
 // serve.go auto-registers GET /v1/affiliates/health.
 package affiliates
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"crypto/rand"
@@ -56,12 +58,12 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/authors"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/treasury"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
@@ -295,65 +297,107 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		auditStore: deps.Audit,
 	}}
 	mounted = s
-	routes(app, s)
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("affiliates.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	routes(zapp, s)
 	s.Log.Info("affiliates mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "marginBps", affiliateMarginBps(), "commerce", s.State.commerce.configured())
 	return nil
 }
 
 // routes registers the affiliates surface. The static /sweep binds before the
 // /:id/* param routes (distinct segment counts).
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/affiliates", cloud.Handle(s, myAffiliates))
-	app.Get("/v1/affiliates/me", cloud.Handle(s, myAffiliatesMe))
+//
+// EVERY route is a typed op: the registry entry zip.<Verb> makes is the ONE thing
+// OpenAPI, MCP and the CLI project from, and it takes the ABSOLUTE path because the
+// registry keys on it.
+func routes(zapp *zip.App, s *cloud.Service[state]) {
+	o := ops{s: s}
+	zip.Get(zapp, "/v1/affiliates", o.myAffiliates, zip.WithOperationID("affiliateProgram"))
+	zip.Get(zapp, "/v1/affiliates/me", o.myAffiliatesMe, zip.WithOperationID("affiliateMe"))
 	// Self-service dashboard reads/writes (all org-scoped to the caller's own affiliate).
-	app.Get("/v1/affiliates/me/earnings", cloud.Handle(s, myEarnings))
-	app.Get("/v1/affiliates/me/links", cloud.Handle(s, myLinks))
-	app.Post("/v1/affiliates/me/links", cloud.Handle(s, createLink))
-	app.Post("/v1/affiliates/me/handle", cloud.Handle(s, setHandle))
-	app.Post("/v1/affiliates/apply", cloud.Handle(s, apply))
-	app.Post("/v1/affiliates/attribute", cloud.Handle(s, attribute))
+	zip.Get(zapp, "/v1/affiliates/me/earnings", o.myEarnings, zip.WithOperationID("affiliateEarnings"))
+	zip.Get(zapp, "/v1/affiliates/me/links", o.myLinks, zip.WithOperationID("affiliateLinks"))
+	zip.Post(zapp, "/v1/affiliates/me/links", o.createLink, zip.WithOperationID("affiliateCreateLink"), zip.WithStatus(http.StatusCreated))
+	zip.Post(zapp, "/v1/affiliates/me/handle", o.setHandle, zip.WithOperationID("affiliateSetHandle"))
+	zip.Post(zapp, "/v1/affiliates/apply", o.apply, zip.WithOperationID("affiliateApply"))
+	zip.Post(zapp, "/v1/affiliates/attribute", o.attribute, zip.WithOperationID("affiliateAttribute"))
 	// A public link-click ping (no principal — a visitor clicking a shareable link has
 	// no session yet). Bumps the click counter for a known code; unknown codes no-op.
-	app.Post("/v1/affiliates/click", cloud.Handle(s, clickLink))
+	zip.Post(zapp, "/v1/affiliates/click", o.clickLink, zip.WithOperationID("affiliateClick"))
 	// The privacy-preserving leaderboard any signed-in affiliate can read: opt-in
 	// handles + aggregate share + the caller's OWN rank. Never another org's identity.
-	app.Get("/v1/affiliates/leaderboard", cloud.Handle(s, leaderboard))
-	app.Get("/v1/admin/affiliates", cloud.Handle(s, adminList))
+	zip.Get(zapp, "/v1/affiliates/leaderboard", o.leaderboard, zip.WithOperationID("affiliateLeaderboard"))
+	zip.Get(zapp, "/v1/admin/affiliates", o.adminList, zip.WithOperationID("adminAffiliates"))
 	// The unified SuperAdmin referral analytics board (cross-tenant): top referrers,
 	// conversion, and the multi-level accrual liability. It reads the ONE attribution
 	// spine the affiliate accrual is built on.
-	app.Get("/v1/admin/referrals", cloud.Handle(s, adminReferrals))
-	app.Post("/v1/admin/affiliates/sweep", cloud.Handle(s, adminSweep))
-	app.Post("/v1/admin/affiliates/:id/approve", cloud.Handle(s, adminApprove))
-	app.Post("/v1/admin/affiliates/:id/suspend", cloud.Handle(s, adminSuspend))
-	app.Post("/v1/admin/affiliates/:id/rate", cloud.Handle(s, adminSetRate))
-	app.Post("/v1/admin/affiliates/:id/payout", cloud.Handle(s, adminPayout))
+	zip.Get(zapp, "/v1/admin/referrals", o.adminReferrals, zip.WithOperationID("adminReferrals"))
+	zip.Post(zapp, "/v1/admin/affiliates/sweep", o.adminSweep, zip.WithOperationID("adminAffiliateSweep"))
+	zip.Post(zapp, "/v1/admin/affiliates/:id/approve", o.adminApprove, zip.WithOperationID("adminAffiliateApprove"))
+	zip.Post(zapp, "/v1/admin/affiliates/:id/suspend", o.adminSuspend, zip.WithOperationID("adminAffiliateSuspend"))
+	zip.Post(zapp, "/v1/admin/affiliates/:id/rate", o.adminSetRate, zip.WithOperationID("adminAffiliateRate"))
+	zip.Post(zapp, "/v1/admin/affiliates/:id/payout", o.adminPayout, zip.WithOperationID("adminAffiliatePayout"))
+}
+
+// ops binds the service to the typed handlers: a TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, which is also the only bound
+// form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// admit is the SuperAdmin gate for every /v1/admin op here, fail-closed. It reads the
+// platform-sudo claim off the request the bridge carried in, so an op with no request
+// (the CLI's local invoke) refuses rather than inventing an identity.
+func admit(ctx context.Context) error {
+	c, ok := cloud.Request(ctx)
+	if !ok || !c.IsAdmin() {
+		return zip.ErrForbidden("SuperAdmin required")
+	}
+	return nil
+}
+
+// callerUser is the validated subject, for the ops that record who acted. Empty off
+// the HTTP path, where there is no request to read one from.
+func callerUser(ctx context.Context) string {
+	if c, ok := cloud.Request(ctx); ok {
+		return strings.TrimSpace(c.User())
+	}
+	return ""
 }
 
 // ── customer surface ─────────────────────────────────────────────────────────
 
-// myAffiliates answers GET /v1/affiliates for the validated caller. If the org is
-// not (yet) an affiliate it returns an honest "not enrolled" shape so the console
-// shows the apply form; otherwise it returns the dashboard (status, code, link,
-// rate, referred count, accrued/pending/paid, payout history). For an APPROVED
-// affiliate it ALSO opportunistically runs the accrual sweep over its own referred
-// orgs, so the dashboard is self-updating (bounded, best-effort).
-func myAffiliates(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// myAffiliates reads the caller org's affiliate program. It answers status, code,
+// shareable link, commission rate, referred count, accrued/pending/paid commission
+// and payout history.
+//
+// An org that has not applied gets an honest {isAffiliate:false} shape so the console
+// can show the apply form. For an APPROVED affiliate it ALSO opportunistically runs
+// the accrual sweep over its own referred orgs, so the dashboard is self-updating —
+// bounded and best-effort, so a commerce hiccup never fails the page.
+//
+// The response is the open program document, not a fixed record: the enrolled and
+// not-enrolled answers carry different keys, so no single struct states it truthfully.
+//
+// Response: {"isAffiliate":true,"id":"aff_9f2a","status":"approved","code":"acme","link":"https://hanzo.ai/?aff=acme","rateBps":2000,"marginBps":1500,"referredCount":4,"accruedCents":1250,"pendingCents":1250,"paidCents":0,"payouts":[]}
+func (o ops) myAffiliates(ctx context.Context, _ *struct{}) (*map[string]any, error) {
+	s := o.s
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to view your affiliate program")
+		return nil, zip.ErrForbidden("sign in to view your affiliate program")
 	}
-	ctx := c.Context()
 
 	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
-		return c.JSON(http.StatusOK, map[string]any{
+		return &map[string]any{
 			"isAffiliate":    false,
 			"defaultRateBps": defaultRateBps,
-		})
+		}, nil
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
 	}
 
 	// Lazy accrual sweep for MY referred orgs (bounded, best-effort — a commerce
@@ -369,14 +413,14 @@ func myAffiliates(s *cloud.Service[state], c *zip.Ctx) error {
 
 	referred, err := s.State.store.CountReferrals(ctx, a.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
 	}
 	payouts, err := s.State.store.ListPayouts(ctx, a.ID, payoutLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
+	return &map[string]any{
 		"isAffiliate":   true,
 		"id":            a.ID,
 		"status":        a.Status,
@@ -391,40 +435,47 @@ func myAffiliates(s *cloud.Service[state], c *zip.Ctx) error {
 		"pendingCents":  a.PendingCents(),
 		"paidCents":     a.PaidCents,
 		"payouts":       payoutViews(payouts),
-	})
+	}, nil
 }
 
-// levelView is one row of an affiliate's downline broken out by upline level: the
+// AffiliateLevelView is one row of an affiliate's downline broken out by upline level: the
 // level (1=direct, 2, 3), the commission rate paid at that level, and how many orgs
 // sit at that level below the affiliate.
-type levelView struct {
+type AffiliateLevelView struct {
 	Level         int   `json:"level"`
 	RateBps       int64 `json:"rateBps"`
 	DownlineCount int   `json:"downlineCount"`
 }
 
-// myAffiliatesMe answers GET /v1/affiliates/me — the richer self-view the console's
-// affiliate dashboard reads: my code + link, my downline broken out by upline level
-// (L1/L2/L3 with each level's rate + count), and lifetime accrued/pending/paid +
-// payouts. Like GET /v1/affiliates it opportunistically refreshes accrual for an
-// approved affiliate so the dashboard is self-updating.
-func myAffiliatesMe(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// myAffiliatesMe reads the caller's affiliate self-view. It breaks the downline out
+// by upline level — L1 (direct), L2 and L3, each with that level's rate and how many
+// orgs sit there — beside lifetime accrued/pending/paid commission and payouts.
+//
+// A caller who has not applied gets {isAffiliate:false} together with the rate
+// schedule they WOULD earn on, so the console can quote it. Like GET /v1/affiliates
+// it opportunistically refreshes accrual for an approved affiliate.
+//
+// The response is the open self-view document: the enrolled and not-enrolled answers
+// carry different keys, so no single struct states it truthfully.
+//
+// Response: {"isAffiliate":true,"id":"aff_9f2a","status":"approved","code":"acme","link":"https://hanzo.ai/?aff=acme","rateBps":2000,"marginBps":1500,"levels":[{"level":1,"rateBps":2000,"downlineCount":4}],"downlineTotal":4,"accruedCents":1250,"pendingCents":1250,"paidCents":0,"payouts":[]}
+func (o ops) myAffiliatesMe(ctx context.Context, _ *struct{}) (*map[string]any, error) {
+	s := o.s
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to view your affiliate program")
+		return nil, zip.ErrForbidden("sign in to view your affiliate program")
 	}
-	ctx := c.Context()
 
 	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
-		return c.JSON(http.StatusOK, map[string]any{
+		return &map[string]any{
 			"isAffiliate":    false,
 			"defaultRateBps": defaultRateBps,
 			"schedule":       uplineSchedule(defaultRateBps),
-		})
+		}, nil
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
 	}
 
 	if a.Status == StatusApproved {
@@ -438,7 +489,7 @@ func myAffiliatesMe(s *cloud.Service[state], c *zip.Ctx) error {
 
 	downline, err := s.State.store.DownlineByLevel(ctx, a.Org, maxDepth)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "downline: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "downline: %v", err)
 	}
 	var perLevel [maxDepth]int
 	for _, lvl := range downline {
@@ -446,16 +497,16 @@ func myAffiliatesMe(s *cloud.Service[state], c *zip.Ctx) error {
 			perLevel[lvl-1]++
 		}
 	}
-	levels := make([]levelView, 0, maxDepth)
+	levels := make([]AffiliateLevelView, 0, maxDepth)
 	for lvl := 1; lvl <= maxDepth; lvl++ {
-		levels = append(levels, levelView{Level: lvl, RateBps: levelRateBps(lvl, a), DownlineCount: perLevel[lvl-1]})
+		levels = append(levels, AffiliateLevelView{Level: lvl, RateBps: levelRateBps(lvl, a), DownlineCount: perLevel[lvl-1]})
 	}
 	payouts, err := s.State.store.ListPayouts(ctx, a.ID, payoutLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
+	return &map[string]any{
 		"isAffiliate":   true,
 		"id":            a.ID,
 		"status":        a.Status,
@@ -470,92 +521,128 @@ func myAffiliatesMe(s *cloud.Service[state], c *zip.Ctx) error {
 		"pendingCents":  a.PendingCents(),
 		"paidCents":     a.PaidCents,
 		"payouts":       payoutViews(payouts),
-	})
+	}, nil
 }
 
 // uplineSchedule renders the level rate schedule for a non-enrolled caller's /me view
 // so the console can show "what you'd earn": L1 at the given direct rate, L2/L3 at the
 // platform switches — resolved here, so the quote reflects the schedule actually in
 // force rather than the one compiled in.
-func uplineSchedule(directRateBps int64) []levelView {
+func uplineSchedule(directRateBps int64) []AffiliateLevelView {
 	l2, l3 := uplineRates()
-	return []levelView{
+	return []AffiliateLevelView{
 		{Level: 1, RateBps: directRateBps},
 		{Level: 2, RateBps: l2},
 		{Level: 3, RateBps: l3},
 	}
 }
 
-// applyRequest is the POST /v1/affiliates/apply body: an optional requested vanity
-// code (staff approves + mints it).
-type applyRequest struct {
+// AffiliateApply is the POST /v1/affiliates/apply body.
+type AffiliateApply struct {
+	// RequestedCode is an optional vanity code — 3–32 chars of a–z, 0–9 and hyphen —
+	// that staff mint on approval. Empty lets approval derive one.
 	RequestedCode string `json:"requestedCode"`
 }
 
-// apply enrolls the validated caller's org as an affiliate at status=applied.
-// Idempotent (one affiliate per org, first apply wins). A malformed vanity code is
-// refused up front.
-func apply(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// AffiliateApplication is the POST /v1/affiliates/apply answer.
+type AffiliateApplication struct {
+	// ID is the affiliate id.
+	ID string `json:"id"`
+	// Status is "applied" until staff approve.
+	Status string `json:"status"`
+	// Code is the live affiliate code; empty until approval mints it.
+	Code string `json:"code"`
+	// RequestedCode echoes the vanity code the application asked for.
+	RequestedCode string `json:"requestedCode"`
+	// RateBps is the commission rate in basis points this affiliate will earn.
+	RateBps int64 `json:"rateBps"`
+	// Created is true when THIS call enrolled the org; false on a repeat apply.
+	Created bool `json:"created"`
+}
+
+// apply enrolls the caller's org in the affiliate program. Status starts at applied
+// and staff mint the code on approval.
+//
+// Idempotent — one affiliate per org, first apply wins, and a repeat returns the
+// existing application with created:false. A malformed vanity code is refused up
+// front. 201 on the call that enrolled the org, 200 on a repeat.
+//
+// Example: {"requestedCode":"acme"}
+// Response: {"id":"aff_9f2a","status":"applied","code":"","requestedCode":"acme","rateBps":2000,"created":true}
+func (o ops) apply(ctx context.Context, body *AffiliateApply) (*AffiliateApplication, error) {
+	s := o.s
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to apply as an affiliate")
-	}
-	var body applyRequest
-	if err := c.Bind(&body); err != nil {
-		return err
+		return nil, zip.ErrForbidden("sign in to apply as an affiliate")
 	}
 	code := normalizeCode(body.RequestedCode)
 	if code != "" && !validCode(code) {
-		return zip.ErrBadRequest("requested code must be 3–32 chars of a–z, 0–9, hyphen")
+		return nil, zip.ErrBadRequest("requested code must be 3–32 chars of a–z, 0–9, hyphen")
 	}
-	ctx := c.Context()
 
 	id, err := genID("aff")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	a, created, err := s.State.store.Apply(ctx, id, org, strings.TrimSpace(c.User()), code, defaultRateBps)
+	a, created, err := s.State.store.Apply(ctx, id, org, callerUser(ctx), code, defaultRateBps)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "apply: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "apply: %v", err)
 	}
-	status := http.StatusOK
 	if created {
-		status = http.StatusCreated
+		cloud.Created(ctx)
 	}
-	return c.JSON(status, map[string]any{
-		"id":            a.ID,
-		"status":        a.Status,
-		"code":          a.Code,
-		"requestedCode": a.RequestedCode,
-		"rateBps":       a.RateBps,
-		"created":       created,
-	})
+	return &AffiliateApplication{
+		ID:            a.ID,
+		Status:        a.Status,
+		Code:          a.Code,
+		RequestedCode: a.RequestedCode,
+		RateBps:       a.RateBps,
+		Created:       created,
+	}, nil
 }
 
-// attributeRequest is the POST /v1/affiliates/attribute body: the affiliate's code
-// the referred org arrived with (from an ?aff= link, stashed at signup).
-type attributeRequest struct {
+// AffiliateAttribute is the POST /v1/affiliates/attribute body.
+type AffiliateAttribute struct {
+	// Code is the affiliate code the referred org arrived with, from an ?aff= link
+	// stashed at signup. Required.
+	Code string `json:"code" validate:"required"`
+}
+
+// AffiliateAttributed is the POST /v1/affiliates/attribute answer.
+type AffiliateAttributed struct {
+	// ID is the attribution edge's id.
+	ID string `json:"id"`
+	// Code is the affiliate code the edge was recorded under.
 	Code string `json:"code"`
+	// Created is true when THIS call wrote the edge; false when the caller was
+	// already attributed (first touch wins).
+	Created bool `json:"created"`
+	// CreatedAt is unix seconds when the edge was first written.
+	CreatedAt int64 `json:"createdAt"`
 }
 
-// attribute records an affiliate↔referred-org edge. The REFERRED org is the
-// validated caller (never client-supplied); the affiliate is resolved from the code
-// (approved affiliates only). Idempotent (one per referred org, first-touch wins),
-// self-attribution blocked, unknown code rejected.
-func attribute(s *cloud.Service[state], c *zip.Ctx) error {
-	referredOrg, ok := principal.Org(c)
+// attribute records the referral edge from an affiliate to the caller's org. The
+// REFERRED org is the validated caller, never a field.
+//
+// The affiliate is
+// resolved from the code — approved affiliates only. Idempotent: one edge per
+// referred org, first touch wins. Self-attribution and a code that would close a
+// cycle in the upline are refused, and an unknown code is 404 (an affiliate code IS a
+// public shareable link, so its existence is public by design). 201 on the call that
+// wrote the edge.
+//
+// Example: {"code":"acme"}
+// Response: {"id":"afr_1d7f","code":"acme","created":true,"createdAt":1780000000}
+func (o ops) attribute(ctx context.Context, body *AffiliateAttribute) (*AffiliateAttributed, error) {
+	s := o.s
+	referredOrg, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to record an affiliate")
-	}
-	var body attributeRequest
-	if err := c.Bind(&body); err != nil {
-		return err
+		return nil, zip.ErrForbidden("sign in to record an affiliate")
 	}
 	code := normalizeCode(body.Code)
 	if code == "" {
-		return zip.ErrBadRequest("code is required")
+		return nil, zip.ErrBadRequest("code is required")
 	}
-	ctx := c.Context()
 
 	// The 404-vs-2xx here is an intended, benign code-existence signal, not a leak: an
 	// affiliate code IS a public, shareable link, so "is this code real" is public by
@@ -564,79 +651,124 @@ func attribute(s *cloud.Service[state], c *zip.Ctx) error {
 	aff, err := s.State.store.AffiliateForCode(ctx, code)
 	if err != nil {
 		if err == errUnknownCode {
-			return zip.ErrNotFound("unknown affiliate code")
+			return nil, zip.ErrNotFound("unknown affiliate code")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "resolve code: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "resolve code: %v", err)
 	}
 	if aff.Org == referredOrg {
-		return zip.ErrBadRequest("cannot attribute yourself")
+		return nil, zip.ErrBadRequest("cannot attribute yourself")
 	}
 
 	id, err := genID("afr")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	edge, created, err := s.State.store.Attribute(ctx, id, aff.ID, referredOrg, aff.Org, code)
 	if err != nil {
 		switch err {
 		case errSelfAttribution:
-			return zip.ErrBadRequest("cannot attribute yourself")
+			return nil, zip.ErrBadRequest("cannot attribute yourself")
 		case errCycle:
-			return zip.ErrBadRequest("that code would create a cycle in the referral upline")
+			return nil, zip.ErrBadRequest("that code would create a cycle in the referral upline")
 		default:
-			return zip.Errorf(http.StatusInternalServerError, "attribute: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "attribute: %v", err)
 		}
 	}
 
 	// Mirror the edge at the USER level (set-once, cycle-checked): the referee's user
 	// → the affiliate's owner user. Best-effort — a user-graph conflict (self/cycle/
 	// already-referred) never fails the org attribution, which is the money-bearing one.
-	if refereeUser := strings.TrimSpace(c.User()); refereeUser != "" && aff.OwnerUser != "" {
+	if refereeUser := callerUser(ctx); refereeUser != "" && aff.OwnerUser != "" {
 		if _, uerr := s.State.store.SetUserReferrer(ctx, refereeUser, aff.OwnerUser, code); uerr != nil && uerr != errSelfAttribution && uerr != errCycle {
 			s.Log.Warn("affiliates: user-referral edge failed", "referee", refereeUser, "err", uerr)
 		}
 	}
 
-	status := http.StatusOK
 	if created {
-		status = http.StatusCreated
+		cloud.Created(ctx)
 	}
-	return c.JSON(status, map[string]any{
-		"id":        edge.ID,
-		"code":      edge.Code,
-		"created":   created,
-		"createdAt": edge.CreatedAt,
-	})
+	return &AffiliateAttributed{
+		ID:        edge.ID,
+		Code:      edge.Code,
+		Created:   created,
+		CreatedAt: edge.CreatedAt,
+	}, nil
 }
 
 // ── admin surface (SuperAdmin, fail-closed) ────────────────────────────────
 
-// adminList answers GET /v1/admin/affiliates — every affiliate (org exposed) + a
-// fleet summary. SuperAdmin only.
-func adminList(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// AffiliatePage bounds an admin listing.
+type AffiliatePage struct {
+	// Limit caps the rows returned; absent or non-positive means 500, and nothing
+	// above 1000 is honoured.
+	Limit int `json:"limit"`
+}
+
+// AffiliateDirectory is the GET /v1/admin/affiliates envelope.
+type AffiliateDirectory struct {
+	// Status is "ok".
+	Status string `json:"status"`
+	// Msg is empty on success.
+	Msg string `json:"msg"`
+	// Data is the directory itself.
+	Data AffiliateDirectoryData `json:"data"`
+}
+
+// AffiliateDirectoryData is every affiliate plus the fleet tally.
+type AffiliateDirectoryData struct {
+	// Affiliates is one row per affiliate, org exposed. Never null.
+	Affiliates []AdminAffiliateView `json:"affiliates"`
+	// Summary tallies the rows returned.
+	Summary AffiliateSummary `json:"summary"`
+}
+
+// AffiliateOne is the envelope for the admin ops that answer with one affiliate.
+type AffiliateOne struct {
+	// Status is "ok".
+	Status string `json:"status"`
+	// Msg is empty on success.
+	Msg string `json:"msg"`
+	// Data carries the affiliate as it now stands.
+	Data AffiliateOneData `json:"data"`
+}
+
+// AffiliateOneData carries the affiliate an approve, suspend or rate change left
+// behind.
+type AffiliateOneData struct {
+	// Affiliate is the affiliate after the change. Its referredCount is 0 here —
+	// these ops do not count referrals.
+	Affiliate AdminAffiliateView `json:"affiliate"`
+}
+
+// adminList reads every affiliate with its referred count, plus a fleet tally of
+// accrued, pending and paid commission. The org is exposed, which the customer
+// surface never does. SuperAdmin only.
+//
+// Response: {"status":"ok","msg":"","data":{"affiliates":[{"id":"aff_9f2a","org":"acme","code":"acme","status":"approved","rateBps":2000,"referredCount":4,"accruedCents":1250,"pendingCents":1250,"paidCents":0,"createdAt":1780000000,"approvedAt":1780000100,"suspendedAt":0}],"summary":{"total":1,"applied":0,"approved":1,"suspended":0,"accruedCents":1250,"pendingCents":1250,"paidCents":0}}}
+func (o ops) adminList(ctx context.Context, in *AffiliatePage) (*AffiliateDirectory, error) {
+	if err := admit(ctx); err != nil {
+		return nil, err
 	}
-	ctx := c.Context()
-	rows, err := s.State.store.ListAll(ctx, adminLimitOf(c))
+	s := o.s
+	rows, err := s.State.store.ListAll(ctx, adminLimitOf(in.Limit))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list affiliates: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list affiliates: %v", err)
 	}
 	counts, err := s.State.store.ReferralCountsByAffiliate(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
 	}
-	views := make([]adminAffiliateView, 0, len(rows))
-	sum := adminSummary{}
+	views := make([]AdminAffiliateView, 0, len(rows))
+	sum := AffiliateSummary{}
 	for _, a := range rows {
 		sum.add(a)
 		views = append(views, adminViewOf(a, counts[a.ID]))
 	}
-	return adminOK(c, map[string]any{"affiliates": views, "summary": sum})
+	return &AffiliateDirectory{Status: "ok", Data: AffiliateDirectoryData{Affiliates: views, Summary: sum}}, nil
 }
 
-// referrerRow is one row of the top-referrers leaderboard on the analytics board.
-type referrerRow struct {
+// AffiliateReferrerRow is one row of the top-referrers leaderboard on the analytics board.
+type AffiliateReferrerRow struct {
 	Org           string `json:"org"`
 	Code          string `json:"code"`
 	Status        string `json:"status"`
@@ -648,39 +780,43 @@ type referrerRow struct {
 // topReferrersLimit bounds the leaderboard on the analytics board.
 const topReferrersLimit = 25
 
-// adminReferrals answers GET /v1/admin/referrals — the unified SuperAdmin, cross-
-// tenant referral analytics over the ONE attribution spine: the top referrers
-// (by lifetime commission), the funnel conversion (referred orgs that have produced
-// commission ÷ all referred orgs), and the accrual LIABILITY the platform owes,
-// broken out by upline level. SuperAdmin only, fail-closed.
-func adminReferrals(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// adminReferrals reads the cross-tenant referral analytics board. It covers the top
+// referrers by lifetime commission, the funnel conversion (referred orgs that
+// produced commission ÷ all referred orgs), and the accrual LIABILITY the platform
+// owes, broken out by upline level.
+//
+// It reads the ONE attribution spine the affiliate accrual is built on. SuperAdmin
+// only.
+//
+// Response: {"status":"ok","msg":"","data":{"summary":{"affiliates":12,"approved":9,"accruedLifetimeCents":125000,"pendingLiabilityCents":40000,"paidLifetimeCents":85000},"conversion":{"referredOrgs":48,"convertedOrgs":18,"ratePct":37.5},"accrualByLevel":{"l1Cents":100000,"l2Cents":20000,"l3Cents":5000},"topReferrers":[{"org":"acme","code":"acme","status":"approved","referredCount":4,"accruedCents":1250,"pendingCents":1250}]}}
+func (o ops) adminReferrals(ctx context.Context, _ *struct{}) (*AffiliateReferrals, error) {
+	if err := admit(ctx); err != nil {
+		return nil, err
 	}
-	ctx := c.Context()
+	s := o.s
 	rows, err := s.State.store.ListAll(ctx, maxAdminLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list affiliates: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list affiliates: %v", err)
 	}
 	counts, err := s.State.store.ReferralCountsByAffiliate(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
 	}
 	total, converted, err := s.State.store.ReferredOrgCounts(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "conversion: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "conversion: %v", err)
 	}
 	byLevel, err := s.State.store.AccruedByLevel(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "accrued by level: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "accrued by level: %v", err)
 	}
 
 	// Fleet totals + the top-referrer leaderboard (by lifetime commission accrued).
-	sum := adminSummary{}
-	leaders := make([]referrerRow, 0, len(rows))
+	sum := AffiliateSummary{}
+	leaders := make([]AffiliateReferrerRow, 0, len(rows))
 	for _, a := range rows {
 		sum.add(a)
-		leaders = append(leaders, referrerRow{
+		leaders = append(leaders, AffiliateReferrerRow{
 			Org: a.Org, Code: a.Code, Status: a.Status, ReferredCount: counts[a.ID],
 			AccruedCents: a.AccruedCents, PendingCents: a.PendingCents(),
 		})
@@ -694,52 +830,119 @@ func adminReferrals(s *cloud.Service[state], c *zip.Ctx) error {
 	if total > 0 {
 		ratePct = float64(converted) / float64(total) * 100
 	}
-	return adminOK(c, map[string]any{
-		"summary": map[string]any{
-			"affiliates":            sum.Total,
-			"approved":              sum.Approved,
-			"accruedLifetimeCents":  sum.AccruedCents,
-			"pendingLiabilityCents": sum.PendingCents, // what the platform owes but hasn't paid
-			"paidLifetimeCents":     sum.PaidCents,
+	return &AffiliateReferrals{Status: "ok", Data: AffiliateReferralsData{
+		Summary: AffiliateLiability{
+			Affiliates:            sum.Total,
+			Approved:              sum.Approved,
+			AccruedLifetimeCents:  sum.AccruedCents,
+			PendingLiabilityCents: sum.PendingCents,
+			PaidLifetimeCents:     sum.PaidCents,
 		},
-		"conversion": map[string]any{
-			"referredOrgs":  total,
-			"convertedOrgs": converted,
-			"ratePct":       ratePct,
+		Conversion: AffiliateConversion{
+			ReferredOrgs:  total,
+			ConvertedOrgs: converted,
+			RatePct:       ratePct,
 		},
-		"accrualByLevel": map[string]any{
-			"l1Cents": byLevel[1],
-			"l2Cents": byLevel[2],
-			"l3Cents": byLevel[3],
+		AccrualByLevel: AffiliateAccrualByLevel{
+			L1Cents: byLevel[1],
+			L2Cents: byLevel[2],
+			L3Cents: byLevel[3],
 		},
-		"topReferrers": leaders,
-	})
+		TopReferrers: leaders,
+	}}, nil
 }
 
-// adminApprove answers POST /v1/admin/affiliates/:id/approve — approve + mint the
-// code. Body may carry an explicit {code} override; else the requested vanity code;
-// else a derived slug. SuperAdmin only.
-func adminApprove(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// AffiliateReferrals is the GET /v1/admin/referrals envelope.
+type AffiliateReferrals struct {
+	// Status is "ok".
+	Status string `json:"status"`
+	// Msg is empty on success.
+	Msg string `json:"msg"`
+	// Data is the analytics board.
+	Data AffiliateReferralsData `json:"data"`
+}
+
+// AffiliateReferralsData is the cross-tenant referral board.
+type AffiliateReferralsData struct {
+	// Summary is the fleet-wide affiliate population and money position.
+	Summary AffiliateLiability `json:"summary"`
+	// Conversion is the referral funnel.
+	Conversion AffiliateConversion `json:"conversion"`
+	// AccrualByLevel splits lifetime accrual across the upline levels.
+	AccrualByLevel AffiliateAccrualByLevel `json:"accrualByLevel"`
+	// TopReferrers is the leaderboard by lifetime commission, capped at 25 rows.
+	// Never null.
+	TopReferrers []AffiliateReferrerRow `json:"topReferrers"`
+}
+
+// AffiliateLiability is the fleet money position of the affiliate program.
+type AffiliateLiability struct {
+	// Affiliates is how many affiliates exist; Approved how many may earn.
+	Affiliates int `json:"affiliates"`
+	Approved   int `json:"approved"`
+	// AccruedLifetimeCents is all commission ever earned.
+	AccruedLifetimeCents int64 `json:"accruedLifetimeCents"`
+	// PendingLiabilityCents is what the platform owes but has not paid.
+	PendingLiabilityCents int64 `json:"pendingLiabilityCents"`
+	// PaidLifetimeCents is all commission ever paid out.
+	PaidLifetimeCents int64 `json:"paidLifetimeCents"`
+}
+
+// AffiliateConversion is the referral funnel: how many referred orgs went on to
+// produce commission.
+type AffiliateConversion struct {
+	// ReferredOrgs is every org that arrived through an affiliate code.
+	ReferredOrgs int `json:"referredOrgs"`
+	// ConvertedOrgs is how many of those have produced commission.
+	ConvertedOrgs int `json:"convertedOrgs"`
+	// RatePct is converted ÷ referred as a percentage; 0 when nothing is referred.
+	RatePct float64 `json:"ratePct"`
+}
+
+// AffiliateAccrualByLevel splits lifetime accrual across the three upline levels.
+type AffiliateAccrualByLevel struct {
+	// L1Cents is commission accrued to direct referrers, L2Cents and L3Cents to
+	// their uplines.
+	L1Cents int64 `json:"l1Cents"`
+	L2Cents int64 `json:"l2Cents"`
+	L3Cents int64 `json:"l3Cents"`
+}
+
+// AffiliateApprove is the POST /v1/admin/affiliates/:id/approve input.
+type AffiliateApprove struct {
+	// ID is the affiliate id from the path.
+	ID string `json:"id"`
+	// Code overrides the code to mint — 3–32 chars of a–z, 0–9 and hyphen. Empty
+	// takes the requested vanity code, else a slug derived from the org.
+	Code string `json:"code"`
+}
+
+// adminApprove admits an affiliate to earning and mints its code. Approval is what
+// makes an application earn.
+//
+// The code is the explicit override when given, else the vanity code the application
+// asked for, else a slug derived from the org. The minted code is mirrored as a link
+// row so click tracking is uniform across every code. A code another affiliate holds
+// is 409. SuperAdmin only.
+//
+// Example: {"id":"aff_9f2a","code":"acme"}
+// Response: {"status":"ok","msg":"","data":{"affiliate":{"id":"aff_9f2a","org":"acme","code":"acme","status":"approved","rateBps":2000,"referredCount":0,"accruedCents":0,"pendingCents":0,"paidCents":0,"createdAt":1780000000,"approvedAt":1780000100,"suspendedAt":0}}}
+func (o ops) adminApprove(ctx context.Context, in *AffiliateApprove) (*AffiliateOne, error) {
+	if err := admit(ctx); err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
-	var body struct {
-		Code string `json:"code"`
-	}
-	_ = c.Bind(&body) // body is optional
-	ctx := c.Context()
-	a, err := s.State.store.Approve(ctx, id, body.Code, time.Now().Unix())
+	s := o.s
+	a, err := s.State.store.Approve(ctx, strings.TrimSpace(in.ID), in.Code, time.Now().Unix())
 	if err != nil {
 		switch err {
 		case errNotFound:
-			return zip.ErrNotFound("affiliate not found")
+			return nil, zip.ErrNotFound("affiliate not found")
 		case errInvalidCode:
-			return zip.ErrBadRequest("code must be 3–32 chars of a–z, 0–9, hyphen")
+			return nil, zip.ErrBadRequest("code must be 3–32 chars of a–z, 0–9, hyphen")
 		case errCodeTaken:
-			return zip.ErrConflict("that code is already taken")
+			return nil, zip.ErrConflict("that code is already taken")
 		default:
-			return zip.Errorf(http.StatusInternalServerError, "approve: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "approve: %v", err)
 		}
 	}
 	// Mirror the minted primary code as a link row so click tracking is uniform across
@@ -750,78 +953,114 @@ func adminApprove(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 	emitAudit(s, ctx, "affiliate.approve", a, map[string]any{"code": a.Code, "rateBps": a.RateBps})
-	return adminOK(c, map[string]any{"affiliate": adminViewOf(a, 0)})
+	return &AffiliateOne{Status: "ok", Data: AffiliateOneData{Affiliate: adminViewOf(a, 0)}}, nil
 }
 
-// adminSuspend answers POST /v1/admin/affiliates/:id/suspend. SuperAdmin only.
-func adminSuspend(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// AffiliateRef addresses one affiliate by the id in the path.
+type AffiliateRef struct {
+	// ID is the affiliate id from the path, as returned by the admin directory.
+	ID string `json:"id"`
+}
+
+// adminSuspend stops an affiliate earning, leaving accrued commission payable.
+// SuperAdmin only.
+//
+// Example: {"id":"aff_9f2a"}
+// Response: {"status":"ok","msg":"","data":{"affiliate":{"id":"aff_9f2a","org":"acme","code":"acme","status":"suspended","rateBps":2000,"referredCount":0,"accruedCents":1250,"pendingCents":1250,"paidCents":0,"createdAt":1780000000,"approvedAt":1780000100,"suspendedAt":1780000200}}}
+func (o ops) adminSuspend(ctx context.Context, in *AffiliateRef) (*AffiliateOne, error) {
+	if err := admit(ctx); err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
-	ctx := c.Context()
-	a, err := s.State.store.Suspend(ctx, id, time.Now().Unix())
+	s := o.s
+	a, err := s.State.store.Suspend(ctx, strings.TrimSpace(in.ID), time.Now().Unix())
 	if err != nil {
 		if err == errNotFound {
-			return zip.ErrNotFound("affiliate not found")
+			return nil, zip.ErrNotFound("affiliate not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "suspend: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "suspend: %v", err)
 	}
 	emitAudit(s, ctx, "affiliate.suspend", a, nil)
-	return adminOK(c, map[string]any{"affiliate": adminViewOf(a, 0)})
+	return &AffiliateOne{Status: "ok", Data: AffiliateOneData{Affiliate: adminViewOf(a, 0)}}, nil
 }
 
-// payoutRequest is the POST /v1/admin/affiliates/:id/payout body.
-type payoutRequest struct {
-	AmountCents int64  `json:"amountCents"`
-	Method      string `json:"method"`
-	Reference   string `json:"reference"`
+// AffiliatePayoutRequest is the POST /v1/admin/affiliates/:id/payout input.
+type AffiliatePayoutRequest struct {
+	// ID is the affiliate id from the path.
+	ID string `json:"id"`
+	// AmountCents is the payout, in USD minor units. Must be positive and can never
+	// exceed the affiliate's pending commission.
+	AmountCents int64 `json:"amountCents" validate:"required"`
+	// Method is "credits" (issues a commerce grant into the affiliate's wallet) or a
+	// cash method such as wire or paypal (record-only). Required.
+	Method string `json:"method" validate:"required"`
+	// Reference is the operator's own note or external transfer id.
+	Reference string `json:"reference"`
 }
 
-// adminPayout records a payout of accrued commission. A "credits" method issues a
-// commerce grant into the affiliate's wallet; a cash method (wire/paypal/…) is
-// record-only. The amount can never exceed pending (accrued − paid), reserved
-// atomically before any grant. SuperAdmin only.
-func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// AffiliatePayoutOut is the POST /v1/admin/affiliates/:id/payout envelope.
+type AffiliatePayoutOut struct {
+	// Status is "ok".
+	Status string `json:"status"`
+	// Msg is empty on success.
+	Msg string `json:"msg"`
+	// Data carries the payout row and the affiliate after it.
+	Data AffiliatePayoutData `json:"data"`
+}
+
+// AffiliatePayoutData is the settled payout plus the affiliate's new balances.
+type AffiliatePayoutData struct {
+	// Payout is the recorded disbursement.
+	Payout AffiliatePayoutView `json:"payout"`
+	// Affiliate is the affiliate after the payout reserved against pending.
+	Affiliate AdminAffiliateView `json:"affiliate"`
+}
+
+// adminPayout records a payout of accrued commission and settles it. Both guards
+// run before any money moves.
+//
+// A "credits" method issues a commerce grant into the affiliate's wallet; a cash
+// method is record-only. The amount can never exceed pending (accrued − paid),
+// reserved atomically before any grant, and the payout must additionally be backed by
+// the treasury reserve — an unbacked one is refused with 402 and the reservation
+// voided. SuperAdmin only.
+//
+// Example: {"id":"aff_9f2a","amountCents":1250,"method":"credits","reference":"Q3 commission"}
+// Response: {"status":"ok","msg":"","data":{"payout":{"id":"apo_1d7f","amountCents":1250,"method":"credits","reference":"Q3 commission","txn":"txn_44","createdAt":1780000000},"affiliate":{"id":"aff_9f2a","org":"acme","code":"acme","status":"approved","rateBps":2000,"referredCount":0,"accruedCents":1250,"pendingCents":0,"paidCents":1250,"createdAt":1780000000,"approvedAt":1780000100,"suspendedAt":0}}}
+func (o ops) adminPayout(ctx context.Context, in *AffiliatePayoutRequest) (*AffiliatePayoutOut, error) {
+	if err := admit(ctx); err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
-	var body payoutRequest
-	if err := c.Bind(&body); err != nil {
-		return err
+	s := o.s
+	if in.AmountCents <= 0 {
+		return nil, zip.ErrBadRequest("amountCents must be positive")
 	}
-	if body.AmountCents <= 0 {
-		return zip.ErrBadRequest("amountCents must be positive")
-	}
-	method := strings.ToLower(strings.TrimSpace(body.Method))
+	method := strings.ToLower(strings.TrimSpace(in.Method))
 	if method == "" {
-		return zip.ErrBadRequest("method is required (credits, wire, paypal, …)")
+		return nil, zip.ErrBadRequest("method is required (credits, wire, paypal, …)")
 	}
-	ctx := c.Context()
 
-	a, err := s.State.store.GetByID(ctx, id)
+	a, err := s.State.store.GetByID(ctx, strings.TrimSpace(in.ID))
 	if err != nil {
 		if err == errNotFound {
-			return zip.ErrNotFound("affiliate not found")
+			return nil, zip.ErrNotFound("affiliate not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
 	}
 
 	payoutID, err := genID("apo")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	// Reserve against pending FIRST (atomic guard) — a payout can never exceed owed.
-	payout, err := s.State.store.RecordPayout(ctx, payoutID, a.ID, body.AmountCents, method, strings.TrimSpace(body.Reference), time.Now().Unix())
+	payout, err := s.State.store.RecordPayout(ctx, payoutID, a.ID, in.AmountCents, method, strings.TrimSpace(in.Reference), time.Now().Unix())
 	if err != nil {
 		switch err {
 		case errNotFound:
-			return zip.ErrNotFound("affiliate not found")
+			return nil, zip.ErrNotFound("affiliate not found")
 		case errInsufficientPending:
-			return zip.ErrBadRequest(fmt.Sprintf("amount exceeds pending commission (%d cents available)", a.PendingCents()))
+			return nil, zip.ErrBadRequest(fmt.Sprintf("amount exceeds pending commission (%d cents available)", a.PendingCents()))
 		default:
-			return zip.Errorf(http.StatusInternalServerError, "record payout: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "record payout: %v", err)
 		}
 	}
 
@@ -831,16 +1070,16 @@ func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 	// funded reserve (here). Not backed → VOID the pending reservation (restore it)
 	// and refuse honestly — the platform has not reserved capital for this payout.
 	backed, _, berr := treasury.Reserve(ctx, treasury.ProgramAffiliate, "payout:"+payoutID,
-		fmt.Sprintf("Affiliate commission payout (%s)", a.Code), body.AmountCents)
+		fmt.Sprintf("Affiliate commission payout (%s)", a.Code), in.AmountCents)
 	if berr != nil || !backed {
-		if verr := s.State.store.VoidPayout(ctx, payoutID, a.ID, body.AmountCents); verr != nil {
+		if verr := s.State.store.VoidPayout(ctx, payoutID, a.ID, in.AmountCents); verr != nil {
 			s.Log.Error("affiliates: void after unbacked payout failed", "payout", payoutID, "err", verr)
 		}
 		if berr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "reserve payout: %v", berr)
+			return nil, zip.Errorf(http.StatusInternalServerError, "reserve payout: %v", berr)
 		}
 		reserve, _ := treasury.ReserveCents(ctx)
-		return zip.Errorf(http.StatusPaymentRequired,
+		return nil, zip.Errorf(http.StatusPaymentRequired,
 			"treasury reserve insufficient to back this payout (%d cents available); replenish via /v1/admin/treasury/sweep or seed", reserve)
 	}
 
@@ -849,7 +1088,7 @@ func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 	// grant failure is logged loud (never silent) so an operator reconciles from the
 	// payout row + audit.
 	if method == methodCredits {
-		txn, gerr := s.State.commerce.deposit(ctx, a.Org, orgSubject(a.Org), body.AmountCents, grantCurrency,
+		txn, gerr := s.State.commerce.deposit(ctx, a.Org, orgSubject(a.Org), in.AmountCents, grantCurrency,
 			fmt.Sprintf("Affiliate commission payout (%s)", a.Code), grantTag)
 		if gerr != nil {
 			s.Log.Error("affiliates: credits payout grant failed (reserved against pending; not retried)",
@@ -865,21 +1104,51 @@ func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 		"payoutId": payout.ID, "amountCents": payout.AmountCents, "method": payout.Method,
 		"reference": payout.Reference, "txn": payout.Txn,
 	})
-	return adminOK(c, map[string]any{"payout": payoutViewOf(payout), "affiliate": adminViewOf(after, 0)})
+	return &AffiliatePayoutOut{Status: "ok", Data: AffiliatePayoutData{
+		Payout:    payoutViewOf(payout),
+		Affiliate: adminViewOf(after, 0),
+	}}, nil
 }
 
-// adminSweep answers POST /v1/admin/affiliates/sweep — the periodic accrual path (a
-// cron/o11y hits it, or an operator on demand). It folds over every approved
-// affiliate's referred orgs and accrues this period's commission, at-most-once per
-// period. SuperAdmin only.
-func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// AffiliateSweepOut is the POST /v1/admin/affiliates/sweep envelope.
+type AffiliateSweepOut struct {
+	// Status is "ok".
+	Status string `json:"status"`
+	// Msg is empty on success.
+	Msg string `json:"msg"`
+	// Data is what the fold did.
+	Data AffiliateSweepData `json:"data"`
+}
+
+// AffiliateSweepData counts the work one sweep pass did.
+type AffiliateSweepData struct {
+	// Swept is how many referred source orgs were walked.
+	Swept int `json:"swept"`
+	// Accrued is how many NEW affiliate commission accruals this pass latched,
+	// across every upline level.
+	Accrued int `json:"accrued"`
+	// RoyaltiesAccrued is how many OSS-author royalty accruals the same walk
+	// latched, since both are driven from one spend read per source org.
+	RoyaltiesAccrued int `json:"royaltiesAccrued"`
+}
+
+// adminSweep accrues this period's commission for every referred org. It is the
+// operator's override of the scheduled pass.
+//
+// Each source org's metered spend is read ONCE and fans out to BOTH the affiliate
+// upline (L1/L2/L3) and the OSS-author royalty, latching at-most-once per (affiliate,
+// source, period) — so running it twice accrues nothing the second time. A per-source
+// failure is logged and skipped, never fatal. SuperAdmin only.
+//
+// Response: {"status":"ok","msg":"","data":{"swept":48,"accrued":12,"royaltiesAccrued":3}}
+func (o ops) adminSweep(ctx context.Context, _ *struct{}) (*AffiliateSweepOut, error) {
+	if err := admit(ctx); err != nil {
+		return nil, err
 	}
-	ctx := c.Context()
+	s := o.s
 	sources, err := s.State.store.AllReferredOrgs(ctx, sweepLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list sources: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list sources: %v", err)
 	}
 	period := periodKey(time.Now())
 	now := time.Now().Unix()
@@ -903,7 +1172,9 @@ func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 		accrued += n
 		royalties += authors.AccrueForOrg(ctx, src, spend, period, now)
 	}
-	return adminOK(c, map[string]any{"swept": swept, "accrued": accrued, "royaltiesAccrued": royalties})
+	return &AffiliateSweepOut{Status: "ok", Data: AffiliateSweepData{
+		Swept: swept, Accrued: accrued, RoyaltiesAccrued: royalties,
+	}}, nil
 }
 
 // ── accrual core (the ONE multi-level walk, shared by sweep + lazy read) ───────
@@ -1041,8 +1312,8 @@ func emitAudit(s *cloud.Service[state], ctx context.Context, action string, a Af
 
 // ── view models + helpers ─────────────────────────────────────────────────────
 
-// adminAffiliateView is one row in the SuperAdmin directory (org exposed).
-type adminAffiliateView struct {
+// AdminAffiliateView is one row in the SuperAdmin directory (org exposed).
+type AdminAffiliateView struct {
 	ID            string `json:"id"`
 	Org           string `json:"org"`
 	Code          string `json:"code"`
@@ -1058,8 +1329,8 @@ type adminAffiliateView struct {
 	SuspendedAt   int64  `json:"suspendedAt"`
 }
 
-func adminViewOf(a Affiliate, referred int) adminAffiliateView {
-	return adminAffiliateView{
+func adminViewOf(a Affiliate, referred int) AdminAffiliateView {
+	return AdminAffiliateView{
 		ID: a.ID, Org: a.Org, Code: a.Code, RequestedCode: a.RequestedCode, Status: a.Status,
 		RateBps: a.RateBps, ReferredCount: referred, AccruedCents: a.AccruedCents,
 		PendingCents: a.PendingCents(), PaidCents: a.PaidCents,
@@ -1067,8 +1338,8 @@ func adminViewOf(a Affiliate, referred int) adminAffiliateView {
 	}
 }
 
-// payoutView is one row of an affiliate's payout history.
-type payoutView struct {
+// AffiliatePayoutView is one row of an affiliate's payout history.
+type AffiliatePayoutView struct {
 	ID          string `json:"id"`
 	AmountCents int64  `json:"amountCents"`
 	Method      string `json:"method"`
@@ -1077,20 +1348,20 @@ type payoutView struct {
 	CreatedAt   int64  `json:"createdAt"`
 }
 
-func payoutViewOf(p Payout) payoutView {
-	return payoutView{ID: p.ID, AmountCents: p.AmountCents, Method: p.Method, Reference: p.Reference, Txn: p.Txn, CreatedAt: p.CreatedAt}
+func payoutViewOf(p Payout) AffiliatePayoutView {
+	return AffiliatePayoutView{ID: p.ID, AmountCents: p.AmountCents, Method: p.Method, Reference: p.Reference, Txn: p.Txn, CreatedAt: p.CreatedAt}
 }
 
-func payoutViews(ps []Payout) []payoutView {
-	out := make([]payoutView, 0, len(ps))
+func payoutViews(ps []Payout) []AffiliatePayoutView {
+	out := make([]AffiliatePayoutView, 0, len(ps))
 	for _, p := range ps {
 		out = append(out, payoutViewOf(p))
 	}
 	return out
 }
 
-// adminSummary is the fleet tally for the admin directory.
-type adminSummary struct {
+// AffiliateSummary is the fleet tally for the admin directory.
+type AffiliateSummary struct {
 	Total        int   `json:"total"`
 	Applied      int   `json:"applied"`
 	Approved     int   `json:"approved"`
@@ -1100,7 +1371,7 @@ type adminSummary struct {
 	PaidCents    int64 `json:"paidCents"`
 }
 
-func (s *adminSummary) add(a Affiliate) {
+func (s *AffiliateSummary) add(a Affiliate) {
 	s.Total++
 	switch a.Status {
 	case StatusApplied:
@@ -1124,14 +1395,6 @@ func affiliateLink(s *cloud.Service[state], code string) string {
 	return s.State.linkBase + "/?aff=" + code
 }
 
-// adminOK writes the { status:"ok", msg, data } envelope the console's admin
-// surface (originGet/originPost via app/admin/aggregate) unwraps — identical to
-// clients/admin's ok() and clients/referrals' adminOK. The customer /v1/affiliates
-// surface stays bare JSON (read via the /cloud proxy + restGet).
-func adminOK(c *zip.Ctx, data any) error {
-	return cloud.OK(c, data)
-}
-
 // orgSubject is the billing subject commerce keys an org's wallet on — the bare org
 // slug, exactly like clients/admin.orgSubject + clients/referrals.orgSubject. Kept
 // as a named function so the "subject == org" contract lives in one place.
@@ -1151,9 +1414,10 @@ func genID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
-func adminLimitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
+// adminLimitOf bounds an admin listing: absent or non-positive means listLimit, and
+// nothing above maxAdminLimit is honoured.
+func adminLimitOf(n int) int {
+	if n <= 0 {
 		return listLimit
 	}
 	if n > maxAdminLimit {

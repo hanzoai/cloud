@@ -129,7 +129,7 @@ func run(ctx context.Context) (int, int, error) {
 // empty the corpus it feeds — a GitHub outage must not prune every repo out of
 // the catalog — so a failed fetch returns its error AND whatever it did read, and
 // run only reconciles when it got something.
-func corpus(ctx context.Context) ([]Entry, map[string][]Entry, error) {
+func corpus(ctx context.Context) ([]CatalogEntry, map[string][]CatalogEntry, error) {
 	pub, ferr := fromOrgs(ctx)
 	// at is where each published row already sits, so a live site can be FOLDED
 	// onto the repo it was built from instead of replacing it. Both key on
@@ -140,7 +140,7 @@ func corpus(ctx context.Context) ([]Entry, map[string][]Entry, error) {
 	for i, e := range pub {
 		at[e.ID] = i
 	}
-	byOrg := map[string][]Entry{}
+	byOrg := map[string][]CatalogEntry{}
 	sites, err := liveSites(ctx)
 	if err != nil {
 		ferr = err
@@ -150,7 +150,7 @@ func corpus(ctx context.Context) ([]Entry, map[string][]Entry, error) {
 	// gallery once per pass (origin.go) — the one thing that tells a template's
 	// own demo apart from an app somebody built on the platform.
 	starter := starters()
-	var ours []Entry
+	var ours []CatalogEntry
 	for _, s := range sites {
 		e := fromSite(s, starter)
 		if s.Org != platform {
@@ -187,9 +187,9 @@ func corpus(ctx context.Context) ([]Entry, map[string][]Entry, error) {
 // orgRepos reads every source org's public, un-archived repos. It is the FIRST
 // of the corpus's two sources, and a package var for the same reason liveSites
 // is one: the assembly is testable without a live GitHub.
-func orgRepos(ctx context.Context) ([]Entry, error) {
+func orgRepos(ctx context.Context) ([]CatalogEntry, error) {
 	at := map[string]int{}
-	var out []Entry
+	var out []CatalogEntry
 	var ferr error
 	for gh, src := range sourceOrgs() {
 		rows, err := repos(ctx, gh)
@@ -243,7 +243,7 @@ func credit(ctx context.Context, r *ghRepo) bool {
 // without this the winner is Go's iteration order, and hanzo/ui would flip its
 // own forkable answer from sync to sync. Ours beats a vendored fork; between
 // two of ours, the one people actually use.
-func canonical(a, b Entry) bool {
+func canonical(a, b CatalogEntry) bool {
 	if a.Forkable != b.Forkable {
 		return a.Forkable
 	}
@@ -260,8 +260,8 @@ func canonical(a, b Entry) bool {
 // from the project, never inferred: the platform already records what a site was
 // built from and what it was forked from, and a catalog that guessed either
 // would be guessing about authorship.
-func fromSite(s projects.LiveSite, starter map[string]bool) Entry {
-	e := Entry{
+func fromSite(s projects.LiveSite, starter map[string]bool) CatalogEntry {
+	e := CatalogEntry{
 		ID: s.Org + "/" + s.Slug, Org: s.Org, Name: s.Slug, Title: s.Name,
 		Kind: "site", Archetype: "site", URL: s.URL,
 		Repo: s.Repo, Template: s.ForkedFrom,
@@ -287,7 +287,7 @@ func fromSite(s projects.LiveSite, starter map[string]bool) Entry {
 // SOURCE — the link, the description, the language, the stars. Nothing the site
 // does not carry is blanked, because the merged row is the only one that can
 // answer the question the catalog exists for: show me the demo AND its code.
-func fold(repo, site Entry) Entry {
+func fold(repo, site CatalogEntry) CatalogEntry {
 	out := repo
 	out.Kind, out.Archetype = site.Kind, site.Archetype
 	out.URL, out.Updated = site.URL, site.Updated
@@ -333,7 +333,7 @@ func fold(repo, site Entry) Entry {
 // fromRepo maps one repo to a catalog row. The archetype is derived from the
 // repo's own topics and name rather than guessed by a model: a wrong archetype is
 // worse than none, because it silently hides the row from the browse rail.
-func fromRepo(r ghRepo, src source) Entry {
+func fromRepo(r ghRepo, src source) CatalogEntry {
 	url := strings.TrimSpace(r.Homepage)
 	if url != "" && !strings.HasPrefix(url, "http") {
 		url = "https://" + url
@@ -348,7 +348,7 @@ func fromRepo(r ghRepo, src source) Entry {
 			upstream = r.Parent.FullName
 		}
 	}
-	return Entry{
+	return CatalogEntry{
 		ID: src.brand + "/" + r.Name, Org: src.brand, Name: r.Name, Title: r.Name,
 		Kind: "repo", Origin: origin, Archetype: archetype(r), Language: r.Language,
 		Description: r.Description, URL: url, Repo: r.HTMLURL,

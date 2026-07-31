@@ -263,11 +263,11 @@ func TestMCPAuditOutcome(t *testing.T) {
 
 func TestUpdateFlowPublishedVersionValidated(t *testing.T) {
 	app := newApp(t)
-	mk := func() populatedFlow {
+	mk := func() PopulatedFlow {
 		r := req(t, app, http.MethodPost, "/v1/automations/flows", "acme", map[string]any{
 			"displayName": "F", "trigger": map[string]any{"name": "trigger", "type": TriggerTypePiece, "strategy": string(StrategyManual)},
 		})
-		var pf populatedFlow
+		var pf PopulatedFlow
 		_ = json.Unmarshal(r.Body, &pf)
 		return pf
 	}

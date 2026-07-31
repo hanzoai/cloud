@@ -98,6 +98,54 @@ func refuse(c *zip.Ctx) error {
 	return zip.ErrForbidden("not authorized for this deploy console")
 }
 
+// ── the two gates, as middleware a TYPED op can be declared through ──────────
+
+// scopeKey names the request-scoped slot the resolved scope crosses the typed-op
+// seam in. Unexported zero-size type: unforgeable from another package.
+type scopeKey struct{}
+
+// scoped is the TENANT gate: it resolves the request's scope ONCE, refuses when
+// it cannot, and parks the answer for the op below it.
+//
+// The gate is middleware and not the op's first line because of the REFUSAL
+// SHAPE: refuse() bounces a browser navigation to sign-in with a 302, and a
+// typed handler returns a value or an error — neither of which is a redirect.
+// Run here, the redirect is already written and the op never runs.
+func scoped(next zip.Handler) zip.Handler {
+	return func(c *zip.Ctx) error {
+		sc, ok := resolveScope(c)
+		if !ok {
+			return refuse(c)
+		}
+		c.SetContext(context.WithValue(c.Context(), scopeKey{}, sc))
+		return next(c)
+	}
+}
+
+// admitted is the SuperAdmin gate — the same predicate and the same refusal
+// guard() applies, in the form a typed op can be declared through. It parks the
+// whole-fleet scope guard()ed handlers resolve anyway, so namespace resolution
+// stays ONE path across the plane.
+func admitted(next zip.Handler) zip.Handler {
+	return func(c *zip.Ctx) error {
+		if !c.IsAdmin() {
+			return refuse(c)
+		}
+		c.SetContext(context.WithValue(c.Context(), scopeKey{}, scope{superAdmin: true}))
+		return next(c)
+	}
+}
+
+// scopeFrom recovers the scope a gate parked. Absent off the HTTP path, where
+// there is no request to scope — so the op refuses rather than reading the fleet.
+func scopeFrom(ctx context.Context) (scope, error) {
+	sc, ok := ctx.Value(scopeKey{}).(scope)
+	if !ok {
+		return scope{}, zip.ErrForbidden("not authorized for this deploy console")
+	}
+	return sc, nil
+}
+
 // orgOf / projectOf read the tenant + IAM-project labels off an App CR ("" when absent).
 func orgOf(cr *unstructured.Unstructured) string     { return cr.GetLabels()[orgLabel] }
 func projectOf(cr *unstructured.Unstructured) string { return cr.GetLabels()[projectLabel] }
@@ -163,9 +211,9 @@ func (sc scope) appCRs(s *cloud.Service[state], ctx context.Context) ([]unstruct
 // scope's namespaces in order and REQUIRING the CR be visible to the scope. A cross-tenant
 // name (org A's app requested by org B) is reported as a clean 404 — never confirmed to
 // exist, so the detail routes leak no cross-tenant existence oracle.
-func (sc scope) findNamespace(s *cloud.Service[state], c *zip.Ctx, name string) (string, error) {
+func (sc scope) findNamespace(s *cloud.Service[state], ctx context.Context, name string) (string, error) {
 	for _, ns := range sc.namespaces() {
-		cr, _, err := getAppCR(s, c.Context(), ns, name)
+		cr, _, err := getAppCR(s, ctx, ns, name)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue

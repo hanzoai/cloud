@@ -6,7 +6,7 @@
 //	ASSIGNMENT  = flags     — subject -> variant is a deterministic flags evaluation
 //	                          (engineEvaluate, sha1 rollout hash). No 2nd bucketing.
 //	MEASUREMENT = analytics — a subject's outcome events are already captured by
-//	                          distinct_id in hanzo.events. No 2nd event store.
+//	                          distinct_id in event.event. No 2nd event store.
 //	EVIDENCE    = research   — per-variant samples land as immutable evidence rows
 //	                          (kind "ab"); significance is a pure function over them.
 //

@@ -18,10 +18,67 @@
   "paths": {
     "/v1/flags/waitlist": {
       "get": {
-        "operationId": "get_v1_flags_waitlist",
+        "operationId": "waitlistMode",
+        "summary": "waitlistMode reports whether one host is behind its service's waitlist.",
+        "description": "waitlistMode reports whether one host is behind its service's waitlist. It resolves\nhost→service through the launch registry, then reads the waitlist.\u003cservice\u003e switch.\nPublic (in-cluster) read: it answers for the ONE queried host and never enumerates\nthe registry. An empty host falls back to the host the request was sent to.",
         "tags": [
           "flags"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "host",
+            "in": "query",
+            "required": false,
+            "description": "Host is the hostname to resolve, e.g. \"chat.hanzo.ai\". Empty means the\nhost the request itself was sent to.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "chat.hanzo.ai"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "host": "chat.hanzo.ai",
+                  "known": true,
+                  "service": "chat",
+                  "waitlistMode": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistMode"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "WaitlistMode": {
+        "properties": {
+          "host": {
+            "description": "Host is the normalized (lowercased, port-stripped) host that was resolved.",
+            "type": "string"
+          },
+          "known": {
+            "description": "Known is false when no registry entry claims the host.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service is the registry service governing that host, empty when unknown.",
+            "type": "string"
+          },
+          "waitlistMode": {
+            "description": "WaitlistMode is true when the service is gated behind its waitlist.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
       }
     }
   }

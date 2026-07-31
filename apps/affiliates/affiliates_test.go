@@ -93,6 +93,10 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// Serve installs this globally before MountAll; a typed op resolves its
+	// validated org, the request its admin claim rides on, and the 201 slot through
+	// it, so the test wires it the same way.
+	app.Use(cloud.Bridge())
 	routes(app, s)
 	return app, s, fc
 }
@@ -528,7 +532,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 		t.Fatalf("admin list want 200, got %d (%s)", code, body)
 	}
 	data := envData(t, body)
-	var affs []adminAffiliateView
+	var affs []AdminAffiliateView
 	if err := json.Unmarshal(data["affiliates"], &affs); err != nil {
 		t.Fatalf("decode affiliates: %v", err)
 	}
@@ -543,7 +547,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	if a0.AccruedCents != wantCommission || a0.PendingCents != wantCommission {
 		t.Fatalf("admin row accrual: accrued=%d pending=%d, want %d", a0.AccruedCents, a0.PendingCents, wantCommission)
 	}
-	var sum adminSummary
+	var sum AffiliateSummary
 	if err := json.Unmarshal(data["summary"], &sum); err != nil {
 		t.Fatalf("decode summary: %v", err)
 	}
@@ -838,7 +842,7 @@ func TestAdminReferralsAnalytics(t *testing.T) {
 	if byLevel.L1Cents != share(10000, defaultRateBps) || byLevel.L2Cents != share(10000, defaultL2RateBps) {
 		t.Fatalf("accrualByLevel wrong: %+v", byLevel)
 	}
-	var leaders []referrerRow
+	var leaders []AffiliateReferrerRow
 	if err := json.Unmarshal(data["topReferrers"], &leaders); err != nil {
 		t.Fatalf("decode topReferrers: %v", err)
 	}
@@ -851,6 +855,7 @@ func TestAdminReferralsAnalytics(t *testing.T) {
 // against a temp DataDir, proving the package boots as the binary loads it.
 func TestMount(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

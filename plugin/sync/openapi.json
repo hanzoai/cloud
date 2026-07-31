@@ -19,20 +19,69 @@
     "/v1/sync": {
       "get": {
         "operationId": "get_v1_sync",
+        "summary": "listSyncs returns every sync link in the caller's org, with each link's last",
+        "description": "listSyncs returns every sync link in the caller's org, with each link's last\nreconcile time.",
         "tags": [
           "sync"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/syncList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_sync",
+        "summary": "createSync links a source repository to a target and stores the sync policy.",
+        "description": "createSync links a source repository to a target and stores the sync policy. It\nis an UPSERT — re-stating the same source→target pair updates that link rather\nthan making a second one — and with run set it reconciles once immediately in the\nbackground. The org comes from the validated principal, never the body, so a link\ncan only bind endpoints within the caller's own org.",
         "tags": [
           "sync"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "direction": "both",
+                "run": true,
+                "source": {
+                  "locator": "https://github.com/acme/widgets.git",
+                  "provider": "github"
+                },
+                "trigger": "webhook"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/syncReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/syncView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/sync/{id}": {
       "delete": {
-        "operationId": "delete_v1_sync_by_id",
+        "operationId": "delete_v1_sync_id",
+        "summary": "deleteSync removes a sync link and tears down its derived outbound mirror, so an\nunsynced repository can never keep pushing to the upstream.",
+        "description": "deleteSync removes a sync link and tears down its derived outbound mirror, so an\nunsynced repository can never keep pushing to the upstream. Answers 204.",
         "tags": [
           "sync"
         ],
@@ -41,14 +90,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the sync id, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sync_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_sync_by_id",
+        "operationId": "get_v1_sync_id",
+        "summary": "getSync returns one sync link.",
+        "description": "getSync returns one sync link. A link in another org reads as not found.",
         "tags": [
           "sync"
         ],
@@ -57,14 +115,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the sync id, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sync_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/syncView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
-        "operationId": "patch_v1_sync_by_id",
+        "operationId": "patch_v1_sync_id",
+        "summary": "patchSync updates a link's mutable policy — direction, trigger, actor — in place;\nan omitted field is left alone.",
+        "description": "patchSync updates a link's mutable policy — direction, trigger, actor — in place;\nan omitted field is left alone. Endpoints and kind are immutable: delete and\nrecreate to re-point. Changing direction reconciles the derived outbound mirror.",
         "tags": [
           "sync"
         ],
@@ -73,16 +147,46 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the sync id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sync_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "direction": "pull",
+                "id": "sync_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/syncPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/syncView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/sync/{id}/run": {
       "post": {
-        "operationId": "post_v1_sync_by_id_run",
+        "operationId": "post_v1_sync_id_run",
+        "summary": "runSync reconciles one link now — the manual re-sync, and the initial import for a\nsource that cannot webhook.",
+        "description": "runSync reconciles one link now — the manual re-sync, and the initial import for a\nsource that cannot webhook. It answers 202 immediately and the reconcile runs in a\nbounded background worker, so a large mirror-in never blocks the request.",
         "tags": [
           "sync"
         ],
@@ -91,11 +195,194 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the sync id, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sync_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "sync_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/syncRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runAck"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "endpointReq": {
+        "properties": {
+          "connector": {
+            "description": "Connector optionally names the stored credential to authenticate with.",
+            "type": "string"
+          },
+          "locator": {
+            "description": "Locator addresses the resource — an https clone URL for git, a repo name natively.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the platform: github or gitlab for a source, native for a target.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "endpointView": {
+        "properties": {
+          "connector": {
+            "type": "string"
+          },
+          "locator": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "runAck": {
+        "properties": {
+          "id": {
+            "description": "ID echoes the sync being reconciled.",
+            "type": "string"
+          },
+          "queued": {
+            "description": "Queued is always true — the reconcile runs in a bounded background worker.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "syncList": {
+        "properties": {
+          "data": {
+            "description": "Data is the org's links; an empty array when nothing is synced.",
+            "items": {
+              "$ref": "#/components/schemas/syncView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "syncPatch": {
+        "properties": {
+          "actor": {
+            "description": "Actor is the loop-guard identity whose own writes are ignored.",
+            "type": "string"
+          },
+          "direction": {
+            "description": "Direction is both, pull, push or off.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the sync id from the path.",
+            "type": "string"
+          },
+          "trigger": {
+            "description": "Trigger is webhook, poll or manual.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "syncRef": {
+        "properties": {
+          "id": {
+            "description": "ID is the sync id, as returned by create.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "syncReq": {
+        "properties": {
+          "actor": {
+            "description": "Actor is the loop-guard identity whose own writes are ignored; empty takes\nGIT_SYNC_ACTOR.",
+            "type": "string"
+          },
+          "direction": {
+            "description": "Direction is both, pull, push or off; empty means both.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the sync family; empty means git, the only kind today.",
+            "type": "string"
+          },
+          "run": {
+            "description": "Run reconciles once in the background as soon as the link is stored.",
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/endpointReq",
+            "description": "Source is the upstream side: provider github or gitlab, an https clone URL on\nthat provider's own host, no userinfo. Required."
+          },
+          "target": {
+            "$ref": "#/components/schemas/endpointReq",
+            "description": "Target is the downstream side; omit it for git and it derives a native Hanzo\nGit repo named after the source."
+          },
+          "trigger": {
+            "description": "Trigger is webhook, poll or manual; empty means webhook.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "syncView": {
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/endpointView"
+          },
+          "target": {
+            "$ref": "#/components/schemas/endpointView"
+          },
+          "trigger": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "bumped on every reconcile — the last-synced time",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

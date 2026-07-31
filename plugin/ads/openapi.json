@@ -19,20 +19,88 @@
     "/v1/ads/campaigns": {
       "get": {
         "operationId": "get_v1_ads_campaigns",
+        "summary": "listCampaigns returns the caller org's ad campaigns, optionally filtered by status.",
+        "description": "listCampaigns returns the caller org's ad campaigns, optionally filtered by status.",
         "tags": [
           "ads"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows the list to one lifecycle state: draft, active, paused or completed.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "active"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_ads_campaigns",
+        "summary": "createCampaign registers an ad campaign in the caller's org.",
+        "description": "createCampaign registers an ad campaign in the caller's org. Name is required;\nplatform defaults to meta and status to draft, budget and spend are minor units\nclamped to \u003e= 0, and the id, createdAt, updatedAt and externalId of the input are\nignored — the server assigns them. Nothing is spent: a campaign is a plan until it\nis launched.",
         "tags": [
           "ads"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": 50000,
+                "name": "Spring Launch",
+                "objective": "signups",
+                "platform": "meta"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Campaign"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/ads/campaigns/{id}": {
       "delete": {
-        "operationId": "delete_v1_ads_campaigns_by_id",
+        "operationId": "delete_v1_ads_campaigns_id",
+        "summary": "deleteCampaign removes one of the caller org's ad campaigns and answers 204.",
+        "description": "deleteCampaign removes one of the caller org's ad campaigns and answers 204. It\ndeletes the stored plan only — a campaign already running at the provider is not\nstopped there.",
         "tags": [
           "ads"
         ],
@@ -41,14 +109,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the campaign id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "camp_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_ads_campaigns_by_id",
+        "operationId": "get_v1_ads_campaigns_id",
+        "summary": "getCampaign returns one of the caller org's ad campaigns.",
+        "description": "getCampaign returns one of the caller org's ad campaigns.",
         "tags": [
           "ads"
         ],
@@ -57,14 +134,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the campaign id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "camp_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_ads_campaigns_by_id",
+        "operationId": "put_v1_ads_campaigns_id",
+        "summary": "updateCampaign replaces one of the caller org's ad campaigns.",
+        "description": "updateCampaign replaces one of the caller org's ad campaigns. It is a full replace,\nnot a patch: name is required and every omitted field resets to its default. The\ncampaign updated is the one the PATH names — a body id cannot retarget it — and\ncreatedAt and externalId are server-owned.",
         "tags": [
           "ads"
         ],
@@ -75,14 +168,46 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "camp_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": 75000,
+                "id": "camp_4c1e9b7a2d6f0538e4a7c9b1d3f5027a",
+                "name": "Spring Launch",
+                "platform": "meta",
+                "status": "paused"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Campaign"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/ads/campaigns/{id}/launch": {
       "post": {
-        "operationId": "post_v1_ads_campaigns_by_id_launch",
+        "operationId": "post_v1_ads_campaigns_id_launch",
+        "summary": "launchCampaign runs a stored campaign on its provider and starts spending.",
+        "description": "launchCampaign runs a stored campaign on its provider and starts spending. It holds\nno token: the org's connected ad-account credential is resolved from KMS at call\ntime and the launch FAILS CLOSED with 424 when the org has not connected that\nplatform, so it can never spend on a connection the org did not make. On success the\nprovider campaign id is recorded and the campaign goes active.",
         "tags": [
           "ads"
         ],
@@ -91,19 +216,157 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the campaign id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "camp_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "account": "act_1234567890",
+                "id": "camp_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/LaunchReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/ads/summary": {
       "get": {
         "operationId": "get_v1_ads_summary",
+        "summary": "summary returns the caller org's campaign counts and money totals.",
+        "description": "summary returns the caller org's campaign counts and money totals.",
         "tags": [
           "ads"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "active": 3,
+                  "budget": 500000,
+                  "campaigns": 12,
+                  "spend": 128400
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AdsSummary"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdsSummary": {
+        "properties": {
+          "active": {
+            "description": "Active is how many of them are in the active state.",
+            "type": "integer"
+          },
+          "budget": {
+            "description": "Budget is the total budget across campaigns, in minor units.",
+            "type": "integer"
+          },
+          "campaigns": {
+            "description": "Campaigns is how many campaigns the org has.",
+            "type": "integer"
+          },
+          "spend": {
+            "description": "Spend is the total recorded spend across campaigns, in minor units.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Campaign": {
+        "properties": {
+          "account": {
+            "description": "provider ad-account ref (Meta act_\u003cid\u003e)",
+            "type": "string"
+          },
+          "budget": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "externalId": {
+            "description": "provider campaign id after a launch",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "objective": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "spend": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CampaignList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching campaigns, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/Campaign"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "LaunchReq": {
+        "properties": {
+          "account": {
+            "description": "Account sets or overrides the provider ad account to spend from; empty uses the\naccount already stored on the campaign.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the campaign id from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

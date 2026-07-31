@@ -18,8 +18,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -43,29 +41,53 @@ type txnFilter struct {
 	limit    int
 }
 
-// transactionsHandler answers GET /v1/books/transactions?from&to&category&vendor&limit for
-// the caller's OWN org.
-func transactionsHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view transactions")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
+// txnQuery is the register read's filter, as it arrives on the URL.
+type txnQuery struct {
+	// Sandbox reads the org's SANDBOX ledger when it is exactly "true".
+	Sandbox string `json:"sandbox"`
+	// From is the RFC3339 start of the posting-time window, inclusive.
+	From string `json:"from"`
+	// To is the RFC3339 end of the posting-time window, inclusive.
+	To string `json:"to"`
+	// Category filters to one COA account, named by number ("5300") or by category
+	// slug ("software").
+	Category string `json:"category"`
+	// Vendor filters to rows whose vendor or description contains this text,
+	// case-insensitively.
+	Vendor string `json:"vendor"`
+	// Limit caps how many rows come back; 200 when absent or not positive.
+	Limit int `json:"limit"`
+}
+
+// transactionsOut is the register: one line per booked voucher.
+type transactionsOut struct {
+	// Transactions is the matching register rows, newest first.
+	Transactions []Txn `json:"transactions"`
+}
+
+// ListTransactions returns the org's booked ledger as a single-line register, newest
+// first: one row per voucher, with its date, description, vendor, category, source and
+// amount in exact cents. It is the double-entry ledger projected to the register a human
+// reads, filterable by posting-time window, category and vendor. Strictly read-only — it
+// restates the books, it never moves them.
+//
+// Example: {"category": "software", "limit": 50}
+func (o booksOps) listTransactions(ctx context.Context, in *txnQuery) (*transactionsOut, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view transactions")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+		return nil, err
 	}
-	f := txnFilter{
-		from:     strings.TrimSpace(c.Query("from")),
-		to:       strings.TrimSpace(c.Query("to")),
-		category: strings.TrimSpace(c.Query("category")),
-		vendor:   strings.TrimSpace(c.Query("vendor")),
-		limit:    atoiDefault(c.Query("limit"), 200),
-	}
-	rows, err := st.listTransactions(c.Context(), f)
+	rows, err := st.listTransactions(ctx, txnFilter{
+		from:     strings.TrimSpace(in.From),
+		to:       strings.TrimSpace(in.To),
+		category: strings.TrimSpace(in.Category),
+		vendor:   strings.TrimSpace(in.Vendor),
+		limit:    limitOr(in.Limit, 200),
+	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "transactions read failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "transactions read failed")
 	}
-	return booksJSON(c, map[string]any{"transactions": rows})
+	return &transactionsOut{Transactions: rows}, nil
 }
 
 // glLeg is one leg loaded for the projection.

@@ -357,8 +357,8 @@ func (o ops) createCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 	return &p, nil
 }
 
-// listCalendarPosts returns the org's calendar, soonest scheduled first,
-// optionally narrowed to one status.
+// listCalendarPosts returns the org's calendar, soonest scheduled first.
+// It is optionally narrowed to one status.
 //
 // Example: {"status": "scheduled", "limit": 50}
 func (o ops) listCalendarPosts(ctx context.Context, in *PostQuery) (*PostList, error) {

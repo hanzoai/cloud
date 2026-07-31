@@ -25,13 +25,15 @@
 // shows is DERIVED from real invocation rows; there is no invented rollup.
 package functions
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -193,22 +195,112 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // routes registers the functions surface. Static sub-routes before the :name
 // param route so a real function can never shadow
 // /metrics|/triggers|/deployments|/secrets.
+//
+// Every route is a TYPED op — registered on the App with its ABSOLUTE path,
+// because the op registry (the one value OpenAPI, MCP and the CLI are projected
+// from) keys on it — except two:
+//
+//   - GET /:name answers functionDetail, which EMBEDS functionView so JSON
+//     promotes its 17 fields to the top level. zip's schema walker skips an
+//     unexported field and names an exported embedded one as a nested property,
+//     so no Out it can express matches the wire. It stays a raw handler rather
+//     than publishing a shape clients would generate wrong.
+//   - POST /:name/invoke is METERED: a billing denial answers the fleet-wide
+//     contract (cloud.DenyResource — 402 insufficient_balance /
+//     spend_cap_exceeded, 503 balance_unavailable, each a
+//     {"error":{"code","message"}} body) that zip's error type cannot express,
+//     and a run whose program failed answers 502 with the same invocation body,
+//     which is not a success status an op can declare.
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	z := cloud.ZipApp(app)
+	o := ops{s: s}
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every op below resolves
+	// its tenant through it.
+	app.Group("/v1/functions").Use(cloud.Bridge())
 	// Collection root stays flat: Group("/v1/functions").Get("") would register
 	// "/v1/functions/", not the bare collection path.
-	app.Get("/v1/functions", cloud.Handle(s, list))
-	app.Post("/v1/functions", cloud.Handle(s, create))
+	zip.Get(z, "/v1/functions", o.list)
+	zip.Post(z, "/v1/functions", o.create, zip.WithStatus(http.StatusCreated))
 
 	g := app.Group("/v1/functions")
-	g.Get("/metrics", cloud.Handle(s, metrics))
-	g.Get("/triggers", cloud.Handle(s, triggers))
-	g.Get("/deployments", cloud.Handle(s, deployments))
-	g.Get("/secrets", cloud.Handle(s, secrets))
-	g.Get("/:name", cloud.Handle(s, get))
-	g.Delete("/:name", cloud.Handle(s, del))
-	g.Get("/:name/invocations", cloud.Handle(s, invocations))
-	g.Get("/:name/logs", cloud.Handle(s, logs))
-	g.Post("/:name/invoke", cloud.Handle(s, invoke))
+	zip.Get(z, "/v1/functions/metrics", o.metrics)
+	zip.Get(z, "/v1/functions/triggers", o.triggers)
+	zip.Get(z, "/v1/functions/deployments", o.deployments)
+	zip.Get(z, "/v1/functions/secrets", o.secrets)
+	g.Get("/:name", cloud.Handle(s, get)) // embedded-view Out — see above
+	zip.Delete(z, "/v1/functions/:name", o.del)
+	zip.Get(z, "/v1/functions/:name/invocations", o.invocations)
+	zip.Get(z, "/v1/functions/:name/logs", o.logs)
+	g.Post("/:name/invoke", cloud.Handle(s, invoke)) // metered — see above
+}
+
+// ops binds the service to functions' typed handlers: a typed handler takes only
+// a context and its decoded In, so the service arrives as a RECEIVER.
+type ops struct{ s *cloud.Service[state] }
+
+// scope is the ONE gate every typed op opens with: the VALIDATED org and the
+// per-org store it addresses. Off the HTTP path there is no validated org, so
+// the op refuses rather than reading across tenants.
+func (o ops) scope(ctx context.Context) (string, *Store, error) {
+	orgID, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", nil, zip.ErrForbidden("X-Org-Id required")
+	}
+	store, err := storeFor(o.s, orgID)
+	if err != nil {
+		return "", nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	return orgID, store, nil
+}
+
+// ---- declared shapes ----
+
+// functionRef addresses one function by name.
+type functionRef struct {
+	// Name is the function name from the path.
+	Name string `json:"name"`
+}
+
+// invocationQuery is the invocation-history read.
+type invocationQuery struct {
+	// Name is the function name from the path.
+	Name string `json:"name"`
+	// Limit caps the rows returned; 0 or absent means 100.
+	Limit int `json:"limit"`
+}
+
+// functionList is the function inventory: the same shape for the collection read
+// and for the deployment inventory, since a function's current record IS its
+// live deployment.
+type functionList struct {
+	// Functions is one entry per function in the caller's org.
+	Functions []functionView `json:"functions"`
+}
+
+// triggerList is the trigger inventory.
+type triggerList struct {
+	// Triggers is one entry per function's HTTP trigger.
+	Triggers []triggerView `json:"triggers"`
+}
+
+// secretList is the secret inventory — NAMES only, never values.
+type secretList struct {
+	// Secrets is one entry per distinct (namespace, name) a function mounts.
+	Secrets []secretView `json:"secrets"`
+}
+
+// invocationList is the invocation history of one function.
+type invocationList struct {
+	// Invocations is the recorded runs, most recent first.
+	Invocations []invocationView `json:"invocations"`
+}
+
+// logsView is the last invocation's output, or its error when it failed.
+type logsView struct {
+	// Logs is the last run's stderr when it errored, else its stdout. Empty when
+	// the function has never run.
+	Logs string `json:"logs"`
 }
 
 // ---- handlers ----
@@ -227,28 +319,26 @@ type createReq struct {
 	Target      string   `json:"target"` // ""|"sandbox" = sandbox, "fleet" = org GPU fleet
 }
 
-func create(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// create registers a function in the caller's org and answers 201.
+// Name is required and must be unreserved; runtime defaults to node, timeout to
+// 30s (clamped to 900), memory to 256Mi. Re-creating an existing name replaces it.
+//
+// Example: {"name": "resize", "runtime": "python", "code": "def handler(x): return x", "timeoutSec": 30}
+func (o ops) create(ctx context.Context, in *createReq) (*functionView, error) {
+	orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	var body createReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	org, body := orgID, *in
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	if reserved[strings.ToLower(name)] {
-		return zip.ErrBadRequest("name is reserved")
+		return nil, zip.ErrBadRequest("name is reserved")
 	}
 	if !nameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 	// environment (functions.ts) and runtime are the same field; accept either.
 	runtime := strings.ToLower(strings.TrimSpace(firstNonEmpty(body.Runtime, body.Environment)))
@@ -256,10 +346,10 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 		runtime = "node"
 	}
 	if !runtimes[runtime] {
-		return zip.ErrBadRequest("unsupported runtime")
+		return nil, zip.ErrBadRequest("unsupported runtime")
 	}
 	if len(body.Code) > maxCode {
-		return zip.ErrBadRequest("code too large")
+		return nil, zip.ErrBadRequest("code too large")
 	}
 	timeout := body.TimeoutSec
 	if timeout <= 0 {
@@ -276,14 +366,14 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 		target = ""
 	}
 	if target != "" && target != "fleet" {
-		return zip.ErrBadRequest("target must be sandbox or fleet")
+		return nil, zip.ErrBadRequest("target must be sandbox or fleet")
 	}
 	if target == "fleet" && runtime != "python" {
-		return zip.ErrBadRequest("target=fleet supports runtime=python only")
+		return nil, zip.ErrBadRequest("target=fleet supports runtime=python only")
 	}
 	id, err := genID("fn")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
 	f := Function{
@@ -292,36 +382,37 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 		TimeoutSec: timeout, MemoryLimit: mem, EnvNames: cleanList(body.EnvNames),
 		Target: target, Status: "ready", LastDeployAt: now,
 	}
-	saved, err := store.Upsert(c.Context(), f)
+	saved, err := store.Upsert(ctx, f)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toView(s, saved, InvStats{}))
+	v := toView(o.s, saved, InvStats{})
+	return &v, nil
 }
 
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// list returns the caller org's functions, each with its 7-day invocation stats.
+// Only the caller's own org is ever read: the store is opened per org.
+//
+// Response: {"functions": [{"name": "resize", "environment": "python", "status": "ready", "endpoint": "/v1/functions/resize/invoke"}]}
+func (o ops) list(ctx context.Context, _ *struct{}) (*functionList, error) {
+	orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	rows, err := store.List(c.Context(), org)
+	rows, err := store.List(ctx, orgID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	since := time.Now().Unix() - window7d
 	out := make([]functionView, 0, len(rows))
 	for _, f := range rows {
-		st, err := store.StatsSince(c.Context(), org, f.Name, since)
+		st, err := store.StatsSince(ctx, orgID, f.Name, since)
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "stats: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "stats: %v", err)
 		}
-		out = append(out, toView(s, f, st))
+		out = append(out, toView(o.s, f, st))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"functions": out})
+	return &functionList{Functions: out}, nil
 }
 
 func get(s *cloud.Service[state], c *zip.Ctx) error {
@@ -355,112 +446,106 @@ func get(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-func del(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// del deletes one function of the caller's org and answers 204.
+// A name in another org is a 404, never a delete — the store is opened per org.
+//
+// Example: {"name": "resize"}
+func (o ops) del(ctx context.Context, in *functionRef) (*struct{}, error) {
+	orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	deleted, err := store.Delete(c.Context(), org, nameParam(c))
+	deleted, err := store.Delete(ctx, orgID, strings.TrimSpace(in.Name))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("function not found")
+		return nil, zip.ErrNotFound("function not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
-func invocations(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// invocations returns one function's recorded runs, most recent first.
+// limit caps the rows; anything non-positive or absent means 100.
+//
+// Example: {"name": "resize", "limit": 20}
+func (o ops) invocations(ctx context.Context, in *invocationQuery) (*invocationList, error) {
+	orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	name := nameParam(c)
-	limit := 100
-	if q := strings.TrimSpace(c.Query("limit")); q != "" {
-		if n, err := strconv.Atoi(q); err == nil {
-			limit = n
-		}
+	limit := in.Limit
+	if limit <= 0 {
+		limit = 100
 	}
-	invs, err := store.ListInvocations(c.Context(), org, name, limit)
+	invs, err := store.ListInvocations(ctx, orgID, strings.TrimSpace(in.Name), limit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "invocations: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "invocations: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"invocations": toInvViews(invs)})
+	return &invocationList{Invocations: toInvViews(invs)}, nil
 }
 
-func logs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// logs returns the last invocation's output, or its error when that run failed.
+// Empty when the function has never run.
+//
+// Example: {"name": "resize"}
+func (o ops) logs(ctx context.Context, in *functionRef) (*logsView, error) {
+	orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	invs, err := store.ListInvocations(c.Context(), org, nameParam(c), 1)
+	invs, err := store.ListInvocations(ctx, orgID, strings.TrimSpace(in.Name), 1)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "logs: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "logs: %v", err)
 	}
-	logs := ""
+	out := ""
 	if len(invs) > 0 {
 		if invs[0].Error != "" {
-			logs = invs[0].Error
+			out = invs[0].Error
 		} else {
-			logs = invs[0].Output
+			out = invs[0].Output
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"logs": logs})
+	return &logsView{Logs: out}, nil
 }
 
-func triggers(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// triggers lists the HTTP trigger of every function in the caller's org.
+// Each function has exactly one: the POST endpoint that invokes it.
+//
+// Response: {"triggers": [{"id": "resize-http", "name": "HTTP", "type": "http", "enabled": true, "target": "/v1/functions/resize/invoke", "functionName": "resize"}]}
+func (o ops) triggers(ctx context.Context, _ *struct{}) (*triggerList, error) {
+	orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	rows, err := store.List(c.Context(), org)
+	rows, err := store.List(ctx, orgID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "triggers: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "triggers: %v", err)
 	}
 	out := make([]triggerView, 0, len(rows))
 	for _, f := range rows {
 		out = append(out, httpTrigger(f))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"triggers": out})
+	return &triggerList{Triggers: out}, nil
 }
 
-func deployments(s *cloud.Service[state], c *zip.Ctx) error {
-	// Each function's current record IS its live deployment; return them as the
-	// deployment inventory (console normalizes this as a function list).
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// deployments lists the live deployment of every function in the caller's org.
+// Each function's current record IS its deployment, so this answers the same
+// shape as the function list, without the invocation stats.
+func (o ops) deployments(ctx context.Context, _ *struct{}) (*functionList, error) {
+	orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	rows, err := store.List(c.Context(), org)
+	rows, err := store.List(ctx, orgID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "deployments: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "deployments: %v", err)
 	}
 	out := make([]functionView, 0, len(rows))
 	for _, f := range rows {
-		out = append(out, toView(s, f, InvStats{}))
+		out = append(out, toView(o.s, f, InvStats{}))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"functions": out})
+	return &functionList{Functions: out}, nil
 }
 
 type secretView struct {
@@ -469,19 +554,19 @@ type secretView struct {
 	MountedBy string `json:"mountedBy,omitempty"`
 }
 
-func secrets(s *cloud.Service[state], c *zip.Ctx) error {
-	// NAMES only — values are NEVER read or returned (Secret-Manager principle).
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// secrets lists the secret NAMES the caller org's functions mount, never a value.
+// One entry per distinct (namespace, name), attributed to the function that
+// mounts it. Values are never read or returned.
+//
+// Response: {"secrets": [{"name": "API_KEY", "namespace": "default", "mountedBy": "resize"}]}
+func (o ops) secrets(ctx context.Context, _ *struct{}) (*secretList, error) {
+	orgID, store, err := o.scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	rows, err := store.List(c.Context(), org)
+	rows, err := store.List(ctx, orgID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "secrets: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "secrets: %v", err)
 	}
 	seen := map[string]bool{}
 	out := make([]secretView, 0)
@@ -495,7 +580,7 @@ func secrets(s *cloud.Service[state], c *zip.Ctx) error {
 			out = append(out, secretView{Name: n, Namespace: f.Namespace, MountedBy: f.Name})
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"secrets": out})
+	return &secretList{Secrets: out}, nil
 }
 
 // ---- helpers ----

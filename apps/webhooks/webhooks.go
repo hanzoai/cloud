@@ -25,11 +25,15 @@
 // the shared cloud binary.
 package webhooks
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/hanzoai/cloud"
+	"github.com/zap-proto/zip"
 )
 
 // state is the subsystem's own data: the per-org registry stores (shared by the CRUD
@@ -91,15 +95,31 @@ func Shutdown(_ context.Context) error {
 	return nil
 }
 
-// routes registers the /v1/webhooks CRUD surface via the express-style group.
+// routes registers the /v1/webhooks CRUD surface. Every route is a TYPED op:
+// zip.<Verb> registers the route AND the registry entry OpenAPI / MCP / the CLI are
+// projected from, and it takes the ABSOLUTE path because the registry keys on it. The
+// collection keeps its historical trailing slash — Group(p).Get("") registered
+// "/v1/webhooks/", and that is the path the published contract already names.
 func routes(app cloud.Router, s *cloud.Service[*state]) {
-	g := app.Group("/v1/webhooks")
-	g.Get("", cloud.Handle(s, listEndpoints))
-	g.Post("", cloud.Handle(s, createEndpoint))
-	g.Get("/:id", cloud.Handle(s, getEndpoint))
-	g.Put("/:id", cloud.Handle(s, updateEndpoint))
-	g.Delete("/:id", cloud.Handle(s, deleteEndpoint))
-	g.Get("/:id/deliveries", cloud.Handle(s, listDeliveries))
-	g.Post("/:id/test", cloud.Handle(s, testEndpoint))
-	g.Post("/:id/rotate-secret", cloud.Handle(s, rotateSecret))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: fiber runs middleware in registration order, so one installed
+	// after these leaves would never run — and every op below resolves its tenant
+	// through the request it parks.
+	app.Group("/v1/webhooks").Use(cloud.Bridge())
+
+	zip.Get(z, "/v1/webhooks/", o.listEndpoints)
+	zip.Post(z, "/v1/webhooks/", o.createEndpoint, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/webhooks/:id", o.getEndpoint)
+	zip.Put(z, "/v1/webhooks/:id", o.updateEndpoint)
+	zip.Delete(z, "/v1/webhooks/:id", o.deleteEndpoint)
+	zip.Get(z, "/v1/webhooks/:id/deliveries", o.listDeliveries)
+	zip.Post(z, "/v1/webhooks/:id/test", o.testEndpoint)
+	zip.Post(z, "/v1/webhooks/:id/rotate-secret", o.rotateSecret)
 }
+
+// ops binds the service to the webhook registry's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value (o.listEndpoints), which is
+// also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[*state] }
