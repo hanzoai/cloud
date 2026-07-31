@@ -3,6 +3,7 @@ package x402
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
@@ -67,7 +68,14 @@ type rail struct{ s *cloud.Service[state] }
 // and delegated on the call. It is not a field: a caller that could name the payer
 // could spend another tenant's ledger.
 func (r rail) planeSettle(ctx context.Context, in *plane.SettleIn) (*plane.Settled, error) {
-	resource := in.Resource
+	// CLONED, because this outlives the call. ZAP decodes the request against the
+	// server's body buffer, which fasthttp recycles, and the resource is written to
+	// the settlement row and to the audit record — the same aliasing that had a payee
+	// address turn into the bytes of a later message on the reply side (cloud.detach).
+	// It holds today only because both writes happen before this returns; the first
+	// async audit or metering sink makes that timing a bug, and a copy makes it a
+	// property.
+	resource := strings.Clone(in.Resource)
 	if resource == "" {
 		return nil, zip.ErrBadRequest("settle: no resource")
 	}

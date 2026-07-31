@@ -524,10 +524,24 @@ func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, 
 	}
 	if err := creditPayee(ctx, st, payeeSubject, amount); err != nil {
 		// The payer's side landed and the payee's did not. Nothing is served and no
-		// receipt is issued, so the settlement has not happened — but the debit has,
-		// and it stays until the same authorization is retried. Say so, with the id
-		// both sides are keyed on, so it is reconcilable rather than merely lost.
-		s.Log.Error("x402: payer debited, payee credit failed — settlement incomplete until retried",
+		// receipt is issued, so the settlement has not HAPPENED — but the debit has.
+		//
+		// The client's retry completes it: the same authorization yields the same id,
+		// both writes are idempotent on it, and the second attempt credits and serves.
+		// That recovery is NOT unconditional, and this is the part to fix rather than
+		// forget: the authorization carries validBefore (DefaultValidFor, 300s), so a
+		// client that gives up for five minutes can never complete this settlement,
+		// and the buyer is permanently down the money with nothing served. The same
+		// shape follows a store.record failure after both sides landed.
+		//
+		// So it is left RECONCILABLE and the sweep is named rather than implied. The
+		// debit is keyed RequestID = the settlement id in commerce's usage rows; the
+		// settlement store is keyed on the same id. The sweep is therefore exactly:
+		// every usage row with provider "x402" whose RequestID has no settlements row,
+		// older than the validity window — complete it (credit the payee, record the
+		// row) or credit the payer back. It needs a cross-process reader of both
+		// stores and a schedule, which is its own piece of work, not a line here.
+		s.Log.Error("x402: payer debited, payee credit failed — settlement incomplete, reconcile by id",
 			"id", st.ID, "payer", st.PayerOrg, "payeeOrg", st.PayeeOrg,
 			"amount", amount.String(), "err", err)
 		return err
