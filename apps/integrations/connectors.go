@@ -34,7 +34,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/zap-proto/zip"
 )
 
@@ -196,7 +195,7 @@ func httpErr(err error) (*zip.HTTPError, bool) {
 }
 
 func kmsUnavailable() error {
-	return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
+	return zip.Errorf(http.StatusServiceUnavailable, "%s", errCredentialStore)
 }
 
 // ── views ──────────────────────────────────────────────────────────────────────
