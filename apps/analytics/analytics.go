@@ -711,14 +711,23 @@ type healthReport struct {
 	// Service names the subsystem answering, so a probe aggregating several health
 	// endpoints can attribute a degraded one.
 	Service string `json:"service"`
-	// Status is ok or degraded. Degraded is the 503 and means the warehouse is
-	// unreachable — not that a lens table is missing, which is honest-empty.
+	// Status is ok or degraded. Degraded is the 503 and means EITHER load-bearing
+	// dependency is down — the warehouse this subsystem reads, or the event plane it
+	// writes. It is not moved by a missing lens table, which is honest-empty.
 	Status string `json:"status"`
 	// Datastore reports whether the shared warehouse client has a live connection.
-	// It is the load-bearing signal: false is what makes this answer 503.
+	// It is load-bearing for the READ path: false is one of the two ways this
+	// answers 503.
 	Datastore bool `json:"datastore"`
 	// Warehouse names the datastore database every lens reads.
 	Warehouse string `json:"warehouse"`
+	// Plane reports the event plane — the bus and the stream every accepted event is
+	// published to BEFORE any of it reaches the warehouse. It is load-bearing for the
+	// WRITE path, and it is here because its absence was a real outage: this endpoint
+	// answered 200/ok on warehouse connectivity alone while every POST /v1/event 503'd
+	// on a stream that could not bind, so 100% ingest loss was invisible to monitoring.
+	// A probe that cannot see the write path cannot report the write path.
+	Plane healthPlane `json:"plane"`
 	// Reason is the human-readable cause, present only on a degraded report.
 	Reason string `json:"reason,omitempty"`
 	// Lenses is per-lens table availability, probed only when connected — so it is
@@ -745,6 +754,22 @@ type healthLenses struct {
 	Events healthLens `json:"events"`
 }
 
+// healthPlane is the write path's availability, said in the plane's own vocabulary:
+// the bus it dials and the stream it publishes to (bus.go owns both names, so this
+// reports them rather than restating them). Ready is the load-bearing bit; Reason
+// carries the plane's own error text when it is false, so the probe names the actual
+// break — an unbindable stream, an unreachable bus — instead of a bare degraded.
+type healthPlane struct {
+	// Bus is the address this process reaches the plane at.
+	Bus string `json:"bus"`
+	// Stream is the JetStream stream every signal lands on.
+	Stream string `json:"stream"`
+	// Ready reports whether an ingest would succeed right now. False is a 503.
+	Ready bool `json:"ready"`
+	// Reason is the plane's own failure text, present only when Ready is false.
+	Reason string `json:"reason,omitempty"`
+}
+
 // healthLens is one lens's provisioning state: the table it reads and whether that
 // table exists yet. An unavailable lens is not a failure — the read endpoints answer
 // honest-empty — so it never moves the status.
@@ -755,28 +780,45 @@ type healthLens struct {
 	Available bool `json:"available"`
 }
 
-// health is a REAL probe: it reports datastore connectivity (the load-bearing
-// signal) and, when connected, the availability of each lens table. Not
-// JWT-gated (liveness must be probe-able) and it NEVER reads tenant data — only
-// table existence. 503 when the warehouse is unreachable so a readiness probe
-// can gate; 200 otherwise even if the events lens is not yet provisioned (that is
+// health is a REAL probe of BOTH directions: the warehouse this subsystem reads and
+// the event plane it writes. Either one down is a 503, because either one down is a
+// subsystem that cannot do its job — and reporting only the read half is what let a
+// total ingest outage sit behind a green probe.
+//
+// The two are probed INDEPENDENTLY and reported side by side, so the answer says
+// WHICH half broke rather than collapsing both into one bit. Not JWT-gated (liveness
+// must be probe-able) and it NEVER reads tenant data — only table existence and
+// stream presence. 200 even if the events lens is not yet provisioned (that is
 // honest-empty, not a failure).
 func health(s *cloud.Service[state], c *zip.Ctx) error {
-	connected := datastore.Ready()
-	res := healthReport{Service: "analytics", Status: "ok", Datastore: connected, Warehouse: "hanzo",
-		Lost: lossReport()}
-	if !connected {
-		res.Status = "degraded"
-		res.Reason = "datastore (datastore) not connected"
-		return c.JSON(http.StatusServiceUnavailable, res)
-	}
 	ctx, cancel := context.WithTimeout(c.Context(), probeTimeout)
 	defer cancel()
-	res.Lenses = &healthLenses{
-		LLM:    healthLens{Table: llmTable, Available: tableExists(ctx, llmTable)},
-		Events: healthLens{Table: eventsTable, Available: tableExists(ctx, eventsTable)},
+
+	connected := datastore.Ready()
+	res := healthReport{Service: "analytics", Status: "ok", Datastore: connected, Warehouse: "hanzo",
+		Plane: healthPlane{Bus: busURL(), Stream: EventStream, Ready: true},
+		Lost:  lossReport()}
+	if err := planeReady(ctx); err != nil {
+		res.Plane.Ready, res.Plane.Reason = false, err.Error()
 	}
-	return c.JSON(http.StatusOK, res)
+	// Lenses are reported whenever the warehouse is reachable — including on a report
+	// degraded by the PLANE, where the tables genuinely were probed and have something
+	// true to say. Only an unreachable warehouse leaves them out.
+	if connected {
+		res.Lenses = &healthLenses{
+			LLM:    healthLens{Table: llmTable, Available: tableExists(ctx, llmTable)},
+			Events: healthLens{Table: eventsTable, Available: tableExists(ctx, eventsTable)},
+		}
+	}
+	switch {
+	case !connected:
+		res.Status, res.Reason = "degraded", "datastore (datastore) not connected"
+	case !res.Plane.Ready:
+		res.Status, res.Reason = "degraded", res.Plane.Reason
+	default:
+		return c.JSON(http.StatusOK, res)
+	}
+	return c.JSON(http.StatusServiceUnavailable, res)
 }
 
 // tableExists probes datastore for a table's presence. The name is a package
