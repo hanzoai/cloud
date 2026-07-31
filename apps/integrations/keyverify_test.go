@@ -286,11 +286,11 @@ func TestAccountResolution(t *testing.T) {
 // domain, and URL all resolve; junk and non-myshopify hosts are rejected.
 func TestShopHost(t *testing.T) {
 	ok := map[string]string{
-		"acme":                     "acme.myshopify.com",
-		"acme.myshopify.com":       "acme.myshopify.com",
+		"acme":                       "acme.myshopify.com",
+		"acme.myshopify.com":         "acme.myshopify.com",
 		"https://acme.myshopify.com": "acme.myshopify.com",
-		"acme.myshopify.com/admin": "acme.myshopify.com",
-		"ACME":                     "acme.myshopify.com",
+		"acme.myshopify.com/admin":   "acme.myshopify.com",
+		"ACME":                       "acme.myshopify.com",
 	}
 	for in, want := range ok {
 		got, err := shopHost(in)

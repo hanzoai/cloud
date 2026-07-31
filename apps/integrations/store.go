@@ -193,7 +193,7 @@ CREATE INDEX IF NOT EXISTS ix_grants_expires ON grants(expires_at);
 // The owner is RECOVERED, not defaulted: account_label already holds the
 // provider-side account name — for GitHub, the installation's org login — so
 // every existing GitHub row keeps working under the key it should always have
-// had. Every other provider takes owner='', which is what a single-account
+// had. Every other provider takes owner=”, which is what a single-account
 // provider means and what its callers pass.
 //
 // Idempotent: it returns immediately once the column exists, so it runs once and
