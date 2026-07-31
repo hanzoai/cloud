@@ -74,11 +74,11 @@
         }
       }
     },
-    "/v1/admin/treasury/bind-anchor": {
-      "post": {
-        "operationId": "post_v1_admin_treasury_bind-anchor",
-        "summary": "BindTreasuryAnchorSigner makes the reserve's threshold MPC wallet the signer for on-chain anchors, and returns its EVM address so an operator can fund it for gas.",
-        "description": "BindTreasuryAnchorSigner makes the reserve's threshold MPC wallet the signer\nfor on-chain anchors, and returns its EVM address so an operator can fund it\nfor gas. It provisions-or-resolves the caller org's treasury wallet on the\ndeployed MPC ring and installs it, so every later anchor commits the ledger\nroot SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent: a\nrepeat resolves the same wallet. SuperAdmin only.",
+    "/v1/admin/treasury/anchor/signer": {
+      "put": {
+        "operationId": "put_v1_admin_treasury_anchor_signer",
+        "summary": "Installs the reserve's threshold MPC wallet as the signer for on-chain anchors, and returns its EVM address so an operator can fund it for gas.",
+        "description": "Installs the reserve's threshold MPC wallet as the signer\nfor on-chain anchors, and returns its EVM address so an operator can fund it\nfor gas. It provisions-or-resolves the caller org's treasury wallet on the\ndeployed MPC ring and installs it, so every later anchor commits the ledger\nroot SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent — a\nrepeat resolves the same wallet, which is why the address is a PUT. SuperAdmin\nonly.",
         "tags": [
           "admin"
         ],
@@ -87,7 +87,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/bindOut"
+                  "$ref": "#/components/schemas/signerOut"
                 }
               }
             },
@@ -503,40 +503,6 @@
         },
         "type": "object"
       },
-      "bindData": {
-        "properties": {
-          "boundAnchorSigner": {
-            "description": "BoundAnchorSigner is the EVM address now signing anchors. Fund it for gas.",
-            "type": "string"
-          },
-          "chainId": {
-            "description": "ChainID is the EVM chain the signer is bound for.",
-            "type": "integer"
-          },
-          "org": {
-            "description": "Org is the org whose treasury wallet was resolved.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "bindOut": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/bindData",
-            "description": "Data is the bound signer."
-          },
-          "msg": {
-            "description": "Msg carries an operator-facing note; empty on success.",
-            "type": "string"
-          },
-          "status": {
-            "description": "Status is \"ok\" on success.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "policyData": {
         "properties": {
           "policy": {
@@ -618,6 +584,40 @@
           },
           "ref": {
             "description": "Ref is an idempotency key. Without one each seed is a distinct injection.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "signerData": {
+        "properties": {
+          "boundAnchorSigner": {
+            "description": "BoundAnchorSigner is the EVM address now signing anchors. Fund it for gas.",
+            "type": "string"
+          },
+          "chainId": {
+            "description": "ChainID is the EVM chain the signer is bound for.",
+            "type": "integer"
+          },
+          "org": {
+            "description": "Org is the org whose treasury wallet was resolved.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "signerOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/signerData",
+            "description": "Data is the bound signer."
+          },
+          "msg": {
+            "description": "Msg carries an operator-facing note; empty on success.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success.",
             "type": "string"
           }
         },

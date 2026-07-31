@@ -78,17 +78,6 @@ func init() {
 			"anchorStatus.synced":      "true when the last anchored root == the current root",
 		},
 	})
-	zip.Describe("POST /v1/admin/treasury/bind-anchor", zip.Doc{
-		Description: "BindTreasuryAnchorSigner makes the reserve's threshold MPC wallet the signer\nfor on-chain anchors, and returns its EVM address so an operator can fund it\nfor gas. It provisions-or-resolves the caller org's treasury wallet on the\ndeployed MPC ring and installs it, so every later anchor commits the ledger\nroot SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent: a\nrepeat resolves the same wallet. SuperAdmin only.",
-		Fields: map[string]string{
-			"bindData.boundAnchorSigner": "BoundAnchorSigner is the EVM address now signing anchors. Fund it for gas.",
-			"bindData.chainId":           "ChainID is the EVM chain the signer is bound for.",
-			"bindData.org":               "Org is the org whose treasury wallet was resolved.",
-			"bindOut.data":               "Data is the bound signer.",
-			"bindOut.msg":                "Msg carries an operator-facing note; empty on success.",
-			"bindOut.status":             "Status is \"ok\" on success.",
-		},
-	})
 	zip.Describe("POST /v1/admin/treasury/policy", zip.Doc{
 		Description: "SetTreasuryPolicy sets the revenue-share basis points a sweep accrues into the\nreserve fund and returns the stored policy. 0–10000; the change is audited.\nSuperAdmin only.",
 		Fields: map[string]string{
@@ -138,5 +127,16 @@ func init() {
 			"sweepRequest.revenueCents": "RevenueCents is the net platform revenue measured for the period, in minor units. Must be >= 0.",
 		},
 		Example: json.RawMessage(`{"period":"2026-07","revenueCents":100000}`),
+	})
+	zip.Describe("PUT /v1/admin/treasury/anchor/signer", zip.Doc{
+		Description: "Installs the reserve's threshold MPC wallet as the signer\nfor on-chain anchors, and returns its EVM address so an operator can fund it\nfor gas. It provisions-or-resolves the caller org's treasury wallet on the\ndeployed MPC ring and installs it, so every later anchor commits the ledger\nroot SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent — a\nrepeat resolves the same wallet, which is why the address is a PUT. SuperAdmin\nonly.",
+		Fields: map[string]string{
+			"signerData.boundAnchorSigner": "BoundAnchorSigner is the EVM address now signing anchors. Fund it for gas.",
+			"signerData.chainId":           "ChainID is the EVM chain the signer is bound for.",
+			"signerData.org":               "Org is the org whose treasury wallet was resolved.",
+			"signerOut.data":               "Data is the bound signer.",
+			"signerOut.msg":                "Msg carries an operator-facing note; empty on success.",
+			"signerOut.status":             "Status is \"ok\" on success.",
+		},
 	})
 }

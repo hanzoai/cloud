@@ -46,14 +46,6 @@
     "name": "post_v1_admin_treasury_anchor"
   },
   {
-    "description": "BindTreasuryAnchorSigner makes the reserve's threshold MPC wallet the signer\nfor on-chain anchors, and returns its EVM address so an operator can fund it\nfor gas. It provisions-or-resolves the caller org's treasury wallet on the\ndeployed MPC ring and installs it, so every later anchor commits the ledger\nroot SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent: a\nrepeat resolves the same wallet. SuperAdmin only.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "post_v1_admin_treasury_bind-anchor"
-  },
-  {
     "description": "SetTreasuryPolicy sets the revenue-share basis points a sweep accrues into the\nreserve fund and returns the stored policy. 0–10000; the change is audited.\nSuperAdmin only.",
     "inputSchema": {
       "properties": {
@@ -103,5 +95,13 @@
       "type": "object"
     },
     "name": "post_v1_admin_treasury_sweep"
+  },
+  {
+    "description": "Installs the reserve's threshold MPC wallet as the signer\nfor on-chain anchors, and returns its EVM address so an operator can fund it\nfor gas. It provisions-or-resolves the caller org's treasury wallet on the\ndeployed MPC ring and installs it, so every later anchor commits the ledger\nroot SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent — a\nrepeat resolves the same wallet, which is why the address is a PUT. SuperAdmin\nonly.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "put_v1_admin_treasury_anchor_signer"
   }
 ]
