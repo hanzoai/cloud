@@ -5,9 +5,19 @@
 // It is a THIN layer over the unified tool plane (apps/tools): discovery reads
 // the tool registry (every source, activated flags); "install"/"uninstall" ARE the
 // registry's activation writes (marketplace install == tool activation — one store,
-// one truth); and a monetized listing's price reaches per-call enforcement via the
-// registry's Pricer seam (this package fills it), settled by whatever x402 Charger
-// the payments team wires. Marketplace never dispatches a tool itself.
+// one truth); and a monetized listing's price is enforced per call by x402, which
+// this package hands both halves of the door — the price table and the charger (see
+// payments.go). Marketplace never dispatches a tool itself and never moves money
+// itself.
+//
+// CO-RESIDENCY. The three seams it binds — the x402 price table, the tool plane's
+// charger, and the wallet lookup that resolves a payee — are process-globals
+// (x402.reg, tools.std, wallets.mounted). They bind within ONE process. In a fleet
+// that runs marketplace, tools, x402 and wallets as separate binaries, a priced tool
+// dispatched in the tools process reaches no charger there and fails CLOSED
+// (tools.ErrChargerUnset → 402), which is the safe half of the failure: a paid tool
+// is never served free. Making it SETTLE across that boundary is a shared price
+// table or an internal settle call, and is not this file's business.
 //
 // Surface (all org-gated, /v1 only):
 //
@@ -28,9 +38,11 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/apps/x402"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
@@ -47,8 +59,8 @@ type state struct {
 
 var mounted *cloud.Service[state]
 
-// Mount wires /v1/marketplace/* and installs the marketplace Pricer on the tool
-// plane so a published listing's price is enforced at dispatch.
+// Mount wires /v1/marketplace/* and closes the payment seam both ways, so a
+// published listing's price is challenged and settled at every call.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("marketplace.Mount: nil app")
@@ -69,9 +81,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "marketplace"), State: state{store: store, audit: deps.Audit}}
 	mounted = s
 
-	// Fill the tool plane's price seam: a monetized listing's price + recipient
-	// reach per-call dispatch enforcement without tools importing marketplace.
-	tools.SetPricer(&pricer{store: store})
+	// Close the payment seam, both halves, from the one store that already holds
+	// the price and the payee (payments.go). Publish FIRST: from the instant a
+	// charger is installed a dispatch can ask what a tool costs, and it must find
+	// the table already there rather than a moment of "nothing is priced".
+	x402.Publish(&registry{store: store})
+	tools.SetCharger(charger{})
 
 	// cloud.Bridge FIRST, ahead of every leaf: a typed op receives a context.Context
 	// and its decoded In and nothing else, so the validated org — and the request the
@@ -147,11 +162,20 @@ func projectOf(ctx context.Context) string {
 	return principal.Project(c)
 }
 
-// Shutdown closes the store. Idempotent.
+// Shutdown detaches the payment seams and closes the store, in that order.
+// Idempotent.
+//
+// Detaching first is the whole point: both seams close over the store, so leaving
+// them installed past Close would leave a price table answering from a closed
+// database — and a price lookup that errors fails a dispatch closed, turning a
+// clean shutdown into 402s on every tool in the process. Nothing priced, nothing
+// charged, no dangling reader.
 func Shutdown(_ context.Context) error {
 	if mounted == nil {
 		return nil
 	}
+	x402.Publish(nil)
+	tools.SetCharger(nil)
 	var err error
 	if mounted.State.store != nil {
 		err = mounted.State.store.Close()
@@ -198,8 +222,8 @@ func (o marketOps) discover(ctx context.Context, _ *noInput) (*marketCatalog, er
 		if l, ok := byTool[t.Name]; ok {
 			item.Title = l.Title
 			item.Category = l.Category
-			if l.PriceCents > 0 {
-				item.Price = &tools.Price{AmountCents: l.PriceCents, Currency: l.Currency, Recipient: l.Recipient}
+			if l.Price.Sign() > 0 {
+				item.Price = &tools.Price{Amount: l.Price, Currency: l.Currency, Recipient: l.Recipient}
 			}
 		}
 		out = append(out, item)
@@ -244,13 +268,15 @@ type publishReq struct {
 	Description string `json:"description"`
 	// Category groups the listing in the shop window.
 	Category string `json:"category"`
-	// PriceCents is the per-call price. 0 (the default) publishes it free; any
-	// positive price makes the listing monetized and requires Recipient.
-	PriceCents int64 `json:"priceCents"`
-	// Currency denominates PriceCents.
+	// Price is the per-call price as a decimal USD string, exact to 18 places —
+	// "0.0025" is a quarter of a cent and stays one. Empty or "0" (the default)
+	// publishes it free; any positive price makes the listing monetized and
+	// requires Recipient.
+	Price string `json:"price"`
+	// Currency denominates Price.
 	Currency string `json:"currency"`
-	// Recipient is the seller's payout wallet — the x402 payee. Required for a
-	// monetized listing.
+	// Recipient is the seller's payout wallet ID, in the publishing org — the
+	// wallet x402 pays. Required for a monetized listing.
 	Recipient string `json:"recipient"`
 	// Public makes the listing discoverable by other orgs. Private otherwise.
 	Public bool `json:"public"`
@@ -259,10 +285,12 @@ type publishReq struct {
 // Publish offers one tool on the marketplace, optionally monetized. The tool must
 // already resolve in the publisher's own scope, so a listing can never advertise a
 // capability that does not exist; a listing with a price must name the payout wallet
-// the x402 seam settles to, so a monetized offer is never unpayable. The listing is
-// owned by the publishing org and answers 201 with the created row.
+// the x402 seam settles to, so a monetized offer is never unpayable. The price is
+// exact to 18 decimal places, so a per-call price below a cent is a real price and
+// not a rounded-away zero. The listing is owned by the publishing org, paid into a
+// wallet of that same org, and answers 201 with the created row.
 //
-// Example: {"tool": "summarize", "title": "Summarize", "priceCents": 25, "recipient": "0xabc", "public": true}
+// Example: {"tool": "summarize", "title": "Summarize", "price": "0.0025", "recipient": "wal_9f2", "public": true}
 func (o marketOps) publish(ctx context.Context, in *publishReq) (*Listing, error) {
 	org, err := tenantOf(ctx)
 	if err != nil {
@@ -280,10 +308,14 @@ func (o marketOps) publish(ctx context.Context, in *publishReq) (*Listing, error
 	if len(body.Description) > maxText {
 		return nil, zip.ErrBadRequest("description too long")
 	}
-	if body.PriceCents < 0 {
-		return nil, zip.ErrBadRequest("priceCents must be >= 0")
+	price, err := money.ParseUSD(strings.TrimSpace(body.Price))
+	if err != nil {
+		return nil, zip.ErrBadRequest("price must be a decimal USD amount with at most 18 decimals")
 	}
-	if body.PriceCents > 0 && strings.TrimSpace(body.Recipient) == "" {
+	if price.IsNeg() {
+		return nil, zip.ErrBadRequest("price must be >= 0")
+	}
+	if price.Sign() > 0 && strings.TrimSpace(body.Recipient) == "" {
 		return nil, zip.ErrBadRequest("a monetized listing requires a recipient wallet")
 	}
 	// The tool must exist in the publisher's scope — no phantom listings.
@@ -292,7 +324,7 @@ func (o marketOps) publish(ctx context.Context, in *publishReq) (*Listing, error
 	}
 	created, err := o.s.State.store.Create(ctx, Listing{
 		PublisherOrg: org, Tool: body.Tool, Title: body.Title, Description: clip(body.Description),
-		Category: clip(body.Category), PriceCents: body.PriceCents, Currency: strings.TrimSpace(body.Currency),
+		Category: clip(body.Category), Price: price, Currency: strings.TrimSpace(body.Currency),
 		Recipient: strings.TrimSpace(body.Recipient), Public: body.Public,
 	})
 	if err != nil {

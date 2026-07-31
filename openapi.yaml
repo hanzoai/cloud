@@ -3088,14 +3088,14 @@ components:
           type: string
         id:
           type: string
-        priceCents:
-          type: integer
+        price:
+          description: exact per-call price; 0 is free.
         public:
           type: boolean
         publisherOrg:
           type: string
         recipient:
-          description: seller payout wallet (x402 Payee).
+          description: seller payout WALLET ID, in PublisherOrg.
           type: string
         title:
           type: string
@@ -3950,9 +3950,12 @@ components:
       type: object
     Price:
       properties:
-        amountCents:
-          description: AmountCents is what ONE call costs, in minor units of Currency.
-          type: integer
+        amount:
+          description: |-
+            Amount is what ONE call costs, EXACTLY: an 18-decimal USD value, so a
+            per-call price of $0.0025 is $0.0025 and not a cent-floored zero. Cents
+            cannot hold a per-token price, and a tool plane is where per-token prices
+            live.
         currency:
           description: Currency is the ISO 4217 code, e.g. "USD". Empty means USD.
           type: string
@@ -15932,24 +15935,26 @@ components:
           description: Category groups the listing in the shop window.
           type: string
         currency:
-          description: Currency denominates PriceCents.
+          description: Currency denominates Price.
           type: string
         description:
           description: Description is the long copy, clipped at 4096 characters.
           type: string
-        priceCents:
+        price:
           description: |-
-            PriceCents is the per-call price. 0 (the default) publishes it free; any
-            positive price makes the listing monetized and requires Recipient.
-          type: integer
+            Price is the per-call price as a decimal USD string, exact to 18 places —
+            "0.0025" is a quarter of a cent and stays one. Empty or "0" (the default)
+            publishes it free; any positive price makes the listing monetized and
+            requires Recipient.
+          type: string
         public:
           description: Public makes the listing discoverable by other orgs. Private
             otherwise.
           type: boolean
         recipient:
           description: |-
-            Recipient is the seller's payout wallet — the x402 payee. Required for a
-            monetized listing.
+            Recipient is the seller's payout wallet ID, in the publishing org — the
+            wallet x402 pays. Required for a monetized listing.
           type: string
         title:
           description: Title is the shop-window name, 1-200 characters. Required.
@@ -40464,16 +40469,18 @@ paths:
         Publish offers one tool on the marketplace, optionally monetized. The tool must
         already resolve in the publisher's own scope, so a listing can never advertise a
         capability that does not exist; a listing with a price must name the payout wallet
-        the x402 seam settles to, so a monetized offer is never unpayable. The listing is
-        owned by the publishing org and answers 201 with the created row.
+        the x402 seam settles to, so a monetized offer is never unpayable. The price is
+        exact to 18 decimal places, so a per-call price below a cent is a real price and
+        not a rounded-away zero. The listing is owned by the publishing org, paid into a
+        wallet of that same org, and answers 201 with the created row.
       operationId: post_v1_marketplace_listings
       requestBody:
         content:
           application/json:
             example:
-              priceCents: 25
+              price: "0.0025"
               public: true
-              recipient: "0xabc"
+              recipient: wal_9f2
               title: Summarize
               tool: summarize
             schema:
