@@ -164,8 +164,38 @@ the priced tool is refused rather than given away.
 **Waking a peer.** A lazy app starts on a request reaching its prefix, and a plane
 call never touches the router — so before this, an app reached only over its socket
 was never started. `cmd/cloud/wake.go` publishes `zip.App.Start` as `host_start` on
-the router's own socket, and `cloud.Peer` asks it when a socket is unbound
-(`cmd/cloud/wake_test.go`).
+the router's own socket, and `cloud.Ask` asks it when a socket is unbound
+(`cmd/cloud/wake_test.go`). "This fleet runs no such app" comes back as a FIELD on a
+200, never as a 404: three different things answer 404 on that wire, one of them is
+an older host pod answering "unknown op" during a rolling deploy, and reading that as
+absence gives away every priced tool for the length of the window.
+
+**Strings from the plane must be copied before they are kept.** ZAP decodes text
+zero-copy over a buffer the transport reuses, so a retained reply string mutates
+under its owner — that is what turned a recorded payee address into the bytes of a
+later message's amount. `cloud.Ask` detaches every reply. The REQUEST side has no
+such seam: a handler's decoded input aliases the server's body buffer, which
+fasthttp recycles, so anything a plane op keeps past its return must be cloned at the
+op (`apps/x402/rpc.go` does, for the resource it writes to the settlement row).
+
+### Still NOT closed — a stranded debit has no sweeper
+
+`settleLedger` moves the payer's side first. If the payee credit then fails, nothing
+is served and no settlement row is recorded, so the settlement has not happened — but
+the debit has. The client's retry completes it, because the same authorization yields
+the same id and both writes are idempotent on it.
+
+That recovery is not unconditional. The authorization carries `validBefore`
+(`DefaultValidFor`, 300s), so a client that stops retrying for five minutes can never
+complete that settlement and the buyer is permanently out the money with nothing
+served. A `store.record` failure after both sides landed has the same shape.
+
+The sweep is exact and is written down so it can be built rather than rediscovered:
+the debit is keyed `RequestID` = the settlement id in commerce's usage rows, and the
+settlement store is keyed on the same id, so it is *every usage row with provider
+`x402` whose RequestID has no `settlements` row, older than the validity window* —
+complete it or credit the payer back. It needs a reader of two stores in two
+processes plus a schedule, which is its own piece of work.
 
 ### Still NOT closed — a listing claims a tool NAME, and names are fleet-wide
 
