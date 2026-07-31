@@ -88,10 +88,12 @@ func TestCanonicalDoorDecodesTeamBatch(t *testing.T) {
 }
 
 // TestTeamWireLands is the other half: the SAME bytes through the team door survive
-// admission AND normalize into real rows. It walks the WHOLE pipeline offline —
-// decode, the anonymous projection, the exception fold, then normalizeEvent, which is
-// the last function before the INSERT. A row out of normalizeEvent with ok==true is
-// what "the event landed" means everywhere else in this package.
+// admission AND normalize into real facts. It walks the WHOLE pipeline offline —
+// decode, the anonymous projection, the exception fold, then normalize (fact.go),
+// which is the last function before the publish. A fact out of normalize with
+// ok==true is what "the event landed" means everywhere else in this package. The
+// error lands on event.error (its own table), the navigation on event.event as
+// kind=page — the plane vocabulary, not the wide table's $-names.
 func TestTeamWireLands(t *testing.T) {
 	evs, err := decodeTeam([]byte(teamWire))
 	if err != nil {
@@ -102,17 +104,20 @@ func TestTeamWireLands(t *testing.T) {
 		t.Fatalf("team wire admitted %d dropped %d, want 2 admitted / 0 dropped", len(admitted), dropped)
 	}
 	now := time.Now().UTC()
-	want := []struct{ name, kind string }{{"$error", "error"}, {"$pageview", "pageview"}}
+	want := []struct {
+		sig  signal
+		kind string
+	}{{signalError, ""}, {signalEvent, kindPage}}
 	for i, ev := range admitted {
-		row, ok := normalizeEvent("acme", now, foldException(ev))
+		f, ok := normalize("acme", now, foldException(ev))
 		if !ok {
-			t.Fatalf("event %d did not normalize into a row", i)
+			t.Fatalf("event %d did not normalize into a fact", i)
 		}
-		if row.event != want[i].name || row.eventType != want[i].kind {
-			t.Errorf("event %d = (%s,%s), want (%s,%s)", i, row.event, row.eventType, want[i].name, want[i].kind)
+		if f.signal != want[i].sig || f.kind != want[i].kind {
+			t.Errorf("event %d = (%s,%q), want (%s,%q)", i, f.signal, f.kind, want[i].sig, want[i].kind)
 		}
-		if row.tenant != "acme" {
-			t.Errorf("event %d tenant = %q, want acme", i, row.tenant)
+		if f.org != "acme" {
+			t.Errorf("event %d org = %q, want acme", i, f.org)
 		}
 	}
 }
@@ -135,18 +140,18 @@ func TestTeamWireKeepsIdentityOnFullLane(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeTeam: %v", err)
 	}
-	row, ok := normalizeEvent("acme", time.Now().UTC(), foldException(evs[0]))
+	f, ok := normalize("acme", time.Now().UTC(), foldException(evs[0]))
 	if !ok {
 		t.Fatal("did not normalize")
 	}
-	if row.distinctID != "user@hanzo.ai" {
-		t.Errorf("distinctID = %q, want user@hanzo.ai", row.distinctID)
+	if f.distinct != "user@hanzo.ai" {
+		t.Errorf("distinct = %q, want user@hanzo.ai", f.distinct)
 	}
-	if row.anonymousID != "anon_1" {
-		t.Errorf("anonymousID = %q, want anon_1", row.anonymousID)
+	if f.anonymous != "anon_1" {
+		t.Errorf("anonymous = %q, want anon_1", f.anonymous)
 	}
-	if got := row.timestamp.UTC(); !got.Equal(want) {
-		t.Errorf("timestamp = %s, want %s", got, want)
+	if got := f.time.UTC(); !got.Equal(want) {
+		t.Errorf("time = %s, want %s", got, want)
 	}
 }
 
@@ -184,9 +189,9 @@ func TestTeamKindMapping(t *testing.T) {
 		if evs[0].Event != c.name {
 			t.Errorf("%s -> name %q, want %q", c.event, evs[0].Event, c.name)
 		}
-		// Whatever the kind, it must produce a storable row.
-		if _, ok := normalizeEvent("acme", time.Now().UTC(), foldException(evs[0])); !ok {
-			t.Errorf("%s did not normalize into a row", c.event)
+		// Whatever the kind, it must produce a storable fact.
+		if _, ok := normalize("acme", time.Now().UTC(), foldException(evs[0])); !ok {
+			t.Errorf("%s did not normalize into a fact", c.event)
 		}
 	}
 }
@@ -217,13 +222,21 @@ func TestTeamErrorPropertiesAreRehomed(t *testing.T) {
 	if e.Properties["analytics_collector"] != true {
 		t.Error("decodeTeam dropped an unrelated property")
 	}
-	// End to end: the secret in the stack must not appear raw in the stored row.
-	row, ok := normalizeEvent("acme", time.Now().UTC(), foldException(e))
+	// End to end: the secret in the stack must not appear raw in the stored fact —
+	// neither in the attributes map nor in the fault's own free text.
+	f, ok := normalize("acme", time.Now().UTC(), foldException(e))
 	if !ok {
 		t.Fatal("did not normalize")
 	}
-	if strings.Contains(row.properties, "sk-live-DEADBEEF") {
-		t.Errorf("raw secret from the stack reached the stored properties: %s", row.properties)
+	stored := fmt.Sprintf("%v", f.attributes)
+	if f.fault != nil {
+		stored += " " + f.fault.message + " " + f.fault.class
+		for _, fr := range f.fault.frames {
+			stored += " " + fr.file + " " + fr.function
+		}
+	}
+	if strings.Contains(stored, "sk-live-DEADBEEF") {
+		t.Errorf("raw secret from the stack reached the stored fact: %s", stored)
 	}
 }
 
@@ -239,9 +252,9 @@ func TestTeamTimestampAbsentClampsToNow(t *testing.T) {
 		t.Fatalf("absent timestamp decoded to %q, want empty", evs[0].Timestamp)
 	}
 	now := time.Now().UTC()
-	row, _ := normalizeEvent("acme", now, foldException(evs[0]))
-	if row.timestamp.Before(now.Add(-time.Minute)) {
-		t.Errorf("absent timestamp stored as %s, want ~now", row.timestamp)
+	f, _ := normalize("acme", now, foldException(evs[0]))
+	if f.time.Before(now.Add(-time.Minute)) {
+		t.Errorf("absent timestamp stored as %s, want ~now", f.time)
 	}
 }
 
@@ -249,7 +262,7 @@ func TestTeamTimestampAbsentClampsToNow(t *testing.T) {
 // is the reason the past bound lives in clampTS rather than in each decoder. teamTime is
 // correct about ZERO (it returns "" so the write core anchors to server-now) and has no
 // opinion about ONE: `"timestamp":1` is a well-formed epoch-millis that decodes to
-// 1970-01-01, which the write core used to accept verbatim into the leading column of
+// 1970-01-01, which the write core used to accept verbatim into the time half of
 // ORDER BY. That is the widest possible key range from the smallest possible request, on
 // the one event door.
 func TestTeamEpochMillisCannotReach1970(t *testing.T) {
@@ -263,12 +276,12 @@ func TestTeamEpochMillisCannotReach1970(t *testing.T) {
 		t.Fatalf("decodeTeam rendered %q, want the epoch — this test no longer exercises the hazard it names", evs[0].Timestamp)
 	}
 	now := time.Now().UTC()
-	row, ok := normalizeEvent("acme", now, foldException(evs[0]))
+	f, ok := normalize("acme", now, foldException(evs[0]))
 	if !ok {
 		t.Fatal("did not normalize")
 	}
-	if row.timestamp.Before(now.Add(-maxBackdate)) {
-		t.Errorf("the stored row sits at %s — a 1-byte timestamp bought a key range back to the epoch", row.timestamp)
+	if f.time.Before(now.Add(-maxBackdate)) {
+		t.Errorf("the stored fact sits at %s — a 1-byte timestamp bought a key range back to the epoch", f.time)
 	}
 }
 
@@ -421,7 +434,7 @@ func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) (string, bool) {
 	probe.Post("/probe", func(c *zip.Ctx) error {
 		a, ok := teamTenant(c)
 		// Record ok INDEPENDENTLY of the org. The previous version assigned only when
-		// ok, so a mutant returning ("", true) — which normalizeEvent would store as
+		// ok, so a mutant returning ("", true) — which normalize would store as
 		// an empty tenant column and fanOut would forward under an empty org — was
 		// indistinguishable from a clean refusal.
 		got, resolved = a.org, ok
@@ -683,9 +696,9 @@ func TestGuestRowsLandInItsOwnOrgNotPublic(t *testing.T) {
 	guest := teamToken(t, "acme", "a-real-team-secret",
 		map[string]any{"role": token.RoleGuest}, time.Now().Add(time.Hour).Unix())
 
-	// One event per request: the fake warehouse records one entry per INSERT, and a
-	// batch becomes a single multi-row INSERT, so tenants() reports per statement.
-	// Both kinds are exercised, one request each.
+	// One event per request; tenants() reports per committed FACT, so two requests
+	// are two facts. Both kinds are exercised, one request each — the error lands on
+	// event.error and the navigation on event.event, under the same org.
 	for _, body := range []string{
 		`[{"event":"error","properties":{"error_message":"boom"},"timestamp":1750000000000,"distinct_id":"u"}]`,
 		`[{"event":"navigation","properties":{"path":"/pricing"},"timestamp":1750000000000,"distinct_id":"u"}]`,
@@ -729,15 +742,15 @@ func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
 	if code, res := postBody(t, app, "/v1/event", body, guest); code != http.StatusOK || res.Accepted != 1 {
 		t.Fatalf("guest POST = %d %+v, want 200 accepted:1", code, res)
 	}
-	if got := w.col(t, 0, "distinct_id"); got == victim {
+	if got := w.facts[0].distinct; got == victim {
 		t.Fatalf("the guest attributed its pageview to %q — person-level forgery inside a real tenant", victim)
 	}
-	if got := w.col(t, 0, "distinct_id"); got != teamAccount {
+	if got := w.facts[0].distinct; got != teamAccount {
 		t.Errorf("distinct_id = %v, want the SIGNED account %q", got, teamAccount)
 	}
 	// The pre-login alias is cleared: it exists to stitch an anonymous session to a
 	// person later, and there is nothing to stitch when the person is already known.
-	if got := w.col(t, 0, "anonymous_id"); got != "" {
+	if got := w.facts[0].anonymous; got != "" {
 		t.Errorf("anonymous_id = %v, want empty on the attributed lane", got)
 	}
 
@@ -749,7 +762,7 @@ func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
 	if code, res := postBody(t, app, "/v1/event", body, member); code != http.StatusOK || res.Accepted != 1 {
 		t.Fatalf("member POST = %d %+v, want 200 accepted:1", code, res)
 	}
-	if got := w2.col(t, 0, "distinct_id"); got != victim {
+	if got := w2.facts[0].distinct; got != victim {
 		t.Errorf("member distinct_id = %v, want %q — the full lane must not be rewritten", got, victim)
 	}
 }
@@ -769,7 +782,7 @@ func TestAnonymousLaneIdentityIsUntouched(t *testing.T) {
 	if got := w.tenants(t); len(got) != 1 || got[0] != publicTenant {
 		t.Fatalf("anonymous tenant = %v, want [%s]", got, publicTenant)
 	}
-	if got := w.col(t, 0, "distinct_id"); got != "visitor-7" {
+	if got := w.facts[0].distinct; got != "visitor-7" {
 		t.Errorf("anonymous distinct_id = %v, want visitor-7 (nobody signed for it, so there is nothing to substitute)", got)
 	}
 }

@@ -20,7 +20,7 @@
 // wire-tolerant: a bare canonical Event object, a bare [Event] array, AND the
 // CaptureBatch envelope ({batch:[…]} | {events:[…]}) the Segment/beacon/publishable
 // paths speak all decode onto the SAME []CaptureEvent the ONE write core
-// (ingestEvents) consumes, into the SAME hanzo.events table. There is deliberately
+// (ingestEvents) consumes, onto the SAME event plane. There is deliberately
 // no /v1/event/batch — a JSON array, or a batch envelope, IS the batch.
 //
 // CAPABILITY IS DECIDED BY TRUST LEVEL, ONCE, IN ONE PLACE (handle) — never per door.

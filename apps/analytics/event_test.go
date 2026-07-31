@@ -99,14 +99,14 @@ func TestEventToCapture(t *testing.T) {
 }
 
 // TestEventNormalizeThroughCore: a canonical Event, adapted and normalized, yields
-// a row stamped with the SERVER org and the resolved event name.
+// a fact stamped with the SERVER org and the resolved event name.
 func TestEventNormalizeThroughCore(t *testing.T) {
-	row, ok := normalizeEvent("acme", time.Now(), Event{Event: "signup", DistinctID: "u1"}.toCapture())
+	f, ok := normalize("acme", time.Now(), Event{Event: "signup", DistinctID: "u1"}.toCapture())
 	if !ok {
 		t.Fatal("want routable")
 	}
-	if row.tenant != "acme" || row.event != "signup" || row.eventType != "event" {
-		t.Fatalf("row = tenant %q event %q type %q", row.tenant, row.event, row.eventType)
+	if f.org != "acme" || f.name != "signup" || f.signal != signalEvent || f.kind != kindTrack {
+		t.Fatalf("fact = org %q name %q signal %q kind %q", f.org, f.name, f.signal, f.kind)
 	}
 }
 
@@ -161,18 +161,17 @@ func TestWithSource(t *testing.T) {
 	}
 }
 
-// TestSourceStampedIntoProperties: source flows through withSource → normalizeEvent
-// → the stored properties JSON, so the ONE hanzo.events table carries origin
+// TestSourceStampedIntoAttributes: source flows through withSource → normalize
+// → the fact's attributes map, so the ONE event.event table carries origin
 // WITHOUT a schema column.
-func TestSourceStampedIntoProperties(t *testing.T) {
+func TestSourceStampedIntoAttributes(t *testing.T) {
 	e := CaptureEvent{Event: "x", Properties: withSource(nil, sourceEvent)}
-	row, ok := normalizeEvent("acme", time.Now(), e)
+	f, ok := normalize("acme", time.Now(), e)
 	if !ok {
 		t.Fatal("want routable")
 	}
-	props := decodeProps(t, row.properties)
-	if props["$source"] != "event" {
-		t.Fatalf("row.properties $source = %v (props=%v)", props["$source"], props)
+	if f.attributes["$source"] != "event" {
+		t.Fatalf("attributes $source = %v (attrs=%v)", f.attributes["$source"], f.attributes)
 	}
 }
 
