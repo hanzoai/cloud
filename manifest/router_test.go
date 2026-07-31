@@ -49,18 +49,19 @@ import (
 // Three causes, all of them at the composition root:
 //
 //   - AN ADDRESS ANOTHER APP OWNS (0). A prefix is a SUBTREE and it is
-//     exclusive. The /v1/billing REMAINDER belongs to account-bridge — the
-//     session-scoped data bridge the console calls — so any billing leaf
-//     commerce publishes that the manifest does not name deeper reaches the
-//     bridge instead. The last one was /v1/billing/payment-methods, which the
-//     billing app serves itself; commerce dropped the registration, so the
-//     address has ONE owner again. (The rest of the money surface used to sit here: plans,
-//     invoices, subscriptions, subscribe/card, topup/token, spend-alerts,
-//     payouts, payment-config — the entire self-service paid path. Every one
-//     was registered co-resident and reachable by nobody, so the public plan
-//     catalog answered "sign in to view billing" to a pricing page and the
-//     card endpoints answered it to a buyer. commerce's row names each one
-//     deeper than the sibling that was swallowing it now.)
+//     exclusive, so a row holding the bare stem of a family other apps serve
+//     swallows every leaf the manifest does not name deeper. The /v1/billing and
+//     /v1/commerce REMAINDERS were account-bridge's — a wildcard forwarder that
+//     re-served both families over an HTTP hop — and the entire self-service paid
+//     path sat here because of it: plans, invoices, subscriptions, subscribe/card,
+//     topup/token, spend-alerts, payouts, payment-config, payment-methods. Every
+//     one was registered co-resident and reachable by nobody, so the public plan
+//     catalog answered "sign in to view billing" to a pricing page and the card
+//     endpoints answered it to a buyer. commerce's and billing's rows name each
+//     one deeper now, which left the forwarder holding two stems and no leaf —
+//     so it is gone, and NOTHING claims the bare stems. A billing or commerce
+//     leaf that is not named deeper reaches no app at all, which is the loud
+//     failure, not the silent one.
 //   - NO APP AT ALL (12). git's /:org/:repo tree and iam's /.well-known/* are
 //     claimed by nobody, so they fall past every prefix to the console the host
 //     serves at "/" — an SDK call gets the HTML shell. The three newest are the

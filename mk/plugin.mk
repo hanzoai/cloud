@@ -16,9 +16,11 @@
 #
 # APPS is a LIST and is never inferred from the directory name. Four packages
 # are not named after the app they back (apps/zt → zero-trust, eval → evals,
-# auditlog → audit, plugin → plugins) and apps/account backs TWO mounts — its
-# self-service routes and the /v1/billing catch-all bridge. An inferred name
-# would be right 99 times and silently wrong 5.
+# auditlog → audit, plugin → plugins), and it stays a LIST because a package
+# backing two mounts is a shape the fleet has had and will have again —
+# apps/account carried its self-service routes and the /v1/billing catch-all
+# bridge that way until the bridge was retired. An inferred name would be right
+# 100 times and silently wrong 4.
 
 # Simply-expanded: resolved once, from THIS include's own position, so no later
 # include can move them. A command-line ROOT= still wins (mk/fleet.mk uses that

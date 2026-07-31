@@ -30,9 +30,10 @@ import (
 // The OWNER is read from the app's own composition root: plugin/<name>/main.go
 // imports exactly the package it mounts, so the import IS the mapping. Nothing
 // else could be — four apps are not named after their package (audit → auditlog,
-// evals → eval, plugins → plugin, zero-trust → zt) and one package backs two apps
-// (account → account, account-bridge), so a name-derived guess would be right 107
-// times and silently wrong 5. An app whose subsystem is another MODULE (authz,
+// evals → eval, plugins → plugin, zero-trust → zt), so a name-derived guess would
+// be right 107 times and silently wrong 4. (It was wrong 5 while apps/account
+// backed a second app, account-bridge; reading the import means a package taking
+// on or shedding a mount changes nothing here.) An app whose subsystem is another MODULE (authz,
 // licensing, metrics) imports no package here, has no doc comment to read, and
 // gets "" — the honest answer, not a fabricated one.
 //

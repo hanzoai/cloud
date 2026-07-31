@@ -43,8 +43,10 @@ var Apps = []App{
 	// 404. The "/v1" remainder is ai's row now, at the tail. Each subtree here is
 	// DEEPER than the sibling that shares its stem, because a static prefix outranks
 	// a sibling wildcard regardless of mount order: catalog keeps its bare
-	// /v1/catalog, plan keeps the rest of /v1/plans/*, and account-bridge keeps the
-	// /v1/commerce/* and /v1/billing/* per-tenant data bridges the console calls.
+	// /v1/catalog and plan keeps the rest of /v1/plans/*. Nobody claims the bare
+	// /v1/billing or /v1/commerce REMAINDER — every leaf either row serves is named
+	// deeper here or on billing's row below, so the remainder is surface no app
+	// answers and claiming it would only re-create the catch-all that swallowed them.
 	// This is NOT commerce.Prefixes imported (that would re-fatten the host): the
 	// app states its fail-closed set once (apps/commerce/mount.go); this row states
 	// what the ROUTER may hand it, and router_test.go's oracle keeps the two honest.
@@ -64,7 +66,6 @@ var Apps = []App{
 	{Name: "provisioning", Prefixes: []string{"/v1/datastore", "/v1/docdb", "/v1/kv", "/v1/s3", "/v1/search", "/v1/sql", "/v1/vector"}},
 	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/gpu-charge", "/v1/billing/gpu-eligibility", "/v1/billing/payment-methods", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
-	{Name: "account-bridge", Prefixes: []string{"/v1/billing", "/v1/commerce"}},
 	{Name: "do", Prefixes: []string{"/v1/load-balancers", "/v1/vpcs"}},
 	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/pipelines", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
 	{Name: "projects", Prefixes: []string{"/v1/platform/sites", "/v1/projects", "/v1/sites"}},

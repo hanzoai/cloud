@@ -92,18 +92,25 @@ func TestSetAppSelfDispatch(t *testing.T) {
 // COMMERCE_URL — the public edge = this binary — BY PATH through this same transport), re-entering
 // the wildcard until the depth-8 guard refused → 502 → the cap gate fails OPEN.
 //
-// The fix (apps/commerce.go) registers commerce's own AuthorizeSpendCap co-resident, at the
-// commerce mount (order 100) which is AHEAD of the account bridge (order 122), so the specific
-// route shadows the wildcard and the gate's dispatch hits the real handler at depth 1 — no loop.
-// This test models both arrangements on the transport this seam owns and pins the invariant.
+// The fix (apps/commerce.go) registers commerce's own AuthorizeSpendCap co-resident, so the
+// specific route shadows the wildcard and the gate's dispatch hits the real handler at depth 1
+// — no loop. This test models both arrangements on the transport this seam owns and pins the
+// invariant.
+//
+// The bridge itself is RETIRED — that fix, applied to all seventeen of its forwardable
+// endpoints, left it holding two bare prefixes and serving nothing, so it was deleted along
+// with its admin service token. The wildcard below is therefore a MODEL, not a component: what
+// it pins is the class — a self-proxying wildcard on the shared app re-enters itself, and a
+// specific route is what stops it — which is exactly what a future forwarder would rediscover.
 func TestSpendAlertsAuthorizeShadowsBridge(t *testing.T) {
 	const authorizePath = "/v1/billing/spend-alerts/authorize"
 
-	// build assembles the co-resident app: commerce's specific authorize route (registered
-	// FIRST, like mountCommerce at 100) — present only when withSpecific — then the account
-	// bridge's self-proxying /v1/billing/* wildcard (registered LAST, like MountBridge at 122).
-	// The wildcard re-forwards the SAME path back through the transport, exactly as the real
-	// bridge does (host ignored, dispatched by path) — the move that self-loops.
+	// build assembles the co-resident app: commerce's specific authorize route — present only
+	// when withSpecific — plus a self-proxying /v1/billing/* wildcard standing in for the
+	// retired account bridge. The wildcard re-forwards the SAME path back through the transport,
+	// exactly as that bridge did (host ignored, dispatched by path) — the move that self-loops.
+	// Registration order is irrelevant to which one wins (the fiber fork sorts endpoints
+	// most-specific-first); it is stated here only to mirror the shipped arrangement.
 	build := func(withSpecific bool) (app *zip.App, specificHits, wildcardHits *int32) {
 		var sHits, wHits int32
 		app = zip.New(zip.Config{})
@@ -193,12 +200,12 @@ func TestSpendAlertsAuthorizeShadowsBridge(t *testing.T) {
 // co-resident (may carry a :param); requestPath is the concrete path the browser POSTs.
 //
 // It models both arrangements on the POST transport this seam owns:
-//   - build(false) registers ONLY the account bridge's self-proxying POST /v1/billing/*
-//     wildcard (like MountBridge at order 122): billingData → commerceDo re-dials COMMERCE_URL
-//     (the public edge = this binary) BY PATH through THIS transport, re-entering the wildcard
-//     until the depth-8 guard refuses — the exact user-facing 502.
-//   - build(true) ALSO registers the specific commerce route FIRST (like mountCommerce at
-//     order 100), so it shadows the wildcard and the write runs once at depth 1 — no loop.
+//   - build(false) registers ONLY a self-proxying POST /v1/billing/* wildcard standing in for
+//     the retired account bridge: its handler re-dialed COMMERCE_URL (the public edge = this
+//     binary) BY PATH through THIS transport, re-entering the wildcard until the depth-8 guard
+//     refuses — the exact user-facing 502.
+//   - build(true) ALSO registers the specific commerce route, which shadows the wildcard, so
+//     the write runs once at depth 1 — no loop.
 func assertPostShadowsBridge(t *testing.T, specificPattern, requestPath string) {
 	t.Helper()
 	const okBody = `{"status":"ok"}`
