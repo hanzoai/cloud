@@ -168,6 +168,7 @@ var Apps = []App{
 	{Name: "tasks", Prefixes: []string{"/tasks", "/v1/tasks"}},
 	{Name: "automations", Prefixes: []string{"/v1/automations"}},
 	{Name: "flow", Prefixes: []string{"/v1/flow"}},
+	{Name: "engine", Prefixes: []string{"/v1/engine"}},
 	// Open: the tool plane also serves the CALLER's own tools — its connectors,
 	// skills, agents, and the external MCP servers it enabled — which are rows and
 	// cannot be in a build-time catalogue. The host asks it per caller on a

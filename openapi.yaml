@@ -12231,6 +12231,17 @@ components:
         url:
           type: string
       type: object
+    engineStatus:
+      properties:
+        reachable:
+          description: Reachable is true when the engine answered its health probe.
+          type: boolean
+        revision:
+          description: |-
+            Revision is the engine build's git revision, present only when
+            reachable (the server's own build identity — it publishes no semver).
+          type: string
+      type: object
     enrolment:
       properties:
         created:
@@ -33614,6 +33625,88 @@ paths:
         list, the reverse of OptIntoBeta and idempotent.
       tags:
       - enablement
+  /v1/engine/model:
+    get:
+      description: |-
+        Model reads one model's load state — loaded, unloading, or not_found, as
+        the engine itself reports it.
+      operationId: get_v1_engine_model
+      parameters:
+      - description: Model is the model id to inspect, exactly as the model list reports
+          it.
+        example: Qwen/Qwen3-4B
+        in: query
+        name: model
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Model reads one model's load state — loaded, unloading, or not_found,
+        as the engine itself reports it.
+      tags:
+      - engine
+  /v1/engine/models:
+    get:
+      description: |-
+        Models lists the models the engine serves, each with its load state — the
+        server's own model table (its OpenAI-style list envelope, load status
+        included), relayed verbatim.
+      operationId: get_v1_engine_models
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Models lists the models the engine serves, each with its load state
+        — the server's own model table (its OpenAI-style list envelope, load status
+        included), relayed verbatim.
+      tags:
+      - engine
+  /v1/engine/status:
+    get:
+      description: |-
+        Status reports whether the engine deployment is reachable and which build
+        revision it runs — an honest lens for "is the serving runtime up", never a
+        fabricated ok.
+      operationId: get_v1_engine_status
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/engineStatus'
+          description: ok
+      summary: Status reports whether the engine deployment is reachable and which
+        build revision it runs — an honest lens for "is the serving runtime up", never
+        a fabricated ok.
+      tags:
+      - engine
+  /v1/engine/system:
+    get:
+      description: |-
+        System reads the engine host's inventory: OS, CPU, memory, every accelerator
+        device with its VRAM and compute capability, and the build's capabilities
+        (CUDA/Metal/flash-attention) — the real hardware under the serving runtime,
+        relayed verbatim.
+      operationId: get_v1_engine_system
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: 'System reads the engine host''s inventory: OS, CPU, memory, every
+        accelerator device with its VRAM and compute capability, and the build''s
+        capabilities (CUDA/Metal/flash-attention) — the real hardware under the serving
+        runtime, relayed verbatim.'
+      tags:
+      - engine
   /v1/entitlements:
     get:
       description: |-
@@ -50133,6 +50226,9 @@ tags:
 - name: edge
 - name: embed-status
 - name: enablement
+- description: 'Package engine is Hanzo Engine: the serving runtime behind Hanzo''s
+    models — what it serves and what it runs on, read through /v1/engine.'
+  name: engine
 - description: 'Package entitlements is what your org may run: what the plan grants,
     and which of those products are switched on.'
   name: entitlements
