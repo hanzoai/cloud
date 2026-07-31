@@ -72,6 +72,13 @@ const (
 	WalletsPayee  = "wallets_payee"  // resolve a payout wallet to an address + subject
 	FinanceCredit = "finance_credit" // credit a subject's ledger (the payee side)
 
+	// IntegrationsSlackSend posts to an org's Slack channel via the org's
+	// KMS-custodied bot token. It lives on the plane because the token store is
+	// the integrations PROCESS's alone — a peer plugin (o11y paging an alert)
+	// cannot see integrations' in-memory `mounted` token map, so it asks the
+	// process that owns it, over the socket, exactly like a debit asks commerce.
+	IntegrationsSlackSend = "integrations_slack_send"
+
 	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
 	HostStart = "host_start"
 )
@@ -437,6 +444,16 @@ type Payee struct {
 }
 
 // ---- finance.credit — the payee side of a settlement -----------------------
+
+// SlackSendIn posts one message to an org's Slack channel. The ORG is the
+// CALLER's (read from the plane context, never an argument): it selects which
+// tenant's bot token sends, so a caller able to name it could post as another
+// tenant. Channel and Text are required; Thread threads a reply when set.
+type SlackSendIn struct {
+	Channel string `json:"channel" validate:"required"`
+	Thread  string `json:"thread,omitempty"`
+	Text    string `json:"text" validate:"required"`
+}
 
 // CreditIn credits one subject's ledger.
 //

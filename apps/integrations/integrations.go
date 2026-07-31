@@ -500,13 +500,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 
-	// Register the ONE Slack egress on the SHARED cloud seam so other
-	// subsystems (o11y alert paging) can reach it across the plugin boundary.
-	// This closure is compiled HERE, so calling it later runs against THIS
-	// subsystem's own `mounted` + token store — never a peer plugin's nil copy.
-	cloud.SetSlackSender(func(ctx context.Context, org, channel, threadTS, text string) error {
-		return SendSlack(ctx, org, channel, threadTS, text)
-	})
+	// Publish the Slack egress on the internal plane so a peer plugin can reach
+	// this process's bot-token store over the socket (slack_rpc.go).
+	exposeSlack()
 
 	routes(app, zapp, s)
 
