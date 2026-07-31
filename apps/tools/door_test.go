@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -249,5 +250,61 @@ func TestAnonymousDoorIsTheFleetsOwn(t *testing.T) {
 	}
 	if !names["post_v1_tools_call"] {
 		t.Fatalf("the projected ops must still be listed: %v", names)
+	}
+}
+
+// TestTheListingCacheIsPerServerAndPerTenant: one tools/list per server per
+// window, and never a list one org can read off another's key.
+//
+// Without the window every dispatch paid it: resolving a tool name lists every
+// provider, and this provider asked every one of the org's servers over the
+// network — so thirty enabled listings meant thirty outbound requests per tool
+// call, each with a 20s timeout, on the path a model drives.
+func TestTheListingCacheIsPerServerAndPerTenant(t *testing.T) {
+	var lists atomic.Int64
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Method string `json:"method"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req.Method == "tools/list" {
+			lists.Add(1)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": 1, "result": map[string]any{
+			"tools": []map[string]any{{"name": "charge", "description": "d", "inputSchema": map[string]any{"type": "object"}}},
+		}})
+	}))
+	defer ts.Close()
+
+	store, err := OpenMCPServerStore(t.TempDir() + "/mcp.db")
+	if err != nil {
+		t.Fatalf("OpenMCPServerStore: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	ctx := context.Background()
+	for _, org := range []string{"acme", "rival"} {
+		if _, err := store.Write(ctx, MCPServer{ID: "v", Org: org, Name: "v", URL: ts.URL}, true); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+	p := newMCPProvider(store, nil)
+	p.http = ts.Client()
+
+	for i := 0; i < 5; i++ {
+		if tools, err := p.List(ctx, Scope{Org: "acme"}); err != nil || len(tools) != 1 {
+			t.Fatalf("List: %v %v", tools, err)
+		}
+	}
+	if n := lists.Load(); n != 1 {
+		t.Fatalf("five listings asked the server %d times, want 1", n)
+	}
+	// A DIFFERENT tenant with the same server id and URL must ask for itself: the
+	// key carries the org, so nothing is shared across the boundary.
+	if _, err := p.List(ctx, Scope{Org: "rival"}); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if n := lists.Load(); n != 2 {
+		t.Fatalf("a second tenant read the first's cached list (asked %d times, want 2)", n)
 	}
 }
