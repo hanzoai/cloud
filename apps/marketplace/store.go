@@ -91,24 +91,47 @@ CREATE INDEX IF NOT EXISTS ix_listings_public_tool ON listings(public, tool);`);
 // 10^16 atto, so the conversion is exact in both directions and the old column is
 // dropped in the same transaction — there is no window where two columns each claim
 // to be the price. A store that never had price_cents is left alone.
+//
+// The `price` column is ADDED HERE, not by the CREATE above. `CREATE TABLE IF NOT
+// EXISTS` is a no-op against a table that already exists, so a store written before
+// prices were exact arrives with price_cents and no price at all — and the UPDATE
+// would fail on a column that does not exist, failing Open, failing Mount, and
+// stopping the binary on every deployment that ever published a listing. Adding the
+// column is the migration's first statement for exactly that reason.
 func migrateCents(db *sql.DB) error {
-	var legacy int
-	if err := db.QueryRow(
-		`SELECT COUNT(*) FROM pragma_table_info('listings') WHERE name='price_cents'`).Scan(&legacy); err != nil {
-		return fmt.Errorf("marketplace: inspect schema: %w", err)
+	column := func(name string) (bool, error) {
+		var n int
+		if err := db.QueryRow(
+			`SELECT COUNT(*) FROM pragma_table_info('listings') WHERE name=?`, name).Scan(&n); err != nil {
+			return false, fmt.Errorf("marketplace: inspect schema: %w", err)
+		}
+		return n > 0, nil
 	}
-	if legacy == 0 {
+	legacy, err := column("price_cents")
+	if err != nil {
+		return err
+	}
+	if !legacy {
 		return nil
+	}
+	exact, err := column("price")
+	if err != nil {
+		return err
+	}
+
+	stmts := []string{
+		`UPDATE listings SET price = CAST(price_cents AS TEXT) || '0000000000000000' WHERE price_cents > 0`,
+		`ALTER TABLE listings DROP COLUMN price_cents`,
+	}
+	if !exact {
+		stmts = append([]string{`ALTER TABLE listings ADD COLUMN price TEXT NOT NULL DEFAULT '0'`}, stmts...)
 	}
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("marketplace: migrate price: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	for _, stmt := range []string{
-		`UPDATE listings SET price = CAST(price_cents AS TEXT) || '0000000000000000' WHERE price_cents > 0`,
-		`ALTER TABLE listings DROP COLUMN price_cents`,
-	} {
+	for _, stmt := range stmts {
 		if _, err := tx.Exec(stmt); err != nil {
 			return fmt.Errorf("marketplace: migrate price (%s): %w", stmt, err)
 		}
