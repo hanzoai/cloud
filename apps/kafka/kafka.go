@@ -11,9 +11,10 @@
 //
 // It ALWAYS serves, like the PubSub plane it rides (a staged cutover that is
 // over). Mount fails CLOSED: a connect/bind error within the startup window
-// aborts boot rather than serving a phantom broker. It dials the embedded PubSub
-// by default — CLOUD_KAFKA_PUBSUB_URL points it at an external one instead — so
-// there is never a silent half-embed.
+// aborts boot rather than serving a phantom broker. It dials the bus through
+// pubsub.URL — the ONE knob every app in this process reads — so it cannot end
+// up bridging a different bus than the one analytics publishes and webhooks
+// consumes, and there is never a silent half-embed.
 package kafka
 
 import (
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/pubsub"
 	"github.com/hanzoai/kafka/protocol"
 	"github.com/hanzoai/kafka/types"
 )
@@ -58,7 +60,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	cfg := &types.Configuration{
-		PubSubUrl:      firstNonEmpty(os.Getenv("CLOUD_KAFKA_PUBSUB_URL"), "nats://127.0.0.1:4222"),
+		PubSubUrl:      pubsub.URL(),
 		PubSubCredFile: os.Getenv("CLOUD_KAFKA_PUBSUB_CREDS"),
 		BrokerHost:     firstNonEmpty(os.Getenv("CLOUD_KAFKA_HOST"), "cloud"),
 		BrokerPort:     port,

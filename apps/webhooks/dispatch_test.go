@@ -184,7 +184,7 @@ func TestHandleMatchesAndQueues(t *testing.T) {
 	seedEndpoint(t, d, "acme", Endpoint{URL: "https://acme.test/h", Secret: "sk", Events: []string{"commerce.>"}})
 
 	body := commerceEvent(t, "acme")
-	if err := d.handle(context.Background(), &infra.StreamMessage{Subject: "commerce.order.created", Data: body}); err != nil {
+	if err := d.handle(context.Background(), commerceSource(), &infra.StreamMessage{Subject: "commerce.order.created", Data: body}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	jobs := drainJobs(d)
@@ -201,7 +201,7 @@ func TestHandleSkipsDisabled(t *testing.T) {
 	d := newTestDispatcher(t)
 	seedEndpoint(t, d, "acme", Endpoint{URL: "https://acme.test/h", Secret: "sk", Events: []string{"commerce.>"}, Status: "disabled"})
 
-	if err := d.handle(context.Background(), &infra.StreamMessage{Subject: "commerce.order.created", Data: commerceEvent(t, "acme")}); err != nil {
+	if err := d.handle(context.Background(), commerceSource(), &infra.StreamMessage{Subject: "commerce.order.created", Data: commerceEvent(t, "acme")}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if jobs := drainJobs(d); len(jobs) != 0 {
@@ -214,7 +214,7 @@ func TestHandleNonMatchingFiltered(t *testing.T) {
 	d := newTestDispatcher(t)
 	seedEndpoint(t, d, "acme", Endpoint{URL: "https://acme.test/h", Secret: "sk", Events: []string{"commerce.order.*"}})
 
-	if err := d.handle(context.Background(), &infra.StreamMessage{Subject: "commerce.payment.received", Data: commerceEvent(t, "acme")}); err != nil {
+	if err := d.handle(context.Background(), commerceSource(), &infra.StreamMessage{Subject: "commerce.payment.received", Data: commerceEvent(t, "acme")}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if jobs := drainJobs(d); len(jobs) != 0 {
@@ -232,7 +232,7 @@ func TestHandleOrgIsolationOfDelivery(t *testing.T) {
 	seedEndpoint(t, d, "acme", Endpoint{URL: "https://acme.test/h", Secret: "a", Events: nil})
 
 	// An event emitted by A must queue ONLY A's endpoint.
-	if err := d.handle(context.Background(), &infra.StreamMessage{Subject: "commerce.order.created", Data: commerceEvent(t, "acme")}); err != nil {
+	if err := d.handle(context.Background(), commerceSource(), &infra.StreamMessage{Subject: "commerce.order.created", Data: commerceEvent(t, "acme")}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	jobs := drainJobs(d)
@@ -246,7 +246,7 @@ func TestHandleNoOrgDeliversToNobody(t *testing.T) {
 	d := newTestDispatcher(t)
 	seedEndpoint(t, d, "acme", Endpoint{URL: "https://acme.test/h", Secret: "sk", Events: nil})
 
-	if err := d.handle(context.Background(), &infra.StreamMessage{Subject: "commerce.order.created", Data: []byte(`{"type":"order.created"}`)}); err != nil {
+	if err := d.handle(context.Background(), commerceSource(), &infra.StreamMessage{Subject: "commerce.order.created", Data: []byte(`{"type":"order.created"}`)}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if jobs := drainJobs(d); len(jobs) != 0 {
@@ -294,7 +294,7 @@ func TestBusEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv(natsURLEnv, url)
+	t.Setenv("CLOUD_PUBSUB_URL", url)
 	d.start()
 	defer d.stop()
 

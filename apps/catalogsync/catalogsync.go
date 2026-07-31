@@ -9,33 +9,32 @@
 // product event off NATS and dispatch it". Decomplected from commerce and content — the
 // COMMERCE stream is the seam, so neither imports the other; catalogsync imports both.
 //
-// INERT BY DEFAULT. Commerce publishes catalog events only when its NATS publisher is
-// wired, and this consumer runs only when CLOUD_COMMERCE_NATS_URL names the NATS that
-// carries them (the same server cloud's embedded pubsub binds). Unset ⇒ the subsystem is
-// a no-op and connects nothing, exactly like the publisher degrades to no-op when NATS is
-// absent — the loop is off end-to-end until an operator wires both halves.
+// ALWAYS ON, against the ONE bus. It consumes the COMMERCE stream on pubsub.URL — the
+// same embedded server every other app in this process reads, which always serves and
+// fails boot closed. It used to require a knob of its own (CLOUD_COMMERCE_NATS_URL) that
+// no manifest set, so the reverse edge was permanently inert while the bus it needed was
+// running the whole time: an opt-in for a state that does not exist. A commerce publisher
+// that is not wired simply produces no events, which this consumer already handles by
+// waiting.
 package catalogsync
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/content"
+	"github.com/hanzoai/cloud/apps/pubsub"
 	"github.com/hanzoai/commerce/events"
 	"github.com/hanzoai/commerce/infra"
 	luxlog "github.com/luxfi/log"
 )
 
 const (
-	// natsURLEnv names the NATS server carrying the COMMERCE stream. Unset ⇒ inert.
-	natsURLEnv = "CLOUD_COMMERCE_NATS_URL"
-
 	// consumerName is the durable JetStream consumer this subsystem binds on the COMMERCE
 	// stream. Durable + shared across pods, so multiple cloud replicas load-balance the
 	// product events and each is handled exactly once.
@@ -50,30 +49,24 @@ const (
 // can substitute a stub without a live content mount. It is the ONE call into content.
 var generate = content.EnsureCatalogAsset
 
-// runtime holds the running consumer so Shutdown can stop it. Guarded by mu; set once by
-// Mount when NATS is configured.
+// runtime holds the running consumer so Shutdown can stop it. Guarded by mu; the cancel
+// is set once by Mount, the client by each consume attempt.
 var (
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	client *infra.PubSubClient
 )
 
-// Mount starts the catalog-event consumer when CLOUD_COMMERCE_NATS_URL is set, else is a
-// no-op (the loop stays off until an operator wires NATS). It never blocks: the connect +
-// consume loop runs in the background, and a connect failure degrades to inert (a warning,
-// never a crash) — the same fail-soft contract as the forward storefront edge.
+// Mount starts the catalog-event consumer against the platform bus. It never blocks: the
+// connect + consume loop runs in the background, and a connect failure is a warning and a
+// retry, never a crash — the same fail-soft contract as the forward storefront edge.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("catalogsync.Mount: nil deps.Logger")
 	}
 	log := deps.Logger.New("subsystem", "catalogsync")
 
-	url := strings.TrimSpace(os.Getenv(natsURLEnv))
-	if url == "" {
-		log.Info("catalogsync inert (set " + natsURLEnv + " to consume commerce catalog events)")
-		return nil
-	}
-
+	url := pubsub.URL()
 	ctx, cancelFn := context.WithCancel(context.Background())
 	setLifecycle(cancelFn)
 	go run(ctx, log, url)
@@ -107,10 +100,34 @@ func setClient(cl *infra.PubSubClient) {
 	mu.Unlock()
 }
 
-// run connects to NATS, binds the durable COMMERCE consumer filtered to product.created,
-// and dispatches each message to handleEvent until ctx is canceled. Every failure is a
-// clean inert degrade (warn + return), never a crash.
+// run keeps a consumer on the bus until ctx is canceled, reconnecting after any failure.
+// It retries rather than degrading to inert because the subsystem is no longer opt-in: a
+// bus that is briefly down at boot must not silently cost this deployment its reverse
+// storefront edge until someone notices and restarts the pod.
 func run(ctx context.Context, log luxlog.Logger, url string) {
+	for ctx.Err() == nil {
+		consume(ctx, log, url)
+		if ctx.Err() != nil {
+			return
+		}
+		t := time.NewTimer(retryDelay)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// retryDelay is the wait between consume attempts. The connection itself reconnects on
+// its own (MaxReconnects -1); this covers the failures that end the loop entirely.
+const retryDelay = 5 * time.Second
+
+// consume connects to NATS, binds the durable COMMERCE consumer filtered to
+// product.created, and dispatches each message to handleEvent until ctx is canceled or
+// the loop fails. Every failure is a warn + return, never a crash.
+func consume(ctx context.Context, log luxlog.Logger, url string) {
 	cl, err := infra.NewPubSubClient(ctx, &infra.PubSubConfig{
 		URL:             url,
 		Name:            consumerName,
@@ -118,17 +135,18 @@ func run(ctx context.Context, log luxlog.Logger, url string) {
 		MaxReconnects:   -1,
 	})
 	if err != nil {
-		log.Warn("catalogsync: cannot connect to NATS — inert", "url", url, "err", err)
+		log.Warn("catalogsync: cannot connect to the bus — retrying", "url", url, "err", err)
 		return
 	}
 	setClient(cl)
+	defer func() { setClient(nil); _ = cl.Close() }()
 
 	// Ensure the stream + a durable, subject-filtered consumer exist (both idempotent; the
 	// commerce publisher also ensures the stream). DeliverNew: on first bind we start from
 	// new events, never replaying the whole catalog history into a render flood; the durable
 	// then resumes from the last ack across restarts.
 	if err := cl.EnsureStream(ctx, &infra.StreamConfig{Name: events.StreamName, Subjects: events.StreamSubjects}); err != nil {
-		log.Warn("catalogsync: ensure COMMERCE stream — inert", "err", err)
+		log.Warn("catalogsync: ensure COMMERCE stream — retrying", "err", err)
 		return
 	}
 	if _, err := cl.CreateConsumer(ctx, events.StreamName, &infra.ConsumerConfig{
@@ -141,7 +159,7 @@ func run(ctx context.Context, log luxlog.Logger, url string) {
 		AckWait:       30 * time.Second,
 		MaxDeliver:    5,
 	}); err != nil {
-		log.Warn("catalogsync: create consumer — inert", "err", err)
+		log.Warn("catalogsync: create consumer — retrying", "err", err)
 		return
 	}
 

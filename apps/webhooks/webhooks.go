@@ -13,25 +13,29 @@
 //     (principal.Org, gateway-minted X-Org-Id), exactly like apps/notify — 401 for
 //     an unauthenticated caller.
 //   - DISPATCHER (dispatch.go, match.go) — a durable JetStream consumer on the platform
-//     bus (apps/pubsub), over the streams dispatch.go names: COMMERCE (commerce.>) and
-//     EVENTS (event.>, bridge.go). It resolves
-//     each event's org from the envelope, matches ONLY that org's active subscriptions
-//     (NATS subject-wildcard semantics), and POSTs each match with a fresh
-//     HMAC-SHA256 signature and a bounded retry ladder. Org isolation is by
+//     bus (apps/pubsub), over the streams dispatch.go names: COMMERCE (commerce.>, owned
+//     by hanzoai/commerce) and the event plane (event.>, owned by apps/analytics, which
+//     publishes it). It resolves each event's org from the envelope, matches ONLY that
+//     org's active subscriptions (NATS subject-wildcard semantics), and POSTs each match
+//     with a fresh HMAC-SHA256 signature and a bounded retry ladder. Org isolation is by
 //     construction: the store lookup is per-org, so B's endpoint can never receive A's
 //     event.
 //
-// FAIL-SOFT MOUNT. The registry always mounts. The dispatcher is best-effort: no bus
-// URL ⇒ inert; a down bus ⇒ background reconnect-retry. A messaging fault never crashes
-// the process.
+// CONSUMER ONLY. This package publishes nothing and owns no stream. It once held the
+// publish half of the event plane too — its own stream name, its own envelope — which
+// made two subsystems owners of one subject space; JetStream answers that with
+// "subjects overlap with an existing stream", so the second owner to arrive delivers
+// nothing, on every stream, forever. The producer lives with the data now
+// (analytics.PublishEvents).
+//
+// FAIL-SOFT MOUNT. The registry always mounts. The dispatcher is best-effort: a down bus
+// ⇒ background reconnect-retry. A messaging fault never crashes the process.
 package webhooks
 
 import (
 	"context"
 	"fmt"
 	"net/http"
-
-	"github.com/hanzoai/cloud/apps/analytics"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -49,9 +53,6 @@ type state struct {
 // mounted is the process-wide handle Shutdown reaches the dispatcher + stores through
 // (the same package-global pattern apps/crm and apps/books use).
 var mounted *state
-
-// removeSink unregisters the bridge's fan-out consumer on Shutdown.
-var removeSink func()
 
 // Mount opens the per-org registry stores, wires /v1/webhooks, and starts the bus
 // dispatcher (fail-soft). It never returns an error for a bus problem — only for a
@@ -78,13 +79,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return err
 	}
 
-	// Dispatcher last: registry is already wired, so a bus that is down (or absent)
-	// leaves /v1/webhooks fully serving while the consumer retries in the background.
+	// Dispatcher last: registry is already wired, so a bus that is down leaves
+	// /v1/webhooks fully serving while the consumer retries in the background.
 	st.disp.start()
-
-	// The ingest→bus half of the spine (bridge.go): every accepted /v1/event
-	// batch publishes onto the EVENTS stream this same dispatcher consumes.
-	removeSink = analytics.AddSink(st.disp.publishEvents)
 
 	b.Log.Info("webhooks mounted", "prefix", "/v1/webhooks")
 	return nil
@@ -95,10 +92,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 func Shutdown(_ context.Context) error {
 	if mounted == nil {
 		return nil
-	}
-	if removeSink != nil {
-		removeSink()
-		removeSink = nil
 	}
 	if mounted.disp != nil {
 		mounted.disp.stop()
