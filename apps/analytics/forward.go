@@ -13,14 +13,21 @@
 // limitations under the License.
 
 // forward.go is the fan-out seam of the canonical event plane. After the ONE write
-// core (ingestEvents) commits a batch to hanzo.events, it hands a COPY of that batch
-// to an optional downstream sink — the destinations subsystem — which translates and
-// forwards each event to the org's connected ad/analytics platforms (GA4, Meta CAPI,
-// …). The seam is:
+// core (ingestEvents) commits a batch to hanzo.events, the batch goes two ways:
 //
-//   - ONE-WAY. analytics never imports its consumers; each (destinations, the
-//     platform event-bus bridge) calls AddSink from its own Mount. No sinks means
-//     no fan-out, so this file changes nothing about ingest when they are absent.
+//   - onto the PLANE (PublishEvents, bus.go) — always, because this package owns the
+//     platform event stream and publishing to it is not an opt-in integration. Every
+//     bus consumer (webhook delivery today; alerting, replay, exports next) is served
+//     by that one publish, and none of them touches this file to be added.
+//   - to a COPY-taking downstream SINK — the destinations subsystem — which translates
+//     and forwards each event to the org's connected ad/analytics platforms (GA4, Meta
+//     CAPI, …).
+//
+// The seam is:
+//
+//   - ONE-WAY. analytics never imports its consumers; a sink (destinations) calls
+//     AddSink from its own Mount. No sinks means no sink fan-out, so this file changes
+//     nothing about ingest when they are absent.
 //   - RAW. The sink receives the event BEFORE the warehouse privacy scrub, because a
 //     server-side Conversions-API forwarder must hash the match keys (email/phone/
 //     click ids) the warehouse deliberately drops. The org connected the destination
@@ -54,8 +61,10 @@ type SinkEvent struct {
 }
 
 // sinks are the downstream fan-out consumers, registered by subsystem Mounts
-// (destinations; the platform event-bus bridge in apps/webhooks). Mounts run
-// before request traffic, so no lock is needed on this package-global.
+// (destinations). Mounts run before request traffic, so no lock is needed on this
+// package-global. A BUS consumer is never registered here — it subscribes to the
+// stream instead, which is what keeps this list to integrations that genuinely need
+// the raw, pre-scrub batch in-process.
 var sinks []func(org string, evs []SinkEvent)
 
 // AddSink registers a downstream fan-out consumer and returns its remover.
@@ -82,9 +91,6 @@ func fanOut(org string, evs []CaptureEvent) {
 		if fn != nil {
 			live = append(live, fn)
 		}
-	}
-	if len(live) == 0 {
-		return
 	}
 	// The public tenant never fans out. A destination is a connection an ORG made, and
 	// this sink is handed the RAW pre-scrub event so a Conversions API can hash match
@@ -121,6 +127,13 @@ func fanOut(org string, evs []CaptureEvent) {
 	if len(out) == 0 {
 		return
 	}
+	// Onto the plane FIRST, and unconditionally: this is the platform's own fan-out,
+	// not an integration an org opted into. Detached on the same terms as a sink, so a
+	// slow bus costs a goroutine and never an ingest.
+	go func() {
+		defer func() { _ = recover() }()
+		PublishEvents(org, out)
+	}()
 	for _, fn := range live {
 		fn := fn
 		go func() {

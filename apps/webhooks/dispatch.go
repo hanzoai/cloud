@@ -13,10 +13,18 @@ package webhooks
 // applies backpressure under true overload (the consumer waits for a slot rather than
 // spawning unbounded goroutines or dropping events).
 //
-// ONE OPS KNOB. The bus URL is CLOUD_WEBHOOKS_NATS_URL, falling back to the SAME
-// CLOUD_COMMERCE_NATS_URL apps/catalogsync reads — so a deployment sets one variable
-// and both the reverse-storefront loop and this dispatcher come alive, with an optional
-// webhooks-specific override. Unset ⇒ the dispatcher is inert (the registry still serves).
+// NO OPS KNOB, and no publish. This subsystem is a pure CONSUMER: it dials the ONE bus
+// apps/pubsub exports (pubsub.URL — see that package's doc), and it consumes streams
+// that OTHER subsystems own and create. It used to carry a knob of its own that defaulted
+// to OFF, which meant a deployment that set nothing delivered no webhooks at all while
+// every other app on the same bus worked; the embedded bus always serves and fails boot
+// closed, so "no bus configured" was never a real state to have an opt-in for.
+//
+// ONE OWNER PER STREAM. Each consumed stream is created by the subsystem that DEFINES it
+// (streamSource.ensure), never by a config copy held here. JetStream refuses a second
+// stream over the same subjects — "subjects overlap with an existing stream" — so a
+// consumer that declared its own name for a plane someone else publishes does not
+// diverge quietly: it fails to bind, forever, and delivers nothing on ANY stream.
 
 import (
 	"bytes"
@@ -31,24 +39,20 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/pubsub"
 	"github.com/hanzoai/commerce/events"
 	"github.com/hanzoai/commerce/infra"
 	luxlog "github.com/luxfi/log"
 )
 
 const (
-	// natsURLEnv is the dispatcher's own knob; natsURLFallback is the shared one
-	// catalogsync also reads, so ops has ONE variable to turn the bus loops on.
-	natsURLEnv      = "CLOUD_WEBHOOKS_NATS_URL"
-	natsURLFallback = "CLOUD_COMMERCE_NATS_URL"
-
 	// durableName is the shared JetStream durable this subsystem binds per stream:
 	// durable + explicit-ack, so multiple cloud replicas load-balance events and each
 	// is handled exactly once across restarts.
@@ -72,19 +76,52 @@ const (
 // independent knobs.
 var retryBackoff = []time.Duration{1 * time.Second, 5 * time.Second, 25 * time.Second}
 
-// streamSource names a JetStream stream to consume and the subjects it carries (for the
-// idempotent EnsureStream). Adding BASE / WORLD / IAM is appending a row here, not a
-// rewrite: the org-resolution + match + deliver path is stream-agnostic.
+// streamSource is ONE consumed plane, described entirely by its OWNER's vocabulary: the
+// stream's name, the subjects it carries, the field its publisher names the tenant with,
+// and the owner's own idempotent constructor. Adding BASE / WORLD / IAM is appending a
+// row here, not a rewrite: the org-resolution + match + deliver path is stream-agnostic.
+//
+// orgKey is per-stream because the platform genuinely has two envelope dialects and this
+// is the seam that reads both — commerce says organization_id, the event plane says org.
+// Declaring it here (rather than trying keys until one hits) means a stream whose
+// publisher renames its tenant field goes red at this table instead of silently
+// resolving every event to "" and delivering to nobody.
 type streamSource struct {
 	stream   string
 	subjects []string
+	orgKey   string
+	ensure   func(context.Context, *infra.PubSubClient) error
 }
 
-// streams is the consumed set: COMMERCE (commerce.>) and the canonical event
-// plane (EVENTS, event.>) the bridge publishes.
+// streams is the consumed set: COMMERCE (commerce.>), owned by hanzoai/commerce, and the
+// canonical event plane (analytics.EventStream, event.>), owned by apps/analytics — which
+// publishes it, names it, and configures its retention. Neither is this package's to
+// declare; both are this package's to read.
 var streams = []streamSource{
-	{stream: events.StreamName, subjects: events.StreamSubjects},
-	{stream: EventStream, subjects: EventSubjects},
+	{
+		stream:   events.StreamName,
+		subjects: events.StreamSubjects,
+		orgKey:   commerceOrgKey,
+		ensure:   ensureCommerceStream,
+	},
+	{
+		stream:   analytics.EventStream,
+		subjects: analytics.EventSubjects,
+		orgKey:   analytics.EventOrgKey,
+		ensure:   analytics.EnsureEventStream,
+	},
+}
+
+// commerceOrgKey is the tenant field on a commerce event envelope
+// (hanzoai/commerce/events.CommerceEvent.OrganizationID).
+const commerceOrgKey = "organization_id"
+
+// ensureCommerceStream is the COMMERCE plane's constructor. It is written out here
+// because hanzoai/commerce/events exports the stream's NAME and SUBJECTS but ships no
+// constructor — and it is byte-identical to the one apps/catalogsync uses, which is what
+// keeps two consumers from racing to create two different COMMERCE streams.
+func ensureCommerceStream(ctx context.Context, cl *infra.PubSubClient) error {
+	return cl.EnsureStream(ctx, &infra.StreamConfig{Name: events.StreamName, Subjects: events.StreamSubjects})
 }
 
 // deliveryJob is a self-contained unit of work: the resolved subscriber + the exact
@@ -134,15 +171,11 @@ func newDispatcher(stores *cloud.OrgStore[*store], log luxlog.Logger) *dispatche
 	}
 }
 
-// start brings the dispatcher up when a bus URL is configured, else logs inert and
-// returns (the registry still serves). It never blocks and never fails the mount: the
-// connect + consume loop runs in the background and retries a down bus forever.
+// start brings the dispatcher up against the ONE platform bus. It never blocks and never
+// fails the mount: the connect + consume loop runs in the background and retries a down
+// bus forever, so the registry serves from the first moment either way.
 func (d *dispatcher) start() {
-	url := firstNonEmpty(os.Getenv(natsURLEnv), os.Getenv(natsURLFallback))
-	if url == "" {
-		d.log.Info("webhooks dispatcher inert (set " + natsURLEnv + " or " + natsURLFallback + " to deliver bus events)")
-		return
-	}
+	url := pubsub.URL()
 	ctx, cancel := context.WithCancel(context.Background())
 	d.mu.Lock()
 	d.cancel = cancel
@@ -214,7 +247,9 @@ func (d *dispatcher) run(ctx context.Context, url string) {
 // loop per stream, returning on the first loop error or ctx cancellation.
 func (d *dispatcher) consume(ctx context.Context, cl *infra.PubSubClient) error {
 	for _, s := range streams {
-		if err := cl.EnsureStream(ctx, &infra.StreamConfig{Name: s.stream, Subjects: s.subjects}); err != nil {
+		// The OWNER's constructor, so the stream is created once with one config no
+		// matter who gets to the bus first. Never a copy of it written down here.
+		if err := s.ensure(ctx, cl); err != nil {
 			return fmt.Errorf("ensure stream %s: %w", s.stream, err)
 		}
 		// No FilterSubject: we consume the WHOLE stream and match per subscription, so
@@ -246,7 +281,7 @@ func (d *dispatcher) consume(ctx context.Context, cl *infra.PubSubClient) error 
 			send := func(err error) { once.Do(func() { errc <- err }) }
 			defer send(errStreamConsumerPanicked)
 			send(cl.ConsumeMessages(ctx, s.stream, durableName, func(m *infra.StreamMessage) error {
-				return d.handle(ctx, m)
+				return d.handle(ctx, s, m)
 			}))
 		})
 	}
@@ -262,9 +297,9 @@ func (d *dispatcher) consume(ctx context.Context, cl *infra.PubSubClient) error 
 // (returns nil) once queued — never after the retries. It NAKs (returns an error) only
 // on a genuine store fault worth a bounded redelivery; a benign outcome (no org, no
 // subscriber, no match) ACKs so a no-op message is never redelivered forever.
-func (d *dispatcher) handle(ctx context.Context, m *infra.StreamMessage) error {
+func (d *dispatcher) handle(ctx context.Context, s streamSource, m *infra.StreamMessage) error {
 	subject := m.Subject
-	org := orgOf(m.Data)
+	org := orgOf(m.Data, s.orgKey)
 	if org == "" {
 		// No org on the envelope ⇒ deliver to nobody (never cross-tenant). Log once.
 		d.noOrgOnce.Do(func() {
@@ -446,16 +481,24 @@ func signPayload(secret string, ts int64, body []byte) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// orgOf reads the emitting org from a commerce event envelope (organization_id). An
-// undecodable body or an absent org yields "" ⇒ delivered to nobody.
-func orgOf(data []byte) string {
-	var env struct {
-		OrganizationID string `json:"organization_id"`
-	}
-	if json.Unmarshal(data, &env) != nil {
+// orgOf reads the emitting org out of an envelope, from the field the message's OWN
+// stream declares (streamSource.orgKey). An undecodable body, a missing field, or a
+// non-string value yields "" ⇒ delivered to nobody, which is the safe answer: a tenant
+// this function guessed would be a cross-tenant delivery.
+func orgOf(data []byte, key string) string {
+	var env map[string]json.RawMessage
+	if key == "" || json.Unmarshal(data, &env) != nil {
 		return ""
 	}
-	return strings.TrimSpace(env.OrganizationID)
+	raw, ok := env[key]
+	if !ok {
+		return ""
+	}
+	var org string
+	if json.Unmarshal(raw, &org) != nil {
+		return ""
+	}
+	return strings.TrimSpace(org)
 }
 
 // jitter adds up to +25% random spread to a backoff so a fleet of retrying deliveries
@@ -479,15 +522,6 @@ func newUUID() string {
 	b[6] = (b[6] & 0x0f) | 0x40 // version 4
 	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return strings.TrimSpace(v)
-		}
-	}
-	return ""
 }
 
 func streamNames() []string {

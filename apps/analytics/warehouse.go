@@ -254,7 +254,7 @@ func (s *drain) start() {
 	s.cancel = cancel
 	s.mu.Unlock()
 	go s.run(ctx)
-	s.log.Info("event sink started", "stream", stream, "tables", tableNames())
+	s.log.Info("event sink started", "stream", EventStream, "tables", tableNames())
 }
 
 // stop cancels the consumers and closes the connection.
@@ -302,7 +302,7 @@ func (s *drain) consume(ctx context.Context, cl *infra.PubSubClient) error {
 	for _, w := range writers {
 		w := w
 		durable := plane + "-" + string(w.signal)
-		if _, err := cl.CreateConsumer(ctx, stream, &infra.ConsumerConfig{
+		if _, err := cl.CreateConsumer(ctx, EventStream, &infra.ConsumerConfig{
 			Name:          durable,
 			Durable:       durable,
 			Description:   "land " + w.signal.subject() + " in " + w.signal.table(),
@@ -323,7 +323,7 @@ func (s *drain) consume(ctx context.Context, cl *infra.PubSubClient) error {
 			var once sync.Once
 			send := func(err error) { once.Do(func() { errc <- err }) }
 			defer send(fmt.Errorf("event sink: %s consumer panicked (recovered)", w.signal))
-			send(cl.ConsumeMessages(ctx, stream, durable, func(sm *infra.StreamMessage) error {
+			send(cl.ConsumeMessages(ctx, EventStream, durable, func(sm *infra.StreamMessage) error {
 				return s.land(ctx, w, sm)
 			}))
 		})
