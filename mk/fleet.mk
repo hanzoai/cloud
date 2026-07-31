@@ -31,6 +31,22 @@ EXTERNAL := authz licensing metrics
 # adaptor moves out to hanzoai/stream.
 OPENAPI_NEEDS_BROKER := kafka
 
+# Apps with NO STANDALONE MOUNT, DERIVED from the manifest rather than named.
+#
+# A coresident app is middleware on a SIBLING's router (manifest.App.Coresident):
+# it claims no prefix, and mounting it alone is refused by construction — "zen
+# installed middleware at /v1, outside the prefixes it owns". describe mounts one
+# app alone, so there is nothing here for it to project. That is a property of
+# coresidency, not a defect like kafka's broker, and like kafka the subset is
+# empty and therefore has no drift it could hide.
+#
+# Read from apps.go the same way the root Makefile reads APPS, because the ONE
+# place an app declares it is coresident must also be the place this loop learns
+# it. Named here instead, the next coresident app would go missing exactly the way
+# zen did — and zen went missing INVISIBLY, by having no Makefile at all, so the
+# glob below simply never saw it and nothing said so.
+CORESIDENT := $(shell sed -n 's/.*{Name: "\([^"]*\)".*Coresident: true.*/\1/p' $(ROOT)/manifest/apps.go)
+
 .PHONY: openapi-weave describe-apps surface-check
 
 # FIRST, so a bare `make -f mk/fleet.mk` runs the two-second check and not the
@@ -44,16 +60,20 @@ OPENAPI_NEEDS_BROKER := kafka
 openapi-weave: ## Weave the per-app subsets into the fleet spec and prove it equals openapi.yaml. OUT=<path> to write it.
 	@$(GO) test -count=1 $(ROOT)/openapi $(if $(OUT),-weave="$(abspath $(OUT))")
 
-# OPENAPI_NEEDS_BROKER is honoured HERE as well as in the gate, because the gate's
+# The exemptions are honoured HERE as well as in the gate, because the gate's
 # own failure message says "fix: make openapi" — and that fix routed through this
 # loop, which mounted kafka, which fails closed without a live broker. So the one
-# command told to repair a red gate could not run at all. One exemption list, read
-# everywhere it applies.
+# command told to repair a red gate could not run at all. Each exemption is
+# defined once and read everywhere it applies; a repair path that skipped fewer
+# apps than the gate would be the same bug again.
 describe-apps: ## Regenerate EVERY app's own spec subset (one binary per app; slow by construction).
 	@set -e; for d in $(APPDIRS); do \
 	  a=$$(basename $$d); \
 	  case " $(OPENAPI_NEEDS_BROKER) " in \
 	    *" $$a "*) echo ">> skip $$a — needs a live broker to mount (OPENAPI_NEEDS_BROKER)"; continue;; \
+	  esac; \
+	  case " $(CORESIDENT) " in \
+	    *" $$a "*) echo ">> skip $$a — coresident: middleware on a sibling's router, no standalone mount to project"; continue;; \
 	  esac; \
 	  $(MAKE) --no-print-directory -C $$d describe; \
 	done
@@ -88,6 +108,9 @@ surface-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail 
 	  a=$$(basename $$d); \
 	  case " $(OPENAPI_NEEDS_BROKER) " in \
 	    *" $$a "*) echo ">> skip $$a — needs a live broker to mount (OPENAPI_NEEDS_BROKER)"; continue;; \
+	  esac; \
+	  case " $(CORESIDENT) " in \
+	    *" $$a "*) echo ">> skip $$a — coresident: middleware on a sibling's router, no standalone mount to project"; continue;; \
 	  esac; \
 	  $(MAKE) --no-print-directory -C $$d describe >/dev/null \
 	    || { echo "!! $$a cannot project its own document — an app that cannot describe itself is the bug"; exit 1; }; \
