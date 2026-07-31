@@ -33,8 +33,9 @@
 // delivered into a log. The fix is not a second Slack credential — an incoming
 // webhook would be a second secret outside KMS and a second egress beside the
 // one the product already uses. It is the app that is already installed: this
-// receiver forwards each firing alert through integrations.SendSlack, which
-// posts with the org's KMS-custodied bot token (the ONE Slack egress, shared
+// receiver forwards each firing alert through cloud.SlackSend (the shared
+// egress the integrations subsystem installs), which posts with the org's
+// KMS-custodied bot token (the ONE Slack egress, shared
 // with channels and automations). One credential, one egress, one receipt.
 
 package o11y
@@ -52,7 +53,6 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/integrations"
 	"github.com/hanzoai/cloud/openapi"
 )
 
@@ -201,7 +201,7 @@ func page(p *webhook, as []alert) {
 		defer func() { _ = recover() }()
 		ctx, cancel := context.WithTimeout(context.Background(), slackPageTimeout)
 		defer cancel()
-		if err := integrations.SendSlack(ctx, org, channel, "", text); err != nil {
+		if err := cloud.SlackSend(ctx, org, channel, "", text); err != nil {
 			// One line, in the same log as the receipts: a page that could not
 			// be sent is itself an operational fact, and the receipt above
 			// already proved the alert arrived.

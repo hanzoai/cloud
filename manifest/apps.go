@@ -128,7 +128,7 @@ var Apps = []App{
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}},
 	{Name: "graph", Prefixes: []string{"/v1/indexers", "/v1/oracles"}},
 	{Name: "security", Prefixes: []string{"/v1/security"}},
-	{Name: "integrations", Prefixes: []string{"/v1/connector/github/webhook", "/v1/connectors", "/v1/integrations"}},
+	{Name: "integrations", Prefixes: []string{"/v1/connector/github/webhook", "/v1/connectors", "/v1/integrations"}, Eager: true},
 	{Name: "destinations", Prefixes: []string{"/v1/destinations"}},
 	{Name: "cloudflare", Prefixes: []string{"/v1/cloudflare"}},
 	{Name: "sbom", Prefixes: []string{"/v1/sbom"}},
