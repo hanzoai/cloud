@@ -52,12 +52,43 @@ import (
 // as an alias so a value satisfies both names with no adapter (mirrors commerce.Client).
 type Client = types.FinanceClient
 
-// Entry kinds classify a wallet entry's economic meaning (also the first half of its
-// idempotency key). Kept small and closed.
+// Kind classifies a wallet entry's economic meaning — money IN or money OUT — and is
+// also the first half of the entry's idempotency key. Kept small and closed: two
+// directions, two names.
+//
+// IT IS THE ONE VOCABULARY, and it is a TYPE rather than a pair of strings because
+// both halves of the money surface read it. The ledger WRITES these kinds and the
+// customer's finance pages CLASSIFY on them, and while the reader held its own string
+// literals the two silently disagreed: the reader matched commerce's `deposit` /
+// `withdraw` against entries this file has always written as `finance.deposit` /
+// `finance.usage`, so over the peer path a customer's credits rendered empty, their
+// usage totalled zero, and their own top-up signed NEGATIVE. Nothing failed — the
+// strings just never met. Named constants of a named type make that disagreement a
+// compile error instead of a wrong number on a customer's balance page.
+type Kind string
+
 const (
-	kindDeposit = "finance.deposit" // funding:platform → wallet (a prepaid grant/settlement)
-	kindUsage   = "finance.usage"   // wallet → revenue:platform (a metered debit)
+	KindDeposit Kind = "finance.deposit" // funding:platform → wallet (a prepaid grant/settlement)
+	KindUsage   Kind = "finance.usage"   // wallet → revenue:platform (a metered debit)
+	// KindUnknown is what a kind the ledger never wrote parses to. A reader treats it
+	// as neither direction rather than guessing one — an entry nobody can classify
+	// must not be silently counted as spend.
+	KindUnknown Kind = ""
 )
+
+// ParseKind reads a kind back off a wire — the internal plane's Txn.Kind, or a row
+// re-read from an older store. It is the ONE place the ledger's spellings are
+// recognized, so a reader never compares an entry to a string literal.
+func ParseKind(s string) Kind {
+	switch Kind(strings.TrimSpace(s)) {
+	case KindDeposit:
+		return KindDeposit
+	case KindUsage:
+		return KindUsage
+	default:
+		return KindUnknown
+	}
+}
 
 // Finance chart of accounts, WITHIN a single org's file. The file is the org boundary, so
 // accounts carry no org prefix. One asset = USD minor units.
@@ -171,7 +202,7 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 	entryID := id
 	if err := store.Tx(ctx, func(tx ledger.Tx) error {
 		if in.Ref != "" {
-			existing, ok, ferr := tx.EntryByRef(kindDeposit, "", in.Ref)
+			existing, ok, ferr := tx.EntryByRef(string(KindDeposit), "", in.Ref)
 			if ferr != nil {
 				return ferr
 			}
@@ -182,7 +213,7 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 		}
 		e := ledger.JournalEntry{
 			ID:        id,
-			Kind:      kindDeposit,
+			Kind:      string(KindDeposit),
 			Ref:       ref,
 			Memo:      in.Notes,
 			Amount:    in.Amount,
@@ -225,7 +256,7 @@ func (f *ledgerFinance) SumUsageSince(ctx context.Context, org string, test bool
 	if err != nil {
 		return 0, err
 	}
-	sum, err := store.SumByKindSince(ctx, kindUsage, since)
+	sum, err := store.SumByKindSince(ctx, string(KindUsage), since)
 	if err != nil {
 		return 0, err
 	}
@@ -237,20 +268,40 @@ func (f *ledgerFinance) SumUsageSince(ctx context.Context, org string, test bool
 // same transaction as the insert, so a retry debits AT MOST ONCE. A non-positive amount is
 // a no-op.
 func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) error {
+	_, _, err := f.RecordUsageOnce(ctx, in)
+	return err
+}
+
+// RecordUsageOnce is RecordUsage with the ledger's idempotency ANSWERED rather than
+// merely applied: entryID is the entry the debit is recorded under — the original one
+// on a replay — and posted reports whether THIS call is the one that moved the money.
+//
+// It exists because a caller doing a second thing beside the debit has to know which
+// call it is on. The GPU charge is that caller: it answers the customer a transaction
+// id, and a replay that minted a fresh id told a retrying client it had bought a second
+// GPU. The answer comes from INSIDE the same transaction as the insert, so two
+// concurrent replays cannot both read posted=true and both act.
+//
+// RecordUsage is the whole types.FinanceClient contract and delegates here, so there is
+// ONE body and one place the idempotency lives. Callers that need the answer resolve
+// this method by interface assertion, the same widening ListUsage and SumUsageSince use.
+// A non-positive amount is a no-op ("", false, nil): nothing was posted.
+func (f *ledgerFinance) RecordUsageOnce(ctx context.Context, in types.UsageInput) (entryID string, posted bool, err error) {
 	if in.Amount.Sign() <= 0 {
-		return nil
+		return "", false, nil
 	}
-	store, err := f.storeFor(in.Org, in.Test)
-	if err != nil {
-		return err
+	store, serr := f.storeFor(in.Org, in.Test)
+	if serr != nil {
+		return "", false, serr
 	}
-	if err := store.Tx(ctx, func(tx ledger.Tx) error {
+	if terr := store.Tx(ctx, func(tx ledger.Tx) error {
 		if in.RequestID != "" {
-			_, ok, ferr := tx.EntryByRef(kindUsage, "", in.RequestID)
+			existing, ok, ferr := tx.EntryByRef(string(KindUsage), "", in.RequestID)
 			if ferr != nil {
 				return ferr
 			}
 			if ok {
+				entryID, posted = existing.ID, false
 				return nil // idempotent replay — already debited once
 			}
 		}
@@ -264,7 +315,7 @@ func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) er
 		}
 		e := ledger.JournalEntry{
 			ID:        id,
-			Kind:      kindUsage,
+			Kind:      string(KindUsage),
 			Ref:       ref,
 			Memo:      in.Model,
 			Amount:    in.Amount,
@@ -274,9 +325,13 @@ func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) er
 			{Account: walletAcct(in.Subject), Amount: in.Amount.Neg()},
 			{Account: acctRevenue, Amount: in.Amount},
 		}
-		return tx.Insert(e, postings)
-	}); err != nil {
-		return err
+		if ierr := tx.Insert(e, postings); ierr != nil {
+			return ierr
+		}
+		entryID, posted = id, true
+		return nil
+	}); terr != nil {
+		return "", false, terr
 	}
 
 	// The debit is committed — fire the usage-cap alert on this crossing (async,
@@ -286,7 +341,7 @@ func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) er
 		h := *p
 		go h(in.Org, in.Test, in.Project, in.Service)
 	}
-	return nil
+	return entryID, posted, nil
 }
 
 // Close closes every cached org store (best-effort), returning the first error.

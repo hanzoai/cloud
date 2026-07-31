@@ -118,9 +118,13 @@ func (p *commerceProxy) get(ctx context.Context, path, org string, q url.Values)
 // post performs one service-token commerce POST scoped to org, forwarding the JSON
 // body and returning commerce's raw body + status VERBATIM. Same S2S trust as get: the
 // caller's OWN org rides X-Org-Id (the selector commerce keys the per-org wallet under)
-// and the admin service token authorizes the write. Used by gpu-charge — the ONLY money
-// WRITE on this customer surface.
-func (p *commerceProxy) post(ctx context.Context, path, org string, body []byte) ([]byte, int, error) {
+// and the admin service token authorizes the write.
+//
+// idempotencyKey, when non-empty, rides as X-Idempotency-Key — the header commerce's own
+// money moves guard themselves on. It is set by the split-deploy GPU charge, where the
+// ledger that would key the debit is in the OTHER process: a guarantee has to be made
+// where the write happens, so where it cannot be made here it is asked for there.
+func (p *commerceProxy) post(ctx context.Context, path, org string, body []byte, idempotencyKey string) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.base+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, 0, err
@@ -129,6 +133,9 @@ func (p *commerceProxy) post(ctx context.Context, path, org string, body []byte)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.token)
 	req.Header.Set("X-Org-Id", org)
+	if k := strings.TrimSpace(idempotencyKey); k != "" {
+		req.Header.Set("X-Idempotency-Key", k)
+	}
 	resp, err := p.http.Do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("commerce unreachable: %w", err)
@@ -265,23 +272,29 @@ func init() {
 
 	openapi.Describe("/v1/billing/gpu-charge", http.MethodPost,
 		"Debit the caller's org prepaid balance for a GPU",
-		"Records a gpu-tagged withdrawal against the caller's own org and answers 201 with the "+
+		"Records a gpu-tagged debit against the caller's own org and answers 201 with the "+
 			"transaction id and the prepaid balance left. This is the ONE endpoint on the customer "+
 			"billing surface that moves an org's ledger.\n\n"+
+			"`requestId` IS THE IDEMPOTENCY KEY. Two posts carrying the same one are ONE debit: "+
+			"the ledger recognizes the ref inside the same transaction as the insert, so the "+
+			"replay moves no money and answers the ORIGINAL transaction id — a retry, a proxy "+
+			"replay and a double-clicked launch button all cost one GPU. Send it. OMITTED, the "+
+			"debit takes a fresh ref and is additive, which is the same rule every other write on "+
+			"this ledger states for a missing key: without one there is nothing to recognize a "+
+			"repeat by, and two posts are two charges.\n\n"+
 			"THE PAYER IS NOT A FIELD. Every billing-subject key in the body — `user`, `userId`, "+
-			"`customerId` — is overwritten server-side with the caller's own org before the "+
-			"request leaves, so a forged body can never charge another tenant; a body that is not "+
-			"an object is replaced by the pinned subject alone. `amountCents`, `currency`, "+
-			"`requestId` and `tag` pass through, and `tag` is FORCED into the gpu bucket so this "+
-			"can never mint a credit-eligible withdrawal.\n\n"+
-			"Two gates upstream, both fail-closed: a chargeable card on file (402 `card_required`) "+
-			"and prepaid alone covering the amount (402 `insufficient_prepaid`) — credits are "+
-			"never consulted, so a GPU cannot draw on a grant. Both statuses forward VERBATIM, "+
-			"because the launch UI shows the remedy and a money verdict must never be "+
-			"500-masked.\n\n"+
-			"IT IS NOT IDEMPOTENT. `requestId` is recorded on the transaction and deduplicates "+
-			"NOTHING, and no idempotency key is carried upstream: two identical posts are two "+
-			"debits. Retry safety belongs to the caller.\n\n"+
+			"`customerId` — is ignored and the wallet is resolved server-side from the caller's "+
+			"own validated org, so a forged body can never charge another tenant. `amountCents`, "+
+			"`currency`, `requestId`, `notes` and `tag` are the request, and `tag` is FORCED into "+
+			"the gpu bucket so this can never mint a credit-eligible debit.\n\n"+
+			"Two gates, both fail-closed: a chargeable card on file (402 `card_required`) and "+
+			"prepaid alone covering the amount (402 `insufficient_prepaid`) — credits are never "+
+			"consulted, so a GPU cannot draw on a grant. The prepaid gate reads the SAME wallet "+
+			"the debit posts to, so the gate and the charge can never address two wallets. A gate "+
+			"that cannot be READ is 502 and the charge does not happen: unknown is never "+
+			"permission, and a money verdict is never 500-masked.\n\n"+
+			"`amountCents` is whole USD cents and debits EXACTLY, with no rounding — the ledger "+
+			"holds 18-decimal USD, so the cents asked for are the cents taken.\n\n"+
 			"401 without a validated principal — a customer charging its OWN wallet, so an absent "+
 			"identity is not signed in, never not authorized.")
 
@@ -540,7 +553,7 @@ func createPaymentMethod(s *cloud.Service[state], c *zip.Ctx) error {
 	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
-	body, status, err := s.State.commerce.post(c.Context(), "/v1/billing/payment-methods", org, pinSubjectBody(c.Body(), org))
+	body, status, err := s.State.commerce.post(c.Context(), "/v1/billing/payment-methods", org, pinSubjectBody(c.Body(), org), "")
 	if err != nil {
 		s.Log.Warn("commerce save card failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
@@ -548,37 +561,6 @@ func createPaymentMethod(s *cloud.Service[state], c *zip.Ctx) error {
 	c.SetHeader("Content-Type", "application/json")
 	c.SetHeader("Cache-Control", "no-store")
 	return c.Bytes(status, body)
-}
-
-// gpuCharge → commerce POST /v1/billing/gpu-charge: the prepay-only, card-required GPU
-// debit. Commerce enforces BOTH gates + the gpu-tagged (credits-never-consulted)
-// bucketing server-side, so this is a thin, org-scoped hop: the caller's charge params
-// (amountCents/currency/requestId/tag) ride the body, but the billing SUBJECT is PINNED
-// server-side to the caller's OWN org — a client can never charge another tenant. Commerce's
-// status is forwarded VERBATIM (201 ok / 402 {card_required|insufficient_prepaid}), so the
-// launch UI renders the exact remedy; a money verdict is never 500-masked.
-func gpuCharge(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		// A customer's OWN GPU charge — never admin-gate it; an absent identity is a
-		// true "not signed in" (401), matching usage/balance.
-		return zip.ErrUnauthorized("sign in to charge a GPU")
-	}
-	if !s.State.commerce.configured() {
-		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
-	}
-	// Pin the billing subject to the caller's OWN org on the body — commerce's ChargeGPU
-	// reads `user` from the JSON body, so a forged body subject must never widen scope.
-	body := pinSubjectBody(c.Body(), org)
-	respBody, status, err := s.State.commerce.post(c.Context(), "/v1/billing/gpu-charge", org, body)
-	if err != nil {
-		s.Log.Warn("commerce gpu-charge failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
-	}
-	c.SetHeader("Content-Type", "application/json")
-	// A money write's result must never be cached by the browser or an intermediary.
-	c.SetHeader("Cache-Control", "no-store")
-	return c.Bytes(status, respBody)
 }
 
 // pinSubjectBody overwrites every commerce billing-subject key on a top-level JSON object
