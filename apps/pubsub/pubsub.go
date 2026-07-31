@@ -1,15 +1,23 @@
-// Package pubsub is the platform message bus: an embedded Hanzo PubSub node
-// (NATS + JetStream) that binds the NATS client port (default :4222) and serves
-// JetStream over the cloud data dir — the ONE durable log every other app
-// publishes facts onto and consumes them from. The Kafka-wire adaptor
-// (apps/kafka) and any in-cluster NATS/Kafka client talk to it. It is a
-// single embedded node running JetStream over the local file store — there is
-// NO ZooKeeper, raft, or etcd in the path (Lux consensus only; the optional
-// Quasar PQ control plane is a follow-up, see github.com/hanzoai/pubsub/embed).
+// Package pubsub is the platform message bus: publish/subscribe messaging,
+// durable JetStream streams and consumers, and a key-value store, served to
+// tenants at /v1/pubsub over the embedded Hanzo PubSub (NATS + JetStream) node
+// this same package runs.
 //
-// It mounts NO HTTP routes of its own: it is a background TCP server. Cloud's
-// generic per-subsystem liveness route answers /v1/pubsub/health, and the K8s
-// Service TCP-probes :4222 directly.
+// The node binds the NATS client port (default :4222) and serves JetStream
+// over the cloud data dir — the ONE durable log every other app publishes
+// facts onto and consumes them from. The Kafka-wire adaptor (apps/kafka) and
+// any in-cluster NATS/Kafka client talk to it. It is a single embedded node
+// running JetStream over the local file store — there is NO ZooKeeper, raft,
+// or etcd in the path (Lux consensus only; the optional Quasar PQ control
+// plane is a follow-up, see github.com/hanzoai/pubsub/embed).
+//
+// ONE bus, TWO doors. The NATS port is the cluster's door: in-process apps and
+// in-cluster clients, unscoped. /v1/pubsub is the tenant's door: eighteen
+// typed ops (typed.go) that publish, request, manage streams and consumers,
+// pull batches and keep key-value state — each org confined to its own
+// namespace by the validated principal, never by anything a caller asserts.
+// Cloud's generic per-subsystem liveness route answers /v1/pubsub/health, and
+// the K8s Service TCP-probes :4222 directly.
 //
 // It ALWAYS serves. The staged cutover it was gated behind is over — the
 // standalone nats StatefulSet and the pubsub App are retired, so this is the ONE
@@ -57,8 +65,9 @@ import (
 )
 
 // Mount order is the row position in manifest/apps.go: this infrastructure data
-// plane must bind BEFORE apps/kafka dials it. It registers no HTTP routes, so
-// the position only fixes the pubsub-before-kafka mount sequence.
+// plane must bind BEFORE apps/kafka dials it. Its HTTP routes are its own
+// prefix (/v1/pubsub), so the position only fixes the pubsub-before-kafka
+// mount sequence.
 
 // srv holds the running embedded server so shutdown can stop it. Set once by Mount.
 var srv *psembed.Server
@@ -102,10 +111,18 @@ func clientPort() (int, error) {
 	return p, nil
 }
 
-// Mount starts the embedded PubSub server, binding NATS + JetStream in-process.
+// Mount starts the embedded PubSub server, binding NATS + JetStream in-process,
+// and registers the tenant door (/v1/pubsub, typed.go) over it.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("pubsub.Mount: nil deps.Logger")
+	}
+	// A typed op is a route PLUS a registry entry, and the registry lives on
+	// the App. A router that cannot reach it would serve every route with no
+	// schema, no prose, no MCP tool and no SDK method — so the mount FAILS
+	// rather than quietly publishing a surface no projection knows about.
+	if cloud.ZipApp(app) == nil {
+		return fmt.Errorf("pubsub.Mount: router is not a zip app, so the typed ops have no registry")
 	}
 	log := deps.Logger.New("subsystem", "pubsub")
 
@@ -167,7 +184,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("pubsub.Mount: open embedded server (fail-closed): %w", err)
 	}
 	srv = s
-	log.Info("pubsub embedded server serving", "client_url", s.ClientURL(), "store_dir", dataDir, "port", port)
+
+	// The tenant door rides the server just bound: registered only once the
+	// plane is UP, so a served route always has a real bus behind it.
+	routes(app, &cloud.Service[state]{Base: cloud.NewBase(deps, "pubsub")})
+
+	log.Info("pubsub embedded server serving", "client_url", s.ClientURL(), "store_dir", dataDir, "port", port, "door", "/v1/pubsub")
 	return nil
 }
 
@@ -185,8 +207,10 @@ func claimable(host string, port int) error {
 	return ln.Close()
 }
 
-// shutdown stops the embedded server on graceful cloud shutdown. Idempotent.
+// Shutdown stops the door's client connection and the embedded server on
+// graceful cloud shutdown. Idempotent.
 func Shutdown(_ context.Context) error {
+	closeDoor()
 	if srv != nil {
 		srv.Shutdown()
 		srv = nil
