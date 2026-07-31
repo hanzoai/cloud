@@ -16,6 +16,9 @@
     },
     {
       "name": "sentry"
+    },
+    {
+      "name": "summary"
     }
   ],
   "paths": {
@@ -896,10 +899,150 @@
           }
         ]
       }
+    },
+    "/v1/summary": {
+      "get": {
+        "operationId": "get_v1_summary",
+        "summary": "GetSummary reports whether the platform is up.",
+        "description": "GetSummary reports whether the platform is up. It returns the public status\ndocument: the incidents currently open against Hanzo's own services, derived\nfrom the fleet health probes, plus the address of the human status page. No\nauthentication is required and no tenant data is involved — the answer is the\nsame for every caller.\n\nA service that fails its health probe becomes one incident naming that service.\nWhen the availability source itself cannot be read the endpoint answers 503\nrather than an empty incident list, because \"we cannot tell\" and \"everything is\nfine\" are different answers and only one of them is true.",
+        "tags": [
+          "summary"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusSummary"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "StatusComponent": {
+        "properties": {
+          "current_status": {
+            "description": "CurrentStatus is this component's own condition: \"full_outage\" for a\nservice that did not answer its health probe at all.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "StatusIncident": {
+        "properties": {
+          "affected_components": {
+            "items": {
+              "$ref": "#/components/schemas/StatusComponent"
+            },
+            "type": "array"
+          },
+          "current_worst_impact": {
+            "description": "CurrentWorstImpact is the incident's impact on the PLATFORM, which is not\nthe same question as the component's own condition above.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_update_at": {
+            "description": "LastUpdateAt is when the failing measurement this incident reports was\nread, RFC3339 UTC.",
+            "type": "string"
+          },
+          "last_update_message": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "StatusMaintenance": {
+        "properties": {
+          "affected_components": {
+            "items": {
+              "$ref": "#/components/schemas/StatusComponent"
+            },
+            "type": "array"
+          },
+          "ends_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_update_at": {
+            "type": "string"
+          },
+          "last_update_message": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "starts_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "StatusSummary": {
+        "properties": {
+          "checked_at": {
+            "description": "CheckedAt is when the underlying availability read was taken, RFC3339 UTC.\nNot part of the status-page schema the panel parses (which ignores unknown\nfields); it is here because a status document with no timestamp cannot be\ntold apart from a stale one.",
+            "type": "string"
+          },
+          "in_progress_maintenances": {
+            "items": {
+              "$ref": "#/components/schemas/StatusMaintenance"
+            },
+            "type": "array"
+          },
+          "ongoing_incidents": {
+            "items": {
+              "$ref": "#/components/schemas/StatusIncident"
+            },
+            "type": "array"
+          },
+          "page_title": {
+            "type": "string"
+          },
+          "page_url": {
+            "description": "PageURL is the HUMAN status page — an HTML page for people, distinct from\nthis JSON endpoint. Every link in this document points there.",
+            "type": "string"
+          },
+          "scheduled_maintenances": {
+            "items": {
+              "$ref": "#/components/schemas/StatusMaintenance"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "addItemsIn": {
         "properties": {
           "id": {
