@@ -3168,7 +3168,7 @@ components:
             the entry carries one, or the one an admin set. Curation.
           type: string
         name:
-          description: Name is the publisher's reverse-DNS name, e.g. "com.acme/mcp".
+          description: Name is the publisher's reverse-DNS name, e.g. "com.stripe/mcp".
           type: string
         official:
           description: |-
@@ -40590,7 +40590,7 @@ paths:
           application/json:
             example:
               authHeader: Authorization
-              listing: com.acme_mcp
+              listing: com.stripe_mcp
               secret: Bearer …
             schema:
               $ref: '#/components/schemas/createServerReq'
@@ -45908,7 +45908,7 @@ paths:
       parameters:
       - description: |-
           ID is the listing, from the path. It is the publisher's reverse-DNS name
-          with its one slash written as an underscore — "com.acme_mcp".
+          with its one slash written as an underscore — "com.stripe_mcp".
         in: path
         name: id
         required: true
