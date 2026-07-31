@@ -2,20 +2,20 @@ package account
 
 import (
 	"encoding/json"
-	"github.com/hanzoai/account"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"net/url"
-	"sync"
 	"testing"
+
+	"github.com/hanzoai/account"
 )
 
-// billing_test.go — the per-tenant billing bridge (billing.go). Proves the tenant
-// scoping that prevents cross-tenant billing reads (the Go port of console's
-// billing-scope.test.ts) AND the IDOR-safe handler forwarding.
-
-// ── pure scoping ─────────────────────────────────────────────────────────────
+// billing_test.go — the pure tenant-scoping rules (billing.go): which account a
+// caller bills, and how a request is narrowed to it. The Go port of console's
+// billing-scope.test.ts.
+//
+// These are FUNCTIONS of a query/body and a subject, tested as such. What APPLIES
+// them to a live request is PinBillingSubject, in front of the co-resident commerce
+// handlers, and billing_coresident_test.go drives that seam end to end — including
+// the three admission cases (validated customer, trusted in-proc S2S, neither).
 
 // TestBillingSubject proves the top-up subject is resolved through the ONE rule
 // (ai/object.Payer) — so a top-up credits the SAME account the ai gate debits and
@@ -104,193 +104,5 @@ func TestScopedBillingBody(t *testing.T) {
 		if got := string(scopedBillingBody([]byte(raw), "acme")); got != raw {
 			t.Fatalf("non-object body %q must pass through, got %q", raw, got)
 		}
-	}
-}
-
-// ── handler (IDOR + forwarding) ──────────────────────────────────────────────
-
-// fakeBilling records exactly what the handler forwarded to commerce.
-type fakeBilling struct {
-	mu    sync.Mutex
-	path  string
-	query url.Values
-	body  map[string]any
-	org   string
-	auth  string
-}
-
-func (f *fakeBilling) server(t *testing.T) *httptest.Server {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		f.mu.Lock()
-		f.path, f.query = r.URL.Path, r.URL.Query()
-		f.org, f.auth = r.Header.Get("X-Org-Id"), r.Header.Get("Authorization")
-		if raw, _ := io.ReadAll(r.Body); len(raw) > 0 {
-			_ = json.Unmarshal(raw, &f.body)
-		}
-		f.mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"balance":123}`)
-	}))
-	t.Cleanup(srv.Close)
-	return srv
-}
-
-func TestBilling_RequiresValidatedPrincipal(t *testing.T) {
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	app := mountApp(t, "http://iam.invalid", "", "")
-	// A forged X-Org-Id with NO validated X-User-Id is the exact forge — refuse it
-	// BEFORE any commerce call (no cross-tenant ledger read on a victim org).
-	code, _ := callH(t, app, http.MethodGet, "/v1/billing/balance", map[string]string{"X-Org-Id": "victim"}, "")
-	if code != http.StatusForbidden {
-		t.Fatalf("no validated principal: want 403, got %d", code)
-	}
-}
-
-func TestBilling_NotConfiguredWithoutToken(t *testing.T) {
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "")
-	app := mountApp(t, "http://iam.invalid", "", "")
-	code, _ := callH(t, app, http.MethodGet, "/v1/billing/balance", alice, "")
-	if code != http.StatusNotImplemented {
-		t.Fatalf("no commerce token: want 501, got %d", code)
-	}
-}
-
-func TestBilling_ScopesQueryToCallerAndForwards(t *testing.T) {
-	f := &fakeBilling{}
-	t.Setenv("COMMERCE_URL", f.server(t).URL)
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	app := mountApp(t, "http://iam.invalid", "", "")
-
-	// alice/acme with a FORGED ?userId=victim & ?org=othercorp: the handler must pin
-	// every subject key to the caller's own subject (acme) and drop org.
-	code, body := callH(t, app, http.MethodGet,
-		"/v1/billing/invoices?userId=victim&customerId=victim&org=othercorp&status=open", alice, "")
-	if code != http.StatusOK {
-		t.Fatalf("want 200, got %d (%s)", code, body)
-	}
-	if f.path != "/v1/billing/invoices" {
-		t.Fatalf("forwarded path: want /v1/billing/invoices, got %q", f.path)
-	}
-	for _, k := range billingSubjectKeys {
-		if f.query.Get(k) != "acme" {
-			t.Fatalf("commerce must receive %s=acme (the caller's subject), got %q", k, f.query.Get(k))
-		}
-	}
-	if f.query.Has("org") {
-		t.Fatal("org must be dropped before commerce")
-	}
-	if f.query.Get("status") != "open" {
-		t.Fatalf("non-subject filter must pass through, got %q", f.query.Get("status"))
-	}
-	if f.org != "acme" || f.auth != "Bearer svc-tok" {
-		t.Fatalf("S2S must send X-Org-Id=acme + the service token, got org=%q auth=%q", f.org, f.auth)
-	}
-}
-
-func TestBilling_ScopesWriteBodyToCaller(t *testing.T) {
-	f := &fakeBilling{}
-	t.Setenv("COMMERCE_URL", f.server(t).URL)
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	app := mountApp(t, "http://iam.invalid", "", "")
-
-	// a POST with a forged userId in the body must be overwritten to acme.
-	code, _ := callH(t, app, http.MethodPost, "/v1/billing/spend-alerts", alice,
-		`{"userId":"victim","threshold":5000}`)
-	if code != http.StatusOK {
-		t.Fatalf("want 200, got %d", code)
-	}
-	if f.body["userId"] != "acme" {
-		t.Fatalf("write-body subject must be pinned to acme, got %v", f.body["userId"])
-	}
-	if f.body["threshold"].(float64) != 5000 {
-		t.Fatalf("non-subject body field must survive, got %v", f.body["threshold"])
-	}
-}
-
-func TestBilling_RejectsTraversalSegment(t *testing.T) {
-	f := &fakeBilling{}
-	t.Setenv("COMMERCE_URL", f.server(t).URL)
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	app := mountApp(t, "http://iam.invalid", "", "")
-	// Every traversal form — literal `..`, encoded slash (`%2f`), encoded dot
-	// (`%2e%2e`), matrix param (`;`) — must be REFUSED (400) and must NEVER reach
-	// commerce. Without the percent-escape rejection, `invoices/..%2fadmin` decodes
-	// downstream to `/v1/admin`, tunneling PAST /v1/billing into another surface.
-	for _, p := range []string{
-		"/v1/billing/invoices/../admin",   // literal ..
-		"/v1/billing/invoices/..%2fadmin", // encoded slash (%2f)
-		"/v1/billing/%2e%2e/admin",        // encoded dots (%2e%2e)
-		"/v1/billing/invoices;statement",  // matrix param (;)
-	} {
-		code, _ := callH(t, app, http.MethodGet, p, alice, "")
-		if code != http.StatusBadRequest {
-			t.Fatalf("traversal %q: want 400, got %d", p, code)
-		}
-	}
-	if f.path != "" {
-		t.Fatalf("a traversal must never reach commerce, but upstream saw %q", f.path)
-	}
-}
-
-// ── S2S service-token admission (the auth fix; 4 security invariants) ─────────
-
-// Invariant #4 — THE SECURITY GATE: a public/unauthenticated caller (no validated
-// principal AND not the service token) STILL gets 403 on the spend-alert routes, incl.
-// a WRONG bearer. The fix must NEVER open billing to the world.
-func TestBilling_S2S_PublicStill403(t *testing.T) {
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	app := mountApp(t, "http://iam.invalid", "", "")
-	for _, path := range []string{
-		"/v1/billing/spend-alerts",
-		"/v1/billing/spend-alerts/authorize?user=acme&amount=1",
-	} {
-		// forged X-Org-Id, no validated principal, no service token
-		if code, body := callH(t, app, http.MethodGet, path, map[string]string{"X-Org-Id": "victim"}, ""); code != http.StatusForbidden {
-			t.Fatalf("public caller to %s: want 403, got %d (%s)", path, code, body)
-		}
-	}
-	// a WRONG bearer is still just a public caller → 403
-	if code, _ := callH(t, app, http.MethodGet, "/v1/billing/spend-alerts/authorize?user=acme&amount=1",
-		map[string]string{"X-Org-Id": "acme", "Authorization": "Bearer not-the-token"}, ""); code != http.StatusForbidden {
-		t.Fatalf("wrong bearer: want 403")
-	}
-}
-
-// The trusted in-proc S2S caller (verified COMMERCE_SERVICE_TOKEN + X-Org-Id) is admitted
-// and its authorize query is forwarded to commerce VERBATIM (a trusted caller names its
-// own subject), scoped by X-Org-Id — this is what lets the cap gate reach AuthorizeSpendCap.
-func TestBilling_S2S_ServiceTokenForwardsVerbatim(t *testing.T) {
-	f := &fakeBilling{}
-	t.Setenv("COMMERCE_URL", f.server(t).URL)
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	app := mountApp(t, "http://iam.invalid", "", "")
-
-	code, body := callH(t, app, http.MethodGet,
-		"/v1/billing/spend-alerts/authorize?user=acme&amount=100&project=P",
-		map[string]string{"Authorization": "Bearer svc-tok", "X-Org-Id": "acme"}, "")
-	if code != http.StatusOK {
-		t.Fatalf("S2S authorize: want 200, got %d (%s)", code, body)
-	}
-	if f.path != "/v1/billing/spend-alerts/authorize" {
-		t.Fatalf("forwarded path = %q", f.path)
-	}
-	// VERBATIM: the S2S caller's ?user/?amount/?project reach commerce un-pinned.
-	if f.query.Get("user") != "acme" || f.query.Get("amount") != "100" || f.query.Get("project") != "P" {
-		t.Fatalf("S2S query must forward verbatim, got %v", f.query)
-	}
-	if f.org != "acme" || f.auth != "Bearer svc-tok" {
-		t.Fatalf("S2S must send X-Org-Id=acme + service token, got org=%q auth=%q", f.org, f.auth)
-	}
-}
-
-// S2S with the verified token but NO X-Org-Id → 403 (no org to scope the privileged
-// forward to; never fall back to a client value).
-func TestBilling_S2S_NoOrg403(t *testing.T) {
-	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	app := mountApp(t, "http://iam.invalid", "", "")
-	if code, _ := callH(t, app, http.MethodGet, "/v1/billing/spend-alerts/authorize?user=acme&amount=1",
-		map[string]string{"Authorization": "Bearer svc-tok"}, ""); code != http.StatusForbidden {
-		t.Fatalf("S2S without X-Org-Id: want 403")
 	}
 }

@@ -224,7 +224,7 @@ package at once (`cmd/cloud` alone links >6GB).
 
 ## One host: `cmd/cloud` links the router, `plugin/<app>` links each subsystem
 
-The app count is `len(manifest.Apps)` — 112 at this writing
+The app count is `len(manifest.Apps)` — 111 at this writing
 (`grep -c '^\s*{Name: ' manifest/apps.go`). Treat every absolute below as a
 measurement with provenance, not as a live count; re-measure before quoting one.
 
@@ -264,9 +264,10 @@ are in bijection (every app has a main, every main is an app) so neither drifts.
 Prefixes
 come from, in order: the `PluginSpec` call's own arguments, a declared
 `Prefixes:` field, then the absolute paths the app's package registers — read by
-walking the call graph from the entry's Mount function (per FUNCTION, because
-`apps/account` serves two Wire entries and a package-wide scan gives each the
-other's paths). Both registration forms are read: `app.Get("/v1/x", h)` and the
+walking the call graph from the entry's Mount function (per FUNCTION, not per
+package: one package may back two entries — `apps/account` did until the
+`account-bridge` retirement — and a package-wide scan gives each the other's
+paths). Both registration forms are read: `app.Get("/v1/x", h)` and the
 typed `zip.Get(reg, "/v1/x", h)`. The walk resolves consts, `[]string` ranges and
 concatenation, and tracks which values are Groups so `g.Get("/health")` never
 becomes the prefix `/health`.
@@ -718,9 +719,10 @@ document pipeline" below.)
     openapi/synopsis.go). The owner is read from the app's own composition root —
     `plugin/<app>/main.go` imports exactly the package it mounts — because four
     apps are not named after their package (`audit`→`auditlog`, `evals`→`eval`,
-    `plugins`→`plugin`, `zero-trust`→`zt`) and one package backs two apps
-    (`account`, `account-bridge`), so a name-derived guess is right 107 times and
-    silently wrong 5. It is the comment that OPENS `Package …`, not go/doc's
+    `plugins`→`plugin`, `zero-trust`→`zt`), so a name-derived guess is right 107
+    times and silently wrong 4. (It was wrong 5 while `apps/account` backed a
+    second app, `account-bridge`; reading the import is why that retirement cost
+    nothing here.) It is the comment that OPENS `Package …`, not go/doc's
     first-file fallback: twenty packages open their alphabetically-first file with
     a note about that file (`actions.go — the two GitOps write actions`) and state
     the real package doc in `<name>.go`, so the fallback would publish a file note
@@ -1544,6 +1546,9 @@ reading the LIVE router, whose two ledgers must SUM to the served surface.
   wildcard (`*1` to fiber, `{wildcard1}` to the document, so a bound In field and
   the published parameter cannot agree), already held as a CLOSED list by
   `apps/account/typed_wire_test.go`. Nothing to convert; the count is not a gap.
+  **It is now zero of zero: the app is RETIRED** (below), and the closed list it
+  filled is empty. A refusal that cannot be converted and cannot be deleted is
+  usually a route that should not exist.
 - **Three refusal classes, each measured rather than asserted.**
   `POST /v1/ads/campaigns/{id}/launch` is deliberately BODY-TOLERANT
   (`_ = c.Bind(&body)`, apps/ads/ads.go), so a malformed body launches on the
@@ -3301,6 +3306,45 @@ clobber the canonical index. None of these decide whether a ref syncs.
 `commerce` is co-resident (`apps/commerce.go` → `commercemod.Embed` on cloud's own zip
 app), so the billing surface, the ledger, and the gate are all one process. Two facts
 about running it that are easy to get wrong in opposite directions:
+
+**There is no /v1/billing or /v1/commerce FORWARDER any more, and forwarding is why.**
+`account-bridge` was a 112th app whose whole manifest row was the two BARE stems
+`/v1/billing` and `/v1/commerce`. Behind them sat `GET|POST /v1/billing/*` and a
+five-method `/v1/commerce/*`, each re-dialing commerce over HTTP with the admin
+`COMMERCE_SERVICE_TOKEN`. That token satisfies commerce's
+`MayMintMoney = IsServiceToken || IsSuperAdmin`, so **forwarding WAS authorization**:
+every path that reached commerce through it executed with PLATFORM authority, not the
+caller's, and the only thing between a signed-in org member and `POST /v1/billing/deposit`
+was a hand-maintained per-method allowlist that had to stay ahead of every mint route
+commerce would ever add. A default-refuse table is the right shape for that job and still
+the wrong job to have.
+
+It is gone, and nothing replaced it, because the fix had already been applied seventeen
+times: every endpoint on that allowlist is served NATIVELY — six by `apps/billing`, eleven
+by the co-resident commerce embed — each at a manifest prefix named DEEPER than the bare
+stem. The fiber fork sorts endpoint routes most-specific-first
+(`zap-proto/fiber router_precedence.go`, ServeMux semantics), so every one of those routes
+already won its address regardless of mount order and the wildcard behind them received
+nothing. The `manifest/router_test.go` oracle is what proves it rather than asserts it: it
+routes every published path through the real `zip.Load` and names the app that receives it.
+
+Two consequences worth stating plainly. **The bare stems are now UNCLAIMED** — no row was
+widened to inherit them, because a leaf nobody names is surface nobody serves, and a 404
+from the `/v1` remainder is a louder failure than a catch-all that answers "sign in to view
+billing" to a pricing page (which is exactly what the stems did to the whole self-service
+paid path before commerce's row named each leaf). And **the ten merchant store heads**
+(`product`, `order`, `user`, …) the `/v1/commerce/*` half allowed had no native handler at
+all — but they had no working route either: the forwarder re-dialed `COMMERCE_URL`, which
+is unset everywhere and defaults to the public edge, i.e. THIS binary, where `/v1/product`
+matches nothing deeper than ai's `/v1`. Deleting it removed a hop, not a surface. The
+split-deploy case belongs to `apps/commerce/transport`, whose RoundTripper dispatches
+in-process when commerce is co-resident and falls back to plain HTTP when it is not —
+under the native handler's own subject-pinning, with no admin token in the browser path.
+
+`COMMERCE_SERVICE_TOKEN` is NOT dead: `apps/account/topup.go` still forwards it on the one
+outbound S2S call (the HUSD wallet credit), and `IsServiceToken` compares against it to
+recognise a trusted in-process caller. It is no longer attached to anything a browser can
+address.
 
 **At-rest posture is a CAPABILITY question, answered once.** commerce's per-tenant money
 stores open a concurrent read pool AND a serialized write pool on the same file, which

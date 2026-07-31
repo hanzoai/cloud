@@ -14,13 +14,15 @@ import (
 
 // TestCommercePrefixesPinned pins the wire paths that MUST reach the commerce gin
 // handler — the ones a missing prefix silently regresses because they otherwise
-// fall through to another owner (the account-bridge /v1/billing/* catch-all, or
-// the bare /v1/* AI catch-all) that answers with the wrong contract:
+// fall through to the bare /v1/* AI catch-all, which answers with the wrong
+// contract. (Until the account-bridge /v1/billing/* forwarder was retired there
+// was a second wrong owner in front of it, whose session gate 403'd instead; the
+// two failures below are recorded under the answer they actually gave.)
 //
 //   - /v1/billing/webhooks       provider HMAC is the auth (Square et al); the
-//     session-gated bridge would 403 it.
+//     session-gated bridge 403'd it.
 //   - /v1/billing/auto-recharge  the durable cron's billing-autorecharge poke
-//     (COMMERCE_SERVICE_TOKEN bearer); without the prefix the poke 403s at the
+//     (COMMERCE_SERVICE_TOKEN bearer); without the prefix the poke 403'd at the
 //     bridge ("sign in to view billing") — exactly how the first live fires
 //     failed, and how the commerce unfork regressed it once already.
 //   - /v1/store                  the bare storefront surface (GET /v1/store/current +
