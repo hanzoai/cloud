@@ -1,6 +1,8 @@
-// Package validators mounts the Hanzo Cloud /v1/validators/* surface: the
-// "click → provision node + queue registration" pipeline behind GDA/SDM
-// validator onboarding on lux.cloud.
+// Package validators is one-click validator onboarding: prove your Genesis NFT,
+// get a node provisioned, queue its registration.
+//
+// The /v1/validators/* routes are the "click → provision node + queue
+// registration" pipeline behind GDA/SDM validator onboarding on lux.cloud.
 //
 // The end-to-end claim, all server-enforced at cloud's ONE auth boundary
 // (SanitizeIdentity → principal.Org):

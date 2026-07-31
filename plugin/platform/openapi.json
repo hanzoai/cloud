@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package platform is Hanzo PaaS: the per-org container platform at /v1/platform — projects, applications, builds, deploys, environments, releases, logs and verified custom domains, each app reconciled into the caller's own tenant-\u003corg\u003e Kubernetes namespace.",
+    "description": "Package platform is Hanzo PaaS: deploy containers to your own tenant namespace — builds, releases, environments, logs, custom domains.",
     "version": "v1"
   },
   "servers": [

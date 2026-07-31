@@ -3,8 +3,11 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-// Package venue is the org-scoped "connect a cloud account" plane: an org links
-// its native cloud-provider accounts (DigitalOcean / AWS / GCP), and Hanzo
+// Package venue is bring your own cloud: link a DigitalOcean, AWS or GCP
+// account and its clusters show up ready to run work.
+//
+// It is the org-scoped "connect a cloud account" seam: an org links
+// its native cloud-provider accounts, and Hanzo
 // DISCOVERS the Kubernetes clusters in each account and FOLDS them into the ONE
 // fleet (apps/fleet) — the same registry apps/visor surfaces at
 // /v1/clusters and apps/ml federates workloads onto. There is no second

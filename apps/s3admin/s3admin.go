@@ -1,6 +1,7 @@
-// Package s3admin builds the cloud binary's S3 clients from the one shared admin
-// credential (S3_ADMIN_*) — an internal client for control and data operations,
-// and a public-host client whose only job is minting presigned URLs.
+// Package s3admin is the one way to reach the object store: an internal client
+// for control and data, and a public one that mints presigned URLs.
+//
+// Both are built from the one shared admin credential (S3_ADMIN_*).
 //
 // Its consumers are apps/storage (the /v1/s3 object plane), apps/projects (the
 // deploy blob store), apps/sites (static site serving), clients/s3vfs (deps.VFS,

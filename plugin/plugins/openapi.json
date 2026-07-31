@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package plugin is the control plane for the host's zip-native plugins: what each host is running, and the operations that change it — enable, disable, reload, and pin to (or roll back to) a named version.",
+    "description": "Package plugin is what each host is running, and how to change it: enable, disable, reload, or pin a service to a version.",
     "version": "v1"
   },
   "servers": [

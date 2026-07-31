@@ -1,8 +1,11 @@
-// Package tasks mounts the Hanzo Tasks HTTP + UI surface natively onto the
-// unified cloud binary per HIP-0106 — the follow-up named in cloud's durable.go
-// ("consolidating that surface into cloud"). Tasks is the durable
-// workflow/activity engine (event-sourced, exactly-once, crash-recovering)
-// previously fronted by a standalone tasksd + cluster Service.
+// Package tasks is Hanzo Tasks: durable workflows that survive a crash, with
+// every run visible and replayable.
+//
+// Tasks is the durable workflow/activity engine (event-sourced, exactly-once,
+// crash-recovering) previously fronted by a standalone tasksd + cluster
+// Service; this mounts its HTTP + UI surface natively onto the unified cloud
+// binary per HIP-0106 — the follow-up named in cloud's durable.go
+// ("consolidating that surface into cloud").
 //
 // ONE ENGINE. cloud already embeds the single in-process tasks engine in
 // durable.go (wireDurableIngest → cloud.EmbeddedTasks), shared by ai's durable

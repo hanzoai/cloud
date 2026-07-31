@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package deploy is Hanzo CD: the GitOps plane at /v1/deploy — observe the operator-managed fleet (applications, resource tree, per-object health, live diff, logs), and reconcile it (sync, rollback, git → cluster with prune-safe self-heal).",
+    "description": "Package deploy is Hanzo CD: see what each app is running, sync it, and roll back a bad release.",
     "version": "v1"
   },
   "servers": [

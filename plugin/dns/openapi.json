@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package dns forwards the console's DNS dashboard traffic (/v1/dns/*) to the Hanzo DNS control plane (dns/plugin/hanzodns), which owns the authoritative zone/record store.",
+    "description": "Package dns is your DNS records: the zones and records behind every name you point at Hanzo.",
     "version": "v1"
   },
   "servers": [

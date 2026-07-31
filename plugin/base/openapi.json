@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package base is managed Hanzo Base (/v1/base, /v1/collections): a hosted app engine per org — collections, records, rules, IAM-validated auth — plus the platform's public waitlist at /v1/waitlist.",
+    "description": "Package base is managed Hanzo Base: a hosted backend for your app — collections, records, access rules and sign-in.",
     "version": "v1"
   },
   "servers": [

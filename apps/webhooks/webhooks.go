@@ -1,5 +1,8 @@
-// Package webhooks is the platform-global webhook layer (HIP-0106): ONE registry plus
-// ONE dispatcher that delivers ANY event on the platform bus to org-registered HTTP
+// Package webhooks is how your app hears about events: register an endpoint,
+// pick the events, get each one delivered and signed.
+//
+// It is the platform-global webhook layer (HIP-0106) — ONE registry plus ONE
+// dispatcher that delivers ANY event on the platform bus to org-registered HTTP
 // subscribers. It supersedes commerce's local, billing-scoped delivery path — the
 // webhook surface is /v1/webhooks, top-level, never under /v1/billing, and it fans out
 // EVERY platform event, not just commerce's.

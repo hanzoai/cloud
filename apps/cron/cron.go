@@ -1,8 +1,11 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-// Package cron is the platform's ONE cron system: durable schedules on the
-// embedded hanzoai/tasks engine (cloud.EmbeddedTasks) replacing every k8s
-// CronJob. There are no tickers here and no bespoke scheduler — the engine
+// Package cron is scheduled work that survives a restart: declare the schedule,
+// then watch every run.
+//
+// It is the platform's ONE cron system — durable schedules on the embedded
+// hanzoai/tasks engine (cloud.EmbeddedTasks), replacing every k8s CronJob.
+// There are no tickers here and no bespoke scheduler — the engine
 // owns time (its 5s sweep fires due schedules; runs are durable workflows
 // visible in the Tasks console at console.hanzo.ai/tasks and tasks.hanzo.ai).
 //
