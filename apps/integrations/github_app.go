@@ -329,15 +329,6 @@ type githubImportItem struct {
 	CloneURL string
 }
 
-// GithubImport imports the selected (or all) granted repos into git.hanzo.ai. The
-// selection is intersected with the installation's GRANTED set, so a client can
-// never import a repo the App was not granted (org isolation + a grant check). The
-// import runs in a bounded background worker (don't block the request), so the
-// answer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo
-// status to flip to imported.
-//
-// Example: {"repos":["widgets"]}
-// Response: {"queued":1,"repos":["widgets"]}
 // selectImports resolves the caller's selectors against the installation's granted
 // set. A selector is either owner-qualified ("hanzo-apps/ai") or a bare name
 // ("ai"); the qualified form matches FullName and the bare form matches Name.
@@ -381,6 +372,15 @@ func selectImports(granted []githubRepo, repos []string, all bool) ([]githubImpo
 	return items, nil
 }
 
+// GithubImport imports the selected (or all) granted repos into git.hanzo.ai. The
+// selection is intersected with the installation's GRANTED set, so a client can
+// never import a repo the App was not granted (org isolation + a grant check). The
+// import runs in a bounded background worker (don't block the request), so the
+// answer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo
+// status to flip to imported.
+//
+// Example: {"repos":["widgets"]}
+// Response: {"queued":1,"repos":["widgets"]}
 func (o ops) githubImport(ctx context.Context, in *githubImportIn) (*githubImportOut, error) {
 	org, err := authed(ctx, principalRequired)
 	if err != nil {
