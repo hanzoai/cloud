@@ -362,7 +362,7 @@ type PathItem map[string]*Operation
 // and shows only as len(Handlers) > 1. That is true — but the converse does not
 // hold, and this generator does NOT use that signal:
 //
-//	app.Post("/v1/billing/auto-recharge/run-all",
+//	app.Post("/v1/billing/recharge/run-all",
 //	    commercemid.RequestContext(), commercemid.TokenRequired(),
 //	    commercemid.PlatformOnly(), commercebilling.RunAutoRechargeAllOrgs)
 //

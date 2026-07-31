@@ -69,7 +69,7 @@ type Spend struct {
 	Overage  money.Cents `json:"overageCents"`
 }
 
-// Spend reads a subject's month-to-date consumption (GET /v1/billing/usage-rollup).
+// Spend reads a subject's month-to-date consumption (GET /v1/billing/usage/rollup).
 // Zero (not an error) when commerce is unwired, so a partial deploy degrades to
 // honest zeros.
 func (c *Client) Spend(ctx context.Context, subject string) (Spend, error) {
@@ -77,7 +77,7 @@ func (c *Client) Spend(ctx context.Context, subject string) (Spend, error) {
 	if !c.Ready() {
 		return out, nil
 	}
-	body, err := c.get(ctx, "/v1/billing/usage-rollup", url.Values{"user": {subject}}, subject)
+	body, err := c.get(ctx, "/v1/billing/usage/rollup", url.Values{"user": {subject}}, subject)
 	if err != nil {
 		return out, err
 	}
@@ -302,7 +302,7 @@ func (c *Client) Deposit(ctx context.Context, subject string, amount money.Cents
 }
 
 // CreateCreditGrant forwards a credit-grant request verbatim to commerce's
-// mint-gated POST /v1/billing/credit-grants (CreateCreditGrant), authenticated
+// mint-gated POST /v1/billing/credits (CreateCreditGrant), authenticated
 // by the admin service token, with subject as the target-org namespace selector.
 // Commerce is the sole credit-grant ledger; this relays its contract untouched
 // (the raw response is returned to the caller) so the admin surface stays thin.
@@ -310,7 +310,7 @@ func (c *Client) CreateCreditGrant(ctx context.Context, subject string, body []b
 	if !c.Ready() {
 		return nil, errUnconfigured
 	}
-	return c.post(ctx, "/v1/billing/credit-grants", subject, body, idempotencyKey)
+	return c.post(ctx, "/v1/billing/credits", subject, body, idempotencyKey)
 }
 
 // post performs one admin-authenticated commerce POST (JSON body) and returns the

@@ -107,7 +107,7 @@ var Prefixes = []string{
 	// now a 404 from the /v1 remainder instead of a 403 — still an outage, still
 	// this list's job to prevent. (Landed 5x before the unfork — #274 — and the
 	// pin test lives beside THIS list so it can't silently regress.)
-	"/v1/billing/auto-recharge",
+	"/v1/billing/recharge",
 }
 
 // commerceMasterKey answers ONE question — can this build actually use the key we
@@ -283,14 +283,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// live path — the retired /v1/billing/* forwarder's session gate 403'd it. Same gate
 	// chain the commerce route table uses: TokenRequired authenticates the
 	// service token, PlatformOnly authorizes the mint.
-	app.Post("/v1/billing/auto-recharge/run-all",
+	app.Post("/v1/billing/recharge/run-all",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
 		commercemid.PlatformOnly(),
 		commercebilling.RunAutoRechargeAllOrgs,
 	)
 
-	// POST /v1/billing/test-mode — the org's live/sandbox switch, and the ONLY way to
+	// POST /v1/billing/mode — the org's live/sandbox switch, and the ONLY way to
 	// move a tenant onto real card rails. organization.TestMode() is `!o.Live` and it is
 	// the SINGLE authority for both the Square environment and the ledger bucket, so an
 	// org that has never been flipped transacts in SANDBOX — fail-closed by design, and
@@ -303,7 +303,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// (middleware.Mint: internal service token OR platform global admin, NEVER the
 	// org-level Admin bit), and TokenRequired + PlatformOnly is that gate here. An org
 	// admin must not be able to move their own org between sandbox and production.
-	app.Post("/v1/billing/test-mode",
+	app.Post("/v1/billing/mode",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
 		commercemid.PlatformOnly(),
@@ -357,7 +357,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		{"/v1/billing/subscriptions", commercebilling.ListBillingSubscriptions},
 		{"/v1/billing/alerts", commercebilling.ListSpendAlerts},
 		{"/v1/billing/payouts", commercebilling.ListPayouts},
-		{"/v1/billing/payment-config", commercebilling.GetPaymentConfig},
+		{"/v1/billing/settings", commercebilling.GetPaymentConfig},
 	}
 	for _, r := range billingRead {
 		app.Get(r.path,
@@ -515,7 +515,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	//                          on every one, and the IDOR control on the subject-scoped one.
 	//
 	// payment-methods is NOT one of them, and must not be added back. That address belongs
-	// to the BILLING app: manifest.Apps names "/v1/billing/payment-methods" on the billing
+	// to the BILLING app: manifest.Apps names "/v1/billing/methods" on the billing
 	// row and withholds it from this one, because billing serves the GET (a proxy to
 	// commerce's /v1/billing/portal/payment-methods) — and the host claims a prefix for ONE
 	// app across every method, so the POST has to sit on the same router as the read or it

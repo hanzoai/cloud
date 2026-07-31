@@ -52,10 +52,10 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/usage", h)
 	mux.HandleFunc("/v1/billing/balance", h)
-	mux.HandleFunc("/v1/billing/gpu-eligibility", h)
-	mux.HandleFunc("/v1/billing/gpu-charge", h)
+	mux.HandleFunc("/v1/billing/gpu/eligibility", h)
+	mux.HandleFunc("/v1/billing/gpu/charge", h)
 	mux.HandleFunc("/v1/billing/portal/payment-methods", h)
-	mux.HandleFunc("/v1/billing/payment-methods", h)
+	mux.HandleFunc("/v1/billing/methods", h)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -244,13 +244,13 @@ func TestGPUEligibility_ScopedAndPassthrough(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
 	code, body := call(t, app, http.MethodGet,
-		"/v1/billing/gpu-eligibility?amountCents=24000&minPrepaidCents=24000&currency=usd",
+		"/v1/billing/gpu/eligibility?amountCents=24000&minPrepaidCents=24000&currency=usd",
 		"maxpower/dave", "maxpower")
 	if code != 200 || string(body) != f.body {
 		t.Fatalf("gpu-eligibility: want 200 verbatim, got %d (%s)", code, body)
 	}
-	if f.gotPath != "/v1/billing/gpu-eligibility" {
-		t.Fatalf("commerce path: want /v1/billing/gpu-eligibility, got %q", f.gotPath)
+	if f.gotPath != "/v1/billing/gpu/eligibility" {
+		t.Fatalf("commerce path: want /v1/billing/gpu/eligibility, got %q", f.gotPath)
 	}
 	// The launch gate's amount + 24h floor + currency reach commerce; the subject is the
 	// caller's OWN org on BOTH the S2S selector and the pinned query subject.
@@ -270,7 +270,7 @@ func TestGPUEligibility_ClientCannotWidenScope(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "svc-token")
 	// A forged subject in the query must be overwritten with the caller's own org.
 	code, _ := call(t, app, http.MethodGet,
-		"/v1/billing/gpu-eligibility?user=victim&amountCents=100&org=other",
+		"/v1/billing/gpu/eligibility?user=victim&amountCents=100&org=other",
 		"maxpower/dave", "maxpower")
 	if code != 200 {
 		t.Fatalf("want 200, got %d", code)
@@ -290,9 +290,9 @@ func TestPaymentMethods_ProxiesPortal_Scoped(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `[{"id":"pm_1","brand":"visa","last4":"4242","isDefault":true}]`}
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
-	// The console requests the same-origin /v1/billing/payment-methods (mounted on cloud);
+	// The console requests the same-origin /v1/billing/methods (mounted on cloud);
 	// cloud proxies it to commerce's admin-group PORTAL read.
-	code, body := call(t, app, http.MethodGet, "/v1/billing/payment-methods", "maxpower/dave", "maxpower")
+	code, body := call(t, app, http.MethodGet, "/v1/billing/methods", "maxpower/dave", "maxpower")
 	if code != 200 || string(body) != f.body {
 		t.Fatalf("payment-methods: want 200 verbatim, got %d (%s)", code, body)
 	}
@@ -312,14 +312,14 @@ func TestGPUCharge_PinsSubjectInBody_ForwardsStatus(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
 	// A malicious client tries to charge ANOTHER tenant's wallet via the body subject.
-	code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu-charge",
+	code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu/charge",
 		"maxpower/dave", "maxpower",
 		`{"user":"victim","userId":"victim","customerId":"victim","amountCents":24000,"currency":"usd","tag":"gpu-h100"}`)
 	if code != 402 || string(body) != f.body {
 		t.Fatalf("gpu-charge: want 402 verbatim, got %d (%s)", code, body)
 	}
-	if f.gotMethod != http.MethodPost || f.gotPath != "/v1/billing/gpu-charge" {
-		t.Fatalf("commerce call: want POST /v1/billing/gpu-charge, got %s %q", f.gotMethod, f.gotPath)
+	if f.gotMethod != http.MethodPost || f.gotPath != "/v1/billing/gpu/charge" {
+		t.Fatalf("commerce call: want POST /v1/billing/gpu/charge, got %s %q", f.gotMethod, f.gotPath)
 	}
 	if f.gotOrg != "maxpower" {
 		t.Fatalf("X-Org-Id must be the caller's own org, got %q", f.gotOrg)
@@ -343,7 +343,7 @@ func TestGPUCharge_NoPrincipal_401_NeverTouchesCommerce(t *testing.T) {
 	f := &fakeCommerce{status: 201, body: `{}`}
 	app := mountApp(t, f.server(t).URL, "svc-token")
 	// A forged X-Org-Id with NO validated principal must be refused 401, commerce untouched.
-	code, _ := callBody(t, app, http.MethodPost, "/v1/billing/gpu-charge", "", "victim", `{"amountCents":100}`)
+	code, _ := callBody(t, app, http.MethodPost, "/v1/billing/gpu/charge", "", "victim", `{"amountCents":100}`)
 	if code != http.StatusUnauthorized {
 		t.Fatalf("no principal: want 401, got %d", code)
 	}
@@ -354,7 +354,7 @@ func TestGPUCharge_NoPrincipal_401_NeverTouchesCommerce(t *testing.T) {
 
 func TestGPUCharge_Unconfigured_501(t *testing.T) {
 	app := mountApp(t, "", "") // no commerce base/token
-	code, _ := callBody(t, app, http.MethodPost, "/v1/billing/gpu-charge", "maxpower/dave", "maxpower", `{"amountCents":100}`)
+	code, _ := callBody(t, app, http.MethodPost, "/v1/billing/gpu/charge", "maxpower/dave", "maxpower", `{"amountCents":100}`)
 	if code != http.StatusNotImplemented {
 		t.Fatalf("unconfigured: want 501, got %d", code)
 	}
@@ -393,14 +393,14 @@ func TestCreatePaymentMethod_PostReachesCommerce_PinsSubject(t *testing.T) {
 	f := &fakeCommerce{status: 402, body: `{"error":{"code":"card_declined","message":"Card was declined"}}`}
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
-	code, body := callBody(t, app, http.MethodPost, "/v1/billing/payment-methods",
+	code, body := callBody(t, app, http.MethodPost, "/v1/billing/methods",
 		"maxpower/dave", "maxpower",
 		`{"user":"victim","customerId":"victim","providerRef":"cnon:card-nonce","brand":"visa"}`)
 	if code != 402 || string(body) != f.body {
 		t.Fatalf("save card: want the 402 decline verbatim, got %d (%s)", code, body)
 	}
-	if f.gotMethod != http.MethodPost || f.gotPath != "/v1/billing/payment-methods" {
-		t.Fatalf("commerce call: want POST /v1/billing/payment-methods, got %s %q", f.gotMethod, f.gotPath)
+	if f.gotMethod != http.MethodPost || f.gotPath != "/v1/billing/methods" {
+		t.Fatalf("commerce call: want POST /v1/billing/methods, got %s %q", f.gotMethod, f.gotPath)
 	}
 	var got map[string]any
 	if err := json.Unmarshal(f.gotBody, &got); err != nil {
@@ -421,7 +421,7 @@ func TestCreatePaymentMethod_PostReachesCommerce_PinsSubject(t *testing.T) {
 func TestCreatePaymentMethod_Unauthenticated401(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{}`}
 	app := mountApp(t, f.server(t).URL, "svc-token")
-	if code, _ := callBody(t, app, http.MethodPost, "/v1/billing/payment-methods", "", "", `{}`); code != 401 {
+	if code, _ := callBody(t, app, http.MethodPost, "/v1/billing/methods", "", "", `{}`); code != 401 {
 		t.Fatalf("unauth save card: want 401, got %d", code)
 	}
 }
