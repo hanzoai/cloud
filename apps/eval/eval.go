@@ -1,6 +1,8 @@
-// Package eval is /v1/evals: score a model on YOUR data with YOUR judge —
-// datasets, dataset items, evaluators, score configs, runs, scores and traces,
-// per org. Native, and nothing proxies to the retired observability console.
+// Package eval is scoring a model on your own data, with a judge you choose.
+//
+// /v1/evals: datasets, dataset items, evaluators, score configs, runs, scores
+// and traces, per org. Native, and nothing proxies to the retired observability
+// console.
 //
 // Storage split (CTO directive), two orthogonal stores this package composes:
 //   - metastore  (store.go)     — Hanzo Base/SQLite, per-org config/metadata:

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package ads is paid advertising: ad campaigns with an objective, a budget and reported spend, launched and paused on Meta, Google, TikTok, Reddit, LinkedIn or Microsoft with the org's own connector token.",
+    "description": "Package ads is your paid ad campaigns, launched and paused from one place.",
     "version": "v1"
   },
   "servers": [

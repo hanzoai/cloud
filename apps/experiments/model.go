@@ -1,7 +1,9 @@
-// Package experiments is cloud's unified EXPERIMENT primitive: A/B testing as ONE
-// value whatever the variant KIND is — a feature flag, an ad creative, an email
-// subject, a model id. It is a COMPOSITION of three planes that already exist, never
-// a fourth engine:
+// Package experiments is A/B testing anything: a flag, an ad, a subject line, a
+// model.
+//
+// It is the unified EXPERIMENT primitive — ONE value whatever the variant KIND
+// is — and a COMPOSITION of three planes that already exist, never a fourth
+// engine:
 //
 //	ASSIGNMENT  = flags     — subject -> variant is a deterministic flags evaluation
 //	                          (engineEvaluate, sha1 rollout hash). No 2nd bucketing.

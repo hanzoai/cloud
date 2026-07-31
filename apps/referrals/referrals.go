@@ -1,6 +1,8 @@
-// Package referrals is the customer referral loop: every org has a stable code and
-// share link, a new org claims it at signup, and BOTH sides are granted cloud
-// credit once the referee actually spends — at-most-once, never on signup alone.
+// Package referrals is credit for both sides when someone you refer actually spends.
+//
+// Every org has a stable code and share link, a new org claims it at signup,
+// and BOTH sides are granted cloud credit once the referee actually spends —
+// at-most-once, never on signup alone.
 //
 // It is the ONE-TIME-BONUS member of the three programs built on the same shape;
 // apps/affiliates is the ongoing partner commission and apps/authors the OSS

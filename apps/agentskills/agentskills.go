@@ -1,6 +1,8 @@
-// Package agentskills serves the Agent Skills Discovery surface
-// (/.well-known/agent-skills/) from a catalogue embedded into the ONE cloud
-// binary.
+// Package agentskills is the skill catalogue an AI client reads to learn what it
+// can do.
+//
+// It serves the Agent Skills Discovery convention (/.well-known/agent-skills/)
+// from a catalogue embedded into the ONE cloud binary.
 //
 // Surface (root, public, GET-only — the discovery convention):
 //

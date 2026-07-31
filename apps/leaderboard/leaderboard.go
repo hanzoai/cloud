@@ -1,6 +1,8 @@
-// Package leaderboard ranks AI usage: who leads inside an org, which orgs lead
-// globally, and a GitHub-style per-day contribution graph for one subject — all
-// opt-in for public listing.
+// Package leaderboard is the ranking of who uses AI most, in your org and globally.
+//
+// It ranks who leads inside an org, which orgs lead globally, and draws a
+// GitHub-style per-day contribution graph for one subject — all opt-in for
+// public listing.
 //
 // It is a DERIVED, read-only lens over the ONE usage ledger (hanzo.cloud_usage)
 // through the datastore OLAP rollup — it adds no metering path and double-counts

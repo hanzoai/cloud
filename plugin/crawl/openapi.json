@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package crawl is Hanzo Crawl: fetch one URL and return its readable content as markdown, in-process, in Go.",
+    "description": "Package crawl is any web page turned into clean markdown a model can read.",
     "version": "v1"
   },
   "servers": [

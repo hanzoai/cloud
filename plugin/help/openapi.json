@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package help is the Hanzo Support product: the Frappe-Helpdesk model rebuilt as DocType fixtures on the native framework engine (clients/framework), plus a thin /v1/help subsystem (subsystem.go) for the one plane the generic, secure-by-default framework surface deliberately cannot serve — the PUBLIC help center.",
+    "description": "Package help is a support desk: customers file tickets, your team answers them.",
     "version": "v1"
   },
   "servers": [

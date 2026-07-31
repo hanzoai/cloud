@@ -1,7 +1,10 @@
-// Package esign folds hanzoai/esign (the Documenso fork — "open-source DocuSign")
-// into the unified hanzoai/cloud binary as an in-process subsystem (HIP-0106,
-// task #100, epic #96). Cloud serves the e-signature surface (/v1/esign/*) ITSELF
-// — per tenant, on Base/SQLite — no Next.js/Remix pod, no Prisma, no Postgres.
+// Package esign is a document out for signature, signed and filed with an audit
+// trail.
+//
+// It folds hanzoai/esign (the Documenso fork — "open-source DocuSign") into the
+// unified hanzoai/cloud binary as an in-process subsystem (HIP-0106, task #100,
+// epic #96). Cloud serves the e-signature surface (/v1/esign/*) ITSELF — per
+// tenant, on Base/SQLite — no Next.js/Remix pod, no Prisma, no Postgres.
 //
 // WRAP, DON'T REWRITE — the read-WRITE variant, reusing the SAME seam captable
 // (the #96 pilot) established: the server-side domain (documents, recipients,

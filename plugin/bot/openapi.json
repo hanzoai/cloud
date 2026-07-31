@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package bot is /v1/bot, the node control plane: bot nodes on user machines dial in and hold a socket, and an org lists its connected nodes and invokes commands on one, authorized once at the socket.",
+    "description": "Package bot is your own machines, connected and ready to take a command.",
     "version": "v1"
   },
   "servers": [

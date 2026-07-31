@@ -1,6 +1,7 @@
-// Package marketing is lifecycle email: drip sequences, audiences resolved from
-// the IAM roster, promo codes redeemed as wallet credit, and the per-org
-// suppression list every send passes through.
+// Package marketing is lifecycle email: drip sequences that reach the right people.
+//
+// Audiences resolve from the IAM roster, promo codes redeem as wallet credit,
+// and every send passes through the per-org suppression list.
 //
 // Subsystems (all org-scoped, /v1 only):
 //

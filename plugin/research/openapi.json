@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package research mounts the Hanzo Cloud /v1/research/* surface: the R\u0026D EVIDENCE plane (HIP-0512 §\"Hanzo Research\").",
+    "description": "Package research is every experiment you have ever run, kept and comparable.",
     "version": "v1"
   },
   "servers": [

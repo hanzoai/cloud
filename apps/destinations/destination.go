@@ -1,7 +1,10 @@
-// Package destinations is server-side conversion forwarding: connect Google
-// Analytics 4, Meta, X, LinkedIn, TikTok, Reddit, PostHog or Umami, and every
-// event the org captures is translated into that platform's own conversion schema
-// and sent from the server, with PII hashed on the way out.
+// Package destinations is your events forwarded to the ad and analytics tools
+// you use.
+//
+// Server-side conversion forwarding: connect Google Analytics 4, Meta, X,
+// LinkedIn, TikTok, Reddit, PostHog or Umami, and every event the org captures
+// is translated into that platform's own conversion schema and sent from the
+// server, with PII hashed on the way out.
 //
 // It is a CONSUMER of the canonical /v1/event stream (apps/analytics), installed
 // as a sink at Mount — never a second collector and never a second ingest door.

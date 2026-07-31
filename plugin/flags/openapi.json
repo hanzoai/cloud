@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package flags is feature flags: define a flag, target it by property or percentage rollout, and evaluate it for an identity — plus the platform switches operators flip to change how the deployment behaves without a redeploy.",
+    "description": "Package flags is feature flags: ship it dark, then turn it on for who you pick.",
     "version": "v1"
   },
   "servers": [

@@ -1,5 +1,7 @@
-// Package catalog is the CROSS-ORG discovery lens: one place to find every
-// project, app and site the fleet has built, whichever org built it.
+// Package catalog is one place to browse every project, app and site built here.
+//
+// It is the CROSS-ORG discovery lens: the corpus spans orgs, so a project is
+// findable whichever org built it.
 //
 // It owns no store. The corpus lives in the lexical index (apps/index) — the
 // same store the Meilisearch dialect serves — so relevance, paging, persistence
