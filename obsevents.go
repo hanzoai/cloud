@@ -2,7 +2,6 @@ package cloud
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 )
 
@@ -40,30 +39,3 @@ func SetObsErrorIngest(h http.Handler) { obsErrorIngest = h }
 
 // ObsErrorIngest returns the installed consumer, or nil.
 func ObsErrorIngest() http.Handler { return obsErrorIngest }
-
-// SlackSenderFunc posts text to an org's Slack channel through the ONE product
-// egress — the installed Hanzo app's bot token, custodied in KMS per org. It is
-// registered by the integrations subsystem, and lives HERE (the shared cloud
-// package) rather than being called across subsystems directly: each subsystem
-// is a separate plugin with isolated package globals, so o11y reaching into
-// integrations' own `mounted` var sees a nil copy — the exact "integrations:
-// not mounted" failure the alert forward hit. A closure registered from
-// integrations carries integrations' own linkage, so calling it from anywhere
-// runs against the instance that actually holds the token store. Same pattern
-// as SetObsEventIngest.
-type SlackSenderFunc func(ctx context.Context, org, channel, threadTS, text string) error
-
-var slackSender SlackSenderFunc
-
-// SetSlackSender installs the ONE Slack egress. Called by integrations.Mount.
-func SetSlackSender(fn SlackSenderFunc) { slackSender = fn }
-
-// SlackSend posts through the installed egress, or errors if none is installed
-// (integrations not mounted / disabled). Never panics on a nil seam.
-func SlackSend(ctx context.Context, org, channel, threadTS, text string) error {
-	fn := slackSender
-	if fn == nil {
-		return fmt.Errorf("slack egress not installed (integrations subsystem unmounted)")
-	}
-	return fn(ctx, org, channel, threadTS, text)
-}
