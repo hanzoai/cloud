@@ -76,7 +76,7 @@ func init() {
 			"AudienceRef.id":              "ID is the audience id from the path, as returned by create.",
 		},
 		Example:  json.RawMessage(`{"id":"aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}`),
-		Response: json.RawMessage(`{"available":true,"count":500,"deliverable":3,"unmatched":497,"sample":["u_1","u_2"],"source":"hanzo.events"}`),
+		Response: json.RawMessage(`{"available":true,"count":500,"deliverable":3,"unmatched":497,"sample":["u_1","u_2"],"source":"event.event"}`),
 	})
 	zip.Describe("GET /v1/marketing/calendar", zip.Doc{
 		Description: "Returns the org's calendar, soonest scheduled first,\noptionally narrowed to one status.",
