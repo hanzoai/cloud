@@ -50663,10 +50663,8 @@ tags:
 - description: 'Package agents is autonomous agents for your org: define them, run
     them, keep every run.'
   name: agents
-- description: 'Package analytics is the product-event plane: it owns the ingest door
-    every Hanzo client posts to, lands each event in the `hanzo` warehouse, and serves
-    the per-org read lenses — KPIs, time series, rankings, captured errors — over
-    what it wrote.'
+- description: 'Package analytics is product analytics: send an event, read back who
+    did what.'
   name: analytics
 - description: Package ask is a plain-language question about your business, answered
     with real numbers.

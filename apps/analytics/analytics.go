@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package analytics is the product-event plane: it owns the ingest door every
-// Hanzo client posts to, lands each event in the `hanzo` warehouse, and serves the
-// per-org read lenses — KPIs, time series, rankings, captured errors — over what it
+// Package analytics is product analytics: send an event, read back who did what.
+//
+// It is the product-event plane: it owns the ingest door every Hanzo client
+// posts to, lands each event in the `hanzo` warehouse, and serves the per-org
+// read lenses — KPIs, time series, rankings, captured errors — over what it
 // wrote.
 //
 // It is BOTH halves, and that is deliberate: one write core (ingestEvents) behind
