@@ -69,7 +69,7 @@ func init() {
 			origin:   constOrigin("KLAVIYO_API_BASE", "https://a.klaviyo.com"),
 			path:     "/api/accounts/", place: headerAt, name: "Authorization",
 			scheme: "Klaviyo-API-Key", minLen: 8,
-			extra:  map[string]string{"revision": "2024-10-15"},
+			extra: map[string]string{"revision": "2024-10-15"},
 		}),
 	})
 
@@ -83,7 +83,7 @@ func init() {
 			origin:   constOrigin("TWILIO_API_BASE", "https://api.twilio.com"),
 			path:     "/2010-04-01/Accounts/{account}.json",
 			place:    basicAt, name: accountToken,
-			secret:   "auth_token", minLen: 16, echoAccount: true,
+			secret: "auth_token", minLen: 16, echoAccount: true,
 		}),
 	})
 }
