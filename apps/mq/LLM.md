@@ -48,7 +48,11 @@ Kafka facade's topics), so isolation is cloud's job:
 - `tok` is an injective encoding into the broker's name alphabet
   (`_`-hex escape), so distinct orgs can never share a namespace
   (TestNamespaceEncodingIsInjective).
-- the org comes from `principal.Org` via `cloud.Bridge` — never an In field.
+- the org comes from `principal.OrgFrom(ctx)` — the org `cloud.Bridge` parked —
+  and never from an In field. The org is ALL this surface needs, so there is no
+  `cloud.Request` here: nothing in mq turns on admin-ness, a project or a
+  forwarded credential, and taking the pinned escape hatch to recompute
+  `principal.Org(c)` would be the same value by the longer way.
 
 ## Wire semantics worth knowing
 
