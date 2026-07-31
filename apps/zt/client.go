@@ -34,6 +34,7 @@ package zt
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -180,7 +181,7 @@ type ztError struct {
 // ensureToken returns a valid session token, minting one under the lock when the
 // cache is empty or expiring. force discards any cached token first (used on the
 // 401 retry path when the controller has invalidated a still-"fresh" token).
-func (cl *client) ensureToken(c *zip.Ctx, force bool) (string, error) {
+func (cl *client) ensureToken(ctx context.Context, force bool) (string, error) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	if force {
@@ -189,17 +190,17 @@ func (cl *client) ensureToken(c *zip.Ctx, force bool) (string, error) {
 	if cl.token != "" && time.Now().Before(cl.tokenExp.Add(-tokenSkew)) {
 		return cl.token, nil
 	}
-	return cl.authenticate(c)
+	return cl.authenticate(ctx)
 }
 
 // authenticate performs the password-method login. Caller holds cl.mu. The
 // credential is sent in the JSON body per the Ziti Authenticate model and is never
 // logged. expiresAt pins the cache lifetime; absent/unparseable it defaults to a
 // conservative 20 minutes (the Ziti default session TTL).
-func (cl *client) authenticate(c *zip.Ctx) (string, error) {
+func (cl *client) authenticate(ctx context.Context) (string, error) {
 	body, _ := json.Marshal(map[string]string{"username": cl.user, "password": cl.secret})
 	u := cl.target + mgmtBase + "/authenticate?method=password"
-	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, u, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
 	if err != nil {
 		return "", zip.Errorf(http.StatusInternalServerError, "zt: build auth request: %v", err)
 	}
@@ -235,13 +236,13 @@ func (cl *client) authenticate(c *zip.Ctx) (string, error) {
 // controller rejects the session with 401 (token expired mid-flight). query is
 // appended as-is. Error mapping is honest and customer-appropriate: an unreachable
 // controller → 502, a non-2xx → that status with Ziti's message.
-func (cl *client) get(c *zip.Ctx, path, query string) ([]byte, error) {
-	raw, status, err := cl.do(c, path, query, false)
+func (cl *client) get(ctx context.Context, path, query string) ([]byte, error) {
+	raw, status, err := cl.do(ctx, path, query, false)
 	if err != nil {
 		return nil, err
 	}
 	if status == http.StatusUnauthorized {
-		if raw, status, err = cl.do(c, path, query, true); err != nil {
+		if raw, status, err = cl.do(ctx, path, query, true); err != nil {
 			return nil, err
 		}
 	}
@@ -254,8 +255,8 @@ func (cl *client) get(c *zip.Ctx, path, query string) ([]byte, error) {
 // do performs a single GET (minting/forcing a token first) and returns the raw
 // body + status. It does NOT map non-2xx to an error (get() owns the 401-retry
 // decision); only transport failures surface as a 502 error here.
-func (cl *client) do(c *zip.Ctx, path, query string, forceAuth bool) ([]byte, int, error) {
-	token, err := cl.ensureToken(c, forceAuth)
+func (cl *client) do(ctx context.Context, path, query string, forceAuth bool) ([]byte, int, error) {
+	token, err := cl.ensureToken(ctx, forceAuth)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -263,7 +264,7 @@ func (cl *client) do(c *zip.Ctx, path, query string, forceAuth bool) ([]byte, in
 	if query != "" {
 		u += "?" + query
 	}
-	req, err := http.NewRequestWithContext(c.Context(), http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, 0, zip.Errorf(http.StatusInternalServerError, "zt: build request: %v", err)
 	}
@@ -283,14 +284,14 @@ func (cl *client) do(c *zip.Ctx, path, query string, forceAuth bool) ([]byte, in
 // It walks limit/offset until a short page (or the reported totalCount) is reached,
 // capped at maxPages. Free function (not a method) because Go methods cannot carry
 // their own type parameter.
-func listAll[T any](cl *client, c *zip.Ctx, path string) ([]T, error) {
+func listAll[T any](cl *client, ctx context.Context, path string) ([]T, error) {
 	var out []T
 	for page := 0; page < maxPages; page++ {
 		offset := page * perPage
 		q := url.Values{}
 		q.Set("limit", strconv.Itoa(perPage))
 		q.Set("offset", strconv.Itoa(offset))
-		raw, err := cl.get(c, path, q.Encode())
+		raw, err := cl.get(ctx, path, q.Encode())
 		if err != nil {
 			return nil, err
 		}

@@ -157,6 +157,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// here: balance, the prepaid gate, and the debit.
 	exposeBalance()
 	exposeMeter(deps.Metering)
+	exposeStarter()
+	exposeUsage()
+	exposeTxns()
 
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")
@@ -266,6 +269,26 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		commercemid.TokenRequired(),
 		commercemid.PlatformOnly(),
 		commercebilling.RunAutoRechargeAllOrgs,
+	)
+
+	// POST /v1/billing/test-mode — the org's live/sandbox switch, and the ONLY way to
+	// move a tenant onto real card rails. organization.TestMode() is `!o.Live` and it is
+	// the SINGLE authority for both the Square environment and the ledger bucket, so an
+	// org that has never been flipped transacts in SANDBOX — fail-closed by design, and
+	// the reason a production-credentialled deployment can still hand a buyer a sandbox
+	// card form. Unrouted, that flip could not be performed at all in this binary: the
+	// switch lives on commerce's mint group, which the co-resident embed never compiles.
+	//
+	// Chain is auto-recharge/run-all's, because this is the same class of route — a
+	// money-MINT control, not a customer action. commerce gates it on `mint`
+	// (middleware.Mint: internal service token OR platform global admin, NEVER the
+	// org-level Admin bit), and TokenRequired + PlatformOnly is that gate here. An org
+	// admin must not be able to move their own org between sandbox and production.
+	app.Post("/v1/billing/test-mode",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		commercemid.PlatformOnly(),
+		commercebilling.SetOrgTestMode,
 	)
 
 	// GET /v1/billing/plans — the public tier catalog the console renders. commerce's
@@ -421,6 +444,30 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		iammiddleware.IAMTokenRequired(),
 		accountclient.PinBillingSubject(),
 		commercebilling.TopupWithToken,
+	)
+
+	// POST /v1/billing/subscribe/card — the card-on-file MONTHLY subscription: vault a
+	// Square nonce as a reusable card, charge the first period at the SERVER-AUTHORITATIVE
+	// plan price, create the subscription. It is the paid path's front door, and it had NO
+	// route in this binary at all: commerce publishes it on its api.Route() `user` group
+	// (api/billing/handlers.go), which the co-resident embed never compiles, and mount
+	// never registered it — so the one endpoint that turns a visitor into a subscriber
+	// answered the account bridge's "sign in to view billing" no matter who called it.
+	//
+	// Chain is topup/token's byte-for-byte, and for the same reasons: both are browser
+	// money-WRITES that charge a single-use Square nonce. commerce's own gate is the
+	// `user` group (TokenRequired — any authenticated member may subscribe by paying);
+	// IAMTokenRequired is that gate here, resolving the org GetOrganization reads.
+	// PinBillingSubject pins the subject into query AND body, so subscribeSubject can
+	// only ever resolve the caller's OWN org (its `userId` is honored only inside that
+	// bound) — the IDOR boundary billingData set. The PAN never touches this binary:
+	// the nonce goes to Square and the settled charge is its own mint authority.
+	app.Post("/v1/billing/subscribe/card",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.SubscribeWithCard,
 	)
 
 	// The remaining console billing WRITES that share topup/token's self-dispatch loop

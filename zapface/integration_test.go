@@ -43,7 +43,7 @@ func startZapApp(t *testing.T) (string, func()) {
 			return c.JSON(200, fiber.Map{
 				"status": "ok", "msg": "",
 				"data":  []fiber.Map{{"owner": c.Query("owner"), "name": "p1"}},
-				"data2": 1,
+				"total": 1,
 			})
 		case method == "POST" && strings.HasSuffix(path, "/ai/providers"):
 			body := map[string]any{}

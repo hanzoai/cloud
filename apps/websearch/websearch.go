@@ -12,12 +12,12 @@
 //     body {url,formats} ← {success,data:{markdown,metadata}}
 //     (reranker is optional; we omit it — provider+scraper is sufficient.)
 //
-// This subsystem serves BOTH contracts under /v1/websearch, backed by Hanzo's
+// This subsystem serves BOTH contracts, backed by Hanzo's
 // own services — never a third-party search API:
 //   - GET  /v1/websearch/search        SearXNG-shaped. Served NATIVELY in-process
 //     by a keyless Go meta-search (search.go) — no SearXNG pod, no search SaaS.
-//   - POST /v1/websearch/v1/scrape      Firecrawl-shaped. Served NATIVELY in-process
-//     (also /v1/websearch/scrape)       by clients/crawl — fetch, extract, render —
+//   - POST /v1/scrape                  Firecrawl-shaped. Served NATIVELY in-process
+//                                      by clients/crawl — fetch, extract, render —
 //     returning {success,data:{markdown,metadata}}.
 //
 // Both halves are now in-process Go, for the same reason and by the same shape: a
@@ -38,12 +38,34 @@
 //     shared service key WEBSEARCH_API_KEY as X-API-Key (the hanzo.chat server,
 //     which reaches cloud service-to-service with no user principal). A caller with
 //     neither is refused.
-//   - SCRAPE (/v1/websearch/*/scrape) requires the shared key as a Bearer (the chat
+//   - SCRAPE (/v1/scrape) requires the shared key as a Bearer (the chat
 //     server path only; the console surfaces scrape read-only, does not drive it).
 //
 // An unset key 503s and any missing/mismatched key 401s on the key path; a request
 // with a validated principal never needs the key. So neither surface is ever an
 // open proxy, and the signed-in console user reaches search without the shared key.
+//
+// WHY NOTHING HERE IS A TYPED OP (re-verified at zip v1.18.12), so the next sweep does not
+// re-litigate it. Both surfaces exist to be BYTE-COMPATIBLE with a client this repo
+// does not own — LibreChat's frozen searxng and firecrawl contracts — and each is
+// compatible in a way a typed op structurally cannot be:
+//
+//   - /v1/websearch/search is registered with All (Mount, below), so it answers
+//     every method in the router's set — today delete, get, options, patch, post,
+//     put and trace. zip has no typed `All`, and declaring the five named verbs
+//     instead would DROP options and trace from the path: a routing change, not a
+//     description. The POST/PUT/PATCH arms also read their query string and IGNORE
+//     the body entirely, while a typed op 400s on any unparseable non-empty body
+//     (typed.go op.invoke) — so those arms cannot be typed even one at a time.
+//   - /v1/scrape deliberately answers 200 {"success":false,"error":"missing url"} to
+//     a malformed or oversized body (scrapeScoped, below): firecrawl clients read
+//     data.success, not the status line, and it caps the read at 1 MiB with an
+//     io.LimitReader rather than refusing. A typed op cannot express either — the
+//     400 is raised before the handler runs, and the cap is invisible to it.
+//
+// The route that unblocks the first is a typed `All` in zip; the second needs a
+// body-TOLERANT op. Until then this subsystem is honestly untyped: eight operations,
+// no prose, no MCP tool, no SDK method.
 package websearch
 
 import (
@@ -224,10 +246,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			scrapeScoped(w, r, s)
 		}))(c)
 	}
-	// Firecrawl builds {apiUrl}/{version}/scrape; pin firecrawlVersion:v1 so the
-	// client POSTs /v1/websearch/v1/scrape. Also accept the bare /scrape.
-	g.Post("/v1/scrape", scrape)
-	g.Post("/scrape", scrape)
+	// Firecrawl builds {apiUrl}/{version}/scrape and there is no way to make it
+	// stop, so the path is chosen by where firecrawlApiUrl points. Point it at
+	// the API ROOT (https://api.hanzo.ai) rather than at this group, and the
+	// client lands on a clean top-level /v1/scrape instead of the doubled
+	// /v1/websearch/v1/scrape that pointing it at the group produced.
+	//
+	// /v1/scrape is free for this: ai's crawl-and-index route of that name was a
+	// second door onto object.ScrapeAndIndex and was deleted in favour of
+	// /v1/docs/ingest.
+	app.Post("/v1/scrape", scrape)
 
 	logger.Info("web search surface mounted (native searxng-compat meta-search + firecrawl-compat scrape, both in-process)")
 	return nil

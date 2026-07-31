@@ -3,19 +3,51 @@ package tools
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
+	"github.com/zap-proto/zip"
 )
 
+// The ONE route on this plane that cannot be a typed op still has to be
+// DESCRIBED. "Carries no zip registry entry" was being read as "publishes
+// nothing", and those are opposite facts: it rendered as an operationId and a
+// tag and NO BODY AT ALL, which is exactly what a route taking no input and
+// returning none publishes. No consumer of the document can tell the two apart,
+// so every SDK generated off openapi.yaml offered a plugin build with nowhere to
+// put the source.
+//
+// openapi.Register is the seam for the halves that ARE statable. It attaches to a
+// route the router already carries, so it can never contradict the router, and it
+// does NOT make these typed ops: there is still no prose, no MCP tool, no CLI
+// command and no SDK method, because those come from zip's registry alone. See
+// untypedByDesign in typed_wire_test.go for why it stays out of it.
+//
+// What is still NOT declared here, honestly — each a missing capability, not a
+// missing edit, so none is papered over with prose that overstates:
+//
+//   - the builder's 422 diagnostics. apply states the success shape under the
+//     "2XX" range key only; the failure body needs the same declarable-error-body
+//     capability that keeps this route untyped in the first place.
+//   - field prose on both shapes. zipdoc lifts doc comments off TYPED ops
+//     only, and Register's reflection seam reads Go types, not comments — so
+//     buildOut publishes `bytes: integer` with no description. AuthoredPlugin is
+//     unaffected: it is already described through the typed ops that share it,
+//     and Fold merges the typed schema over this one.
+func init() {
+	openapi.Register("/v1/plugins/build", "POST", buildRequest{}, buildOut{})
+}
+
 // Mount wires the unified tool plane at /v1/tools/* and installs the two providers
-// this package OWNS — builtin (full-cloud-control over the live route table) and
-// the external-MCP-server source. Every OTHER source (connectors, functions,
-// agents, skills) registers its own Provider from its own Mount via tools.Register,
-// so this package never learns how another source lists or runs its tools.
+// this package OWNS — the external-MCP-server source and the org's own authored
+// skills. Every OTHER source (connectors, functions, agents, agent skills)
+// registers its own Provider from its own Mount via tools.Register, so this
+// package never learns how another source lists or runs its tools.
 //
 // The process-wide registry (std) is populated by those Register calls regardless
 // of mount order; Mount only installs the activation store + this package's
@@ -32,7 +64,11 @@ const (
 type state struct {
 	activation *ActivationStore
 	servers    *MCPServerStore
+	authored   *AuthoredStore // org-authored plugins (pluginbuild.go)
+	skills     *SkillStore    // org-authored skills (skillstore.go)
+	catalog    *CatalogStore  // the canonical copy of the public registries (catalog.go)
 	kms        types.KMSClient
+	ai         types.AIClient // generates plugin source from an API spec; nil ⇒ source-only builds
 	audit      *audit.Recorder
 }
 
@@ -61,18 +97,46 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		_ = activation.Close()
 		return fmt.Errorf("tools.Mount: open mcp-server store: %w", err)
 	}
+	authored, err := OpenAuthoredStore(filepath.Join(deps.DataDir, "tools-plugins.db"))
+	if err != nil {
+		_ = activation.Close()
+		_ = servers.Close()
+		return fmt.Errorf("tools.Mount: open authored-plugin store: %w", err)
+	}
 
-	// Install the activation store on the process-wide registry and register the two
-	// providers this package owns.
+	skills, err := OpenSkillStore(filepath.Join(deps.DataDir, "tools-skills.db"))
+	if err != nil {
+		_ = activation.Close()
+		_ = servers.Close()
+		_ = authored.Close()
+		return fmt.Errorf("tools.Mount: open skill store: %w", err)
+	}
+
+	catalog, err := OpenCatalogStore(filepath.Join(deps.DataDir, "tools-catalog.db"))
+	if err != nil {
+		_ = activation.Close()
+		_ = servers.Close()
+		_ = authored.Close()
+		_ = skills.Close()
+		return fmt.Errorf("tools.Mount: open catalog store: %w", err)
+	}
+
+	// Install the activation store on the process-wide registry and register the
+	// providers this package owns: the external-MCP-server source and the org's
+	// own authored skills.
 	std.SetActivation(activation)
-	std.Register(newBuiltinProvider(app))
 	std.Register(newMCPProvider(servers, deps.KMS))
+	std.Register(orgSkillProvider{store: skills})
 
 	b := cloud.NewBase(deps, "tools")
 	s := &cloud.Service[state]{Base: b, State: state{
 		activation: activation,
 		servers:    servers,
+		authored:   authored,
+		skills:     skills,
+		catalog:    catalog,
 		kms:        deps.KMS,
+		ai:         deps.AI,
 		audit:      deps.Audit,
 	}}
 	mounted = s
@@ -82,16 +146,64 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// routes declares the tool plane on ONE group, /v1.
+//
+// This subsystem spans four top-level nouns — tools, skills, mcp and plugins —
+// so there is no single prefix to hang a group on, and a group per noun could not
+// carry the collection ROOTS anyway (Group(p).Get("") yields "p/"). One /v1 group
+// spells each path exactly as the wire spells it, and it is also the OpTarget the
+// typed ops are declared on, so zip composes each op's path from the same prefix
+// the router does and cmd/zipdoc resolves it the same way.
+//
+// cloud.Bridge is NOT installed here: Serve installs it once for the whole binary
+// (serve.go), after the identity boundary that makes the org trustworthy and
+// before MountAll registers any of these leaves. fiber runs middleware in
+// registration order, so one installed here — below the app-level Use — would be
+// redundant, and one installed after these leaves would never run.
+//
+// TYPED ops are all of them but one; the one that could not be described without
+// moving its wire is registered untyped below, named at its own definition with
+// the reason (pluginbuild.go's buildPlugin).
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Collection root (/v1/tools) stays flat — Group(p).Get("") yields "p/".
-	app.Get("/v1/tools", cloud.Handle(s, listTools))
-	g := app.Group("/v1/tools")
-	g.Post("/mcp", cloud.Handle(s, mcp))
-	g.Get("/activation", cloud.Handle(s, getActivation))
-	g.Put("/activation", cloud.Handle(s, putActivation))
-	g.Get("/servers", cloud.Handle(s, listServers))
-	g.Post("/servers", cloud.Handle(s, createServer))
-	g.Delete("/servers/:id", cloud.Handle(s, deleteServer))
+	v1 := app.Group("/v1")
+	o := toolOps{s: s}
+
+	// Discovery + activation.
+	zip.Get(v1, "/tools", o.listTools)
+	// The catalog (catalog.go): our canonical copy of what the public MCP
+	// registries publish, and the two decisions we make about each entry. It hangs
+	// under /v1/tools because it is the SHELF this plane's servers are picked
+	// from — one noun, not a fifth top-level one.
+	zip.Get(v1, "/tools/catalog", o.listCatalog)
+	zip.Post(v1, "/tools/catalog/sync", o.syncCatalog)
+	zip.Get(v1, "/tools/catalog/:id", o.getListing)
+	zip.Patch(v1, "/tools/catalog/:id", o.curateListing)
+	zip.Get(v1, "/tools/activation", o.getActivation)
+	zip.Put(v1, "/tools/activation", o.putActivation)
+	zip.Post(v1, "/tools/call", o.callTool)
+
+	// The separately-listed registries (see registries.go): skills and mcp are
+	// Source views of the SAME registry; plugins is the mounted-subsystem
+	// inventory, which is a different thing entirely.
+	zip.Get(v1, "/skills", o.listSkills)
+	zip.Post(v1, "/skills", o.putSkill, zip.WithStatus(http.StatusCreated))
+	zip.Get(v1, "/skills/authored", o.listAuthoredSkills)
+	zip.Delete(v1, "/skills/:id", o.deleteSkill)
+	zip.Get(v1, "/plugins", o.listPlugins)
+
+	// The builder (pluginbuild.go). /v1/plugins lists what this deployment
+	// mounted; /authored is what THIS ORG built, which is a different set with a
+	// different lifecycle, so it is a subpath rather than a mixed collection.
+	v1.Post("/plugins/build", cloud.Handle(s, buildPlugin))
+	zip.Get(v1, "/plugins/authored", o.listAuthoredPlugins)
+	zip.Delete(v1, "/plugins/authored/:id", o.deleteAuthoredPlugin)
+
+	// The external MCP server registry: a server is a record an org creates, not a
+	// tool the registry enumerates. /v1/mcp itself belongs to the fleet's ONE agent
+	// door (the host serves it), so this owns the deeper /v1/mcp/servers alone.
+	zip.Get(v1, "/mcp/servers", o.listServers)
+	zip.Post(v1, "/mcp/servers", o.createServer, zip.WithStatus(http.StatusCreated))
+	zip.Delete(v1, "/mcp/servers/:id", o.deleteServer)
 }
 
 // Shutdown closes the stores. Idempotent.
@@ -107,6 +219,21 @@ func Shutdown(_ context.Context) error {
 	}
 	if mounted.State.servers != nil {
 		if err := mounted.State.servers.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	if mounted.State.authored != nil {
+		if err := mounted.State.authored.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	if mounted.State.skills != nil {
+		if err := mounted.State.skills.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	if mounted.State.catalog != nil {
+		if err := mounted.State.catalog.Close(); err != nil && first == nil {
 			first = err
 		}
 	}

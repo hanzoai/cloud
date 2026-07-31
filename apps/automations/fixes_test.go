@@ -29,10 +29,10 @@ func TestScheduledRunMeteredExactlyOnce(t *testing.T) {
 
 	app, rec := newAppWithAudit(t) // Mount sets the package `mounted` used by the bookkeeping activity
 
-	srv, port := embedEngine(ctx, t, "acme")
+	srv, addr := embedEngine(ctx, t, "acme")
 	defer func() { _ = srv.Stop(context.Background()) }()
 
-	cli, err := tasksclient.Dial(tasksclient.Options{HostPort: fmt.Sprintf("127.0.0.1:%d", port), Namespace: "acme", DialTimeout: 5 * time.Second, CallTimeout: 5 * time.Second})
+	cli, err := tasksclient.Dial(tasksclient.Options{Address: addr, Namespace: "acme", DialTimeout: 5 * time.Second, CallTimeout: 5 * time.Second})
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -230,18 +230,16 @@ func TestConcurrencyLimiter(t *testing.T) {
 	}
 }
 
-// ── LOW-1: MCP outcome is derived from the real result, after Run ───────────
+// ── LOW-1: a tool-call outcome is derived from the real result, after Run ───────
 
-func TestMCPAuditOutcome(t *testing.T) {
-	app, rec := newAppWithAudit(t)
+func TestToolCallAuditOutcome(t *testing.T) {
+	_, rec := newAppWithAudit(t)
 	// Success: core_code runs and returns.
-	reqRaw(t, app, "/v1/automations/mcp", "acme",
-		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"core_code","arguments":{"k":"v"}}}`)
+	_, _ = InvokeTool(context.Background(), "acme", "core_code", map[string]any{"k": "v"})
 	// Failure: slack is not connected → Run errors.
-	reqRaw(t, app, "/v1/automations/mcp", "acme",
-		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"slack_send_message","arguments":{"channel":"C","text":"hi"}}}`)
+	_, _ = InvokeTool(context.Background(), "acme", "slack_send_message", map[string]any{"channel": "C", "text": "hi"})
 
-	rows, _, err := rec.Query(context.Background(), audit.Filter{Org: "acme", Action: "automations.mcp.call", Limit: 100})
+	rows, _, err := rec.Query(context.Background(), audit.Filter{Org: "acme", Action: "automations.tool.call", Limit: 100})
 	if err != nil {
 		t.Fatalf("audit query: %v", err)
 	}
@@ -255,7 +253,7 @@ func TestMCPAuditOutcome(t *testing.T) {
 		}
 	}
 	if ok != 1 || bad != 1 {
-		t.Fatalf("want 1 ok + 1 error mcp.call audit (outcome from real result), got ok=%d error=%d (total %d)", ok, bad, len(rows))
+		t.Fatalf("want 1 ok + 1 error tool.call audit (outcome from real result), got ok=%d error=%d (total %d)", ok, bad, len(rows))
 	}
 }
 

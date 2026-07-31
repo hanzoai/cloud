@@ -19,9 +19,221 @@
     "/v1/catalog": {
       "get": {
         "operationId": "get_v1_catalog",
+        "summary": "Browse searches AND browses the cross-org catalog: every project, app and site the fleet has built, whichever org built it.",
+        "description": "Browse searches AND browses the cross-org catalog: every project, app and site\nthe fleet has built, whichever org built it.\n\nIt reads TWO corpora and returns them as one page — the published,\nworld-readable catalog that every caller sees, plus the caller's OWN org's\nprivate entries when the request carries a validated principal. Each row says\nwhich it came from in `scope`, so a client can warn before sharing a link. An\nanonymous caller simply gets the published one; no filter can ever widen a\ncaller into another tenant's corpus, because the query that would return it is\nnever run for them.\n\nA request with no q is a browse rather than a search, and both answer the same\nshape: the page, the total before paging, and the facet counts over the whole\nmatching set.",
         "tags": [
           "catalog"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q is the free-text query the lexical index scores relevance on. Empty is a\nbrowse rather than a search — the same request either way.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "description": "Org narrows to one builder org: hanzo | lux | zoo. Case-insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind narrows to repo | site. Case-insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "description": "Origin narrows to what a row IS to you: template | community | third-party |\nproduct. This is the axis the two hanzo.app lanes are cut on.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "template"
+          },
+          {
+            "name": "archetype",
+            "in": "query",
+            "required": false,
+            "description": "Archetype narrows to one project archetype. Case-insensitive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Language narrows to one implementation language. Case-insensitive.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "typescript"
+          },
+          {
+            "name": "template",
+            "in": "query",
+            "required": false,
+            "description": "Template narrows a lane to ONE lineage: the id of the parent everything\nreturned was forked from.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "forkable",
+            "in": "query",
+            "required": false,
+            "description": "Forkable is tri-state: \"true\" selects the forkable rows, \"false\" selects the\nrest, and anything else — including absent — applies no filter at all.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "true"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the page at 200, default 50. A value that is not a non-negative\ninteger falls back to the default.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "20"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "Offset is where the page starts, default 0, with the same tolerance.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalogPage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Entry": {
+        "properties": {
+          "archetype": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "forkable": {
+            "description": "Forkable is NOT omitempty: false is an answer here, not a missing field.\nOmitted, a client could not tell \"you cannot fork this\" from \"nobody said\".",
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "repo | site",
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "license": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is why a row is NOT in the published catalog, set by the admission gate\n(gate.go) on the sites it holds back. It is the difference between a demo\nthat silently vanished from the public lens and one whose owner can read the\nreason and fix it. A published row never carries one.",
+            "type": "string"
+          },
+          "org": {
+            "description": "hanzo | lux | zoo",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Origin is WHAT THIS IS TO YOU: template | community | third-party | product\n(origin.go owns the four nouns and derives them). Not omitempty, for the\nsame reason Forkable is not: every row has an answer, and a missing one is\nexactly the flattening this field exists to end.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "source",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope is provenance, not storage: \"public\" for a row from the published\ncorpus, \"org\" for one only this caller can see. A UI that cannot tell them\napart cannot warn before sharing a link.",
+            "type": "string"
+          },
+          "stars": {
+            "type": "integer"
+          },
+          "template": {
+            "description": "lineage, if forked from one",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          },
+          "upstream": {
+            "description": "Upstream/License credit the third-party work an entry was published from:\nthe difference between \"this org built it\" and \"somebody else built it and\nwe are showing it to you\".\n\nWHO built it is Org, above — the account that paid for the project. There\nwas once a separate admin-gated `official` boolean here claiming the same\nthing, and because it was gated it disagreed: apps Hanzo wrote and hosts\nwere published by a script holding an ordinary org token, so it stayed\nfalse on all of them and this directory filed our own work as somebody\nelse's. A field that restates an unforgeable fact can only ever be the\nwrong copy of it.",
+            "type": "string"
+          },
+          "url": {
+            "description": "live, if it is deployed",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "catalogPage": {
+        "properties": {
+          "data": {
+            "description": "Data is the page of matching entries, most recently updated first.",
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            },
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "description": "Facets counts the whole matching set along every browse axis, so a rail a\nclient renders is a rail that has results behind it. Keyed axis → value → count.",
+            "type": "object"
+          },
+          "total": {
+            "description": "Total is how many entries matched BEFORE paging — what a pager sizes itself on.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

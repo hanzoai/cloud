@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package admission is the launch-control GATE for Hanzo's hosted services — the
-// COMPLETE waitlist feature, COMPOSING the ONE flag engine (clients/flags) one-way. It
+// COMPLETE waitlist feature, COMPOSING the ONE flag engine (apps/flags) one-way. It
 // owns:
 //
 //   - the host→service registry (registry.go) + the brand seed (waitlist.go),

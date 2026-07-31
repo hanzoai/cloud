@@ -1,0 +1,118 @@
+[
+  {
+    "description": "unlinkAccount forgets one linked cloud account: it detaches every fleet cluster\nTHIS account folded (its own names, in its own shard — a neighbour's cluster of\nthe same name is untouched), deletes the sealed credential, and drops the index\nrow.\n\nIt is idempotent and deliberately not an existence oracle: an account this org\ndoes not hold answers exactly the same as one it just removed. A cluster that\nfails to detach is logged and the unlink continues, so a dead provider cannot\nstrand a credential. Requires org admin.",
+    "inputSchema": {
+      "properties": {
+        "label": {
+          "description": "Label is the org-chosen name of the account within that provider. Empty\nmeans \"default\"; anything outside 1–64 of [A-Za-z0-9._-] is refused.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider is the cloud the account belongs to: digitalocean, aws, gcp or\nazure. An unknown provider is not found.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_cloud_provider_accounts_label"
+  },
+  {
+    "description": "listProviders returns the clouds this deployment can link and what linking each\none needs — the DigitalOcean token, the AWS role and external id, the GCP\ncredential JSON, the Azure app — plus whether the provider can be linked without\nstoring any long-lived secret. It is the catalog a \"connect a cloud\" screen\nrenders; it reports no account and no credential.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_cloud"
+  },
+  {
+    "description": "listAccounts lists the caller org's linked cloud accounts across every provider:\nwhich account each one is at the provider, which fleet clusters it folded, and\nwhen it was last discovered. Metadata only — a sealed credential never appears in\na response. Another org's accounts are not visible and not countable.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_cloud_accounts"
+  },
+  {
+    "description": "linkAccount links one of the caller org's cloud accounts and folds the Kubernetes\nclusters it finds there into the ONE Hanzo fleet, so they appear at /v1/clusters\nand can run work like any managed or bring-your-own cluster. Answers 201.\n\nThe credential is verified LIVE against the provider BEFORE anything is stored,\nso a bad one is refused and nothing is written; it is then sealed in the org's own\nKMS namespace and never appears in a response, the account index, or a log line.\nDiscovery follows, and a cluster that fails to fold is reported as DATA in the\nclusters list rather than failing the link.\n\nRe-linking a label that already exists re-seals its credential and re-folds it, so\nthis is how a rotated token is replaced. Requires org admin.",
+    "inputSchema": {
+      "properties": {
+        "clientId": {
+          "description": "ClientID is the Azure AD application id. Azure only.",
+          "type": "string"
+        },
+        "clientSecret": {
+          "description": "ClientSecret selects the service-principal flow. LEAVING IT OUT selects\nkeyless workload identity federation instead, so omitting it is a choice\nrather than an omission. Azure only.",
+          "type": "string"
+        },
+        "credentialJson": {
+          "description": "CredentialJSON is a Google credentials document — an external_account\n(workload identity federation, keyless) or a service-account key. GCP only.",
+          "type": "string"
+        },
+        "externalId": {
+          "description": "ExternalID pins that role assumption to Hanzo, which is what closes the\nconfused-deputy hole. AWS only.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Label is the org-chosen name for this account within the provider, which is\nhow a second account at the same provider is addressed later. Empty means\n\"default\"; anything outside 1–64 of [A-Za-z0-9._-] is refused.",
+          "type": "string"
+        },
+        "projectIds": {
+          "description": "ProjectIDs bounds the GKE cluster sweep. GCP only.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "provider": {
+          "description": "Provider is the cloud being linked, from the path: digitalocean, aws, gcp\nor azure.",
+          "type": "string"
+        },
+        "regions": {
+          "description": "Regions bounds the AWS EKS cluster sweep. AWS only.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "roleArn": {
+          "description": "RoleARN is the AWS role Hanzo assumes into the account — the keyless path,\nso no access key is ever stored.",
+          "type": "string"
+        },
+        "subscriptionIds": {
+          "description": "SubscriptionIDs bounds the AKS cluster sweep. Azure only.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tenantId": {
+          "description": "TenantID is the Azure AD tenant of the app. Azure only.",
+          "type": "string"
+        },
+        "token": {
+          "description": "Token is the DigitalOcean personal access token. DigitalOcean only, and it\nis the one provider that requires storing a secret.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_cloud_provider_accounts"
+  },
+  {
+    "description": "syncAccount re-discovers one already-linked cloud account and reconciles what it\nfolded: kubeconfigs are refreshed, clusters that appeared since the last sync are\nfolded, and clusters this account folded that the provider no longer returns are\ndetached — only this account's own, in the fleet shard it was linked into.\n\nIt is idempotent, it reads the credential already sealed at link time, and a\ndiscovery failure leaves the existing fold set alone rather than mass-detaching\nit. An account this org has not linked is not found. Requires org admin.",
+    "inputSchema": {
+      "properties": {
+        "label": {
+          "description": "Label is the org-chosen name of the account within that provider. Empty\nmeans \"default\"; anything outside 1–64 of [A-Za-z0-9._-] is refused.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider is the cloud the account belongs to: digitalocean, aws, gcp or\nazure. An unknown provider is not found.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_cloud_provider_accounts_label_sync"
+  }
+]

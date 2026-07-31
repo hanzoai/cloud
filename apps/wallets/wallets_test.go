@@ -98,7 +98,7 @@ func mkAccount(t *testing.T, app *zip.App, org string) string {
 	if code != http.StatusOK {
 		t.Fatalf("create account = %d (%s)", code, body)
 	}
-	var a Account
+	var a WalletAccount
 	if err := json.Unmarshal(body, &a); err != nil {
 		t.Fatalf("decode account: %v (%s)", err, body)
 	}

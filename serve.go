@@ -41,12 +41,12 @@ import (
 // pipeline (Recover → RequestID → Logger), and shuts down gracefully on
 // SIGINT/SIGTERM.
 func Serve(plugins []Plugin, enable []string) error {
-	// `<binary> openapi <file>` describes instead of serving. Before LoadConfig
-	// AND before credz.Boot because the document must be a function of the code
+	// `<binary> describe <dir>` projects instead of serving. Before LoadConfig
+	// AND before credz.Boot because the artifacts must be a function of the code
 	// alone: both read the environment, and a route set that moved with a
-	// developer's shell is a spec that cannot be a golden — see openapi_dump.go.
-	if dest, ok := SpecRequested(); ok {
-		return dumpSpec(plugins, dest)
+	// developer's shell is a spec that cannot be a golden — see describe.go.
+	if dir, ok := DescribeRequested(); ok {
+		return describe(plugins, dir)
 	}
 
 	// Credentials FIRST — before config is read, before any store opens. A child
@@ -197,10 +197,21 @@ func Serve(plugins []Plugin, enable []string) error {
 	// fasthttp rejected the body before any handler ran, and its wire error is the
 	// opaque 400 "Error when parsing request", which reads like a malformed
 	// payload rather than a size cap. Env GATEWAY_BODY_LIMIT (see config.go).
+	// The per-caller half of this binary's MCP door, from the composition root
+	// (Plugin.Door). Nil for every app but the tool plane, which is the only one
+	// whose tools are ROWS — an org's connectors, skills, agents and the servers
+	// it enabled — and therefore the only one that cannot be projected at build
+	// time. The build-time half is unaffected: it is still the typed-op array,
+	// still rendered once, still served as bytes.
+	source, err := door(plugins)
+	if err != nil {
+		return err
+	}
 	app := zip.New(zip.Config{
 		Logger:         deps.Logger,
 		ReadBufferSize: cfg.ReadBufferSize,
 		BodyLimit:      cfg.BodyLimit,
+		MCP:            zip.MCPConfig{Source: source},
 		// Static Server fallback for responses the ProductionHeaders middleware
 		// cannot reach — the transport's own pre-routing errors (431/400) and any
 		// fiber path that bypasses the chain. Set to this deployment's brand so
@@ -292,14 +303,24 @@ func Serve(plugins []Plugin, enable []string) error {
 	app.Use(EdgeCORS(deps.GatewayPolicy))
 	app.Use(EdgeRateLimit(deps.GatewayPolicy))
 
-	// Identity trust boundary. Runs before BillingGate (which reads c.User()/
-	// c.Org()) and every subsystem, so a downstream c.IsAdmin()/c.Org()/c.User()
-	// reflects a VALIDATED IAM principal — never a raw client header. This makes
-	// the gateway's "X-User-IsAdmin is never client-supplied" contract hold even
-	// when cloud-api is reached directly (in-cluster) instead of through the
-	// gateway, closing the forgeable-admin trust boundary. The admin claim is
-	// granted ONLY to a validated SuperAdmin (owner == AdminOrg). See
-	// middleware_identity.go / auth_identity.go.
+	// Identity trust boundary — cloud strips every client-supplied authority header
+	// and re-injects only what a VALIDATED IAM principal justifies.
+	//
+	// HIP-0519 says identity is verified once, at the edge, and that is the shape
+	// to reach. It rests on ONE assumption: the gateway is the only ingress. That
+	// assumption does not hold here yet, and the estate's own red-team probe says
+	// so — with this middleware removed, a request carrying a forged X-Org-Id,
+	// X-User-Id and X-User-IsAdmin reads another org's secret VALUE from the
+	// in-cluster KMS listener:
+	//
+	//	PROBE (b) forged org + forged X-User-Id + IsAdmin → 200 {"value":"…"}
+	//
+	// So this stays until service listeners are unreachable except through the
+	// gateway. Removing it is a network-policy change first and a code change
+	// second, and doing the code half alone is a cross-tenant secret read.
+	// red_orgscope_isolation_test.go and TestAudit_AnonRequestNotAttributedToForgedOrg
+	// fail the moment it is dropped; they are the gate on that work, not obstacles
+	// to it.
 	app.Use(IdentityMiddleware(cfg))
 
 	// Typed-op bridge. A zip.Get[In, Out] handler receives a context.Context and
@@ -319,7 +340,7 @@ func Serve(plugins []Plugin, enable []string) error {
 	// UI's SuperAdmin gate sees the same owner+isAdmin every /v1/admin/* route already
 	// authorizes on (a PKCE session is not a casibase session — without this the UI
 	// bounced to login despite valid admin API access). No principal → casibase path
-	// unchanged. Runs AFTER IdentityMiddleware, BEFORE MountAll's casibase mount.
+	// unchanged. Runs BEFORE MountAll's casibase mount.
 	app.Use(AccountFromPrincipal())
 
 	// Shard router (horizontal writer scale). Runs IMMEDIATELY after SanitizeIdentity
@@ -342,7 +363,7 @@ func Serve(plugins []Plugin, enable []string) error {
 	// audit/). A write failure fails the request CLOSED (AU-5). Constructed here
 	// so the Recorder lives for the process and the /v1/admin/audit query + verify
 	// endpoints (clients/admin) read the SAME store via deps.Audit.
-	auditRec, err := buildAuditRecorder(cfg, deps.Logger)
+	auditRec, err := buildAuditRecorder(cfg, deps.Logger, procName(plugins))
 	if err != nil {
 		return fmt.Errorf("audit: %w", err)
 	}
@@ -360,7 +381,7 @@ func Serve(plugins []Plugin, enable []string) error {
 	app.Use(ScopeRateLimit(deps.Metering, deps.GatewayPolicy))
 
 	// Starter credit — the funding path the two gates below are sequenced behind.
-	// Runs AFTER IdentityMiddleware (it needs the VALIDATED principal to resolve a
+	// It needs the gateway-asserted principal to resolve a
 	// wallet; an unvalidated caller is skipped) and BEFORE both gates, so a brand-new
 	// account is funded before anything on this same request asks whether it can pay.
 	// Mounted here rather than at the org-creating handler because that handler is not
@@ -380,7 +401,7 @@ func Serve(plugins []Plugin, enable []string) error {
 	app.Use(BillingGate(deps.Metering, DefaultPrice))
 
 	// Spend gate — the ONE "may this principal spend?" enforcement point. Runs AFTER
-	// IdentityMiddleware (so it keys on the VALIDATED principal + owner claim, never a
+	// the gateway (so it keys on the asserted principal + owner header, never a
 	// client X-Org-Id) and beside BillingGate, BEFORE MountAll so it precedes every
 	// subsystem /v1/<name>/* wildcard.
 	//
@@ -497,18 +518,19 @@ func Serve(plugins []Plugin, enable []string) error {
 		return fmt.Errorf("console: %w", err)
 	}
 
-	// Internal plane: native ZAP over this app's unix socket (rpc.go). Served
-	// for every mounted app name — methods Exposed during Mount are live by now —
-	// so Dial(app) resolving a socket always means "the app is up", and an up app
-	// answering 404 means version skew: two different, diagnosable facts.
+	// Internal plane: this app's typed ops over ZAP on its canonical unix socket
+	// (plane.go). Served for every mounted app name — the ops declared during
+	// Mount are live by now — so zip.DialApp(app) resolving a socket always means
+	// "the app is up", and an up app answering 404 for an op means version skew:
+	// two different, diagnosable facts.
 	for _, p := range plugins {
 		if p.Name == "" {
 			continue
 		}
-		if c, err := Listen(p.Name, deps.Logger); err != nil {
-			deps.Logger.Warn("rpc: socket not served", "app", p.Name, "err", err)
+		if stop, err := ServePlane(p.Name, deps.Logger); err != nil {
+			deps.Logger.Warn("plane: socket not served", "app", p.Name, "err", err)
 		} else {
-			defer func() { _ = c.Close() }()
+			defer func() { _ = stop() }()
 		}
 	}
 
@@ -626,11 +648,11 @@ func listenOn(cfg *Config) (addrs []string, ops string) {
 	//	:9653  — ZAP over TCP, the machine transport across hosts
 	//	:8080  — HTTP, the edge/browser leg (and WS + SSE)
 	//
-	// The app's UNIX socket is deliberately absent. It carries the internal plane's
-	// own protocol (zaprpc: method id, promise, capability) and rpc.Listen serves
-	// it — handing the same path to zip as well means two servers on one socket,
-	// and whichever binds first answers the other's callers in a framing they
-	// cannot parse. That surfaced as "promise 0 for 1" on a balance read.
+	// The app's canonical UNIX socket is deliberately absent HERE, and belongs to
+	// the plane app instead (plane.go): a typed op rides every transport its app
+	// listens on, so registering the internal ops on the edge-facing app would put
+	// the gate, the meter and the secret reads on :8080. Two apps, two address
+	// sets, and no path from the edge to an op that was never registered on it.
 	return []string{cfg.ZAPListenAddr, "http://" + cfg.ListenAddr}, cfg.HealthListenAddr
 }
 

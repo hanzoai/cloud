@@ -180,7 +180,7 @@ func (o ops) ProvidersCredit(ctx context.Context, _ *core.None) (*ProvidersCredi
 }
 
 // ProvidersCreditOut is the GET /v1/admin/providers/credit envelope. This read carries no
-// data2: it is a fixed roster of providers, not a page.
+// total: it is a fixed roster of providers, not a page.
 type ProvidersCreditOut struct {
 	Status string           `json:"status"`
 	Msg    string           `json:"msg"`
@@ -221,7 +221,7 @@ type UsageFundingIn struct {
 	To string `json:"to"`
 }
 
-// UsageFundingOut is the GET /v1/admin/usage/funding envelope. No data2: the split is one
+// UsageFundingOut is the GET /v1/admin/usage/funding envelope. No total: the split is one
 // row per (provider, model) over the window, unpaginated.
 type UsageFundingOut struct {
 	Status string            `json:"status"`

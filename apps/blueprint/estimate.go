@@ -54,9 +54,15 @@ const (
 // Estimate so the response is self-documenting and the metering path reads the
 // SAME numbers it displays. Values are microdollars per resource-hour.
 type RateCard struct {
-	MicroUSDPerVCPUHour int64  `json:"microUsdPerVcpuHour"`
-	MicroUSDPerGBHour   int64  `json:"microUsdPerGbHour"`
-	Basis               string `json:"basis"`
+	// MicroUSDPerVCPUHour is the price of one vCPU for one hour, in millionths of
+	// a US dollar.
+	MicroUSDPerVCPUHour int64 `json:"microUsdPerVcpuHour"`
+	// MicroUSDPerGBHour is the price of one GiB of memory for one hour, in
+	// millionths of a US dollar.
+	MicroUSDPerGBHour int64 `json:"microUsdPerGbHour"`
+	// Basis names where the rates come from, so a published price can be
+	// explained rather than merely asserted.
+	Basis string `json:"basis"`
 }
 
 // DefaultRateCard is the shipped rate card (the constants above). rateCardFromEnv

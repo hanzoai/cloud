@@ -60,7 +60,7 @@ const (
 	payoutPrefix = "payout:"
 )
 
-// Entry kinds classify a journal entry's economic meaning (also the first half of
+// JournalEntry kinds classify a journal entry's economic meaning (also the first half of
 // its idempotency key). Kept small and closed.
 const (
 	KindAccrual = "accrual" // revenue-share allocation: revenue:platform → fund:reserve
@@ -96,10 +96,19 @@ type Posting struct {
 	Amount  money.Amount `json:"amount"` // signed 18-decimal USD (1e-18); Σ over an entry == 0
 }
 
-// Entry is one balanced journal entry. Ref (with Kind+Program) is the idempotency
+// The three types below carry their own product in their names because the
+// published SCHEMA namespace is FLAT: zip keys a component schema on the Go
+// type's bare name (typeName drops the package), so the fleet weave refuses two
+// apps that mean different things by one name. They were Entry, Report and
+// Policy, and apps/catalog, apps/admin and apps/gateway each publish one of
+// those about something else entirely — the weave named every collision the
+// moment these became a typed op's Out. The json tags are untouched: the wire
+// never knew the Go name.
+
+// JournalEntry is one balanced journal entry. Ref (with Kind+Program) is the idempotency
 // key: re-posting the same (Kind, Program, Ref) is a no-op that returns the
 // original — so a crashed-and-retried payout debits the fund AT MOST ONCE.
-type Entry struct {
+type JournalEntry struct {
 	ID        string       `json:"id"`
 	Kind      string       `json:"kind"`
 	Program   string       `json:"program,omitempty"` // referral|affiliate|author for payouts; "" otherwise
@@ -120,21 +129,21 @@ const DefaultRevenueShareBps int64 = 2000
 // Policy is the revenue-share configuration: the fraction of net platform revenue,
 // in basis points, that a sweep accrues into the reserve fund. One value, one
 // place; SuperAdmin adjusts it. An unset policy defaults to DefaultRevenueShareBps.
-type Policy struct {
+type SharePolicy struct {
 	RevenueShareBps int64 `json:"revenueShareBps"`
 	UpdatedAt       int64 `json:"updatedAt"`
 }
 
-// Report is the reserve-fund health snapshot: what's available now, what's been
+// TreasuryReport is the reserve-fund health snapshot: what's available now, what's been
 // accrued and paid over all time, and the per-program payout breakdown. Every
 // figure is derived from the same postings, so it always reconciles
 // (Fund == Accrued − Paid).
-type Report struct {
+type TreasuryReport struct {
 	ReserveCents     int64            `json:"reserveCents"`     // fund:reserve balance (available now)
 	AccruedCents     int64            `json:"accruedCents"`     // lifetime revenue-share into the fund
 	PaidCents        int64            `json:"paidCents"`        // lifetime backed payouts out of the fund
 	ByProgramCents   map[string]int64 `json:"byProgramCents"`   // program → lifetime paid
-	Policy           Policy           `json:"policy"`           // current revenue-share policy
+	Policy           SharePolicy      `json:"policy"`           // current revenue-share policy
 	SolventForPayout bool             `json:"solventForPayout"` // reserve > 0: at least some payout is backable
 }
 
@@ -145,13 +154,13 @@ type Report struct {
 type Tx interface {
 	// EntryByRef returns the existing entry for (kind, program, ref) if present —
 	// the idempotency lookup performed inside the same tx as the insert.
-	EntryByRef(kind, program, ref string) (Entry, bool, error)
+	EntryByRef(kind, program, ref string) (JournalEntry, bool, error)
 	// Balance returns an account's signed balance as visible inside this tx.
 	Balance(account string) (money.Amount, error)
 	// Insert upserts every referenced account then writes the entry and its
 	// postings. The engine has already validated the postings balance and the ref
 	// is free; the adapter only persists.
-	Insert(e Entry, postings []Posting) error
+	Insert(e JournalEntry, postings []Posting) error
 }
 
 // Store is the persistence port. The engine owns all rules; the Store owns storage
@@ -167,11 +176,11 @@ type Store interface {
 	// (e.g. "payout:") — the per-program rollup.
 	BalancesWithPrefix(ctx context.Context, prefix string) (map[string]money.Amount, error)
 	// Entries returns the most recent entries (newest first, with postings), bounded.
-	Entries(ctx context.Context, limit int) ([]Entry, error)
+	Entries(ctx context.Context, limit int) ([]JournalEntry, error)
 	// Policy returns the current revenue-share policy (zero value if never set).
-	Policy(ctx context.Context) (Policy, error)
+	Policy(ctx context.Context) (SharePolicy, error)
 	// SetPolicy persists the revenue-share policy.
-	SetPolicy(ctx context.Context, p Policy) error
+	SetPolicy(ctx context.Context, p SharePolicy) error
 }
 
 // Backend is the ledger-of-record PORT the treasury posts through. TWO adapters
@@ -186,13 +195,13 @@ type Store interface {
 type Backend interface {
 	// Name identifies the backend of record ("native" | "formance").
 	Name() string
-	Policy(ctx context.Context) (Policy, error)
-	SetPolicy(ctx context.Context, bps, now int64) (Policy, error)
-	Accrue(ctx context.Context, period string, revenueCents, now int64) (Entry, bool, error)
-	Seed(ctx context.Context, ref, memo string, amountCents, now int64) (Entry, bool, error)
-	DebitReserve(ctx context.Context, program, ref, memo string, amountCents, now int64) (Entry, bool, bool, error)
-	Snapshot(ctx context.Context) (Report, error)
-	Entries(ctx context.Context, limit int) ([]Entry, error)
+	Policy(ctx context.Context) (SharePolicy, error)
+	SetPolicy(ctx context.Context, bps, now int64) (SharePolicy, error)
+	Accrue(ctx context.Context, period string, revenueCents, now int64) (JournalEntry, bool, error)
+	Seed(ctx context.Context, ref, memo string, amountCents, now int64) (JournalEntry, bool, error)
+	DebitReserve(ctx context.Context, program, ref, memo string, amountCents, now int64) (JournalEntry, bool, bool, error)
+	Snapshot(ctx context.Context) (TreasuryReport, error)
+	Entries(ctx context.Context, limit int) ([]JournalEntry, error)
 	ReserveCents(ctx context.Context) (int64, error)
 	Root(ctx context.Context) ([32]byte, int, error)
 	// AccountsWithPrefix returns account→balance for every account under prefix — the
@@ -206,8 +215,8 @@ type Backend interface {
 // not accounting). sqlstore satisfies it, so policy persists identically regardless of
 // which backend owns the journal.
 type PolicyStore interface {
-	Policy(ctx context.Context) (Policy, error)
-	SetPolicy(ctx context.Context, p Policy) error
+	Policy(ctx context.Context) (SharePolicy, error)
+	SetPolicy(ctx context.Context, p SharePolicy) error
 }
 
 // Ledger is the native double-entry engine bound to a Store — the offline/default
@@ -242,28 +251,28 @@ func PayoutAccount(program string) string { return payoutPrefix + program }
 // fund:reserve +share). Idempotent by period (ref "accrual:<period>") so re-running
 // a sweep for the same period never double-accrues. A zero share (no policy, or
 // revenue too small to yield a cent) is a no-op returning created=false.
-func (l *Ledger) Accrue(ctx context.Context, period string, revenueCents, now int64) (Entry, bool, error) {
+func (l *Ledger) Accrue(ctx context.Context, period string, revenueCents, now int64) (JournalEntry, bool, error) {
 	period = strings.TrimSpace(period)
 	if period == "" {
-		return Entry{}, false, ErrEmptyRef
+		return JournalEntry{}, false, ErrEmptyRef
 	}
 	if revenueCents < 0 {
-		return Entry{}, false, ErrNonPositive
+		return JournalEntry{}, false, ErrNonPositive
 	}
 	pol, err := l.store.Policy(ctx)
 	if err != nil {
-		return Entry{}, false, fmt.Errorf("read policy: %w", err)
+		return JournalEntry{}, false, fmt.Errorf("read policy: %w", err)
 	}
 	share := revenueCents * pol.RevenueShareBps / bpsDenominator
 	if share <= 0 {
-		return Entry{}, false, nil // nothing to accrue this period
+		return JournalEntry{}, false, nil // nothing to accrue this period
 	}
 	id, err := genID("acc")
 	if err != nil {
-		return Entry{}, false, err
+		return JournalEntry{}, false, err
 	}
 	shareAmt := money.FromCents(share)
-	e := Entry{
+	e := JournalEntry{
 		ID:        id,
 		Kind:      KindAccrual,
 		Ref:       "accrual:" + period,
@@ -282,19 +291,19 @@ func (l *Ledger) Accrue(ctx context.Context, period string, revenueCents, now in
 // −amount, fund:reserve +amount), idempotent by ref. It bootstraps a fresh fund so
 // backed payouts can begin before the first revenue-share sweep. Distinct kind
 // (seed) so it is auditable apart from an accrual.
-func (l *Ledger) Seed(ctx context.Context, ref, memo string, amountCents, now int64) (Entry, bool, error) {
+func (l *Ledger) Seed(ctx context.Context, ref, memo string, amountCents, now int64) (JournalEntry, bool, error) {
 	if amountCents <= 0 {
-		return Entry{}, false, ErrNonPositive
+		return JournalEntry{}, false, ErrNonPositive
 	}
 	if strings.TrimSpace(ref) == "" {
-		return Entry{}, false, ErrEmptyRef
+		return JournalEntry{}, false, ErrEmptyRef
 	}
 	id, err := genID("seed")
 	if err != nil {
-		return Entry{}, false, err
+		return JournalEntry{}, false, err
 	}
 	amt := money.FromCents(amountCents)
-	e := Entry{ID: id, Kind: KindSeed, Ref: ref, Memo: memo, Amount: amt, CreatedAt: now}
+	e := JournalEntry{ID: id, Kind: KindSeed, Ref: ref, Memo: memo, Amount: amt, CreatedAt: now}
 	postings := []Posting{
 		{Account: AccountRevenue, Amount: amt.Neg()},
 		{Account: AccountReserve, Amount: amt},
@@ -319,27 +328,27 @@ func (l *Ledger) Seed(ctx context.Context, ref, memo string, amountCents, now in
 // concurrent debits cannot both pass the guard and overdraw the fund. Idempotency
 // by (KindPayout, program, ref) makes a retry a no-op — the fund is charged AT MOST
 // ONCE per ref, the mirror of the loops' own at-most-once credit latch.
-func (l *Ledger) DebitReserve(ctx context.Context, program, ref, memo string, amountCents, now int64) (entry Entry, backed, created bool, err error) {
+func (l *Ledger) DebitReserve(ctx context.Context, program, ref, memo string, amountCents, now int64) (entry JournalEntry, backed, created bool, err error) {
 	program = strings.TrimSpace(program)
 	ref = strings.TrimSpace(ref)
 	if amountCents <= 0 {
-		return Entry{}, false, false, ErrNonPositive
+		return JournalEntry{}, false, false, ErrNonPositive
 	}
 	if program == "" || ref == "" {
-		return Entry{}, false, false, ErrEmptyRef
+		return JournalEntry{}, false, false, ErrEmptyRef
 	}
 	id, gerr := genID("pay")
 	if gerr != nil {
-		return Entry{}, false, false, gerr
+		return JournalEntry{}, false, false, gerr
 	}
 	amt := money.FromCents(amountCents)
-	e := Entry{ID: id, Kind: KindPayout, Program: program, Ref: ref, Memo: memo, Amount: amt, CreatedAt: now}
+	e := JournalEntry{ID: id, Kind: KindPayout, Program: program, Ref: ref, Memo: memo, Amount: amt, CreatedAt: now}
 	postings := []Posting{
 		{Account: AccountReserve, Amount: amt.Neg()},
 		{Account: PayoutAccount(program), Amount: amt},
 	}
 	if verr := validateBalanced(postings); verr != nil {
-		return Entry{}, false, false, verr
+		return JournalEntry{}, false, false, verr
 	}
 	txErr := l.store.Tx(ctx, func(tx Tx) error {
 		existing, ok, ferr := tx.EntryByRef(KindPayout, program, ref)
@@ -366,21 +375,21 @@ func (l *Ledger) DebitReserve(ctx context.Context, program, ref, memo string, am
 		return nil
 	})
 	if txErr != nil {
-		return Entry{}, false, false, txErr
+		return JournalEntry{}, false, false, txErr
 	}
 	return entry, backed, created, nil
 }
 
 // post is the generic balanced-entry writer used by Accrue/Seed: validate the legs
 // sum to zero, then insert idempotently by ref inside one transaction.
-func (l *Ledger) post(ctx context.Context, e Entry, postings []Posting) (Entry, bool, error) {
+func (l *Ledger) post(ctx context.Context, e JournalEntry, postings []Posting) (JournalEntry, bool, error) {
 	if strings.TrimSpace(e.Ref) == "" {
-		return Entry{}, false, ErrEmptyRef
+		return JournalEntry{}, false, ErrEmptyRef
 	}
 	if err := validateBalanced(postings); err != nil {
-		return Entry{}, false, err
+		return JournalEntry{}, false, err
 	}
-	var out Entry
+	var out JournalEntry
 	var created bool
 	err := l.store.Tx(ctx, func(tx Tx) error {
 		existing, ok, ferr := tx.EntryByRef(e.Kind, e.Program, e.Ref)
@@ -399,7 +408,7 @@ func (l *Ledger) post(ctx context.Context, e Entry, postings []Posting) (Entry, 
 		return nil
 	})
 	if err != nil {
-		return Entry{}, false, err
+		return JournalEntry{}, false, err
 	}
 	return out, created, nil
 }
@@ -418,14 +427,14 @@ func (l *Ledger) ReserveCents(ctx context.Context) (int64, error) {
 
 // Snapshot computes the reserve-fund health report. Fund == Accrued − Paid always,
 // because all three are the same postings viewed three ways — it can never drift.
-func (l *Ledger) Snapshot(ctx context.Context) (Report, error) {
+func (l *Ledger) Snapshot(ctx context.Context) (TreasuryReport, error) {
 	reserve, err := l.store.Balance(ctx, AccountReserve)
 	if err != nil {
-		return Report{}, fmt.Errorf("reserve balance: %w", err)
+		return TreasuryReport{}, fmt.Errorf("reserve balance: %w", err)
 	}
 	payouts, err := l.store.BalancesWithPrefix(ctx, payoutPrefix)
 	if err != nil {
-		return Report{}, fmt.Errorf("payout balances: %w", err)
+		return TreasuryReport{}, fmt.Errorf("payout balances: %w", err)
 	}
 	byProgram := make(map[string]int64, len(payouts))
 	var paid int64
@@ -436,10 +445,10 @@ func (l *Ledger) Snapshot(ctx context.Context) (Report, error) {
 	}
 	pol, err := l.store.Policy(ctx)
 	if err != nil {
-		return Report{}, fmt.Errorf("policy: %w", err)
+		return TreasuryReport{}, fmt.Errorf("policy: %w", err)
 	}
 	reserveCents := reserve.Cents()
-	return Report{
+	return TreasuryReport{
 		ReserveCents:     reserveCents,
 		AccruedCents:     reserveCents + paid, // lifetime into the fund
 		PaidCents:        paid,
@@ -450,7 +459,7 @@ func (l *Ledger) Snapshot(ctx context.Context) (Report, error) {
 }
 
 // Entries returns the most recent journal entries (newest first, with postings).
-func (l *Ledger) Entries(ctx context.Context, limit int) ([]Entry, error) {
+func (l *Ledger) Entries(ctx context.Context, limit int) ([]JournalEntry, error) {
 	return l.store.Entries(ctx, limit)
 }
 
@@ -494,8 +503,8 @@ func (l *Ledger) Root(ctx context.Context) (root [32]byte, entryCount int, err e
 // value), so the off-chain preimage and the on-chain balance agree bit-for-bit. Both
 // backends (native + Formance) use it, so the on-chain root is computed one way
 // regardless of which ledger owns the books.
-func ComputeRoot(entries []Entry, reserve money.Amount) [32]byte {
-	sorted := make([]Entry, len(entries))
+func ComputeRoot(entries []JournalEntry, reserve money.Amount) [32]byte {
+	sorted := make([]JournalEntry, len(entries))
 	copy(sorted, entries)
 	sort.Slice(sorted, func(i, j int) bool {
 		if sorted[i].CreatedAt != sorted[j].CreatedAt {
@@ -517,17 +526,17 @@ func ComputeRoot(entries []Entry, reserve money.Amount) [32]byte {
 }
 
 // Policy returns the current revenue-share policy.
-func (l *Ledger) Policy(ctx context.Context) (Policy, error) { return l.store.Policy(ctx) }
+func (l *Ledger) Policy(ctx context.Context) (SharePolicy, error) { return l.store.Policy(ctx) }
 
 // SetPolicy persists a revenue-share policy after validating the basis points are
 // in range [0, 10000] (0%–100%).
-func (l *Ledger) SetPolicy(ctx context.Context, bps, now int64) (Policy, error) {
+func (l *Ledger) SetPolicy(ctx context.Context, bps, now int64) (SharePolicy, error) {
 	if bps < 0 || bps > bpsDenominator {
-		return Policy{}, fmt.Errorf("revenueShareBps must be in [0,%d], got %d", bpsDenominator, bps)
+		return SharePolicy{}, fmt.Errorf("revenueShareBps must be in [0,%d], got %d", bpsDenominator, bps)
 	}
-	p := Policy{RevenueShareBps: bps, UpdatedAt: now}
+	p := SharePolicy{RevenueShareBps: bps, UpdatedAt: now}
 	if err := l.store.SetPolicy(ctx, p); err != nil {
-		return Policy{}, err
+		return SharePolicy{}, err
 	}
 	return p, nil
 }

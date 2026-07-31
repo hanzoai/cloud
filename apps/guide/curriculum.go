@@ -19,7 +19,7 @@
 //     runtime the DB is authoritative. See blueprint.go for the schema + projection,
 //     blueprint_store.go for the seeded/versioned store, admin.go for the CRUD plane.
 //
-// This file is the pure ENGINE: the checklist schema (Step / Curriculum), validation,
+// This file is the pure ENGINE: the checklist schema (JourneyStep / Curriculum), validation,
 // and the dependency/next-step/auto-detect logic — all free functions over plain data,
 // no I/O, so they are exhaustively unit-testable. The engine ALWAYS runs on a
 // Curriculum of ENABLED steps (the projection Blueprint.Curriculum() drops disabled
@@ -35,10 +35,19 @@ import (
 	"strings"
 )
 
-// Step is one checklist item. The struct tags are JSON, and sigs.k8s.io/yaml decodes
-// YAML through them — so one tag set is the ONE contract for both the embedded YAML
-// blueprint and a JSON PUT body (DRY: no parallel yaml tags).
-type Step struct {
+// JourneyStep is one checklist item — one quest of the launch journey. The struct
+// tags are JSON, and sigs.k8s.io/yaml decodes YAML through them — so one tag set is
+// the ONE contract for both the embedded YAML blueprint and a JSON PUT body (DRY: no
+// parallel yaml tags).
+//
+// The qualifier is load-bearing, not decoration: the type NAME is the schema name in
+// the published document, and that document is ONE flat namespace shared by every app
+// in the fleet. Plain `Step` is already claimed there by apps/marketing (a step of a
+// drip sequence — a different shape entirely), and openapi.Weave refuses one name with
+// two shapes because a generated SDK would bind whichever it read last. Do not
+// "simplify" this back to Step; that is the collision, not a tidier name. The wire is
+// unaffected either way — the JSON keys live on the fields.
+type JourneyStep struct {
 	ID      string `json:"id"`
 	Section string `json:"section,omitempty"` // the phase (section id) this step groups under
 	Title   string `json:"title"`
@@ -73,9 +82,9 @@ type Step struct {
 // so the next-step/gating logic never has to reason about enablement. Order is
 // authoring order and is the tiebreak the next-step logic walks.
 type Curriculum struct {
-	Version string `json:"version"`
-	Title   string `json:"title,omitempty"`
-	Steps   []Step `json:"steps"`
+	Version string        `json:"version"`
+	Title   string        `json:"title,omitempty"`
+	Steps   []JourneyStep `json:"steps"`
 }
 
 // State is a step's per-org lifecycle state.
@@ -200,14 +209,14 @@ func findCycle(c Curriculum) string {
 	return ""
 }
 
-// stepByID returns the step with id, or (Step{}, false).
-func (c Curriculum) stepByID(id string) (Step, bool) {
+// stepByID returns the step with id, or (JourneyStep{}, false).
+func (c Curriculum) stepByID(id string) (JourneyStep, bool) {
 	for _, s := range c.Steps {
 		if s.ID == id {
 			return s, true
 		}
 	}
-	return Step{}, false
+	return JourneyStep{}, false
 }
 
 // stateOf returns the recorded state for id, defaulting to todo.

@@ -270,8 +270,16 @@ func buildTellerClient(certPEM, keyPEM []byte) (tellerDoer, error) {
 
 // exchange is the link-flow's server side: it persists a Teller enrollment's access_token to
 // KMS for one org. Symmetric to Plaid's public-token → access-token exchange, this is the
-// ONLY write of the token, and it goes to KMS — never books.db. The route handler
-// (bankExchangeHandler) calls this after Teller Connect returns the enrollment.
+// ONLY write of the token, and it goes to KMS — never books.db.
+//
+// NOTHING CALLS IT ON THE HTTP PATH. bankExchangeHandler answers 501 unconditionally and
+// never reaches this, and the same is true of plaidConn.Exchange/LinkToken and linkConfig
+// below — so the whole link flow is implemented and unreachable, and no org can connect a
+// bank through the API. This comment used to claim the handler calls it; typing the bank
+// surface is what found that out (an op has to say what it answers on success, and these
+// two never succeed). Wiring the handlers is a WIRE change — a route that has only ever
+// answered 501 would start answering 200 with a body nothing has specified — so it is a
+// deliberate follow-up, not a side effect of describing the surface.
 func (tc *tellerConn) exchange(ctx context.Context, org, accessToken string) error {
 	org = strings.TrimSpace(org)
 	accessToken = strings.TrimSpace(accessToken)

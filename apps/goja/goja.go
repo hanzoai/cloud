@@ -1,8 +1,11 @@
-// Package gojahost runs a Hanzo Node service's goja bundle (a self-contained,
-// ESM-free JS file exposing globalThis.handle(req)) inside the unified cloud
-// binary, per HIP-0106.
+// Package goja is the in-process JavaScript host: it runs a service's goja
+// bundle (a self-contained, ESM-free JS file exposing globalThis.handle(req))
+// inside the cloud binary, with an optional tenant-bound Base/SQLite binding.
 //
-// It is the SHARED glue used by clients/plan and clients/pricing to host
+// It is a LIBRARY, not a subsystem — it registers no route and has no manifest
+// row.
+//
+// It is the SHARED glue used by apps/plan and apps/pricing to host
 // @hanzo/plans and @hanzo/pricing in-process via dop251/goja — the same engine
 // base/plugins/gojavm uses. We do not import base's gojavm Runtime directly
 // because that loader is manifest-driven (extension.json + a single exported

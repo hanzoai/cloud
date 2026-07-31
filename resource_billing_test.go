@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,7 +23,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -427,5 +430,125 @@ func TestDenyResource(t *testing.T) {
 		if !containsSub(string(body), tc.body) {
 			t.Fatalf("%s body %q missing %q", tc.path, body, tc.body)
 		}
+	}
+}
+
+// A usage priced ONLY as a typed money.Amount must be billed.
+//
+// metering.Usage carries three amount sources with a documented precedence — the
+// typed Amount wins, then micro-USD, then whole cents — and Usage.Money resolves
+// them. MeterUsage used to ask its own version of the question, reading two of the
+// three (`AmountCents <= 0 && AmountMicros <= 0`), and returned early on a Usage
+// whose cost was exact. That is the shape a per-token 18-dp caller sends, so the
+// money was dropped before Record could bill it: no error, no log, no row, and a
+// status-code test would see nothing wrong because there is no request to fail.
+//
+// $0.0025 is deliberately sub-cent: it survives only because the amount is exact,
+// which is the whole reason the typed field exists.
+func TestResourceMeter_MeterUsageBillsAnExactAmount(t *testing.T) {
+	fc := &recCommerce{balanceAvailable: 5000}
+	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
+
+	exact, err := money.ParseUSD("0.0025") // sub-cent: survives only because it is exact.
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	rm.MeterUsage("acme", "zen", metering.Usage{
+		User:   "acme",
+		Amount: exact, // no cents, no micros set.
+		Model:  "zen-1",
+	})
+
+	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
+		t.Fatalf("usage records = %d, want 1 — a Usage priced only as a typed "+
+			"money.Amount was dropped before Record saw it", fc.usages())
+	}
+	org, _ := fc.lastUsage()
+	if org != "acme" {
+		t.Fatalf("usage billed org %q, want %q", org, "acme")
+	}
+}
+
+// A debit must cross the internal plane EXACTLY.
+//
+// plane.Money is a decimal string precisely so an amount survives the process
+// boundary unrounded, and the receiving side honors it (apps/commerce
+// meter_rpc.go parses the decimal and debits it verbatim). meterPeer defeated
+// both: it built the plane amount from u.AmountCents, so a usage priced only as
+// a typed money.Amount — the shape every per-token caller sends — crossed as
+// $0.00. The guard fix upstream (Usage.Money) made those debits SURVIVE to this
+// path; this is the test that they survive it whole.
+//
+// The capture op stands where commerce's /finance/record stands, on the same
+// plane socket, receiving the same RecordIn — what it sees is what commerce
+// would have debited.
+func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	ResetPlane()
+
+	got := make(chan plane.RecordIn, 1)
+	zip.Post[plane.RecordIn, plane.Recorded](Plane(), "/finance/record",
+		func(_ context.Context, in *plane.RecordIn) (*plane.Recorded, error) {
+			got <- *in
+			return &plane.Recorded{Amount: in.Amount}, nil
+		},
+		zip.WithOperationID(plane.FinanceRecord),
+		zip.WithSummary("test capture of the peer debit"))
+
+	stop, err := ServePlane("commerce", nil)
+	if err != nil {
+		t.Fatalf("ServePlane: %v", err)
+	}
+	t.Cleanup(func() { _ = stop() })
+	up := false
+	for i := 0; i < 300; i++ {
+		if c, derr := net.Dial("unix", zip.SocketPath("commerce")); derr == nil {
+			_ = c.Close()
+			up = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !up {
+		t.Fatalf("plane socket never came up at %s", zip.SocketPath("commerce"))
+	}
+
+	// No BaseURL: metering is configured but DISABLED, which is every process
+	// that does not hold the ledger — exactly the state that routes to the peer.
+	m, err := metering.New(metering.Config{Org: "hanzo"})
+	if err != nil {
+		t.Fatalf("metering.New: %v", err)
+	}
+	rm := NewResourceMeter(Deps{Logger: luxlog.New("test"), Metering: m, Env: "mainnet"}, "provisioning")
+	if rm.Enabled() {
+		t.Fatal("fixture broken: metering must be disabled so the debit takes the peer path")
+	}
+
+	exact, err := money.ParseUSD("0.0025") // sub-cent: survives ONLY if the wire is exact
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	rm.MeterUsage("acme", "zen", metering.Usage{User: "acme", Amount: exact, Model: "zen-1"})
+
+	var in plane.RecordIn
+	select {
+	case in = <-got:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no debit crossed the plane — meterPeer dropped or never sent it")
+	}
+	if in.Subject != "acme" {
+		t.Fatalf("debit subject = %q, want acme", in.Subject)
+	}
+	amt, err := in.Amount.Parse()
+	if err != nil {
+		t.Fatalf("the plane amount does not parse: %v", err)
+	}
+	crossed := money.FromDecimal(amt.Decimal())
+	if crossed.IsZero() {
+		t.Fatalf("the debit crossed as ZERO (wire %q %q) — the sender flattened to cents before the exact wire could carry it",
+			in.Amount.Decimal, in.Amount.Currency)
+	}
+	if crossed.Cmp(exact) != 0 {
+		t.Fatalf("debit crossed as %s, want %s (wire %q %q)", crossed, exact, in.Amount.Decimal, in.Amount.Currency)
 	}
 }

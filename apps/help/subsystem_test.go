@@ -70,6 +70,21 @@ func anon(t *testing.T, app *zip.App, method, path string, body any, headers map
 	return resp.StatusCode, b
 }
 
+// anonRaw is anon for a body that is NOT valid JSON — the input a typed op's
+// decoder would otherwise refuse before the handler's own gates ran.
+func anonRaw(t *testing.T, app *zip.App, method, path string, body []byte) (int, []byte) {
+	t.Helper()
+	req := httptest.NewRequest(method, path, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
 func dataArray(t *testing.T, raw []byte) []map[string]any {
 	t.Helper()
 	var res struct {

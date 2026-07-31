@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/hanzoai/authz"
 	"io"
 	"net/http"
 	"net/url"
@@ -246,11 +247,13 @@ func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
 	}
 	owner := strings.TrimSpace(env.Data.Owner)
 	return &idClaims{
-		Owner:             owner,
-		Name:              strings.TrimSpace(env.Data.Name),
-		PreferredUsername: strings.TrimSpace(env.Data.Name),
-		Email:             strings.TrimSpace(env.Data.Email),
-		IsAdmin:           env.Data.IsAdmin,
+		Claims: authz.Claims{
+			Owner:             owner,
+			Name:              strings.TrimSpace(env.Data.Name),
+			PreferredUsername: strings.TrimSpace(env.Data.Name),
+			Email:             strings.TrimSpace(env.Data.Email),
+			IsAdmin:           env.Data.IsAdmin,
+		},
 		// The org came from the SUBJECT: IAM resolved this accessKey to a user row,
 		// and that row's owner is the tenant. No application mints it and no claim
 		// carries it, so it is NOT the app-selected value homeOrg exists to reject —

@@ -56,7 +56,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 func slugs(t *testing.T, body []byte) map[string]string {
 	t.Helper()
 	var out struct {
-		Data []Template `json:"data"`
+		Data []StarterKit `json:"data"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatalf("decode list: %v (%s)", err, body)
@@ -74,7 +74,7 @@ func slugs(t *testing.T, body []byte) map[string]string {
 // gallery is.
 func TestPrivateTemplateIsOrgOnly(t *testing.T) {
 	app := mountApp(t)
-	tpl := Template{Slug: "acme-internal", Title: "Acme Internal Portal", Framework: "Next.js 14", Source: "https://git.acme.example/portal"}
+	tpl := StarterKit{Slug: "acme-internal", Title: "Acme Internal Portal", Framework: "Next.js 14", Source: "https://git.acme.example/portal"}
 
 	if code, body := do(t, app, http.MethodPost, "/v1/templates", "acme", tpl); code != http.StatusCreated {
 		t.Fatalf("publish want 201, got %d (%s)", code, body)
@@ -134,12 +134,12 @@ func TestPrivateTemplateIsOrgOnly(t *testing.T) {
 func TestWritesBindOrg(t *testing.T) {
 	app := mountApp(t)
 	// A forged owner in the body must not decide anything.
-	tpl := Template{Slug: "widget", Title: "Widget Kit", Org: "globex"}
+	tpl := StarterKit{Slug: "widget", Title: "Widget Kit", Org: "globex"}
 	code, body := do(t, app, http.MethodPost, "/v1/templates", "acme", tpl)
 	if code != http.StatusCreated {
 		t.Fatalf("publish want 201, got %d (%s)", code, body)
 	}
-	var got Template
+	var got StarterKit
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestWritesBindOrg(t *testing.T) {
 		t.Fatalf("anonymous publish want 403, got %d", code)
 	}
 	if code, _ := do(t, app, http.MethodPut, "/v1/templates/widget", "globex",
-		Template{Title: "Hijacked"}); code != http.StatusNotFound {
+		StarterKit{Title: "Hijacked"}); code != http.StatusNotFound {
 		t.Fatalf("cross-org edit want 404, got %d", code)
 	}
 	if code, _ := do(t, app, http.MethodDelete, "/v1/templates/widget", "globex", nil); code != http.StatusNotFound {
@@ -159,7 +159,7 @@ func TestWritesBindOrg(t *testing.T) {
 	}
 	// The owner's own edit + delete still work, and the row is really gone.
 	if code, _ := do(t, app, http.MethodPut, "/v1/templates/widget", "acme",
-		Template{Title: "Widget Kit v2"}); code != http.StatusOK {
+		StarterKit{Title: "Widget Kit v2"}); code != http.StatusOK {
 		t.Fatalf("owner edit want 200, got %d", code)
 	}
 	if code, _ := do(t, app, http.MethodDelete, "/v1/templates/widget", "acme", nil); code != http.StatusNoContent {
@@ -180,20 +180,20 @@ func TestSlugStaysSingleValued(t *testing.T) {
 		t.Fatalf("catalog: %v", err)
 	}
 	if code, body := do(t, app, http.MethodPost, "/v1/templates", "acme",
-		Template{Slug: cat[0].Slug, Title: "Shadow"}); code != http.StatusConflict {
+		StarterKit{Slug: cat[0].Slug, Title: "Shadow"}); code != http.StatusConflict {
 		t.Fatalf("shadowing a public slug want 409, got %d (%s)", code, body)
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/templates", "acme",
-		Template{Slug: "dup", Title: "First"}); code != http.StatusCreated {
+		StarterKit{Slug: "dup", Title: "First"}); code != http.StatusCreated {
 		t.Fatal("first publish must succeed")
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/templates", "acme",
-		Template{Slug: "dup", Title: "Second"}); code != http.StatusConflict {
+		StarterKit{Slug: "dup", Title: "Second"}); code != http.StatusConflict {
 		t.Fatalf("republishing an owned slug want 409, got %d", code)
 	}
 	// Two orgs CAN hold the same private slug — the key is (org, slug).
 	if code, _ := do(t, app, http.MethodPost, "/v1/templates", "globex",
-		Template{Slug: "dup", Title: "Globex's own"}); code != http.StatusCreated {
+		StarterKit{Slug: "dup", Title: "Globex's own"}); code != http.StatusCreated {
 		t.Fatalf("another org's same slug want 201, got %d", code)
 	}
 	if code, body := do(t, app, http.MethodGet, "/v1/templates/dup", "globex", nil); code != http.StatusOK {

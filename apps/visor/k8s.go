@@ -23,6 +23,7 @@
 // are admin-gated — a SuperAdmin (platform sudo) OR an OrgAdmin of the owning org —
 // because provisioning spends real infrastructure on Hanzo's house account. The gate
 // is the SAME principal predicate the rest of the cloud mutating surface uses.
+
 package visor
 
 import (

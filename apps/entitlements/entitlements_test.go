@@ -92,8 +92,10 @@ func mount(t *testing.T, commerce cloud.CommerceClient) (*zip.App, *service) {
 	t.Helper()
 	s := &service{store: openTestStore(t), commerce: commerce, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Get("/v1/orgs/:org/entitlements", s.get)
-	app.Post("/v1/orgs/:org/entitlements", s.post)
+	// The REAL registration, not a reconstruction of it: a test that rebuilt the
+	// router by hand could exercise a surface this binary does not serve — and
+	// would silently drop the cloud.Bridge every typed op resolves its org through.
+	routes(app, s)
 	return app, s
 }
 
@@ -329,7 +331,7 @@ func TestRemoveNeverGated(t *testing.T) {
 	_ = store.Enable(context.Background(), "acme", "engine", "u", 1)
 	s := &service{store: store, commerce: nil, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Post("/v1/orgs/:org/entitlements", s.post)
+	routes(app, s)
 
 	code, body := send(t, app, orgMember("POST", "/v1/orgs/acme/entitlements", "acme", map[string]any{"remove": []string{"engine"}}))
 	if code != http.StatusOK {

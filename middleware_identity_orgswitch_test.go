@@ -26,9 +26,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
-	model "github.com/hanzoai/iam/pkg/model"
 	"github.com/zap-proto/zip"
 )
 
@@ -85,7 +85,7 @@ func memberClaims(owner string, orgs ...string) idClaims {
 	// (the empty set), not a token that quietly inherited a home org.
 	c.Orgs = nil
 	for _, o := range orgs {
-		c.Orgs = append(c.Orgs, model.OrgRef{Org: o, Role: "member"})
+		c.Orgs = append(c.Orgs, authz.Membership{Org: o, Role: "member"})
 	}
 	return c
 }

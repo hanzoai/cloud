@@ -187,8 +187,8 @@ func runReseal(args []string) error {
 	inv := filterHost(full, *onlyHost)
 
 	ctx := context.Background()
-	src := newKMSClient(*srcURL, nil)
-	dst := newKMSClient(*cloudURL, nil)
+	src := newKMSClient(*srcURL, standalone, nil)
+	dst := newKMSClient(*cloudURL, embedded, nil)
 	// src (standalone read): the CR's existing app-name credential.
 	// dst (cloud write): the per-org <org>-platform-kms credential cloud accepts
 	// dynamically (admin-denied, no static widening) — provisioning it is gated.

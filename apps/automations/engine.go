@@ -223,7 +223,7 @@ func orgEngineClient(org string) (tasksclient.Client, error) {
 		return nil, ErrEngineNotReady
 	}
 	cli, err := tasksclient.Dial(tasksclient.Options{
-		HostPort:  fmt.Sprintf("127.0.0.1:%d", eng.ZAPPort()),
+		Address:   eng.Address(),
 		Namespace: org,
 	})
 	if err != nil {

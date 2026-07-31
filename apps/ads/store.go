@@ -125,13 +125,13 @@ func (s *Store) addColumnIfMissing(table, col, spec string) error {
 // Close closes the underlying database. Idempotent-safe via sql.DB.
 func (s *Store) Close() error { return s.db.Close() }
 
-// Campaign is an org-scoped ad campaign — the root of the ad hierarchy
+// AdCampaign is an org-scoped ad campaign — the root of the ad hierarchy
 // (campaign → ad sets → ads; the ad-set/ad legs hang off this seam as
 // follow-ups). Budget and Spend are minor units (cents). Platform is the ad
 // network (meta/google/tiktok/x); Status is the lifecycle
 // (draft/active/paused/completed) — both validated at the write layer against
 // the fixed vocabularies in ads.go.
-type Campaign struct {
+type AdCampaign struct {
 	ID         string `json:"id"`
 	Org        string `json:"-"`
 	Name       string `json:"name"`
@@ -148,38 +148,38 @@ type Campaign struct {
 
 const campaignCols = `id,org,name,platform,account,external_id,status,objective,budget,spend,created_at,updated_at`
 
-func scanCampaign(sc interface{ Scan(...any) error }) (Campaign, error) {
-	var c Campaign
+func scanCampaign(sc interface{ Scan(...any) error }) (AdCampaign, error) {
+	var c AdCampaign
 	err := sc.Scan(&c.ID, &c.Org, &c.Name, &c.Platform, &c.Account, &c.ExternalID, &c.Status, &c.Objective,
 		&c.Budget, &c.Spend, &c.CreatedAt, &c.UpdatedAt)
 	return c, err
 }
 
-func (s *Store) CreateCampaign(ctx context.Context, c Campaign) (Campaign, error) {
+func (s *Store) CreateCampaign(ctx context.Context, c AdCampaign) (AdCampaign, error) {
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO ads_campaigns (`+campaignCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 		c.ID, c.Org, c.Name, c.Platform, c.Account, c.ExternalID, c.Status, c.Objective, c.Budget, c.Spend,
 		c.CreatedAt, c.UpdatedAt); err != nil {
-		return Campaign{}, fmt.Errorf("insert campaign: %w", err)
+		return AdCampaign{}, fmt.Errorf("insert campaign: %w", err)
 	}
 	return c, nil
 }
 
-func (s *Store) GetCampaign(ctx context.Context, org, id string) (Campaign, error) {
+func (s *Store) GetCampaign(ctx context.Context, org, id string) (AdCampaign, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+campaignCols+` FROM ads_campaigns WHERE org=? AND id=?`, org, id)
 	c, err := scanCampaign(row)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Campaign{}, errNotFound
+		return AdCampaign{}, errNotFound
 	}
 	if err != nil {
-		return Campaign{}, fmt.Errorf("get campaign: %w", err)
+		return AdCampaign{}, fmt.Errorf("get campaign: %w", err)
 	}
 	return c, nil
 }
 
 // ListCampaigns lists the org's campaigns, optionally filtered by status
 // (status=="" means all). Most-recently-updated first.
-func (s *Store) ListCampaigns(ctx context.Context, org, status string, limit int) ([]Campaign, error) {
+func (s *Store) ListCampaigns(ctx context.Context, org, status string, limit int) ([]AdCampaign, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -195,7 +195,7 @@ func (s *Store) ListCampaigns(ctx context.Context, org, status string, limit int
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := make([]Campaign, 0, 16)
+	out := make([]AdCampaign, 0, 16)
 	for rows.Next() {
 		c, err := scanCampaign(rows)
 		if err != nil {
@@ -209,15 +209,15 @@ func (s *Store) ListCampaigns(ctx context.Context, org, status string, limit int
 // UpdateCampaign edits the user-owned fields. external_id is deliberately NOT in
 // the SET list: it is launch-owned (MarkLaunched sets it), so editing a campaign
 // never clobbers the link to its live provider execution.
-func (s *Store) UpdateCampaign(ctx context.Context, c Campaign) (Campaign, error) {
+func (s *Store) UpdateCampaign(ctx context.Context, c AdCampaign) (AdCampaign, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE ads_campaigns SET name=?,platform=?,account=?,status=?,objective=?,budget=?,spend=?,updated_at=? WHERE org=? AND id=?`,
 		c.Name, c.Platform, c.Account, c.Status, c.Objective, c.Budget, c.Spend, c.UpdatedAt, c.Org, c.ID)
 	if err != nil {
-		return Campaign{}, fmt.Errorf("update campaign: %w", err)
+		return AdCampaign{}, fmt.Errorf("update campaign: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return Campaign{}, errNotFound
+		return AdCampaign{}, errNotFound
 	}
 	return s.GetCampaign(ctx, c.Org, c.ID)
 }
@@ -226,15 +226,15 @@ func (s *Store) UpdateCampaign(ctx context.Context, c Campaign) (Campaign, error
 // external id, and status=active. Org-scoped — a cross-tenant id affects zero
 // rows (errNotFound), never a foreign mutation. This is the ONLY writer of
 // external_id, so the launch link is never clobbered by a user edit.
-func (s *Store) MarkLaunched(ctx context.Context, org, id, account, externalID string, updatedAt int64) (Campaign, error) {
+func (s *Store) MarkLaunched(ctx context.Context, org, id, account, externalID string, updatedAt int64) (AdCampaign, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE ads_campaigns SET account=?,external_id=?,status='active',updated_at=? WHERE org=? AND id=?`,
 		account, externalID, updatedAt, org, id)
 	if err != nil {
-		return Campaign{}, fmt.Errorf("mark launched: %w", err)
+		return AdCampaign{}, fmt.Errorf("mark launched: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return Campaign{}, errNotFound
+		return AdCampaign{}, errNotFound
 	}
 	return s.GetCampaign(ctx, org, id)
 }

@@ -50,11 +50,11 @@ func run() error {
 	// only Logger and DataDir out of it, but building it the one canonical way
 	// keeps this entrypoint honest about what a subsystem may reach for.
 	//
-	// `o11y openapi` is the exception, and for the same reason cloud.Serve makes
-	// it one: a document is a projection of routes, so describing must be a
+	// `o11y describe` is the exception, and for the same reason cloud.Serve makes
+	// it one: the artifacts are a projection of routes, so describing must be a
 	// function of the code alone and must not open the deployment's real stores
 	// (the default data dir is /var/lib/cloud, which a describe run cannot write).
-	specDest, describing := cloud.SpecRequested()
+	specDir, describing := cloud.DescribeRequested()
 	cfg := cloud.LoadConfig()
 	if describing {
 		spec, done, err := cloud.SpecConfig()
@@ -83,7 +83,7 @@ func run() error {
 	// This main is hand-written (it is a plugin, not a Wire stub), so it asks for
 	// the mode itself — through the same one producer.
 	if describing {
-		return cloud.WriteSpec(specDest, app)
+		return cloud.Describe(specDir, app)
 	}
 
 	// Teardown belongs to the process that owns the resources. The OTLP

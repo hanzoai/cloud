@@ -5,10 +5,11 @@ package cloud
 import (
 	"context"
 	"fmt"
-	"github.com/hanzoai/money"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/money"
 )
 
 // The money plane reached from a process that does not own it.
@@ -21,17 +22,10 @@ import (
 // free without changing a line of billing code.
 //
 // So the gate asks commerce over the internal plane instead of assuming. The
-// payload deliberately mirrors metering.AuthInput minus the parts a caller must
-// not choose: the billed ORG rides the capability, never the body.
-//
-// These names are the commerce side's; they are duplicated here rather than
-// imported because package cloud is what apps/commerce imports, and taking the
-// dependency back would be a cycle. The shapes are one JSON contract, pinned by a
-// test on each side.
+// input deliberately mirrors metering.AuthInput minus the parts a caller must
+// not choose: the billed ORG rides the caller, never the argument.
 const (
 	peerCommerce    = "commerce"
-	peerAuthorize   = "finance.authorize"
-	peerRecord      = "finance.record"
 	peerCallTimeout = 10 * time.Second
 )
 
@@ -42,20 +36,25 @@ const (
 // cap is 402 spend_cap_exceeded, and anything else is unknown — which the
 // fail-closed caller turns into 503 rather than free work.
 func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, projectValidated bool, costCents int64) error {
-	body := PutAuthorizeReq(org, money.FromUSD(costCents), project, rm.provider, projectValidated)
-	ctx, cancel := context.WithTimeout(ctx, peerCallTimeout)
+	in := plane.AuthorizeIn{
+		Subject:          org,
+		Amount:           plane.Amount(money.FromUSD(costCents)),
+		Project:          project,
+		Service:          rm.provider,
+		ProjectValidated: projectValidated,
+	}
+	ctx, cancel := context.WithTimeout(For(ctx, org), peerCallTimeout)
 	defer cancel()
 
-	out, err := Dial(peerCommerce).For(org).Call(ctx, peerAuthorize, body)
+	v, err := Ask[plane.AuthorizeIn, plane.Verdict](ctx, peerCommerce, plane.FinanceAuthorize, &in)
 	if err != nil {
 		// The biller is unreachable. Unknown, never allowed.
 		return fmt.Errorf("gate: commerce unreachable: %w", err)
 	}
-	v, err := GateVerdict(out)
-	if err != nil {
-		return fmt.Errorf("gate: %w", err)
-	}
 	switch {
+	case v == nil:
+		// A void reply from a gate is not permission. Nothing said yes.
+		return fmt.Errorf("gate: commerce answered nothing")
 	case v.OK:
 		return nil
 	case v.NoFunds:
@@ -75,15 +74,31 @@ func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, proj
 // logged for reconciliation rather than swallowed — an unbilled create is a number
 // somebody has to find later, so it says so now.
 func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage) {
-	body := PutAuthorizeReq(org, money.FromUSD(u.AmountCents), u.Project,
-		firstNonEmpty(u.Service, rm.provider), false)
+	// The EXACT debit, never the cents field. plane.Money is a decimal string
+	// precisely so a debit crosses the process boundary unrounded, and the
+	// receiver honors that (meter_rpc.go parses the decimal and debits it
+	// verbatim) — but this sender flattened first, so a usage priced only as a
+	// typed Amount arrived as $0.00. Usage.Money resolves the three amount
+	// sources with their documented precedence; it is the same question
+	// MeterUsage already asks to decide there is anything to bill at all.
+	in := plane.RecordIn{
+		Subject: org,
+		Amount:  plane.Amount(u.Money().Unwrap()),
+		Usage: plane.Usage{
+			Project: u.Project,
+			Service: firstNonEmpty(u.Service, rm.provider),
+		},
+	}
 	log := rm.log
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), peerCallTimeout)
+		// The debit acts FOR the org with no request behind it, so it states the
+		// tenant explicitly — the books it writes to are chosen here, not by
+		// whatever ran last.
+		ctx, cancel := context.WithTimeout(For(context.Background(), org), peerCallTimeout)
 		defer cancel()
-		if _, err := Dial(peerCommerce).For(org).Call(ctx, peerRecord, body); err != nil && log != nil {
+		if _, err := Ask[plane.RecordIn, plane.Recorded](ctx, peerCommerce, plane.FinanceRecord, &in); err != nil && log != nil {
 			log.Error("resource debit failed over the internal plane (resource created, not billed)",
-				"org", org, "kind", kind, "cents", u.AmountCents, "err", err)
+				"org", org, "kind", kind, "amount", u.Money().String(), "err", err)
 		}
 	}()
 }

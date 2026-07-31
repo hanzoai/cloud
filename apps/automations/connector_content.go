@@ -10,7 +10,7 @@ import (
 // connector_content.go registers the "content" connector: the marketing content loop
 // (clients/content) exposed as automation ACTIONS and MCP TOOLS, so the loop runs
 // AUTONOMOUSLY. Each action is both a flow step and an MCP tool named
-// "content_<action>" at POST /v1/automations/mcp — the surface a scheduled flow, an
+// "content_<action>" on the unified tool plane — the surface a scheduled flow, an
 // /v1/agents tool call, or a headless hanzo-bot drives.
 //
 // Why a first-class connector and not core.http_request → /v1/content/*: core.http_request

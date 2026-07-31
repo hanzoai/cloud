@@ -1,10 +1,14 @@
-// Package flags is cloud's NATIVE feature-flag engine: definitions live in
-// per-(org, project) SQLite (cloud.OrgDB — {DataDir}/orgs/{org}/projects/{project}/
-// flags.db, encrypted at rest via cek) and evaluation runs in-process through the
-// embedded hanzo-flags evaluator (github.com/hanzoai/flags/go) with PostHog-compatible
-// semantics: rollout hash, full property-operator set, variants, payloads. Stateless
-// and scalable by construction — no KV, no network hop, every pod evaluates from its
-// own hot in-memory copy of the definitions.
+// Package flags is feature flags: define a flag, target it by property or
+// percentage rollout, and evaluate it for an identity — plus the platform switches
+// operators flip to change how the deployment behaves without a redeploy.
+//
+// Definitions live in per-(org, project) SQLite (cloud.OrgDB —
+// {DataDir}/orgs/{org}/projects/{project}/flags.db, encrypted at rest via cek) and
+// evaluation runs in-process through the embedded hanzo-flags evaluator
+// (github.com/hanzoai/flags/go) with PostHog-compatible semantics: rollout hash,
+// full property-operator set, variants, payloads. Stateless and scalable by
+// construction — no KV, no network hop, every pod evaluates from its own hot
+// in-memory copy of the definitions.
 //
 // TWO surfaces, ONE engine:
 //
@@ -30,7 +34,7 @@
 // rides on it: no host→service map, no waitlist, no service registry. Those COMPOSE
 // this engine from the OUTSIDE, one-way (they import flags; flags imports none of them):
 //
-//   - the launch waitlist gate (clients/admission) — a service's mode IS the switch
+//   - the launch waitlist gate (apps/admission) — a service's mode IS the switch
 //     waitlist.<svc>; admission owns the host→service registry + Enforce and reads the
 //     mode through flags.Bool. It USED to live in this package; extracting it is the
 //     PROOF the engine composes its tenants rather than absorbing them.

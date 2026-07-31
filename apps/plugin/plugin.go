@@ -4,7 +4,7 @@
 //
 // A plugin here is a service that ships as its OWN binary and is composed in at
 // run time by zip.Load, one child process per app on a private unix socket. The
-// authoritative app->prefixes table is the generated manifest.Apps; the
+// authoritative app->prefixes table is the hand-authored manifest.Apps; the
 // authoritative VERSION is the artifact's SHA-256, because that is the only
 // identifier that cannot drift from the bits actually serving. This package
 // invents neither — it reports the first and moves the second.
@@ -13,14 +13,19 @@
 // CLOUD_PLUGINS JSON manifest, mounting wasm/goa modules and reverse proxies.
 // Nothing in this repo, in universe, or in any chart ever set CLOUD_PLUGINS, so
 // that lane mounted nothing in production while publishing an untyped
-// GET /v1/plugins that reported the empty set — a second source of truth for
-// "what is a plugin here" that was always empty, and invisible to OpenAPI, MCP
-// and the CLI because it was untyped. It is gone; this is the one way.
+// GET /v1/plugins that reported the empty set. That lane is gone from here.
+//
+// GET /v1/plugins still exists, in apps/tools, and it answers the SAME question
+// from a different source: cloud.Subsystems(), the snapshot taken at boot. It
+// therefore cannot see the effect of the enable/disable/reload below, which is
+// why this surface — live, per host, keyed on the running artifact's digest — is
+// the one to read when the answer has to be true right now.
 //
 // Every route below can take production down, so every one of them is
 // SuperAdmin-gated and every mutation is written to the hash-chained audit
 // trail BEFORE it is reported as done. A deployment with no audit store refuses
 // to mutate at all, the same way a credit grant does.
+//
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 package plugin
 
@@ -34,8 +39,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/admin/core"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/ha"
 	"github.com/zap-proto/zip"
@@ -125,7 +130,7 @@ type ListOut struct {
 	Msg    string  `json:"msg"`
 	Data   []Host  `json:"data"`
 	Drift  []Drift `json:"drift,omitempty"`
-	Data2  *int    `json:"data2,omitempty"`
+	Total  *int    `json:"total,omitempty"`
 }
 
 // ReloadIn names an artifact to run. Exactly one of Version or URL+Sum, or
@@ -195,10 +200,10 @@ func (o *ops) list(ctx context.Context, in *ListIn) (*ListOut, error) {
 		return nil, err
 	}
 	if in.Scope == scopeHost {
-		return &ListOut{Status: core.OK, Data: []Host{o.here()}, Data2: core.Total(1)}, nil
+		return &ListOut{Status: core.OK, Data: []Host{o.here()}, Total: core.Total(1)}, nil
 	}
 	hosts := o.fleet(ctx, c)
-	return &ListOut{Status: core.OK, Data: hosts, Drift: drift(hosts), Data2: core.Total(len(hosts))}, nil
+	return &ListOut{Status: core.OK, Data: hosts, Drift: drift(hosts), Total: core.Total(len(hosts))}, nil
 }
 
 // here is this host's own account, the only one it can answer without a hop.

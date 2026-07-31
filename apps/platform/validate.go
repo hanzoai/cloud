@@ -20,6 +20,7 @@
 // Every bound is a hard-coded safe default, operator-overridable via env — the
 // values are resolved ONCE at k8sClient construction so a request path never
 // re-reads the environment and the tests are deterministic.
+
 package platform
 
 import (

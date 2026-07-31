@@ -2,7 +2,7 @@
 // envelope, per-org access policy (pairing / allowlist / open), a durable
 // inbox, and outbound send across the connected chat transports (Discord,
 // Slack, Teams, Telegram). Identity and token custody stay in
-// clients/integrations — channels consumes its ingress seam
+// apps/integrations — channels consumes its ingress seam
 // (integrations.RegisterIngress) and its send doors, so the dependency points
 // one way: channels → integrations, never back.
 package channels
@@ -24,7 +24,7 @@ type state struct {
 }
 
 // mounted is the active service, read by ingest on emit goroutines and written
-// once at Mount/Shutdown — an atomic.Pointer (clients/sync pattern) so a
+// once at Mount/Shutdown — an atomic.Pointer (apps/sync pattern) so a
 // detached event reads it race-free. nil ⇒ unmounted; ingest drops.
 var mounted atomic.Pointer[cloud.Service[state]]
 
@@ -51,7 +51,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Publish state BEFORE registering the ingress consumer so the first
 	// emitted event finds a mounted service.
 	mounted.Store(s)
-	routes(app, s)
+	if err := routes(app, s); err != nil {
+		return err
+	}
 	integrations.RegisterIngress(ingest)
 	b.Log.Info("channels mounted", "transports", len(transports))
 	return nil

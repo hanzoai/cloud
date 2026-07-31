@@ -19,9 +19,23 @@
     "/v1/notify/health": {
       "get": {
         "operationId": "get_v1_notify_health",
+        "summary": "health reports that the notify send surface is mounted.",
+        "description": "health reports that the notify send surface is mounted.\n\nIt is a pure liveness probe: it answers 200 whenever this subsystem is mounted\nand checks nothing downstream, so an \"ok\" here says the routes are reachable, not\nthat any provider credential is configured. The body is notifyd's verbatim, so\nprobes and clients that keyed on the standalone service keep working unchanged.",
         "tags": [
           "notify"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/notifyHealth"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/notify/send": {
@@ -46,6 +60,23 @@
         "tags": [
           "notify"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "notifyHealth": {
+        "properties": {
+          "service": {
+            "description": "Service names the subsystem answering — always \"notify\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\"; the route answers 200 whenever the subsystem is mounted.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

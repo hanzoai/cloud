@@ -1,12 +1,17 @@
-// Package membership is the LIVE writer-membership source: the K8s Endpoints
-// poll that plugs into internal/org's Source seam so the horizontally-scaled
-// cloud tracks its CHANGING pod set instead of a static list.
+// Package membership is the live writer-membership source: the K8s pod poll
+// that feeds internal/org.Source so a horizontally-scaled cloud tracks its
+// CHANGING pod set instead of a static peer list.
 //
-// It lives OUT of package cloud on purpose. Every subsystem imports cloud for
-// Deps, so cloud's import graph is the floor under all of them; the k8s client
-// pulls 263 packages that only this one file needed. cloud declares the seam
-// (cloud.SetLiveSource) and apps/ installs K8s into it, so a subsystem — and
-// cloud's own tests — compile without the Kubernetes client present at all.
+// It is a LIBRARY, not a subsystem — it registers no route and has no manifest
+// row. It is also UNWIRED: the composition root that installed it
+// (apps/apps.go Wire, deleted at 22f4fc64) and the seam it installed through
+// (cloud.SetLiveSource) are both gone, and nothing in the tree calls K8s. Until
+// a caller returns, every deployment runs on its static peer set and the
+// outage below is NOT fixed.
+//
+// It lives OUT of package cloud on purpose: every subsystem imports cloud for
+// Deps, so cloud's import graph is the floor under all of them, and the k8s
+// client pulls 263 packages that only this one file needs.
 //
 // It is the fix for the rolling-upgrade outage: with a static peer set, ha.Owner
 // keeps electing a pod that is draining or already gone, and the shard router
@@ -19,7 +24,6 @@
 // hot-path AmOwner check lock-free from an atomic snapshot). Each poll re-lists,
 // so a dropped connection self-heals on the next tick — no watch state to wedge.
 package membership
-
 
 import (
 	"context"

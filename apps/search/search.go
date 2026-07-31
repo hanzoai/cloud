@@ -1,16 +1,23 @@
-// Package search is THE search entry point: ONE surface, POST /v1/search, that
-// answers "what is RELEVANT" over a tenant's own data.
+// Package search answers "what is RELEVANT" over a tenant's own data: it owns no
+// store and fuses the two retrieval stores the platform already runs — the lexical
+// index (apps/index) and the vector index (apps/knowledge) — into one ranked
+// result set.
 //
-// It owns no store. It is a composition of the two retrieval STORES the platform
-// already runs — the lexical index (clients/index, hanzoai/index) and the vector
-// index (clients/knowledge, hanzoai/vector) — fused into one ranked result set.
-// That is the whole point: before this, a caller had to know which of
-// /v1/kb/search, /v1/index/indexes/:uid/search and /v1/search-docs/* held the
-// answer, and got a different request shape and a different score scale from each.
+// IT IS NOT MOUNTED. There is no manifest row and no plugin/search binary, so
+// Mount below is never called and its POST /v1/search never reaches the wire —
+// /v1/search belongs to apps/provisioning (list/create a provisioned search
+// index), which is a different product that happens to share the word. The one
+// live caller is apps/team's fulltext RPC, which calls ForOrg in-process; and in
+// the team BINARY neither leg is mounted, so index.Ready() is false there and the
+// lexical leg reports `disabled` on every query. Until a door is decided, a caller
+// still has to know which of /v1/kb/search, /v1/index/indexes/:uid/search and
+// /v1/code/search holds the answer, and gets a different request shape and a
+// different score scale from each — which is the problem this package was written
+// to end.
 //
 // WHAT BELONGS HERE. A query whose honest answer has a SCORE. A query whose
 // honest answer has a TRUTH VALUE — the definition of a symbol, the callers of a
-// function, a dependency edge — belongs to /v1/code (clients/code) and must not be
+// function, a dependency edge — belongs to /v1/code (apps/code) and must not be
 // forced through a relevance-ranked shape: a definition is not 0.87 relevant, it
 // either is the definition or it is not.
 //
@@ -25,6 +32,7 @@
 // silent empty. This is not a nicety: a silent empty is exactly how a vector-store
 // credential drift went unnoticed for five days behind a fail-empty
 // /v1/kb/search.
+//
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 package search
 
