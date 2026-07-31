@@ -54,15 +54,32 @@ var untypedByDesign = map[string]string{
 	"POST /{org}/{repo}/git-receive-pack": "the git-host root form: a pack stream in, pkt-line " +
 		"report-status out, and a c.Next() fall-through on a non-git Host.",
 
+	// The same six one segment deeper, for a project-scoped repo: identical
+	// handlers and identical non-JSON wire, addressed as :org/:project/:repo
+	// because a git client sends no headers and the scope has nowhere else to
+	// ride (git.go, cloneURL).
+	"GET /v1/git/{org}/{project}/{repo}/info/refs": "the project-scoped ref advertisement; " +
+		"application/x-git-*-advertisement bytes, not a JSON value.",
+	"POST /v1/git/{org}/{project}/{repo}/git-upload-pack": "project-scoped: an x-git-upload-pack-request " +
+		"pack stream in, a STREAMED packfile out.",
+	"POST /v1/git/{org}/{project}/{repo}/git-receive-pack": "project-scoped: an x-git-receive-pack-request " +
+		"pack stream in, pkt-line report-status out.",
+	"GET /{org}/{project}/{repo}/info/refs": "the git-host root form, project-scoped; pkt-line bytes and a " +
+		"c.Next() fall-through on a non-git Host.",
+	"POST /{org}/{project}/{repo}/git-upload-pack": "the git-host root form, project-scoped: a pack stream " +
+		"in, a streamed packfile out, and a c.Next() fall-through on a non-git Host.",
+	"POST /{org}/{project}/{repo}/git-receive-pack": "the git-host root form, project-scoped: a pack stream " +
+		"in, pkt-line report-status out, and a c.Next() fall-through on a non-git Host.",
+
 	// 3. The browser UI — Hanzo Git's server-rendered web surface (ui.go),
 	// text/html from html/template. A typed dispatch ends in c.JSON(out). The six
 	// root-level pages carry the same onGitHost c.Next() fall-through as family 2.
 	// The JSON twin of every one of these IS a typed op (/v1/git/repos/{name}/…
 	// refs|tree|blob|commits|readme), so the schema is not missing — it is at the
 	// address that answers JSON.
-	"GET /git":                   "server-rendered text/html (the repo list page); a typed Out answers JSON.",
-	"GET /git/explore":           "server-rendered text/html (the public explore page); a typed Out answers JSON.",
-	"GET /git/{org}/{repo}":      "server-rendered text/html (the repo page); a typed Out answers JSON.",
+	"GET /git":              "server-rendered text/html (the repo list page); a typed Out answers JSON.",
+	"GET /git/explore":      "server-rendered text/html (the public explore page); a typed Out answers JSON.",
+	"GET /git/{org}/{repo}": "server-rendered text/html (the repo page); a typed Out answers JSON.",
 	"GET /git/{org}/{repo}/tree/{wildcard1}": "server-rendered text/html (the tree browser); a typed Out " +
 		"answers JSON.",
 	"GET /git/{org}/{repo}/blob/{wildcard1}": "server-rendered text/html (the blob view); a typed Out " +
@@ -200,14 +217,18 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // usage), the ref advertisement, and the twelve HTML pages. Declaring a body for
 // one of those would replace an honest silence with a fresh falsehood.
 var declaredBodies = map[string]string{
-	"POST /v1/git/webhook":                       "application/json",
-	"POST /v1/git/zap/createRepo":                "application/json",
-	"POST /v1/git/zap/getRepo":                   "application/json",
-	"POST /v1/git/zap/deleteRepo":                "application/json",
-	"POST /v1/git/{org}/{repo}/git-upload-pack":  "application/octet-stream",
-	"POST /v1/git/{org}/{repo}/git-receive-pack": "application/octet-stream",
-	"POST /{org}/{repo}/git-upload-pack":         "application/octet-stream",
-	"POST /{org}/{repo}/git-receive-pack":        "application/octet-stream",
+	"POST /v1/git/webhook":                                 "application/json",
+	"POST /v1/git/zap/createRepo":                          "application/json",
+	"POST /v1/git/zap/getRepo":                             "application/json",
+	"POST /v1/git/zap/deleteRepo":                          "application/json",
+	"POST /v1/git/{org}/{repo}/git-upload-pack":            "application/octet-stream",
+	"POST /v1/git/{org}/{repo}/git-receive-pack":           "application/octet-stream",
+	"POST /{org}/{repo}/git-upload-pack":                   "application/octet-stream",
+	"POST /{org}/{repo}/git-receive-pack":                  "application/octet-stream",
+	"POST /v1/git/{org}/{project}/{repo}/git-upload-pack":  "application/octet-stream",
+	"POST /v1/git/{org}/{project}/{repo}/git-receive-pack": "application/octet-stream",
+	"POST /{org}/{project}/{repo}/git-upload-pack":         "application/octet-stream",
+	"POST /{org}/{project}/{repo}/git-receive-pack":        "application/octet-stream",
 }
 
 // TestRefusedRoutesDeclareTheBodyTheyRead holds the description of the 24 refusals
