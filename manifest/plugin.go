@@ -87,6 +87,22 @@ type App struct {
 	Required bool
 }
 
+// Names is every app, in mount order — which is the fleet's routing order and
+// therefore the order its document is woven in, so a conflict is reported as the
+// router would meet it.
+//
+// It exists so that "the fleet, as a list of names" is written once. Both callers
+// are about the published document (the host that serves it, the gate that writes
+// it) and a second loop over Apps in either would be a second answer to a
+// question with one.
+func Names() []string {
+	out := make([]string, len(Apps))
+	for i, a := range Apps {
+		out[i] = a.Name
+	}
+	return out
+}
+
 // Plugin says where this app's binary is, without naming it twice:
 //
 //	CLOUD_<NAME>_ADDR — already listening there; start nothing, just mount it.

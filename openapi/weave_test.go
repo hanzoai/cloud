@@ -32,7 +32,6 @@ import (
 
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
-	"github.com/zap-proto/zip"
 	"sigs.k8s.io/yaml"
 )
 
@@ -48,8 +47,11 @@ const (
 	specDir    = "../plugin"
 )
 
-// parts reads every app's subset, in manifest.Apps mount order — which is the
-// fleet's routing order, so a conflict is reported as the router would meet it.
+// fromTree is the WORKING TREE's copy of one app's subset — the files
+// surface-check has just regenerated from source and is about to compare against.
+// The host reads the same files through plugin.Spec, embedded at build time;
+// openapi.Subsets decodes either, so there is one decoder and one weave whichever
+// end you enter from.
 //
 // It reads them and nothing else. WHERE a path is routed is not a question a
 // document can answer, and the version of this function that tried is why the
@@ -58,36 +60,12 @@ const (
 // defect it already contained, and what survived that was reported with t.Logf.
 // A gate that reads its own output cannot fail. The question moved to the only
 // thing that can answer it, the router: manifest/router_test.go.
-func parts(t *testing.T) []openapi.Part {
-	t.Helper()
-	out := make([]openapi.Part, 0, len(manifest.Apps))
-	for _, a := range manifest.Apps {
-		path := filepath.Join(specDir, a.Name, "openapi.json")
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("%s: %v\n\nEvery app publishes its own subset. Run `make -f mk/fleet.mk describe-apps`.", path, err)
-		}
-		var doc openapi.Document
-		if err := json.Unmarshal(raw, &doc); err != nil {
-			t.Fatalf("%s: %v", path, err)
-		}
-		out = append(out, openapi.Part{App: a.Name, Doc: &doc})
-	}
-	return out
-}
-
-// core is the one operation no app owns: the endpoint that serves the document.
-// It is mounted here, by the same generator, rather than written down — a
-// hand-kept literal would be a second definition of a route zip already knows.
-func core(t *testing.T) openapi.Part {
-	t.Helper()
-	app := zip.New(zip.Config{DisableStartupMessage: true})
-	openapi.Mount(app, openapi.Info{})
-	doc, err := openapi.FleetSpec(app)
+func fromTree(app string) []byte {
+	raw, err := os.ReadFile(filepath.Join(specDir, app, "openapi.json"))
 	if err != nil {
-		t.Fatalf("core: %v", err)
+		return nil // openapi.Subsets refuses it by name
 	}
-	return openapi.Part{App: "openapi", Doc: doc}
+	return raw
 }
 
 func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
@@ -95,7 +73,14 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v — run `make openapi`", goldenPath, err)
 	}
-	woven, err := openapi.Weave(append(parts(t), core(t)))
+	subsets, err := openapi.Subsets(manifest.Names(), fromTree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The SAME composition the host serves (cmd/cloud spec → openapi.MountFleet),
+	// which is what makes the served document and this golden one document rather
+	// than two that agree today.
+	woven, err := openapi.Fleet(subsets)
 	if err != nil {
 		t.Fatalf("weave: %v", err)
 	}
