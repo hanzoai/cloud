@@ -11,27 +11,46 @@ name: CI/CD
 #     platform.hanzo.ai reads too, so no build logic moved)
 #   .github/workflows/containment.yml → `containment` (verbatim; only its own
 #     self-exclusion path follows the file)
-#   .hanzo/workflows/deploy.yml → deleted, not moved (below)
+#   .hanzo/workflows/deploy.yml → deleted, then RESTORED (below)
 #
-# CI gates. It does not deploy, and deliberately builds no cloud image: that
-# image and its v* tags have ONE owner, apps/platform/release.go (POST
-# /v1/runner {release:true}) — a second builder on the same commit is the
-# double-build hanzo.yml's images: block already refuses for this reason.
-# deploy.yml claimed to do both and could do neither: it shelled
-# `buildctl-daemonless.sh`, absent from the image this fleet actually serves for
+# THIS FILE GATES. deploy.yml RELEASES. That split is new, and it reverses what
+# this header used to say.
+#
+# It used to read: "deliberately builds no cloud image — that image and its v*
+# tags have ONE owner, apps/platform/release.go (POST /v1/runner {release:true})."
+# The single owner was the right instinct and the wrong address. THE OWNER COULD
+# NOT SURVIVE ITS OWN DEPLOY.
+#
+# release.go ran build → smoke → tag → rollout in a goroutine detached with
+# context.WithoutCancel, inside a service that runs at replicas: 1 with strategy:
+# Recreate — and the last thing it did was move the pin that rolls that replica.
+# Any sync of charts/app/values/hanzo/cloud.yaml killed the only pod and the
+# pipeline with it, after the image was pushed but before it was smoked, tagged
+# or pinned. The tag list is the evidence: v1.801.326, 327, 329 and 335 exist;
+# 328, 330-334 and 336+ do not. Each gap is a published image nobody can name.
+#
+# So the release moved to where every other service's release already runs, and
+# cloud stopped being the one service that did it differently.
+#
+# The ORIGINAL deploy.yml's defects were real and are not repeated. It shelled
+# `buildctl-daemonless.sh`, absent from the image this fleet serves for
 # `hanzo-build-linux-amd64` (catthehacker/ubuntu:act-24.04 —
-# universe:infra/k8s/git-runner/statefulset.yaml), read a GIT_CLONE_TOKEN secret
-# that exists on neither the repo nor the org, and ended in a `kubectl patch app`
-# that cd.hanzo.ai's selfHeal undoes on its next poll. Rollout is, and stays, a
-# reviewed tag pin in hanzoai/universe.
+# universe:infra/k8s/git-runner/statefulset.yaml); the new one uses
+# docker/build-push-action on that runner's own daemon. It read a GIT_CLONE_TOKEN
+# secret that exists on neither the repo nor the org; the new one reads
+# GHCR_USER/GHCR_TOKEN/GH_PAT/KMS_CLIENT_* — the same set insights, analytics,
+# studio and bot-hub already release with. And it ended in a `kubectl patch app`
+# that cd.hanzo.ai's selfHeal undoes on its next poll; the new one ends in
+# pin.sh. Rollout is, and stays, a reviewed tag pin in hanzoai/universe.
 on:
   push:
     branches: [main]
     # v* is what publishes the plugin binary (hanzo.yml `binaries:` → bucket:).
     # ci builds it on every push and publishes only on a tag, and the tag here is
-    # release.go's receipt for an image that already built and smoked — so the
+    # deploy.yml's receipt for an image that already built and smoked — so the
     # artifact a host installs unattended can only come from a proven commit,
-    # and this still mints no tag of its own.
+    # and this still mints no tag of its own. (The receipt moved from release.go
+    # to deploy.yml; what it certifies did not.)
     #
     # This sat under `workflow_dispatch:` instead of `push:`, where it means
     # nothing — and a SECOND `workflow_dispatch:` key below then overwrote that

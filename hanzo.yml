@@ -1,18 +1,25 @@
 # Canonical CI config for hanzoai/cloud — read by the hanzoai/ci reusable
 # (.hanzo/workflows/cicd.yml, the `gate` job) and platform.hanzo.ai.
 #
-# NO images: lane at all. The cloud MAIN image is owned by apps/platform/release.go
-# together with the v* tags (the tag-is-a-receipt invariant: main push → build →
-# smoke → push image → tag). That is the in-cloud port of the old release.yml,
-# reached at POST /v1/runner {release:true}; declaring the cloud image here too
-# would double-build and re-open the phantom-tag hole it exists to close. No other
-# artifact in this repo is built as an image either — the prebuilt inputs cloud's
+# NO images: lane HERE, and the reason changed. The cloud MAIN image and its v*
+# tags still have exactly ONE owner, and the tag-is-a-receipt invariant still
+# holds (main push → build → smoke → tag → pin). But that owner is now
+# .hanzo/workflows/deploy.yml, not apps/platform/release.go.
+#
+# release.go held it until a release could be shown to reliably kill itself: it
+# ran detached inside the single replica whose pin it moved, so its own last step
+# terminated the pod mid-pipeline and left an image published, unsmoked and
+# untagged. v1.801.328 and 330-334 and 336+ are those images.
+#
+# This file still declares no image because a lane here would be a SECOND builder
+# on the same commit — the double-build that re-opens the phantom-tag hole. One
+# owner, in the one place the rest of the fleet already builds. No other artifact
+# in this repo is built as an image either — the prebuilt inputs cloud's
 # Dockerfile pulls (console-embed, agent-skills) are published by THEIR OWN repos.
 # So CI's only job here is the TEST GATE on every push/PR.
 #
-# NO deploy: cloud is operator-managed — universe records desired state and the
-# operator reconciles the Service CR; the release path notifies universe with a
-# proven tag.
+# NO deploy here either: deploy.yml ends in universe/charts/app/pin.sh, and
+# cd.hanzo.ai reconciles what that pin records.
 
 # NO binaries: lane. Every subsystem now ships as its OWN plugin/<app> binary, and
 # the per-app binaries travel INSIDE the release image — the Dockerfile builds the
