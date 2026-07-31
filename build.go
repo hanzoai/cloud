@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/org"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/ha"
 	"github.com/hanzoai/metrics"
 	s3 "github.com/hanzoai/s3-go"
@@ -1040,6 +1042,277 @@ func CtxShutdown(f func() error) ShutdownFunc {
 // hanzoai/ai/controllers) and ai import hanzoai/cloud — a cycle, not a weight.
 func MountMetrics(a *zip.App, deps Deps) error {
 	return metrics.Mount(a, metrics.Deps{Logger: deps.Logger, DataDir: deps.DataDir, Brand: deps.Brand})
+}
+
+// The prose for the operations this repo PUBLISHES but does not REGISTER.
+//
+// Every other surface declares its own: a typed op carries prose in a doc comment
+// zipdoc lifts, and an untyped route declares it with openapi.Describe beside the
+// route table. Two subsystems can do neither, and both for the same reason — the
+// module that owns the route cannot reach this registry:
+//
+//   - hanzoai/metrics registers /v1/{metrics,logs,traces}/* itself and imports
+//     ONLY zap-proto/zip + luxfi, deliberately (mount.go's own argument: it
+//     depends on the three things it uses). Importing hanzoai/cloud to describe
+//     itself would give that up to buy prose.
+//   - hanzoai/licensing is a separate, proprietary module whose Mount registers
+//     one wildcard, app.All("/v1/licensing/*"), over its own net/http mux.
+//
+// So the prose lands at cloud's OWN wire fact — MountMetrics above for the first,
+// and for the second the fact that cloud's Serve is what mounts it — rather than
+// nowhere. Both plugin binaries link this package, so this init runs for both, and
+// the registry cannot contradict a router either way: a Describe whose route is
+// not live never renders, and the key is the fiber pattern the router carries
+// (`/v1/licensing/*`), not the `{wildcard1}` template the document renders it as.
+//
+// Without it these sixteen operations publish an operationId and NOTHING else —
+// every generated SDK offers a call it cannot explain and the spec-derived CLI a
+// command with no help text.
+func init() {
+	// ── metrics: one native store, three signals ──────────────────────────────
+	//
+	// The tenancy rule is repeated on each operation on purpose: each description
+	// is read ALONE, as one SDK method's doc or one CLI command's help.
+
+	openapi.Describe("/v1/metrics/health", http.MethodGet,
+		"How many metric series this deployment holds for your org",
+		"Reports the native metrics store's live state for the calling tenant: the subsystem "+
+			"version, the resolved `org`, and `series` — the number of distinct series actually "+
+			"held right now, read out of the store rather than a constant. It is not a dependency "+
+			"probe and has nothing downstream to fail on: the store is in-process, so this answers "+
+			"200 whenever the process is up.\n\n"+
+			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
+			"brand and then `default`. This surface trusts the edge rather than re-deriving the org "+
+			"from a validated claim of its own, so it belongs behind the gateway and nowhere else.")
+
+	openapi.Describe("/v1/metrics/batch", http.MethodPost,
+		"Ingest a MetricBatch — the same payload the ZAP transport carries",
+		"Writes every sample in a luxfi/metric `MetricBatch` into the calling org's store and "+
+			"answers `{written}`: the number of SAMPLES stored, not families and not metrics. This "+
+			"is the exact wire shape the ZAP `MsgMetricBatch` transport carries, so the HTTP door "+
+			"and the optional ZAP push receiver share one code path and one meaning — the transport "+
+			"is an optimisation, never a different contract.\n\n"+
+			"A counter or gauge lands as one sample. A histogram or summary contributes DERIVED "+
+			"`<name>_sum` and `<name>_count` series, so one metric can write more than one sample "+
+			"and `written` can exceed the number of metrics you sent. The batch's own "+
+			"`TimestampNs` stamps every sample it carries.\n\n"+
+			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
+			"brand and then `default`; each org gets its own store, WAL-durable under the "+
+			"deployment's data dir. A body that does not decode is 400.")
+
+	openapi.Describe("/v1/metrics/write", http.MethodPost,
+		"Append samples to your org's named, labelled series",
+		"Takes `{series:[{name, labels, samples:[{t, v}]}]}`, appends every sample, creating each "+
+			"series on first write, and answers `{written}` — again counting SAMPLES, so three "+
+			"series of ten samples is 30.\n\n"+
+			"A series is identified by its name PLUS its whole label set, so adding one label makes "+
+			"a different series rather than annotating an existing one. Timestamps `t` are "+
+			"NANOSECONDS since the Unix epoch; a sample sent without one is stored at 0 and is then "+
+			"excluded by any query that sets a lower bound, which is the usual reason a write that "+
+			"reported success does not read back. Retention is per series and bounded — past 65536 "+
+			"samples the oldest are evicted.\n\n"+
+			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
+			"brand and then `default`. A body that does not decode is 400; nothing else is "+
+			"validated or rejected.")
+
+	openapi.Describe("/v1/metrics/query", http.MethodGet,
+		"Read your org's series back over a time range",
+		"Answers `{count, series}`, where `count` is the number of matching SERIES and each series "+
+			"carries the samples that fall inside the window. `name` selects one series name, and "+
+			"an absent or empty `name` returns every series the org holds. `match` is a "+
+			"`k=v,k2=v2` label matcher applied as a SUPERSET test: a series matches when it carries "+
+			"all the named labels with those values, extra labels and all.\n\n"+
+			"`start` and `end` are nanoseconds since the Unix epoch, and here is the rule worth "+
+			"knowing: a bound that is absent, empty or unparseable becomes 0, which this store "+
+			"reads as UNBOUNDED. A malformed `start` therefore silently widens the query instead of "+
+			"failing it. There is no limit parameter — the window and the matcher are the whole of "+
+			"what bounds the answer.\n\n"+
+			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
+			"brand and then `default`, so a query can only ever read the org the edge asserted.")
+
+	openapi.Describe("/v1/logs/health", http.MethodGet,
+		"How many log records this deployment holds for your org",
+		"Reports the native log store's live state for the calling tenant: the subsystem version "+
+			"and `records`, the count actually held right now rather than a constant. Not a "+
+			"dependency probe — the store is in-process, so this answers 200 whenever the process "+
+			"is up.\n\n"+
+			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
+			"brand and then `default`.")
+
+	openapi.Describe("/v1/logs/write", http.MethodPost,
+		"Append structured log records for your org",
+		"Takes `{records:[{t, level, body, labels}]}`, appends each one, and answers `{written}`. "+
+			"Bodies are stored verbatim; `labels` are the indexed dimensions a query filters on, so "+
+			"what you do not label you can only find by substring.\n\n"+
+			"`t` is NANOSECONDS since the Unix epoch. A record sent without one is stored at 0 and "+
+			"then falls outside any query carrying a lower bound — the usual reason a successful "+
+			"write does not read back. Retention is a bounded ring, 1048576 records per org, oldest "+
+			"evicted first. No record is validated or rejected, so `written` is the number of "+
+			"records SENT; only a body that does not decode at all is 400.\n\n"+
+			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
+			"brand and then `default`; each org's records live in its own WAL-durable store.")
+
+	openapi.Describe("/v1/logs/query", http.MethodGet,
+		"Search your org's logs by label, time and substring",
+		"Answers `{count, records}`, newest first. `match` is the same `k=v,k2=v2` superset label "+
+			"matcher the metrics query uses; `contains` is a case-insensitive substring test "+
+			"against the record body; `start` and `end` are nanosecond bounds.\n\n"+
+			"A bound that is absent, empty or unparseable becomes 0, which means UNBOUNDED — a "+
+			"malformed `start` widens the search rather than failing it. `limit` caps the page and "+
+			"defaults to 100 when absent or non-positive, so an unfiltered read is never the whole "+
+			"ring.\n\n"+
+			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
+			"brand and then `default`, so a search can only reach the org the edge asserted.")
+
+	openapi.Describe("/v1/traces/health", http.MethodGet,
+		"How many spans this deployment holds for your org",
+		"Reports the native trace store's live state for the calling tenant: the subsystem version "+
+			"and `spans`, the count actually held right now. Not a dependency probe — the store is "+
+			"in-process, so this answers 200 whenever the process is up.\n\n"+
+			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
+			"brand and then `default`.")
+
+	openapi.Describe("/v1/traces/write", http.MethodPost,
+		"Append spans for your org",
+		"Takes `{spans:[{traceId, spanId, parentId, name, startNs, endNs, attrs}]}`, appends each, "+
+			"and answers `{written}` — the number of spans sent. Every span is indexed by its trace "+
+			"id as it lands, which is what makes the waterfall read possible without a second "+
+			"store.\n\n"+
+			"Times are NANOSECONDS since the Unix epoch. Retention is a bounded ring of 1048576 "+
+			"spans per org: past that the OLDEST are evicted to keep the newest 1048576, and the "+
+			"trace index is rebuilt — so a long-lived trace can lose its early spans while its "+
+			"later ones survive, and a waterfall read is best-effort against retention, not a "+
+			"guarantee.\n\n"+
+			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
+			"brand and then `default`. A body that does not decode is 400.")
+
+	openapi.Describe("/v1/traces/trace", http.MethodGet,
+		"Every span of one trace — the waterfall",
+		"Answers `{spans}`: every span the org holds for the trace id in `id`, in the order they "+
+			"were appended, which is what a waterfall view renders. Unlike the other reads there is "+
+			"no count, no time range and no limit — a trace is addressed by id or not at all.\n\n"+
+			"An id with no spans answers an EMPTY list, never a 404: the store cannot tell a trace "+
+			"that never existed from one whose spans retention has already dropped, so it does not "+
+			"pretend to. The tenant is the gateway-minted `X-Org-Id` header, falling back to the "+
+			"deployment brand and then `default`, and a trace id belonging to another org is simply "+
+			"not in this org's store.")
+
+	openapi.Describe("/v1/traces/query", http.MethodGet,
+		"Recent spans for your org over a time range",
+		"Answers `{count, spans}`, newest first, filtered on each span's START time. `start` and "+
+			"`end` are nanosecond bounds where 0 — which is what an absent, empty or unparseable "+
+			"value becomes — means UNBOUNDED, so a malformed bound widens the listing instead of "+
+			"failing it. `limit` defaults to 100 when absent or non-positive.\n\n"+
+			"It lists SPANS, not traces: several spans of one trace each count separately and each "+
+			"take a slot against `limit`. Assembling one trace is /v1/traces/trace. The tenant is "+
+			"the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then "+
+			"`default`.")
+
+	// ── licensing: one wildcard route, seven published methods, two served ────
+	//
+	// app.All publishes the subtree under every method; the net/http mux behind it
+	// registers GET and POST only. That gap is the fact a reader would otherwise
+	// get wrong, so each of the five unserved methods says so in its own words
+	// rather than leaving the operation bare.
+
+	openapi.Describe("/v1/licensing/*", http.MethodGet,
+		"Read the licensing subtree: releases, the public verification key, health",
+		"The subtree is mounted as ONE wildcard route, so the path segment selects the real "+
+			"operation. Under GET those are:\n\n"+
+			"- `/v1/licensing/releases` — every release the deployment knows.\n"+
+			"- `/v1/licensing/releases/{release}` — one release's metadata; an unknown id is 404.\n"+
+			"- `/v1/licensing/download/{release}` — the license-gated artifact download. It is "+
+			"gated on the minted LICENSE token rather than the OIDC bearer, because that is exactly "+
+			"what the engine runs on: present it as an `X-License-Token` header or a `?token=` "+
+			"query parameter. No token is 401; a token whose signature, app or expiry fails, or "+
+			"that has been revoked, or that lacks the features the release requires, is 403; a "+
+			"yanked release is 410. The answer carries the artifact AND its cosign signature, so a "+
+			"client verifies the binary before trusting it.\n"+
+			"- `/v1/licensing/pubkey` and `/v1/licensing/jwks` — the same Ed25519 PUBLIC key, in "+
+			"raw base64 and as a JWK. This is the only public-safe surface here, and it is what "+
+			"lets an engine verify tokens OFFLINE. The private key never enters this process: "+
+			"signing goes through the KMS signer abstraction, not key material.\n"+
+			"- `/v1/licensing/healthz` — status, deployment env, and which signer provider is in "+
+			"use.\n\n"+
+			"Any other path under the subtree is 404.")
+
+	openapi.Describe("/v1/licensing/*", http.MethodPost,
+		"Issue, verify and revoke license tokens, bind a device, publish a release",
+		"The subtree is mounted as ONE wildcard route, so the path segment selects the real "+
+			"operation. Under POST those are:\n\n"+
+			"- `/v1/licensing/issue` — mints an Ed25519 license token for a paid product. The "+
+			"caller must be authenticated (mounted in cloud, that is an IAM-verified bearer), and "+
+			"the entitlement is then checked in commerce for that caller's org and subject: a "+
+			"caller who does not own the product is 403, never a token. The token's `app_id` is the "+
+			"DEPLOYMENT's brand, so a hanzo deployment can never mint a lux- or zoo-scoped token. "+
+			"Device binding comes from a `fingerprint` you registered earlier or from `signals` "+
+			"bound at issue time, and a deployment configured to require one refuses without it. "+
+			"The lifetime is clamped both to policy and to the entitlement's own expiry, so a token "+
+			"never outlives the entitlement that justified it. Naming a `release` scopes the token "+
+			"to it as a `release:<id>` feature, which is what makes release-scoped revocation "+
+			"reach it.\n"+
+			"- `/v1/licensing/verify` — an online, unauthenticated check of a token: signature, "+
+			"app and expiry, then the revocation list. The rule worth knowing is that an INVALID "+
+			"token is still 200 — the answer is `{valid:false, reason}`, not an HTTP error — "+
+			"because this read is informational and the engine is what enforces the license, "+
+			"offline, from the public key.\n"+
+			"- `/v1/licensing/revoke` — appends a revocation entry scoped by `nonce`, `holder`, "+
+			"`fingerprint` or `release`, stamped with the admin who did it. Authenticated; any "+
+			"other scope, or a missing value, is 400.\n"+
+			"- `/v1/licensing/fingerprint` — turns device signals into the opaque binding value "+
+			"`/issue` accepts. Authenticated, and the raw signals are never echoed back.\n"+
+			"- `/v1/licensing/releases` — publishes a release, answering 201. Authenticated, and "+
+			"outside dev a release carrying no cosign signature is refused, so an unsigned binary "+
+			"cannot enter the download path.\n\n"+
+			"Any other path under the subtree is 404.")
+
+	openapi.Describe("/v1/licensing/*", http.MethodPut,
+		"Not served — nothing in the licensing subtree is replaced by PUT",
+		"The subtree is mounted as ONE wildcard route, so every method that route can carry is "+
+			"published — but the mux behind it registers GET and POST handlers only. A PUT to a "+
+			"real licensing path (`/v1/licensing/issue`, `/v1/licensing/releases`, and the rest) is "+
+			"405, with an `Allow` header naming the methods that path does serve; a PUT to a path "+
+			"the subtree does not have at all is 404.\n\n"+
+			"There is no replace-in-place anywhere here: a release is published again through POST "+
+			"/v1/licensing/releases, and a license is re-issued rather than edited.")
+
+	openapi.Describe("/v1/licensing/*", http.MethodPatch,
+		"Not served — nothing in the licensing subtree is patched",
+		"The subtree is mounted as ONE wildcard route, so every method that route can carry is "+
+			"published — but the mux behind it registers GET and POST handlers only. A PATCH to a "+
+			"real licensing path is 405, with an `Allow` header naming the methods that path does "+
+			"serve; a PATCH to a path the subtree does not have is 404.\n\n"+
+			"Nothing here is mutable in part. A license is an immutable signed token — you issue a "+
+			"new one — and a release is republished whole.")
+
+	openapi.Describe("/v1/licensing/*", http.MethodDelete,
+		"Not served — a license is revoked, never deleted",
+		"The subtree is mounted as ONE wildcard route, so every method that route can carry is "+
+			"published — but the mux behind it registers GET and POST handlers only. A DELETE to a "+
+			"real licensing path is 405, with an `Allow` header naming the methods that path does "+
+			"serve; a DELETE to a path the subtree does not have is 404.\n\n"+
+			"The delete-shaped operation here is revocation, and it is POST /v1/licensing/revoke. "+
+			"It APPENDS a revocation entry rather than removing anything, because a token already "+
+			"in the field cannot be recalled — it can only be denied at verify and download time, "+
+			"and the entry is the record of who denied it and why.")
+
+	openapi.Describe("/v1/licensing/*", http.MethodOptions,
+		"Not served — but the refusal still names the methods a path allows",
+		"The subtree is mounted as ONE wildcard route, so every method that route can carry is "+
+			"published — but the mux behind it registers GET and POST handlers only, and OPTIONS is "+
+			"not among them. An OPTIONS to a real licensing path is therefore 405 rather than a "+
+			"capability answer; it does still carry the `Allow` header naming that path's real "+
+			"methods, which is the part a client was asking for. An OPTIONS to a path the subtree "+
+			"does not have is 404.")
+
+	openapi.Describe("/v1/licensing/*", http.MethodTrace,
+		"Not served — the licensing subtree does not echo requests",
+		"The subtree is mounted as ONE wildcard route, so every method that route can carry is "+
+			"published — but the mux behind it registers GET and POST handlers only. A TRACE to a "+
+			"real licensing path is 405 with an `Allow` header naming that path's real methods, and "+
+			"a TRACE to a path the subtree does not have is 404. No request is ever echoed back, "+
+			"which is what you want of a surface that carries bearer tokens and license tokens in "+
+			"headers.")
 }
 
 // App describes one subsystem to mount. There is NO Order field: the slice

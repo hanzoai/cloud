@@ -46,6 +46,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/fleet"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -476,6 +477,76 @@ type launchReq struct {
 	InstanceType string `json:"instanceType"`
 	Region       string `json:"region"`
 	DryRun       bool   `json:"dryRun"`
+}
+
+// The prose for the five operations here that cannot be typed ops. Every other route
+// in visor is typed and zipdoc lifts its doc comment into zipdoc_gen.go; these five
+// stay raw handlers for the reasons Mount states beside each — two launches whose
+// response shape depends on `dryRun`, two catalog passthroughs whose shape is Visor's
+// and not this package's, and one verb dispatch that streams an agent's answer back
+// verbatim. So there is no comment for anything to lift and the published document
+// would carry an operationId and nothing else. Two of the five SPEND REAL MONEY, so a
+// caller reading only the document has to be told where the quote is. Declared
+// through the same registry Register uses, so a description renders only while the
+// router actually serves the route.
+func init() {
+	openapi.Describe("/v1/machines", http.MethodPost,
+		"Launch a metered machine for your org, or price one first with dryRun",
+		"Provisions a machine owned by the caller's org and answers 201 with the machine. "+
+			"Send `dryRun: true` to get a PRICE QUOTE instead: 200 with the upstream quote passed "+
+			"through verbatim, nothing launched and nothing spent. Two response shapes on one "+
+			"address is the rule to know, and it is why this is not a typed op.\n\n"+
+			"Metering is not this plane's: the launch fronts the compute provider's resell "+
+			"endpoint, which owns the balance gate and the per-hour meter, and cloud only forwards "+
+			"the tenant. Ownership is the validated principal's org and is never read from the "+
+			"body, so a launch always lands in the caller's OWN tenant and the machine it creates "+
+			"is only ever visible to that tenant. Fails closed: a validated principal is required "+
+			"(403 without one) and `size` (or its `instanceType` alias) is required (400).")
+	openapi.Describe("/v1/compute/regions", http.MethodGet,
+		"The regions a machine or GPU can be launched into",
+		"Lists the launch regions the compute catalog offers, passed through verbatim from the "+
+			"provider so the shape stays the provider's single source of truth. The catalog is "+
+			"GLOBAL, not per-tenant: no owner is forwarded and every org sees the same list. It "+
+			"is still gated — a validated principal is required, 403 without one — because the "+
+			"catalog is what backs the launch drawer, not public marketing copy.")
+	openapi.Describe("/v1/compute/sizes", http.MethodGet,
+		"The machine and GPU sizes that can be launched",
+		"Lists the instance sizes the compute catalog offers, passed through verbatim from the "+
+			"provider so the shape stays the provider's single source of truth. These are the "+
+			"values `size` accepts on a launch. The catalog is GLOBAL, not per-tenant: no owner "+
+			"is forwarded and every org sees the same list. It is still gated — a validated "+
+			"principal is required, 403 without one.")
+	openapi.Describe("/v1/compute/bots/launch", http.MethodPost,
+		"Launch a bot machine — an agent plus the machine that runs it — or price one",
+		"Creates BOTH halves of a bot in one call and answers 201 with the bot: the cloud agent "+
+			"it runs, then a bot-kind machine bootstrapped with the bot runtime, then the binding "+
+			"between them, so a launched bot is immediately messageable. Send `dryRun: true` for a "+
+			"price quote instead — 200 with the upstream quote verbatim, no agent created, no "+
+			"machine launched, nothing spent.\n\n"+
+			"The agent is created FIRST and on purpose: it is create-if-absent (an agent that "+
+			"already exists is reused, so a relaunch is fine and several bots may share one "+
+			"explicit `agent`), and doing it before the machine means a bad request — a model that "+
+			"is not in the catalog, say — fails with the real reason BEFORE any metered machine is "+
+			"provisioned. `agent` defaults to the bot's name and an empty `model` takes the "+
+			"deployment default.\n\n"+
+			"Org-scoped and fails closed: a validated principal is required (403 without one), the "+
+			"owning org is that principal's and never a body field, `size` is required (400), and "+
+			"`name` is required for a real launch though not for a quote.")
+	openapi.Describe("/v1/compute/bots/:id/:action", http.MethodPost,
+		"Message a bot, or stop it, by naming the action in the path",
+		"Dispatches one verb against a bot the caller's org owns. `message` runs the bot's bound "+
+			"agent with the request body as the message and streams the agent's answer back "+
+			"VERBATIM — the upstream body, its content type and its status — so a message is a "+
+			"real agent run, recorded, billed and traced exactly like any other, under the "+
+			"caller's own identity rather than a fabricated one. `stop` and `pause` are the same "+
+			"single honest capability: they halt the runtime by unbinding the agent while LEAVING "+
+			"THE MACHINE UP, so the bot stops answering but keeps costing — rebind to resume, or "+
+			"delete the bot to tear it down. Stopping is idempotent; a bot with no binding still "+
+			"reports stopped.\n\n"+
+			"Org-scoped and fails closed: a validated principal is required (403 without one) and "+
+			"the bot is addressed under the caller's OWN org, so another tenant's id is not "+
+			"reachable. An unknown action is a clean 400 naming the three it accepts, never a "+
+			"silent no-op, and messaging a bot with no bound agent is a 400.")
 }
 
 // launchMachine quotes (dryRun) or launches a metered, per-org machine. It fronts

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -103,6 +104,42 @@ var vmProxyQueries = map[string]struct{}{
 	// second ingress, no second access boundary to get wrong. Aggregated by name and
 	// severity so the series stays small and carries no instance-level detail.
 	`sum by (alertname, network, severity) (ALERTS{alertstate="firing",brand="lux"})`: {},
+}
+
+// Both VM routes return VictoriaMetrics' own status code and its Prometheus
+// envelope VERBATIM, which is exactly why they are not typed ops: a typed op
+// answers its declared status and marshals a Go value, so a VM 4xx would become a
+// 200 and the envelope would be re-shaped out from under the board that parses it
+// (typed_wire_test.go's untypedByDesign). zipdoc has nothing to lift, so the prose
+// is declared here beside that wire fact.
+func init() {
+	openapi.Describe("/v1/o11y/vm/query", http.MethodGet,
+		"Instant platform-infrastructure metric, for platform administrators",
+		"Answers VictoriaMetrics' native Prometheus JSON for one instant query, "+
+			"byte-for-byte — its own status code and envelope, unwrapped and un-reshaped, so "+
+			"the console's infrastructure-health board parses the response it was written "+
+			"against.\n\n"+
+			"PLATFORM SUDO ONLY. This is not tenant data: it is the whole fleet's `up{}` "+
+			"inventory, so it takes the same platform-sudo predicate the infra-log god-view "+
+			"takes, and every customer is 403. VictoriaMetrics has no per-request auth of its "+
+			"own — it is an internal ClusterIP — so this handler IS the access boundary, and it "+
+			"fails closed at every step.\n\n"+
+			"The query is ALLOWLISTED, not passed through. The `query` parameter must equal one "+
+			"of the exact PromQL strings the boards issue, or it is a 400; there is no way to "+
+			"phrase a new one. That is what keeps a read proxy from becoming a generic PromQL "+
+			"exfiltration and DoS endpoint.")
+	openapi.Describe("/v1/o11y/vm/query_range", http.MethodGet,
+		"Ranged platform-infrastructure metric, for platform administrators",
+		"Answers VictoriaMetrics' native Prometheus JSON for one ranged query over "+
+			"start/end/step, byte-for-byte — its own status code and envelope, so the "+
+			"console's infrastructure trends render off the response as-is.\n\n"+
+			"PLATFORM SUDO ONLY, on the same fleet-wide `up{}` inventory and the same fixed "+
+			"board queries as the instant read; a customer is 403. VictoriaMetrics carries no "+
+			"per-request auth, so this handler is the access boundary.\n\n"+
+			"The query is ALLOWLISTED to the exact PromQL the boards issue — anything else is a "+
+			"400 — and start, end and step must each be positive integers before the request is "+
+			"forwarded. Range arguments are the other half of the same boundary: an unbounded "+
+			"step over an unbounded window is a DoS whether or not the query is on the list.")
 }
 
 // handleVMQuery proxies the board's instant query: GET /v1/o11y/vm/query?query=up.

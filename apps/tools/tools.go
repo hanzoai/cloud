@@ -22,18 +22,20 @@ import (
 // so every SDK generated off openapi.yaml offered a plugin build with nowhere to
 // put the source.
 //
-// openapi.Register is the seam for the halves that ARE statable. It attaches to a
-// route the router already carries, so it can never contradict the router, and it
-// does NOT make these typed ops: there is still no prose, no MCP tool, no CLI
-// command and no SDK method, because those come from zip's registry alone. See
-// untypedByDesign in typed_wire_test.go for why it stays out of it.
+// openapi.Register is the seam for the BODIES; openapi.Describe is the seam for
+// the PROSE, which zipdoc lifts from a doc comment for a typed op and has nowhere
+// to lift from here. Both attach to a route the router already carries, so neither
+// can contradict the router, and neither makes this a typed op: it is still not an
+// MCP tool and still not a CLI command, because those come from zip's registry
+// alone. See untypedByDesign in typed_wire_test.go for why it stays out of it.
 //
 // What is still NOT declared here, honestly — each a missing capability, not a
 // missing edit, so none is papered over with prose that overstates:
 //
 //   - the builder's 422 diagnostics. apply states the success shape under the
 //     "2XX" range key only; the failure body needs the same declarable-error-body
-//     capability that keeps this route untyped in the first place.
+//     capability that keeps this route untyped in the first place. The prose below
+//     names it, which is the honest half a schema cannot carry.
 //   - field prose on both shapes. zipdoc lifts doc comments off TYPED ops
 //     only, and Register's reflection seam reads Go types, not comments — so
 //     buildOut publishes `bytes: integer` with no description. AuthoredPlugin is
@@ -41,6 +43,31 @@ import (
 //     and Fold merges the typed schema over this one.
 func init() {
 	openapi.Register("/v1/plugins/build", "POST", buildRequest{}, buildOut{})
+	openapi.Describe("/v1/plugins/build", http.MethodPost,
+		"Build a plugin for your org from TypeScript, or from an API spec a model writes it from",
+		"Builds one plugin for the caller's org and answers 201 with the bundle's size, whether a "+
+			"model wrote the source, and the plugin as stored. Post `source` to build TypeScript "+
+			"as-is, or `spec` — an OpenAPI document or plain prose describing the endpoints — to "+
+			"have one generated; the generated source comes back in the answer, so a caller reads "+
+			"what will run before it runs. Exactly one of the two, and `name` must be one lowercase "+
+			"path segment; both or neither is 400.\n\n"+
+			"COMPILING IS THE GATE. The source goes through the same pipeline the committed "+
+			"connectors do — esbuild to one CommonJS program, then compiled in the goja runtime "+
+			"that will actually execute it — and anything that fails is rejected and NEVER stored. "+
+			"So a plugin in the store is one this deployment has already loaded once, not one a "+
+			"model claimed was fine. A failed build answers 422 carrying the diagnostics a caller "+
+			"needs to fix it: the bundler's error, the source that failed, and whether the model "+
+			"wrote it — a body outside the declared success shape.\n\n"+
+			"CREDENTIALS ARE NOT PART OF A PLUGIN. A plugin names the connectors `provider` it "+
+			"needs and reads that credential from `ctx.auth` at run time, under KMS custody. Source "+
+			"that contains something shaped like a key is REFUSED rather than silently scrubbed, so "+
+			"a caller who pasted one finds out instead of shipping it — register it as a connector "+
+			"instead.\n\n"+
+			"Requires a validated principal; 403 without one. The plugin is stored under that "+
+			"principal's org and is what `/v1/plugins/authored` lists — never `/v1/plugins`, which "+
+			"is this deployment's mounted-subsystem inventory. Source over 512 KiB or a spec over "+
+			"256 KiB is refused. Posting a `spec` to a deployment with no AI client configured is "+
+			"503, and a generation that fails upstream is 502.")
 }
 
 // Mount wires the unified tool plane at /v1/tools/* and installs the two providers

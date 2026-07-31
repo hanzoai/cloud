@@ -29,8 +29,42 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/team/wallet"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 )
+
+// The prose for the two UNTYPED /ui routes. They serve the embedded page's
+// bytes under a per-asset Content-Type, which no typed Out can carry, so zipdoc
+// has nothing to lift and without this they publish an operationId and nothing
+// else. The plan read documents itself from its own doc comment.
+//
+// The path keys are the FIBER patterns exactly as registered below; the `*` is
+// what the document renders as {wildcard1}.
+func init() {
+	openapi.Describe("/v1/team/billing/ui", http.MethodGet,
+		"Open the wallet page",
+		"Serves the usage-and-wallet page the Team front links to — HTML, not JSON. It is a "+
+			"static React build compiled into this binary, so there is no upstream to be down "+
+			"and no build step at request time.\n\n"+
+			"SESSION-GATED: without a verified team session token — bearer, else the HttpOnly "+
+			"account cookie — the caller gets 401 and not one byte of the page, so an anonymous "+
+			"browser meets a refusal rather than a shell that then fails to load anything.\n\n"+
+			"The page is markup only. It reads money SAME-ORIGIN from cloud's own balance and "+
+			"usage endpoints, which pin the org from the IAM cookie the team OAuth callback set "+
+			"— nothing under this path proxies a money read, so there is no second auth "+
+			"mechanism here to get wrong. A deployment whose page was never built answers 503 "+
+			"naming the missing bundle, never a blank 200.")
+	openapi.Describe("/v1/team/billing/ui/*", http.MethodGet,
+		"Load an asset of the wallet page",
+		"Serves one file of the embedded wallet bundle — a content-hashed script or stylesheet "+
+			"under assets/, an icon, or the page shell itself.\n\n"+
+			"A path that names NO REAL FILE falls back to the shell instead of 404ing, which is "+
+			"what makes a deep link into the page's own routes survive a hard refresh. So a 200 "+
+			"here is not proof the asset exists — a typo answers HTML.\n\n"+
+			"assets/ is immutable for a year (the names carry the content hash); the shell is "+
+			"no-cache, so a deploy is picked up on the next load. Gated exactly like the page: "+
+			"401 without a verified session, 503 when the bundle was never built.")
+}
 
 // errNoOrg refuses a verified token that carries no tenant claim — such a token
 // can name no org's data.

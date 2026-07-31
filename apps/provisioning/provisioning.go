@@ -262,14 +262,86 @@ func routes(z *zip.App, s *cloud.Service[state]) {
 	mountTyped(z, ops{s: s})
 }
 
+// createProse is the PRODUCT half of each create's description — what the caller
+// actually gets, and the scheme its connection string carries. Keyed by the same
+// strings as kinds; a kind that arrives here without prose publishes an empty
+// description, which openapi.Describe refuses at init rather than shipping.
+//
+// The second half of every description is shared (createContract) because it is
+// the same code for all seven: one create closure, one preamble. Stating it once
+// is what keeps seven descriptions from becoming seven accounts of one handler.
+var createProse = map[string]struct{ summary, lead string }{
+	"sql": {"Provision a PostgreSQL database for your org",
+		"Launches your org's OWN PostgreSQL instance and answers with its `postgres://` connection string."},
+	"kv": {"Provision a key-value store for your org",
+		"Launches your org's OWN key-value instance and answers with its `kv://` connection string."},
+	"docdb": {"Provision a document database for your org",
+		"Launches your org's OWN document-database instance — it speaks the MongoDB wire protocol, so existing MongoDB drivers connect unchanged — and answers with its `mongodb://` connection string."},
+	"datastore": {"Provision a Hanzo Datastore instance for your org",
+		"Launches your org's OWN Hanzo Datastore instance and answers with its `datastore://` connection string."},
+	"vector": {"Provision a vector collection for your org",
+		"Creates a vector collection inside the already-running shared vector backend and answers with the endpoint that reaches it."},
+	"search": {"Provision a search index for your org",
+		"Creates a search index inside the already-running shared search backend and answers with the endpoint that reaches it."},
+	"s3": {"Provision an object storage bucket for your org",
+		"Creates an S3-compatible bucket inside the already-running shared object store and answers with the endpoint that reaches it."},
+}
+
+// dedicatedNote is the half of the story only the DEDICATED kinds can tell. It is
+// attached by MEMBERSHIP of dedicatedEngines — the same map create branches on —
+// so a kind that changes strategy changes its published prose in the same edit.
+const dedicatedNote = " The instance is yours alone: a deployment in your own " +
+	"tenant namespace, so its admin credential is naturally scoped to you and no " +
+	"other tenant shares the process. Off-cluster, where there is no orchestrator to " +
+	"launch one, this fails closed with 503 rather than handing back a shared one."
+
+// createContract is everything true of all seven creates, because all seven ARE
+// one create closure with one preamble.
+const createContract = "\n\n" +
+	"`name` is the org-unique slug every physical name derives from, and must match " +
+	"^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to " +
+	"one of your app instances: the DSN is injected into that instance's addons " +
+	"secret as <KIND>_URL, switching the app off its built-in store and onto this " +
+	"one. Omit it and the connection string is yours to wire.\n\n" +
+	"THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this " +
+	"response and nowhere else — every read beside it omits the password — so a " +
+	"caller that does not keep them has to provision again. Where KMS is configured " +
+	"the password is sealed there and only a reference is persisted; where it is " +
+	"not, it is returned this once and stored nowhere. It is never held in " +
+	"plaintext.\n\n" +
+	"Scoped to the caller's validated org (403 without one), which also namespaces " +
+	"the physical resource under a fixed-width hash, so two tenants can never fold " +
+	"onto one backend resource — a residual collision fails closed with 409 rather " +
+	"than silently sharing. A name already taken in your org is 409; an invalid name " +
+	"or instance slug is 400; a backend that refuses the create is 502. Where a " +
+	"later step fails after the backend resource already exists, it is torn back " +
+	"down rather than left orphaned.\n\n" +
+	"Billing is gated BEFORE anything is created: an unfunded org — or, in the " +
+	"fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and " +
+	"nothing is provisioned. The fee is per-kind and set by the deployment."
+
 // The seven creates state their request and response shapes here, next to their
 // registration. openapi.Register is the reflection seam for a route that is not a
 // typed op: it buys the document a body and a success shape — so a generated SDK
-// can actually construct the call — and nothing else. Prose, an MCP tool and a
-// CLI command come only from zip's registry, i.e. only from a typed op.
+// can actually construct the call. openapi.Describe is the seam for the other
+// half a reflection over Go types can never reach, the PROSE, and without it
+// these seven published a name and a body schema with no statement of what they
+// provision, that the credential is returned exactly once, or that the org is
+// charged before anything is built. Neither seam can add a route: both attach to
+// one the router already carries.
+//
+// init, not routes: both panic on a duplicate declaration, and routes runs once
+// per Mount.
 func init() {
 	for _, kind := range kinds {
 		openapi.Register("/v1/"+kind, "POST", provisionRequest{}, provisionResult{})
+
+		p := createProse[kind]
+		desc := p.lead
+		if _, dedicated := dedicatedEngines[kind]; dedicated {
+			desc += dedicatedNote
+		}
+		openapi.Describe("/v1/"+kind, "POST", p.summary, desc+createContract)
 	}
 }
 
@@ -331,13 +403,13 @@ func create(s *cloud.Service[state], kind string) zip.Handler {
 			return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 		}
 
-		// DEDICATED-instance strategy (datastore, docdb): the org's OWN isolated
-		// instance, launched via an operator Datastore CR in tenant-<org>.
+		// DEDICATED-instance strategy (sql, kv, docdb, datastore): the org's OWN
+		// isolated instance, launched via an operator Datastore CR in tenant-<org>.
 		if e, dedicated := dedicatedEngines[kind]; dedicated {
 			return createDedicated(s, c, ctx, kind, org, name, e, fee, instance)
 		}
 
-		// SHARED-logical strategy (sql, vector, kv, search, s3).
+		// SHARED-logical strategy (vector, search, s3).
 		prov := s.State.reg[kind]
 		if prov == nil {
 			return zip.Errorf(http.StatusNotImplemented, "kind %q not supported", kind)

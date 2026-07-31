@@ -14,6 +14,7 @@ package team
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/wsx"
 )
@@ -82,6 +84,37 @@ type transServer struct {
 // can write into the per-workspace store the SPA reads WITHOUT holding a client
 // WebSocket. One server, one store.
 var live *transServer
+
+// The prose for the data-plane socket. It is UNTYPED and cannot be otherwise —
+// the response is a protocol upgrade, not a value — so zipdoc has nothing to
+// lift and without this it publishes an operationId and nothing else. The
+// statistics op beside it documents itself from its own doc comment.
+//
+// The path key is the FIBER pattern exactly as registered in Mount.
+func init() {
+	openapi.Describe("/v1/team/transactor/:token", http.MethodGet,
+		"Open the workspace data-plane socket",
+		"Upgrades to the WebSocket the Team client runs an entire workspace over: every frame "+
+			"is a ZAP envelope wrapping one JSON-RPC message — findAll/findOne reads against the "+
+			"workspace's documents, tx writes that broadcast to the other live sessions, hello "+
+			"negotiating JSON rather than msgpack. The response is a protocol upgrade, so there "+
+			"is no body to read.\n\n"+
+			"THE PATH SEGMENT IS THE CREDENTIAL. It is the workspace token selectWorkspace "+
+			"minted — bearer-equivalent, and sitting in a URL that proxies and access logs "+
+			"record, which is exactly why it expires in twelve hours and is re-minted on demand "+
+			"rather than being long-lived like the session token. It is decoded and verified "+
+			"(signature and expiry) BEFORE the upgrade, so a bad one is a 401 and never a socket "+
+			"that is accepted and then dropped, and it must carry both an account and a "+
+			"workspace claim.\n\n"+
+			"The tenant is the token's SIGNED org claim and it keys every store path, so no "+
+			"header can name another workspace's data. The upgrade ALSO refuses a browser Origin "+
+			"outside the team surfaces with 403 — otherwise any page could open an authenticated "+
+			"socket with a token it lured out of a logged-in browser — while a request with no "+
+			"Origin at all is admitted, because that is what a non-browser client sends.\n\n"+
+			"On connect the workspace's system spaces are seeded once and the roster is "+
+			"reconciled every time, so the org's human members and its bots are present as "+
+			"workspace people without a separate sync call.")
+}
 
 // serveWS decodes + AUTHORIZES the workspace token BEFORE the WebSocket upgrade
 // (fail-secure: a bad token is a 401, never an upgraded-then-dropped socket),

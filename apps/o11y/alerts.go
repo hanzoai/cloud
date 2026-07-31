@@ -53,6 +53,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/integrations"
+	"github.com/hanzoai/cloud/openapi"
 )
 
 // recentMax bounds the replay ring. Matches the receiver this replaced, and the
@@ -100,6 +101,42 @@ type alert struct {
 	Status      string            `json:"status"`
 	Labels      map[string]string `json:"labels"`
 	Annotations map[string]string `json:"annotations"`
+}
+
+// The two alert routes are text/plain and deliberately un-typed (the POST accepts
+// a body that will not parse; typing it would answer JSON and reject that body —
+// typed_wire_test.go's untypedByDesign pins both). zipdoc has no doc comment to
+// lift from a raw handler, so their prose is declared here, beside the wire fact.
+func init() {
+	openapi.Describe("/v1/o11y/alerts/last", http.MethodGet,
+		"Replay the page-delivery receipts this process took",
+		"Answers the most recent Alertmanager deliveries THIS process received, as plain "+
+			"text — one greppable `PAGE-DELIVERED` line per alert, newest last, so piping to "+
+			"`tail` reads in arrival order. `(none)` when nothing has landed.\n\n"+
+			"It answers the question Alertmanager cannot: Alertmanager can tell you it "+
+			"dispatched a notification, never that anything received it. This ring is the far "+
+			"side of that hop, and it is the only record that a page actually arrived.\n\n"+
+			"The ring is PROCESS-LOCAL and bounded to the last 200 lines. Both are the point: a "+
+			"receipt that outlived the process that took the call would be a claim about "+
+			"something nobody observed, and an unbounded receipt log is a memory leak with a "+
+			"nice name. A restart empties it.")
+	openapi.Describe("/v1/o11y/alerts/:receiver", http.MethodPost,
+		"Take an Alertmanager notification and page Slack",
+		"Records one Alertmanager webhook delivery and pages the on-call. Each alert in the "+
+			"payload prints a `PAGE-DELIVERED` line to the process log and joins the ring the "+
+			"receipt replay serves, then the batch is posted to Slack with the org's "+
+			"KMS-custodied bot token — the ONE Slack egress the product already has, not a "+
+			"second webhook credential. Resolved notifications page too: \"it recovered\" is the "+
+			"half of an incident people are actually waiting for.\n\n"+
+			"It ALWAYS answers 200 with the body `ok`, and a body that will not parse is "+
+			"recorded with empty fields rather than rejected. Alertmanager retries on any other "+
+			"status, so a receipt that pushes back changes the thing it is measuring, and a 400 "+
+			"on a malformed payload would make it retry forever — the delivery still happened, "+
+			"which is the fact being recorded.\n\n"+
+			"The receiver segment is Alertmanager's own receiver name, a parameter rather than a "+
+			"hand-listed route because the receiver set is config, not code. Paging is detached "+
+			"and fail-soft: with no channel configured nothing is posted and the receipt still "+
+			"lands, and a Slack failure prints its own line instead of failing the request.")
 }
 
 // mountAlerts registers the receiver. Called from MountO11y BEFORE the

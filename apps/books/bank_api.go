@@ -54,8 +54,56 @@ func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
 //
 // init, not bankRoutes: Register panics on a duplicate declaration, and bankRoutes
 // runs once per Mount.
+// Declaring the wire is not the same as explaining it. Register says what the bytes
+// are; Describe is the prose a typed op would have carried in its doc comment, and
+// without it these three publish an operationId and nothing else — an SDK method
+// that cannot say what it does, and a CLI command with no help. Stated beside the
+// declaration so the two cannot drift apart.
 func init() {
 	openapi.Register("/v1/books/bank/import", "POST", openapi.Binary{}, BankTally{})
+	openapi.Describe("/v1/books/bank/import", http.MethodPost,
+		"Import a bank statement file into your books",
+		"Takes a bank statement as RAW BYTES — the file exactly as downloaded, OFX, QFX or "+
+			"CSV, not wrapped in JSON — parses every row, books it against the caller org's "+
+			"own ledger, and answers the tally: how many rows were seen, how many vouchers "+
+			"posted, how many inflows reconciled, how many raised a question, how many were "+
+			"own-account transfers, and how many were skipped.\n\n"+
+			"RE-IMPORTING THE SAME STATEMENT DOES NOT DOUBLE-BOOK. Every row goes through the "+
+			"same posting choke point every other source uses, keyed idempotently, so an "+
+			"overlapping statement — the usual case, since exports overlap at the month "+
+			"boundary — lands its new rows and counts the rest as skipped. Skipped is the "+
+			"number to read on a second import.\n\n"+
+			"It is READ-ONLY against the bank: this ingests, it never sends money. Scoped to "+
+			"the caller's own org from the validated principal, and refused without one; "+
+			"`sandbox=true` writes the org's sandbox ledger instead of its real books. An "+
+			"empty body is a 400, and a file the parser cannot read is a 400 carrying the "+
+			"parser's reason rather than a partial import. On a deployment whose import "+
+			"parser is not built, this answers 501 rather than mishandling the file.")
+	openapi.Describe("/v1/books/bank/link-token", http.MethodPost,
+		"Begin connecting a bank account (not yet available)",
+		"ANSWERS 501 UNCONDITIONALLY. It is the intended first hop of the bank-linking "+
+			"handshake — mint the short-lived session token a browser hands to the provider's "+
+			"link widget — and nothing on the HTTP path reaches an implementation today.\n\n"+
+			"The connectors behind it are written and tested; only the wiring is missing, so "+
+			"an org cannot connect a bank through the API at all. Until that lands, bank data "+
+			"reaches the books by statement import.\n\n"+
+			"It is documented as refusing rather than declared with a success body precisely "+
+			"because it has never sent one. A response schema here would be invention: every "+
+			"generated SDK would carry a return type for a call that has only ever failed. A "+
+			"caller with no principal gets 401 before the 501.")
+	openapi.Describe("/v1/books/bank/exchange", http.MethodPost,
+		"Finish connecting a bank account (not yet available)",
+		"ANSWERS 501 UNCONDITIONALLY. It is the intended second hop of the bank-linking "+
+			"handshake — trade the provider's short-lived public token for the durable access "+
+			"credential and seal that credential into KMS — and nothing on the HTTP path "+
+			"reaches an implementation today.\n\n"+
+			"The durable bank credential is the reason this hop exists: it is meant to be "+
+			"sealed server-side and never handed back to the caller. Since the route never "+
+			"succeeds, no credential is stored by it and no bank is connected through it.\n\n"+
+			"Documented as refusing rather than declared with a success body, for the same "+
+			"reason as the first hop: it has never sent one, and stating a shape it has never "+
+			"produced would put a return type in every SDK for a call that always fails. A "+
+			"caller with no principal gets 401 before the 501.")
 }
 
 // bankTxnList is the org's normalized bank rows as the route answers them: a bare array.

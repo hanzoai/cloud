@@ -56,6 +56,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -609,6 +610,66 @@ func (o ops) createVersion(ctx context.Context, in *createVersionIn) (*FlowVersi
 		return nil, mapStoreErr(err, "flow not found")
 	}
 	return &saved, nil
+}
+
+// The prose for the three operations here that cannot be typed ops. Every other route
+// in automations is typed and zipdoc lifts its doc comment into zipdoc_gen.go; these
+// three stay raw handlers for reasons routes() and each handler state — two response
+// shapes on the builder's edit door, an arbitrary JSON resume payload, an open-keyed
+// event body under a URL address — so there is no comment for anything to lift and the
+// published document would carry an operationId and nothing else. They are the three
+// most easily misused routes in the surface (one edits a flow, one releases a held
+// approval, one starts runs), which is exactly why a caller reading only the document
+// must be told the rules here. Declared through the same registry Register uses, so a
+// description renders only while the router actually serves the route.
+func init() {
+	openapi.Describe("/v1/automations/flows/:id/operations", http.MethodPost,
+		"Edit a flow — rename it, retarget its trigger, or add, move and delete steps",
+		"Applies ONE flow operation and answers the thing it changed. The operation is named "+
+			"by `type`, with its arguments under `request`: `CHANGE_NAME`, `UPDATE_TRIGGER`, "+
+			"`ADD_ACTION`, `UPDATE_ACTION`, `MOVE_ACTION`, `DELETE_ACTION` edit the flow's LATEST "+
+			"version and answer with that version, and `CHANGE_STATUS` instead enables or disables "+
+			"the flow and answers with the FLOW. Two response shapes on one address is the rule a "+
+			"reader would otherwise get wrong, and it is why this route is not a typed op.\n\n"+
+			"Edits land on the latest version only — the published version a run executes is "+
+			"untouched until it is republished — and the whole resulting step tree is re-validated "+
+			"against the step-count and size caps after every operation, so a long sequence of "+
+			"`ADD_ACTION` calls cannot grow a flow past a bound one step at a time (422 when it "+
+			"would). Org-scoped and fails closed: a validated principal is required (403 without "+
+			"one), the flow and its version are read under the caller's OWN org so another "+
+			"tenant's id is a 404, and an operation whose `request` does not decode is a 400.")
+	openapi.Describe("/v1/automations/runs/:id/resume", http.MethodPost,
+		"Release a run waiting at an approval step, with the approval payload",
+		"Delivers the durable `resume` signal to a run parked on a `wait_for_approval` "+
+			"waitpoint and answers `{resumed:true}` once the engine has taken it.\n\n"+
+			"The body is an ARBITRARY JSON value — object, array, string, number — delivered "+
+			"VERBATIM into the workflow as that waitpoint's output, so it is what the steps after "+
+			"the approval read as their input. An empty body resumes with no payload. That "+
+			"open shape is why this route is not a typed op: an operation's input can carry the "+
+			"payload or the run address, never both.\n\n"+
+			"Org-scoped and fails closed: a validated principal is required (403 without one), "+
+			"the run is read under the caller's OWN org so another tenant's run id is a 404, a "+
+			"body that is not JSON is a 400, and a payload over the size limit is a 413 — it "+
+			"becomes durable engine state, so it is bounded here rather than after it lands. "+
+			"The resume is audited as `automations.run.resume`.")
+	openapi.Describe("/v1/automations/hooks/:source/:event", http.MethodPost,
+		"Fire an event that starts every enabled flow subscribed to it",
+		"Delivers one event to the org's automation triggers and answers `{matched:n}` — how "+
+			"many enabled flows had a webhook trigger on this `(source, event)` key and were "+
+			"started by it. A zero match is a success, not an error: nothing was subscribed.\n\n"+
+			"The path is the trigger key and the JSON object body is the event payload, threaded "+
+			"into each started run as `{{trigger.*}}` with all of its keys intact — which is why "+
+			"this is not a typed op, since a declared input struct would silently DISCARD every "+
+			"payload key it had no field for. Re-delivery is a no-op: an `X-Idempotency-Key` "+
+			"header dedupes, and with none the body is content-hashed instead, so a hammer of "+
+			"identical posts collapses to ONE run rather than minting a fresh one per post. An "+
+			"in-platform producer may propagate `X-Causation-Depth` so a firing that a flow "+
+			"caused is bounded against a loop; an absent or invalid header reads as depth 0, an "+
+			"external origin.\n\n"+
+			"Authenticated and org-scoped, unlike a provider's public webhook URL: a validated "+
+			"principal is required (403 without one) and the org is that principal's, never the "+
+			"body's, so a producer can only fire into its own tenant's flows. Both path segments "+
+			"are required (400) and a payload over the size limit is a 413.")
 }
 
 // applyOperation applies a FlowOperation. CHANGE_STATUS is flow-scoped (routes to

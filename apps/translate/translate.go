@@ -43,8 +43,55 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// The PROSE for the translate door. Its two review-lane siblings are typed ops whose
+// descriptions zipdoc lifts from their doc comments; this one is raw by construction
+// (serve, below, names the blocker), so there is no comment to lift and the
+// subsystem's ONLY product route was reaching the document — and every SDK and CLI
+// generated from it — as an operationId and nothing else.
+//
+// Declared through the registry openapi.Register shares, so it renders only while the
+// router actually serves the route.
+func init() {
+	openapi.Describe("/v1/translate", http.MethodPost,
+		"Translate a string or a batch into one target language",
+		"Returns one translation per input string, in input order, each carrying where it sits on "+
+			"the review ladder and whether it came from your memory rather than an engine — plus a "+
+			"usage block of REAL counts (strings, cached, translated, and the source characters that "+
+			"actually reached an engine). Send `text` for one string or `batch` for many, never both. "+
+			"When you name no `source`, the detected one is reported back.\n\n"+
+			"THE TRANSLATION MEMORY IS CONSULTED FIRST AND IT IS NORMATIVE, NOT A CACHE. Every string "+
+			"keys on (source text, target, glossary version, tier); a hit is returned VERBATIM and "+
+			"never re-translated, which is what makes a locale rebuild idempotent under a "+
+			"non-deterministic model and the bill proportional to what actually changed. Misses go to "+
+			"the engine and are written back at state `machine`. Editing a glossary term changes the "+
+			"key, so a stale rendering can never be served.\n\n"+
+			"IT CANNOT TRAMPLE REVIEWED WORK. A write from this route may create an entry or refresh "+
+			"one still at `machine`, and nothing else — a string a human moved to approved or "+
+			"published through the memory review lane survives every rebuild, and comes back here "+
+			"unchanged. The memory is the caller's OWN org's, a separate store per org: the source "+
+			"text you send is customer content and lands nowhere else. Read it back or review it at "+
+			"/v1/translate/memory.\n\n"+
+			"`tier` picks the engine and defaults to quality — the model plane, which carries context, "+
+			"terminology and tone, and which bills its own tokens, so nothing is charged twice here. "+
+			"`bulk` is the high-volume engine and is metered HERE, on the source characters that "+
+			"reached it: a fully-cached rebuild reports zero characters and costs zero. BULK NEVER "+
+			"FALLS BACK TO QUALITY — on a deployment that does not serve it the answer is 503 for that "+
+			"tier, so a caller is never quietly served, or charged, at a tier it did not ask for. A "+
+			"bulk request beyond its balance is refused with the nested "+
+			"{\"error\":{\"code\",\"message\"}} body at 402/503.\n\n"+
+			"`target` IS CHECKED FOR SHAPE, NOT FOR SUPPORT: anything BCP-47-shaped is accepted (`es`, "+
+			"`pt-BR`), anything else is 400. There is no unsupported-language error — a well-formed "+
+			"tag no engine can actually render is passed straight through, and whatever comes back is "+
+			"what gets stored and returned. `format` (text, html, markdown) tells the engine what "+
+			"markup to preserve; `glossary` fixes terms verbatim.\n\n"+
+			"Requires a validated principal — 401 without one, and the org is always that principal's. "+
+			"At most 512 strings per call and 32768 characters per string; an engine that fails or "+
+			"answers a reply that does not cover every input is 502, and nothing is stored.")
+}
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document

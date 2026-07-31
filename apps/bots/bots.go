@@ -41,6 +41,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/runtime"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -199,6 +200,31 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// carry a trailing slash for a path this API has never served.
 	zip.Get(app.Group("/v1"), "/bots", o.list)
 	zip.Post(g, "/:runId/stop", o.stop)
+}
+
+// The prose for the one operation here that cannot be a typed op. The list and the
+// stop are typed and zipdoc lifts their doc comments into zipdoc_gen.go; the launch
+// stays a raw handler (run says why — a typed op publishes a success this route has
+// none of), so there is no comment for anything to lift and the published document
+// would carry an operationId and nothing else. That is the worst case for exactly
+// this route: an SDK method and a CLI command with no help text, for an operation
+// whose whole content is a refusal a caller must be told about up front. Declared
+// through the same registry Register uses, so it renders only while the router
+// actually serves the route.
+func init() {
+	openapi.Describe("/v1/bots/run", http.MethodPost,
+		"Reserved address for launching a bot run — not implemented, always 501",
+		"Answers 501 to every call. The bot runtime exposes no launch operation, so nothing "+
+			"here can start a sandbox, and this address is published rather than dropped because "+
+			"it is reserved: routes resolve by specificity, so the `run` literal can never bind "+
+			"as a run id against its neighbour `/v1/bots/:runId/stop`.\n\n"+
+			"The refusal is total and takes no input. The handler never reads the body, so any "+
+			"bytes at all — malformed JSON included — get the same 501; no run id is minted, no "+
+			"session URL is handed back, and no per-run fee is charged. That is the point: the "+
+			"earlier version minted an id the runtime had never heard of, pointed it at a VNC "+
+			"node that did not exist, and took real money for it.\n\n"+
+			"Listing and stopping runs are live and org-scoped. Only the launch is missing, and "+
+			"it returns in the same change that can prove a bot boots.")
 }
 
 // run reports that launching is not implemented.

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -32,6 +33,83 @@ const (
 	svcUploadPack  = "git-upload-pack"
 	svcReceivePack = "git-receive-pack"
 )
+
+// notByHand is the sentence that matters most to the consumer these descriptions
+// reach. Twelve of git's published operations are the git wire protocol, so every
+// generated SDK offers twelve methods and every spec-derived CLI twelve commands
+// that a human should never call directly — and the honest thing the document can
+// do is say so.
+const notByHand = " This is git's own wire protocol, not an API call to make by " +
+	"hand: point a git client at the clone URL and it makes this request itself."
+
+// The four path families the SAME three handlers answer on. A family is a real
+// difference in who can reach the route and how the repository is addressed, so
+// each states its own, and the twelve descriptions are generated from three
+// leads and four suffixes rather than written twelve times.
+var packMounts = []struct{ prefix, note string }{
+	{"/v1/git/:org/:repo", " Addressed under the API prefix, so `git clone " +
+		"https://<host>/v1/git/<org>/<repo>.git` works on any host the binary serves."},
+	{"/v1/git/:org/:project/:repo", " Addressed under the API prefix, with the " +
+		"PROJECT as a middle path segment: project scope otherwise rides a header a " +
+		"git client cannot send, so this path is the only usable remote for a " +
+		"project-scoped repository."},
+	{"/:org/:repo", " Addressed at the git host's root, so `git clone " +
+		"https://<git-host>/<org>/<repo>.git` works with the canonical URL and no " +
+		"prefix. Served ONLY on the dedicated git host; on the API and console hosts " +
+		"it falls through, so a bare /:org/:repo can never shadow another surface."},
+	{"/:org/:project/:repo", " Addressed at the git host's root with the PROJECT as " +
+		"a middle path segment — the canonical-URL form of the project-scoped remote, " +
+		"since a git client has no header to carry a project. Served only on the " +
+		"dedicated git host; elsewhere it falls through."},
+}
+
+// The prose for git's twelve smart-HTTP operations. None can be a typed op — the
+// request and response are a binary pack stream — so zipdoc has nothing to lift,
+// and left bare they published twelve operationIds a reader could not tell from
+// twelve ordinary JSON calls. openapi.Describe attaches prose to routes the
+// router already carries; the four families below are four distinct router
+// patterns, so each is described separately rather than folded into one.
+func init() {
+	for _, m := range packMounts {
+		openapi.Describe(m.prefix+"/info/refs", http.MethodGet,
+			"Advertise a repository's refs to a git client",
+			"The ref-advertisement phase of git's smart-HTTP protocol — the first "+
+				"request a clone, a fetch and a push all make. `?service=` selects which: "+
+				"`git-upload-pack` advertises for a fetch, `git-receive-pack` for a push, "+
+				"and any other value is 400.\n\n"+
+				"ANONYMOUS ONLY FOR FETCH, AND ONLY ON A PUBLIC REPOSITORY. The push "+
+				"advertisement always requires an authenticated org, and where a path org "+
+				"is present it must equal the authenticated one. A private repository "+
+				"reached without its org is 404, indistinguishable from one that does not "+
+				"exist."+m.note+notByHand)
+
+		openapi.Describe(m.prefix+"/"+svcUploadPack, http.MethodPost,
+			"Serve a clone or fetch",
+			"The pack-transfer phase of a clone or fetch: the request and the response "+
+				"are git's binary pack protocol, streamed straight through git itself — "+
+				"request body to git's stdin, git's stdout to the response — so a "+
+				"multi-gigabyte clone never lands in this process's memory.\n\n"+
+				"A PUBLIC repository is fetched anonymously; a private one requires its own "+
+				"org, and a wrong or absent org is 404 rather than a hint that the "+
+				"repository exists. A Content-Type other than "+
+				"`application/x-"+svcUploadPack+"-request` is 400."+m.note+notByHand)
+
+		openapi.Describe(m.prefix+"/"+svcReceivePack, http.MethodPost,
+			"Accept a push, and turn it into a build",
+			"The pack-transfer phase of a push, and the point at which a push becomes an "+
+				"EVENT. NEVER ANONYMOUS: a push always requires an authenticated org, and "+
+				"the org in the path must equal it.\n\n"+
+				"Once the pack is on disk the repository's storage usage is metered and a "+
+				"build is fired for every branch whose tip actually moved, computed from "+
+				"the before/after branch diff rather than from what the client claimed. "+
+				"That runs on a cancel-immune context, so a client that hangs up the moment "+
+				"its push lands still gets its build, and it runs even when git itself "+
+				"exited non-zero — the refs on disk are the ground truth. Repacking "+
+				"housekeeping is detached and never blocks the response.\n\n"+
+				"A Content-Type other than `application/x-"+svcReceivePack+"-request` is "+
+				"400."+m.note+notByHand)
+	}
+}
 
 // gitProtocol returns the validated client Git-Protocol header (empty when
 // absent/malformed) to forward as the subprocess GIT_PROTOCOL — protocol v2 is a

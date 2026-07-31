@@ -65,6 +65,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	ntypes "github.com/hanzoai/notify/pkg/types"
 	"github.com/hanzoai/notify/service/mail"
 	"github.com/hanzoai/notify/service/plivo"
@@ -125,6 +126,50 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		log.Info("notify send surface mounted", "prefix", "/v1/notify")
 	}
 	return nil
+}
+
+// The three send routes' prose, declared beside the wire fact that keeps them
+// untyped. A typed op's prose is lifted from its doc comment by zipdoc; these
+// have no typed op to lift from (the two-shape refusal above), so without a
+// Describe they publish an operationId and nothing else — an SDK method that
+// cannot explain itself and a CLI command with no help text. Declared through the
+// same registry Register uses, so a description renders only while the router
+// actually serves the route.
+func init() {
+	const delivery = "Delivery is synchronous and per recipient: one recipient answers the bare " +
+		"{messageId,status} SendResponse, several answer the {items:[…]} envelope. A terminal " +
+		"provider failure is a 200 whose status is failed with the reason in error, never a " +
+		"transport error. ?sync=true is REQUIRED — an async dispatch answers 503, because the " +
+		"queue plane that would run it is owned elsewhere and is not folded in here. The message " +
+		"body wins verbatim when present; otherwise template_id (or the event name) selects a " +
+		"built-in template rendered against template_vars."
+
+	openapi.Describe("/v1/notify/send", http.MethodPost,
+		"Send one transactional message by email or SMS through your org's own provider credential",
+		"Delivers a message to each address in `to` over the channel the body names — sms or "+
+			"email — using the CALLER ORG'S own provider credential, read from KMS at "+
+			"orgs/<org>/notify/<service>/<key> and never from the environment. The org is the "+
+			"validated principal's, never a client-supplied header, so a caller can only ever send "+
+			"as their own tenant; an unauthenticated caller gets 401. Naming no provider picks the "+
+			"one whose credentials are actually configured (Twilio, then Plivo for SMS; Twilio Email, "+
+			"then SMTP for email) and fails closed when none is. "+delivery)
+
+	openapi.Describe("/v1/notify/send/sms", http.MethodPost,
+		"Send one transactional SMS through your org's own provider credential",
+		"The channel-pinned form of the generic send: identical in every respect except that the "+
+			"channel is fixed to sms, OVERRIDING whatever the body names — so a body that says email "+
+			"still goes out as a text message. The provider is the org's own SMS credential from KMS "+
+			"(Twilio, then Plivo), resolved for the validated principal's org and never from a "+
+			"client-supplied header; an unauthenticated caller gets 401. "+delivery)
+
+	openapi.Describe("/v1/notify/send/email", http.MethodPost,
+		"Send one transactional email through your org's own provider credential",
+		"The channel-pinned form of the generic send: identical in every respect except that the "+
+			"channel is fixed to email, OVERRIDING whatever the body names — so a body that says sms "+
+			"still goes out as mail. The provider is the org's own email credential from KMS (Twilio "+
+			"Email, then SMTP), resolved for the validated principal's org and never from a "+
+			"client-supplied header; an unauthenticated caller gets 401. Subject is carried on the "+
+			"email channel only. "+delivery)
 }
 
 // noIn is the input of an op that takes nothing: no body, no path parameter, no

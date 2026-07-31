@@ -51,6 +51,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -64,6 +65,120 @@ func mountFinance(s *cloud.Service[state], app cloud.Router) {
 	app.Get("/v1/finance/invoices", cloud.Handle(s, financeInvoices))              // issued invoices (honest empty today)
 	app.Get("/v1/finance/payment-methods", cloud.Handle(s, financePaymentMethods)) // masked saved cards (brand+last4)
 	app.Get("/v1/finance/ledger", cloud.Handle(s, financeLedger))                  // per-org double-entry postings over ?range=
+}
+
+// The PROSE for the six, beside the route table that keeps them untyped. Each is a raw
+// *zip.Ctx handler, so zipdoc has no doc comment to lift; without a Describe the
+// document publishes an operationId and nothing else, and every generated SDK offers a
+// MONEY call that cannot say whose books it reads or what the amounts mean.
+//
+// The one fact a reader of BOTH prefixes needs, stated once here and pointed at from the
+// ops it changes: /v1/billing/* forwards the raw commerce wire (body and status verbatim,
+// one row per billed call), while /v1/finance/* RESHAPES that same wallet into the typed
+// finance contract the UI renders. They are two shapes of one ledger, not two ledgers —
+// except payment-methods, which read one store under two different KEYS.
+func init() {
+	openapi.Describe("/v1/finance/balance", http.MethodGet,
+		"Spendable prepaid for the caller's org, in the finance shape",
+		"Answers the org's spendable prepaid balance typed for the finance surfaces: "+
+			"`availableCents`, `pendingCents`, `dueCents` and the `asOf` instant it was read.\n\n"+
+			"It is the SAME wallet read /v1/billing/balance answers — one function, called by "+
+			"both, so the two surfaces cannot drift into disagreeing about a customer's money. "+
+			"Reshaped, never re-metered. Co-resident the number comes straight out of the org's "+
+			"own double-entry ledger file.\n\n"+
+			"`dueCents` is a structural 0: this is a PREPAID wallet with no open-invoice debt, so "+
+			"nothing is ever owed and a non-zero value here would be an invention. `pendingCents` "+
+			"is 0 on the co-resident ledger, where authorization holds are never posted; only a "+
+			"split-deploy upstream reports holds, and there spendable is the balance NET of them, "+
+			"floored at 0 — a fully-held wallet reports 0 rather than money the gate would "+
+			"refuse.\n\n"+
+			"Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own "+
+			"org from the validated IAM owner claim; 401 without a validated principal, and a "+
+			"balance that cannot be read is 502 — never 0, because unknown is not broke.")
+
+	openapi.Describe("/v1/finance/credits", http.MethodGet,
+		"Credit grants and top-ups on the caller's org wallet",
+		"Answers the money PUT IN to the org's wallet — each staff grant, promo and settled "+
+			"top-up as a positive row with its id, label, cents and grant time.\n\n"+
+			"Spend is not a credit. A posting counts here only when its type is `deposit`; "+
+			"withdrawals belong to /v1/finance/usage (aggregated) and /v1/finance/ledger (signed). "+
+			"All three project ONE read of the same ledger, so they cannot disagree about a "+
+			"row.\n\n"+
+			"`label` falls back through the posting's notes, then its tags, then a bare Credit — "+
+			"it is a description, never an identifier. `remainingCents` is OMITTED: the wallet is "+
+			"one running balance, not per-grant buckets, so no grant has a remainder to report and "+
+			"spend cannot be attributed to the credit that funded it.\n\n"+
+			"Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own "+
+			"org; 401 without a validated principal. An org with no grants gets an empty array — "+
+			"honest, never a fabricated figure.")
+
+	openapi.Describe("/v1/finance/usage", http.MethodGet,
+		"What the caller's org spent over a window, as a series and by tag",
+		"Answers metered spend inside `range=`: the window total, a time series to plot, and one "+
+			"line per usage TAG. Aggregated from the same charged ledger the balance comes off — "+
+			"projected, never re-metered.\n\n"+
+			"Only WITHDRAW postings count; deposits are credits and are excluded. `range` is 24h, "+
+			"7d, 30d or 90d, and anything else — including absent — is 30d, so a typo silently "+
+			"widens the window to a month rather than failing. Buckets are hourly at 24h and daily "+
+			"otherwise, in UTC; a posting whose timestamp will not parse is dropped rather than "+
+			"mis-bucketed.\n\n"+
+			"Lines group by the posting's tag (`Usage` where it carries none) and `units` counts "+
+			"POSTINGS, not tokens. The dimensions here are time and tag. For per-request rows and "+
+			"a per-PRODUCT breakdown, read /v1/billing/usage instead — the same money, cut a "+
+			"different way.\n\n"+
+			"Cents are ROUNDED from the ledger's exact 18-decimal USD, so a window made of "+
+			"sub-cent token calls totals LOW here. Scoped to the caller's own org; 401 without a "+
+			"validated principal.")
+
+	openapi.Describe("/v1/finance/invoices", http.MethodGet,
+		"Issued invoices — none exist, and that is the honest answer",
+		"Answers an empty typed array, always. The fleet bills a PREPAID wallet — money in, "+
+			"metered debits out — and issues no customer invoices, so there is no invoice ledger "+
+			"to project. Nothing here is a fabricated figure and nothing is hidden behind a "+
+			"filter.\n\n"+
+			"The shape is fixed, so the finance UI renders this lane today and the day an invoice "+
+			"ledger exists it fills with ZERO client change. Spend that actually happened is "+
+			"/v1/finance/usage; money in and out is /v1/finance/ledger; what is left to spend is "+
+			"/v1/finance/balance.\n\n"+
+			"The gate is real even though the body is empty: 401 without a validated principal. It "+
+			"is the only finance read that touches no store, so it is also the only one that "+
+			"cannot 502.")
+
+	openapi.Describe("/v1/finance/payment-methods", http.MethodGet,
+		"Saved cards for the wallet the caller pays from",
+		"Answers the masked card descriptors for the caller's resolved WALLET — id, brand, last "+
+			"four, expiry, default flag — reshaped into the finance contract.\n\n"+
+			"It re-masks defensively: whatever the upstream sends, at most the trailing four "+
+			"DIGITS survive into `last4`. No card number, no security code and no processor token "+
+			"exists in this shape at all, so an over-returning upstream still cannot leak one "+
+			"through this lane.\n\n"+
+			"Read the sibling difference before trusting a mismatch. This keys the store on the "+
+			"resolved wallet; /v1/billing/payment-methods keys it on the org SLUG, which is also "+
+			"the key a card is SAVED under — identical for an org paying from its shared pool, "+
+			"different wherever the payer is a person. When the two lists disagree, the billing "+
+			"one is what was saved.\n\n"+
+			"401 without a validated principal. An upstream that answers non-2xx or cannot be "+
+			"reached is 502 — never an empty list, because no cards and could not ask must not "+
+			"look alike.")
+
+	openapi.Describe("/v1/finance/ledger", http.MethodGet,
+		"Money in and out of the caller's org wallet, signed",
+		"Answers the org's own postings inside `range=`, each as a signed entry: a `deposit` "+
+			"CREDITS the wallet (positive, account `credits:<org>`) and every other posting DEBITS "+
+			"it (negative, account `usage:<org>`), described by its notes or its tags.\n\n"+
+			"This is the closest projection of the truth. The org's double-entry postings are the "+
+			"source of record — balanced, only ever appended, one file per org — and this lane is "+
+			"that list, widest of the three: /v1/finance/credits is its deposit half and "+
+			"/v1/finance/usage is its withdrawal half rolled up. All three come from ONE read, "+
+			"which is why they cannot contradict each other, and all three answer 501 where no "+
+			"commerce link is configured rather than reporting an empty wallet.\n\n"+
+			"`range` is 24h, 7d, 30d or 90d, defaulting to 30d. A row whose timestamp will not "+
+			"parse is KEPT rather than dropped — a malformed date must show up in a money list, "+
+			"not vanish from it. `balanceCents` is omitted: these are MOVEMENTS, and the standing "+
+			"balance is /v1/finance/balance.\n\n"+
+			"Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's own "+
+			"org, where the org's ledger file is the tenant boundary; 401 without a validated "+
+			"principal.")
 }
 
 // ── the finance contract (typed, USD cents, matching @hanzo/finance-ui types.ts) ──

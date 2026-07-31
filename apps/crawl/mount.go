@@ -71,6 +71,21 @@ type crawlDocument struct {
 // same reflection over the same structs the handler binds, so it cannot drift.
 func init() {
 	openapi.Register("/v1/crawl", http.MethodPost, crawlRequest{}, crawlResult{})
+	openapi.Describe("/v1/crawl", http.MethodPost,
+		"Fetch one URL and read it back as markdown",
+		"Fetches a single URL from inside the cluster and answers with the page's title, its "+
+			"content rendered to markdown, and whatever metadata the document carried.\n\n"+
+			"A page that could not be fetched is a NORMAL outcome, not a fault: an unreachable "+
+			"host, a refused address or a non-document content type all answer 200 with "+
+			"`success:false` and the reason in `error`. Non-2xx is reserved for a caller "+
+			"problem — 401 for a bad key, 400 for a missing url, 503 when the surface is "+
+			"unconfigured — so error handling can trust the status.\n\n"+
+			"Admission is either a validated principal or the shared service key, presented as "+
+			"X-API-Key or a Bearer; neither is refused, and an unset key fails closed rather "+
+			"than opening the fetcher to the private network. Crawled pages are archived under "+
+			"the scope of the VERIFIED principal, never a scope named in the body; a service "+
+			"caller has no org and its pages land in the shared corpus. One URL per call, and "+
+			"the request body is bounded at 1 MiB.")
 }
 
 // serviceKey is the shared key a service caller presents. It is deliberately the

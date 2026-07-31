@@ -20,6 +20,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -76,6 +77,93 @@ const (
 	maxLinksPerAffiliate = 50
 	leaderboardLimit     = 50
 )
+
+// The dashboard routes are raw handlers too, so their prose is declared here
+// beside them. Amounts are integer cents throughout, matching the store.
+func init() {
+	openapi.Describe("/v1/affiliates/me/earnings", http.MethodGet,
+		"Your commission ledger, by period and by referred org",
+		"The caller's own commission ledger: per period, the margin it earned against and "+
+			"the commission taken from that margin; and per referred org, that referral's "+
+			"aggregate contribution. Integer cents throughout.\n\n"+
+			"The per-org view deliberately carries the affiliate's OWN earned share and NOT "+
+			"the referred org's spend or margin. An affiliate is entitled to what it earned, "+
+			"not to a restatement of its customer's usage — the period view is where the "+
+			"margin base appears, aggregated across every referral.\n\n"+
+			"Scoped server-side to the validated caller's affiliate; a caller that is not one "+
+			"gets `isAffiliate:false`. An approved affiliate's ledger is refreshed by a "+
+			"bounded, best-effort sweep first, so the figures are current.")
+	openapi.Describe("/v1/affiliates/me/links", http.MethodGet,
+		"Your share links and their funnel",
+		"The caller's share links, each with its URL and its funnel: clicks tracked, signups "+
+			"— orgs attributed with that code — and conversions, meaning how many of those "+
+			"signups have actually produced commission.\n\n"+
+			"Signups and conversions are DERIVED from the commission ledger and never stored, "+
+			"so they cannot drift from the money. Clicks are the one stored counter and the "+
+			"one that is pure vanity.\n\n"+
+			"Any pending public click pings are folded into the store before the read, in one "+
+			"batch — which is how the counters stay current without a database write per "+
+			"click. Scoped to the validated caller's own affiliate; a non-affiliate gets "+
+			"`isAffiliate:false` and the link cap.")
+	openapi.Describe("/v1/affiliates/me/links", http.MethodPost,
+		"Mint a new share link",
+		"Mints a new share link for the caller's own affiliate and answers it with its full "+
+			"URL, 201.\n\n"+
+			"APPROVAL IS REQUIRED: an org that has applied but is not approved is refused, "+
+			"because a link that cannot accrue is a link that quietly loses the referral. A "+
+			"requested vanity code must be valid and free across the WHOLE directory — codes "+
+			"are one global namespace, so a taken code is a 409 rather than a silent alias. "+
+			"Omit the code and a random one is minted.\n\n"+
+			"Bounded per affiliate. The label is cosmetic: it is trimmed, stripped of control "+
+			"characters and capped, and it is never part of a code.")
+	openapi.Describe("/v1/affiliates/me/handle", http.MethodPost,
+		"Set or clear your public leaderboard name",
+		"Sets the caller's public leaderboard display name, or clears it.\n\n"+
+			"The handle IS the opt-in. An empty handle opts out: the affiliate keeps its rank "+
+			"and can still see its own row, it simply stops being listed to anyone else. That "+
+			"is the whole privacy control — there is no separate visibility flag, and no way to "+
+			"be listed without choosing a name.\n\n"+
+			"Requires a validated principal and an existing affiliate record; apply first. The "+
+			"handle is bounded and restricted to letters, digits, space, hyphen, underscore "+
+			"and dot.")
+	openapi.Describe("/v1/affiliates/click", http.MethodPost,
+		"Count a click on a share link",
+		"Counts a click on a share link. PUBLIC — it takes no principal, because a visitor "+
+			"clicking a shareable link has no session yet.\n\n"+
+			"The ping folds into an in-memory buffer and NEVER writes the money database "+
+			"synchronously, so a click flood cannot contend with the accrual and payout write "+
+			"path; tallies are flushed in one batch on the next authenticated links read and "+
+			"at shutdown. Clicks are a vanity metric: no accrual and no payout ever reads them "+
+			"— those key on real metered spend — so click inflation cannot move money.\n\n"+
+			"Any well-formed code is accepted WITHOUT checking that it exists, deliberately: "+
+			"this is not a code-existence oracle. `counted` reports that the buffer took the "+
+			"ping, not that the code is real; an unknown code simply no-ops at flush time.")
+	openapi.Describe("/v1/affiliates/leaderboard", http.MethodGet,
+		"The partner leaderboard, plus your own rank",
+		"The top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with "+
+			"aggregate figures only, plus the caller's own exact rank.\n\n"+
+			"It never discloses an org identity and never a referred org's usage. An affiliate "+
+			"that has set no handle still OCCUPIES its rank but is not listed — so opting out "+
+			"hides the name, not the position, and the visible board must not be read as a "+
+			"complete roster.\n\n"+
+			"The caller's own row carries its exact GLOBAL rank, computed over the whole "+
+			"approved set rather than over the page, so it is right well outside the top of the "+
+			"board. Only an approved affiliate has a rank. Requires a validated principal; a "+
+			"signed-in non-affiliate may read the board but gets no personal row.")
+	openapi.Describe("/v1/admin/affiliates/:id/rate", http.MethodPost,
+		"Set an affiliate's direct commission rate",
+		"Sets one affiliate's DIRECT commission rate, in basis points of Hanzo's margin.\n\n"+
+			"The rate is CAPPED so that the direct rate plus the platform-wide second- and "+
+			"third-level rates can never exceed the whole margin — the structural guarantee "+
+			"that everything paid on one source event stays inside the margin actually earned. "+
+			"The cap is resolved from the rates in force at the moment of the call and quoted "+
+			"in the refusal, because those switches move; a hardcoded bound would start lying "+
+			"the moment somebody edits the schedule.\n\n"+
+			"Only the direct level is per-affiliate. The second and third levels are platform "+
+			"switches and are not settable here. The change applies to FUTURE accruals — "+
+			"commission already latched for a period is not recomputed. PLATFORM SUDO ONLY. "+
+			"Audited.")
+}
 
 // ── earnings (the per-affiliate share-ledger projection) ────────────────────────
 
