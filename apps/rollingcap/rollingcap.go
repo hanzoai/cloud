@@ -25,8 +25,12 @@
 // The two knobs are platform switches, so admin.hanzo.ai renders and edits them live
 // through the existing /v1/admin/flags cockpit — this package adds NO bespoke admin
 // UI. Mounting registers no routes; it only installs the hook. It sits in its own
-// package (not the root cloud package) because it imports clients/flags, and flags
+// package (not the root cloud package) because it imports apps/flags, and flags
 // imports the root cloud package — the wiring must live above that edge.
+//
+// It is therefore CO-RESIDENT-ONLY. Both globals it composes are published in the
+// host process, so a rollingcap loaded as its own plugin process reads nil for both,
+// installs nothing, and serves no route — the cap only exists where the ai gate does.
 package rollingcap
 
 import (
@@ -90,10 +94,10 @@ func init() {
 // + wireFinance have already installed the globals it reads.
 func Mount(_ cloud.Router, _ cloud.Deps) error {
 	// cloud.TierReader is the SOURCE (wireTierReader sets it in BuildDeps, which
-	// runs before MountAll). aiobject's is a COPY clients/ai makes at ai.Mount, and
-	// reading that copy here made the cap DEAD in every deployment: cmd/rollingcap
-	// never links clients/ai at all, and in the unified binary apps.Wire() mounts
-	// rollingcap BEFORE ai — so the copy was nil either way and this took the
+	// runs before MountAll). aiobject's is a COPY apps/ai makes at ai.Mount, and
+	// reading that copy here made the cap DEAD in every deployment: plugin/rollingcap
+	// never links apps/ai at all, and the host mounts rollingcap ahead of ai in the
+	// manifest.Apps sequence — so the copy was nil either way and this took the
 	// early-out below on every boot. Read the source, not a copy of it.
 	tier := cloud.TierReader()
 	fin := finance.Current()

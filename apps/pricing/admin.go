@@ -1,3 +1,5 @@
+package pricing
+
 // Admin surface for the catalog enablement overlay (SuperAdmin only).
 //
 //	GET   /v1/admin/catalog                     full catalog + every entry's state
@@ -10,7 +12,6 @@
 // members of the global `admin` org. Same trust model the pricing /sync trigger
 // and provisioning already rely on. Non-admins get 403, never the catalog
 // state.
-package pricing
 
 import (
 	"context"

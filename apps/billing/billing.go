@@ -1,13 +1,17 @@
-// Package billing mounts the CUSTOMER-facing, org-scoped billing surface
-// (/v1/billing/{usage,balance,gpu-eligibility,gpu-charge,payment-methods}) on the
-// unified cloud binary.
+// Package billing is the customer's own money door: what my org holds, what it has
+// spent, and the cards it pays with. It serves the org-scoped
+// /v1/billing/{usage,usage/accounts,balance,gpu-eligibility,gpu-charge,payment-methods}
+// reads plus the six /v1/finance/{balance,credits,usage,invoices,payment-methods,ledger}
+// projections the finance UI renders (finance.go). It owns NEITHER prefix whole —
+// commerce serves the merchant half of /v1/billing/* (invoices, subscriptions,
+// spend-alerts, webhooks) and treasury serves /v1/finance/{treasury,accounts}.
 //
 // WHY THIS EXISTS. On the console host (console.hanzo.ai) the ingress routes
 // /v1/* straight to cloud-api:8000 — the console's Next BFF is reached only at
 // "/". So the console's /v1/billing/usage + /v1/billing/balance calls land HERE,
 // on cloud-api, NOT on the console's per-tenant commerce proxy. cloud-api
 // previously wired commerce billing ONLY under the admin-gated aggregate
-// (clients/admin, /v1/admin/*), so a normal org owner (e.g. davelorenzini /
+// (apps/admin, /v1/admin/*), so a normal org owner (e.g. davelorenzini /
 // maxpower) hitting /v1/billing/usage had NO customer route and was denied — the
 // "Access required" wall on every product overview + o11y usage panel. This adds
 // exactly the customer surface those calls need.
@@ -18,7 +22,7 @@
 // customer therefore reads ONLY their OWN org's ledger. The commerce billing
 // subject is pinned server-side to that org and NO client-supplied subject/org
 // query param is ever forwarded, so the browser cannot widen scope. This is the
-// per-org READ twin of the admin god-view (clients/admin) — the SAME commerce S2S
+// per-org READ twin of the admin god-view (apps/admin) — the SAME commerce S2S
 // machinery, but scoped to the caller instead of all-orgs (which stays admin-only).
 //
 // SUBJECT. Prepaid balance is per-ORG: commerce keys the wallet under the BARE org
@@ -27,10 +31,14 @@
 // the real wallet, "org/user" reads an empty one). The gateway debits this SAME
 // key, so a read here shows exactly what the org is charged.
 //
-// PASSTHROUGH. The console's normalizeUsageRecords parses commerce's RAW per-request
-// ledger ({usage:[{transactionId,amount,metadata,createdAt}]}); balance is the raw
-// {balance,holds,available} cents object. So this proxies commerce's body + status
-// VERBATIM — it never reshapes or rolls up (the rollup is the admin aggregate's job).
+// TWO BACKENDS, ONE WIRE. Balance and usage read the co-resident native ledger
+// DIRECTLY when finance is published (balance.go, usage_coresident.go) — which it always
+// is in the unified binary — and fall back to the commerce S2S proxy only on a split
+// deploy. Either way the wire is commerce's: the console's normalizeUsageRecords parses
+// the RAW per-request ledger ({usage:[{transactionId,amount,metadata,createdAt}]}) and
+// balance is the raw {balance,holds,available} cents object, so the proxy path forwards
+// commerce's body + status VERBATIM and never rolls up (the rollup is the admin
+// aggregate's job).
 package billing
 
 import (
