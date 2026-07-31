@@ -70,6 +70,14 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 	_, _ = rand.Read(raw)
 	t.Setenv("CLOUD_KMS_MASTER_KEY_REF", base64.StdEncoding.EncodeToString(raw))
 
+	// The tool plane bills its OWN orchestration unit on every successful call —
+	// cloud.DefaultResourceFeeCents, $1.00, unless a deployment prices it — and that
+	// debit is fire-and-forget on a background context. Left at its default it would
+	// land in the same ledger these tests read, asynchronously, so "the payer was
+	// debited exactly the price" would be measuring two charges and racing one of
+	// them. Priced at zero, the only thing that can move money here is x402.
+	t.Setenv("CLOUD_TOOLS_FEE_CENTS", "0")
+
 	log := luxlog.New("test")
 	dir := t.TempDir()
 
@@ -94,17 +102,10 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 	app := zip.New(zip.Config{Logger: log})
 	deps := cloud.Deps{Logger: log, KMS: kmsClient, DataDir: dir, Metering: meter}
 
-	act, aerr := tools.OpenActivationStore(dir + "/act.db")
-	if aerr != nil {
-		t.Fatalf("OpenActivationStore: %v", aerr)
-	}
-	tools.Default().SetActivation(act)
-	var offer []tools.Tool
-	for _, name := range offered {
-		offer = append(offer, tools.Tool{Name: name, Source: tools.SourceConnector, Dispatchable: true})
-	}
-	tools.Default().Register(&fakeProvider{tools: offer})
-
+	// Mount order is the composition root's: marketplace installs cloud.Bridge
+	// app-wide and fiber runs middleware in REGISTRATION order, so it must be
+	// registered before the tool plane's leaves or a dispatch reaches no parked
+	// request — no attested payer, and every priced tool 424s.
 	if err := wallets.Mount(app, deps); err != nil {
 		t.Fatalf("wallets.Mount: %v", err)
 	}
@@ -114,55 +115,33 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("marketplace.Mount: %v", err)
 	}
+
+	// The REAL tool plane, not a stand-in for it. A payment seam proved through a
+	// hand-rolled route proves the seam and not the product: the door that has to
+	// carry a payer, map a 402 and let the challenge header out is tools' own
+	// callTool, so that is the door every test here knocks on.
+	if err := tools.Mount(app, deps); err != nil {
+		t.Fatalf("tools.Mount: %v", err)
+	}
+	var offer []tools.Tool
+	for _, name := range offered {
+		offer = append(offer, tools.Tool{Name: name, Source: tools.SourceConnector, Dispatchable: true})
+	}
+	tools.Default().Register(&fakeProvider{tools: offer})
+
 	t.Cleanup(func() {
 		_ = Shutdown(context.Background())
+		_ = tools.Shutdown(context.Background())
 		_ = x402.Shutdown()
 		_ = wallets.Shutdown()
-		_ = act.Close()
 		finance.Publish(nil)
 		tools.Default().SetActivation(nil)
 	})
 
-	// The tool call is a route on this app, so a dispatch carries a request and
-	// therefore an attested payer — which is the whole reason payment can be
-	// enforced from inside a typed op at all.
 	m := &market{t: t, app: app, fin: fin}
-	m.mountToolCall()
 	m.key, _ = crypto.GenerateKey()
 	m.payee = m.createWallet(sellerOrg)
 	return m
-}
-
-// mountToolCall registers the one route under test: the tool plane's dispatch door,
-// with the same policy tools' own callTool applies (activation → payment → run) and
-// the same 402 mapping. It is registered here rather than by tools.Mount because
-// mounting the whole plane would drag five stores into a payment test; what matters
-// is that a dispatch happens ON a request.
-func (m *market) mountToolCall() {
-	g := m.app.Group("/v1/tools", cloud.Bridge())
-	g.Post("/call", func(c *zip.Ctx) error {
-		var in struct {
-			Name string `json:"name"`
-		}
-		if err := json.Unmarshal(c.Body(), &in); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]any{"error": "bad body"})
-		}
-		p, ok := tools.PrincipalFrom(c)
-		if !ok {
-			return c.JSON(http.StatusForbidden, map[string]any{"error": "sign in"})
-		}
-		out, err := tools.Default().Dispatch(c.Context(), p, in.Name, nil)
-		switch {
-		case err == nil:
-			return c.JSON(http.StatusOK, map[string]any{"result": out})
-		case errors.Is(err, tools.ErrPaymentRequired), errors.Is(err, tools.ErrChargerUnset):
-			return c.JSON(http.StatusPaymentRequired, map[string]any{"error": err.Error()})
-		case errors.Is(err, tools.ErrNotActivated):
-			return c.JSON(http.StatusForbidden, map[string]any{"error": err.Error()})
-		default:
-			return c.JSON(http.StatusFailedDependency, map[string]any{"error": err.Error()})
-		}
-	})
 }
 
 // createWallet provisions a real KMS wallet in org and returns its id — the payout
