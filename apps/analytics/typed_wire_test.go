@@ -189,9 +189,11 @@ var proseless = map[string]bool{
 	// The PostHog wire — now served on /v1/event, sniffed by decodeEvent.
 	"insightsBody": true, "insightsEvent": true,
 	// The health probe's report — the one body that is the same at 200 and 503 —
-	// including the sink's irrecoverable-loss counters, which reach the document
-	// nested inside it through that same Register seam.
-	"healthReport": true, "healthLenses": true, "healthLens": true, "loss": true,
+	// including the event plane's own availability and the sink's irrecoverable-loss
+	// counters, which reach the document nested inside it through that same Register
+	// seam. Every one of these fields carries a doc comment in Go; reflection is what
+	// cannot see it.
+	"healthReport": true, "healthLenses": true, "healthLens": true, "healthPlane": true, "loss": true,
 }
 
 // TestEveryPublishedFieldIsDescribed covers the RESPONSE side the op-level gate
@@ -421,6 +423,7 @@ func TestHealthReportKeepsTheMapItReplaced(t *testing.T) {
 	degraded, err := json.Marshal(healthReport{
 		Service: "analytics", Status: "degraded", Datastore: false, Warehouse: "hanzo",
 		Reason: "datastore (datastore) not connected",
+		Plane:  healthPlane{Bus: "nats://127.0.0.1:4222", Stream: EventStream, Ready: true},
 	})
 	if err != nil {
 		t.Fatalf("marshal degraded: %v", err)
@@ -437,6 +440,12 @@ func TestHealthReportKeepsTheMapItReplaced(t *testing.T) {
 		// when deliveries start failing, so a zero that disappears at the moment the
 		// number would move is worse than useless to whoever is reading this.
 		"lost": map[string]any{"undecodable": float64(0), "exhausted": float64(0)},
+		// `plane` is present on EVERY report for the same reason, and it is the field
+		// whose absence was an outage: this probe answered 200/ok on warehouse
+		// connectivity alone while 100% of writes failed on the bus. The two halves are
+		// independent — a reachable plane on a degraded report is real information, and
+		// so is a broken one — so neither hides behind the other's status.
+		"plane": map[string]any{"bus": "nats://127.0.0.1:4222", "stream": EventStream, "ready": true},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("degraded report = %v, want exactly %v — lenses must be ABSENT, not null: the "+
