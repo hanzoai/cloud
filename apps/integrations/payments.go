@@ -1,6 +1,8 @@
 package integrations
 
 // payments.go registers the payment/commerce connectors an online store needs:
+// Stripe is NOT among them and must not be re-added — Hanzo does not transact on
+// that rail, and a connector implies we do.
 // customer-held API keys, verified live against a cheap authenticated endpoint
 // via keyVerify. All user-scoped (the key belongs to the customer, not a Hanzo
 // OAuth app) — parity with the anthropic/openai key connectors.
@@ -11,18 +13,6 @@ import (
 )
 
 func init() {
-	register(&Provider{
-		ID: "stripe", Name: "Stripe",
-		Description: "Payments, billing, and payouts.",
-		Category:    "Payments", Scope: userScope,
-		Secrets: []string{apiKeySecret},
-		Verify: keyVerify(keySpec{
-			provider: "stripe",
-			origin:   constOrigin("STRIPE_API_BASE", "https://api.stripe.com"),
-			path:     "/v1/balance", place: bearer, minLen: 16,
-		}),
-	})
-
 	register(&Provider{
 		ID: "paypal", Name: "PayPal",
 		Description: "Checkout and payouts. Connect with client-id:secret.",
