@@ -124,7 +124,11 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 	}
 
 	// 1) Landing proof: per-name counts for THIS org, once the drain has consumed.
-	rows := awaitRows(t, ctx, 9, // 10 events over 9 distinct names (a page view + 8 named)
+	// The batch is 10 events over 10 DISTINCT names, so the group count and the row
+	// count are the same number. Waiting on a SMALLER number than the assertion below
+	// checks is a race, not a shortcut: the poll returns the moment the 9th name lands
+	// and the 10th row is then simply missing. Wait for exactly what is asserted.
+	rows := awaitRows(t, ctx, 10,
 		"SELECT name, count() AS n FROM "+eventsTable+" WHERE org = ? GROUP BY name ORDER BY name", org)
 	t.Logf("── %s landed rows (org=%s) ──", eventsTable, org)
 	total := 0

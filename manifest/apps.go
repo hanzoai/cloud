@@ -77,7 +77,16 @@ var Apps = []App{
 	{Name: "campaign", Prefixes: []string{"/v1/campaign"}},
 	{Name: "validators", Prefixes: []string{"/v1/validators"}},
 	{Name: "social", Prefixes: []string{"/v1/social"}},
-	{Name: "analytics", Prefixes: []string{"/v1/analytics/health", "/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top", "/v1/errors", "/v1/insights/events", "/v1/insights/health"}},
+	// The INGESTION doors are load-bearing, not decorative: apps/analytics/event.go's
+	// `doors` table serves /v1/event, /v1/insights/e, /v1/analytics and /v1/analytics/batch,
+	// and every beacon the products emit lands on one of them. Listing only the read
+	// endpoints (as this row did) sent every write to commerce's bare "/v1" catch-all,
+	// which does not serve them — 405, silently, for every event in the fleet. The row was
+	// harmless while each app called its own routes(); it became the router when the
+	// mega-build died, so a missing prefix is now an outage. Bare "/v1/analytics" covers
+	// the batch door and the four read lenses; "/v1/event" covers the Team SPA's
+	// (product, team, LLM-obs, Sentry envelope). /v1/tracker is NOT here: apps/tracker owns that name.
+	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/insights/e", "/v1/insights/events", "/v1/insights/health"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/agent-bindings", "/v1/clusters", "/v1/compute/bots", "/v1/compute/regions", "/v1/compute/sizes", "/v1/fleet", "/v1/gpus", "/v1/k8s/clusters", "/v1/k8s/nodes", "/v1/machines"}},
