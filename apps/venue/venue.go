@@ -6,8 +6,8 @@
 // Package venue is the org-scoped "connect a cloud account" plane: an org links
 // its native cloud-provider accounts (DigitalOcean / AWS / GCP), and Hanzo
 // DISCOVERS the Kubernetes clusters in each account and FOLDS them into the ONE
-// fleet (clients/fleet) — the same registry clients/visor surfaces at
-// /v1/clusters and clients/ml federates workloads onto. There is no second
+// fleet (apps/fleet) — the same registry apps/visor surfaces at
+// /v1/clusters and apps/ml federates workloads onto. There is no second
 // cluster registry: discovery ends at fleet.Register, exactly where a hand-pasted
 // BYO kubeconfig (visor.attachCluster) ends, so a discovered cluster appears in
 // /v1/clusters and can run work like any managed or BYO cluster.
@@ -28,7 +28,7 @@
 // sealed in the org's KMS namespace (/orgs/{org}/cloud/{provider}/{label}), and
 // recorded in the org's account index (metadata only — the credential is never in
 // the index, a response, or a log line). This is DISTINCT from the platform's own
-// house DO key (clients/do, one DO_API_TOKEN for Hanzo's own VPCs/LBs): a venue
+// house DO key (apps/do, one DO_API_TOKEN for Hanzo's own VPCs/LBs): a venue
 // account is the CUSTOMER's cloud account, org-scoped and isolated.
 //
 // TENANT ISOLATION. org is principal.Org (the ZAP-propagated, gateway-validated

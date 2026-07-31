@@ -8,6 +8,7 @@
 //	  CR (an annotation bump the operator's watch observes). Today the CR is the
 //	  desired source, so sync = nudge-reconcile; when git.hanzo.ai is the source it
 //	  becomes apply-desired-from-git, same endpoint.
+
 package deploy
 
 import (

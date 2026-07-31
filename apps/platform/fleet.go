@@ -41,6 +41,7 @@
 // construction clients/ml uses. When no kubeconfig is resolvable the board mounts
 // anyway and every endpoint fails closed (503 + the real init error; the shared
 // /v1/platform/health route reports "degraded"), never status-theater.
+
 package platform
 
 import (

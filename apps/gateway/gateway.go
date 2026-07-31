@@ -5,7 +5,7 @@
 // cap, or a tenant's authenticated rate ceiling with NO redeploy — replacing the
 // gateway's baked-into-an-image KrakenD config.
 //
-// TWO IAM-gated scopes (mirrors clients/pricing/enablement.go: global state is
+// TWO IAM-gated scopes (mirrors apps/pricing/enablement.go: global state is
 // SuperAdmin-only, self-service is scoped to the validated tenant):
 //
 //   - PLATFORM policy (CORS origins, per-IP cap + window) — pre-auth edge knobs

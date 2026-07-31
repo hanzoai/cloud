@@ -16,6 +16,7 @@
 // tenant-<row.Org>, derived from the row and never from a request. Fail-safe on
 // read: a project store that cannot answer reaps NOTHING, because "IAM is
 // unavailable" and "the project is gone" must never be the same signal.
+
 package platform
 
 import (

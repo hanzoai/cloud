@@ -25,6 +25,7 @@
 // tenancy key). The response is a `{ "<plural>": [...] }` object — the exact
 // shape the console FE normalizers read (r.environments / r.pipelines / r.builds
 // / r.releases).
+
 package platform
 
 import (

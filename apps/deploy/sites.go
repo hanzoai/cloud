@@ -11,6 +11,7 @@
 // to report (Version == RunningVersion == "static" ⇒ Synced). Health is whether the
 // site is actually reachable: a staticFiles Middleware with a matching IngressRoute
 // host is Healthy; one defined but never routed is Missing.
+
 package deploy
 
 import (

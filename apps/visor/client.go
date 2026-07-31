@@ -16,6 +16,7 @@
 // data}. A logical failure is status:"error" at HTTP 200, NOT a 4xx/5xx — so a
 // bare status-code check would read an error as success. call() inspects the
 // status field and surfaces msg as an honest error; it never fabricates data.
+
 package visor
 
 import (
