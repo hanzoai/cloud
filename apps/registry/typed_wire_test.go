@@ -343,6 +343,38 @@ func TestNoPrincipalIs403AndNoUpstreamByte(t *testing.T) {
 	}
 }
 
+// A signed-in caller whose token names NO org is refused too, and just as early.
+// Every repository name on this plane is `<org>/<image>`, so a request with no
+// tenant cannot address anything: there is no whole-registry view to fall back
+// to, and inventing one would be the cross-tenant read the org segment exists to
+// make inexpressible. Same 403 the anonymous caller gets — the status is the
+// contract — and the same zero upstream bytes.
+func TestValidatedWithNoOrgIsRefused(t *testing.T) {
+	app, f, p := harness(t)
+	for _, probe := range []struct{ method, path, body string }{
+		{http.MethodGet, "/v1/registry/status", ""},
+		{http.MethodGet, "/v1/registry/projects", ""},
+		{http.MethodGet, "/v1/registry/images", ""},
+		{http.MethodGet, "/v1/registry/tags?image=api", ""},
+		{http.MethodGet, "/v1/registry/packages", ""},
+		{http.MethodPost, "/v1/registry/token", `{"image":"api"}`},
+	} {
+		status, body := do(t, app, probe.method, probe.path, "u1", "", probe.body)
+		if status != http.StatusForbidden {
+			t.Errorf("%s %s validated with no org = %d, want 403; body=%s", probe.method, probe.path, status, body)
+		}
+	}
+	f.mu.Lock()
+	touched := len(f.calls) + len(f.scopes) + f.probes
+	f.mu.Unlock()
+	p.mu.Lock()
+	touched += len(p.searches)
+	p.mu.Unlock()
+	if touched != 0 {
+		t.Errorf("upstreams were contacted %d time(s) for a tenant-less caller; must be 0", touched)
+	}
+}
+
 // The catalog is filtered to the org's namespace BEFORE the response exists:
 // acme sees exactly its own repositories (org-relative names, full refs),
 // never globex's and never the unprefixed platform names.

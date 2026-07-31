@@ -38,10 +38,23 @@ The registries are shared platform deployments, so the org boundary is
 enforced HERE on their own namespace conventions: an org's images are the
 catalog entries under `<org>/…` (the fleet's `<host>/<org>/<app>` push
 convention) and its npm packages are `<org>` and `@<org>/…`. The org comes
-from the validated principal (principal.Org), never an In field; per-image ops
-pass the `owned` gate, which composes the ONE addressable repository name
+from the validated principal — `principal.OrgFrom(ctx)`, the org `cloud.Bridge`
+parked by calling `principal.Org` — and NEVER an In field; per-image ops pass
+the `owned` gate, which composes the ONE addressable repository name
 `<org>/<image>` — a foreign repository cannot be expressed. Filtering happens
 before any response shape exists. typed_wire_test.go measures all of it.
+
+`caller` is ONE refusal, not three, and takes no `cloud.Request`: the org is all
+this plane needs, and `principal.Org` already composes the validated-principal
+check (`OrgOf` returns false on an empty `X-User-Id`, which is exactly
+`principal.Validated`). Both refused states are 403 and only the status is
+contract, so they answer one product-facing message —
+`TestNoPrincipalIs403AndNoUpstreamByte` (the forge) and
+`TestValidatedWithNoOrgIsRefused` (signed in, no tenant, so no repository name
+exists to address) prove both refuse before an upstream byte. The signed-in-but
+org-less state is already diagnosed where it is KNOWN, by the identity boundary,
+which logs it with the subject and the audience (`SanitizeIdentity`, "token names
+no home org").
 
 Config: REGISTRY_UPSTREAM (default `https://oci.hanzo.ai`), REGISTRY_PKG
 (default `https://pkg.hanzo.ai`), REGISTRY_CLIENT_ID / REGISTRY_CLIENT_SECRET
