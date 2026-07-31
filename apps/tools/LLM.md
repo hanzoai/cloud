@@ -115,20 +115,47 @@ never the right type. `CheapestPublicForTool` also compares in Go rather than SQ
 `$10` is `10^19` atto, past int64, so `ORDER BY CAST(price AS INTEGER)` would
 mis-order the expensive half of the shop.
 
-### What is NOT closed — the process boundary
+### What is NOT closed — the process boundary. THE SEAM IS INERT IN PRODUCTION.
 
-All three seams are process-globals (`x402.reg`, `tools.std`, `wallets.mounted`), so
-the wiring binds **within one process**. In the split fleet (`manifest/apps.go` runs
-`tools`, `marketplace`, `x402` and `wallets` as four binaries) a dispatch in the
-tools process finds no charger and fails CLOSED — `ErrChargerUnset` → 402. Safe, but
-still unpayable there.
+All three seams are process-globals (`x402.reg`, `tools.std`, wallets' mounted
+singleton), so the wiring binds **within one process**. The shipped fleet runs **one
+process per app**, and that is the only topology there is:
 
-This predates the change: `tools.SetPricer` was called from the same Mount and had
-the same property. What it needs is a price table the tools process can read —
-either a shared store or an internal settle call on `apps/x402` — and that is a
-deployment-topology decision, not a wiring one. Until then, a priced tool is payable
-exactly where marketplace, x402 and wallets are co-resident, which is what
-`apps/marketplace/payments_test.go` composes and proves end to end.
+- `manifest/apps.go` declares `tools`, `marketplace`, `x402`, `wallets` as ordinary
+  prefix-routed rows. `Coresident` — the one flag that puts an app in another's
+  process — is set by exactly one app, `zen` (`manifest/apps.go:194`).
+- `Dockerfile` builds one binary per row into `/plugins`; `cmd/cloud` is a router
+  that `zip.Load`s each as a **child process** (`cmd/cloud/main.go:257`).
+- The fused monolith that linked all subsystems is **deleted**
+  (`cmd/cloud/main.go:1-9`).
+
+So the honest state of this defect, per process:
+
+| process | what it has | what happens |
+|---|---|---|
+| `tools` | no charger | every priced dispatch → `ErrChargerUnset` → 402 |
+| `marketplace` | a price table in its own `x402.reg`, no mounted x402 | `x402.Settle` finds `mounted == nil` |
+| `x402` | no price table, no wallets, no finance | nothing to enforce against |
+
+Every one of those fails **closed** — a paid tool is never served free, and
+`x402.Enforce` now refuses rather than passing through when no table is published
+(`apps/x402/x402.go`, `unenforceable`), which is the one place this used to fail
+OPEN. What does not hold is that a priced tool can be **bought**.
+
+Closing it is a fleet-topology change, and the fleet already has the pattern: the
+internal plane. `resource_billing_peer.go` documents the identical bug — *"Splitting
+apps into their own binaries turned every priced create free without changing a line
+of billing code"* — and the answer was to ASK the owning process (`cloud.Ask` /
+`zip.Post` on `cloud.Plane()`; see `apps/commerce/meter_rpc.go`). Four ops close it:
+
+1. `tools` → `x402`: settle this tool call
+2. `x402` → `marketplace`: what does this resource cost, and who is paid
+3. `x402` → `wallets`: resolve the payee wallet in the publisher's org
+4. `x402` → `commerce`: credit the payee (the payer debit already peers)
+
+Until those exist, a priced listing is payable exactly where the four are
+co-resident, which is what `apps/marketplace/payments_test.go` composes — through
+the real `tools.Mount` door — and proves end to end.
 
 ## Running a stdio package in our cloud — NOT BUILT, and why
 
