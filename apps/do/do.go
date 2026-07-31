@@ -1,10 +1,9 @@
-// Package do mounts the Hanzo Cloud DigitalOcean-native infra surface —
-// /v1/vpcs and /v1/load-balancers — on the unified cloud binary (HIP-0106).
-// DigitalOcean is Hanzo's EXCLUSIVE cloud venue; VPCs and Load Balancers are
-// first-class DO resources, so this subsystem is a thin, org-scoped facade over
-// the digitalocean/godo SDK's native VPCs + LoadBalancers services. It backs the
-// console's "VPC" and "Load Balancers" pages, which render "not connected" today
-// because nothing serves them.
+// Package do is the org-scoped private-network surface — /v1/vpcs and
+// /v1/load-balancers — carved out of Hanzo's OWN house DigitalOcean account.
+//
+// It is the house-account facade over digitalocean/godo's VPCs + LoadBalancers.
+// An org's OWN cloud accounts (DigitalOcean, AWS, GCP, Azure) are a different
+// plane: apps/venue links those and folds their clusters into the fleet.
 //
 //	GET    /v1/vpcs                 list the caller's VPCs            -> {vpcs:[...]}
 //	POST   /v1/vpcs                 create {name,region,ip_range}     -> Vpc
@@ -18,7 +17,7 @@
 // TENANT ISOLATION — DigitalOcean is a SINGLE account, so the org boundary is
 // enforced by this subsystem, not by DO. A resource's PHYSICAL DO name is derived
 // from the caller's validated org as "o"<orgHash>-<friendly> — the SAME org-hash,
-// DNS-safe convention clients/s3 + clients/provisioning use for shared backends
+// DNS-safe convention apps/storage + apps/provisioning use for shared backends
 // (provisioning.BucketName). The client speaks FRIENDLY names ("web"); the server
 // maps friendly↔physical and never trusts a client-supplied physical name. LIST
 // filters DO's account-wide inventory to the caller's "o"<orgHash>- prefix and

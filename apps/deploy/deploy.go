@@ -1,11 +1,12 @@
-// Package gitops mounts the native GitOps control plane at /v1/deploy — the
-// ArgoCD-grade deploy dashboard for the operator-managed fleet, made native to
-// the cloud binary and parallel to /v1/git (the native git server).
+// Package deploy is Hanzo CD: the GitOps plane at /v1/deploy — observe the
+// operator-managed fleet (applications, resource tree, per-object health, live
+// diff, logs), and reconcile it (sync, rollback, git → cluster with prune-safe
+// self-heal).
 //
 // Each operator hanzo.ai/v1 App CR IS a GitOps Application: the desired state
 // declared for one workload, which the Hanzo operator reconciles into a
 // Deployment + Service + Ingress (+ HPA/PDB/Pods). This plane OBSERVES that
-// reconciliation the way ArgoCD observes a synced Application —
+// reconciliation the way a CD controller observes a synced Application —
 //
 //	GET  /v1/deploy/applications        — the fleet list: name, declared version,
 //	                                      health, sync, per app.

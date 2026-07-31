@@ -20,6 +20,7 @@
 // operator view observes CD, it never drives it (sync policy here is `automated`
 // with selfHeal, so the plane reconciles itself; the actionable verb an operator
 // has is the per-app reconcile already served by dashSync).
+
 package deploy
 
 import (

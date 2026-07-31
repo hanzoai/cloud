@@ -11,6 +11,7 @@
 //   - an image-ref allowlist restricted to the org registries we own,
 //
 // so a leaked token can never push to an arbitrary registry.
+
 package platform
 
 import (

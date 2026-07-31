@@ -12,6 +12,7 @@
 // (list + detail + tree). Distinct from the native `Application` (applications.go)
 // which backs the native /v1/deploy/applications surface — this backs the
 // ArgoCD-UI-compatible /v1/deploy/* surface (dashboard.go; no /api/, no inner /v1).
+
 package deploy
 
 import (

@@ -5,6 +5,7 @@
 // normal org reads only its OWN apps' detail (a cross-tenant name is a clean 404,
 // no existence oracle), a SuperAdmin reads the whole fleet, and an unvalidated
 // caller fails closed. There is ONE scoping path (scope.go); nothing here forks it.
+
 package deploy
 
 import (
