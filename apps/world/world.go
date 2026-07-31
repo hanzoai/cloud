@@ -26,6 +26,8 @@
 // Order 142 binds /v1/world/* ahead of the AI /v1/* catch-all (150).
 package world
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"fmt"
 	"net/http"
@@ -36,6 +38,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 const (
@@ -122,12 +125,28 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// EVERY org and enforcing now would 402 all users. Flip on once the catalog
 	// licenses "world" to a tier (and confirm /v1/world/news may 403 unvalidated —
 	// RequireProduct refuses anonymous callers). See clients/entitlements.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("world.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
 	g := app.Group("/v1/world")
-	g.Get("/news", s.getNews)
-	g.Get("/pipeline", s.getPipeline)
-	g.Put("/pipeline", s.putPipeline)
+	// The typed-op bridge FIRST — fiber runs middleware in registration order, so
+	// one installed after these leaves would never run, and every op below takes
+	// the request off the context it parks. Bounded to world's own subtree. Serve
+	// installs one app-wide too; nesting is harmless, and this is what makes the
+	// surface testable on a bare app.
+	g.Use(cloud.Bridge())
+
+	zip.Get(zapp, "/v1/world/news", s.getNews)
+	zip.Get(zapp, "/v1/world/pipeline", s.getPipeline)
+	zip.Put(zapp, "/v1/world/pipeline", s.putPipeline)
+	zip.Get(zapp, "/v1/world/limits", s.getLimits)
+
+	// stream stays an untyped route: it answers text/event-stream, not one JSON
+	// value, so there is no Out for a typed op to declare and nothing a generated
+	// client could decode. It is invisible to the OpenAPI schema, the MCP tool
+	// list and the CLI by that fact, not by omission.
 	g.Get("/stream", s.stream)
-	g.Get("/limits", s.getLimits)
 
 	log.Info("world surface mounted", "brand", deps.Brand,
 		"ai", s.ai != nil, "kms", s.kms != nil, "allowlisted_hosts", len(s.rssAllow))

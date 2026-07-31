@@ -21,23 +21,105 @@
   "paths": {
     "/v1/admin/authors": {
       "get": {
-        "operationId": "get_v1_admin_authors",
+        "operationId": "adminAuthors",
+        "summary": "adminList reads every author with its repo and deploy counts, plus a fleet tally of\naccrued, pending and paid royalty.",
+        "description": "adminList reads every author with its repo and deploy counts, plus a fleet tally of\naccrued, pending and paid royalty. SuperAdmin only.",
         "tags": [
           "admin"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; absent or non-positive means 500, and nothing\nabove 1000 is honoured.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "authors": [
+                      {
+                        "accruedCents": 1250,
+                        "approvedAt": 1780000100,
+                        "createdAt": 1780000000,
+                        "deployCount": 12,
+                        "githubLogin": "octocat",
+                        "id": "aut_9f2a",
+                        "org": "acme",
+                        "paidCents": 0,
+                        "pendingCents": 1250,
+                        "repoCount": 3,
+                        "shareBps": 2000,
+                        "status": "approved",
+                        "suspendedAt": 0,
+                        "verified": true
+                      }
+                    ],
+                    "summary": {
+                      "accruedCents": 1250,
+                      "approved": 1,
+                      "connected": 0,
+                      "paidCents": 0,
+                      "pendingCents": 1250,
+                      "suspended": 0,
+                      "total": 1
+                    }
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorDirectory"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/authors/sweep": {
       "post": {
-        "operationId": "post_v1_admin_authors_sweep",
+        "operationId": "adminAuthorSweep",
+        "summary": "adminSweep accrues this period's royalty for every approved author.",
+        "description": "adminSweep accrues this period's royalty for every approved author. It is the\noperator's override of the scheduler's automatic pass.\n\nThe fold walks each approved author's DISTINCT deploying orgs and latches royalty\nat-most-once per (author, org, period), so running it twice accrues nothing the\nsecond time. A per-author failure is logged and skipped, never fatal. SuperAdmin\nonly.",
         "tags": [
           "admin"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "accrued": 3,
+                    "swept": 12
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorSweepOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/authors/{id}/approve": {
       "post": {
-        "operationId": "post_v1_admin_authors_by_id_approve",
+        "operationId": "adminAuthorApprove",
+        "summary": "adminApprove admits an author to earning, optionally overriding their royalty\nshare.",
+        "description": "adminApprove admits an author to earning, optionally overriding their royalty\nshare. SuperAdmin only.",
         "tags": [
           "admin"
         ],
@@ -46,16 +128,68 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the author id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "aut_9f2a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "aut_9f2a",
+                "shareBps": 2500
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AuthorApprove"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "author": {
+                      "accruedCents": 0,
+                      "approvedAt": 1780000100,
+                      "createdAt": 1780000000,
+                      "deployCount": 0,
+                      "githubLogin": "octocat",
+                      "id": "aut_9f2a",
+                      "org": "acme",
+                      "paidCents": 0,
+                      "pendingCents": 0,
+                      "repoCount": 0,
+                      "shareBps": 2500,
+                      "status": "approved",
+                      "suspendedAt": 0,
+                      "verified": true
+                    }
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorOne"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/authors/{id}/basis": {
       "get": {
-        "operationId": "get_v1_admin_authors_by_id_basis",
+        "operationId": "adminAuthorBasis",
+        "summary": "adminBasis reads one author's royalty basis.",
+        "description": "adminBasis reads one author's royalty basis. It runs the SAME builder the author's\nown endpoint runs, so support sees exactly what the author sees. SuperAdmin only.",
         "tags": [
           "admin"
         ],
@@ -64,16 +198,54 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the author id from the path, as returned by the admin directory.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "aut_9f2a"
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "Period is the UTC year-month, e.g. \"2026-07\". Empty is every period.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-07"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "id": "aut_9f2a",
+                    "isAuthor": true,
+                    "ledger": [],
+                    "platformShareBps": 8000,
+                    "shareBps": 2000,
+                    "status": "approved"
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorBasisOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/authors/{id}/payout": {
       "post": {
-        "operationId": "post_v1_admin_authors_by_id_payout",
+        "operationId": "adminAuthorPayout",
+        "summary": "adminPayout records a payout of accrued royalty and settles it.",
+        "description": "adminPayout records a payout of accrued royalty and settles it. Both guards run\nbefore any money moves.\n\nA \"credits\" method issues a commerce grant into the author's wallet; a cash method\nis record-only. The amount can never exceed pending (accrued − paid), reserved\natomically before any grant, and an external payout must additionally be backed by\nthe treasury reserve — an unbacked one is refused with 402 and the reservation\nvoided. SuperAdmin only.",
         "tags": [
           "admin"
         ],
@@ -82,16 +254,79 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the author id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "aut_9f2a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "amountCents": 1250,
+                "id": "aut_9f2a",
+                "method": "credits",
+                "reference": "Q3 royalty"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AuthorPayoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "author": {
+                      "accruedCents": 1250,
+                      "approvedAt": 1780000100,
+                      "createdAt": 1780000000,
+                      "deployCount": 0,
+                      "githubLogin": "octocat",
+                      "id": "aut_9f2a",
+                      "org": "acme",
+                      "paidCents": 1250,
+                      "pendingCents": 0,
+                      "repoCount": 0,
+                      "shareBps": 2000,
+                      "status": "approved",
+                      "suspendedAt": 0,
+                      "verified": true
+                    },
+                    "payout": {
+                      "amountCents": 1250,
+                      "createdAt": 1780000000,
+                      "id": "apo_1d7f",
+                      "method": "credits",
+                      "reference": "Q3 royalty",
+                      "settlement": "wallet",
+                      "txn": "txn_44"
+                    }
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorPayoutOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/authors/{id}/suspend": {
       "post": {
-        "operationId": "post_v1_admin_authors_by_id_suspend",
+        "operationId": "adminAuthorSuspend",
+        "summary": "adminSuspend stops an author earning, leaving accrued royalty payable.",
+        "description": "adminSuspend stops an author earning, leaving accrued royalty payable. SuperAdmin\nonly.",
         "tags": [
           "admin"
         ],
@@ -100,51 +335,741 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the author id from the path, as returned by the admin directory.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "aut_9f2a"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "aut_9f2a"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AuthorRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "author": {
+                      "accruedCents": 1250,
+                      "approvedAt": 1780000100,
+                      "createdAt": 1780000000,
+                      "deployCount": 0,
+                      "githubLogin": "octocat",
+                      "id": "aut_9f2a",
+                      "org": "acme",
+                      "paidCents": 0,
+                      "pendingCents": 1250,
+                      "repoCount": 0,
+                      "shareBps": 2000,
+                      "status": "suspended",
+                      "suspendedAt": 1780000200,
+                      "verified": true
+                    }
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorOne"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/authors": {
       "get": {
-        "operationId": "get_v1_authors",
+        "operationId": "authorMe",
+        "summary": "myAuthors reads the caller org's author dashboard.",
+        "description": "myAuthors reads the caller org's author dashboard. It answers status, login,\nverified repos and owner claims, deploy edges, accrued/pending/paid royalty and\npayout history.\n\nAn org that has not connected gets an honest {isAuthor:false} shape so the console\ncan show the connect form — not a 404, which would answer \"is this org an author?\".\nFor an APPROVED author it ALSO opportunistically runs the accrual sweep, so the\ndashboard is self-updating; a commerce hiccup never fails the page.\n\nThe response is the open dashboard document, not a fixed record: the enrolled and\nnot-enrolled answers carry different keys, so no single struct states it truthfully.",
         "tags": [
           "authors"
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       }
     },
     "/v1/authors/basis": {
       "get": {
-        "operationId": "get_v1_authors_basis",
+        "operationId": "authorBasis",
+        "summary": "basis reads the audit trail behind the caller's OWN royalty.",
+        "description": "basis reads the audit trail behind the caller's OWN royalty. It answers the current\ncost model, the immutable ledger rows with the attribution edges that explain each,\nan account-wide reconciliation, and an honest statement of the slice returned.\n\nThe subject is the principal's org, so no id can be supplied. It is a separate\nendpoint from the dashboard precisely because the dashboard accrues lazily on read:\nan audit must not move the money it is auditing, so this path never sweeps and\ncalling it N times leaves the balances and the ledger byte-identical. An org that\nis not an author gets {isAuthor:false}, not a 404, which would answer \"is this org\nan author?\".\n\nThe response is the open basis document, not a fixed record: the enrolled and\nnot-enrolled answers carry different keys, and the model, reconciliation and window\nsections grow with the disclosure.",
         "tags": [
           "authors"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "Period is the UTC year-month the accrual latch mints, e.g. \"2026-07\". Empty is\nevery period; any other shape is refused.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-07"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       }
     },
     "/v1/authors/connect": {
       "post": {
-        "operationId": "post_v1_authors_connect",
+        "operationId": "authorConnect",
+        "summary": "connect enrolls the caller's org as an author.",
+        "description": "connect enrolls the caller's org as an author. It answers the verify material an\nauthor places on their default branch, and is idempotent — a repeat connect returns\nthe existing author with created:false.\n\nThe login comes from IAM's linked forge account when there is one (identity\nverified), else from the supplied login, which is verified later per repo. The\nresponse is 201 on the call that enrolled the org and 200 on a repeat.",
         "tags": [
           "authors"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "login": "octocat",
+                "provider": "github"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AuthorConnect"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": true,
+                  "githubLogin": "octocat",
+                  "id": "aut_9f2a",
+                  "shareBps": 2000,
+                  "status": "connected",
+                  "verified": true,
+                  "verifyCode": "avc_1d7f",
+                  "verifyFile": "hanzo.json",
+                  "verifySnippet": "{\n  \"hanzoAuthorCode\": \"avc_1d7f\"\n}"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorIdentity"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/authors/deploys/record": {
       "post": {
-        "operationId": "post_v1_authors_deploys_record",
+        "operationId": "authorRecordDeploy",
+        "summary": "recordDeploy records a deploy-attribution edge for the caller's DEPLOYING org.",
+        "description": "recordDeploy records a deploy-attribution edge for the caller's DEPLOYING org. It\nis what makes a deploy earn its author royalty.\n\nWhen repoUrl names a VERIFIED author repo — or a repo under a verified owner — the\nedge is recorded (idempotent per repo+project+org) and becomes eligible for royalty.\nA repo that is not a verified author repo is NOT an error: it answers recorded:false\nso the deploy path can fire this unconditionally. A self-deploy is recorded for\nprovenance but excluded from accrual. 201 on the call that wrote the edge.",
         "tags": [
           "authors"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "project": "prj_4c1e",
+                "repoUrl": "github.com/octocat/hello-world"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AuthorDeploy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": true,
+                  "createdAt": 1780000000,
+                  "deployId": "ade_1d7f",
+                  "recorded": true,
+                  "self": false
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorDeployRecorded"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/authors/repos/verify": {
       "post": {
-        "operationId": "post_v1_authors_repos_verify",
+        "operationId": "authorVerifyRepo",
+        "summary": "verifyRepo proves the caller owns a repo or a whole owner.",
+        "description": "verifyRepo proves the caller owns a repo or a whole owner. Both are proven the same\ntwo ways, and both record a claim.\n\nA repo url records a per-repo claim; an owner url records an owner-wide claim\ncovering every repo under that owner. Ownership is proven the SAME two ways in both\ncases: an IAM-linked forge token with admin/push permission, or a hanzo.json\ncarrying the author's verify code on the default branch (for an owner, of its\n.github control repo). Unprovable ownership is 422, a claim another author already\nholds is 409, and the caller must have connected first. 201 on the call that\nrecorded the claim, 200 on a repeat.",
         "tags": [
           "authors"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "repoUrl": "github.com/octocat/hello-world"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AuthorVerify"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": true,
+                  "repo": {
+                    "badgeMarkdown": "[![Deploy on Hanzo](https://hanzo.ai/deploy-badge.svg)](https://hanzo.ai/new?template=https://github.com/octocat/hello-world)",
+                    "createdAt": 1780000000,
+                    "method": "oauth",
+                    "repoUrl": "github.com/octocat/hello-world",
+                    "verified": true,
+                    "verifiedAt": 1780000000
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorClaim"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdminAuthorView": {
+        "properties": {
+          "accruedCents": {
+            "description": "AccruedCents is lifetime royalty earned.",
+            "type": "integer"
+          },
+          "approvedAt": {
+            "description": "ApprovedAt is unix seconds when the author was admitted to earning; 0 if never.",
+            "type": "integer"
+          },
+          "createdAt": {
+            "description": "CreatedAt is unix seconds when the org connected.",
+            "type": "integer"
+          },
+          "deployCount": {
+            "description": "DeployCount is how many attribution edges point at this author. 0 on the\nsingle-author answers, which do not count.",
+            "type": "integer"
+          },
+          "githubLogin": {
+            "description": "GithubLogin is the linked forge login.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the author id.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the author's own org, exposed here and nowhere on the customer surface.",
+            "type": "string"
+          },
+          "paidCents": {
+            "description": "PaidCents is lifetime royalty paid out.",
+            "type": "integer"
+          },
+          "pendingCents": {
+            "description": "PendingCents is accrued minus paid, never negative.",
+            "type": "integer"
+          },
+          "repoCount": {
+            "description": "RepoCount is how many repos this author has claimed. 0 on the single-author\nanswers, which do not count.",
+            "type": "integer"
+          },
+          "shareBps": {
+            "description": "ShareBps is the author's royalty share in basis points.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is connected, approved or suspended.",
+            "type": "string"
+          },
+          "suspendedAt": {
+            "description": "SuspendedAt is unix seconds when the author was suspended; 0 if never.",
+            "type": "integer"
+          },
+          "verified": {
+            "description": "Verified reports an IAM-linked forge identity rather than file-only proof.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorApprove": {
+        "properties": {
+          "id": {
+            "description": "ID is the author id from the path.",
+            "type": "string"
+          },
+          "shareBps": {
+            "description": "ShareBps overrides the author's royalty share, in basis points (0–10000). 0\nkeeps the current share.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorBasisOut": {
+        "properties": {
+          "data": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Data is the SAME open basis document the author's own endpoint returns.",
+            "type": "object"
+          },
+          "msg": {
+            "description": "Msg is empty on success.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorClaim": {
+        "properties": {
+          "created": {
+            "description": "Created is true when THIS call recorded the claim; false when it already\nexisted.",
+            "type": "boolean"
+          },
+          "org": {
+            "$ref": "#/components/schemas/AuthorOwnerView",
+            "description": "Owner is the owner-wide claim covering every repo under that owner, present\nwhen the url named an owner. It is serialized as \"org\"."
+          },
+          "repo": {
+            "$ref": "#/components/schemas/AuthorRepoView",
+            "description": "Repo is the per-repo claim, present when the url named a repo."
+          }
+        },
+        "type": "object"
+      },
+      "AuthorConnect": {
+        "properties": {
+          "githubLogin": {
+            "description": "GithubLogin is the login to link when IAM holds no linked account for the\nprovider. Ignored when one is linked — that identity is stronger proof.",
+            "type": "string"
+          },
+          "login": {
+            "description": "Login is the provider-neutral alias for GithubLogin, and wins when both are\nsent.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the forge to link: \"github\" or \"gitlab\". Empty means github.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorDeploy": {
+        "properties": {
+          "project": {
+            "description": "Project is the deployed project's id. Required.",
+            "type": "string"
+          },
+          "repoUrl": {
+            "description": "RepoURL is the forge repo the project was sourced from. Empty means a\nhand-built project with nothing to attribute.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project"
+        ],
+        "type": "object"
+      },
+      "AuthorDeployRecorded": {
+        "properties": {
+          "created": {
+            "description": "Created is true when THIS call wrote the edge, false when it already existed.\nPresent only on a recorded:true answer.",
+            "type": "boolean"
+          },
+          "createdAt": {
+            "description": "CreatedAt is unix seconds when the edge was first written, on a recorded:true\nanswer only.",
+            "type": "integer"
+          },
+          "deployId": {
+            "description": "DeployID is the attribution edge's id, on a recorded:true answer only.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason says why nothing was attributed, on a recorded:false answer only.",
+            "type": "string"
+          },
+          "recorded": {
+            "description": "Recorded reports whether an attribution edge exists for this deploy. False is\nan honest no-op, not an error, so a deploy path can fire this unconditionally.",
+            "type": "boolean"
+          },
+          "self": {
+            "description": "Self reports a deploy of the author's own repo by the author's own org —\nrecorded for provenance, excluded from accrual by the sweep. Present only on a\nrecorded:true answer.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorDirectory": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AuthorDirectoryData",
+            "description": "Data is the directory itself."
+          },
+          "msg": {
+            "description": "Msg is empty on success.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorDirectoryData": {
+        "properties": {
+          "authors": {
+            "description": "Authors is one row per author, org exposed. Never null.",
+            "items": {
+              "$ref": "#/components/schemas/AdminAuthorView"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AuthorSummary",
+            "description": "Summary tallies the rows returned."
+          }
+        },
+        "type": "object"
+      },
+      "AuthorIdentity": {
+        "properties": {
+          "created": {
+            "description": "Created is true when THIS call enrolled the org; false on a repeat connect.",
+            "type": "boolean"
+          },
+          "githubLogin": {
+            "description": "GithubLogin is the linked forge login, lower-cased.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the author id, stable across repeat connects.",
+            "type": "string"
+          },
+          "shareBps": {
+            "description": "ShareBps is the author's royalty share in basis points.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the author's lifecycle state — \"connected\" on first link.",
+            "type": "string"
+          },
+          "verified": {
+            "description": "Verified reports an IAM-linked forge identity (strong proof) rather than a\nlogin the caller merely typed.",
+            "type": "boolean"
+          },
+          "verifyCode": {
+            "description": "VerifyCode is this author's stable code for the file method.",
+            "type": "string"
+          },
+          "verifyFile": {
+            "description": "VerifyFile is the file name to place on the default branch: \"hanzo.json\".",
+            "type": "string"
+          },
+          "verifySnippet": {
+            "description": "VerifySnippet is the ready-to-paste hanzo.json body carrying the code.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorOne": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AuthorOneData",
+            "description": "Data carries the author as it now stands."
+          },
+          "msg": {
+            "description": "Msg is empty on success.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorOneData": {
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/AdminAuthorView",
+            "description": "Author is the author after the change."
+          }
+        },
+        "type": "object"
+      },
+      "AuthorOwnerView": {
+        "properties": {
+          "badgeMarkdown": {
+            "description": "BadgeMarkdown is the ready-to-paste badge deep-linking this owner's template\nimport.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is unix seconds when the claim was first recorded.",
+            "type": "integer"
+          },
+          "method": {
+            "description": "Method is how it was proven: \"oauth\" or \"file\", against the owner's .github\ncontrol repo.",
+            "type": "string"
+          },
+          "ownerUrl": {
+            "description": "OwnerURL is the canonical \"host/owner\" form, unique across authors.",
+            "type": "string"
+          },
+          "verified": {
+            "description": "Verified reports that ownership of the owner was proven.",
+            "type": "boolean"
+          },
+          "verifiedAt": {
+            "description": "VerifiedAt is unix seconds when ownership was proven.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorPayoutData": {
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/AdminAuthorView",
+            "description": "Author is the author after the payout reserved against pending."
+          },
+          "payout": {
+            "$ref": "#/components/schemas/AuthorPayoutView",
+            "description": "Payout is the recorded disbursement."
+          }
+        },
+        "type": "object"
+      },
+      "AuthorPayoutOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AuthorPayoutData",
+            "description": "Data carries the payout row and the author after it."
+          },
+          "msg": {
+            "description": "Msg is empty on success.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorPayoutRequest": {
+        "properties": {
+          "amountCents": {
+            "description": "AmountCents is the payout, in USD minor units. Must be positive and can never\nexceed the author's pending royalty.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the author id from the path.",
+            "type": "string"
+          },
+          "method": {
+            "description": "Method is \"credits\" (issues a commerce grant into the author's wallet) or a\ncash method such as wire or paypal (record-only). Required.",
+            "type": "string"
+          },
+          "reference": {
+            "description": "Reference is the operator's own note or external transfer id.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amountCents",
+          "method"
+        ],
+        "type": "object"
+      },
+      "AuthorPayoutView": {
+        "properties": {
+          "amountCents": {
+            "description": "AmountCents is the disbursement, in USD minor units.",
+            "type": "integer"
+          },
+          "createdAt": {
+            "description": "CreatedAt is unix seconds when the payout was reserved.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the payout id.",
+            "type": "string"
+          },
+          "method": {
+            "description": "Method is \"credits\" or a cash method such as wire or paypal.",
+            "type": "string"
+          },
+          "reference": {
+            "description": "Reference is the operator's note or external transfer id.",
+            "type": "string"
+          },
+          "settlement": {
+            "description": "Settlement discloses treasury-vs-wallet-vs-cash on every payout, to the author\nand to the admin mirror alike — the disclosure that keeps a first-party\nsettlement legible as internal accounting.",
+            "type": "string"
+          },
+          "txn": {
+            "description": "Txn is the commerce grant or treasury entry id, when one was issued.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorRef": {
+        "properties": {
+          "id": {
+            "description": "ID is the author id from the path, as returned by the admin directory.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorRepoView": {
+        "properties": {
+          "badgeMarkdown": {
+            "description": "BadgeMarkdown is the ready-to-paste \"Deploy on Hanzo\" README snippet.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is unix seconds when the claim was first recorded.",
+            "type": "integer"
+          },
+          "method": {
+            "description": "Method is how it was proven: \"oauth\" (admin/push on the repo) or \"file\"\n(hanzo.json carrying the verify code).",
+            "type": "string"
+          },
+          "repoUrl": {
+            "description": "RepoURL is the canonical \"host/owner/name\" form.",
+            "type": "string"
+          },
+          "verified": {
+            "description": "Verified reports that ownership was proven.",
+            "type": "boolean"
+          },
+          "verifiedAt": {
+            "description": "VerifiedAt is unix seconds when ownership was proven.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorSummary": {
+        "properties": {
+          "accruedCents": {
+            "description": "AccruedCents, PendingCents and PaidCents sum the rows returned.",
+            "type": "integer"
+          },
+          "approved": {
+            "type": "integer"
+          },
+          "connected": {
+            "description": "Connected, Approved and Suspended count them by status.",
+            "type": "integer"
+          },
+          "paidCents": {
+            "type": "integer"
+          },
+          "pendingCents": {
+            "type": "integer"
+          },
+          "suspended": {
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total is how many authors the listing returned.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorSweepData": {
+        "properties": {
+          "accrued": {
+            "description": "Accrued is how many royalty ledger rows THIS pass latched.",
+            "type": "integer"
+          },
+          "swept": {
+            "description": "Swept is how many (author, deploying org) pairs were checked.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorSweepOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AuthorSweepData",
+            "description": "Data is what the fold did."
+          },
+          "msg": {
+            "description": "Msg is empty on success.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorVerify": {
+        "properties": {
+          "repoUrl": {
+            "description": "RepoURL is a forge repo (github.com/owner/name) or a whole owner\n(github.com/owner). gitlab.com is accepted in both forms. Required.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repoUrl"
+        ],
+        "type": "object"
       }
     }
   }

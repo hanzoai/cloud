@@ -92,8 +92,12 @@ func mount(t *testing.T, commerce cloud.CommerceClient) (*zip.App, *service) {
 	t.Helper()
 	s := &service{store: openTestStore(t), commerce: commerce, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Get("/v1/orgs/:org/entitlements", s.get)
-	app.Post("/v1/orgs/:org/entitlements", s.post)
+	// The typed-op bridge, exactly as Mount installs it: every op reads the
+	// request off the context it parks, so a surface mounted without it refuses
+	// every caller.
+	app.Use(cloud.Bridge())
+	zip.Get(app, "/v1/orgs/:org/entitlements", s.get)
+	zip.Post(app, "/v1/orgs/:org/entitlements", s.post)
 	return app, s
 }
 
@@ -329,7 +333,8 @@ func TestRemoveNeverGated(t *testing.T) {
 	_ = store.Enable(context.Background(), "acme", "engine", "u", 1)
 	s := &service{store: store, commerce: nil, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Post("/v1/orgs/:org/entitlements", s.post)
+	app.Use(cloud.Bridge())
+	zip.Post(app, "/v1/orgs/:org/entitlements", s.post)
 
 	code, body := send(t, app, orgMember("POST", "/v1/orgs/acme/entitlements", "acme", map[string]any{"remove": []string{"engine"}}))
 	if code != http.StatusOK {

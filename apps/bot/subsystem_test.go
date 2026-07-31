@@ -31,7 +31,10 @@ func mountBot(t *testing.T, reg *Registry) *zip.App {
 		State: state{reg: reg},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	routes(app, s, deps)
+	// Serve installs this globally before MountAll; a typed op resolves its
+	// validated org through it, so the test wires it the same way.
+	app.Use(cloud.Bridge())
+	routes(app, app, s, deps)
 	return app
 }
 
@@ -103,7 +106,7 @@ func TestNodesListIsOrgScoped(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("%s list: %d (%s)", org, code, body)
 		}
-		var v nodesView
+		var v BotNodeList
 		if err := json.Unmarshal(body, &v); err != nil {
 			t.Fatalf("decode: %v (%s)", err, body)
 		}

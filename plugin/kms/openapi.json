@@ -21,15 +21,56 @@
         "operationId": "post_v1_kms_auth_login",
         "tags": [
           "kms"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/loginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/loginResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/kms/config": {
       "get": {
         "operationId": "get_v1_kms_config",
+        "summary": "config answers the KMS console's runtime settings — the OIDC issuer it signs\nin against and the API base it calls.",
+        "description": "config answers the KMS console's runtime settings — the OIDC issuer it signs\nin against and the API base it calls. It carries no secret and needs no\nbearer, and it lives under /v1/kms rather than /v1/admin so a gateway that\nadmin-gates the admin prefix cannot block the console's own config fetch.",
         "tags": [
           "kms"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "apiBase": "/v1/kms",
+                  "brand": "hanzo",
+                  "issuer": "https://hanzo.id",
+                  "loginPath": "/v1/kms/auth/login"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/secretsConfig"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kms/health": {
@@ -43,15 +84,118 @@
     "/v1/kms/secrets": {
       "get": {
         "operationId": "get_v1_kms_secrets",
+        "summary": "listSecrets lists the caller org's secrets at one path and environment, as\nmetadata only — name, path, environment, scheme.",
+        "description": "listSecrets lists the caller org's secrets at one path and environment, as\nmetadata only — name, path, environment, scheme. No value and no ciphertext\nis returned, so it is the safe way to see what exists.",
         "tags": [
           "kms"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "env",
+            "in": "query",
+            "required": false,
+            "description": "Env selects the environment to list. Empty means the default environment.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "prod"
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "description": "Environment is the operator's spelling of env, honoured when env is absent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "description": "Path narrows to a subpath under the org. Empty lists the org root.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "ci"
+          },
+          {
+            "name": "secretPath",
+            "in": "query",
+            "required": false,
+            "description": "SecretPath is the operator's spelling of path, honoured when path is absent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "names": [
+                    "STRIPE_KEY"
+                  ],
+                  "secrets": [
+                    {
+                      "env": "prod",
+                      "name": "STRIPE_KEY",
+                      "path": "/orgs/hanzo/ci",
+                      "scheme": "aead+mlkem"
+                    }
+                  ],
+                  "total": 1
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/kmsSecrets"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_kms_secrets",
+        "summary": "putSecret seals a value and stores it at (path, name, env) under the caller's\nown org.",
+        "description": "putSecret seals a value and stores it at (path, name, env) under the caller's\nown org. The value is sealed under a fresh per-secret key, master-key-wrapped,\nbefore it is written — plaintext never touches disk. An existing secret at the\nsame coordinate is overwritten.\n\nenv is REQUIRED and is never defaulted on a write: it is part of the storage\nkey, so a silent default would commit the value to a bucket the readers that\nresolve project/env/path never look in.",
         "tags": [
           "kms"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "env": "prod",
+                "name": "STRIPE_KEY",
+                "path": "ci",
+                "value": "sk-live-…"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/secretPutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "env": "prod",
+                  "name": "STRIPE_KEY",
+                  "stored": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/secretStored"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kms/secrets/{wildcard1}": {
@@ -86,6 +230,138 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SecretMeta": {
+        "properties": {
+          "env": {
+            "description": "Env is the environment it belongs to.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the secret's name within its path.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the org-qualified path it lives at, e.g. \"/orgs/hanzo/ci\".",
+            "type": "string"
+          },
+          "scheme": {
+            "description": "Scheme is how the value is sealed. Every secret written here goes through\nkmsstore.Seal, which is ModeStandard — \"aead+mlkem\": AES-256-GCM under an\nML-KEM-wrapped DEK. The store's other two modes, \"tfhe\" and \"ckks\", are\nreported verbatim if a row carries one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "kmsSecrets": {
+        "properties": {
+          "names": {
+            "description": "Names is the same set as bare names, the shape the KMS operator reads.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "secrets": {
+            "description": "Secrets is the full descriptor of each secret found.",
+            "items": {
+              "$ref": "#/components/schemas/SecretMeta"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many were found.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "loginRequest": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "clientSecret": {
+            "type": "string"
+          }
+        }
+      },
+      "loginResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "expiresIn": {
+            "type": "integer"
+          },
+          "tokenType": {
+            "type": "string"
+          }
+        }
+      },
+      "secretPutRequest": {
+        "properties": {
+          "env": {
+            "description": "Env is the environment the value belongs to — a first-class part of the\nstorage key, never defaulted on a write. Required.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the secret's name within its path. Required.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is an optional subpath under the org, e.g. \"ci\". Empty stores at the\norg root.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the plaintext to seal. Required; it is sealed under a fresh\nper-secret key before it reaches disk.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "secretStored": {
+        "properties": {
+          "env": {
+            "description": "Env is the environment it was written to.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the secret that was written.",
+            "type": "string"
+          },
+          "stored": {
+            "description": "Stored is true when the value was sealed and committed.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "secretsConfig": {
+        "properties": {
+          "apiBase": {
+            "description": "APIBase is the path prefix every secrets call is made under.",
+            "type": "string"
+          },
+          "brand": {
+            "description": "Brand is the white-label the deployment serves as.",
+            "type": "string"
+          },
+          "issuer": {
+            "description": "Issuer is the OIDC issuer the console authenticates against.",
+            "type": "string"
+          },
+          "loginPath": {
+            "description": "LoginPath is where a machine credential is exchanged for a bearer.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

@@ -427,17 +427,24 @@ func deploySiteFiles(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, siteResponse(p, d, st))
 }
 
-// listSites lists the org's deployed (live) sites at their pretty URLs.
-func listSites(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.ListProjects(c.Context(), org)
+// siteList is the org's live sites — a bare array.
+type siteList = []siteView
+
+// listSites lists the org's deployed sites at their public URLs. Only projects
+// that are actually live appear; one that never deployed is not a site yet.
+//
+// Response: [{"slug": "spring-launch", "url": "https://spring-launch.hanzo.app", "name": "Spring Launch", "status": "live", "updatedAt": 1780000000}]
+func (o ops) listSites(ctx context.Context, _ *struct{}) (*siteList, error) {
+	_, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	out := make([]siteView, 0, len(rows))
+	s := o.s
+	rows, err := s.State.store.ListProjects(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	out := make(siteList, 0, len(rows))
 	for _, p := range rows {
 		if p.Status != "live" {
 			continue
@@ -447,7 +454,7 @@ func listSites(s *cloud.Service[state], c *zip.Ctx) error {
 			Status: p.Status, UpdatedAt: p.UpdatedAt,
 		})
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
 // ---- slug + project helpers ----

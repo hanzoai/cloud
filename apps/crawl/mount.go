@@ -1,10 +1,11 @@
 package crawl
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
+	"context"
 	"crypto/subtle"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -14,14 +15,16 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Request is the /v1/crawl body. One URL per call: batching would make the
+// CrawlRequest is the /v1/crawl body. One URL per call: batching would make the
 // response a partial-failure envelope that every caller then has to unpack, and no
 // caller has asked for more than one.
-type Request struct {
+type CrawlRequest struct {
+	// URL is the page to fetch. Required. It is fetched from inside the cluster,
+	// so it is checked against the address guard before any connection is made.
 	URL string `json:"url"`
 }
 
-// Response is the /v1/crawl body.
+// CrawlView is the /v1/crawl body.
 //
 // Success is a field rather than an HTTP status because "the page could not be
 // fetched" is a normal outcome of asking about a URL, not a fault of the request:
@@ -29,17 +32,27 @@ type Request struct {
 // was unreachable. Reserving non-2xx for auth and malformed input keeps a caller's
 // error handling honest — a 200 means the surface worked, and Success says what it
 // found.
-type Response struct {
-	Success bool      `json:"success"`
-	Data    *Document `json:"data,omitempty"`
-	Error   string    `json:"error,omitempty"`
+type CrawlView struct {
+	// Success is true when the page was fetched and extracted. False with a 200 is
+	// a normal answer: the ask was well-formed and the page was unreachable.
+	Success bool `json:"success"`
+	// Data is the crawled page, present only on success.
+	Data *Document `json:"data,omitempty"`
+	// Error says why the fetch failed — refused host, unreachable, wrong content
+	// type — verbatim, so a caller debugging a crawl can tell those apart.
+	Error string `json:"error,omitempty"`
 }
 
 // Document is the crawled page.
 type Document struct {
-	URL      string         `json:"url"`
-	Title    string         `json:"title,omitempty"`
-	Markdown string         `json:"markdown"`
+	// URL is the FINAL url after redirects, not the one asked for.
+	URL string `json:"url"`
+	// Title is the document title, best-effort from <title> or og:title.
+	Title string `json:"title,omitempty"`
+	// Markdown is the readable content. Empty is a legitimate result for a page
+	// that carries none.
+	Markdown string `json:"markdown"`
+	// Metadata is what the page declared about itself (og:*, description, …).
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
@@ -77,22 +90,26 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// with no object store keeps crawling and keeps nothing — see Bind.
 	Bind(deps.VFS)
 
-	// The scope is resolved per request at the zip layer, where the verified
-	// principal lives, and captured in the handler — it cannot be read off the
-	// net/http request below, and reading it from the BODY would let a caller name
-	// another tenant's corpus prefix.
-	serve := func(c *zip.Ctx) error {
-		s := scope(c)
-		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handleScoped(w, r, s) })
-		if principal.Validated(c) {
-			return zip.AdaptNetHTTP(h)(c)
-		}
-		return zip.AdaptNetHTTP(guard(h))(c)
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("crawl.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 
 	g := app.Group("/v1/crawl")
-	g.Post("", serve)
-	g.Post("/", serve)
+	// The typed-op bridge FIRST, then the gate — fiber runs middleware in
+	// registration order, so the op below sees an admitted caller and the request
+	// its scope is read from. Serve installs a bridge app-wide too; nesting is
+	// harmless, and this is what makes the surface testable on a bare app.
+	g.Use(cloud.Bridge())
+	// The gate is middleware rather than a wrapper inside the handler because a
+	// typed op answers ONE shape and a refusal is not that shape: a caller turned
+	// away here never reaches the crawl and gets the same body it always did.
+	g.Use(admit)
+
+	// One route, registered without the trailing slash: fiber is non-strict, so
+	// /v1/crawl/ reaches it too, and a second registration would mint a second
+	// operation (and a second MCP tool) for the same address.
+	zip.Post(zapp, "/v1/crawl", handle)
 
 	// No "archive" field: it used to log deps.VFS != nil, which is ALWAYS true —
 	// deps.VFS is guaranteed non-nil by contract (R-7, so consumers never
@@ -105,29 +122,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// guard admits a caller holding the shared service key, presented as either
-// X-API-Key or a Bearer. Both are accepted because the two clients that reach this
-// surface already differ on that point and neither is wrong; requiring one would
-// break a working caller to no benefit.
-func guard(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		want := serviceKey()
-		if want == "" {
-			writeJSON(w, http.StatusServiceUnavailable, Response{Error: "crawl not configured"})
-			return
-		}
-		got := strings.TrimSpace(r.Header.Get("X-API-Key"))
-		if got == "" {
-			got = strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
-		}
-		// Constant-time: a byte-at-a-time comparison leaks the key's prefix to a
-		// caller willing to time enough requests.
-		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-			writeJSON(w, http.StatusUnauthorized, Response{Error: "invalid api key"})
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+// admit lets a caller through on EITHER a validated principal (a signed-in user,
+// already authenticated and metered) OR the shared service key, presented as
+// either X-API-Key or a Bearer. Both header spellings are accepted because the
+// two clients that reach this surface already differ on that point and neither is
+// wrong; requiring one would break a working caller to no benefit.
+func admit(c *zip.Ctx) error {
+	if principal.Validated(c) {
+		return c.Next()
+	}
+	want := serviceKey()
+	if want == "" {
+		return c.JSON(http.StatusServiceUnavailable, CrawlView{Error: "crawl not configured"})
+	}
+	got := strings.TrimSpace(c.Header("X-API-Key"))
+	if got == "" {
+		got = strings.TrimSpace(strings.TrimPrefix(c.Header("Authorization"), "Bearer "))
+	}
+	// Constant-time: a byte-at-a-time comparison leaks the key's prefix to a
+	// caller willing to time enough requests.
+	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+		return c.JSON(http.StatusUnauthorized, CrawlView{Error: "invalid api key"})
+	}
+	return c.Next()
 }
 
 // scope reads the caller's corpus scope from the VERIFIED principal.
@@ -137,29 +154,40 @@ func guard(next http.Handler) http.Handler {
 // seg() produces for an empty segment. That is deliberate: a service-wide corpus
 // is the honest home for pages fetched on nobody's behalf, and inventing an org
 // for it would file them under a tenant that did not ask.
-func scope(c *zip.Ctx) Scope {
+//
+// It reads the REQUEST, never the body: the scope selects the corpus prefix, and
+// a caller who could name it in a field could name another tenant's.
+func scope(ctx context.Context) Scope {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return Scope{}
+	}
 	org, _ := principal.Org(c)
 	return Scope{Org: org, Project: principal.Project(c)}
 }
 
-// handleScoped serves one crawl under a caller scope. The scope selects the corpus
-// prefix, so it comes from the VERIFIED principal and never from the body.
-func handleScoped(w http.ResponseWriter, r *http.Request, s Scope) {
-	var req Request
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil || strings.TrimSpace(req.URL) == "" {
-		writeJSON(w, http.StatusBadRequest, Response{Error: "missing url"})
-		return
+// handle fetches ONE url and returns it as markdown plus the metadata the page
+// declared about itself, archiving the result under the caller's own corpus. A
+// page that cannot be fetched is a 200 with success:false and the reason — the
+// ask was well-formed, the page was not there — so a non-2xx from this route
+// always means the request itself was refused.
+//
+// Example: {"url": "https://hanzo.ai/about"}
+// Response: {"success": true, "data": {"url": "https://hanzo.ai/about", "title": "About Hanzo", "markdown": "# About Hanzo\n…"}}
+func handle(ctx context.Context, in *CrawlRequest) (*CrawlView, error) {
+	url := strings.TrimSpace(in.URL)
+	if url == "" {
+		return nil, zip.ErrBadRequest("missing url")
 	}
 
-	page, err := Read(r.Context(), s, req.URL)
+	page, err := Read(ctx, scope(ctx), url)
 	if err != nil {
-		// 200 with Success:false — see the note on Response. The message is the
+		// 200 with Success:false — see the note on CrawlView. The message is the
 		// error verbatim: a caller debugging a failed crawl needs to know whether the
 		// host was refused, unreachable, or served the wrong type.
-		writeJSON(w, http.StatusOK, Response{Error: err.Error()})
-		return
+		return &CrawlView{Error: err.Error()}, nil
 	}
-	writeJSON(w, http.StatusOK, Response{
+	return &CrawlView{
 		Success: true,
 		Data: &Document{
 			URL:      page.URL,
@@ -167,11 +195,5 @@ func handleScoped(w http.ResponseWriter, r *http.Request, s Scope) {
 			Markdown: page.Markdown,
 			Metadata: page.Metadata,
 		},
-	})
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	}, nil
 }

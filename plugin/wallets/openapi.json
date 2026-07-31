@@ -19,34 +19,176 @@
     "/v1/wallets": {
       "get": {
         "operationId": "get_v1_wallets",
+        "summary": "listWallets lists the caller's wallets, narrowed within the org.",
+        "description": "listWallets lists the caller's wallets, narrowed within the org. Project, agent\nand account are optional filters — the API face of the ONE scope lookup path —\nwhile org is always the bound isolation boundary, so a caller can never widen\npast its own org.",
         "tags": [
           "wallets"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows to one org project; empty means every project.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "required": false,
+            "description": "Agent narrows to one agent; empty means every agent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "description": "Account narrows to one account grouping; empty means every account.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "wallets": [
+                    {
+                      "accountId": "acct_9f2c",
+                      "address": "0x5b1c…",
+                      "chain": "36963",
+                      "createdAt": 1780000000,
+                      "custody": "kms",
+                      "id": "wal_3d81",
+                      "name": "ops hot wallet",
+                      "org": "acme",
+                      "tier": "hot"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/walletList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_wallets",
+        "summary": "createWallet provisions one wallet under an account of the caller's org.",
+        "description": "createWallet provisions one wallet under an account of the caller's org. The\ncustody backend creates the signing material and returns its address; the\nwallet's scope (org, ambient project, agent, account) is what its key material\nis addressed by, so nothing here can reach another tenant's keys.",
         "tags": [
           "wallets"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "accountId": "acct_9f2c",
+                "chain": "36963",
+                "custody": "kms",
+                "name": "ops hot wallet",
+                "tier": "hot"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createWalletReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/walletView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/wallets/accounts": {
       "get": {
         "operationId": "get_v1_wallets_accounts",
+        "summary": "listAccounts lists the wallet groupings the caller's org owns.",
+        "description": "listAccounts lists the wallet groupings the caller's org owns. Org is the bound\nisolation boundary, so another tenant's accounts are never returned.",
         "tags": [
           "wallets"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accounts": [
+                    {
+                      "createdAt": 1780000000,
+                      "id": "acct_9f2c",
+                      "name": "treasury",
+                      "org": "acme"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/walletAccountList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_wallets_accounts",
+        "summary": "createAccount creates a named wallet grouping in the caller's org.",
+        "description": "createAccount creates a named wallet grouping in the caller's org. An account is\nthe addressing narrowing a wallet is later assigned to; it holds no key material.",
         "tags": [
           "wallets"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "treasury"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createAccountReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/walletAccount"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/wallets/{id}": {
       "get": {
-        "operationId": "get_v1_wallets_by_id",
+        "operationId": "get_v1_wallets_id",
+        "summary": "getWallet reads one wallet of the caller's org.",
+        "description": "getWallet reads one wallet of the caller's org. Another org's id is reported\nnot-found, so the wallet id space leaks no existence across tenants.",
         "tags": [
           "wallets"
         ],
@@ -55,16 +197,32 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the wallet id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "wal_3d81"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/walletView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/wallets/{id}/keys": {
       "post": {
-        "operationId": "post_v1_wallets_by_id_keys",
+        "operationId": "post_v1_wallets_id_keys",
+        "summary": "rotateKeys rolls one wallet's signing material.",
+        "description": "rotateKeys rolls one wallet's signing material. The new material is created by\nthe wallet's own custody backend and its address persisted, while the wallet id\nand scope are unchanged, so every reference to the wallet keeps resolving.",
         "tags": [
           "wallets"
         ],
@@ -73,16 +231,45 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the wallet id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "wal_3d81"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "wal_3d81"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/walletRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/walletView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/wallets/{id}/safe-tx": {
       "post": {
-        "operationId": "post_v1_wallets_by_id_safe-tx",
+        "operationId": "post_v1_wallets_id_safe-tx",
+        "summary": "proposeSafeTx composes propose and MPC-sign for a safe-custody wallet.",
+        "description": "proposeSafeTx composes propose and MPC-sign for a safe-custody wallet. The ring\ncomputes the EIP-712 Safe-tx hash — bound to the Safe contract and chain — and\nreturns it with the threshold (r,s) its MPC produced, which is the owner\napproval; any other custody kind is a 400.",
         "tags": [
           "wallets"
         ],
@@ -91,16 +278,50 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the wallet id from the path; it must be a safe-custody wallet.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "wal_3d81"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "chainId": 36963,
+                "data": "0x",
+                "id": "wal_3d81",
+                "nonce": 7,
+                "to": "0x5b1c9e7a3f4d20e8b6c1a9d7f3025e4b8c6a1d90",
+                "value": "1000000000000000000"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/safeTxReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/safeTxOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/wallets/{id}/sign": {
       "post": {
-        "operationId": "post_v1_wallets_by_id_sign",
+        "operationId": "post_v1_wallets_id_sign",
+        "summary": "sign signs a 32-byte digest with one wallet of the caller's org.",
+        "description": "sign signs a 32-byte digest with one wallet of the caller's org. Signing runs in\nthat wallet's own custody backend, so the key material never leaves it; supply\ndigest directly, or message to have it hashed.",
         "tags": [
           "wallets"
         ],
@@ -109,11 +330,280 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the wallet id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "wal_3d81"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "wal_3d81",
+                "message": "transfer 10 to 0x5b1c"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/signReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/signOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "createAccountReq": {
+        "properties": {
+          "name": {
+            "description": "Name is the human label for the grouping. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "createWalletReq": {
+        "properties": {
+          "accountId": {
+            "description": "AccountID is the account grouping the wallet belongs to. Required, and it\nmust already exist in the caller's org.",
+            "type": "string"
+          },
+          "agent": {
+            "description": "Agent optionally narrows the wallet to one agent within the org.",
+            "type": "string"
+          },
+          "chain": {
+            "description": "Chain is the EVM chain the wallet addresses; empty leaves it chain-agnostic.",
+            "type": "string"
+          },
+          "custody": {
+            "description": "Custody selects the signing backend: kms, mpc, treasury or safe. Empty takes\nthe deployment's default; mpc/treasury/safe are 503 until the ring is wired.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the human label for the wallet.",
+            "type": "string"
+          },
+          "tier": {
+            "description": "Tier is one of the nine wallet tiers (hot, warm, cold, gas, bridge,\ncontract_admin, validator, quarantine, disaster_recovery). Empty means hot.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "safeTxOut": {
+        "properties": {
+          "r": {
+            "description": "R is the r component of the threshold signature.",
+            "type": "string"
+          },
+          "s": {
+            "description": "S is the s component of the threshold signature.",
+            "type": "string"
+          },
+          "safeAddress": {
+            "description": "SafeAddress is the Safe contract address.",
+            "type": "string"
+          },
+          "safeTxHash": {
+            "description": "SafeTxHash is the EIP-712 Safe-tx hash the ring computed.",
+            "type": "string"
+          },
+          "walletId": {
+            "description": "WalletID is the safe-custody wallet the transaction was proposed for.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "safeTxReq": {
+        "properties": {
+          "chainId": {
+            "description": "ChainID is the EVM chain the Safe is bound to; 0 takes the wallet's chain.",
+            "type": "integer"
+          },
+          "data": {
+            "description": "Data is the calldata, hex, empty for a plain transfer.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the wallet id from the path; it must be a safe-custody wallet.",
+            "type": "string"
+          },
+          "nonce": {
+            "description": "Nonce is the Safe's transaction nonce.",
+            "type": "integer"
+          },
+          "to": {
+            "description": "To is the destination address of the Safe transaction.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the native-token amount, as a decimal string in base units.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "signOut": {
+        "properties": {
+          "address": {
+            "description": "Address is the wallet's on-chain address.",
+            "type": "string"
+          },
+          "digest": {
+            "description": "Digest is the 32-byte digest that was signed, 0x-prefixed hex.",
+            "type": "string"
+          },
+          "signature": {
+            "description": "Signature is the produced signature, 0x-prefixed hex.",
+            "type": "string"
+          },
+          "walletId": {
+            "description": "WalletID is the wallet that signed.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "signReq": {
+        "properties": {
+          "digest": {
+            "description": "Digest is a pre-computed 32-byte digest, hex, with or without the 0x prefix.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the wallet id from the path.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is plain text to hash into the digest. Ignored when digest is set.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "walletAccount": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the creation time, unix seconds.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the account id, the value a wallet's accountId references.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the human label for the grouping.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the owning tenant.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "walletAccountList": {
+        "properties": {
+          "accounts": {
+            "description": "Accounts are the wallet groupings owned by the caller's org.",
+            "items": {
+              "$ref": "#/components/schemas/walletAccount"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "walletList": {
+        "properties": {
+          "wallets": {
+            "description": "Wallets are the caller's own wallets matching the narrowings.",
+            "items": {
+              "$ref": "#/components/schemas/walletView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "walletRef": {
+        "properties": {
+          "id": {
+            "description": "ID is the wallet id from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "walletView": {
+        "properties": {
+          "accountId": {
+            "description": "AccountID is the account grouping the wallet belongs to.",
+            "type": "string"
+          },
+          "address": {
+            "description": "Address is the wallet's on-chain address, as custody provisioned it.",
+            "type": "string"
+          },
+          "agent": {
+            "description": "Agent is the agent the wallet is narrowed to, absent when unassigned.",
+            "type": "string"
+          },
+          "chain": {
+            "description": "Chain is the EVM chain the wallet addresses, empty when chain-agnostic.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is the creation time, unix seconds.",
+            "type": "integer"
+          },
+          "custody": {
+            "description": "Custody is the signing backend: kms, mpc, treasury or safe.",
+            "type": "string"
+          },
+          "financeAccount": {
+            "description": "FinanceAccount is the ledger account this wallet backs, absent when unbound.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the wallet id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the human label for the wallet.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the owning tenant — the isolation boundary, never crossed.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the org project the wallet is narrowed to, absent when org-wide.",
+            "type": "string"
+          },
+          "tier": {
+            "description": "Tier is one of the nine wallet tiers, e.g. hot or cold.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

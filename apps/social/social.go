@@ -46,7 +46,14 @@
 //
 // serve.go auto-registers GET /v1/social/health (this subsystem does not set
 // OwnsHealth, so the generic always-ok liveness route serves it).
+//
+// EVERY ROUTE IS A TYPED OP (zip.Get/Post/Put/Delete with concrete In/Out structs),
+// so the surface is ONE registry with N projections: REST, the OpenAPI document, the
+// MCP tool list and the CLI all derive from these same registrations. Handler prose
+// is lifted into the spec at build time by cmd/zipdoc.
 package social
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
 	"context"
@@ -57,7 +64,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -159,33 +165,119 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 }
 
 // routes registers the social surface: the account + post CRUD + the summary roll-up.
+// The bridge goes on FIRST — fiber runs middleware in registration order, so one
+// installed after these leaves would never run — because a typed op is handed only a
+// context and reads its validated org off the value the bridge parks there.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/social")
-	g.Get("/summary", cloud.Handle(s, summary))
-	g.Get("/providers", cloud.Handle(s, listProviders))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	app.Group("/v1/social").Use(cloud.Bridge())
 
-	g.Get("/accounts", cloud.Handle(s, listAccounts))
-	g.Post("/accounts", cloud.Handle(s, createAccount))
-	g.Get("/accounts/:id", cloud.Handle(s, getAccount))
-	g.Put("/accounts/:id", cloud.Handle(s, updateAccount))
-	g.Delete("/accounts/:id", cloud.Handle(s, deleteAccount))
+	// A typed op takes the ABSOLUTE path — the registry keys on it — so every
+	// registration below spells /v1/social in full.
+	zip.Get(z, "/v1/social/summary", o.summary)
+	zip.Get(z, "/v1/social/providers", o.listProviders)
 
-	g.Get("/posts", cloud.Handle(s, listPosts))
-	g.Post("/posts", cloud.Handle(s, createPost))
-	g.Get("/posts/:id", cloud.Handle(s, getPost))
-	g.Put("/posts/:id", cloud.Handle(s, updatePost))
-	g.Delete("/posts/:id", cloud.Handle(s, deletePost))
-	g.Post("/posts/:id/publish", cloud.Handle(s, publishPostHandler))
+	zip.Get(z, "/v1/social/accounts", o.listAccounts)
+	zip.Post(z, "/v1/social/accounts", o.createAccount, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/social/accounts/:id", o.getAccount)
+	zip.Put(z, "/v1/social/accounts/:id", o.updateAccount)
+	zip.Delete(z, "/v1/social/accounts/:id", o.deleteAccount)
+
+	zip.Get(z, "/v1/social/posts", o.listPosts)
+	zip.Post(z, "/v1/social/posts", o.createPost, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/social/posts/:id", o.getPost)
+	zip.Put(z, "/v1/social/posts/:id", o.updatePost)
+	zip.Delete(z, "/v1/social/posts/:id", o.deletePost)
+	zip.Post(z, "/v1/social/posts/:id/publish", o.publishPost)
 }
 
 // ---- shared helpers (mirror clients/crm + clients/marketing) ----
 
-// tenant resolves the org — the tenant-isolation KEY — for a request. It uses
-// principal.Org EXACTLY as SanitizeIdentity minted it from the validated IAM owner
-// claim (HIP-0026): never lowercased, stripped, or truncated.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+// ops binds the service to social's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, the only bound form
+// cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
 
-func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
+// tenant resolves the org — the tenant-isolation KEY — EXACTLY as SanitizeIdentity
+// minted it from the validated IAM owner claim (HIP-0026), carried across the typed
+// seam by cloud.Bridge: never lowercased, stripped, truncated, or read from the input.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
+}
+
+// ---- wire types ----
+
+// Ref addresses one account or post by id.
+type Ref struct {
+	// ID is the record id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// AccountPage is the bound + filter an account list accepts.
+type AccountPage struct {
+	// Provider narrows to one network (x, facebook, instagram, linkedin, tiktok,
+	// youtube, threads); empty means every connected account.
+	Provider string `json:"provider"`
+	// Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.
+	Limit int `json:"limit"`
+}
+
+// PostPage is the bound + filter a post list accepts.
+type PostPage struct {
+	// Status narrows to one lifecycle state (draft, scheduled, published, failed);
+	// empty means every post.
+	Status string `json:"status"`
+	// Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.
+	Limit int `json:"limit"`
+}
+
+// AccountList is a page of connected accounts.
+type AccountList struct {
+	// Data is the page; an empty array when the org has connected no account.
+	Data []Account `json:"data"`
+}
+
+// PostList is a page of posts.
+type PostList struct {
+	// Data is the page; an empty array when the org has written no post.
+	Data []Post `json:"data"`
+}
+
+// ProviderList is each network's publish-readiness in this deployment.
+type ProviderList struct {
+	// Data is one row per supported network, in the fixed provider order.
+	Data []ProviderCapability `json:"data"`
+}
+
+// Summary is the org's social roll-up.
+type Summary struct {
+	// Posts is how many posts the org has, in any state.
+	Posts int `json:"posts"`
+	// Scheduled is how many are waiting for their send time.
+	Scheduled int `json:"scheduled"`
+	// Published is how many have gone out.
+	Published int `json:"published"`
+	// Accounts is how many channels are connected.
+	Accounts int `json:"accounts"`
+}
+
+// limitOf bounds a caller's page size: absent, unparseable or non-positive means
+// defaultLimit, and nothing above maxLimit is honoured.
+func limitOf(n int) int {
+	if n <= 0 {
+		return defaultLimit
+	}
+	if n > maxLimit {
+		return maxLimit
+	}
+	return n
+}
 
 // genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
 func genID(prefix string) (string, error) {
@@ -208,17 +300,6 @@ func clipN(s string, n int) string {
 		return s[:n]
 	}
 	return s
-}
-
-func limitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
-		return defaultLimit
-	}
-	if n > maxLimit {
-		return maxLimit
-	}
-	return n
 }
 
 // normProvider lower-cases + defaults (empty → x) and validates against the fixed
@@ -290,142 +371,169 @@ func mapErr(err error, notFoundMsg string) error {
 
 // ---- accounts ----
 
-func createAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// createAccount records a connected social channel for the caller's org. Provider
+// defaults to x and must be one this deployment knows; status defaults to connected.
+// The id and timestamps of the input are ignored — the server assigns them. No OAuth
+// is performed here: this stores the channel, it does not authorize it.
+//
+// Example: {"provider": "linkedin", "handle": "@hanzoai", "status": "connected"}
+func (o ops) createAccount(ctx context.Context, in *Account) (*Account, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Account
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	provider, okPr := normProvider(body.Provider)
 	if !okPr {
-		return zip.ErrBadRequest("provider must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
+		return nil, zip.ErrBadRequest("provider must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
 	}
 	status, okSt := normAccountStatus(body.Status)
 	if !okSt {
-		return zip.ErrBadRequest("status must be one of connected, disconnected, error")
+		return nil, zip.ErrBadRequest("status must be one of connected, disconnected, error")
 	}
 	id, err := genID("acct")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
 	acct := Account{
 		ID: id, Org: org, Provider: provider, Handle: clip(body.Handle), Status: status,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	saved, err := s.State.store.CreateAccount(c.Context(), acct)
+	saved, err := s.State.store.CreateAccount(ctx, acct)
 	if err != nil {
-		return mapErr(err, "")
+		return nil, mapErr(err, "")
 	}
-	return c.JSON(http.StatusCreated, saved)
+	return &saved, nil
 }
 
-func listAccounts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	provider := strings.ToLower(strings.TrimSpace(c.Query("provider")))
-	rows, err := s.State.store.ListAccounts(c.Context(), org, provider, limitOf(c))
+// listAccounts returns the caller org's connected channels, optionally narrowed to
+// one network.
+//
+// Example: {"provider": "linkedin", "limit": 50}
+func (o ops) listAccounts(ctx context.Context, in *AccountPage) (*AccountList, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	provider := strings.ToLower(strings.TrimSpace(in.Provider))
+	rows, err := s.State.store.ListAccounts(ctx, org, provider, limitOf(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	return &AccountList{Data: rows}, nil
 }
 
-func getAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	acct, err := s.State.store.GetAccount(c.Context(), org, idParam(c))
+// getAccount returns one of the caller org's connected channels. An account in
+// another org reads as not found. The provider token is never serialized.
+//
+// Example: {"id": "acct_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) getAccount(ctx context.Context, in *Ref) (*Account, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "account not found")
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, acct)
+	acct, err := s.State.store.GetAccount(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "account not found")
+	}
+	return &acct, nil
 }
 
-func updateAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// updateAccount replaces a connected channel's provider, handle and status. Every
+// field is rewritten from the input, so send the whole record. The stored provider
+// token is untouched.
+//
+// Example: {"id": "acct_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60", "provider": "linkedin", "handle": "@hanzoai", "status": "disconnected"}
+func (o ops) updateAccount(ctx context.Context, in *Account) (*Account, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Account
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	provider, okPr := normProvider(body.Provider)
 	if !okPr {
-		return zip.ErrBadRequest("provider must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
+		return nil, zip.ErrBadRequest("provider must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
 	}
 	status, okSt := normAccountStatus(body.Status)
 	if !okSt {
-		return zip.ErrBadRequest("status must be one of connected, disconnected, error")
+		return nil, zip.ErrBadRequest("status must be one of connected, disconnected, error")
 	}
 	acct := Account{
-		ID: idParam(c), Org: org, Provider: provider, Handle: clip(body.Handle), Status: status,
+		ID: strings.TrimSpace(in.ID), Org: org, Provider: provider, Handle: clip(body.Handle), Status: status,
 		UpdatedAt: time.Now().Unix(),
 	}
-	saved, err := s.State.store.UpdateAccount(c.Context(), acct)
+	saved, err := s.State.store.UpdateAccount(ctx, acct)
 	if err != nil {
-		return mapErr(err, "account not found")
+		return nil, mapErr(err, "account not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
-func deleteAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	deleted, err := s.State.store.DeleteAccount(c.Context(), org, idParam(c))
+// deleteAccount disconnects a channel and answers 204. Posts already published
+// through it are left as they are.
+//
+// Example: {"id": "acct_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) deleteAccount(ctx context.Context, in *Ref) (*struct{}, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := s.State.store.DeleteAccount(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("account not found")
+		return nil, zip.ErrNotFound("account not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ---- posts ----
 
-func createPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// createPost writes a post for the caller's org. Content is required; channel
+// defaults to x and status to draft. A post created as scheduled for now or earlier
+// publishes immediately and comes back carrying that outcome; one scheduled for the
+// future is left to the scheduler. A failed publish never fails the create — the post
+// exists either way.
+//
+// Example: {"content": "We shipped it.", "channel": "linkedin", "status": "scheduled", "scheduleAt": 1780000000, "media": ["https://cdn.example.com/a.png"]}
+func (o ops) createPost(ctx context.Context, in *Post) (*Post, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Post
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	content := clipBody(body.Content)
 	if content == "" {
-		return zip.ErrBadRequest("content is required")
+		return nil, zip.ErrBadRequest("content is required")
 	}
 	channel, okCh := normProvider(body.Channel)
 	if !okCh {
-		return zip.ErrBadRequest("channel must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
+		return nil, zip.ErrBadRequest("channel must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
 	}
 	status, okSt := normPostStatus(body.Status)
 	if !okSt {
-		return zip.ErrBadRequest("status must be one of draft, scheduled, published, failed")
+		return nil, zip.ErrBadRequest("status must be one of draft, scheduled, published, failed")
 	}
 	id, err := genID("post")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
 	post := Post{
 		ID: id, Org: org, Content: content, Channel: channel, Status: status,
 		ScheduleAt: nonNeg(body.ScheduleAt), Media: normMedia(body.Media), CreatedAt: now, UpdatedAt: now,
 	}
-	saved, err := s.State.store.CreatePost(c.Context(), post)
+	saved, err := s.State.store.CreatePost(ctx, post)
 	if err != nil {
-		return mapErr(err, "")
+		return nil, mapErr(err, "")
 	}
 	// On-create fanout: a post scheduled for now-or-earlier publishes immediately
 	// (best effort — the post is already stored; the publish outcome, published or
@@ -434,112 +542,135 @@ func createPost(s *cloud.Service[state], c *zip.Ctx) error {
 	// two outcome-bearing results (published, or a fail-closed not-configured) update
 	// the returned record; an infra error leaves it 'scheduled' for the scheduler.
 	if saved.Status == statusScheduled && saved.ScheduleAt <= now {
-		if updated, perr := publishPost(c.Context(), s, org, saved.ID); perr == nil || errors.Is(perr, errProviderNotConfigured) {
+		if updated, perr := publishPost(ctx, s, org, saved.ID); perr == nil || errors.Is(perr, errProviderNotConfigured) {
 			saved = updated
 		}
 	}
-	return c.JSON(http.StatusCreated, saved)
+	return &saved, nil
 }
 
-func listPosts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
-	rows, err := s.State.store.ListPosts(c.Context(), org, status, limitOf(c))
+// listPosts returns the caller org's posts, optionally narrowed to one lifecycle
+// state.
+//
+// Example: {"status": "scheduled", "limit": 50}
+func (o ops) listPosts(ctx context.Context, in *PostPage) (*PostList, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
-}
-
-func getPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	post, err := s.State.store.GetPost(c.Context(), org, idParam(c))
+	status := strings.ToLower(strings.TrimSpace(in.Status))
+	rows, err := s.State.store.ListPosts(ctx, org, status, limitOf(in.Limit))
 	if err != nil {
-		return mapErr(err, "post not found")
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
-	return c.JSON(http.StatusOK, post)
+	return &PostList{Data: rows}, nil
 }
 
-func updatePost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// getPost returns one of the caller org's posts, including its publish outcome. A
+// post in another org reads as not found.
+//
+// Example: {"id": "post_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) getPost(ctx context.Context, in *Ref) (*Post, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Post
-	if err := c.Bind(&body); err != nil {
-		return err
+	post, err := s.State.store.GetPost(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "post not found")
 	}
+	return &post, nil
+}
+
+// updatePost replaces a post's content, channel, status, schedule and media. Content
+// is required and every field is rewritten from the input, so send the whole record.
+// The publish results (account, external id, error) are server-owned and untouched.
+//
+// Example: {"id": "post_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60", "content": "We shipped it.", "channel": "linkedin", "status": "draft"}
+func (o ops) updatePost(ctx context.Context, in *Post) (*Post, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	body := *in
 	content := clipBody(body.Content)
 	if content == "" {
-		return zip.ErrBadRequest("content is required")
+		return nil, zip.ErrBadRequest("content is required")
 	}
 	channel, okCh := normProvider(body.Channel)
 	if !okCh {
-		return zip.ErrBadRequest("channel must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
+		return nil, zip.ErrBadRequest("channel must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
 	}
 	status, okSt := normPostStatus(body.Status)
 	if !okSt {
-		return zip.ErrBadRequest("status must be one of draft, scheduled, published, failed")
+		return nil, zip.ErrBadRequest("status must be one of draft, scheduled, published, failed")
 	}
 	post := Post{
-		ID: idParam(c), Org: org, Content: content, Channel: channel, Status: status,
+		ID: strings.TrimSpace(in.ID), Org: org, Content: content, Channel: channel, Status: status,
 		ScheduleAt: nonNeg(body.ScheduleAt), Media: normMedia(body.Media), UpdatedAt: time.Now().Unix(),
 	}
-	saved, err := s.State.store.UpdatePost(c.Context(), post)
+	saved, err := s.State.store.UpdatePost(ctx, post)
 	if err != nil {
-		return mapErr(err, "post not found")
+		return nil, mapErr(err, "post not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
-func deletePost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	deleted, err := s.State.store.DeletePost(c.Context(), org, idParam(c))
+// deletePost removes a post and answers 204. A post already published is deleted
+// from the record only — nothing is retracted from the network it went out on.
+//
+// Example: {"id": "post_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) deletePost(ctx context.Context, in *Ref) (*struct{}, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := s.State.store.DeletePost(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("post not found")
+		return nil, zip.ErrNotFound("post not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ---- publish ----
 
-// publishPostHandler publishes a post NOW to its channel's connected accounts (the
-// explicit publish action, the twin of the on-create fanout). Idempotent: re-publishing
-// an already-published post returns it unchanged. 404 if the post is not the org's; 503
-// (with the exact missing credentials) if the deployment cannot publish the provider.
-func publishPostHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	post, err := publishPost(c.Context(), s, org, idParam(c))
+// publishPost pushes a post to its channel's connected accounts now — the explicit
+// publish, twin of the on-create fanout. Idempotent: an already-published post comes
+// back unchanged. A push the deployment cannot make answers 503 naming exactly which
+// credentials are missing; a provider that rejects the push is recorded on the post as
+// failed and returned, never reported as a server fault.
+//
+// Example: {"id": "post_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) publishPost(ctx context.Context, in *Ref) (*Post, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapPublishErr(err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, post)
+	post, err := publishPost(ctx, s, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapPublishErr(err)
+	}
+	return &post, nil
 }
 
-// listProviders reports each network's publish-readiness: whether this deployment has
-// its OAuth-app credentials and, if not, exactly which env vars are missing. Honest and
-// live (reads the environment), never fabricated — the console's connect affordance and
-// the coordinator's pre-cutover checklist of what to supply.
-func listProviders(_ *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := tenant(c); !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// listProviders reports each network's publish-readiness: whether this deployment
+// holds that network's OAuth-app credentials and, when it does not, exactly which
+// environment variables are missing. Read live from the environment, never fabricated.
+//
+// Response: {"data": [{"provider": "x", "credentialsConfigured": false, "missingCredentials": ["X_CLIENT_ID", "X_CLIENT_SECRET"]}]}
+func (o ops) listProviders(ctx context.Context, _ *struct{}) (*ProviderList, error) {
+	if _, err := tenant(ctx); err != nil {
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": providerCapabilities()})
+	return &ProviderList{Data: providerCapabilities()}, nil
 }
 
 // mapPublishErr maps a publishPost control error to an honest HTTP status: not-found →
@@ -557,18 +688,21 @@ func mapPublishErr(err error) error {
 
 // ---- summary ----
 
-func summary(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	posts, scheduled, published, accounts, err := s.State.store.Counts(c.Context(), org)
+// summary reports the caller org's post counts by state and how many channels are
+// connected.
+//
+// Response: {"posts": 42, "scheduled": 5, "published": 30, "accounts": 3}
+func (o ops) summary(ctx context.Context, _ *struct{}) (*Summary, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"posts": posts, "scheduled": scheduled, "published": published, "accounts": accounts,
-	})
+	posts, scheduled, published, accounts, err := s.State.store.Counts(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
+	}
+	return &Summary{Posts: posts, Scheduled: scheduled, Published: published, Accounts: accounts}, nil
 }
 
 // Shutdown stops the scheduler and closes the social store, in that order (drain the

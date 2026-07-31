@@ -53,7 +53,7 @@
 package storage
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -114,6 +114,40 @@ type state struct {
 	bill  *cloud.ResourceMeter
 }
 
+// ops carries the mounted Service into a TYPED op. zip fixes a typed handler's
+// signature at (context.Context, *In) → (*Out, error), so the Service arrives on
+// the receiver rather than as the parameter cloud.Handle passes a raw handler. A
+// METHOD, not a wrapped free function, is also what makes the surface
+// self-documenting: cmd/zipdoc lifts the doc comment off the function NAMED at
+// the registration.
+type ops struct{ *cloud.Service[state] }
+
+// noArgs is the input of an op that takes nothing — a read scoped entirely by
+// the validated principal the guard already resolved.
+type noArgs struct{}
+
+// scope is the two facts every typed op here opens with: the REQUEST behind the
+// typed context, and the org the guard resolved onto it. Off the HTTP path (a
+// CLI local invoke with no request) there is no principal, so it refuses with the
+// same 403 the guard answers — fail-closed with one gate, not two.
+func scope(ctx context.Context) (*zip.Ctx, string, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, "", zip.ErrForbidden("X-Org-Id required")
+	}
+	org := reqOrg(c)
+	if org == "" {
+		return nil, "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return c, org, nil
+}
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, the ONLY way prose reaches the published document, the MCP tool
+// list and the CLI help — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // Mount wires /v1/s3/* onto app. The "s3"-product meter and the guard-wrapped,
 // unconditional route set make this a direct construction (cloud.NewBase), not
 // cloud.Mount.
@@ -126,6 +160,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "storage"), State: state{admin: s3admin.New(), bill: cloud.NewResourceMeter(deps, "s3")}}
 
+	// A typed op is a route PLUS a registry entry, and the registry lives on the
+	// App. A router that cannot reach it must fail the mount rather than serve
+	// routes no projection knows about.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("s3.Mount: router carries no typed-op registry")
+	}
+	o := ops{s}
+
 	// Register the FULL surface unconditionally — even when S3 is unconfigured.
 	// The guard fails each op closed with 503 (s.State.admin.Configured() is false),
 	// so the s3 subsystem always OWNS its route space. If the routes were mounted only
@@ -133,13 +176,28 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// /v1/s3/objects to provisioning's GET /v1/s3/:name (a 404 "resource not
 	// found") instead of the honest 503 — the file-manager surface must fail closed
 	// under its own name, never fall through to a different subsystem's handler.
+	//
+	// Bridge carries into a typed op the request facts its signature drops — here
+	// the org the guard resolved. It installs BEFORE the leaves it serves.
 	g := app.Group("/v1/s3")
+	g.Use(cloud.Bridge())
+	// gated wraps each typed op in the SAME guard the raw routes carry, so a typed
+	// op is gated exactly as the untyped route beside it.
+	gated := zapp.With(guarded(s))
+
+	// RAW: health answers 200 or a 503 whose body is the probe's contract
+	// ({service, status, ready, error}), and a typed op has one success shape and
+	// no vocabulary for a non-2xx one.
 	g.Get("/health", cloud.Handle(s, health))
-	g.Get("/buckets", guard(s, cloud.Handle(s, listBuckets)))
-	g.Post("/buckets", guard(s, cloud.Handle(s, createBucket)))
-	g.Delete("/buckets/:bucket", guard(s, cloud.Handle(s, deleteBucket)))
-	g.Get("/buckets/:bucket/objects", guard(s, cloud.Handle(s, listObjects)))
-	g.Post("/buckets/:bucket/objects", guard(s, cloud.Handle(s, presignUpload)))
+	zip.Get(gated, "/v1/s3/buckets", o.listBuckets)
+	zip.Post(gated, "/v1/s3/buckets", o.createBucket, zip.WithStatus(http.StatusCreated))
+	zip.Delete(gated, "/v1/s3/buckets/:bucket", o.deleteBucket)
+	zip.Get(gated, "/v1/s3/buckets/:bucket/objects", o.listObjects)
+	zip.Post(gated, "/v1/s3/buckets/:bucket/objects", o.presignUpload)
+	// RAW: an object key is a PATH — it carries "/" — so these address it with a
+	// trailing wildcard, and a typed op may not: zip renders "*" verbatim while the
+	// document renders it as {wildcard1}, and the two spellings not matching is a
+	// hard projection failure for the whole subset.
 	g.Get("/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, presignDownload)))
 	g.Delete("/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, deleteObject)))
 
@@ -193,6 +251,13 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	}
 }
 
+// guarded is guard in middleware form — the SAME wrapper, partially applied, so
+// zapp.With(guarded(s)) gates a typed op exactly as guard(s, h) gates the raw
+// route beside it. One implementation, two call shapes.
+func guarded(s *cloud.Service[state]) zip.Middleware {
+	return func(next zip.Handler) zip.Handler { return guard(s, next) }
+}
+
 // orgKey is the Locals key the guard uses to hand the resolved org to handlers.
 type ctxKey string
 
@@ -228,7 +293,7 @@ func reqOrg(ctx *zip.Ctx) string {
 // NORMALIZATION — this uses provisioning.SanitizeOrg (case-folds to a DNS slug),
 // NOT KMS's exact-match, ON PURPOSE: the S3 bucket name is derived through
 // provisioning's SAME sanitized slug (BucketName), so a bucket provisioned via
-// POST /v1/s3 is findable here — exact-match would break that lockstep. A real
+// POST /v1/object is findable here — exact-match would break that lockstep. A real
 // IAM owner claim is already a lowercase DNS label, so the fold is a no-op on
 // validated input (and, post the principal gate above, only a validated principal
 // reaches it). The divergence from KMS is intentional per-subsystem, not drift.
@@ -251,7 +316,7 @@ func tenant(ctx *zip.Ctx) (string, bool) {
 // namespaced to the caller's org. This is the SAME derivation
 // provisioning.BucketName uses (bucketName(physicalName(org,name)) — org-hash
 // prefixed AND '_'→'-' folded to a DNS-safe S3 name), so a bucket provisioned via
-// POST /v1/s3 is browsable here and a bucket created here is a valid S3 name.
+// POST /v1/object is browsable here and a bucket created here is a valid S3 name.
 func physicalBucket(org, friendly string) string { return provisioning.BucketName(org, friendly) }
 
 // orgPrefix is the S3-bucket-name prefix that ALL of a caller's buckets share
@@ -300,21 +365,37 @@ func health(s *cloud.Service[state], ctx *zip.Ctx) error {
 // ── buckets ─────────────────────────────────────────────────────────────────
 
 type bucketItem struct {
-	Name      string `json:"name"`      // friendly name
-	CreatedAt int64  `json:"createdAt"` // unix seconds
+	// Name is the bucket's FRIENDLY name — what the tenant created it as, with the
+	// server-side org prefix stripped.
+	Name string `json:"name"`
+	// CreatedAt is when the bucket was made, unix seconds.
+	CreatedAt int64 `json:"createdAt"`
 }
 
-// listBuckets returns ONLY the caller's buckets (physical name has the caller's
-// org prefix), with the prefix stripped so the tenant sees friendly names.
-func listBuckets(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	cli, err := s.State.admin.Client()
+// bucketList is one page of the caller's own buckets.
+type bucketList struct {
+	// Buckets is every bucket in the caller's org namespace; another tenant's
+	// buckets are invisible rather than forbidden.
+	Buckets []bucketItem `json:"buckets"`
+	// Total is how many buckets came back — the listing is not paginated.
+	Total int `json:"total"`
+}
+
+// listBuckets returns the caller org's buckets by their friendly names.
+//
+// Response: {"buckets": [{"name": "photos", "createdAt": 1780000000}], "total": 1}
+func (o ops) listBuckets(ctx context.Context, _ *noArgs) (*bucketList, error) {
+	_, org, err := scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
+		return nil, err
 	}
-	all, err := cli.ListBuckets(ctx.Context())
+	cli, err := o.State.admin.Client()
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "list buckets: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
+	}
+	all, err := cli.ListBuckets(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "list buckets: %v", err)
 	}
 	out := make([]bucketItem, 0, len(all))
 	for _, b := range all {
@@ -324,114 +405,158 @@ func listBuckets(s *cloud.Service[state], ctx *zip.Ctx) error {
 		}
 		out = append(out, bucketItem{Name: name, CreatedAt: b.CreationDate.Unix()})
 	}
-	return ctx.JSON(http.StatusOK, map[string]any{"buckets": out, "total": len(out)})
+	return &bucketList{Buckets: out, Total: len(out)}, nil
 }
 
 type createBucketRequest struct {
+	// Name is the friendly bucket name, lowercase DNS-style
+	// (^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$). The physical name is derived from the
+	// caller's org server-side.
 	Name string `json:"name"`
 }
 
-// createBucket makes a new org-scoped bucket. The physical name is derived from
-// the caller's org, so a tenant can only ever create in its own namespace.
-func createBucket(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	var req createBucketRequest
-	if err := json.Unmarshal(ctx.Body(), &req); err != nil {
-		return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
+// createBucket makes a new bucket in the caller org's namespace and answers 201.
+//
+// Example: {"name": "photos"}
+// Response: {"name": "photos", "createdAt": 1780000000}
+func (o ops) createBucket(ctx context.Context, in *createBucketRequest) (*bucketItem, error) {
+	_, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
 	// Validate AS-IS (no silent lowercasing) so create and reference agree on the
 	// one name shape — a client that creates "Photos" and lists "photos" would be
 	// confusing; bucketNameRE requires lowercase, so mixed case is a clean 400.
-	name := strings.TrimSpace(req.Name)
+	name := strings.TrimSpace(in.Name)
 	if !bucketNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+		return nil, zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 	}
-	cli, err := s.State.admin.Client()
+	cli, err := o.State.admin.Client()
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
 	physical := physicalBucket(org, name)
-	exists, err := cli.BucketExists(ctx.Context(), physical)
+	exists, err := cli.BucketExists(ctx, physical)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "bucket check: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "bucket check: %v", err)
 	}
 	if exists {
-		return zip.ErrConflict("bucket already exists")
+		return nil, zip.ErrConflict("bucket already exists")
 	}
-	if err := cli.MakeBucket(ctx.Context(), physical, s3.MakeBucketOptions{Region: s.State.admin.Region()}); err != nil {
-		return zip.Errorf(http.StatusBadGateway, "create bucket: %v", err)
+	if err := cli.MakeBucket(ctx, physical, s3.MakeBucketOptions{Region: o.State.admin.Region()}); err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "create bucket: %v", err)
 	}
-	return ctx.JSON(http.StatusCreated, bucketItem{Name: name, CreatedAt: time.Now().Unix()})
+	return &bucketItem{Name: name, CreatedAt: time.Now().Unix()}, nil
 }
 
-// deleteBucket removes an EMPTY bucket (SeaweedFS refuses a non-empty one — we do not
-// cascade a delete of a tenant's objects behind a single bucket call).
-func deleteBucket(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	name, ok := friendlyParam(ctx.Param("bucket"))
-	if !ok {
-		return zip.ErrBadRequest("invalid bucket name")
-	}
-	cli, err := s.State.admin.Client()
+// bucketRef addresses one of the caller's buckets by its friendly name.
+type bucketRef struct {
+	// Bucket is the friendly bucket name from the path, as listBuckets returns it.
+	Bucket string `json:"bucket"`
+}
+
+// deleteBucket removes an EMPTY bucket of the caller's org and answers 204. A
+// bucket that still holds objects is refused rather than cascaded.
+//
+// Example: {"bucket": "photos"}
+func (o ops) deleteBucket(ctx context.Context, in *bucketRef) (*struct{}, error) {
+	_, org, err := scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
+		return nil, err
+	}
+	name, ok := friendlyParam(in.Bucket)
+	if !ok {
+		return nil, zip.ErrBadRequest("invalid bucket name")
+	}
+	cli, err := o.State.admin.Client()
+	if err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
 	physical := physicalBucket(org, name)
-	if err := cli.RemoveBucket(ctx.Context(), physical); err != nil {
+	if err := cli.RemoveBucket(ctx, physical); err != nil {
 		if isNoSuchBucket(err) {
-			return zip.ErrNotFound("bucket not found")
+			return nil, zip.ErrNotFound("bucket not found")
 		}
 		if isBucketNotEmpty(err) {
-			return zip.ErrConflict("bucket is not empty")
+			return nil, zip.ErrConflict("bucket is not empty")
 		}
-		return zip.Errorf(http.StatusBadGateway, "delete bucket: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "delete bucket: %v", err)
 	}
-	return ctx.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ── objects ─────────────────────────────────────────────────────────────────
 
 type objectItem struct {
-	Key          string `json:"key"`          // key RELATIVE to the requested prefix
-	IsDir        bool   `json:"isDir"`        // true for a folder (common prefix)
-	Size         int64  `json:"size"`         // bytes (0 for a folder)
-	LastModified int64  `json:"lastModified"` // unix seconds (0 for a folder)
-	ETag         string `json:"etag,omitempty"`
+	// Key is the object key RELATIVE to the requested prefix, so a UI can render a
+	// breadcrumb without re-splitting the full key.
+	Key string `json:"key"`
+	// IsDir is true for a folder (an S3 common prefix), false for a real object.
+	IsDir bool `json:"isDir"`
+	// Size is the object's bytes; 0 for a folder.
+	Size int64 `json:"size"`
+	// LastModified is unix seconds; 0 for a folder.
+	LastModified int64 `json:"lastModified"`
+	// ETag is the store's entity tag, quotes stripped; absent for a folder.
+	ETag string `json:"etag,omitempty"`
 }
 
-// listObjects lists one folder level of a bucket. ?prefix= scopes to a
-// sub-"folder"; folder-style by default (a "/" delimiter, so sub-prefixes come
-// back as dir entries) unless ?recursive=true, which lists every key flat under
-// the prefix. Keys are returned RELATIVE to the requested prefix so the UI
-// renders a breadcrumb. The listing is bounded by maxListKeys (both the S3-side
-// MaxKeys page and a hard break) so a huge bucket cannot exhaust memory.
-func listObjects(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	bname, ok := friendlyParam(ctx.Param("bucket"))
-	if !ok {
-		return zip.ErrBadRequest("invalid bucket name")
+// listObjectsRequest addresses one folder level inside one of the caller's buckets.
+type listObjectsRequest struct {
+	// Bucket is the friendly bucket name from the path.
+	Bucket string `json:"bucket"`
+	// Prefix scopes the listing to a sub-folder; empty lists the bucket root. An
+	// absolute or traversing prefix is coerced to the root rather than refused.
+	Prefix string `json:"prefix"`
+	// Recursive lists every key flat under prefix instead of one folder level.
+	Recursive bool `json:"recursive"`
+}
+
+// objectList is one bounded page of a folder level.
+type objectList struct {
+	// Bucket is the friendly bucket name that was listed.
+	Bucket string `json:"bucket"`
+	// Prefix is the folder that was listed, after normalization.
+	Prefix string `json:"prefix"`
+	// Objects is the folder's entries, at most 1000 per call.
+	Objects []objectItem `json:"objects"`
+	// Total is how many entries came back.
+	Total int `json:"total"`
+}
+
+// listObjects lists one folder level of a bucket, keys relative to the prefix.
+// The page is capped at 1000 entries, so a huge bucket cannot exhaust memory.
+//
+// Example: {"bucket": "photos", "prefix": "2026/", "recursive": false}
+// Response: {"bucket": "photos", "prefix": "2026/", "objects": [{"key": "may/", "isDir": true, "size": 0, "lastModified": 0}], "total": 1}
+func (o ops) listObjects(ctx context.Context, in *listObjectsRequest) (*objectList, error) {
+	_, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
-	prefix := cleanPrefix(ctx.Query("prefix"))
+	bname, ok := friendlyParam(in.Bucket)
+	if !ok {
+		return nil, zip.ErrBadRequest("invalid bucket name")
+	}
+	prefix := cleanPrefix(in.Prefix)
 	// Folder-style by default (SeaweedFS applies a "/" delimiter when Recursive is
 	// false, returning sub-prefixes as directory entries — the file-manager view).
-	// ?recursive=true lists every key flat under the prefix. The brief's
+	// recursive=true lists every key flat under the prefix. The brief's
 	// ?delimiter=/ is the default and needs no param; only recursion is opt-in.
-	recursive := ctx.Query("recursive") == "true"
-
-	cli, err := s.State.admin.Client()
+	cli, err := o.State.admin.Client()
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
 	physical := physicalBucket(org, bname)
 
 	out := make([]objectItem, 0, 64)
-	opts := s3.ListObjectsOptions{Prefix: prefix, Recursive: recursive, MaxKeys: maxListKeys}
-	for obj := range cli.ListObjects(ctx.Context(), physical, opts) {
+	opts := s3.ListObjectsOptions{Prefix: prefix, Recursive: in.Recursive, MaxKeys: maxListKeys}
+	for obj := range cli.ListObjects(ctx, physical, opts) {
 		if obj.Err != nil {
 			if isNoSuchBucket(obj.Err) {
-				return zip.ErrNotFound("bucket not found")
+				return nil, zip.ErrNotFound("bucket not found")
 			}
-			return zip.Errorf(http.StatusBadGateway, "list objects: %v", obj.Err)
+			return nil, zip.Errorf(http.StatusBadGateway, "list objects: %v", obj.Err)
 		}
 		rel := strings.TrimPrefix(obj.Key, prefix)
 		if rel == "" {
@@ -449,57 +574,63 @@ func listObjects(s *cloud.Service[state], ctx *zip.Ctx) error {
 			break
 		}
 	}
-	return ctx.JSON(http.StatusOK, map[string]any{
-		"bucket": bname, "prefix": prefix, "objects": out, "total": len(out),
-	})
+	return &objectList{Bucket: bname, Prefix: prefix, Objects: out, Total: len(out)}, nil
 }
 
 type presignUploadRequest struct {
-	Key string `json:"key"` // object key to upload (relative to the bucket root)
+	// Bucket is the friendly bucket name from the path.
+	Bucket string `json:"bucket"`
+	// Key is the object key to upload, relative to the bucket root. It may contain
+	// "/" but must not be absolute, empty, a folder marker or traverse with "..".
+	Key string `json:"key"`
 }
 
 type presignResponse struct {
-	URL    string `json:"url"`    // presigned URL the browser follows directly
-	Method string `json:"method"` // "PUT" (upload) or "GET" (download)
-	Key    string `json:"key"`
-	Expiry int64  `json:"expiresIn"` // seconds until the URL expires
+	// URL is the presigned URL the browser follows directly, signed against the
+	// PUBLIC endpoint and scoped to this exact bucket and key.
+	URL string `json:"url"`
+	// Method is the verb the URL is signed for: PUT to upload, GET to download.
+	Method string `json:"method"`
+	// Key is the object key the URL addresses, after cleaning.
+	Key string `json:"key"`
+	// Expiry is how many seconds the URL stays valid.
+	Expiry int64 `json:"expiresIn"`
 }
 
-// presignUpload returns a presigned PUT URL the browser uses to upload DIRECTLY
-// to S3 (bypassing this binary and the console proxy entirely — no large body
-// through the server, and the admin credential never leaves the server). The URL
-// is signed against the PUBLIC host and scoped to the exact bucket+key, and it
-// expires (presignTTL). The object key is path-cleaned so a "../" cannot escape
-// the bucket.
-func presignUpload(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	bname, ok := friendlyParam(ctx.Param("bucket"))
-	if !ok {
-		return zip.ErrBadRequest("invalid bucket name")
-	}
-	var req presignUploadRequest
-	if err := json.Unmarshal(ctx.Body(), &req); err != nil {
-		return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
-	}
-	key, ok := cleanKey(req.Key)
-	if !ok {
-		return zip.ErrBadRequest("key is required and must be a clean object path")
-	}
-	if !s.State.admin.PresignConfigured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "presigned upload is not available (no public endpoint configured)")
-	}
-	pub, err := s.State.admin.PublicClient()
+// presignUpload mints a short-lived presigned PUT URL so the browser uploads
+// straight to the object store — no body through this binary, and the admin
+// credential never leaves the server.
+//
+// Example: {"bucket": "photos", "key": "2026/may/cover.jpg"}
+// Response: {"url": "https://s3.hanzo.ai/o1234-photos/2026/may/cover.jpg?X-Amz-Signature=...", "method": "PUT", "key": "2026/may/cover.jpg", "expiresIn": 300}
+func (o ops) presignUpload(ctx context.Context, in *presignUploadRequest) (*presignResponse, error) {
+	_, org, err := scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
+		return nil, err
+	}
+	bname, ok := friendlyParam(in.Bucket)
+	if !ok {
+		return nil, zip.ErrBadRequest("invalid bucket name")
+	}
+	key, ok := cleanKey(in.Key)
+	if !ok {
+		return nil, zip.ErrBadRequest("key is required and must be a clean object path")
+	}
+	if !o.State.admin.PresignConfigured() {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "presigned upload is not available (no public endpoint configured)")
+	}
+	pub, err := o.State.admin.PublicClient()
+	if err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
 	physical := physicalBucket(org, bname)
-	u, err := pub.PresignedPutObject(ctx.Context(), physical, key, presignTTL)
+	u, err := pub.PresignedPutObject(ctx, physical, key, presignTTL)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "presign upload: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "presign upload: %v", err)
 	}
-	return ctx.JSON(http.StatusOK, presignResponse{
+	return &presignResponse{
 		URL: u.String(), Method: http.MethodPut, Key: key, Expiry: int64(presignTTL.Seconds()),
-	})
+	}, nil
 }
 
 // presignDownload returns a presigned GET URL for the object at the trailing

@@ -19,23 +19,110 @@
     "/v1/tools": {
       "get": {
         "operationId": "get_v1_tools",
+        "summary": "listTools returns every tool resolvable in the caller's (org, project) — from",
+        "description": "listTools returns every tool resolvable in the caller's (org, project) — from\nevery source — each carrying whether it is activated, optionally narrowed to\none source and/or to the activated set.",
         "tags": [
           "tools"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "Source keeps only tools from that source (builtin, mcp, connector, ...).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "mcp"
+          },
+          {
+            "name": "activated",
+            "in": "query",
+            "required": false,
+            "description": "Activated keeps only the tools activated for the caller's (org, project).",
+            "schema": {
+              "type": "boolean"
+            },
+            "example": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/tools/activation": {
       "get": {
         "operationId": "get_v1_tools_activation",
+        "summary": "getActivation returns the tool names activated for the caller's (org, project).",
+        "description": "getActivation returns the tool names activated for the caller's (org, project).",
         "tags": [
           "tools"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Activation"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_tools_activation",
+        "summary": "putActivation applies a batch of toggles for the caller's (org, project) — the\nONE write path that turns skills, plugins and connectors on and off — and\nreturns the resulting activated set.",
+        "description": "putActivation applies a batch of toggles for the caller's (org, project) — the\nONE write path that turns skills, plugins and connectors on and off — and\nreturns the resulting activated set. At most 256 toggles per call.",
         "tags": [
           "tools"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "activate": [
+                  "search"
+                ],
+                "deactivate": [
+                  "shell"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ActivationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "enabled": [
+                    "search"
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Activation"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/tools/mcp": {
@@ -49,20 +136,66 @@
     "/v1/tools/servers": {
       "get": {
         "operationId": "get_v1_tools_servers",
+        "summary": "listServers returns the external MCP servers the caller's org has registered.",
+        "description": "listServers returns the external MCP servers the caller's org has registered.\nThe auth secret is never returned — only whether one is sealed.",
         "tags": [
           "tools"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_tools_servers",
+        "summary": "createServer registers an org's external MCP server.",
+        "description": "createServer registers an org's external MCP server. The auth secret VALUE is\nsealed in KMS (per-org ref); SQLite keeps only the URL + header name + a\nhas-secret flag. The URL is SSRF-validated at the boundary; the dialer re-checks\nat connect time (DNS-rebinding defense).",
         "tags": [
           "tools"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "authHeader": "Authorization",
+                "name": "acme-mcp",
+                "secret": "Bearer s3cr3t",
+                "url": "https://mcp.acme.com/v1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CreateServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MCPServer"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/tools/servers/{id}": {
       "delete": {
-        "operationId": "delete_v1_tools_servers_by_id",
+        "operationId": "delete_v1_tools_servers_id",
+        "summary": "deleteServer removes one of the caller org's external MCP servers and answers\n204.",
+        "description": "deleteServer removes one of the caller org's external MCP servers and answers\n204. A server belonging to another org reads as not found.",
         "tags": [
           "tools"
         ],
@@ -71,11 +204,171 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the server id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "srv_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Activation": {
+        "properties": {
+          "enabled": {
+            "description": "Enabled is every activated tool name; empty, never null, when none are.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ActivationRequest": {
+        "properties": {
+          "activate": {
+            "description": "Activate names the tools to switch on for the caller's (org, project).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "deactivate": {
+            "description": "Deactivate names the tools to switch off.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "CreateServerRequest": {
+        "properties": {
+          "authHeader": {
+            "description": "AuthHeader is the header name the secret is sent in.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name identifies the server, required, at most 128 characters.",
+            "type": "string"
+          },
+          "secret": {
+            "description": "Secret is the auth secret VALUE. It is sealed in KMS and never stored in\nSQLite nor returned by any read.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the server endpoint; it is SSRF-validated here and again at connect.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MCPServer": {
+        "properties": {
+          "authHeader": {
+            "description": "header to inject the KMS secret into (e.g. \"Authorization\").",
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Price": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "currency": {
+            "description": "ISO 4217, e.g. \"USD\"; empty ⇒ \"USD\".",
+            "type": "string"
+          },
+          "recipient": {
+            "description": "payout wallet ref for the marketplace seller.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ServerList": {
+        "properties": {
+          "servers": {
+            "description": "Servers is every server the caller's org registered; empty, never null.",
+            "items": {
+              "$ref": "#/components/schemas/MCPServer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Tool": {
+        "properties": {
+          "activated": {
+            "description": "Activated is filled by the registry from the activation store for the\nrequesting (org,project); providers leave it zero.",
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "dispatchable": {
+            "type": "boolean"
+          },
+          "inputSchema": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ToolList": {
+        "properties": {
+          "tools": {
+            "description": "Tools is every tool matching the filter, from every source.",
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

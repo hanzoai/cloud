@@ -19,52 +19,197 @@
     "/v1/functions": {
       "get": {
         "operationId": "get_v1_functions",
+        "summary": "list returns the caller org's functions, each with its 7-day invocation stats.",
+        "description": "list returns the caller org's functions, each with its 7-day invocation stats.\nOnly the caller's own org is ever read: the store is opened per org.",
         "tags": [
           "functions"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "functions": [
+                    {
+                      "endpoint": "/v1/functions/resize/invoke",
+                      "environment": "python",
+                      "name": "resize",
+                      "status": "ready"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/functionList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_functions",
+        "summary": "create registers a function in the caller's org and answers 201.\nName is required and must be unreserved; runtime defaults to node, timeout to\n30s (clamped to 900), memory to 256Mi.",
+        "description": "create registers a function in the caller's org and answers 201.\nName is required and must be unreserved; runtime defaults to node, timeout to\n30s (clamped to 900), memory to 256Mi. Re-creating an existing name replaces it.",
         "tags": [
           "functions"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "code": "def handler(x): return x",
+                "name": "resize",
+                "runtime": "python",
+                "timeoutSec": 30
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/functionView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/functions/deployments": {
       "get": {
         "operationId": "get_v1_functions_deployments",
+        "summary": "deployments lists the live deployment of every function in the caller's org.",
+        "description": "deployments lists the live deployment of every function in the caller's org.\nEach function's current record IS its deployment, so this answers the same\nshape as the function list, without the invocation stats.",
         "tags": [
           "functions"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/functionList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/functions/metrics": {
       "get": {
         "operationId": "get_v1_functions_metrics",
+        "summary": "metrics buckets the caller org's real invocation rows into a per-function series.\nEvery point is a COUNT of rows that fell in that bucket — nothing is\ninterpolated.",
+        "description": "metrics buckets the caller org's real invocation rows into a per-function series.\nEvery point is a COUNT of rows that fell in that bucket — nothing is\ninterpolated. costCents is null: there is no per-invocation cost source.",
         "tags": [
           "functions"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the window: 1H, 6H, 24H, 7D or 30D. Anything else means 24H.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "24H"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/metricsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/functions/secrets": {
       "get": {
         "operationId": "get_v1_functions_secrets",
+        "summary": "secrets lists the secret NAMES the caller org's functions mount, never a value.\nOne entry per distinct (namespace, name), attributed to the function that\nmounts it.",
+        "description": "secrets lists the secret NAMES the caller org's functions mount, never a value.\nOne entry per distinct (namespace, name), attributed to the function that\nmounts it. Values are never read or returned.",
         "tags": [
           "functions"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "secrets": [
+                    {
+                      "mountedBy": "resize",
+                      "name": "API_KEY",
+                      "namespace": "default"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/secretList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/functions/triggers": {
       "get": {
         "operationId": "get_v1_functions_triggers",
+        "summary": "triggers lists the HTTP trigger of every function in the caller's org.",
+        "description": "triggers lists the HTTP trigger of every function in the caller's org.\nEach function has exactly one: the POST endpoint that invokes it.",
         "tags": [
           "functions"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "triggers": [
+                    {
+                      "enabled": true,
+                      "functionName": "resize",
+                      "id": "resize-http",
+                      "name": "HTTP",
+                      "target": "/v1/functions/resize/invoke",
+                      "type": "http"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/triggerList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/functions/{name}": {
       "delete": {
-        "operationId": "delete_v1_functions_by_name",
+        "operationId": "delete_v1_functions_name",
+        "summary": "del deletes one function of the caller's org and answers 204.",
+        "description": "del deletes one function of the caller's org and answers 204.\nA name in another org is a 404, never a delete — the store is opened per org.",
         "tags": [
           "functions"
         ],
@@ -73,11 +218,18 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the function name from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "resize"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
         "operationId": "get_v1_functions_by_name",
@@ -98,7 +250,9 @@
     },
     "/v1/functions/{name}/invocations": {
       "get": {
-        "operationId": "get_v1_functions_by_name_invocations",
+        "operationId": "get_v1_functions_name_invocations",
+        "summary": "invocations returns one function's recorded runs, most recent first.",
+        "description": "invocations returns one function's recorded runs, most recent first.\nlimit caps the rows; anything non-positive or absent means 100.",
         "tags": [
           "functions"
         ],
@@ -107,11 +261,35 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the function name from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "resize"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 or absent means 100.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 20
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/invocationList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/functions/{name}/invoke": {
@@ -134,7 +312,9 @@
     },
     "/v1/functions/{name}/logs": {
       "get": {
-        "operationId": "get_v1_functions_by_name_logs",
+        "operationId": "get_v1_functions_name_logs",
+        "summary": "logs returns the last invocation's output, or its error when that run failed.",
+        "description": "logs returns the last invocation's output, or its error when that run failed.\nEmpty when the function has never run.",
         "tags": [
           "functions"
         ],
@@ -143,11 +323,298 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the function name from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "resize"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/logsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "createReq": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "envNames": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "handler": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "memoryLimit": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "runtime": {
+            "type": "string"
+          },
+          "target": {
+            "description": "\"\"|\"sandbox\" = sandbox, \"fleet\" = org GPU fleet",
+            "type": "string"
+          },
+          "timeoutSec": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "functionList": {
+        "properties": {
+          "functions": {
+            "description": "Functions is one entry per function in the caller's org.",
+            "items": {
+              "$ref": "#/components/schemas/functionView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "functionView": {
+        "properties": {
+          "avgDurationMs": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "envCount": {
+            "type": "integer"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "errors7d": {
+            "type": "integer"
+          },
+          "image": {
+            "type": "string"
+          },
+          "invocations7d": {
+            "type": "integer"
+          },
+          "lastDeployedAt": {
+            "type": "string"
+          },
+          "memoryLimit": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "successRate": {
+            "type": "number"
+          },
+          "target": {
+            "type": "string"
+          },
+          "timeoutSec": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "invocationList": {
+        "properties": {
+          "invocations": {
+            "description": "Invocations is the recorded runs, most recent first.",
+            "items": {
+              "$ref": "#/components/schemas/invocationView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "invocationView": {
+        "properties": {
+          "durationMs": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "statusCode": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "logsView": {
+        "properties": {
+          "logs": {
+            "description": "Logs is the last run's stderr when it errored, else its stdout. Empty when\nthe function has never run.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "metricsView": {
+        "properties": {
+          "costCents": {
+            "description": "null — no per-invocation cost source",
+            "type": "integer"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/seriesLine"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/statusBreakdown"
+          }
+        },
+        "type": "object"
+      },
+      "pointView": {
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "v": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "secretList": {
+        "properties": {
+          "secrets": {
+            "description": "Secrets is one entry per distinct (namespace, name) a function mounts.",
+            "items": {
+              "$ref": "#/components/schemas/secretView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "secretView": {
+        "properties": {
+          "mountedBy": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "seriesLine": {
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/pointView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "statusBreakdown": {
+        "properties": {
+          "error": {
+            "type": "integer"
+          },
+          "success": {
+            "type": "integer"
+          },
+          "timeout": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "triggerList": {
+        "properties": {
+          "triggers": {
+            "description": "Triggers is one entry per function's HTTP trigger.",
+            "items": {
+              "$ref": "#/components/schemas/triggerView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "triggerView": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "functionName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

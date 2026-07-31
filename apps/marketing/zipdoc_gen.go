@@ -76,10 +76,10 @@ func init() {
 			"AudienceRef.id":              "ID is the audience id from the path, as returned by create.",
 		},
 		Example:  json.RawMessage(`{"id":"aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}`),
-		Response: json.RawMessage(`{"available":true,"count":500,"deliverable":3,"unmatched":497,"sample":["u_1","u_2"],"source":"hanzo.events"}`),
+		Response: json.RawMessage(`{"available":true,"count":500,"deliverable":3,"unmatched":497,"sample":["u_1","u_2"],"source":"event.event"}`),
 	})
 	zip.Describe("GET /v1/marketing/calendar", zip.Doc{
-		Description: "listCalendarPosts returns the org's calendar, soonest scheduled first,\noptionally narrowed to one status.",
+		Description: "listCalendarPosts returns the org's calendar, soonest scheduled first.\nIt is optionally narrowed to one status.",
 		Fields: map[string]string{
 			"CalendarPost.body":        "Body is the post text. Required.",
 			"CalendarPost.channel":     "Channel is the target network: x, facebook, instagram, linkedin, tiktok,\nyoutube or threads. Required — a post must name where it goes.",
@@ -112,7 +112,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}`),
 	})
 	zip.Describe("GET /v1/marketing/campaigns", zip.Doc{
-		Description: "listCampaigns returns the org's campaigns, most recently updated first,\noptionally narrowed to one lifecycle status.",
+		Description: "listCampaigns returns the org's campaigns, most recently updated first.\nIt is optionally narrowed to one lifecycle status.",
 		Fields: map[string]string{
 			"Campaign.budget":      "Budget and Spend are minor units (USD cents), clamped to >= 0.",
 			"Campaign.channel":     "Channel is the delivery surface: email, sms, social, meta, google or\ntiktok. Empty means email.",
@@ -144,7 +144,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}`),
 	})
 	zip.Describe("GET /v1/marketing/promos", zip.Doc{
-		Description: "listPromos returns every promo the deployment offers with its live counters:\nhow many orgs have redeemed it and how many redemptions remain under the cap.\nThe promos are fleet-wide, not per-org — only the counters move.",
+		Description: "listPromos returns every promo the deployment offers, with its live counters.\nThe counters are how many orgs have redeemed it and how many redemptions remain\nunder the cap. The promos are fleet-wide, not per-org — only the counters move.",
 		Fields: map[string]string{
 			"Promo.active":         "Active is false for a promo that is no longer offered; an inactive promo\nquotes as ineligible and refuses to redeem.",
 			"Promo.code":           "Code is the promo id, e.g. \"first1000\".",
@@ -216,7 +216,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"}`),
 	})
 	zip.Describe("GET /v1/marketing/sequences/:id/enrollments", zip.Doc{
-		Description: "listEnrollments returns who is walking one sequence, most recently enrolled\nfirst, with each walk's current step and next due time.",
+		Description: "listEnrollments returns who is walking one sequence, most recently enrolled first.\nEach walk carries its current step and next due time.",
 		Fields: map[string]string{
 			"Enrollment.address":     "Address is the normalized (lower-cased, trimmed) recipient.",
 			"Enrollment.channel":     "Channel is the delivery surface the steps go out on.",
@@ -246,7 +246,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"}`),
 	})
 	zip.Describe("GET /v1/marketing/summary", zip.Doc{
-		Description: "summary rolls up the caller org's campaigns: how many there are, how many are\nactive, and the summed budget and spend in cents.",
+		Description: "summary rolls up the caller org's campaigns.\nIt counts them, counts the active ones, and sums budget and spend in cents.",
 		Fields: map[string]string{
 			"Summary.budget":    "Budget and Spend are the summed campaign budget and spend, in cents.",
 			"Summary.campaigns": "Campaigns is how many campaigns the org has, Active how many are running.",
@@ -254,7 +254,7 @@ func init() {
 		Response: json.RawMessage(`{"campaigns":12,"active":3,"budget":500000,"spend":128400}`),
 	})
 	zip.Describe("GET /v1/marketing/suppressions", zip.Doc{
-		Description: "listSuppressions returns the org's opt-out list, newest first — everyone the\nsend gate will refuse to deliver to.",
+		Description: "listSuppressions returns the org's opt-out list, newest first.\nIt is everyone the send gate will refuse to deliver to.",
 		Fields: map[string]string{
 			"Page.limit":            "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
 			"Suppression.address":   "Address is the recipient, normalized (lower-cased, trimmed) so an opt-out\ncannot be slipped past on a case or whitespace difference. Required.",

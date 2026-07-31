@@ -37,25 +37,67 @@
     "/v1/builds": {
       "get": {
         "operationId": "get_v1_builds",
+        "summary": "listBuilds returns the org's recorded BuildKit builds, newest first.",
+        "description": "listBuilds returns the org's recorded BuildKit builds, newest first.\nEach row is joined to its app for the source repo and to its deployment for\nthe commit.\nA build is triggered by deploying a git-source app — the ONE build trigger —\nso this is list-only, and an org that has built nothing gets an empty list\nrather than a fabricated one.",
         "tags": [
           "builds"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/buildList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/environments": {
       "get": {
         "operationId": "get_v1_environments",
+        "summary": "listEnvironments aggregates the org's apps into their deploy targets.",
+        "description": "listEnvironments aggregates the org's apps into their deploy targets.\nAn environment is not a standalone record — it is the Application.Environment\nscope — so this is list-only, and a new environment appears the moment an app\ntargets it.",
         "tags": [
           "environments"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/environmentList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pipelines": {
       "get": {
         "operationId": "get_v1_pipelines",
+        "summary": "listPipelines projects each of the org's apps as a CI/CD pipeline.",
+        "description": "listPipelines projects each of the org's apps as a CI/CD pipeline.\nA row carries the app's build source (repo or image) and the status and timing\nof its latest deployment run.\nThere is one pipeline per app — a pipeline is created by creating an app — so\nthis is list-only.",
         "tags": [
           "pipelines"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pipelineList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/platform/fleet": {
@@ -81,7 +123,19 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/fleet/{app}/deploy": {
@@ -318,7 +372,28 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/deployReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploymentView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/deployments": {
@@ -344,7 +419,22 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/deploymentView"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/deployments/{id}": {
@@ -378,7 +468,19 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploymentView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/deployments/{id}/logs": {
@@ -438,7 +540,22 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/domainView"
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_platform_projects_by_project_apps_by_app_domains",
@@ -462,7 +579,28 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/addDomainReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/domainView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/domains/{host}": {
@@ -530,7 +668,19 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/domainView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/env": {
@@ -603,7 +753,28 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/previewReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/previewView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/promote": {
@@ -629,7 +800,28 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/promoteReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploymentView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/rollback": {
@@ -655,7 +847,28 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/rollbackReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deploymentView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/start": {
@@ -681,7 +894,19 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/appView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/stop": {
@@ -707,15 +932,41 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/appView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/releases": {
       "get": {
         "operationId": "get_v1_releases",
+        "summary": "listReleases returns the org's released versions.",
+        "description": "listReleases returns the org's released versions.\nA release is a deployment that actually reached the cluster (deploying or\nlive), so a build that never rolled out is not one.\nReleases are created by deploying — the ONE deploy path — so this is\nlist-only, and it reports real deployment history and nothing else.",
         "tags": [
           "releases"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/releaseList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/run": {
@@ -752,12 +1003,117 @@
         "operationId": "post_v1_runner",
         "tags": [
           "runner"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/runnerBuildReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runnerBuildResp"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
   "components": {
     "schemas": {
+      "AppView": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "cluster": {
+            "type": "string"
+          },
+          "declaredTag": {
+            "type": "string"
+          },
+          "drift": {
+            "$ref": "#/components/schemas/Drift"
+          },
+          "endpoints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "string"
+          },
+          "health": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "latestTag": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "registry": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "runningTag": {
+            "type": "string"
+          }
+        }
+      },
+      "Drift": {
+        "type": "object",
+        "properties": {
+          "flags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriftFlag"
+            }
+          },
+          "severity": {
+            "type": "string"
+          }
+        }
+      },
+      "DriftFlag": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          }
+        }
+      },
       "EnvVarJSON": {
         "type": "object",
         "properties": {
@@ -768,6 +1124,28 @@
             "type": "boolean"
           },
           "value": {
+            "type": "string"
+          }
+        }
+      },
+      "Record": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "addDomainReq": {
+        "type": "object",
+        "properties": {
+          "host": {
             "type": "string"
           }
         }
@@ -861,6 +1239,70 @@
           }
         }
       },
+      "binarySpec": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "type": "string"
+          },
+          "ldflags": {
+            "type": "string"
+          },
+          "main": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "out": {
+            "type": "string"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "run": {
+            "type": "string"
+          }
+        }
+      },
+      "buildList": {
+        "properties": {
+          "builds": {
+            "description": "Builds is the org's real build records, joined to their app and commit.",
+            "items": {
+              "$ref": "#/components/schemas/buildView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "buildView": {
+        "properties": {
+          "commit": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "createAppReq": {
         "type": "object",
         "properties": {
@@ -930,6 +1372,131 @@
           }
         }
       },
+      "deployReq": {
+        "type": "object",
+        "properties": {
+          "commit": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        }
+      },
+      "deploymentView": {
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "type": "string"
+          },
+          "buildId": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
+      "domainView": {
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "primary": {
+            "type": "boolean"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Record"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "verified": {
+            "type": "boolean"
+          }
+        }
+      },
+      "environmentList": {
+        "properties": {
+          "environments": {
+            "description": "Environments is one row per environment any of the org's apps targets.",
+            "items": {
+              "$ref": "#/components/schemas/environmentView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "environmentView": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "services": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "gitSource": {
         "type": "object",
         "properties": {
@@ -955,6 +1522,69 @@
           }
         }
       },
+      "pipelineList": {
+        "properties": {
+          "pipelines": {
+            "description": "Pipelines is one row per app, carrying its latest deployment run.",
+            "items": {
+              "$ref": "#/components/schemas/pipelineView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "pipelineView": {
+        "properties": {
+          "duration": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lastRun": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "previewReq": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          }
+        }
+      },
+      "previewView": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/deploymentView"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
       "projectView": {
         "type": "object",
         "properties": {
@@ -974,6 +1604,60 @@
             "type": "string"
           },
           "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "promoteReq": {
+        "type": "object",
+        "properties": {
+          "deploymentId": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        }
+      },
+      "releaseList": {
+        "properties": {
+          "releases": {
+            "description": "Releases is one row per deployment that actually reached the cluster.",
+            "items": {
+              "$ref": "#/components/schemas/releaseView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "releaseView": {
+        "properties": {
+          "environment": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "releasedAt": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "rollbackReq": {
+        "type": "object",
+        "properties": {
+          "deploymentId": {
             "type": "string"
           }
         }
@@ -1029,6 +1713,82 @@
             "type": "string"
           },
           "url": {
+            "type": "string"
+          }
+        }
+      },
+      "runnerBuildReq": {
+        "type": "object",
+        "properties": {
+          "arch": {
+            "type": "string"
+          },
+          "binaries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/binarySpec"
+            }
+          },
+          "branch": {
+            "type": "string"
+          },
+          "bucket": {
+            "type": "string"
+          },
+          "context": {
+            "type": "string"
+          },
+          "dockerTarget": {
+            "type": "string"
+          },
+          "dockerfile": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "organizationId": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "release": {
+            "type": "boolean"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "sha": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        }
+      },
+      "runnerBuildResp": {
+        "type": "object",
+        "properties": {
+          "buildJobId": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "index": {
+            "type": "string"
+          },
+          "runnerPool": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target": {
             "type": "string"
           }
         }

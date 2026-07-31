@@ -16,12 +16,101 @@
     }
   ],
   "paths": {
-    "/v1/crawl/": {
+    "/v1/crawl": {
       "post": {
         "operationId": "post_v1_crawl",
+        "summary": "handle fetches ONE url and returns it as markdown plus the metadata the page\ndeclared about itself, archiving the result under the caller's own corpus.",
+        "description": "handle fetches ONE url and returns it as markdown plus the metadata the page\ndeclared about itself, archiving the result under the caller's own corpus. A\npage that cannot be fetched is a 200 with success:false and the reason — the\nask was well-formed, the page was not there — so a non-2xx from this route\nalways means the request itself was refused.",
         "tags": [
           "crawl"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "url": "https://hanzo.ai/about"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CrawlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "markdown": "# About Hanzo\n…",
+                    "title": "About Hanzo",
+                    "url": "https://hanzo.ai/about"
+                  },
+                  "success": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CrawlRequest": {
+        "properties": {
+          "url": {
+            "description": "URL is the page to fetch. Required. It is fetched from inside the cluster,\nso it is checked against the address guard before any connection is made.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CrawlView": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Document",
+            "description": "Data is the crawled page, present only on success."
+          },
+          "error": {
+            "description": "Error says why the fetch failed — refused host, unreachable, wrong content\ntype — verbatim, so a caller debugging a crawl can tell those apart.",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is true when the page was fetched and extracted. False with a 200 is\na normal answer: the ask was well-formed and the page was unreachable.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Document": {
+        "properties": {
+          "markdown": {
+            "description": "Markdown is the readable content. Empty is a legitimate result for a page\nthat carries none.",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Metadata is what the page declared about itself (og:*, description, …).",
+            "type": "object"
+          },
+          "title": {
+            "description": "Title is the document title, best-effort from \u003ctitle\u003e or og:title.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the FINAL url after redirects, not the one asked for.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

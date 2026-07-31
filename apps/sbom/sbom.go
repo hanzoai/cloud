@@ -39,6 +39,8 @@
 // /v1/sbom/* before the ai subsystem's /v1/* catch-all (150).
 package sbom
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"fmt"
@@ -109,13 +111,33 @@ func build(b cloud.Base) (state, error) {
 // routes registers the SBOM surface. Health is a static route registered BEFORE the
 // greedy resolve wildcard so it is never captured by it. Health is not JWT-gated
 // (liveness must be probe-able).
+//
+// Ingest and health are zip TYPED ops — one declaration the router, the OpenAPI
+// document, the MCP tool list and the CLI all read. Resolve stays a raw handler:
+// its ref rides a greedy `*` segment, and a typed op may not carry one (the
+// registry's `{wildcardN}` and the router's `*` are two different spellings of
+// the path, which the projection refuses rather than guesses at).
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	o := ops{s: s}
 	g := app.Group("/v1/sbom")
-	g.Get("/health", cloud.Handle(s, health))
+	// The bridge FIRST: a typed op receives only its context and its decoded
+	// input, so the request the SuperAdmin gate reads crosses here — and fiber
+	// runs middleware in registration order, so one installed after the leaves it
+	// serves would never run.
+	g.Use(cloud.Bridge())
+	z := cloud.ZipApp(app)
+	zip.Get(z, "/v1/sbom/health", o.health)
 	// Root route stays flat: Group("/v1/sbom").Post("") would register "/v1/sbom/".
-	app.Post("/v1/sbom", cloud.Handle(s, ingest))
+	zip.Post(z, "/v1/sbom", o.ingest, zip.WithStatus(http.StatusCreated))
 	g.Get("/*", cloud.Handle(s, resolve))
 }
+
+// ops binds the subsystem to its typed handlers: a TypedHandler takes only a
+// context and its input, so the service arrives as a RECEIVER.
+type ops struct{ s *cloud.Service[state] }
+
+// noInput is the In of an op that takes nothing off the wire.
+type noInput struct{}
 
 // requireDatastore returns the honest 503 when the datastore store is not
 // connected, rather than fabricating a result. Mirrors the analytics lens.
@@ -163,44 +185,52 @@ func ensureTable(ctx context.Context) error {
 
 // ── POST /v1/sbom — ingest (CI) ──────────────────────────────────────────────
 
-// ingest persists a CycloneDX SBOM's components keyed by image digest. Gated to a
-// validated SuperAdmin (owner == AdminOrg) — the canonical cloud super-admin
-// check, which the build fleet / CI carries. Re-ingest is idempotent: rows share
-// the (digest, name, version, purl) ORDER BY, so ReplacingMergeTree keeps the
-// latest by ingested_at (and resolve reads FINAL).
-func ingest(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
-	}
-	var in SbomIngest
-	if err := c.Bind(&in); err != nil {
-		return err
+// sbomIngested is what a successful ingest answers: the key the document was
+// filed under, and how many components came out of it.
+type sbomIngested struct {
+	// ImageDigest is the content-addressed key the components were filed under.
+	ImageDigest string `json:"imageDigest"`
+	// ComponentCount is how many components the document flattened to.
+	// A valid document with no components is 0, not an error.
+	ComponentCount int `json:"componentCount"`
+}
+
+// ingest persists a CycloneDX SBOM's components keyed by image digest.
+//
+// Gated to a validated SuperAdmin (owner == AdminOrg) — the canonical cloud
+// super-admin check, which the build fleet / CI carries.
+// Re-ingest is idempotent: rows share the (digest, name, version, purl) ORDER BY,
+// so ReplacingMergeTree keeps the latest by ingested_at (and resolve reads FINAL).
+//
+// Example: {"imageDigest": "sha256:9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60", "imageRef": "ghcr.io/hanzoai/cloud:v1.801.94", "sourceRepo": "hanzoai/cloud", "gitSha": "6625b5d", "format": "cyclonedx", "document": {"components": [{"name": "golang.org/x/net", "version": "v0.38.0", "type": "library", "purl": "pkg:golang/golang.org/x/net@v0.38.0"}]}}
+// Response: {"imageDigest": "sha256:9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60", "componentCount": 1}
+func (o ops) ingest(ctx context.Context, in *SbomIngest) (*sbomIngested, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok || !c.IsAdmin() {
+		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
 	in.ImageDigest = strings.TrimSpace(in.ImageDigest)
 	if in.ImageDigest == "" {
-		return zip.ErrBadRequest("imageDigest is required")
+		return nil, zip.ErrBadRequest("imageDigest is required")
 	}
 	comps, err := parseComponents(in.Document)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	if err := requireDatastore(); err != nil {
-		return err
+		return nil, err
 	}
-	if err := ensureTable(c.Context()); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "sbom store initializing: %v", err)
+	if err := ensureTable(ctx); err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "sbom store initializing: %v", err)
 	}
 
-	if stmt, args := insertBatch(in, comps); stmt != "" {
-		if err := datastore.Exec(c.Context(), stmt, args...); err != nil {
-			return zip.Errorf(http.StatusBadGateway, "sbom insert: %v", err)
+	if stmt, args := insertBatch(*in, comps); stmt != "" {
+		if err := datastore.Exec(ctx, stmt, args...); err != nil {
+			return nil, zip.Errorf(http.StatusBadGateway, "sbom insert: %v", err)
 		}
 	}
-	s.Log.Info("sbom ingested", "imageDigest", in.ImageDigest, "components", len(comps), "sourceRepo", in.SourceRepo)
-	return c.JSON(http.StatusCreated, map[string]any{
-		"imageDigest":    in.ImageDigest,
-		"componentCount": len(comps),
-	})
+	o.s.Log.Info("sbom ingested", "imageDigest", in.ImageDigest, "components", len(comps), "sourceRepo", in.SourceRepo)
+	return &sbomIngested{ImageDigest: in.ImageDigest, ComponentCount: len(comps)}, nil
 }
 
 // ── GET /v1/sbom/{ref} — resolve (console) ───────────────────────────────────
@@ -209,6 +239,11 @@ func ingest(s *cloud.Service[state], c *zip.Ctx) error {
 // carries the (possibly slash-bearing, possibly percent-encoded) ref; we decode it
 // and bind it to BOTH columns. FINAL collapses ReplacingMergeTree duplicates from
 // repeated ingests. 404 when nothing matches (honest empty, never fabricated).
+//
+// That greedy segment is also why this stays a RAW handler: a typed op's path is
+// the one the registry and the router must agree on letter for letter, and they
+// spell a wildcard differently ({wildcardN} against `*`), so declaring one here
+// would fail the projection rather than describe the route.
 func resolve(s *cloud.Service[state], c *zip.Ctx) error {
 	ref := strings.Trim(strings.TrimSpace(c.Fiber().Params("*")), "/")
 	if dec, err := url.PathUnescape(ref); err == nil {
@@ -330,14 +365,32 @@ func Prefetch(ctx context.Context, log luxlog.Logger, ref string) {
 
 // ── GET /v1/sbom/health — liveness ───────────────────────────────────────────
 
-// health is a pure liveness probe: the service is up; datastore reflects whether
-// the datastore store is connected. Not JWT-gated, always 200 (a disconnected
-// datastore is degraded-but-alive; the data endpoints report that as 503).
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]any{
-		"service":   "sbom",
-		"status":    "ok",
-		"datastore": datastore.Ready(),
-		"table":     sbomTable,
-	})
+// sbomHealth is the liveness answer: the service is up, and whether the global
+// store behind it is reachable.
+type sbomHealth struct {
+	// Service is always "sbom" — which subsystem answered.
+	Service string `json:"service"`
+	// Status is always "ok": the route answers 200 whenever the process is alive.
+	Status string `json:"status"`
+	// Datastore reports whether the datastore connection is up.
+	// False means the data routes answer 503; the process is still alive.
+	Datastore bool `json:"datastore"`
+	// Table is the global, cross-tenant table components are filed in.
+	Table string `json:"table"`
+}
+
+// health reports liveness and whether the global SBOM store is reachable.
+//
+// It is a pure probe: not JWT-gated, and always 200.
+// A disconnected datastore is degraded-but-alive, reported as datastore:false
+// here and as a 503 by the routes that need it.
+//
+// Response: {"service": "sbom", "status": "ok", "datastore": true, "table": "hanzo.sbom_component"}
+func (o ops) health(context.Context, *noInput) (*sbomHealth, error) {
+	return &sbomHealth{
+		Service:   "sbom",
+		Status:    "ok",
+		Datastore: datastore.Ready(),
+		Table:     sbomTable,
+	}, nil
 }

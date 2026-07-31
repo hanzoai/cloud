@@ -23,9 +23,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// services reads the launch board: every hosted service in the registry with its LIVE
-// waitlist mode, evaluated through the flag engine. This is the "remove the waitlist one
-// service at a time" view.
+// services reads the launch board. It lists every hosted service in the registry with
+// its LIVE waitlist mode, evaluated through the flag engine. This is the "remove the
+// waitlist one service at a time" view.
 //
 // Response: {"status":"ok","msg":"","data":{"services":[{"service":"chat",
 // "displayName":"Chat","description":"","hosts":["chat.hanzo.ai"],"waitlistMode":true}]}}
@@ -75,7 +75,7 @@ type serviceModeIn struct {
 	WaitlistMode bool `json:"waitlistMode"`
 }
 
-// upsertService onboards a hosted service, or edits one, so a new host comes under the
+// upsertService onboards a hosted service, or edits one. A new host comes under the
 // launch gate WITHOUT a redeploy. Re-registering an existing service PRESERVES its live
 // switch — editing the hosts of a service that is already open must not silently close
 // it again.

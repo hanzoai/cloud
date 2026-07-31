@@ -252,8 +252,8 @@ type Unsubscribed struct {
 	Channel      string `json:"channel"`
 }
 
-// listSuppressions returns the org's opt-out list, newest first — everyone the
-// send gate will refuse to deliver to.
+// listSuppressions returns the org's opt-out list, newest first.
+// It is everyone the send gate will refuse to deliver to.
 //
 // Example: {"limit": 100}
 func (o ops) listSuppressions(ctx context.Context, in *Page) (*SuppressionList, error) {

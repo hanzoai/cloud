@@ -80,6 +80,9 @@ func mountFleet(t *testing.T, rt *stubRuntime) *zip.App {
 	t.Setenv(gatewayURLEnv, "https://bot.example.test")
 	rt.start(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	// Serve installs this globally before MountAll; a typed op resolves its
+	// validated org through it, so the test wires it the same way.
+	app.Use(cloud.Bridge())
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
 	if err := visor.Mount(app, deps); err != nil { // Wire order: visor first — the shadowing mount
 		t.Fatalf("visor.Mount: %v", err)
@@ -156,7 +159,7 @@ func TestGetBotsServesRunsNotMachines(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("GET /v1/bots want 200, got %d (%s)", code, body)
 	}
-	var v botsView
+	var v BotRunList
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}

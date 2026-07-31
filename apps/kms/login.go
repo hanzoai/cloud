@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -97,6 +98,21 @@ type loginResponse struct {
 	AccessToken string `json:"accessToken"`
 	ExpiresIn   int64  `json:"expiresIn"`
 	TokenType   string `json:"tokenType"`
+}
+
+// The broker's declared bodies. This is the ONE route on this surface that
+// declares a schema without being a typed op, and the reason is the rate limit.
+//
+// A typed op is also published as an MCP tool, and a tools/call at POST /mcp
+// invokes the op's core DIRECTLY — it never passes through the fiber chain, so
+// it never passes through the per-source-IP limiter this route is wrapped in
+// (mount.go). Typing it would therefore open an unlimited second door onto an
+// unauthenticated fan-out to IAM, which is exactly the amplifier the limiter
+// exists to close. A schema-only registration buys the SDK its request and
+// response types and adds no second door; the cost is that this operation
+// carries no prose, because Register has nowhere to put any.
+func init() {
+	openapi.Register("/v1/kms/auth/login", "POST", loginRequest{}, loginResponse{})
 }
 
 // login exchanges the caller's clientId/clientSecret for an owner-scoped IAM JWT.

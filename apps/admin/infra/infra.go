@@ -135,8 +135,8 @@ type ScaleIn struct {
 	Count int `json:"count"`
 }
 
-// read serves the whole DigitalOcean infrastructure board: droplets, volumes, DOKS
-// clusters and load balancers, each cross-referenced against every cluster's live
+// read serves the whole DigitalOcean infrastructure board. It covers droplets, volumes,
+// DOKS clusters and load balancers, each cross-referenced against every cluster's live
 // Kubernetes state so the board can say what is safe to destroy and what is not.
 //
 // It is cached for up to a minute because one read is a fan-out over the DO API plus a
@@ -335,9 +335,9 @@ func run[T any](ctx context.Context, b *board, m mutation[T]) (*MutationOut, err
 	return &MutationOut{Status: core.OK, Data: out}, nil
 }
 
-// deleteVolume destroys a volume the board has just proven no PersistentVolume in any
-// cluster references. Irreversible, so it snapshots first unless explicitly waived —
-// the snapshot IS the undo.
+// deleteVolume destroys a volume no cluster PersistentVolume references. The board has
+// just proven that. Irreversible, so it snapshots first unless explicitly waived — the
+// snapshot IS the undo.
 // Response: {"status":"ok","msg":"","data":{"deleted":true,"name":"acme-data","sizeGiB":200,
 // "freedMonthlyCents":2000,"snapshotId":"snap-01J"}}
 func (b *board) deleteVolume(ctx context.Context, in *VolumeIn) (*MutationOut, error) {
@@ -482,8 +482,8 @@ func (b *board) deleteLoadBalancer(ctx context.Context, in *LoadBalancerIn) (*Mu
 	})
 }
 
-// scaleNodePool sets a node pool's node count — the ONE correct way to change how many
-// nodes a DOKS cluster has.
+// scaleNodePool sets a node pool's node count. It is the ONE correct way to change how
+// many nodes a DOKS cluster has.
 //
 // The response states what the board could NOT prove: DOKS picks which nodes a shrink
 // removes, so no particular pod is shown to survive one. See NodePool.ScaleTo.
@@ -511,8 +511,8 @@ func (b *board) scaleNodePool(ctx context.Context, in *ScaleIn) (*MutationOut, e
 	})
 }
 
-// cordonNode marks one cluster node unschedulable — or schedulable again — and can drain
-// the pods already on it.
+// cordonNode marks one cluster node unschedulable, or schedulable again. It can also
+// drain the pods already on it.
 //
 // It is the ONE infra change that does not go through the run discipline, because there
 // is no destructive verdict to check: cordoning is reversible and evicting respects the

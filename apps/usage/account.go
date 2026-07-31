@@ -1,12 +1,11 @@
 package usage
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 	"sort"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -261,32 +260,37 @@ type reportResp struct {
 	Stored   bool `json:"stored"`
 }
 
-// record ingests a batch of samples and appends them to the warehouse series. It is
-// FAIL-SOFT: a datastore outage costs a poll of history (stored:false), never a
-// failed request. It records usage ONLY — the link registry is refreshed separately
-// via POST /v1/links, so there is one and only one way to update an account row.
-func record(s *cloud.Service[state], c *zip.Ctx) error {
+// record ingests account-usage samples into the caller's own warehouse series. The
+// body carries either a `samples` array or one bare sample at the top level. It is FAIL-SOFT: a datastore outage costs a poll of history (stored:false),
+// never a failed request. It records usage ONLY — the link registry is refreshed
+// separately via POST /v1/links, so there is one and only one way to update an
+// account row.
+//
+// Example: {"samples": [{"provider": "claude", "machine": "spark", "window": "6h", "lane": "five_hour", "usedPct": 47, "confidence": "percentOnly"}]}
+// Response: {"accepted": 1, "stored": true}
+func (o ops) record(ctx context.Context, body *reportReq) (*reportResp, error) {
+	s := o.s
+	c, hasReq := o.request(ctx)
+	if !hasReq {
+		return nil, zip.ErrUnauthorized("sign in to report usage")
+	}
 	org, user, ok := caller(c)
 	if !ok {
-		return zip.ErrUnauthorized("sign in to report usage")
-	}
-	var body reportReq
-	if err := c.Bind(&body); err != nil {
-		return err
+		return nil, zip.ErrUnauthorized("sign in to report usage")
 	}
 	raw := body.samplesOf()
 	if len(raw) == 0 {
-		return zip.ErrBadRequest("at least one sample is required")
+		return nil, zip.ErrBadRequest("at least one sample is required")
 	}
 	if len(raw) > maxSamples {
-		return zip.ErrBadRequest(fmt.Sprintf("at most %d samples per report", maxSamples))
+		return nil, zip.ErrBadRequest(fmt.Sprintf("at most %d samples per report", maxSamples))
 	}
 	now := time.Now()
 	samples := make([]Sample, 0, len(raw))
 	for _, in := range raw {
 		x, err := parseSample(in, now)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		samples = append(samples, x)
 	}
@@ -294,11 +298,11 @@ func record(s *cloud.Service[state], c *zip.Ctx) error {
 	// History is fail-soft: a warehouse outage must never fail a report or block a
 	// device. `stored` tells the caller which happened — honestly.
 	stored := true
-	if err := s.State.warehouse.WriteSamples(c.Context(), org, user, samples, now); err != nil {
+	if err := s.State.warehouse.WriteSamples(ctx, org, user, samples, now); err != nil {
 		s.Log.Debug("account usage write skipped", "org", org, "err", err)
 		stored = false
 	}
-	return c.JSON(http.StatusAccepted, reportResp{Accepted: len(samples), Stored: stored})
+	return &reportResp{Accepted: len(samples), Stored: stored}, nil
 }
 
 // ── reads ────────────────────────────────────────────────────────────────────
@@ -316,35 +320,53 @@ type dashResp struct {
 	Windows   []sampleView `json:"windows"`   // every instance in range, newest first
 }
 
-// samples is the PER-PROVIDER view: one connected account's own consumption of its
-// own plan — "my Claude Max plan is 47% through its 6h window, resets at 14:20".
+// sampleQuery selects one provider account's lane series.
+type sampleQuery struct {
+	// Provider is the metered provider, e.g. claude. Required.
+	Provider string `json:"provider" validate:"required"`
+	// Account narrows to one linked account of that provider; empty means all of them.
+	Account string `json:"account"`
+	// Window narrows to one window class: 6h, day, week or month.
+	Window string `json:"window"`
+	// Range is the dash window: 1h, 24h, 7d or 30d. Empty means 24h.
+	Range string `json:"range"`
+}
+
+// samples returns one connected provider account's own plan consumption over a window.
+// `current` is the newest instance of each lane (the headline) and `windows` is the
+// history behind it, both computed from ONE deduped read. It is scoped to the caller's OWN linked
+// accounts, and an unavailable warehouse answers available:false rather than an error.
 //
-// `current` is the newest instance of each lane (the headline); `windows` is the
-// history behind it. Both are computed from ONE deduped read — no second query.
-func samples(s *cloud.Service[state], c *zip.Ctx) error {
+// Example: {"provider": "claude", "range": "24h"}
+func (o ops) samples(ctx context.Context, in *sampleQuery) (*dashResp, error) {
+	s := o.s
+	c, hasReq := o.request(ctx)
+	if !hasReq {
+		return nil, zip.ErrUnauthorized("sign in to view usage")
+	}
 	org, user, ok := caller(c)
 	if !ok {
-		return zip.ErrUnauthorized("sign in to view usage")
+		return nil, zip.ErrUnauthorized("sign in to view usage")
 	}
-	provider := trim(c.Query("provider"))
+	provider := trim(in.Provider)
 	if provider == "" {
-		return zip.ErrBadRequest("provider is required")
+		return nil, zip.ErrBadRequest("provider is required")
 	}
 	if len(provider) > maxProvider {
-		return zip.ErrBadRequest("provider too long")
+		return nil, zip.ErrBadRequest("provider too long")
 	}
-	acct := trim(c.Query("account"))
+	acct := trim(in.Account)
 	if len(acct) > maxAccount {
-		return zip.ErrBadRequest("account too long")
+		return nil, zip.ErrBadRequest("account too long")
 	}
-	window := trim(c.Query("window"))
+	window := trim(in.Window)
 	if window != "" && !validWindow(window) {
-		return zip.ErrBadRequest("window must be one of 6h, day, week, month")
+		return nil, zip.ErrBadRequest("window must be one of 6h, day, week, month")
 	}
-	rangeLabel := trim(c.Query("range"))
+	rangeLabel := trim(in.Range)
 	from, to, err := resolveRange(rangeLabel, time.Now())
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	if rangeLabel == "" {
 		rangeLabel = Range24h
@@ -355,9 +377,9 @@ func samples(s *cloud.Service[state], c *zip.Ctx) error {
 		Source: SourceAccount, Scope: ScopeUser,
 		Current: []sampleView{}, Windows: []sampleView{},
 	}
-	rows, ok := s.State.warehouse.Series(c.Context(), org, user, provider, acct, window, from, to)
+	rows, ok := s.State.warehouse.Series(ctx, org, user, provider, acct, window, from, to)
 	if !ok {
-		return c.JSON(http.StatusOK, out) // Available=false: honest "unavailable"
+		return &out, nil // Available=false: honest "unavailable"
 	}
 	out.Available = true
 	for _, x := range rows {
@@ -366,7 +388,7 @@ func samples(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, x := range currentOf(rows) {
 		out.Current = append(out.Current, toSampleView(x))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
 // currentOf picks the newest instance of each lane — the live state. Rows arrive

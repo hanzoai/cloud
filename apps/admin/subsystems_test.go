@@ -6,44 +6,58 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/datastore"
 )
 
-// TestSubsystemSQL_UsesV3Columns is the regression guard for the bug this board was
-// built on top of: distributed_o11y_index_v3 is snake_case and spells resource
-// attributes with $$. Querying the v2 spellings (durationNano / serviceName) does not
-// fail loudly — the caller swallows the error and the board shows honest-looking zeros
-// forever. Pin the real column names.
-func TestSubsystemSQL_UsesV3Columns(t *testing.T) {
+// TestSubsystemSQL_NamesEventPlaneColumns is the regression guard for the bug this
+// board was built on top of. The columns it reads used to be a materialized resource
+// attribute (resource_string_service$$name) and a unit-suffixed duration
+// (duration_nano), and naming either of them wrong did NOT fail loudly — the caller
+// swallowed the error and the board showed honest-looking zeros forever. The event
+// plane spells them as what they are, and this pins that: every retired spelling must
+// stay retired, and the live ones must be present.
+func TestSubsystemSQL_NamesEventPlaneColumns(t *testing.T) {
+	retired := []string{"durationNano", "serviceName", "duration_nano", "resource_string_service$$name", "has_error", "attributes_string", "timestamp"}
 	for _, sql := range []string{subsystemREDSQL(), subsystemLastErrorSQL(), o11yTraceTotalsSQL(), o11yTopServicesSQL()} {
-		if strings.Contains(sql, "durationNano") || strings.Contains(sql, "serviceName") {
-			t.Errorf("v2 column spelling in a v3 query — it will silently return nothing: %q", sql)
+		for _, dead := range retired {
+			if strings.Contains(sql, dead) {
+				t.Errorf("retired column spelling %q — the query will silently return nothing: %q", dead, sql)
+			}
 		}
 	}
-	if !strings.Contains(subsystemREDSQL(), "duration_nano") {
-		t.Errorf("RED query must measure duration_nano; got %q", subsystemREDSQL())
+	if !strings.Contains(subsystemREDSQL(), "quantile(0.5)(duration)") {
+		t.Errorf("RED query must measure duration; got %q", subsystemREDSQL())
 	}
-	if !strings.Contains(o11yTraceTotalsSQL(), "resource_string_service$$name") {
-		t.Errorf("trace totals must count the v3 service column; got %q", o11yTraceTotalsSQL())
+	if !strings.Contains(o11yTraceTotalsSQL(), "uniqExact(service)") {
+		t.Errorf("span totals must count the service column; got %q", o11yTraceTotalsSQL())
 	}
 }
 
-// TestSubsystemSQL_Shape proves both reads hit the ONE trace table, group by the ONE
-// subsystem label the tracing middleware writes, and bind the time bound POSITIONALLY
-// (no interpolation anywhere).
+// TestSubsystemSQL_Shape proves each read hits the table for the QUESTION it asks —
+// RED off the span plane (what a subsystem did, and how long), the last failure off
+// the error plane (what broke, message included) — groups by the ONE subsystem label
+// the tracing middleware writes, and binds the time bound POSITIONALLY (no
+// interpolation anywhere).
 func TestSubsystemSQL_Shape(t *testing.T) {
-	for name, sql := range map[string]string{"red": subsystemREDSQL(), "lastError": subsystemLastErrorSQL()} {
-		if !strings.Contains(sql, "FROM "+o11yTraceTable) {
-			t.Errorf("%s must read %s; got %q", name, o11yTraceTable, sql)
+	for name, c := range map[string]struct{ sql, table string }{
+		"red":       {subsystemREDSQL(), datastore.Span},
+		"lastError": {subsystemLastErrorSQL(), datastore.Error},
+	} {
+		if !strings.Contains(c.sql, "FROM "+c.table) {
+			t.Errorf("%s must read %s; got %q", name, c.table, c.sql)
 		}
-		if !strings.Contains(sql, subsystemAttr) {
-			t.Errorf("%s must group by %s; got %q", name, subsystemAttr, sql)
+		if !strings.Contains(c.sql, subsystemAttr) {
+			t.Errorf("%s must group by %s; got %q", name, subsystemAttr, c.sql)
 		}
-		if n := strings.Count(sql, "?"); n != 1 {
-			t.Errorf("%s: %d bind params, want 1 (the time bound only); got %q", name, n, sql)
+		if n := strings.Count(c.sql, "?"); n != 1 {
+			t.Errorf("%s: %d bind params, want 1 (the time bound only); got %q", name, n, c.sql)
 		}
 	}
-	if !strings.Contains(subsystemLastErrorSQL(), "has_error") {
-		t.Errorf("last-error query must select only errored spans; got %q", subsystemLastErrorSQL())
+	if !strings.Contains(subsystemREDSQL(), "status = '"+datastore.SpanError+"'") {
+		t.Errorf("RED query must count failures by the span's own status; got %q", subsystemREDSQL())
+	}
+	if !strings.Contains(subsystemLastErrorSQL(), "argMax(message, time)") {
+		t.Errorf("last-error query must carry the failure's message; got %q", subsystemLastErrorSQL())
 	}
 }
 

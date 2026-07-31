@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/admin/plugins", zip.Doc{
-		Description: "list reports what each host is actually running: every loaded plugin with its\nversion, pid, uptime, reload and restart counts, and its measured CPU, RSS,\nthread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
+		Description: "list reports what each host is actually running. Every loaded plugin is listed\nwith its version, pid, uptime, reload and restart counts, and its measured CPU,\nRSS, thread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
 		Fields: map[string]string{
 			"Host.error":   "Err is set when a peer could not be reached. Its plugins are then\nunknown, which is NOT the same as none, so the list stays empty and the\ndrift below refuses to conclude anything from it.",
 			"Host.host":    "Host is the pod's stable id, and Addr where it was reached. Self is true\nfor the host that answered the request.",
@@ -29,7 +29,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"billing disabled","data":[{"host":"cloud-0","ok":true}]}`),
 	})
 	zip.Describe("POST /v1/admin/plugins/:name/enable", zip.Doc{
-		Description: "enable brings a stopped or disabled plugin back on the artifact it already\nhas: the zero Plugin names no new artifact, so Reload reuses the loaded spec\nand clears the disabled flag. Named for what an operator means by it.",
+		Description: "enable restarts a stopped or disabled plugin on the artifact it already has. The\nzero Plugin names no new artifact, so Reload reuses the loaded spec and clears\nthe disabled flag. Named for what an operator means by it.",
 		Fields: map[string]string{
 			"NameIn.name":  "Name is the app, from the path.",
 			"NameIn.scope": "Scope \"host\" applies here only; default \"fleet\" applies everywhere.",

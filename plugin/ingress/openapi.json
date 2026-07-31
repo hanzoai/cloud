@@ -19,20 +19,67 @@
     "/v1/ingress/middlewares": {
       "get": {
         "operationId": "get_v1_ingress_middlewares",
+        "summary": "ListMiddlewares returns every edge transform the caller's org has configured,\nordered by id.",
+        "description": "ListMiddlewares returns every edge transform the caller's org has configured,\nordered by id. A route names the ones it wants, in order.",
         "tags": [
           "ingress"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ingressMiddlewares"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_ingress_middlewares",
+        "summary": "PutMiddleware creates or replaces one edge transform and hot-applies it.",
+        "description": "PutMiddleware creates or replaces one edge transform and hot-applies it. POST\nmints an id when the body omits one; PUT takes the id from the URL, which wins\nover any id in the body. type must be one of redirectScheme, stripPrefix,\naddPrefix or headers, and stripPrefix/addPrefix each require their config key.",
         "tags": [
           "ingress"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "config": {
+                  "prefixes": "/api"
+                },
+                "id": "strip-api",
+                "type": "stripPrefix"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Middleware"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Middleware"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/ingress/middlewares/{id}": {
       "delete": {
-        "operationId": "delete_v1_ingress_middlewares_by_id",
+        "operationId": "delete_v1_ingress_middlewares_id",
+        "summary": "DeleteMiddleware removes one of the caller org's edge transforms and hot-applies\nthe change.",
+        "description": "DeleteMiddleware removes one of the caller org's edge transforms and hot-applies\nthe change. Routes still naming it stop being served (they compile as skipped)\nuntil they name a transform that exists. Answers 204; an id this org does not\nhold is 404.",
         "tags": [
           "ingress"
         ],
@@ -41,14 +88,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the object to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "strip-api"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_ingress_middlewares_by_id",
+        "operationId": "get_v1_ingress_middlewares_id",
+        "summary": "GetMiddleware returns one of the caller org's edge transforms by id.",
+        "description": "GetMiddleware returns one of the caller org's edge transforms by id.",
         "tags": [
           "ingress"
         ],
@@ -57,14 +113,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the object to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "strip-api"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Middleware"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_ingress_middlewares_by_id",
+        "operationId": "put_v1_ingress_middlewares_id",
+        "summary": "PutMiddleware creates or replaces one edge transform and hot-applies it.",
+        "description": "PutMiddleware creates or replaces one edge transform and hot-applies it. POST\nmints an id when the body omits one; PUT takes the id from the URL, which wins\nover any id in the body. type must be one of redirectScheme, stripPrefix,\naddPrefix or headers, and stripPrefix/addPrefix each require their config key.",
         "tags": [
           "ingress"
         ],
@@ -73,30 +145,107 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID identifies the transform within the org: [A-Za-z0-9-_.], at most 128\nchars. A create that omits it gets a generated one. Routes reference it by\nthis id.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "strip-api"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "config": {
+                  "prefixes": "/api"
+                },
+                "id": "strip-api",
+                "type": "stripPrefix"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Middleware"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Middleware"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/ingress/routes": {
       "get": {
         "operationId": "get_v1_ingress_routes",
+        "summary": "ListRoutes returns every routing rule the caller's org has configured, ordered\nby id.",
+        "description": "ListRoutes returns every routing rule the caller's org has configured, ordered\nby id. A route maps an exact Host (and optional path prefix) to a service.",
         "tags": [
           "ingress"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ingressRoutes"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_ingress_routes",
+        "summary": "PutRoute creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart.",
+        "description": "PutRoute creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart. POST mints an id when the body omits\none; PUT takes the id from the URL, which wins over any id in the body. A\nroute's host is a GLOBALLY unique DNS claim: a host another org's route already\nholds is refused 409, so no tenant can hijack another's hostname.",
         "tags": [
           "ingress"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "host": "app.example.com",
+                "id": "web",
+                "service": "app-pool",
+                "tls": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Route"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Route"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/ingress/routes/{id}": {
       "delete": {
-        "operationId": "delete_v1_ingress_routes_by_id",
+        "operationId": "delete_v1_ingress_routes_id",
+        "summary": "DeleteRoute removes one of the caller org's routing rules and hot-applies the\nshrunken table, freeing its host for another claim.",
+        "description": "DeleteRoute removes one of the caller org's routing rules and hot-applies the\nshrunken table, freeing its host for another claim. Answers 204; an id this org\ndoes not hold is 404.",
         "tags": [
           "ingress"
         ],
@@ -105,14 +254,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the object to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "web"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_ingress_routes_by_id",
+        "operationId": "get_v1_ingress_routes_id",
+        "summary": "GetRoute returns one of the caller org's routing rules by id.",
+        "description": "GetRoute returns one of the caller org's routing rules by id.",
         "tags": [
           "ingress"
         ],
@@ -121,14 +279,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the object to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "a1b2c3d4e5f60718"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Route"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_ingress_routes_by_id",
+        "operationId": "put_v1_ingress_routes_id",
+        "summary": "PutRoute creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart.",
+        "description": "PutRoute creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart. POST mints an id when the body omits\none; PUT takes the id from the URL, which wins over any id in the body. A\nroute's host is a GLOBALLY unique DNS claim: a host another org's route already\nholds is refused 409, so no tenant can hijack another's hostname.",
         "tags": [
           "ingress"
         ],
@@ -137,30 +311,109 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID identifies the route within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "web"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "host": "app.example.com",
+                "id": "web",
+                "service": "app-pool",
+                "tls": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Route"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Route"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/ingress/services": {
       "get": {
         "operationId": "get_v1_ingress_services",
+        "summary": "ListServices returns every backend pool the caller's org has configured,\nordered by id.",
+        "description": "ListServices returns every backend pool the caller's org has configured,\nordered by id. A service is the weighted round-robin target a route dispatches\nto.",
         "tags": [
           "ingress"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ingressServices"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_ingress_services",
+        "summary": "PutService creates or replaces one backend pool and hot-applies it.",
+        "description": "PutService creates or replaces one backend pool and hot-applies it. POST mints\nan id when the body omits one; PUT takes the id from the URL, which wins over\nany id in the body. A pool needs at least one backend and every backend URL\nmust be http(s)://host[:port].",
         "tags": [
           "ingress"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "backends": [
+                  {
+                    "url": "http://10.0.0.7:8000",
+                    "weight": 1
+                  }
+                ],
+                "id": "app-pool"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Service"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Service"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/ingress/services/{id}": {
       "delete": {
-        "operationId": "delete_v1_ingress_services_by_id",
+        "operationId": "delete_v1_ingress_services_id",
+        "summary": "DeleteService removes one of the caller org's backend pools and hot-applies the\nchange.",
+        "description": "DeleteService removes one of the caller org's backend pools and hot-applies the\nchange. Routes still pointing at it stop being served (they compile as skipped)\nuntil they name a pool that exists. Answers 204; an id this org does not hold\nis 404.",
         "tags": [
           "ingress"
         ],
@@ -169,14 +422,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the object to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "app-pool"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_ingress_services_by_id",
+        "operationId": "get_v1_ingress_services_id",
+        "summary": "GetService returns one of the caller org's backend pools by id.",
+        "description": "GetService returns one of the caller org's backend pools by id.",
         "tags": [
           "ingress"
         ],
@@ -185,14 +447,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the object to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "app-pool"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Service"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_ingress_services_by_id",
+        "operationId": "put_v1_ingress_services_id",
+        "summary": "PutService creates or replaces one backend pool and hot-applies it.",
+        "description": "PutService creates or replaces one backend pool and hot-applies it. POST mints\nan id when the body omits one; PUT takes the id from the URL, which wins over\nany id in the body. A pool needs at least one backend and every backend URL\nmust be http(s)://host[:port].",
         "tags": [
           "ingress"
         ],
@@ -201,33 +479,349 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one. Routes reference it by this id.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "app-pool"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "backends": [
+                  {
+                    "url": "http://10.0.0.7:8000",
+                    "weight": 1
+                  }
+                ],
+                "id": "app-pool"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Service"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Service"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/ingress/status": {
       "get": {
         "operationId": "get_v1_ingress_status",
+        "summary": "Status reports the ingress edge's live posture.",
+        "description": "Status reports the ingress edge's live posture.\nThat is the role this instance runs in (app or edge), whether its listeners are\nbound and on which addresses, the ACME posture (staging flag and certificate cache\ndirectory), how many hosts the compiled route table currently serves, and how many\nthe ACME HostPolicy will issue a certificate for.",
         "tags": [
           "ingress"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ingressStatus"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/ingress/tls": {
       "get": {
         "operationId": "get_v1_ingress_tls",
+        "summary": "GetTLS returns the caller org's ACME intent and the edge-wide TLS facts it lands in.",
+        "description": "GetTLS returns the caller org's ACME intent and the edge-wide TLS facts it lands in.\nThose are: which role this instance runs in, whether its listeners are bound, every\nhost the ACME HostPolicy will issue a certificate for (the union across ALL orgs of\nTLS-marked routes and configured extraHosts, because one process holds one\ncertificate cache), and the ACME directory and account email the process was\nstarted with.",
         "tags": [
           "ingress"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ingressTLS"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_ingress_tls",
+        "summary": "PutTLS replaces the caller org's ACME intent and hot-applies what can be\nhot-applied.",
+        "description": "PutTLS replaces the caller org's ACME intent and hot-applies what can be\nhot-applied. extraHosts are normalized and validated, then feed the ACME\nHostPolicy on the reload this op performs, alongside the per-route tls flags.\nacmeEmail and staging bind an ACME account for the lifetime of an edge process,\nso they only take effect when the edge (re)starts — the returned note says so.",
         "tags": [
           "ingress"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "extraHosts": [
+                  "www.example.com"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/TLSConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TLSConfig"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Backend": {
+        "properties": {
+          "url": {
+            "description": "URL is the upstream server, http(s)://host[:port].",
+            "type": "string"
+          },
+          "weight": {
+            "description": "Weight is this member's share of the round-robin; must be \u003e= 0.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Middleware": {
+        "properties": {
+          "config": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Config is the transform's parameters: redirectScheme takes scheme (default\nhttps) and permanent (\"true\" ⇒ 301, else 302); stripPrefix REQUIRES\nprefixes (comma-separated, first match wins); addPrefix REQUIRES prefix;\nheaders is a header→value map set on the response.",
+            "type": "object"
+          },
+          "id": {
+            "description": "ID identifies the transform within the org: [A-Za-z0-9-_.], at most 128\nchars. A create that omits it gets a generated one. Routes reference it by\nthis id.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the transform: redirectScheme, stripPrefix, addPrefix or headers.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Route": {
+        "properties": {
+          "host": {
+            "description": "Host is the exact hostname this route matches, lowercased with any trailing\ndot stripped. It is a GLOBALLY unique claim — one route across the whole\nedge may hold a host, so no tenant can hijack another's.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID identifies the route within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one.",
+            "type": "string"
+          },
+          "middlewares": {
+            "description": "Middlewares are the ids of the edge transforms to apply, in this order,\nbefore the request reaches the service. At most 16.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pathPrefix": {
+            "description": "PathPrefix narrows the match to requests under this path; it must start\nwith \"/\". Empty matches every path on the host.",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority orders routes that share a host: higher wins, and equal priorities\nfall back to the longer PathPrefix.",
+            "type": "integer"
+          },
+          "service": {
+            "description": "Service is the id of the backend pool this route dispatches to. A route\nnaming a service that does not exist is skipped at compile, not served.",
+            "type": "string"
+          },
+          "tls": {
+            "description": "TLS asks the edge to terminate TLS for Host with an ACME-managed certificate.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Service": {
+        "properties": {
+          "backends": {
+            "description": "Backends are the upstream servers to balance across: 1..32 of them.",
+            "items": {
+              "$ref": "#/components/schemas/Backend"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.\nA create that omits it gets a generated one. Routes reference it by this id.",
+            "type": "string"
+          },
+          "passHostHeader": {
+            "description": "PassHostHeader forwards the client's original Host header upstream instead\nof rewriting it to the backend's.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "TLSConfig": {
+        "properties": {
+          "acmeEmail": {
+            "description": "ACMEEmail is the ACME account email. It binds an account for the lifetime\nof an edge process, so it applies only when the edge (re)starts.",
+            "type": "string"
+          },
+          "extraHosts": {
+            "description": "ExtraHosts get certificates without owning a route — at most 256. They feed\nthe ACME HostPolicy and hot-apply on the next reload.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "staging": {
+            "description": "Staging issues from Let's Encrypt's staging directory (untrusted certs, high\nrate limits). Like ACMEEmail it applies only when the edge (re)starts.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "ingressMiddlewares": {
+        "properties": {
+          "middlewares": {
+            "description": "Middlewares is the org's middlewares, ordered by id.",
+            "items": {
+              "$ref": "#/components/schemas/Middleware"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ingressRoutes": {
+        "properties": {
+          "routes": {
+            "description": "Routes is the org's routes, ordered by id.",
+            "items": {
+              "$ref": "#/components/schemas/Route"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ingressServices": {
+        "properties": {
+          "services": {
+            "description": "Services is the org's services, ordered by id.",
+            "items": {
+              "$ref": "#/components/schemas/Service"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ingressStatus": {
+        "properties": {
+          "acmeCacheDir": {
+            "description": "ACMECacheDir is where autocert persists accounts and certificates.",
+            "type": "string"
+          },
+          "acmeStaging": {
+            "description": "ACMEStaging is true when certificates are issued from Let's Encrypt staging.",
+            "type": "boolean"
+          },
+          "edgeEnabled": {
+            "description": "EdgeEnabled is true when the edge listeners are actually bound.",
+            "type": "boolean"
+          },
+          "httpAddr": {
+            "description": "HTTPAddr is the address the ACME HTTP-01 + HTTP router listens on.",
+            "type": "string"
+          },
+          "httpsAddr": {
+            "description": "HTTPSAddr is the address the SNI TLS terminator listens on.",
+            "type": "string"
+          },
+          "liveHosts": {
+            "description": "LiveHosts is how many hosts the compiled table routes.",
+            "type": "integer"
+          },
+          "proxy": {
+            "description": "Proxy names the reverse-proxy implementation behind every route.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Role is \"edge\" when CLOUD_INGRESS_EDGE_ENABLED is set, else \"app\".",
+            "type": "string"
+          },
+          "tlsHosts": {
+            "description": "TLSHosts is how many hosts the ACME HostPolicy will issue a certificate\nfor. NOT a subset of LiveHosts: an extraHost owns no route, and a TLS route\nnaming a missing service is skipped while its host still wants a cert.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ingressTLS": {
+        "properties": {
+          "acmeDirectory": {
+            "description": "ACMEDirectory is the ACME endpoint in use: the staging URL, or\n\"letsencrypt-production\".",
+            "type": "string"
+          },
+          "acmeEmail": {
+            "description": "ACMEEmail is the account email the PROCESS was started with\n(CLOUD_INGRESS_ACME_EMAIL), not the stored config's.",
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/TLSConfig",
+            "description": "Config is the caller org's stored ACME intent."
+          },
+          "edgeEnabled": {
+            "description": "EdgeEnabled is true when the edge listeners are actually bound.",
+            "type": "boolean"
+          },
+          "managedHosts": {
+            "description": "ManagedHosts is every host the ACME HostPolicy will issue a certificate for\n— the union across ALL orgs of TLS-marked routes and configured extraHosts,\nbecause one process holds one certificate cache.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "note": {
+            "description": "Note states which fields hot-apply and which need an edge restart.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Role is \"edge\" when this instance binds the listeners, else \"app\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

@@ -58,7 +58,7 @@ type setFlagIn struct {
 	Filters json.RawMessage `json:"filters,omitempty"`
 }
 
-// setFlag stores or overwrites ONE platform switch's definition and answers with the
+// setFlag stores or overwrites ONE platform switch's definition. It answers with the
 // whole board as it now stands. The flip is hot: this pod applies it immediately and
 // peers converge within one evaluation TTL (15s by default), with no redeploy.
 //

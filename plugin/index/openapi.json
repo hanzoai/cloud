@@ -271,9 +271,49 @@
     "/v1/index/version": {
       "get": {
         "operationId": "get_v1_index_version",
+        "summary": "version reports which server answered, in the shape a Meilisearch client\nexpects.",
+        "description": "version reports which server answered, in the shape a Meilisearch client\nexpects. It names the dialect implementation rather than a Meilisearch release,\nso a client logging it is not misled about what it is talking to. It reads no\nstore and takes no tenant, which is why it is the one route here that always\nanswers.",
         "tags": [
           "index"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "commitDate": "",
+                  "commitSha": "hanzo-cloud",
+                  "pkgVersion": "1.0.0"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/versionView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "versionView": {
+        "properties": {
+          "commitDate": {
+            "description": "CommitDate is always empty: there is no upstream build to date.",
+            "type": "string"
+          },
+          "commitSha": {
+            "description": "CommitSha names the implementation rather than a build hash, so a client\nlogging it says which server answered.",
+            "type": "string"
+          },
+          "pkgVersion": {
+            "description": "PkgVersion names the DIALECT implementation, not a Meilisearch release.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

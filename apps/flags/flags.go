@@ -452,7 +452,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	cloud.SetSwitchReader(Bool)
 	b := cloud.NewBase(deps, "flags")
 	svc := &cloud.Service[state]{Base: b, State: state{client: c}}
-	routes(app, svc)
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("flags.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	routes(app, zapp, svc)
 	log.Info("flags engine ready", "engine", "hanzo-flags", "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
 	return nil
 }

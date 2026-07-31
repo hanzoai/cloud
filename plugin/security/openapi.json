@@ -18,15 +18,76 @@
   "paths": {
     "/v1/security/findings": {
       "get": {
-        "operationId": "get_v1_security_findings",
+        "operationId": "listFindings",
+        "summary": "listFindings returns the caller org's findings, optionally narrowed by scan and severity.",
+        "description": "listFindings returns the caller org's findings, optionally narrowed by scan and severity.",
         "tags": [
           "security"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "scanId",
+            "in": "query",
+            "required": false,
+            "description": "ScanID restricts the listing to one scan.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minSeverity",
+            "in": "query",
+            "required": false,
+            "description": "MinSeverity drops anything below it: critical, high, medium or low.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means the store's default.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "createdAt": 1780000000000,
+                      "fingerprint": "9c1185a5c5e9fc54",
+                      "id": "fnd_1",
+                      "line": 1,
+                      "path": "config.py",
+                      "preview": "aws_key = \"AKIA****\"",
+                      "ruleId": "aws-access-key",
+                      "ruleName": "AWS Access Key ID",
+                      "scanId": "scan_9f2c",
+                      "severity": "critical"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/FindingList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/security/findings/{id}": {
       "get": {
-        "operationId": "get_v1_security_findings_by_id",
+        "operationId": "getFinding",
+        "summary": "getFinding returns one of the caller org's findings, redacted.",
+        "description": "getFinding returns one of the caller org's findings, redacted.\n\nA finding belonging to another org answers 404, never a peek.",
         "tags": [
           "security"
         ],
@@ -35,46 +96,199 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the finding id.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "fnd_1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "createdAt": 1780000000000,
+                  "fingerprint": "9c1185a5c5e9fc54",
+                  "id": "fnd_1",
+                  "line": 1,
+                  "path": "config.py",
+                  "preview": "aws_key = \"AKIA****\"",
+                  "ruleId": "aws-access-key",
+                  "ruleName": "AWS Access Key ID",
+                  "scanId": "scan_9f2c",
+                  "severity": "critical"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Finding"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/security/health": {
       "get": {
-        "operationId": "get_v1_security_health",
+        "operationId": "securityHealth",
+        "summary": "health reports whether the scanner is up and how many rules it loaded.",
+        "description": "health reports whether the scanner is up and how many rules it loaded.\n\nIt is fail-open: the subsystem has no external dependency, so it reports ok\nwhenever the store opened.\nRegistered before the generic liveness route so the real probe is not shadowed.",
         "tags": [
           "security"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "rules": 42,
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/security/rules": {
       "get": {
-        "operationId": "get_v1_security_rules",
+        "operationId": "listSecurityRules",
+        "summary": "listRules returns the secret-detection rule catalog.",
+        "description": "listRules returns the secret-detection rule catalog.\n\nThere is no tenant scope: the catalog is the same for every caller and\ndiscloses nothing tenant-specific.",
         "tags": [
           "security"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "description": "AWS access key identifier",
+                      "id": "aws-access-key",
+                      "name": "AWS Access Key ID",
+                      "severity": "critical"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/RuleList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/security/scans": {
       "get": {
-        "operationId": "get_v1_security_scans",
+        "operationId": "listScans",
+        "summary": "listScans returns the caller org's scans, most recent first.",
+        "description": "listScans returns the caller org's scans, most recent first.",
         "tags": [
           "security"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means the store's default.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "createdAt": 1780000000000,
+                      "critical": 1,
+                      "files": 1,
+                      "findings": 1,
+                      "high": 0,
+                      "id": "scan_9f2c",
+                      "low": 0,
+                      "medium": 0
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ScanList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_security_scans",
+        "operationId": "submitScan",
+        "summary": "submitScan scans the submitted files for secrets and records the redacted findings.",
+        "description": "submitScan scans the submitted files for secrets and records the redacted findings.\n\nThe raw content is scanned in memory and never stored; only the masked preview\nand the secret's fingerprint are persisted.\nOne scan is one metered unit, and the scan's tally is written to the audit log.",
         "tags": [
           "security"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "files": [
+                  {
+                    "content": "aws_key = \"AKIAIOSFODNN7EXAMPLE\"",
+                    "path": "config.py"
+                  }
+                ],
+                "project": "api"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "createdAt": 1780000000000,
+                  "critical": 1,
+                  "files": 1,
+                  "findings": 1,
+                  "high": 0,
+                  "id": "scan_9f2c",
+                  "low": 0,
+                  "medium": 0,
+                  "project": "api"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ScanSummary"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/security/scans/{id}": {
       "get": {
-        "operationId": "get_v1_security_scans_by_id",
+        "operationId": "getScan",
+        "summary": "getScan returns one of the caller org's scans with its findings.",
+        "description": "getScan returns one of the caller org's scans with its findings.\n\nThe findings ride along so the detail view is one round-trip; a scan belonging\nto another org answers 404, never a peek.",
         "tags": [
           "security"
         ],
@@ -83,11 +297,239 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the scan id returned by submit.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "scan_9f2c"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "findings": [],
+                  "scan": {
+                    "createdAt": 1780000000000,
+                    "critical": 1,
+                    "files": 1,
+                    "findings": 1,
+                    "high": 0,
+                    "id": "scan_9f2c",
+                    "low": 0,
+                    "medium": 0
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ScanDetail"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Finding": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the finding's scan time, unix milliseconds.",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "description": "Fingerprint is the SHA-256 of the raw secret, for dedupe across scans.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the finding id.",
+            "type": "string"
+          },
+          "line": {
+            "description": "Line is the 1-based line the secret was found on.",
+            "type": "integer"
+          },
+          "path": {
+            "description": "Path is the file the secret was found in.",
+            "type": "string"
+          },
+          "preview": {
+            "description": "Preview is the masked excerpt; it never carries the secret.",
+            "type": "string"
+          },
+          "ruleId": {
+            "description": "RuleID is the detection rule that fired.",
+            "type": "string"
+          },
+          "ruleName": {
+            "description": "RuleName is that rule's human name.",
+            "type": "string"
+          },
+          "scanId": {
+            "description": "ScanID is the scan this finding came from.",
+            "type": "string"
+          },
+          "severity": {
+            "description": "Severity is critical, high, medium or low.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "FindingList": {
+        "properties": {
+          "data": {
+            "description": "Data is the findings, worst severity first.",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "rules": {
+            "description": "Rules is the number of detection rules loaded.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is ok whenever the findings store opened.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RuleList": {
+        "properties": {
+          "data": {
+            "description": "Data is the rule catalog, worst severity first.",
+            "items": {
+              "$ref": "#/components/schemas/RuleView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "RuleView": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ScanDetail": {
+        "properties": {
+          "findings": {
+            "description": "Findings are every finding this scan produced, redacted.",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          },
+          "scan": {
+            "$ref": "#/components/schemas/ScanSummary",
+            "description": "Scan is the scan's summary and severity tally."
+          }
+        },
+        "type": "object"
+      },
+      "ScanList": {
+        "properties": {
+          "data": {
+            "description": "Data is the scan summaries, most recent first.",
+            "items": {
+              "$ref": "#/components/schemas/ScanSummary"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ScanRequest": {
+        "properties": {
+          "files": {
+            "description": "Files are the files to scan; at least one, at most 500, 8 MiB of content\nin total.",
+            "items": {
+              "$ref": "#/components/schemas/SourceFile"
+            },
+            "type": "array"
+          },
+          "project": {
+            "description": "Project is the optional sub-scope within the org; defaults to the caller's\nX-Project-Id, and must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ScanSummary": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is the scan time, unix milliseconds.",
+            "type": "integer"
+          },
+          "critical": {
+            "description": "Critical counts the critical-severity findings.",
+            "type": "integer"
+          },
+          "files": {
+            "description": "Files counts the files submitted.",
+            "type": "integer"
+          },
+          "findings": {
+            "description": "Findings counts every finding across all severities.",
+            "type": "integer"
+          },
+          "high": {
+            "description": "High counts the high-severity findings.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the scan id, the key for its findings.",
+            "type": "string"
+          },
+          "low": {
+            "description": "Low counts the low-severity findings.",
+            "type": "integer"
+          },
+          "medium": {
+            "description": "Medium counts the medium-severity findings.",
+            "type": "integer"
+          },
+          "project": {
+            "description": "Project is the sub-scope the scan ran under, absent at org level.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SourceFile": {
+        "properties": {
+          "content": {
+            "description": "Content is the file's raw text. It is scanned in memory and never persisted.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the file's path, reported verbatim on any finding it produces.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

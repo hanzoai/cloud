@@ -83,10 +83,15 @@ vet: ## go vet this app and its entrypoint(s).
 #
 # `build` first, because a spec generated from a stale binary is a lie.
 #
-# GIT_SSH_ADDR: mounting is not free of side effects — apps/git opens a real
-# SSH listener on a fixed :2222 — and a document is a projection of routes, not a
-# reason to contend for a port with a cloud already running on the box. The same
-# ephemeral-port convention the shared openapi_dump spec harness uses.
+# GIT_SSH_ADDR, CLOUD_PUBSUB_*: mounting is not free of side effects — apps/git
+# opens a real SSH listener on a fixed :2222 and apps/pubsub binds the NATS client
+# port on a fixed :4222, both FAIL-CLOSED — and a document is a projection of
+# ROUTES, not a reason to contend for a port with a cloud already running on the
+# box. Each app's own ephemeral-port knob (the same one its tests use: :0 for the
+# listener, -1 for "pick a free port" in NATS) makes projecting a document
+# independent of what else holds a port here. Without them the gate is red for an
+# environmental reason on any box running a cloud — and a gate that cannot be run
+# is a gate that stops being run.
 #
 # The binary is handed the PATH, never a redirect: a subsystem's dependencies
 # write to stdout at mount (hanzoai/commerce prints a sqlite-vec warning and GORM
@@ -94,7 +99,8 @@ vet: ## go vet this app and its entrypoint(s).
 openapi: build ## Emit this app's own subset of the API document into plugin/<app>/openapi.json.
 	@for a in $(APPS); do \
 	  echo ">> openapi $$a"; \
-	  GIT_SSH_ADDR=127.0.0.1:0 $(BIN)/$$a openapi $(ROOT)/plugin/$$a/openapi.json || exit 1; \
+	  GIT_SSH_ADDR=127.0.0.1:0 CLOUD_PUBSUB_HOST=127.0.0.1 CLOUD_PUBSUB_PORT=-1 \
+	    $(BIN)/$$a openapi $(ROOT)/plugin/$$a/openapi.json || exit 1; \
 	done
 
 # Binaries only. plugin/<app>/openapi.json is a committed artifact, like the fleet's

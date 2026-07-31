@@ -49,7 +49,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path"
 	"sort"
@@ -61,14 +60,16 @@ import (
 	zip "github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 )
 
 const (
-	// o11yIngestRoute is the cloud-native LLM-obs ingestion endpoint — /v1/ only
-	// (never an api-prefixed path); the retired console-worker producer repoints
-	// here at cutover.
-	o11yIngestRoute = "/v1/o11y/ingestion"
+	// o11yIngestLeaf is the cloud-native LLM-obs ingestion endpoint's leaf under
+	// the o11y prefix — /v1/ only (never an api-prefixed path); the retired
+	// console-worker producer repoints here at cutover. The full public path is
+	// o11yPrefix + this, composed in exactly one place (o11yIngestRoute) so the
+	// route, the op's identity and the log line can never disagree.
+	o11yIngestLeaf  = "/ingestion"
+	o11yIngestRoute = o11yPrefix + o11yIngestLeaf
 
 	// o11yBlobThresholdEnv overrides the inline-body size cap (bytes). A body larger
 	// than this overflows to object storage; the row keeps only the blob ref.
@@ -92,22 +93,33 @@ var ingestColumns = []string{"id", "org", "type", "timestamp", "body", "blob_ref
 // o11yEvent is one LLM-observability ingestion event: a typed envelope whose Body
 // is the type-specific payload. Batches arrive as {"batch":[...]}.
 type o11yEvent struct {
-	ID        string          `json:"id"`
-	Type      string          `json:"type"`
-	Timestamp string          `json:"timestamp"`
-	Body      json.RawMessage `json:"body"`
+	// ID is the producer's id for this event; it becomes the row's primary key
+	// and the blob key when an oversized body overflows.
+	ID string `json:"id"`
+	// Type routes the event to its table: trace-create, score-create, or one of
+	// the observation kinds (observation-*, span-*, generation-*, event-create).
+	// An unrecognised type is dropped, never mis-routed.
+	Type string `json:"type"`
+	// Timestamp is the producer's event time, stored verbatim.
+	Timestamp string `json:"timestamp"`
+	// Body is the type-specific payload. A body over the inline cap is written
+	// to object storage and the row keeps only the reference.
+	Body json.RawMessage `json:"body"`
 }
 
 // o11yBatch is the ingestion request envelope ({"batch":[...]}).
 type o11yBatch struct {
+	// Batch is the events to persist, in one request.
 	Batch []o11yEvent `json:"batch"`
 }
 
 // ingestResult is the endpoint's honest receipt: how many events were persisted vs
 // dropped (unknown type). Never leaks another tenant's data.
 type ingestResult struct {
+	// Accepted is how many events were persisted.
 	Accepted int `json:"accepted"`
-	Dropped  int `json:"dropped"`
+	// Dropped is how many were discarded for carrying an unrecognised type.
+	Dropped int `json:"dropped"`
 }
 
 // eventSink writes coalesced rows to a Datastore table. The real impl is a
@@ -227,7 +239,18 @@ func mountEventIngest(a cloud.Router, deps cloud.Deps) error {
 	}
 	eventIngestSink = sink
 
-	a.Post(o11yIngestRoute, makeIngestHandler(sink, nil, blobThreshold(), log))
+	// A TYPED op on the registry, with its WHOLE path spelled: that path is the
+	// identity every projection keys on AND the key cmd/zipdoc files its prose
+	// under, and the extractor reads the literal it was handed rather than
+	// composing a group's prefix. It arrives as a method value on a RECEIVER
+	// because that is the only bound form cmd/zipdoc can lift prose from — a
+	// closure returned by a helper is a call expression with nothing to read.
+	z := cloud.ZipApp(a)
+	if z == nil {
+		return fmt.Errorf("o11y.mountEventIngest: router carries no typed-op registry")
+	}
+	o := ingestOps{sink: sink, threshold: blobThreshold(), log: log}
+	zip.Post(z, o11yIngestRoute, o.ingest)
 
 	if cloud.EmbeddedTasks() != nil {
 		log.Info("o11y event ingest: durable engine present; flush runs inline, durable Activity hand-off is the next reviewed step")
@@ -236,29 +259,37 @@ func mountEventIngest(a cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// makeIngestHandler builds the POST handler over a sink (+ optional blob overflow).
-// The org is the gateway-validated tenant (principal.Org), never a raw header —
-// a batch can only ever be attributed to the caller's own org.
-func makeIngestHandler(sink eventSink, blobs blobStore, threshold int, log luxlog.Logger) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org, ok := principal.Org(c)
-		if !ok {
-			return zip.ErrForbidden("a validated principal is required")
-		}
-		var batch o11yBatch
-		if err := c.Bind(&batch); err != nil {
-			return zip.ErrBadRequest("malformed ingestion batch")
-		}
-		if len(batch.Batch) == 0 {
-			return c.JSON(http.StatusOK, ingestResult{})
-		}
-		accepted, dropped, err := processBatch(c.Context(), org, batch.Batch, sink, blobs, threshold)
-		if err != nil {
-			log.Warn("o11y event ingest flush failed", "org", org, "err", err)
-			return zip.ErrInternal("ingest flush failed")
-		}
-		return c.JSON(http.StatusOK, ingestResult{Accepted: accepted, Dropped: dropped})
+// ingestOps binds the sink (+ optional blob overflow) to the typed ingest op. A
+// TypedHandler is func(context.Context, *In) (*Out, error) — no parameter for the
+// sink — so it arrives as a RECEIVER and the op is a method value.
+type ingestOps struct {
+	sink      eventSink
+	blobs     blobStore
+	threshold int
+	log       luxlog.Logger
+}
+
+// IngestO11yEvents persists a batch of LLM-observability events — traces,
+// observations and scores — for the caller's org. Each event routes to its table
+// by type; an event carrying an unrecognised type is dropped and counted rather
+// than mis-routed, and a body over the inline cap is written to object storage
+// with only its reference kept on the row. The receipt says how many of each.
+//
+// Example: {"batch": [{"id": "e_1", "type": "trace-create", "timestamp": "2026-01-01T00:00:00Z", "body": {}}]}
+func (o ingestOps) ingest(ctx context.Context, in *o11yBatch) (*ingestResult, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
+	if len(in.Batch) == 0 {
+		return &ingestResult{}, nil
+	}
+	accepted, dropped, err := processBatch(ctx, org, in.Batch, o.sink, o.blobs, o.threshold)
+	if err != nil {
+		o.log.Warn("o11y event ingest flush failed", "org", org, "err", err)
+		return nil, zip.ErrInternal("ingest flush failed")
+	}
+	return &ingestResult{Accepted: accepted, Dropped: dropped}, nil
 }
 
 // shutdownEventIngest closes the Datastore connection so buffered inserts flush

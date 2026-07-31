@@ -11,22 +11,23 @@ import (
 	"context"
 	"net/http"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 )
 
 // This file proves the unification net-invariant: there is ONE ingest handler
-// implementation and ONE write core; /v1/event is the single canonical door serving
+// implementation and ONE ingest core; /v1/event is the single canonical door serving
 // EVERY wire shape (Event | [Event] | {batch}) and EVERY auth context (IAM bearer |
 // pk_ key | site-host-forced); the other routes are thin aliases/shims delegating to
-// it. The proof is decomposed to fit the harness (datastore is DOWN, so the HTTP
-// path stops at requireDatastore's 503 before a row is written):
+// it. The proof is decomposed to fit the harness (the publish seam is substituted, so
+// the HTTP path is observable without a bus):
 //
-//   - WIRE dimension (deterministic, row layer): the SAME logical event in every
+//   - WIRE dimension (deterministic, fact layer): the SAME logical event in every
 //     wire shape decodes through the ONE tolerant decoder (decodeIngest) and the ONE
-//     normalizer (normalizeEvent) into a byte-identical warehouse row, tenant = the
-//     server-resolved org. This is exactly the row buildEventsInsert binds.
-//   - AUTH dimension (HTTP layer): each auth context is ADMITTED (503, never 403),
+//     normalizer (normalize) into a byte-identical fact, org = the server-resolved
+//     tenant. This is exactly what the writer binds, column for column.
+//   - AUTH dimension (HTTP layer): each auth context is ADMITTED (never 403),
 //     proving the canonical door resolved a tenant for it. Each pure resolver
 //     (resolveKeyOrg→org, the host-forced Site.Org) is
 //     unit-proven elsewhere (publishable_test, capture_keyorg_test, hostcarve_test),
@@ -98,13 +99,13 @@ func TestDecodeIngest_EmptyAndMalformed(t *testing.T) {
 
 // ── net invariant: SAME warehouse row + SAME tenant across every wire ──────────
 
-// TestUnifiedIngest_SameRowSameTenant is THE unification proof at the row layer: one
+// TestUnifiedIngest_SameFactSameTenant is THE unification proof at the fact layer: one
 // logical event, expressed as every wire shape the canonical door and its aliases
 // accept, decoded through the ONE decoder and normalized with the SAME server org,
-// yields a byte-identical warehouse row (modulo the randomly-minted id) whose tenant
-// is that org. Since buildEventsInsert binds eventRow.args() positionally, identical
-// args() == identical warehouse row.
-func TestUnifiedIngest_SameRowSameTenant(t *testing.T) {
+// yields a byte-identical fact (modulo the randomly-minted id) whose org is that
+// tenant. Since the writer binds the message's values positionally, identical values
+// == identical warehouse row.
+func TestUnifiedIngest_SameFactSameTenant(t *testing.T) {
 	const org = "acme"
 	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
 
@@ -124,41 +125,80 @@ func TestUnifiedIngest_SameRowSameTenant(t *testing.T) {
 		if err != nil || len(evs) != 1 {
 			t.Fatalf("%s: decodeIngest evs=%v err=%v", name, evs, err)
 		}
-		// foldException is a no-op for non-error events — part of the ONE core path.
-		row, ok := normalizeEvent(org, now, foldException(evs[0]))
+		// the ONE core path: every wire lands on the same fact.
+		f, ok := normalize(org, now, evs[0])
 		if !ok {
 			t.Fatalf("%s: normalize dropped a routable event", name)
 		}
-		rows[name] = row.args()
+		// Compare what the WRITER binds, so this proves the row and not just the struct.
+		rows[name] = writerFor(t, f.signal).args(wire(f))
 	}
 
-	// The tenant column (index 2) is the server org for EVERY wire — never the body.
+	// The tenant column (index 0) is the server org for EVERY wire — never the body.
 	for name, a := range rows {
-		if a[2] != org {
-			t.Fatalf("%s: tenant arg = %v, want %q (server-stamped)", name, a[2], org)
+		if a[0] != org {
+			t.Fatalf("%s: org arg = %v, want %q (server-stamped)", name, a[0], org)
 		}
 	}
-	// Every wire yields the identical warehouse row, comparing all columns except the
-	// minted id (index 0) — the only non-deterministic column when messageId is absent.
+	// Every wire yields the identical row, comparing all columns except the minted id
+	// (index 2) — the only non-deterministic column when messageId is absent.
 	ref := rows["bareObject"]
 	for name, a := range rows {
 		assertRowArgsEqualExceptID(t, name, ref, a)
 	}
 }
 
-// assertRowArgsEqualExceptID compares two positional row-arg slices column-by-column,
-// skipping index 0 (the randomly-minted id). A mismatch names the differing column.
-func assertRowArgsEqualExceptID(t *testing.T, name string, want, got []any) {
+// writerFor returns the writer that lands a signal, so a test binds to the same
+// column order production does.
+func writerFor(t *testing.T, sig signal) writer {
 	t.Helper()
-	if len(want) != len(got) || len(got) != len(eventColumns) {
-		t.Fatalf("%s: arg width = %d, want %d", name, len(got), len(eventColumns))
-	}
-	for i := 1; i < len(got); i++ {
-		if !reflect.DeepEqual(want[i], got[i]) {
-			t.Fatalf("%s: column %q differs: %v (%T) != %v (%T)",
-				name, eventColumns[i], got[i], got[i], want[i], want[i])
+	for _, w := range writers {
+		if w.signal == sig {
+			return w
 		}
 	}
+	t.Fatalf("no writer for signal %q", sig)
+	return writer{}
+}
+
+// idColumn is the position of the minted id in the envelope — the one column that is
+// non-deterministic when the caller sends no messageId.
+var idColumn = columnAt(envelopeColumns, "id")
+
+// assertRowArgsEqualExceptID compares two positional row-arg slices column-by-column,
+// skipping the minted id. A mismatch names the differing column.
+func assertRowArgsEqualExceptID(t *testing.T, name string, want, got []any) {
+	t.Helper()
+	if len(want) != len(got) {
+		t.Fatalf("%s: arg width = %d, want %d", name, len(got), len(want))
+	}
+	for i := 0; i < len(got); i++ {
+		if i == idColumn {
+			continue
+		}
+		if !reflect.DeepEqual(want[i], got[i]) {
+			t.Fatalf("%s: column %d (%s) differs: %v (%T) != %v (%T)",
+				name, i, columnName(i), got[i], got[i], want[i], want[i])
+		}
+	}
+}
+
+// columnName names a bound position for a failure message. Past the envelope the
+// position is the signal's own, so it is reported as an offset rather than guessed at.
+func columnName(i int) string {
+	if i < len(envelopeColumns) {
+		return envelopeColumns[i]
+	}
+	return "signal column +" + strconv.Itoa(i-len(envelopeColumns))
+}
+
+func columnAt(list []string, want string) int {
+	for i, s := range list {
+		if s == want {
+			return i
+		}
+	}
+	return -1
 }
 
 // ── pluggable auth on the ONE door: IAM's pk- folded into /v1/event ──────────

@@ -55,7 +55,7 @@ func TestInstallTelemetry_SpanReachesCoResidentSink(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_ZAP_ENDPOINT", "")
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
-	t.Setenv("O11Y_TRACES_ZAP_INPROCESS", "true") // a co-resident sink is expected
+	t.Setenv("OTEL_SDK_DISABLED", "")
 
 	sink := &captureSink{}
 	RegisterTraceSink(sink.sink)
@@ -164,15 +164,12 @@ func TestInstallTelemetry_RetiresOTLPExporterEnv(t *testing.T) {
 	}
 }
 
-// TestInstallTelemetry_DisabledIsNoop confirms the clean no-op posture: with no
-// sink expected and no endpoint set, InstallTelemetry installs nothing, returns a
-// non-nil shutdown, and leaves TracerProviderInstalled false so apps/ does not
-// adopt a no-op provider into ai.
+// TestInstallTelemetry_DisabledIsNoop: the OTel standard kill switch installs
+// nothing, returns a non-nil shutdown, and leaves TracerProviderInstalled false so
+// apps/ does not adopt a no-op provider into ai. It is the ONLY off switch — where
+// spans GO is locality, and locality is never configured.
 func TestInstallTelemetry_DisabledIsNoop(t *testing.T) {
-	t.Setenv("OTEL_EXPORTER_ZAP_ENDPOINT", "")
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
-	t.Setenv("O11Y_TRACES_ZAP_INPROCESS", "")
+	t.Setenv("OTEL_SDK_DISABLED", "true")
 
 	shutdown := InstallTelemetry(context.Background(), testLogger(), "hanzo-cloud")
 	if shutdown == nil {
@@ -184,21 +181,57 @@ func TestInstallTelemetry_DisabledIsNoop(t *testing.T) {
 	shutdown(context.Background()) // must not panic
 }
 
-// TestTraceInprocEnabled_Gate: the ONE gate both the host producer and the
-// clients/o11y sink read, so the two can never disagree about whether a
-// co-resident sink is expected.
-func TestTraceInprocEnabled_Gate(t *testing.T) {
+// TestTelemetryDisabled_Gate pins the kill switch's vocabulary.
+func TestTelemetryDisabled_Gate(t *testing.T) {
 	for _, v := range []string{"1", "true", "TRUE", "yes", "on", " true "} {
-		t.Setenv("O11Y_TRACES_ZAP_INPROCESS", v)
-		if !TraceInprocEnabled() {
-			t.Fatalf("TraceInprocEnabled()=false for %q, want true", v)
+		t.Setenv("OTEL_SDK_DISABLED", v)
+		if !telemetryDisabled() {
+			t.Fatalf("telemetryDisabled()=false for %q, want true", v)
 		}
 	}
 	for _, v := range []string{"", "0", "false", "no", "off", "maybe"} {
-		t.Setenv("O11Y_TRACES_ZAP_INPROCESS", v)
-		if TraceInprocEnabled() {
-			t.Fatalf("TraceInprocEnabled()=true for %q, want false", v)
+		t.Setenv("OTEL_SDK_DISABLED", v)
+		if telemetryDisabled() {
+			t.Fatalf("telemetryDisabled()=true for %q, want false", v)
 		}
+	}
+}
+
+// TestLocalO11y_IsLoopbackPerSignal pins the SAME-MACHINE rung: o11y is a sibling
+// process, so its address is loopback, and each signal has its own port because
+// each signal has its own listener. This is the exact pair that was wrong — the
+// span wire named the METRIC port on a cluster Service — and getting it wrong
+// costs nothing at compile time and every span at run time.
+func TestLocalO11y_IsLoopbackPerSignal(t *testing.T) {
+	if got, want := localO11y(O11ySpanPort), "127.0.0.1:4317"; got != want {
+		t.Errorf("span rung = %q, want %q", got, want)
+	}
+	if got, want := localO11y(O11yMetricPort), "127.0.0.1:4319"; got != want {
+		t.Errorf("metric rung = %q, want %q", got, want)
+	}
+	if O11ySpanPort == O11yMetricPort || O11ySpanPort == O11yLogPort || O11yLogPort == O11yMetricPort {
+		t.Error("two signals share a port — one receiver would decode the other's frames and drop them")
+	}
+}
+
+// TestInstallTelemetry_NoEndpointStillReachesTheSibling is the regression this
+// ladder exists for. Production sets OTEL_EXPORTER_ZAP_ENDPOINT to the empty
+// string; under the old rule that meant "no wire", so every process without a
+// co-resident sink — the host and all 111 non-o11y plugins — reached ExportSpans
+// with no route AND no wire and dropped the batch. Unset now means "o11y is on this
+// machine", so the wire is always there and only a REGISTERED sink outranks it.
+func TestInstallTelemetry_NoEndpointStillReachesTheSibling(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_ZAP_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
+	t.Setenv("OTEL_SDK_DISABLED", "")
+	RegisterTraceSink(nil) // o11y is a plugin: no handler in this process
+
+	shutdown := InstallTelemetry(context.Background(), testLogger(), "hanzo-cloud")
+	t.Cleanup(func() { shutdown(context.Background()) })
+
+	if !TracerProviderInstalled() {
+		t.Fatal("no provider installed with an empty endpoint — spans from the host and every sibling plugin go nowhere")
 	}
 }
 

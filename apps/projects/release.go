@@ -475,9 +475,9 @@ func activate(s *cloud.Service[state], ctx context.Context, org string, p Projec
 
 // ---- HTTP ----
 
-// releaseView is the published shape of a release, used by every release route
+// siteRelease is the published shape of a release, used by every release route
 // so create, activate, and list describe the resource identically.
-type releaseView struct {
+type siteRelease struct {
 	ReleaseID string `json:"releaseId"`
 	Slug      string `json:"slug"`
 	Objects   int    `json:"objects"`
@@ -488,8 +488,8 @@ type releaseView struct {
 	CreatedAt int64  `json:"createdAt"`
 }
 
-func toReleaseView(s *cloud.Service[state], r Release, active bool) releaseView {
-	v := releaseView{
+func toReleaseView(s *cloud.Service[state], r Release, active bool) siteRelease {
+	v := siteRelease{
 		ReleaseID: r.ID, Slug: r.Slug, Objects: r.Objects, Bytes: r.Bytes,
 		Source: r.Source, Active: active, CreatedAt: r.CreatedAt,
 	}
@@ -595,24 +595,36 @@ func createRelease(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toReleaseView(s, r, p.CurrentRelease == r.ID))
 }
 
-// activateRelease flips the site's pointer to an existing release — the go-live,
-// and equally the ROLLBACK (aim it at an older release; releases are immutable
-// and RETAINED to the retention depth, so nothing is rebuilt or re-copied). Not
-// billed: no new content is produced, only a pointer moved.
-func activateRelease(s *cloud.Service[state], c *zip.Ctx) error {
-	org, p, err := releaseSite(s, c)
+// releaseRef addresses one release of one site.
+type releaseRef struct {
+	// Slug is the site slug from the path.
+	Slug string `json:"slug"`
+	// Release is the release id from the path.
+	Release string `json:"release"`
+}
+
+// activateRelease flips the site's pointer to an existing release. It is the
+// go-live and equally the ROLLBACK — aim it at an older release and nothing is
+// rebuilt or re-copied, because releases are immutable and retained to the
+// retention depth, so it is not billed: only a pointer moves.
+//
+// Example: {"slug": "spring-launch", "release": "rel_7c31a9"}
+func (o ops) activateRelease(ctx context.Context, in *releaseRef) (*siteRelease, error) {
+	org, p, err := o.releaseSite(ctx, in.Slug)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("release"))
+	s := o.s
+	id := strings.TrimSpace(in.Release)
 	if !releaseIDRE.MatchString(id) {
-		return zip.ErrNotFound("release not found")
+		return nil, zip.ErrNotFound("release not found")
 	}
-	r, err := activate(s, c.Context(), org, p, id)
+	r, err := activate(s, ctx, org, p, id)
 	if err != nil {
-		return activateErr(err)
+		return nil, activateErr(err)
 	}
-	return c.JSON(http.StatusOK, toReleaseView(s, r, true))
+	out := toReleaseView(s, r, true)
+	return &out, nil
 }
 
 // publishSiteRelease is create+activate: the 99% path, one call. It is exactly
@@ -645,20 +657,48 @@ func publishSiteRelease(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toReleaseView(s, r, true))
 }
 
-// listReleases returns a site's releases newest-first, marking the active one —
-// the rollback menu.
-func listReleases(s *cloud.Service[state], c *zip.Ctx) error {
-	org, p, err := releaseSite(s, c)
+// releaseList is a site's rollback menu — a bare array, newest first.
+type releaseList = []siteRelease
+
+// listReleases returns a site's releases newest-first, marking the active one.
+// It is the rollback menu: any row here can be activated.
+//
+// Example: {"slug": "spring-launch"}
+func (o ops) listReleases(ctx context.Context, in *projectRef) (*releaseList, error) {
+	org, p, err := o.releaseSite(ctx, in.Slug)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	rows, err := s.State.store.ListReleases(c.Context(), org, p.Slug, maxReleaseList)
+	s := o.s
+	rows, err := s.State.store.ListReleases(ctx, org, p.Slug, maxReleaseList)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list releases: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list releases: %v", err)
 	}
-	out := make([]releaseView, 0, len(rows))
+	out := make(releaseList, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, toReleaseView(s, r, r.ID == p.CurrentRelease))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
+}
+
+// releaseSite is releaseSite for a TYPED op: the slug arrives decoded rather than
+// read off the request, and the org still comes only from the validated principal.
+func (o ops) releaseSite(ctx context.Context, rawSlug string) (string, Project, error) {
+	c, org, err := o.begin(ctx)
+	if err != nil {
+		return "", Project{}, err
+	}
+	_ = c
+	slug := normalizeSlug(rawSlug)
+	if slug == "" || !slugRE.MatchString(slug) || sites.IsReserved(slug) {
+		return "", Project{}, zip.ErrNotFound("site not found")
+	}
+	p, err := o.s.State.store.GetProject(ctx, org, slug)
+	if errors.Is(err, errNotFound) {
+		return "", Project{}, zip.ErrNotFound("site not found")
+	}
+	if err != nil {
+		return "", Project{}, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	return org, p, nil
 }

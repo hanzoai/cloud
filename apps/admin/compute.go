@@ -70,10 +70,10 @@ type computeLeaf struct {
 	LastTs     string `json:"lastTs"`
 }
 
-// compute rolls the fleet's compute usage up to one row per (org, app, project, kind):
-// how many distinct machines ran in the window, how many are still active, what they
-// billed, and when each group last emitted an event. The console folds these into its
-// org → app → project tree.
+// compute rolls the fleet's compute usage up to one row per workload group. The group is
+// (org, app, project, kind), and each row reports how many distinct machines ran in the
+// window, how many are still active, what they billed, and when the group last emitted an
+// event. The console folds these into its org → app → project tree.
 //
 // A machine counts as ACTIVE when its LATEST lifecycle event is not a terminal one
 // (stop/destroy/terminate/delete/off/shutdown/expire and their past tenses) — the same

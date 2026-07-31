@@ -24,7 +24,7 @@ import (
 func postCreateInstance(t *testing.T, s *cloud.Service[state], kind, org, name, instance string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/"+kind, create(s, kind))
+	app.Post("/v1/"+kind, create(s, kind)...)
 	body := `{"name":"` + name + `","instance":"` + instance + `"}`
 	req, _ := http.NewRequest("POST", "/v1/"+kind, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

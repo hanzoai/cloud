@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -71,6 +72,25 @@ func mountZAP(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/zap/getRepo", cloud.Handle(s, zapGet))
 	g.Post("/zap/deleteRepo", cloud.Handle(s, zapDelete))
 	g.Post("/zap/usage", cloud.Handle(s, zapUsage))
+}
+
+// The envelope keeps these off the typed registrar, but the three procedures
+// that READ a body all bind the same named struct, and openapi.Register declares
+// it off that very struct — pure description, no route, status, field or byte
+// moves. Without it a ZAP client reads three procedures in the document that
+// look like they take nothing.
+//
+// Only the request is stated. The success half is the envelope, and the envelope
+// is written as a map (cloud.OK), so there is no named type to point at; naming
+// one here would be inventing a shape rather than describing one. listRepos and
+// usage read no body at all, so they have nothing to declare.
+//
+// init, not mountZAP: Register panics on a duplicate declaration, and mountZAP
+// runs once per Mount.
+func init() {
+	openapi.Register("/v1/git/zap/createRepo", "POST", zapProcReq{}, nil)
+	openapi.Register("/v1/git/zap/getRepo", "POST", zapProcReq{}, nil)
+	openapi.Register("/v1/git/zap/deleteRepo", "POST", zapProcReq{}, nil)
 }
 
 // ---- envelope ----

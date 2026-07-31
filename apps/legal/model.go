@@ -18,7 +18,7 @@
 //     yield identical bytes, so a rendered contract is reproducible).
 //   - cek            encryption at rest for the document store (a rendered contract
 //     carries names + terms and is sealed on disk).
-//   - the Esign / Filing seams (providers.go) — provider-agnostic, honest-stub default,
+//   - the Esign / DocumentFiling seams (providers.go) — provider-agnostic, honest-stub default,
 //     config-driven real provider — mirroring the company formation seams.
 //   - audit.Recorder the ONE tamper-evident trail (deps.Audit); every generate / sign /
 //     file action is recorded, referencing opaque document ids.
@@ -68,26 +68,26 @@ func counselRequired(c Category) bool {
 	return c == CategoryFormation || c == CategoryEquity
 }
 
-// Field declares one merge field a template consumes: the key used in the template
+// MergeField declares one merge field a template consumes: the key used in the template
 // body ({{.key}}) and a human label. Every declared field is REQUIRED — the engine
 // fails closed on a missing one rather than rendering a blank into a contract.
-type Field struct {
+type MergeField struct {
 	Key   string `json:"key"`
 	Label string `json:"label"`
 }
 
-// Template is one standardized document template. Body is a text/template source that
+// DocumentTemplate is one standardized document template. Body is a text/template source that
 // references its Fields as {{.key}}. Version increments on each org override; a
 // built-in has Version 1 and Origin "builtin". CounselReview marks the formation and
 // securities instruments that must carry CounselNotice.
-type Template struct {
+type DocumentTemplate struct {
 	ID            string   `json:"id"`
 	Category      Category `json:"category"`
 	Title         string   `json:"title"`
 	Version       int      `json:"version"`
 	Origin        string   `json:"origin"` // builtin | org
 	CounselReview bool     `json:"counselReview"`
-	Fields        []Field  `json:"fields"`
+	Fields        []MergeField  `json:"fields"`
 	Body          string   `json:"body"`
 }
 
@@ -134,10 +134,10 @@ const (
 	FilingRejected  FilingStatus = "rejected"  // the state/partner rejected it
 )
 
-// Filing tracks a state/agency filing of one or more generated documents. It is a
+// DocumentFiling tracks a state/agency filing of one or more generated documents. It is a
 // TRACKING record: the platform does not file autonomously; the honest default state
 // is "manual" (file through your registered agent) until a filing partner is wired.
-type Filing struct {
+type DocumentFiling struct {
 	ID           string       `json:"id"`
 	Org          string       `json:"org"`
 	DocumentIDs  []string     `json:"documentIds"`

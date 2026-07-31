@@ -171,6 +171,10 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce, *fakeG
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// Serve installs this globally before MountAll; a typed op resolves its
+	// validated org, the request its admin claim rides on, and the 201 slot through
+	// it, so the test wires it the same way.
+	app.Use(cloud.Bridge())
 	routes(app, s)
 	return app, s, fc, fg
 }
@@ -669,7 +673,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 		t.Fatalf("admin list want 200, got %d (%s)", code, body)
 	}
 	data := envData(t, body)
-	var authors []adminAuthorView
+	var authors []AdminAuthorView
 	if err := json.Unmarshal(data["authors"], &authors); err != nil {
 		t.Fatalf("decode authors: %v", err)
 	}
@@ -681,7 +685,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	if a0.Org != "orgA" || a0.GithubLogin != "acmedev" || a0.Status != StatusApproved || a0.RepoCount != 1 || a0.DeployCount != 1 || a0.AccruedCents != want {
 		t.Fatalf("admin row wrong: %+v", a0)
 	}
-	var sum adminSummary
+	var sum AuthorSummary
 	if err := json.Unmarshal(data["summary"], &sum); err != nil {
 		t.Fatalf("decode summary: %v", err)
 	}

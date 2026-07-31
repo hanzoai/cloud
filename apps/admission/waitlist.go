@@ -24,7 +24,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -33,6 +32,8 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 // The reserved platform tenant the launch registry rides in — the SAME reserved
 // (org, project) the flag engine uses for its platform switches, so the registry and
@@ -251,21 +252,46 @@ func seedRegistry(brand string, log luxlog.Logger) int {
 	return len(seed)
 }
 
-// waitlistModeRoute answers GET /v1/flags/waitlist?host=<h> — the runtime lookup the
-// @file waitlist-guard caches. Public (in-cluster) read: it returns ONLY the boolean
-// mode for the ONE queried host, never an enumeration.
-func waitlistModeRoute(c *zip.Ctx) error {
-	host := strings.TrimSpace(c.Query("host"))
+// HostQuery selects the ONE host a mode read resolves.
+type HostQuery struct {
+	// Host is the hostname to resolve, e.g. "chat.hanzo.ai". Empty means the
+	// host the request itself was sent to.
+	Host string `json:"host"`
+}
+
+// WaitlistMode is the gate's verdict for one host.
+type WaitlistMode struct {
+	// Host is the normalized (lowercased, port-stripped) host that was resolved.
+	Host string `json:"host"`
+	// Service is the registry service governing that host, empty when unknown.
+	Service string `json:"service"`
+	// WaitlistMode is true when the service is gated behind its waitlist.
+	WaitlistMode bool `json:"waitlistMode"`
+	// Known is false when no registry entry claims the host.
+	Known bool `json:"known"`
+}
+
+// waitlistMode reports whether one host is behind its service's waitlist. It resolves
+// host→service through the launch registry, then reads the waitlist.<service> switch.
+// Public (in-cluster) read: it answers for the ONE queried host and never enumerates
+// the registry. An empty host falls back to the host the request was sent to.
+//
+// Example: {"host": "chat.hanzo.ai"}
+// Response: {"host": "chat.hanzo.ai", "service": "chat", "waitlistMode": true, "known": true}
+func waitlistMode(ctx context.Context, in *HostQuery) (*WaitlistMode, error) {
+	host := strings.TrimSpace(in.Host)
 	if host == "" {
-		host = c.Fiber().Hostname()
+		if c, ok := cloud.Request(ctx); ok {
+			host = c.Fiber().Hostname()
+		}
 	}
-	mode, service, known := WaitlistModeForHost(c.Context(), host)
-	return c.JSON(http.StatusOK, map[string]any{
-		"host":         NormalizeHost(host),
-		"service":      service,
-		"waitlistMode": mode,
-		"known":        known,
-	})
+	mode, service, known := WaitlistModeForHost(ctx, host)
+	return &WaitlistMode{
+		Host:         NormalizeHost(host),
+		Service:      service,
+		WaitlistMode: mode,
+		Known:        known,
+	}, nil
 }
 
 // ── lifecycle ────────────────────────────────────────────────────────────────
@@ -289,10 +315,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		brand: deps.Brand,
 	}
 	n := seedRegistry(deps.Brand, log)
+	z := cloud.ZipApp(app)
+	if z == nil {
+		return fmt.Errorf("admission.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	// The bridge first — a typed op is handed only a context, so the request it reads
+	// the fallback hostname from is parked there. Bounded to admission's own prefix;
+	// Serve installs one app-wide too and nesting is harmless.
+	app.Use(cloud.Bridge())
 	// The guard's public runtime mode read (host→service→waitlist.<svc>), one namespace
 	// under /v1/flags. Exempt from the Enforce gate (see defaultExemptPrefixes) so a
 	// gated user can still resolve mode.
-	app.Get("/v1/flags/waitlist", waitlistModeRoute)
+	zip.Get(z, "/v1/flags/waitlist", waitlistMode, zip.WithOperationID("waitlistMode"))
 	log.Info("admission gate ready", "services", n)
 	return nil
 }

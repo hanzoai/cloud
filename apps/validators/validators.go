@@ -19,9 +19,18 @@
 // Tenant isolation is the org (principal.Org — the VALIDATED IAM owner, never a
 // client header); every store query filters WHERE org=?. The tokenId IS the
 // validator slot. serve.go auto-registers GET /v1/validators/health.
+//
+// EVERY ROUTE IS A TYPED OP (zip.Get/Post with concrete In/Out structs), so the
+// surface is ONE registry with N projections — REST, the OpenAPI document, the
+// MCP tool list and the CLI all derive from these same registrations. The prose
+// in each handler's doc comment is lifted into the spec by the build-time
+// cmd/zipdoc pass, because Go does not keep comments at run time.
 package validators
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -65,6 +74,10 @@ var mounted *cloud.Service[state]
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("validators.Mount: nil app")
+	}
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("validators.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("validators.Mount: nil deps.Logger")
@@ -118,23 +131,126 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted = s
 
-	routes(app, s)
+	routes(app, zapp, s)
 	b.Log.Info("validators mounted", "brand", deps.Brand, "network", network,
 		"nftContract", nft.contract.Hex(), "clusterReady", prov.Available())
 	return nil
 }
 
-func routes(app cloud.Router, s *cloud.Service[state]) {
+func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
+	o := ops{s: s}
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every op below resolves
+	// its tenant through it. Bounded to validators' own subtree.
+	app.Group("/v1/validators").Use(cloud.Bridge())
+
 	// The collection root (/v1/validators) stays FLAT: Group("/v1/validators").
 	// Get("")/Post("") would register "/v1/validators/" (trailing slash), which
 	// the portal's bare /v1/validators calls would miss. Same gotcha the
 	// clients/wallets, guide, link, … subsystems document.
-	app.Get("/v1/validators", cloud.Handle(s, listValidators))
-	app.Post("/v1/validators", cloud.Handle(s, provisionValidator))
+	zip.Get(zapp, "/v1/validators", o.listValidators)
+	zip.Post(zapp, "/v1/validators", o.provisionValidator)
 
-	g := app.Group("/v1/validators")
-	g.Get("/challenge", cloud.Handle(s, issueChallenge))
-	g.Get("/:tokenId", cloud.Handle(s, getValidator))
+	// /challenge is registered BEFORE /:tokenId: zip is first-match, so the
+	// literal must precede the param that would otherwise swallow it.
+	zip.Get(zapp, "/v1/validators/challenge", o.issueChallenge)
+	zip.Get(zapp, "/v1/validators/:tokenId", o.getValidator)
+}
+
+// ops binds the service to validators' typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, the only bound form
+// cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// tenant resolves the org — the tenant-isolation KEY — for an org-scoped op. It
+// is EXACTLY what SanitizeIdentity minted from the validated IAM owner claim,
+// carried across the typed seam by cloud.Bridge, never read from the input.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("validated identity required")
+	}
+	return org, nil
+}
+
+// ── wire types ──────────────────────────────────────────────────────────────
+
+// SlotRef addresses one validator slot by its GenesisNFT token id.
+type SlotRef struct {
+	// TokenID is the GenesisNFT id of the slot; it IS the validator slot number.
+	TokenID uint64 `json:"tokenId"`
+}
+
+// Challenge is the single-use, org-bound nonce plus the exact text to sign.
+type Challenge struct {
+	// Nonce is the single-use value bound to (org, slot); claiming burns it.
+	Nonce string `json:"nonce"`
+	// Message is the exact text the wallet must personal_sign, byte for byte.
+	Message string `json:"message"`
+	// TokenID echoes the slot the challenge is bound to.
+	TokenID uint64 `json:"tokenId"`
+	// ExpiresAt is the unix second after which the nonce is refused.
+	ExpiresAt int64 `json:"expiresAt"`
+	// TTLSeconds is the lifetime the nonce was issued with.
+	TTLSeconds int `json:"ttlSeconds"`
+}
+
+// ProvisionRequest is the claim: the slot, the issued nonce, and the
+// personal_sign signature over the challenge message.
+type ProvisionRequest struct {
+	// TokenID is the Validator-tier GenesisNFT id being claimed. Required.
+	TokenID uint64 `json:"tokenId"`
+	// Nonce is the value issued by GET /v1/validators/challenge. Required.
+	Nonce string `json:"nonce"`
+	// Signature is the wallet's personal_sign over the challenge message. Required.
+	Signature string `json:"signature"`
+}
+
+// SlotList is the caller org's claimed slots on one network.
+type SlotList struct {
+	// Data is the page of claimed slots; empty when the org has claimed none.
+	Data []SlotView `json:"data"`
+	// Network is the network slug new nodes join (mainnet/testnet/devnet/localnet).
+	Network string `json:"network"`
+}
+
+// SlotView is one claimed slot: its node identity, CR placement and status.
+type SlotView struct {
+	// Slot is the validator slot number (the same value as tokenId).
+	Slot uint64 `json:"slot"`
+	// TokenID is the GenesisNFT id that entitles the slot.
+	TokenID uint64 `json:"tokenId"`
+	// Wallet is the lower-cased address that proved ownership of the NFT.
+	Wallet string `json:"wallet"`
+	// NodeID is the luxd node identity generated for the slot.
+	NodeID string `json:"nodeID"`
+	// BLSPubkey is the node's BLS public key, hex-encoded.
+	BLSPubkey string `json:"blsPubkey"`
+	// NodeStatus is provisioning, node_created or node_pending (no cluster reached).
+	NodeStatus string `json:"nodeStatus"`
+	// CRName is the LuxNetwork custom resource written for the node.
+	CRName string `json:"crName"`
+	// Namespace is the cluster namespace the node CR lives in.
+	Namespace string `json:"namespace"`
+	// Network is the network slug the node syncs.
+	Network string `json:"network"`
+	// CreatedAt is unix seconds, server-assigned at claim time.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is unix seconds of the last status change.
+	UpdatedAt int64 `json:"updatedAt"`
+	// Registration is the queued, owner-gated P-Chain registration; absent until enqueued.
+	Registration *RegistrationView `json:"registration,omitempty"`
+}
+
+// RegistrationView is the queued registration — never auto-submitted to a P-Chain.
+type RegistrationView struct {
+	// ID is the registration id.
+	ID string `json:"id"`
+	// Status is the queue state; new registrations are pending_owner_approval.
+	Status string `json:"status"`
+	// NodeID is the node the registration would add.
+	NodeID string `json:"nodeID"`
 }
 
 // ── handlers ────────────────────────────────────────────────────────────────
@@ -142,80 +258,77 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // issueChallenge issues a single-use, org-bound nonce and the EXACT message the
 // caller must personal_sign. Binding the nonce to (org, slot) here means a
 // signature can never be replayed for a different org, slot, or session.
-func issueChallenge(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("validated identity required")
-	}
-	tokenID, err := parseTokenID(strings.TrimSpace(c.Query("tokenId")))
+//
+// Example: {"tokenId": 42}
+func (o ops) issueChallenge(ctx context.Context, in *SlotRef) (*Challenge, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.ErrBadRequest("tokenId query param must be a positive integer")
+		return nil, err
+	}
+	tokenID := in.TokenID
+	if tokenID == 0 {
+		return nil, zip.ErrBadRequest("tokenId query param must be a positive integer")
 	}
 	if !s.State.nft.isValidatorTier(tokenID) {
-		return zip.ErrBadRequest(fmt.Sprintf("token %d is not a Validator-tier slot (1..%d)", tokenID, s.State.nft.validatorSlots))
+		return nil, zip.ErrBadRequest(fmt.Sprintf("token %d is not a Validator-tier slot (1..%d)", tokenID, s.State.nft.validatorSlots))
 	}
 	nonce, err := newNonce()
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now()
 	expiresAt := now.Add(s.State.ttl)
-	if err := s.State.store.PutChallenge(c.Context(), nonce, org, expiresAt.Unix(), now.Unix()); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "issue challenge: %v", err)
+	if err := s.State.store.PutChallenge(ctx, nonce, org, expiresAt.Unix(), now.Unix()); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "issue challenge: %v", err)
 	}
-	s.State.store.PurgeExpiredChallenges(c.Context(), now.Unix())
-	return c.JSON(http.StatusOK, map[string]any{
-		"nonce":      nonce,
-		"message":    challengeMessage(org, tokenID, nonce),
-		"tokenId":    tokenID,
-		"expiresAt":  expiresAt.Unix(),
-		"ttlSeconds": int(s.State.ttl.Seconds()),
-	})
+	s.State.store.PurgeExpiredChallenges(ctx, now.Unix())
+	return &Challenge{
+		Nonce:      nonce,
+		Message:    challengeMessage(org, tokenID, nonce),
+		TokenID:    tokenID,
+		ExpiresAt:  expiresAt.Unix(),
+		TTLSeconds: int(s.State.ttl.Seconds()),
+	}, nil
 }
 
-// provisionRequestBody is the POST body: the slot, the issued nonce, and the
-// personal_sign signature over the challenge message.
-type provisionRequestBody struct {
-	TokenID   uint64 `json:"tokenId"`
-	Nonce     string `json:"nonce"`
-	Signature string `json:"signature"`
-}
-
-// provisionValidator is the "click → provision node + queue registration"
-// pipeline. It fails CLOSED at every gate: bad signature, non-owner, non-tier,
-// KMS unavailable — none of these persist a claim or leak key material.
-func provisionValidator(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("validated identity required")
+// provisionValidator claims a slot: it verifies the signature and on-chain NFT
+// ownership, generates a luxd staking identity into KMS, writes the node CR and
+// ENQUEUES an owner-gated registration. It fails CLOSED at every gate — bad
+// signature, non-owner, non-tier, KMS unavailable — none of which persist a claim
+// or leak key material. Re-claiming a slot this org already holds re-applies the
+// CR without regenerating keys.
+//
+// Example: {"tokenId": 42, "nonce": "deadbeefcafef00d", "signature": "0x1c…"}
+func (o ops) provisionValidator(ctx context.Context, in *ProvisionRequest) (*SlotView, error) {
+	s := o.s
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body provisionRequestBody
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	if body.TokenID == 0 || strings.TrimSpace(body.Nonce) == "" || strings.TrimSpace(body.Signature) == "" {
-		return zip.ErrBadRequest("tokenId, nonce, and signature are required")
+		return nil, zip.ErrBadRequest("tokenId, nonce, and signature are required")
 	}
-	ctx := c.Context()
 	now := time.Now()
 
 	// 1) Burn the challenge (atomic single-use, org-bound, unexpired). Do this
 	// FIRST so a replayed or forged nonce is rejected before any on-chain read.
 	if err := s.State.store.ConsumeChallenge(ctx, body.Nonce, org, now.Unix()); err != nil {
-		return zip.Errorf(http.StatusUnauthorized, "challenge invalid: request a fresh /v1/validators/challenge")
+		return nil, zip.Errorf(http.StatusUnauthorized, "challenge invalid: request a fresh /v1/validators/challenge")
 	}
 
 	// 2) Recover the signer from the EXACT message the challenge issued (server
 	// reconstructs it from the validated org + tokenId + nonce).
 	addr, err := recoverSigner(challengeMessage(org, body.TokenID, body.Nonce), body.Signature)
 	if err != nil {
-		return zip.ErrBadRequest("signature does not recover: " + err.Error())
+		return nil, zip.ErrBadRequest("signature does not recover: " + err.Error())
 	}
 
 	// 3) On-chain ownership: the recovered wallet must own Validator-tier NFT
 	// #tokenId on Ethereum mainnet.
 	if err := s.State.nft.verifyOwnership(ctx, body.TokenID, addr); err != nil {
-		return zip.ErrForbidden(err.Error())
+		return nil, zip.ErrForbidden(err.Error())
 	}
 
 	// 4) Idempotency: a slot already claimed by THIS org re-provisions (keys stay,
@@ -224,20 +337,20 @@ func provisionValidator(s *cloud.Service[state], c *zip.Ctx) error {
 	existing, gerr := s.State.store.GetSlot(ctx, body.TokenID)
 	if gerr == nil {
 		if existing.Org != org {
-			return zip.ErrConflict("validator slot already claimed by another organization")
+			return nil, zip.ErrConflict("validator slot already claimed by another organization")
 		}
-		return reprovision(s, c, existing)
+		return reprovision(s, ctx, existing)
 	}
 
 	// 5) NEW claim. Generate the staking identity and seal it into KMS BEFORE
 	// persisting anything — fail closed so a claim never exists without its keys.
 	id, err := generateStakingIdentity()
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "generate staking identity: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "generate staking identity: %v", err)
 	}
 	kmsBase := kmsStakingBaseRef(org, body.TokenID)
 	if err := id.seal(ctx, s.KMS, kmsBase); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "seal staking keys: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "seal staking keys: %v", err)
 	}
 
 	name := crName(org, body.TokenID)
@@ -257,13 +370,13 @@ func provisionValidator(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if _, err := s.State.store.ClaimSlot(ctx, slot); err != nil {
 		if err == errConflict {
-			return zip.ErrConflict("validator slot already claimed by another organization")
+			return nil, zip.ErrConflict("validator slot already claimed by another organization")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "claim slot: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "claim slot: %v", err)
 	}
 
 	// 6) Materialize the node CR (best-effort — honest "pending" if no cluster).
-	nodeStatus, crName := materialize(s, c, slot)
+	nodeStatus, crName := materialize(s, ctx, slot)
 
 	// 7) ENQUEUE the owner-gated registration. NEVER auto-submitted to any
 	// P-Chain — the owner co-signs the AddPermissionlessValidatorTx out of band.
@@ -280,34 +393,36 @@ func provisionValidator(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	saved, err := s.State.store.EnqueueRegistration(ctx, reg)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "enqueue registration: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "enqueue registration: %v", err)
 	}
 	_ = crName
 
 	slot.Status = nodeStatus
-	return c.JSON(http.StatusCreated, slotView(slot, saved, s.State.network))
+	// A NEW claim answers 201; the re-provision path above keeps its 200.
+	cloud.Created(ctx)
+	return slotView(slot, saved, s.State.network), nil
 }
 
 // reprovision re-applies the node CR for an already-claimed slot (idempotent
 // retry) and returns the current state without regenerating keys.
-func reprovision(s *cloud.Service[state], c *zip.Ctx, slot Slot) error {
-	reg, _ := s.State.store.getRegByToken(c.Context(), slot.TokenID)
-	nodeStatus, _ := materialize(s, c, slot)
+func reprovision(s *cloud.Service[state], ctx context.Context, slot Slot) (*SlotView, error) {
+	reg, _ := s.State.store.getRegByToken(ctx, slot.TokenID)
+	nodeStatus, _ := materialize(s, ctx, slot)
 	slot.Status = nodeStatus
-	return c.JSON(http.StatusOK, slotView(slot, reg, s.State.network))
+	return slotView(slot, reg, s.State.network), nil
 }
 
 // materialize writes the node CR (best-effort) and returns the resulting node
 // status + CR name. A cluster-less deployment degrades to an honest
 // "node_pending" — the slot + keys + registration still persist.
-func materialize(s *cloud.Service[state], c *zip.Ctx, slot Slot) (status, crName string) {
+func materialize(s *cloud.Service[state], ctx context.Context, slot Slot) (status, crName string) {
 	if !s.State.prov.Available() {
 		s.Log.Info("validators: no cluster resolved — node stays pending (slot claimed, keys sealed)",
 			"org", slot.Org, "slot", slot.TokenID)
-		_ = s.State.store.SetSlotStatus(c.Context(), slot.TokenID, "node_pending", time.Now().Unix())
+		_ = s.State.store.SetSlotStatus(ctx, slot.TokenID, "node_pending", time.Now().Unix())
 		return "node_pending", slot.CRName
 	}
-	name, ns, err := s.State.prov.Provision(c.Context(), provisionRequest{
+	name, ns, err := s.State.prov.Provision(ctx, provisionRequest{
 		Org:        slot.Org,
 		TokenID:    slot.TokenID,
 		NodeID:     slot.NodeID,
@@ -317,80 +432,89 @@ func materialize(s *cloud.Service[state], c *zip.Ctx, slot Slot) (status, crName
 	if err != nil {
 		s.Log.Warn("validators: node CR provisioning failed — slot claimed, keys sealed, node pending",
 			"org", slot.Org, "slot", slot.TokenID, "err", err)
-		_ = s.State.store.SetSlotStatus(c.Context(), slot.TokenID, "node_pending", time.Now().Unix())
+		_ = s.State.store.SetSlotStatus(ctx, slot.TokenID, "node_pending", time.Now().Unix())
 		return "node_pending", slot.CRName
 	}
 	_ = ns
-	_ = s.State.store.SetSlotStatus(c.Context(), slot.TokenID, "node_created", time.Now().Unix())
+	_ = s.State.store.SetSlotStatus(ctx, slot.TokenID, "node_created", time.Now().Unix())
 	return "node_created", name
 }
 
-// listValidators returns the org's claimed slots (each with its live-ish status).
-func listValidators(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("validated identity required")
-	}
-	slots, err := s.State.store.ListSlots(c.Context(), org, limitOf(c))
+// listValidators returns the caller org's claimed validator slots, each with its
+// node status and its queued registration.
+//
+// Example: {"limit": 50}
+func (o ops) listValidators(ctx context.Context, in *Page) (*SlotList, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list validators: %v", err)
+		return nil, err
 	}
-	regs, err := s.State.store.ListRegistrations(c.Context(), org, maxListLimit)
+	slots, err := s.State.store.ListSlots(ctx, org, limitOf(in.Limit))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list registrations: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list validators: %v", err)
+	}
+	regs, err := s.State.store.ListRegistrations(ctx, org, maxListLimit)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list registrations: %v", err)
 	}
 	byToken := make(map[uint64]Registration, len(regs))
 	for _, r := range regs {
 		byToken[r.TokenID] = r
 	}
-	out := make([]map[string]any, 0, len(slots))
+	out := make([]SlotView, 0, len(slots))
 	for _, sl := range slots {
-		out = append(out, slotView(sl, byToken[sl.TokenID], s.State.network))
+		out = append(out, *slotView(sl, byToken[sl.TokenID], s.State.network))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out, "network": s.State.network})
+	return &SlotList{Data: out, Network: s.State.network}, nil
 }
 
-// getValidator returns one slot's detail (org-scoped).
-func getValidator(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("validated identity required")
-	}
-	tokenID, err := parseTokenID(c.Param("tokenId"))
+// Page is the bound shared by every list that filters on nothing but size.
+type Page struct {
+	// Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.
+	Limit int `json:"limit"`
+}
+
+// getValidator returns one of the caller org's claimed slots. A slot held by
+// another org reads as not found.
+//
+// Example: {"tokenId": 42}
+func (o ops) getValidator(ctx context.Context, in *SlotRef) (*SlotView, error) {
+	s := o.s
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.ErrBadRequest("tokenId must be a positive integer")
+		return nil, err
 	}
-	sl, err := s.State.store.GetSlot(c.Context(), tokenID)
+	if in.TokenID == 0 {
+		return nil, zip.ErrBadRequest("tokenId must be a positive integer")
+	}
+	sl, err := s.State.store.GetSlot(ctx, in.TokenID)
 	if err != nil || sl.Org != org {
-		return zip.ErrNotFound("validator slot not found")
+		return nil, zip.ErrNotFound("validator slot not found")
 	}
-	reg, _ := s.State.store.getRegByToken(c.Context(), tokenID)
-	return c.JSON(http.StatusOK, slotView(sl, reg, s.State.network))
+	reg, _ := s.State.store.getRegByToken(ctx, in.TokenID)
+	return slotView(sl, reg, s.State.network), nil
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 // slotView is the wire shape for a claimed slot + its owner-gated registration.
-func slotView(sl Slot, reg Registration, network string) map[string]any {
-	v := map[string]any{
-		"slot":       sl.TokenID,
-		"tokenId":    sl.TokenID,
-		"wallet":     sl.Wallet,
-		"nodeID":     sl.NodeID,
-		"blsPubkey":  sl.BLSPubkey,
-		"nodeStatus": sl.Status,
-		"crName":     sl.CRName,
-		"namespace":  sl.Namespace,
-		"network":    network,
-		"createdAt":  sl.CreatedAt,
-		"updatedAt":  sl.UpdatedAt,
+func slotView(sl Slot, reg Registration, network string) *SlotView {
+	v := &SlotView{
+		Slot:       sl.TokenID,
+		TokenID:    sl.TokenID,
+		Wallet:     sl.Wallet,
+		NodeID:     sl.NodeID,
+		BLSPubkey:  sl.BLSPubkey,
+		NodeStatus: sl.Status,
+		CRName:     sl.CRName,
+		Namespace:  sl.Namespace,
+		Network:    network,
+		CreatedAt:  sl.CreatedAt,
+		UpdatedAt:  sl.UpdatedAt,
 	}
 	if reg.ID != "" {
-		v["registration"] = map[string]any{
-			"id":     reg.ID,
-			"status": reg.Status,
-			"nodeID": reg.NodeID,
-		}
+		v.Registration = &RegistrationView{ID: reg.ID, Status: reg.Status, NodeID: reg.NodeID}
 	}
 	return v
 }
@@ -403,22 +527,15 @@ func kmsStakingBaseRef(org string, tokenID uint64) string {
 	return "orgs/" + org + "/validators/" + strconv.FormatUint(tokenID, 10)
 }
 
-func parseTokenID(v string) (uint64, error) {
-	n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
-	if err != nil || n == 0 {
-		return 0, fmt.Errorf("invalid tokenId %q", v)
-	}
-	return n, nil
-}
-
 func newRegID() string {
 	nonce, _ := newNonce()
 	return "vreg_" + nonce
 }
 
-func limitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
+// limitOf bounds a caller's page size: absent, unparseable or non-positive means
+// defaultListLimit, and nothing above maxListLimit is honoured.
+func limitOf(n int) int {
+	if n <= 0 {
 		return defaultListLimit
 	}
 	if n > maxListLimit {

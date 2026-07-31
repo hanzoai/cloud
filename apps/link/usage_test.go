@@ -375,7 +375,7 @@ func TestDashIsUnavailableNotEmpty(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("dash want 200, got %d (%s)", code, b)
 	}
-	var got dashResp
+	var got planDash
 	_ = json.Unmarshal(b, &got)
 	if got.Available {
 		t.Fatal("available must be false with no warehouse")

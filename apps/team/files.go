@@ -24,6 +24,7 @@ package team
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -32,6 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -41,19 +43,35 @@ const maxBlobSize = 100 << 20
 
 // filesService serves the workspace blob plane. vfs is cloud's blob seam (deps.VFS);
 // accounts asserts workspace membership; secret verifies the session token.
+// degraded is the fail-closed posture Mount resolved (no HS256 secret): a typed
+// op cannot be wrapped by Mount's guard, so it asks for itself — see typed.go.
 type filesService struct {
 	vfs      types.VFSClient
 	accounts *accountStore
 	secret   string
+	degraded bool
 }
 
-func (s *filesService) register(r zip.Router, guard guardFn) {
+func (s *filesService) register(app cloud.Router, zapp *zip.App, guard guardFn) {
+	g := app.Group(teamPrefix)
+	// TYPED ops spell the ABSOLUTE path (teamPrefix + leaf, a constant
+	// expression): cmd/zipdoc reads the path argument literally, so a
+	// group-relative registration would file the prose under an address that
+	// does not exist.
 	// Workspace is in the PATH (front.ts POSTs to {UPLOAD_URL}/{workspace}).
-	r.Post("/files/:workspace", guard(s.upload))
-	r.Get("/files/:workspace/:filename", guard(s.download))
+	//
+	// upload and download stay UNTYPED, and cannot be otherwise: upload's request
+	// is a multipart form (not JSON) whose part filename IS the blob id, and
+	// download's response is the blob's raw BYTES under a byte-derived
+	// Content-Type. Neither is a shape a typed In/Out can describe.
+	g.Post("/files/:workspace", guard(s.upload))
+	g.Get("/files/:workspace/:filename", guard(s.download))
 	// deleteFile: DELETE getFileUrl(ws, file) = /{workspace}/{file}?file={file}
-	// (front.ts) — the download route shape, DELETE method.
-	r.Delete("/files/:workspace/:filename", guard(s.deleteBlob))
+	// (front.ts) — the download route shape, DELETE method. TYPED: a DELETE
+	// addresses what it deletes with its URL, which is exactly what this one
+	// already did, and it answers 204 with no body — declared, so the document
+	// says 204 too.
+	zip.Delete(zapp, teamPrefix+"/files/:workspace/:filename", s.deleteBlob, zip.WithStatus(http.StatusNoContent))
 }
 
 // principal resolves (account, org) from the request's VERIFIED session or
@@ -66,8 +84,10 @@ func (s *filesService) principal(c *zip.Ctx) (account, org string, err error) {
 // authorize asserts :workspace belongs to org AND the caller is a MEMBER of it
 // (Red F-C: bind files to workspace membership, not just same-org). Any failure is
 // a 404 — no oracle distinguishing "no such workspace", "not your org", or "not a
-// member".
-func (s *filesService) authorize(c *zip.Ctx, account, org, wsUUID string) error {
+// member". It takes the CONTEXT rather than the request because it needs nothing
+// else off the wire, which is what lets the typed delete and the untyped
+// upload/download share the one gate.
+func (s *filesService) authorize(ctx context.Context, account, org, wsUUID string) error {
 	wsUUID = strings.TrimSpace(wsUUID)
 	if wsUUID == "" {
 		return zip.ErrBadRequest("workspace required")
@@ -75,11 +95,11 @@ func (s *filesService) authorize(c *zip.Ctx, account, org, wsUUID string) error 
 	if s.accounts == nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "team: file storage unavailable")
 	}
-	w, err := s.accounts.WorkspaceByUUID(c.Context(), org, wsUUID)
+	w, err := s.accounts.WorkspaceByUUID(ctx, org, wsUUID)
 	if err != nil {
 		return zip.ErrNotFound("workspace not found")
 	}
-	if _, ok := s.accounts.Membership(c.Context(), w.ID, account); !ok {
+	if _, ok := s.accounts.Membership(ctx, w.ID, account); !ok {
 		return zip.ErrNotFound("workspace not found")
 	}
 	return nil
@@ -95,7 +115,7 @@ func (s *filesService) upload(c *zip.Ctx) error {
 		return zip.ErrUnauthorized("invalid session token")
 	}
 	ws := c.Param("workspace")
-	if err := s.authorize(c, account, org, ws); err != nil {
+	if err := s.authorize(c.Context(), account, org, ws); err != nil {
 		return err
 	}
 	fh, err := c.Fiber().FormFile("file")
@@ -146,7 +166,7 @@ func (s *filesService) download(c *zip.Ctx) error {
 		return zip.ErrUnauthorized("invalid session token")
 	}
 	ws := c.Param("workspace")
-	if err := s.authorize(c, account, org, ws); err != nil {
+	if err := s.authorize(c.Context(), account, org, ws); err != nil {
 		return err
 	}
 	blobID := strings.TrimSpace(c.Query("file"))
@@ -179,37 +199,59 @@ func (s *filesService) download(c *zip.Ctx) error {
 	return c.Bytes(http.StatusOK, data)
 }
 
-// deleteBlob removes a blob (front.ts deleteFile). Same org + workspace-membership
-// guard as download (F-C). It is IDEMPOTENT and NO-ORACLE: a cross-tenant request
-// is refused at authorize() with the SAME 404 as any missing workspace, and an
-// authorized delete of a present OR absent blob returns the SAME 204 — so deleting
-// never confirms a blob's existence, and a foreign blobId (a different physical
-// key the caller can never name into another tenant's box) is a harmless no-op.
-// front.ts only checks response.ok, so 204 satisfies the contract.
-func (s *filesService) deleteBlob(c *zip.Ctx) error {
-	account, org, err := s.principal(c)
-	if err != nil {
-		return zip.ErrUnauthorized("invalid session token")
+// blobRef addresses one workspace blob from the URL, which is the whole input a
+// DELETE has: the workspace and the blob id are path segments, and `file` is the
+// query the front actually carries the id in.
+type blobRef struct {
+	// Workspace is the workspace uuid the blob belongs to, from the path.
+	Workspace string `json:"workspace"`
+	// Filename is the last path segment, which the front sets to the blob id
+	// when it sends no explicit `file`.
+	Filename string `json:"filename"`
+	// File is the blob id, and wins over the path segment when both are present.
+	File string `json:"file"`
+}
+
+// DeleteBlob removes one blob from a workspace's file store.
+// The caller must hold a verified session AND be a member of the workspace;
+// anything else — an unknown workspace, another tenant's workspace, a workspace
+// the caller is not in — answers the same 404, so a probe learns nothing about
+// what exists.
+//
+// It is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a
+// delete never confirms a blob's existence and a foreign blob id (a physical key
+// the caller can never name into another tenant's box) is a harmless no-op.
+// A storage backend that is unavailable fails closed with 502 rather than lying
+// about success.
+//
+// Example: {"workspace": "6579…", "file": "0d4f…"}
+func (s *filesService) deleteBlob(ctx context.Context, in *blobRef) (*none, error) {
+	if s.degraded {
+		return nil, unavailable()
 	}
-	ws := c.Param("workspace")
-	if err := s.authorize(c, account, org, ws); err != nil {
-		return err
+	account, org, err := sessionOf(ctx, s.secret)
+	if err != nil {
+		return nil, zip.ErrUnauthorized("invalid session token")
+	}
+	ws := in.Workspace
+	if err := s.authorize(ctx, account, org, ws); err != nil {
+		return nil, err
 	}
 	// deleteFile calls getFileUrl(ws, file) with no filename → path segment == the
 	// blob id; ?file= carries it too. Accept either, prefer the explicit ?file=.
-	blobID := strings.TrimSpace(firstNonEmpty(c.Query("file"), c.Param("filename")))
+	blobID := strings.TrimSpace(firstNonEmpty(in.File, in.Filename))
 	if blobID == "" {
-		return zip.ErrBadRequest("file (blob id) required")
+		return nil, zip.ErrBadRequest("file (blob id) required")
 	}
 	// Idempotent + no-oracle on a WORKING backend: a present OR missing blob both
 	// return 204 (a missing key, ErrBlobNotFound, is not a caller-visible error), so
 	// deleting never confirms existence and a foreign blobId is a harmless no-op.
 	// But a backend that is unavailable/disabled (any OTHER error) fails CLOSED with
 	// 502 — never a silent success lie, never a nil-deref 500.
-	if err := s.vfs.Delete(c.Context(), blobKey(org, ws, blobID)); err != nil && !errors.Is(err, types.ErrBlobNotFound) {
-		return zip.Errorf(http.StatusBadGateway, "file storage unavailable")
+	if err := s.vfs.Delete(ctx, blobKey(org, ws, blobID)); err != nil && !errors.Is(err, types.ErrBlobNotFound) {
+		return nil, zip.Errorf(http.StatusBadGateway, "file storage unavailable")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // blobKey is the physical, tenant-scoped VFS key. seg() sanitizes every component

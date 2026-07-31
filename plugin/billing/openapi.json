@@ -24,7 +24,19 @@
         "operationId": "get_v1_billing_balance",
         "tags": [
           "billing"
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/commerceBalance"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/billing/gpu-charge": {
@@ -62,57 +74,585 @@
     "/v1/billing/usage/accounts": {
       "get": {
         "operationId": "get_v1_billing_usage_accounts",
+        "summary": "usageAccounts breaks the caller's own routed spend down per linked account —\nrequests, tokens and cost cents for each, plus their total.",
+        "description": "usageAccounts breaks the caller's own routed spend down per linked account —\nrequests, tokens and cost cents for each, plus their total. It reports only the\ncaller's own accounts; a deployment without the linked-account plane answers 501\nrather than a fabricated empty breakdown.",
         "tags": [
           "billing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accounts": [
+                    {
+                      "account": "anthropic",
+                      "costCents": 130,
+                      "requests": 42
+                    }
+                  ],
+                  "scope": "user",
+                  "source": "routed",
+                  "total": {
+                    "accounts": 1,
+                    "costCents": 130,
+                    "requests": 42
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsUsage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/finance/balance": {
       "get": {
         "operationId": "get_v1_finance_balance",
+        "summary": "financeBalance answers the caller org's prepaid wallet: what is spendable now,\nwhat is held, and what is owed (always 0 — the wallet is prepaid).",
+        "description": "financeBalance answers the caller org's prepaid wallet: what is spendable now,\nwhat is held, and what is owed (always 0 — the wallet is prepaid). It is the SAME\nwallet the spend gate reads, so the number shown is the number that admits or\nrefuses a request.",
         "tags": [
           "finance"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "asOf": "2026-07-29T18:00:00Z",
+                  "availableCents": 998800,
+                  "currency": "usd",
+                  "dueCents": 0,
+                  "pendingCents": 0
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/financeBalanceView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/finance/credits": {
       "get": {
         "operationId": "get_v1_finance_credits",
+        "summary": "financeCredits lists the credit grants on the caller org's wallet — every\nstaff/promo grant and top-up, each positive.",
+        "description": "financeCredits lists the credit grants on the caller org's wallet — every\nstaff/promo grant and top-up, each positive. Consumption is usage, not a credit,\nand is excluded. An org with no grants gets an empty array, never a fabricated row.",
         "tags": [
           "finance"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": [
+                  {
+                    "cents": 50000,
+                    "grantedAt": "2026-05-01T00:00:00Z",
+                    "id": "txn_9f21",
+                    "label": "Launch credit"
+                  }
+                ],
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/financeCredit"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/finance/invoices": {
       "get": {
         "operationId": "get_v1_finance_invoices",
+        "summary": "financeInvoices lists the caller org's issued invoices.",
+        "description": "financeInvoices lists the caller org's issued invoices. It is empty by\nconstruction today: the wallet is prepaid (deposits and withdraws), so no invoice\nis ever issued — an honest empty array rather than a fabricated figure.",
         "tags": [
           "finance"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": [],
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/financeInvoice"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/finance/ledger": {
       "get": {
         "operationId": "get_v1_finance_ledger",
+        "summary": "financeLedger lists the caller org's money movements over the window as signed",
+        "description": "financeLedger lists the caller org's money movements over the window as signed\npostings: a deposit credits the wallet (positive), a withdraw debits it (negative).",
         "tags": [
           "finance"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is how far back to look: 24h, 7d, 30d or 90d. Anything else, including\nan absent value, means 30d.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "30d"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": [
+                  {
+                    "account": "usage:acme",
+                    "cents": -1240,
+                    "currency": "usd",
+                    "date": "2026-07-28T12:00:00Z",
+                    "description": "ai",
+                    "id": "txn_9f21"
+                  }
+                ],
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/financeLedgerEntry"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/finance/payment-methods": {
       "get": {
         "operationId": "get_v1_finance_payment-methods",
+        "summary": "financePaymentMethods lists the caller org's saved cards as MASKED descriptors —\nbrand, last four and expiry.",
+        "description": "financePaymentMethods lists the caller org's saved cards as MASKED descriptors —\nbrand, last four and expiry. It re-masks whatever the processor returns, so a full\ncard number can never reach the response.",
         "tags": [
           "finance"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": [
+                  {
+                    "brand": "visa",
+                    "expMonth": 4,
+                    "expYear": 2029,
+                    "id": "pm_1QX",
+                    "isDefault": true,
+                    "last4": "4242",
+                    "type": "card"
+                  }
+                ],
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/financePaymentMethod"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/finance/usage": {
       "get": {
         "operationId": "get_v1_finance_usage",
+        "summary": "financeUsage reports the caller org's metered spend over the window: a total, a\ntime series (hourly for 24h, daily otherwise) and a per-tag breakdown.",
+        "description": "financeUsage reports the caller org's metered spend over the window: a total, a\ntime series (hourly for 24h, daily otherwise) and a per-tag breakdown. It projects\nthe SAME priced ledger the wallet is debited from — never a second meter.",
         "tags": [
           "finance"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is how far back to look: 24h, 7d, 30d or 90d. Anything else, including\nan absent value, means 30d.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7d"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "currency": "usd",
+                  "end": "2026-07-29T18:00:00Z",
+                  "lines": [
+                    {
+                      "cents": 1240,
+                      "label": "ai",
+                      "units": 12
+                    }
+                  ],
+                  "series": [
+                    {
+                      "cents": 400,
+                      "date": "2026-07-22T00:00:00Z"
+                    }
+                  ],
+                  "start": "2026-07-22T18:00:00Z",
+                  "totalCents": 1240
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/financeUsageView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccountsTotal": {
+        "properties": {
+          "accounts": {
+            "type": "integer"
+          },
+          "completionTokens": {
+            "type": "integer"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "totalTokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AccountsUsage": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/RoutedUsage"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/AccountsTotal"
+          }
+        },
+        "type": "object"
+      },
+      "RoutedUsage": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "billing": {
+            "type": "string"
+          },
+          "completionTokens": {
+            "type": "integer"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "totalTokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "commerceBalance": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "available": {
+            "type": "integer"
+          },
+          "balance": {
+            "type": "integer"
+          },
+          "holds": {
+            "type": "integer"
+          }
+        }
+      },
+      "financeBalanceView": {
+        "properties": {
+          "asOf": {
+            "description": "AsOf is when the balance was read, RFC3339 UTC.",
+            "type": "string"
+          },
+          "availableCents": {
+            "description": "AvailableCents is the spendable prepaid balance, net of holds, never negative.",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is always \"usd\" — the wallet's only denomination today.",
+            "type": "string"
+          },
+          "dueCents": {
+            "description": "DueCents is what the org owes; always 0 on a prepaid wallet.",
+            "type": "integer"
+          },
+          "pendingCents": {
+            "description": "PendingCents is prepaid funds authorized but not yet settled.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "financeCredit": {
+        "properties": {
+          "cents": {
+            "description": "Cents is the grant's magnitude, always positive.",
+            "type": "integer"
+          },
+          "expiresAt": {
+            "description": "ExpiresAt is when the grant lapses; absent when it does not.",
+            "type": "string"
+          },
+          "grantedAt": {
+            "description": "GrantedAt is when the grant posted, RFC3339.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the ledger row this grant came from.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the grant's note or tag, else \"Credit\".",
+            "type": "string"
+          },
+          "remainingCents": {
+            "description": "RemainingCents is what is left of the grant when the ledger tracks it.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "financeInvoice": {
+        "properties": {
+          "cents": {
+            "description": "Cents is the invoice total.",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is the invoice's denomination.",
+            "type": "string"
+          },
+          "date": {
+            "description": "Date is when the invoice was issued.",
+            "type": "string"
+          },
+          "dueDate": {
+            "description": "DueDate is when payment is due.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the invoice's identifier.",
+            "type": "string"
+          },
+          "number": {
+            "description": "Number is the human-facing invoice number.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the invoice's state, e.g. paid or open.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL links to the rendered invoice.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "financeLedgerEntry": {
+        "properties": {
+          "account": {
+            "description": "Account is the org-scoped book the posting hit: \"credits:\u003corg\u003e\" or \"usage:\u003corg\u003e\".",
+            "type": "string"
+          },
+          "balanceCents": {
+            "description": "BalanceCents is the running balance after the posting, when known.",
+            "type": "integer"
+          },
+          "cents": {
+            "description": "Cents is the signed move: positive for a deposit, negative for a withdraw.",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is the posting's denomination, lowercased.",
+            "type": "string"
+          },
+          "date": {
+            "description": "Date is when the posting landed, RFC3339.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the posting's note, tag, or its type.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the ledger row.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "financePaymentMethod": {
+        "properties": {
+          "brand": {
+            "description": "Brand is the card network, e.g. visa.",
+            "type": "string"
+          },
+          "expMonth": {
+            "description": "ExpMonth is the expiry month, 1-12.",
+            "type": "integer"
+          },
+          "expYear": {
+            "description": "ExpYear is the four-digit expiry year.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the saved method's identifier at the payment processor.",
+            "type": "string"
+          },
+          "isDefault": {
+            "description": "IsDefault marks the method a charge falls back to.",
+            "type": "boolean"
+          },
+          "last4": {
+            "description": "Last4 is at most the trailing four digits — the only digits ever surfaced.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the instrument kind, e.g. \"card\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "financeUsageView": {
+        "properties": {
+          "currency": {
+            "description": "Currency is always \"usd\".",
+            "type": "string"
+          },
+          "end": {
+            "description": "End is the window's closing instant, RFC3339.",
+            "type": "string"
+          },
+          "lines": {
+            "description": "Lines is the same spend broken out per charge tag.",
+            "items": {
+              "$ref": "#/components/schemas/usageLine"
+            },
+            "type": "array"
+          },
+          "series": {
+            "description": "Series is the spend over time, oldest bucket first.",
+            "items": {
+              "$ref": "#/components/schemas/usagePoint"
+            },
+            "type": "array"
+          },
+          "start": {
+            "description": "Start is the window's opening instant, RFC3339.",
+            "type": "string"
+          },
+          "totalCents": {
+            "description": "TotalCents is the metered spend across the whole window.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "usageLine": {
+        "properties": {
+          "cents": {
+            "description": "Cents is the line's total spend.",
+            "type": "integer"
+          },
+          "label": {
+            "description": "Label is the charge tag the spend was grouped under, else \"Usage\".",
+            "type": "string"
+          },
+          "tokens": {
+            "description": "Tokens is the token count when the upstream reports one.",
+            "type": "integer"
+          },
+          "units": {
+            "description": "Units is how many charges made up the line.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "usagePoint": {
+        "properties": {
+          "cents": {
+            "description": "Cents is the spend inside that bucket.",
+            "type": "integer"
+          },
+          "date": {
+            "description": "Date is the bucket's start, RFC3339 — hourly over a 24h range, else daily.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

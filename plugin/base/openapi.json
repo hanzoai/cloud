@@ -22,9 +22,27 @@
     "/v1/base/health": {
       "get": {
         "operationId": "get_v1_base_health",
+        "summary": "health reports that the base subsystem is mounted and answering.",
+        "description": "health reports that the base subsystem is mounted and answering. It opens no\nBase app and reads no store, so it stays true whether or not the per-org\nhosting lane is switched on — which is what makes it a liveness probe for the\nbinary rather than a readiness probe for the embed.",
         "tags": [
           "base"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "service": "base",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/baseStatus"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/collections": {
@@ -183,6 +201,23 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "baseStatus": {
+        "properties": {
+          "service": {
+            "description": "Service names the subsystem answering.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" whenever this route answers.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

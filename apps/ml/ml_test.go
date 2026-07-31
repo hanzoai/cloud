@@ -1,6 +1,7 @@
 package ml
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -157,7 +158,9 @@ func TestView(t *testing.T) {
 		"status":     map[string]any{"url": "http://m1.ml-acme.svc.cluster.local"},
 	}}
 
-	noSpec := view(obj, false)
+	// Assert the WIRE shape, not the Go value: view() is a declared type now, so what
+	// matters is the JSON a client actually sees.
+	noSpec := wireOf(t, view(obj, false))
 	if noSpec["name"] != "m1" {
 		t.Fatalf("name = %v", noSpec["name"])
 	}
@@ -175,9 +178,42 @@ func TestView(t *testing.T) {
 		t.Fatal("namespace must not be echoed")
 	}
 
-	withSpec := view(obj, true)
+	withSpec := wireOf(t, view(obj, true))
 	if _, ok := withSpec["spec"]; !ok {
 		t.Fatal("spec must be present in single-object view")
+	}
+}
+
+// wireOf round-trips a view through JSON so a test asserts the keys a client receives.
+func wireOf(t *testing.T, r Resource) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("marshal view: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("unmarshal view: %v", err)
+	}
+	return m
+}
+
+// TestViewKeepsEmptyStatusPresent pins the presence distinction the wire depends on:
+// a CR whose status is present but empty keeps "status":{}, and a CR with no status at
+// all omits the key. A plain map field with omitempty would collapse the two.
+func TestViewKeepsEmptyStatusPresent(t *testing.T) {
+	empty := &unstructured.Unstructured{Object: map[string]any{
+		"metadata": map[string]any{"name": "m1"},
+		"status":   map[string]any{},
+	}}
+	if _, ok := wireOf(t, view(empty, false))["status"]; !ok {
+		t.Fatal("an empty-but-present status must stay present on the wire")
+	}
+	absent := &unstructured.Unstructured{Object: map[string]any{
+		"metadata": map[string]any{"name": "m2"},
+	}}
+	if _, ok := wireOf(t, view(absent, false))["status"]; ok {
+		t.Fatal("an absent status must stay absent on the wire")
 	}
 }
 

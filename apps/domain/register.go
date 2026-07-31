@@ -9,10 +9,10 @@ import (
 	"github.com/hanzoai/cloud/apps/domain/namecom"
 )
 
-// Quote is a priced availability result: the wholesale cost and the customer sell
+// Offer is a priced availability result: the wholesale cost and the customer sell
 // price (marked up), both in cents. It is what search/availability return and what a
 // register bills against.
-type Quote struct {
+type Offer struct {
 	Domain            string `json:"domain"`
 	Available         bool   `json:"available"`
 	Premium           bool   `json:"premium,omitempty"`
@@ -24,10 +24,10 @@ type Quote struct {
 }
 
 // quoteFrom prices a registrar search result through the markup.
-func (s *Service) quoteFrom(r namecom.SearchResult) Quote {
+func (s *Service) quoteFrom(r namecom.SearchResult) Offer {
 	cost := dollarsToCents(r.PurchasePrice)
 	renewCost := dollarsToCents(r.RenewalPrice)
-	return Quote{
+	return Offer{
 		Domain:            strings.ToLower(r.DomainName),
 		Available:         r.Purchasable,
 		Premium:           r.Premium,
@@ -40,7 +40,7 @@ func (s *Service) quoteFrom(r namecom.SearchResult) Quote {
 }
 
 // Availability checks exact names and returns priced quotes (availability + pricing).
-func (s *Service) Availability(ctx context.Context, names ...string) ([]Quote, error) {
+func (s *Service) Availability(ctx context.Context, names ...string) ([]Offer, error) {
 	if !s.reg.Configured() {
 		return nil, ErrNotConfigured
 	}
@@ -53,7 +53,7 @@ func (s *Service) Availability(ctx context.Context, names ...string) ([]Quote, e
 
 // Search runs a keyword search (with alternate-TLD suggestions) and returns priced
 // quotes. tldFilter (optional) narrows the TLDs.
-func (s *Service) Search(ctx context.Context, keyword string, tldFilter ...string) ([]Quote, error) {
+func (s *Service) Search(ctx context.Context, keyword string, tldFilter ...string) ([]Offer, error) {
 	if !s.reg.Configured() {
 		return nil, ErrNotConfigured
 	}
@@ -64,8 +64,8 @@ func (s *Service) Search(ctx context.Context, keyword string, tldFilter ...strin
 	return s.quotes(resp), nil
 }
 
-func (s *Service) quotes(resp *namecom.SearchResponse) []Quote {
-	out := make([]Quote, 0, len(resp.Results))
+func (s *Service) quotes(resp *namecom.SearchResponse) []Offer {
+	out := make([]Offer, 0, len(resp.Results))
 	for _, r := range resp.Results {
 		out = append(out, s.quoteFrom(r))
 	}
@@ -74,8 +74,8 @@ func (s *Service) quotes(resp *namecom.SearchResponse) []Quote {
 
 // RegisterResult is a successful purchase.
 type RegisterResult struct {
-	Record Record `json:"record"`
-	Quote  Quote  `json:"quote"`
+	Ownership Ownership `json:"record"`
+	Offer  Offer  `json:"quote"`
 }
 
 // Register buys a domain for org: quote → guard → authorize (deposit) → provision the
@@ -104,7 +104,7 @@ func (s *Service) Register(ctx context.Context, org, domainName string, years in
 		return nil, ErrAlreadyOwned
 	}
 
-	// 1. Quote — must be purchasable + priced.
+	// 1. Quote it — must be purchasable + priced.
 	quotes, err := s.Availability(ctx, domainName)
 	if err != nil {
 		return nil, err
@@ -154,8 +154,8 @@ func (s *Service) Register(ctx context.Context, org, domainName string, years in
 	ref := "domain:register:" + domainName
 	s.bill.Capture(org, q.PriceCents, ref)
 
-	// 6. Record ownership.
-	rec := Record{
+	// 6. Ownership ownership.
+	rec := Ownership{
 		Org:          org,
 		Domain:       domainName,
 		RegisteredAt: time.Now().Unix(),
@@ -173,12 +173,12 @@ func (s *Service) Register(ctx context.Context, org, domainName string, years in
 	if err := s.store.Put(rec); err != nil {
 		return nil, err
 	}
-	return &RegisterResult{Record: rec, Quote: q}, nil
+	return &RegisterResult{Ownership: rec, Offer: q}, nil
 }
 
 // RenewResult is a successful renewal.
 type RenewResult struct {
-	Record    Record `json:"record"`
+	Ownership    Ownership `json:"record"`
 	PaidCents int64  `json:"paidCents"`
 }
 
@@ -231,13 +231,13 @@ func (s *Service) Renew(ctx context.Context, org, domainName string, years int) 
 	if err := s.store.Put(rec); err != nil {
 		return nil, err
 	}
-	return &RenewResult{Record: rec, PaidCents: priceCents}, nil
+	return &RenewResult{Ownership: rec, PaidCents: priceCents}, nil
 }
 
 // renewalCostFrom derives the wholesale renewal cost (cents) for a quote. The renewal
 // SELL price already passed through markup; recover a cost floor from it so the
 // registrar price cap is set sanely (never below the known wholesale).
-func renewalCostFrom(q Quote) int64 {
+func renewalCostFrom(q Offer) int64 {
 	if q.CostCents > 0 {
 		return q.CostCents
 	}
@@ -262,7 +262,7 @@ func (s *Service) Transfer(ctx context.Context, org, domainName, authCode string
 	if err != nil {
 		return nil, err
 	}
-	q := Quote{Currency: "usd", Domain: domainName}
+	q := Offer{Currency: "usd", Domain: domainName}
 	if len(quotes) > 0 {
 		q = quotes[0]
 	}
@@ -283,7 +283,7 @@ func (s *Service) Transfer(ctx context.Context, org, domainName, authCode string
 	}
 	s.bill.Capture(org, q.PriceCents, "domain:transfer:"+domainName)
 
-	rec := Record{
+	rec := Ownership{
 		Org:          org,
 		Domain:       domainName,
 		RegisteredAt: time.Now().Unix(),
@@ -295,8 +295,8 @@ func (s *Service) Transfer(ctx context.Context, org, domainName, authCode string
 	if err := s.store.Put(rec); err != nil {
 		return nil, err
 	}
-	return &RegisterResult{Record: rec, Quote: q}, nil
+	return &RegisterResult{Ownership: rec, Offer: q}, nil
 }
 
 // ListByOrg returns the domains an org holds.
-func (s *Service) ListByOrg(org string) ([]Record, error) { return s.store.ListByOrg(org) }
+func (s *Service) ListByOrg(org string) ([]Ownership, error) { return s.store.ListByOrg(org) }

@@ -101,12 +101,12 @@ func TestEventToCapture(t *testing.T) {
 // TestEventNormalizeThroughCore: a canonical Event, adapted and normalized, yields
 // a row stamped with the SERVER org and the resolved event name.
 func TestEventNormalizeThroughCore(t *testing.T) {
-	row, ok := normalizeEvent("acme", time.Now(), Event{Event: "signup", DistinctID: "u1"}.toCapture())
+	f, ok := normalize("acme", time.Now(), Event{Event: "signup", DistinctID: "u1"}.toCapture())
 	if !ok {
 		t.Fatal("want routable")
 	}
-	if row.tenant != "acme" || row.event != "signup" || row.eventType != "event" {
-		t.Fatalf("row = tenant %q event %q type %q", row.tenant, row.event, row.eventType)
+	if f.org != "acme" || f.name != "signup" || f.kind != kindTrack || f.signal != signalEvent {
+		t.Fatalf("fact = org %q name %q kind %q signal %q", f.org, f.name, f.kind, f.signal)
 	}
 }
 
@@ -138,41 +138,41 @@ func TestCaptureBatchAdapter(t *testing.T) {
 	}
 }
 
-// ── source tagging (the $source property, one-table origin discriminator) ────
+// ── source tagging (the `source` attribute, the per-door origin discriminator) ────
 
 func TestWithSource(t *testing.T) {
-	// stamps $source
+	// stamps source
 	got := withSource(nil, sourceEvent)
-	if got["$source"] != "event" {
+	if got["source"] != "event" {
 		t.Fatalf("withSource(nil,event) = %v", got)
 	}
 	// does not mutate the caller's map, and preserves existing keys
 	orig := map[string]any{"a": 1}
 	out := withSource(orig, sourcePostHog)
-	if out["a"] != 1 || out["$source"] != "posthog" {
+	if out["a"] != 1 || out["source"] != "posthog" {
 		t.Fatalf("withSource copy = %v", out)
 	}
-	if _, leaked := orig["$source"]; leaked {
+	if _, leaked := orig["source"]; leaked {
 		t.Fatalf("withSource mutated the caller's map: %v", orig)
 	}
 	// empty source is a no-op passthrough (same map)
-	if got := withSource(orig, ""); got["$source"] != nil {
+	if got := withSource(orig, ""); got["source"] != nil {
 		t.Fatalf("empty source must not stamp, got %v", got)
 	}
 }
 
-// TestSourceStampedIntoProperties: source flows through withSource → normalizeEvent
-// → the stored properties JSON, so the ONE hanzo.events table carries origin
-// WITHOUT a schema column.
-func TestSourceStampedIntoProperties(t *testing.T) {
+// TestSourceStampedIntoAttributes: source flows through withSource → normalize → the
+// stored attributes, so a fact carries the door it arrived through with no schema
+// column of its own — which is what makes the alias sunset a warehouse query
+// (attributes['source'] = 'capture') rather than a guess.
+func TestSourceStampedIntoAttributes(t *testing.T) {
 	e := CaptureEvent{Event: "x", Properties: withSource(nil, sourceEvent)}
-	row, ok := normalizeEvent("acme", time.Now(), e)
+	f, ok := normalize("acme", time.Now(), e)
 	if !ok {
 		t.Fatal("want routable")
 	}
-	props := decodeProps(t, row.properties)
-	if props["$source"] != "event" {
-		t.Fatalf("row.properties $source = %v (props=%v)", props["$source"], props)
+	if f.attributes["source"] != "event" {
+		t.Fatalf("attributes[source] = %q (attrs=%v)", f.attributes["source"], f.attributes)
 	}
 }
 

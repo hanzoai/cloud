@@ -19,8 +19,8 @@
 // ONE door, EVERY wire, EVERY auth context. The decoder (decodeIngest) is
 // wire-tolerant: a bare canonical Event object, a bare [Event] array, AND the
 // CaptureBatch envelope ({batch:[…]} | {events:[…]}) the Segment/beacon/publishable
-// paths speak all decode onto the SAME []CaptureEvent the ONE write core
-// (ingestEvents) consumes, into the SAME hanzo.events table. There is deliberately
+// paths speak all decode onto the SAME []CaptureEvent the ONE ingest core
+// (ingestEvents) consumes, into the SAME event plane. There is deliberately
 // no /v1/event/batch — a JSON array, or a batch envelope, IS the batch.
 //
 // CAPABILITY IS DECIDED BY TRUST LEVEL, ONCE, IN ONE PLACE (handle) — never per door.
@@ -43,7 +43,7 @@
 // that presented NOTHING is CREDENTIAL-LESS and takes the ANONYMOUS lane (publicIngest,
 // public.go) — kind allowlist, field PROJECTION, its own size/rate bounds, DNT — no
 // matter which door it arrived at. It rejoins this pipeline at ingestDecoded, so decode,
-// write core, and receipt are shared; only capability differs.
+// the ingest core, and receipt are shared; only capability differs.
 //
 // There is NO host fallback anywhere: no door turns a request Host into a REAL tenant
 // with full capability. The org is NEVER read from the body, on either lane.
@@ -83,7 +83,7 @@ type Event struct {
 }
 
 // toCapture adapts the canonical Event onto the internal CaptureEvent the write
-// core consumes. Type is left empty (canonicalType ⇒ "event"); no $-property is
+// core consumes. Type is left empty (routeOf ⇒ a tracked event); no $-property is
 // promoted to a column here — /v1/event stays a strict four-field contract, and
 // every non-core field the caller sent stays in Properties.
 func (e Event) toCapture() CaptureEvent {
@@ -264,23 +264,25 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 }
 
 // decode is a WIRE's decoder: raw request bytes → the canonical []CaptureEvent the ONE
-// write core consumes. Exactly two exist — decodeIngest (the canonical Event / Segment
+// ingest core consumes. Exactly two exist — decodeIngest (the canonical Event / Segment
 // beacon wire) and decodeInsights (the deprecated PostHog wire) — and the wire is the
 // ONLY thing that differs between doors. Handing the pipeline a decoder, rather than
 // forking the pipeline per wire, is what lets admission stay a single decision instead
 // of one copy per door (which is exactly how the credential-less doors drifted).
 type decode func([]byte) ([]CaptureEvent, error)
 
-// ingestDecoded is the TAIL of the ingest pipeline, and the ONE place it lives: fold
-// type:'error' events (foldException) → the ONE write core (ingestEvents) → the honest
-// receipt. Every lane ends here, so "what happens to an admitted event" is written
-// once. org is the SERVER-resolved tenant; dropped is what admission already refused
-// upstream (0 on the vouched-for lane, so its behavior is unchanged), added to the
-// receipt so {accepted,dropped} always totals what the caller sent.
+// ingestDecoded is the TAIL of the ingest pipeline, and the ONE place it lives: the
+// ONE ingest core (ingestEvents) → the honest receipt. Every lane ends here, so "what
+// happens to an admitted event" is written once. org is the SERVER-resolved tenant;
+// dropped is what admission already refused upstream (0 on the vouched-for lane, so
+// its behavior is unchanged), added to the receipt so {accepted,dropped} always totals
+// what the caller sent.
+//
+// It no longer rewrites the events on the way past. An exception used to be FOLDED
+// into a property here so the one wide table needed no new columns; event.error has
+// those columns, so the exception is read straight off the wire at normalize
+// (faultOf, fact.go) and an event reaches the core exactly as the caller sent it.
 func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, dropped int) error {
-	for i := range evs {
-		evs[i] = foldException(evs[i])
-	}
 	res, err := ingestEvents(c.Context(), org, source, evs)
 	if err != nil {
 		return err

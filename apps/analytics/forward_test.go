@@ -21,7 +21,7 @@ func TestFanOutTranslatesAndFiresSink(t *testing.T) {
 		{Type: "event", Event: "order_completed", DistinctID: "u1", Revenue: 49, Currency: "USD",
 			Properties: map[string]any{"email": "a@b.com"}},
 		{Type: "pageview"},         // resolves to $pageview
-		{Type: "event", Event: ""}, // unroutable → dropped (mirrors the write core)
+		{Type: "event", Event: ""}, // unroutable → dropped (mirrors the ingest core)
 	})
 
 	select {
@@ -35,7 +35,7 @@ func TestFanOutTranslatesAndFiresSink(t *testing.T) {
 		if evs[0].Properties["email"] != "a@b.com" {
 			t.Errorf("raw (pre-scrub) properties must be carried for match keys: %+v", evs[0].Properties)
 		}
-		if evs[1].Name != "$pageview" {
+		if evs[1].Name != "page_viewed" {
 			t.Errorf("pageview name = %q", evs[1].Name)
 		}
 	case <-time.After(2 * time.Second):

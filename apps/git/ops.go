@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -41,6 +42,13 @@ type ops struct{ s *cloud.Service[state] }
 type tenant struct {
 	org     string
 	project string
+	// user is the validated principal INSIDE that org (the gateway-minted
+	// X-User-Id). It is not an isolation key — org is — but it is the owner a
+	// per-member record is written under (an SSH key, keys.go), and bridging it
+	// here is the ONLY way a typed op can learn it: the handler receives a
+	// context and its decoded In, never the request. Like org it is read from the
+	// validated request and never from an In field, which the caller supplies.
+	user string
 }
 
 // principalKey is the context key bridgePrincipal parks the tenant under.
@@ -53,7 +61,7 @@ func tenantFrom(c *zip.Ctx) (tenant, error) {
 	if !ok {
 		return tenant{}, zip.ErrForbidden("X-Org-Id required")
 	}
-	return tenant{org: o, project: projectScope(c)}, nil
+	return tenant{org: o, project: projectScope(c), user: strings.TrimSpace(c.User())}, nil
 }
 
 // bridgePrincipal carries the validated tenant from the request headers onto the

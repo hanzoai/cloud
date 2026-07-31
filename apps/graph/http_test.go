@@ -116,7 +116,7 @@ func TestIndexersGatedAndShape(t *testing.T) {
 		t.Fatalf("indexers want 200, got %d (%s)", code, body)
 	}
 	var listed struct {
-		Indexers []indexerView `json:"indexers"`
+		Indexers []Indexer `json:"indexers"`
 	}
 	if err := json.Unmarshal(body, &listed); err != nil {
 		t.Fatalf("shape: %v (%s)", err, body)
@@ -144,7 +144,7 @@ func TestIndexerUnhealthyDegraded(t *testing.T) {
 		t.Fatalf("indexers want 200, got %d (%s)", code, body)
 	}
 	var listed struct {
-		Indexers []indexerView `json:"indexers"`
+		Indexers []Indexer `json:"indexers"`
 	}
 	_ = json.Unmarshal(body, &listed)
 	if len(listed.Indexers) != 1 || listed.Indexers[0].Status != "degraded" {
@@ -170,7 +170,7 @@ func TestIndexerUnreachableHonestEmpty(t *testing.T) {
 		t.Fatalf("unreachable indexer want 200 (honest-empty), got %d (%s)", code, body)
 	}
 	var listed struct {
-		Indexers []indexerView `json:"indexers"`
+		Indexers []Indexer `json:"indexers"`
 	}
 	if err := json.Unmarshal(body, &listed); err != nil {
 		t.Fatalf("shape: %v (%s)", err, body)
@@ -197,7 +197,7 @@ func TestOraclesGatedShapeAndEmpty(t *testing.T) {
 		t.Fatalf("oracles want 200, got %d (%s)", code, body)
 	}
 	var listed struct {
-		Oracles []oracleView `json:"oracles"`
+		Oracles []Oracle `json:"oracles"`
 	}
 	if err := json.Unmarshal(body, &listed); err != nil {
 		t.Fatalf("shape: %v (%s)", err, body)
@@ -230,7 +230,7 @@ func TestOraclesGraphQLErrorHonestEmpty(t *testing.T) {
 		t.Fatalf("graphql error want 200 (honest-empty), got %d (%s)", code, body)
 	}
 	var listed struct {
-		Oracles []oracleView `json:"oracles"`
+		Oracles []Oracle `json:"oracles"`
 	}
 	if err := json.Unmarshal(body, &listed); err != nil {
 		t.Fatalf("shape: %v (%s)", err, body)

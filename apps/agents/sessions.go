@@ -190,14 +190,19 @@ func toEventView(e Event) eventView {
 // /v1/agents/:name wildcard (Fiber matches in registration order, so a bare
 // :name would otherwise capture "sessions"). Within the block, the static
 // /stream route precedes the /:id param for the same reason.
-func mountSessions(s *cloud.Service[state], app cloud.Router) {
+func mountSessions(s *cloud.Service[state], app cloud.Router, zapp *zip.App) {
 	g := app.Group("/v1/agents")
-	g.Post("/sessions", cloud.Handle(s, registerSession))
-	g.Get("/sessions", cloud.Handle(s, listSessions))
+	// TYPED ops carry the ABSOLUTE path: the registry keys on it, and cmd/zipdoc
+	// at the pinned zip reads the path argument literally.
+	o := sessionOps{s: s}
+	zip.Post(zapp, "/v1/agents/sessions", o.registerSession, zip.WithStatus(http.StatusCreated))
+	zip.Get(zapp, "/v1/agents/sessions", o.listSessions)
+	// The live feed stays an untyped handler and cannot be otherwise: its response
+	// is an open SSE stream, not a value.
 	g.Get("/sessions/stream", cloud.Handle(s, sessionsStream))
-	g.Get("/sessions/:id", cloud.Handle(s, getSession))
-	g.Patch("/sessions/:id", cloud.Handle(s, patchSession))
-	g.Get("/sessions/:id/tree", cloud.Handle(s, sessionTree))
+	zip.Get(zapp, "/v1/agents/sessions/:id", o.getSession)
+	zip.Patch(zapp, "/v1/agents/sessions/:id", o.patchSession)
+	zip.Get(zapp, "/v1/agents/sessions/:id/tree", o.sessionTree)
 	g.Post("/sessions/:id/events", cloud.Handle(s, appendSessionEvent))
 	g.Get("/sessions/:id/control", cloud.Handle(s, drainControl))
 	g.Post("/sessions/:id/pause", cloud.Handle(s, pauseSession))
@@ -214,6 +219,48 @@ func mountSessions(s *cloud.Service[state], app cloud.Router) {
 }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
+
+// sessionOps binds the service to the typed session ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value (o.getSession), which is
+// also the only bound form cmd/zipdoc can lift prose from.
+type sessionOps struct{ s *cloud.Service[state] }
+
+// sessionRef addresses one session. The id is the path segment: the URL is the
+// addressing authority, so it binds from there whatever a body says.
+type sessionRef struct {
+	// ID is the session to act on, from the path.
+	ID string `json:"id"`
+}
+
+// sessionQuery narrows a session list. Every field is optional.
+type sessionQuery struct {
+	// Root narrows to one flow: every session sharing this root id.
+	Root string `json:"root"`
+	// Parent narrows to the direct children of one session.
+	Parent string `json:"parent"`
+	// Status narrows to running, paused, done or error.
+	Status string `json:"status"`
+	// Project narrows to the sessions that built one product.
+	Project string `json:"project"`
+	// Limit caps the rows returned.
+	Limit int `json:"limit"`
+}
+
+// sessionList is a page of the caller org's sessions.
+type sessionList struct {
+	// Sessions is the matching sessions, each with its event and child counts
+	// and its most recent event.
+	Sessions []sessionView `json:"sessions"`
+}
+
+// patchSessionIn is a partial update. Every field is optional — a field the
+// request omits keeps its stored value — and the id comes from the path.
+type patchSessionIn struct {
+	// ID is the session to update, from the path.
+	ID string `json:"id"`
+	patchSessionReq
+}
 
 // ---- register ----
 
@@ -239,65 +286,75 @@ type registerReq struct {
 	Published bool   `json:"published"`
 }
 
-func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+// registerSession opens a session — one agent run, recorded as it happens.
+// A session with a parentSessionId joins that parent's flow and inherits its
+// root, so a subagent tree is one addressable unit; the parent must be in the
+// caller's OWN org, so a tree can never cross a tenant boundary.
+// Status defaults to running, actor defaults to the validated caller, and a
+// session that names a target must name one registered to the same org.
+//
+// Example: {"agent": "triage", "title": "Fix the flaky import test", "repo": "hanzoai/cloud"}
+func (o sessionOps) registerSession(ctx context.Context, in *registerReq) (*sessionView, error) {
+	s := o.s
+	c, ok := cloud.Request(ctx)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return nil, zip.ErrForbidden("X-Org-Id required")
 	}
-	var body registerReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
+	body := *in
 	agent := strings.TrimSpace(body.Agent)
 	if agent == "" {
-		return zip.ErrBadRequest("agent is required")
+		return nil, zip.ErrBadRequest("agent is required")
 	}
 	if len(agent) > maxAgentLabel {
-		return zip.ErrBadRequest("agent too long")
+		return nil, zip.ErrBadRequest("agent too long")
 	}
 	if len(body.Title) > maxTitle {
-		return zip.ErrBadRequest("title too long")
+		return nil, zip.ErrBadRequest("title too long")
 	}
 	status := strings.TrimSpace(body.Status)
 	if status == "" {
 		status = StatusRunning
 	}
 	if !validStatus(status) {
-		return zip.ErrBadRequest("status must be running|paused|done|error")
+		return nil, zip.ErrBadRequest("status must be running|paused|done|error")
 	}
 	actor := strings.TrimSpace(body.Actor)
 	if actor == "" {
 		actor = billingActor(org, c.User())
 	}
 	if len(actor) > maxActor {
-		return zip.ErrBadRequest("actor too long")
+		return nil, zip.ErrBadRequest("actor too long")
 	}
 	if len(body.TaskWorkflowID) > maxWorkflowRef || len(body.TaskRunID) > maxWorkflowRef {
-		return zip.ErrBadRequest("task workflow/run reference too long")
+		return nil, zip.ErrBadRequest("task workflow/run reference too long")
 	}
 	host, cwd, repo, target, cerr := sessionContext(s, c, org, body.Host, body.Cwd, body.Repo, body.Target)
 	if cerr != nil {
-		return cerr
+		return nil, cerr
 	}
 	provider := strings.TrimSpace(body.Provider)
 	account := strings.TrimSpace(body.Account)
 	if len(provider) > maxProvider {
-		return zip.ErrBadRequest("provider too long")
+		return nil, zip.ErrBadRequest("provider too long")
 	}
 	if len(account) > maxAccount {
-		return zip.ErrBadRequest("account too long")
+		return nil, zip.ErrBadRequest("account too long")
 	}
 	project := strings.TrimSpace(body.Project)
 	if len(project) > maxProject {
-		return zip.ErrBadRequest("project too long")
+		return nil, zip.ErrBadRequest("project too long")
 	}
 	if body.Published && project == "" {
-		return zip.ErrBadRequest("published requires a project — a build with no product is not a story anyone can open")
+		return nil, zip.ErrBadRequest("published requires a project — a build with no product is not a story anyone can open")
 	}
 
 	id, err := genID("sess")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
 	x := Session{
@@ -319,12 +376,12 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 	// one flow share it); a session with no parent is itself a root.
 	parent := strings.TrimSpace(body.ParentSessionID)
 	if parent != "" {
-		p, perr := s.State.store.GetSession(c.Context(), org, parent)
+		p, perr := s.State.store.GetSession(ctx, org, parent)
 		if perr == errSessionNotFound {
-			return zip.ErrBadRequest("parentSessionId not found in this org")
+			return nil, zip.ErrBadRequest("parentSessionId not found in this org")
 		}
 		if perr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "parent: %v", perr)
+			return nil, zip.Errorf(http.StatusInternalServerError, "parent: %v", perr)
 		}
 		x.ParentID = p.ID
 		x.RootID = p.RootID
@@ -332,14 +389,15 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 		x.RootID = id
 	}
 
-	if err := s.State.store.CreateSession(c.Context(), x); err != nil {
+	if err := s.State.store.CreateSession(ctx, x); err != nil {
 		if err == errParentNotFound {
-			return zip.ErrBadRequest("parentSessionId not found in this org")
+			return nil, zip.ErrBadRequest("parentSessionId not found in this org")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
 	publishSession(s, x, 0, 0)
-	return c.JSON(http.StatusCreated, toSessionView(x, 0, 0))
+	v := toSessionView(x, 0, 0)
+	return &v, nil
 }
 
 // sessionContext validates + binds a session's execution context (host/cwd/repo/
@@ -375,110 +433,132 @@ func sessionContext(s *cloud.Service[state], c *zip.Ctx, org, host, cwd, repo, t
 
 // ---- list ----
 
-func listSessions(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// listSessions returns the caller org's agent sessions, newest first.
+// It narrows by flow (root), by direct parent, by status, by the product a
+// session built, or by any combination of those.
+// Each row carries its event and child counts and its most recent event, so a
+// board can render a flow without a second read per session.
+//
+// Example: {"status": "running", "limit": 50}
+func (o sessionOps) listSessions(ctx context.Context, in *sessionQuery) (*sessionList, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
 	f := SessionFilter{
-		Root:    trimField(c.Query("root")),
-		Parent:  trimField(c.Query("parent")),
-		Status:  trimField(c.Query("status")),
-		Project: trimField(c.Query("project")),
-		Limit:   queryInt(c, "limit"),
+		Root:    trimField(in.Root),
+		Parent:  trimField(in.Parent),
+		Status:  trimField(in.Status),
+		Project: trimField(in.Project),
+		Limit:   in.Limit,
 	}
 	if f.Status != "" && !validStatus(f.Status) {
-		return zip.ErrBadRequest("status must be running|paused|done|error")
+		return nil, zip.ErrBadRequest("status must be running|paused|done|error")
 	}
-	rows, err := s.State.store.ListSessions(c.Context(), org, f)
+	rows, err := s.State.store.ListSessions(ctx, org, f)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]sessionView, 0, len(rows))
 	for _, x := range rows {
-		ev, _ := s.State.store.CountEvents(c.Context(), org, x.ID)
-		ch, _ := s.State.store.CountChildren(c.Context(), org, x.ID)
+		ev, _ := s.State.store.CountEvents(ctx, org, x.ID)
+		ch, _ := s.State.store.CountChildren(ctx, org, x.ID)
 		v := toSessionView(x, ev, ch)
-		if last, ok, _ := s.State.store.LastEvent(c.Context(), org, x.ID); ok {
+		if last, ok, _ := s.State.store.LastEvent(ctx, org, x.ID); ok {
 			v.LastEvent = toLastEventView(last)
 		}
 		out = append(out, v)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"sessions": out})
+	return &sessionList{Sessions: out}, nil
 }
 
 // ---- detail ----
 
-func getSession(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// getSession returns one session with its direct children and recent events.
+// A session in another org reads as not-found, so a probe learns nothing about
+// what exists elsewhere.
+//
+// Example: {"id": "sess_1"}
+func (o sessionOps) getSession(ctx context.Context, in *sessionRef) (*sessionDetail, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := idParam(c)
+	id := in.ID
 	if len(id) > maxSessionID {
-		return zip.ErrNotFound("session not found")
+		return nil, zip.ErrNotFound("session not found")
 	}
-	x, err := s.State.store.GetSession(c.Context(), org, id)
+	x, err := s.State.store.GetSession(ctx, org, id)
 	if err == errSessionNotFound {
-		return zip.ErrNotFound("session not found")
+		return nil, zip.ErrNotFound("session not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	kids, err := s.State.store.ListSessions(c.Context(), org, SessionFilter{Parent: id})
+	kids, err := s.State.store.ListSessions(ctx, org, SessionFilter{Parent: id})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "children: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "children: %v", err)
 	}
-	events, err := s.State.store.ListEvents(c.Context(), org, id, 0, recentEvents)
+	events, err := s.State.store.ListEvents(ctx, org, id, 0, recentEvents)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "events: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "events: %v", err)
 	}
-	evCount, _ := s.State.store.CountEvents(c.Context(), org, id)
+	evCount, _ := s.State.store.CountEvents(ctx, org, id)
 	kidViews := make([]sessionView, 0, len(kids))
 	for _, k := range kids {
-		kc, _ := s.State.store.CountChildren(c.Context(), org, k.ID)
-		ke, _ := s.State.store.CountEvents(c.Context(), org, k.ID)
+		kc, _ := s.State.store.CountChildren(ctx, org, k.ID)
+		ke, _ := s.State.store.CountEvents(ctx, org, k.ID)
 		kidViews = append(kidViews, toSessionView(k, ke, kc))
 	}
 	evViews := make([]eventView, 0, len(events))
 	for _, e := range events {
 		evViews = append(evViews, toEventView(e))
 	}
-	return c.JSON(http.StatusOK, sessionDetail{
+	return &sessionDetail{
 		sessionView:  toSessionView(x, evCount, len(kids)),
 		Children:     kidViews,
 		RecentEvents: evViews,
-	})
+	}, nil
 }
 
 // ---- tree ----
 
-func sessionTree(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// sessionTree returns the subagent tree rooted at one session.
+// Every node carries its own event count and fan-out, so a flow renders from one
+// read; the whole tree is pulled by a single indexed query on the shared root id
+// and assembled in memory.
+//
+// Example: {"id": "sess_1"}
+func (o sessionOps) sessionTree(ctx context.Context, in *sessionRef) (*treeNode, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := idParam(c)
+	id := in.ID
 	if len(id) > maxSessionID {
-		return zip.ErrNotFound("session not found")
+		return nil, zip.ErrNotFound("session not found")
 	}
-	x, err := s.State.store.GetSession(c.Context(), org, id)
+	x, err := s.State.store.GetSession(ctx, org, id)
 	if err == errSessionNotFound {
-		return zip.ErrNotFound("session not found")
+		return nil, zip.ErrNotFound("session not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
 	// One indexed query pulls the whole tree (same RootID); assemble in memory.
-	nodes, err := s.State.store.ListTree(c.Context(), org, x.RootID, treeNodeCap)
+	nodes, err := s.State.store.ListTree(ctx, org, x.RootID, treeNodeCap)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "tree: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "tree: %v", err)
 	}
-	counts, err := s.State.store.EventCountsByRoot(c.Context(), org, x.RootID)
+	counts, err := s.State.store.EventCountsByRoot(ctx, org, x.RootID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "counts: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "counts: %v", err)
 	}
-	return c.JSON(http.StatusOK, buildSubtree(nodes, counts, id))
+	node := buildSubtree(nodes, counts, id)
+	return &node, nil
 }
 
 // buildSubtree assembles the flat tree rows into the node rooted at rootAtID.
@@ -522,32 +602,38 @@ type patchSessionReq struct {
 	Published *bool   `json:"published"`
 }
 
-func patchSession(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// patchSession updates one session in place, leaving every omitted field alone.
+// A finished session stays finished: reopening a done or error run would
+// fabricate liveness, so a status change away from a terminal state is refused.
+// Publishing requires the session to name the product it built, because the
+// public build route is keyed on (org, project), and a target must be one
+// registered to the caller's own org.
+//
+// Example: {"id": "sess_1", "status": "done", "published": true}
+func (o sessionOps) patchSession(ctx context.Context, in *patchSessionIn) (*sessionView, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := idParam(c)
-	x, err := s.State.store.GetSession(c.Context(), org, id)
+	id := in.ID
+	x, err := s.State.store.GetSession(ctx, org, id)
 	if err == errSessionNotFound {
-		return zip.ErrNotFound("session not found")
+		return nil, zip.ErrNotFound("session not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	var body patchSessionReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := in.patchSessionReq
 	if body.Status != nil {
 		ns := strings.TrimSpace(*body.Status)
 		if !validStatus(ns) {
-			return zip.ErrBadRequest("status must be running|paused|done|error")
+			return nil, zip.ErrBadRequest("status must be running|paused|done|error")
 		}
 		// A finished session stays finished (truthful, monotonic terminal state):
 		// reopening a done/error run would fabricate liveness.
 		if isTerminalStatus(x.Status) && ns != x.Status {
-			return zip.Errorf(http.StatusConflict, "session is %s; cannot change status", x.Status)
+			return nil, zip.Errorf(http.StatusConflict, "session is %s; cannot change status", x.Status)
 		}
 		x.Status = ns
 		if isTerminalStatus(ns) && x.EndedAt == 0 {
@@ -556,14 +642,14 @@ func patchSession(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if body.Title != nil {
 		if len(*body.Title) > maxTitle {
-			return zip.ErrBadRequest("title too long")
+			return nil, zip.ErrBadRequest("title too long")
 		}
 		x.Title = strings.TrimSpace(*body.Title)
 	}
 	if body.Project != nil {
 		np := strings.TrimSpace(*body.Project)
 		if len(np) > maxProject {
-			return zip.ErrBadRequest("project too long")
+			return nil, zip.ErrBadRequest("project too long")
 		}
 		x.Project = np
 	}
@@ -572,7 +658,7 @@ func patchSession(s *cloud.Service[state], c *zip.Ctx) error {
 		// route answer at all, so it is refused unless the session names the
 		// product it built — /v1/agents/builds is keyed on (org, project).
 		if *body.Published && x.Project == "" {
-			return zip.ErrBadRequest("published requires a project — a build with no product is not a story anyone can open")
+			return nil, zip.ErrBadRequest("published requires a project — a build with no product is not a story anyone can open")
 		}
 		x.Published = *body.Published
 	}
@@ -580,27 +666,28 @@ func patchSession(s *cloud.Service[state], c *zip.Ctx) error {
 		nt := strings.TrimSpace(*body.Target)
 		if nt != "" {
 			if len(nt) > maxSessionID {
-				return zip.ErrBadRequest("target too long")
+				return nil, zip.ErrBadRequest("target too long")
 			}
-			if _, terr := s.State.store.GetTarget(c.Context(), org, nt); terr == errTargetNotFound {
-				return zip.ErrBadRequest("target not found in this org")
+			if _, terr := s.State.store.GetTarget(ctx, org, nt); terr == errTargetNotFound {
+				return nil, zip.ErrBadRequest("target not found in this org")
 			} else if terr != nil {
-				return zip.Errorf(http.StatusInternalServerError, "target: %v", terr)
+				return nil, zip.Errorf(http.StatusInternalServerError, "target: %v", terr)
 			}
 		}
 		x.Target = nt // "" detaches
 	}
 	x.UpdatedAt = time.Now().Unix()
-	if err := s.State.store.UpdateSession(c.Context(), x); err != nil {
+	if err := s.State.store.UpdateSession(ctx, x); err != nil {
 		if err == errSessionNotFound {
-			return zip.ErrNotFound("session not found")
+			return nil, zip.ErrNotFound("session not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
-	ev, _ := s.State.store.CountEvents(c.Context(), org, id)
-	ch, _ := s.State.store.CountChildren(c.Context(), org, id)
+	ev, _ := s.State.store.CountEvents(ctx, org, id)
+	ch, _ := s.State.store.CountChildren(ctx, org, id)
 	publishSession(s, x, ev, ch)
-	return c.JSON(http.StatusOK, toSessionView(x, ev, ch))
+	v := toSessionView(x, ev, ch)
+	return &v, nil
 }
 
 // ---- append event ----
@@ -611,6 +698,14 @@ type eventReq struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
+// appendSessionEvent records one event on a session — the transcript turn the
+// live feed and the readable build are assembled from.
+//
+// It stays an UNTYPED handler and cannot be otherwise: the guard gate refuses a
+// turn carrying a credential with a structured 422 (code secret_in_transcript
+// plus the findings that matched), and that body is the contract a client
+// branches on. A typed handler returns (*Out, error) and lets zip render the
+// error, which would flatten the findings away.
 func appendSessionEvent(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {

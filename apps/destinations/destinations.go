@@ -1,5 +1,7 @@
 package destinations
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"encoding/json"
@@ -107,14 +109,36 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// routes registers the destinations surface. Everything a fixed shape can state is
+// a zip TYPED op, so the REST route, the OpenAPI document, the MCP tool and the CLI
+// command all come from the one declaration; the bridge goes on FIRST because a
+// typed op is handed only a context, so the request (and the validated principal it
+// proves) is parked there.
+//
+// connect is the ONE exception and stays a raw handler: its body is an OPEN object
+// whose keys are the addressed destination's OWN Spec fields plus the camelCase of
+// its KMS secret names, so they differ per platform. No fixed Go struct states that
+// shape truthfully, and typing it as a map would leave the :platform path segment
+// unbound at run time (a typed In binds path segments into top-level scalar FIELDS).
+// A published shape that is wrong is worse than an unpublished one.
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
 	g := app.Group("/v1/destinations")
-	g.Get("", cloud.Handle(s, list))
-	g.Get("/:platform", cloud.Handle(s, get))
+	g.Use(cloud.Bridge())
+
+	zip.Get(z, "/v1/destinations", o.list, zip.WithOperationID("listDestinations"))
+	zip.Get(z, "/v1/destinations/:platform", o.get, zip.WithOperationID("getDestination"))
 	g.Post("/:platform", cloud.Handle(s, connect))
-	g.Delete("/:platform", cloud.Handle(s, disconnect))
-	g.Post("/:platform/test", cloud.Handle(s, test))
+	zip.Delete(z, "/v1/destinations/:platform", o.disconnect, zip.WithOperationID("disconnectDestination"))
+	zip.Post(z, "/v1/destinations/:platform/test", o.test, zip.WithOperationID("testDestination"))
 }
+
+// ops binds the service to destinations' typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, the only bound form
+// cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
 
 // Shutdown closes the store and clears the sink. Idempotent.
 func Shutdown() error {
@@ -143,6 +167,31 @@ func fanoutEnabled() bool {
 func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 func platformParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("platform")) }
+
+// tenantOrg is the typed seam's tenant gate: the org is EXACTLY the validated IAM
+// owner claim carried across by cloud.Bridge, never a field of the input, because
+// an input is what the caller says about itself.
+func tenantOrg(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("a validated principal is required")
+	}
+	if !validOrg(org) {
+		return "", zip.ErrBadRequest("org must be a DNS-1123 label")
+	}
+	return org, nil
+}
+
+// orgAdmin gates the mutating ops on the caller's ORG-ADMIN claim, which lives on
+// the request rather than the context. Off the HTTP path there is no claim to read,
+// so it refuses — the same fail-closed answer an anonymous caller gets.
+func orgAdmin(ctx context.Context, msg string) error {
+	c, ok := cloud.Request(ctx)
+	if !ok || !principal.IsOrgAdmin(c) {
+		return zip.ErrForbidden(msg)
+	}
+	return nil
+}
 
 // validOrg mirrors clients/integrations: the org is folded into the KMS secret path
 // and the store key, so it is validated strictly at every custody boundary.
@@ -249,16 +298,27 @@ func sealSecrets(s *cloud.Service[state], path string, secrets map[string]string
 // Status is a destination's card for an org: its Spec (fields the console renders),
 // this org's connection state, and whether a credential is resolvable (live).
 type Status struct {
-	Platform  string   `json:"platform"`
-	Name      string   `json:"name"`
-	Category  string   `json:"category"`
-	Connected bool     `json:"connected"`
-	Enabled   bool     `json:"enabled"`
-	Live      bool     `json:"live"`
-	Account   string   `json:"account,omitempty"`
-	Config    Config   `json:"config,omitempty"`
-	Fields    []Field  `json:"fields"`
-	Secrets   []string `json:"secrets"`
+	// Platform is the destination's registry slug, the :platform path segment.
+	Platform string `json:"platform"`
+	// Name is the destination's display name.
+	Name string `json:"name"`
+	// Category groups the destination in the console, e.g. ads or analytics.
+	Category string `json:"category"`
+	// Connected is true when this org has a stored row for the destination.
+	Connected bool `json:"connected"`
+	// Enabled is whether the org's connection currently forwards events.
+	Enabled bool `json:"enabled"`
+	// Live is whether a credential resolves right now.
+	Live bool `json:"live"`
+	// Account is the operator-set label for the connected account.
+	Account string `json:"account,omitempty"`
+	// Config is the org's stored NON-SECRET ids for this destination.
+	Config Config `json:"config,omitempty"`
+	// Fields are the non-secret inputs connect accepts for this destination.
+	Fields []Field `json:"fields"`
+	// Secrets are the KMS secret names this destination custodies; values are
+	// never returned.
+	Secrets []string `json:"secrets"`
 }
 
 // statusOf builds the card for a destination, folding in the org's live row (row may
@@ -282,17 +342,27 @@ func statusOf(s *cloud.Service[state], ctx context.Context, org string, dest Des
 
 // ── handlers ─────────────────────────────────────────────────────────────────
 
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	rows, err := s.State.store.List(c.Context(), org)
+// StatusList is every registered destination with this org's connection state.
+type StatusList struct {
+	// Destinations is one card per registered platform, connected or not.
+	Destinations []Status `json:"destinations"`
+}
+
+// list returns every destination platform with the caller org's connection state.
+//
+// Unconnected platforms are listed too, so the console can render the full catalog
+// from one read.
+//
+// Response: {"destinations": [{"platform": "meta", "name": "Meta Conversions API", "category": "ads", "connected": true, "enabled": true, "live": true, "fields": [{"key": "pixel_id", "label": "Pixel ID", "required": true}], "secrets": ["api_secret"]}]}
+func (o ops) list(ctx context.Context, _ *struct{}) (*StatusList, error) {
+	s := o.s
+	org, err := tenantOrg(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	rows, err := s.State.store.List(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	byPlatform := make(map[string]Row, len(rows))
 	for _, r := range rows {
@@ -302,34 +372,48 @@ func list(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, id := range sortedIDs(s.State.dests) {
 		dest := s.State.dests[id]
 		if r, ok := byPlatform[id]; ok {
-			out = append(out, statusOf(s, c.Context(), org, dest, &r))
+			out = append(out, statusOf(s, ctx, org, dest, &r))
 		} else {
-			out = append(out, statusOf(s, c.Context(), org, dest, nil))
+			out = append(out, statusOf(s, ctx, org, dest, nil))
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"destinations": out})
+	return &StatusList{Destinations: out}, nil
 }
 
-func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	dest, ok := s.State.dests[platformParam(c)]
-	if !ok {
-		return zip.ErrNotFound("unknown destination")
-	}
-	row, found, err := s.State.store.Get(c.Context(), org, dest.ID())
+// Ref addresses one destination platform.
+type Ref struct {
+	// Platform is the destination's registry slug, e.g. meta, ga4 or tiktok.
+	Platform string `json:"platform"`
+}
+
+// get returns one destination platform with the caller org's connection state.
+//
+// An unknown platform slug answers 404; a known one that this org has not
+// connected answers its card with connected false.
+//
+// Example: {"platform": "meta"}
+// Response: {"platform": "meta", "name": "Meta Conversions API", "category": "ads", "connected": true, "enabled": true, "live": true, "fields": [{"key": "pixel_id", "label": "Pixel ID", "required": true}], "secrets": ["api_secret"]}
+func (o ops) get(ctx context.Context, in *Ref) (*Status, error) {
+	s := o.s
+	org, err := tenantOrg(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
+	dest, ok := s.State.dests[strings.TrimSpace(in.Platform)]
+	if !ok {
+		return nil, zip.ErrNotFound("unknown destination")
+	}
+	row, found, err := s.State.store.Get(ctx, org, dest.ID())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	var st Status
 	if found {
-		return c.JSON(http.StatusOK, statusOf(s, c.Context(), org, dest, &row))
+		st = statusOf(s, ctx, org, dest, &row)
+	} else {
+		st = statusOf(s, ctx, org, dest, nil)
 	}
-	return c.JSON(http.StatusOK, statusOf(s, c.Context(), org, dest, nil))
+	return &st, nil
 }
 
 // connect provisions (or updates) a destination: non-secret ids into the store, API
@@ -398,22 +482,31 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, statusOf(s, c.Context(), org, dest, &row))
 }
 
-// disconnect forgets a destination: every custodied KMS secret, then the row.
-// Idempotent. Org-admin.
-func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+// Disconnected reports a completed disconnect.
+type Disconnected struct {
+	// Disconnected is always true — the op is idempotent, so it also reports true
+	// for a destination that was not connected.
+	Disconnected bool `json:"disconnected"`
+}
+
+// disconnect forgets a destination for the caller org: its KMS secrets, then its row.
+//
+// It is idempotent and requires org admin.
+//
+// Example: {"platform": "meta"}
+// Response: {"disconnected": true}
+func (o ops) disconnect(ctx context.Context, in *Ref) (*Disconnected, error) {
+	s := o.s
+	org, err := tenantOrg(ctx)
+	if err != nil {
+		return nil, err
+	}
+	dest, ok := s.State.dests[strings.TrimSpace(in.Platform)]
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return nil, zip.ErrNotFound("unknown destination")
 	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	dest, ok := s.State.dests[platformParam(c)]
-	if !ok {
-		return zip.ErrNotFound("unknown destination")
-	}
-	if !principal.IsOrgAdmin(c) {
-		return zip.ErrForbidden("disconnecting a destination requires org admin")
+	if err := orgAdmin(ctx, "disconnecting a destination requires org admin"); err != nil {
+		return nil, err
 	}
 	if s.State.kms != nil {
 		for _, name := range dest.Spec().Secrets {
@@ -422,47 +515,64 @@ func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
 			}
 		}
 	}
-	if _, err := s.State.store.Delete(c.Context(), org, dest.ID()); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+	if _, err := s.State.store.Delete(ctx, org, dest.ID()); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"disconnected": true})
+	return &Disconnected{Disconnected: true}, nil
 }
 
-// test sends ONE synthetic event through the connected destination end-to-end and
-// reports the platform's response as DATA (a send failure is {ok:false,error:…}, not
-// an HTTP error, so the console renders it). Org-admin.
-func test(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	dest, ok := s.State.dests[platformParam(c)]
-	if !ok {
-		return zip.ErrNotFound("unknown destination")
-	}
-	if !principal.IsOrgAdmin(c) {
-		return zip.ErrForbidden("testing a destination requires org admin")
-	}
-	row, found, err := s.State.store.Get(c.Context(), org, dest.ID())
+// TestResult is the platform's own answer to one synthetic send.
+type TestResult struct {
+	// OK is whether the platform accepted the event.
+	OK bool `json:"ok"`
+	// Sent is how many events the platform reported accepting.
+	Sent int `json:"sent"`
+	// Message is the platform's own response text; empty when it returned none.
+	Message string `json:"message"`
+	// Error is the send failure, reported as DATA so the console can render it.
+	// Absent on success.
+	Error string `json:"error,omitempty"`
+}
+
+// test sends ONE synthetic pageview through the connected destination end-to-end.
+//
+// A send failure is reported as DATA ({"ok":false,"error":…}), not an HTTP error,
+// so the console renders the platform's own answer.
+// The event carries no PII, only a stable per-org test id, and the op requires org
+// admin.
+//
+// Example: {"platform": "meta"}
+// Response: {"ok": true, "sent": 1, "message": "1 event received"}
+func (o ops) test(ctx context.Context, in *Ref) (*TestResult, error) {
+	s := o.s
+	org, err := tenantOrg(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
+		return nil, err
+	}
+	dest, ok := s.State.dests[strings.TrimSpace(in.Platform)]
+	if !ok {
+		return nil, zip.ErrNotFound("unknown destination")
+	}
+	if err := orgAdmin(ctx, "testing a destination requires org admin"); err != nil {
+		return nil, err
+	}
+	row, found, err := s.State.store.Get(ctx, org, dest.ID())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	}
 	if !found {
-		return zip.ErrNotFound("destination not connected")
+		return nil, zip.ErrNotFound("destination not connected")
 	}
 	secret, err := resolveSecret(s, org, dest, row.Config)
 	if err != nil {
-		return zip.ErrBadRequest("no credential is configured for this destination")
+		return nil, zip.ErrBadRequest("no credential is configured for this destination")
 	}
 	cv := syntheticConversion(org, s.Brand)
-	res, serr := dest.Send(c.Context(), row.Config, secret, []Conversion{cv})
+	res, serr := dest.Send(ctx, row.Config, secret, []Conversion{cv})
 	if serr != nil {
-		return c.JSON(http.StatusOK, map[string]any{"ok": false, "error": serr.Error()})
+		return &TestResult{OK: false, Error: serr.Error()}, nil
 	}
-	return c.JSON(http.StatusOK, map[string]any{"ok": true, "sent": res.Sent, "message": res.Message})
+	return &TestResult{OK: true, Sent: res.Sent, Message: res.Message}, nil
 }
 
 // syntheticConversion builds the one test event: a pageview attributed to a stable

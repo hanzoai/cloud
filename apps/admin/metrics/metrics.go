@@ -133,8 +133,8 @@ type MetricsData struct {
 	Sources     []core.SourceStatus `json:"sources"`
 }
 
-// Metrics answers GET /v1/admin/metrics by aggregating commerce.events directly
-// (fleet-wide, no per-org fan-out). SuperAdmin only.
+// Metrics aggregates commerce.events directly. It is fleet-wide with no per-org fan-out,
+// SuperAdmin only.
 //
 //	GET /v1/admin/metrics?window=30d&limit=20
 func Metrics(ctx context.Context, in *MetricsIn) (*MetricsOut, error) {

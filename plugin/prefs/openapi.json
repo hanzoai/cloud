@@ -16,18 +16,59 @@
     }
   ],
   "paths": {
-    "/v1/prefs/": {
+    "/v1/prefs": {
       "get": {
         "operationId": "get_v1_prefs",
+        "summary": "prefs returns the caller's own preference document.",
+        "description": "prefs returns the caller's own preference document.\n\nA user who has never saved one reads an empty object rather than a 404: \"I\nhave no preferences yet\" is a successful answer, and the user menu has to\nrender either way.\nThere is no path to another person's document — not for an org admin, not for\na platform SuperAdmin — so the subject is never named on the wire.",
         "tags": [
           "prefs"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "prefs": {
+                    "density": "compact",
+                    "theme": "dark"
+                  },
+                  "updatedAt": 1780000000
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/prefsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
         "operationId": "patch_v1_prefs",
         "tags": [
           "prefs"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "prefsView": {
+        "properties": {
+          "prefs": {
+            "description": "Prefs is the caller's whole preference document, verbatim.\nA user who has never written one reads an empty object, not a 404.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is unix seconds of the last write, absent until the first one.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

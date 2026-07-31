@@ -19,22 +19,77 @@
     "/v1/kb/connectors": {
       "get": {
         "operationId": "get_v1_kb_connectors",
+        "summary": "listConnectors lists every connector with the caller org's real ingested-doc count.\nA provider that is configured but not yet connected appears as \"disconnected\", so\nthe console can offer a Connect button.",
+        "description": "listConnectors lists every connector with the caller org's real ingested-doc count.\nA provider that is configured but not yet connected appears as \"disconnected\", so\nthe console can offer a Connect button. No secret is ever returned.",
         "tags": [
           "kb"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "connectors": [
+                    {
+                      "account": "acme",
+                      "configured": true,
+                      "docCount": 42,
+                      "error": "",
+                      "kind": "native",
+                      "lastSync": "2026-07-29 10:00:00",
+                      "provider": "slack",
+                      "status": "connected"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/connectorList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kb/connectors/catalog": {
       "get": {
         "operationId": "get_v1_kb_connectors_catalog",
+        "summary": "listCatalog returns every connector this deployment offers, sorted by provider.\nconfigured reports whether OAuth credentials are present, so the console shows\nConnect or a \"not configured\" hint.",
+        "description": "listCatalog returns every connector this deployment offers, sorted by provider.\nconfigured reports whether OAuth credentials are present, so the console shows\nConnect or a \"not configured\" hint. Metadata only — no secret and no org state.",
         "tags": [
           "kb"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "connectors": [
+                    {
+                      "configured": true,
+                      "description": "Slack workspace",
+                      "displayName": "Slack",
+                      "kind": "native",
+                      "provider": "slack"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/catalogList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kb/connectors/{provider}": {
       "delete": {
-        "operationId": "delete_v1_kb_connectors_by_provider",
+        "operationId": "delete_v1_kb_connectors_provider",
+        "summary": "disconnectConnector revokes a connection and de-indexes what it ingested.\nThe KMS credential is tombstoned (overwritten with empty — the KMS client has\nno delete) so a later sync cannot reuse it, this provider's points are removed\nfrom the org's vector namespace, and the connector document is marked\ndisconnected.",
+        "description": "disconnectConnector revokes a connection and de-indexes what it ingested.\nThe KMS credential is tombstoned (overwritten with empty — the KMS client has\nno delete) so a later sync cannot reuse it, this provider's points are removed\nfrom the org's vector namespace, and the connector document is marked\ndisconnected. The ingested kb-source documents stay in the store — they are the\norg's own data, deletable through the framework CRUD surface — but are no\nlonger retrievable by search. Everything is org-scoped.",
         "tags": [
           "kb"
         ],
@@ -43,16 +98,36 @@
             "name": "provider",
             "in": "path",
             "required": true,
+            "description": "Provider is the connector id from the path (slack, github, google, …).",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "slack"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "provider": "slack",
+                  "status": "disconnected"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/connectionView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kb/connectors/{provider}/callback": {
       "get": {
-        "operationId": "get_v1_kb_connectors_by_provider_callback",
+        "operationId": "get_v1_kb_connectors_provider_callback",
+        "summary": "connectCallback completes the OAuth exchange and records the connection.",
+        "description": "connectCallback completes the OAuth exchange and records the connection.\nThe org is recovered from the SIGNED state, not a header, so an attacker cannot\nland their token in a victim org; the token itself goes to KMS, never the\ndocument or the logs.",
         "tags": [
           "kb"
         ],
@@ -61,16 +136,66 @@
             "name": "provider",
             "in": "path",
             "required": true,
+            "description": "Provider is the connector id from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "slack"
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "description": "Code is the provider's authorization code, exchanged for a token.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "abc123"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "State is the value connect signed; the org is recovered from it, never a header.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "signed-state"
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "description": "Error is set by the provider when the user denied consent.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "account": "acme",
+                  "provider": "slack",
+                  "status": "connected"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/connectionView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kb/connectors/{provider}/connect": {
       "get": {
-        "operationId": "get_v1_kb_connectors_by_provider_connect",
+        "operationId": "get_v1_kb_connectors_provider_connect",
+        "summary": "connectStart returns the provider authorize URL the console sends the user to.\nThe state it carries is signed for the CALLER's org, so the token the callback\nstores can only ever land in that org.",
+        "description": "connectStart returns the provider authorize URL the console sends the user to.\nThe state it carries is signed for the CALLER's org, so the token the callback\nstores can only ever land in that org. Nothing is stored yet.",
         "tags": [
           "kb"
         ],
@@ -79,16 +204,35 @@
             "name": "provider",
             "in": "path",
             "required": true,
+            "description": "Provider is the connector id from the path (slack, github, google, …).",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "slack"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "authorizeUrl": "https://slack.com/oauth/v2/authorize?client_id=..."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/connectStartView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kb/connectors/{provider}/sync": {
       "post": {
-        "operationId": "post_v1_kb_connectors_by_provider_sync",
+        "operationId": "post_v1_kb_connectors_provider_sync",
+        "summary": "syncConnector pulls a provider's documents into the caller org's knowledge.\nThe token is read from KMS and the documents land as kb-source pages the index\npicks up.",
+        "description": "syncConnector pulls a provider's documents into the caller org's knowledge.\nThe token is read from KMS and the documents land as kb-source pages the index\npicks up. A provider-side failure answers 502 and the connector is left in\nstatus \"error\" with the reason recorded.",
         "tags": [
           "kb"
         ],
@@ -97,19 +241,92 @@
             "name": "provider",
             "in": "path",
             "required": true,
+            "description": "Provider is the connector id from the path (slack, github, google, …).",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "slack"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "provider": "slack"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/providerRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ingested": 42,
+                  "provider": "slack"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/syncView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kb/graph": {
       "get": {
         "operationId": "get_v1_kb_graph",
+        "summary": "graph returns the caller org's knowledge as a node/edge graph for a renderer.\nNodes are pages, memories, sources and connectors; edges are the parent tree,\nthe wikilinks and the connector provenance.",
+        "description": "graph returns the caller org's knowledge as a node/edge graph for a renderer.\nNodes are pages, memories, sources and connectors; edges are the parent tree,\nthe wikilinks and the connector provenance. A store outage degrades to an empty\ngraph with degraded=true, never a 5xx.",
         "tags": [
           "kb"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows every node to that project scope; empty means the whole org.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "edges": [
+                    {
+                      "from": "kb-page:runbook",
+                      "kind": "link",
+                      "to": "kb-page:index"
+                    }
+                  ],
+                  "nodes": [
+                    {
+                      "id": "kb-page:runbook",
+                      "title": "Runbook",
+                      "type": "kb-page"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/graphView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kb/import": {
@@ -123,9 +340,316 @@
     "/v1/kb/search": {
       "post": {
         "operationId": "post_v1_kb_search",
+        "summary": "search runs an org-scoped semantic retrieval over the org's knowledge namespace.\nThe org comes from principal.Org (a validated principal), so cross-tenant\nretrieval is impossible: the collection AND the payload filter are both pinned to\nthis org.",
+        "description": "search runs an org-scoped semantic retrieval over the org's knowledge namespace.\nThe org comes from principal.Org (a validated principal), so cross-tenant\nretrieval is impossible: the collection AND the payload filter are both pinned to\nthis org. An unreachable/disabled index returns an honest empty result set, never\na 5xx — the RAG caller degrades to no-context rather than failing the turn.",
         "tags": [
           "kb"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "limit": 10,
+                "query": "how do we rotate the signing key"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/searchBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "hits": [
+                    {
+                      "doctype": "kb-page",
+                      "name": "runbook",
+                      "score": 0.82,
+                      "title": "Key rotation"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/searchResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "catalogEntry": {
+        "properties": {
+          "configured": {
+            "description": "Configured reports whether this deployment holds OAuth credentials for it.",
+            "type": "boolean"
+          },
+          "description": {
+            "description": "Description is a one-line description of what it ingests.",
+            "type": "string"
+          },
+          "displayName": {
+            "description": "DisplayName is the human label for a picker.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is \"native\" (a Go connector) or \"piece\" (an activepieces connector).",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the connector id used everywhere else on this surface.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "catalogList": {
+        "properties": {
+          "connectors": {
+            "description": "Connectors is every offered connector, sorted by provider.",
+            "items": {
+              "$ref": "#/components/schemas/catalogEntry"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "connectStartView": {
+        "properties": {
+          "authorizeUrl": {
+            "description": "AuthorizeURL is the provider's consent URL, already carrying the signed state.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "connectionView": {
+        "properties": {
+          "account": {
+            "description": "Account is the connected account label; present only after a connect.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the connector id.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"connected\" or \"disconnected\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "connectorList": {
+        "properties": {
+          "connectors": {
+            "description": "Connectors is one entry per known provider, connected or not.",
+            "items": {
+              "$ref": "#/components/schemas/connectorView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "connectorView": {
+        "properties": {
+          "account": {
+            "description": "Account is the connected account label; absent until first connected.",
+            "type": "string"
+          },
+          "configured": {
+            "description": "Configured reports whether this deployment holds OAuth credentials for it.",
+            "type": "boolean"
+          },
+          "docCount": {
+            "description": "DocCount is a live count of this provider's ingested documents in the org.",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Error is the last sync failure; absent until first connected, empty when clean.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is \"native\" (a Go connector) or \"piece\" (an activepieces connector).",
+            "type": "string"
+          },
+          "lastSync": {
+            "description": "LastSync is when the last sync finished; absent until first connected.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the connector id.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is disconnected | connected | syncing | error.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graphEdge": {
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "parent | link | provenance",
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graphNode": {
+        "properties": {
+          "id": {
+            "description": "\"\u003cdoctype\u003e:\u003cname\u003e\" — globally unique, click-to-open key",
+            "type": "string"
+          },
+          "name": {
+            "description": "the document name (empty for synthetic nodes)",
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "title": {
+            "description": "display label",
+            "type": "string"
+          },
+          "type": {
+            "description": "kb-page | kb-memory | kb-source | kb-connector | unresolved",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graphView": {
+        "properties": {
+          "degraded": {
+            "description": "Degraded is true only when the document store was unavailable.",
+            "type": "boolean"
+          },
+          "edges": {
+            "description": "Edges are the parent tree, the wikilinks and the connector provenance.",
+            "items": {
+              "$ref": "#/components/schemas/graphEdge"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "description": "Nodes are the pages, memories, sources and connectors.",
+            "items": {
+              "$ref": "#/components/schemas/graphNode"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "hit": {
+        "properties": {
+          "doctype": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "providerRef": {
+        "properties": {
+          "provider": {
+            "description": "Provider is the connector id from the path (slack, github, google, …).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "searchBody": {
+        "properties": {
+          "doctypes": {
+            "description": "DocTypes restricts retrieval to a subset of kb-page, kb-memory, kb-source.\nAn empty or foreign list means all indexed knowledge doctypes.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "Limit bounds the hits returned; default 10, max 50.",
+            "type": "integer"
+          },
+          "project": {
+            "description": "Project narrows retrieval to one project scope.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Query is the natural-language question. Required.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "searchResult": {
+        "properties": {
+          "degraded": {
+            "description": "Degraded is true only when retrieval was unavailable and hits is empty.",
+            "type": "boolean"
+          },
+          "hits": {
+            "description": "Hits are the matching documents, best score first.",
+            "items": {
+              "$ref": "#/components/schemas/hit"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "syncView": {
+        "properties": {
+          "ingested": {
+            "description": "Ingested is how many documents this sync filed into the org's knowledge.",
+            "type": "integer"
+          },
+          "provider": {
+            "description": "Provider is the connector that was synced.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

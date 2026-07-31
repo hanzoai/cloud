@@ -19,17 +19,54 @@
     "/v1/blueprint": {
       "get": {
         "operationId": "get_v1_blueprint",
+        "summary": "listBlueprints lists every blueprint with its service count and monthly cost estimate.",
+        "description": "listBlueprints lists every blueprint with its service count and monthly cost estimate.\nIt is the index the console renders before drilling into one blueprint's SBOM.",
         "tags": [
           "blueprint"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "estCentsPerMonth": 1051,
+                      "services": 1,
+                      "templateId": "postgres"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BlueprintList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/blueprint/health": {
       "get": {
         "operationId": "get_v1_blueprint_health",
+        "summary": "health reports blueprint liveness, the embedded blueprint count and the active rate card.",
+        "description": "health reports blueprint liveness, the embedded blueprint count and the active rate card.\nNot JWT-gated — liveness must be probe-able — and always 200.",
         "tags": [
           "blueprint"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/blueprint/sbom": {
@@ -38,6 +75,74 @@
         "tags": [
           "blueprint"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BlueprintList": {
+        "properties": {
+          "data": {
+            "description": "Data is the rows, ordered by blueprint id.",
+            "items": {
+              "$ref": "#/components/schemas/BlueprintRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "BlueprintRow": {
+        "properties": {
+          "estCentsPerMonth": {
+            "description": "CentsPerMonth is the estimated compute cost of running the stack for a month.",
+            "type": "integer"
+          },
+          "services": {
+            "description": "Services is how many container services the stack runs.",
+            "type": "integer"
+          },
+          "templateId": {
+            "description": "TemplateID is the blueprint id, the same slug /v1/blueprint/sbom?template= takes.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "blueprints": {
+            "description": "Blueprints is how many blueprints are embedded in this binary.",
+            "type": "integer"
+          },
+          "rateCard": {
+            "$ref": "#/components/schemas/RateCard",
+            "description": "RateCard is the rate the estimates are priced with, after the env overlay."
+          },
+          "service": {
+            "description": "Service is the subsystem name, always \"blueprint\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" whenever the surface answers.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RateCard": {
+        "properties": {
+          "basis": {
+            "type": "string"
+          },
+          "microUsdPerGbHour": {
+            "type": "integer"
+          },
+          "microUsdPerVcpuHour": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

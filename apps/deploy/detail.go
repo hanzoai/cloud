@@ -11,7 +11,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"net/http"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -33,28 +32,30 @@ type argoSyncWindows struct {
 	CanSync         bool  `json:"canSync"`
 }
 
-// dashSyncWindows is GET /v1/deploy/applications/:name/syncwindows — the permissive
-// empty ApplicationSyncWindowState, gated to the caller's own app (a cross-tenant
-// name 404s before the static body is returned, so the endpoint discloses nothing
-// about another tenant's fleet).
-func dashSyncWindows(s *cloud.Service[state], c *zip.Ctx) error {
-	sc, ok := resolveScope(c)
-	if !ok {
-		return refuse(c)
+// syncWindows reports whether one application may be synced right now.
+// This plane declares no blackout windows, so the answer is always yes — but the
+// app must exist AND belong to the caller, or the read is a 404.
+//
+// Example: {"name": "cloud"}
+func (o ops) syncWindows(ctx context.Context, in *appRef) (*argoSyncWindows, error) {
+	s := o.s
+	sc, err := scopeFrom(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := ready(s); err != nil {
-		return err
+		return nil, err
 	}
-	name := reqName(c)
-	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must be a DNS-1123 label")
+	name, err := appName(in.Name)
+	if err != nil {
+		return nil, err
 	}
 	// Existence + ownership check (discard the namespace): 404 a name that is not the
 	// caller's, so a tenant cannot probe whether another org runs an app of a given name.
-	if _, err := sc.findNamespace(s, c, name); err != nil {
-		return err
+	if _, err := sc.findNamespace(s, ctx, name); err != nil {
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, argoSyncWindows{CanSync: true})
+	return &argoSyncWindows{CanSync: true}, nil
 }
 
 // ── revision metadata ────────────────────────────────────────────────────────
@@ -73,7 +74,7 @@ type argoRevisionMetadata struct {
 // bloat the response (the value is otherwise inert — JSON-escaped, never a shell/path arg).
 const maxRevisionLen = 256
 
-// dashRevisionMetadata is GET /v1/deploy/applications/:name/revisions/:revision/metadata.
+// revisionMetadata describes one revision of an application as far as the CR knows.
 //
 // The App CR is IMAGE-based: the deploy is pinned to an image tag, not a git commit, and
 // the projection's git source (git.hanzo.ai/hanzoai/universe) is the display-only manifest
@@ -84,27 +85,31 @@ const maxRevisionLen = 256
 // revision (HEAD resolves to the CR's declared image tag), date = when the app was declared
 // (the CR creation time), author = "" (none). Real git enrichment is a follow-on gated on
 // the CR carrying a real git source + a clients/git CommitMetadata export.
-func dashRevisionMetadata(s *cloud.Service[state], c *zip.Ctx) error {
-	sc, ok := resolveScope(c)
-	if !ok {
-		return refuse(c)
+//
+// Example: {"name": "cloud", "revision": "HEAD"}
+func (o ops) revisionMetadata(ctx context.Context, in *revisionRef) (*argoRevisionMetadata, error) {
+	s := o.s
+	sc, err := scopeFrom(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := ready(s); err != nil {
-		return err
+		return nil, err
 	}
-	name := reqName(c)
-	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must be a DNS-1123 label")
-	}
-	ns, err := sc.findNamespace(s, c, name)
+	name, err := appName(in.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cr, _, err := getAppCR(s, c.Context(), ns, name)
+	ns, err := sc.findNamespace(s, ctx, name)
 	if err != nil {
-		return k8sErr(s, "get", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, revisionMetadataOf(cr, c.Param("revision")))
+	cr, _, err := getAppCR(s, ctx, ns, name)
+	if err != nil {
+		return nil, k8sErr(s, "get", err)
+	}
+	meta := revisionMetadataOf(cr, in.Revision)
+	return &meta, nil
 }
 
 // revisionMetadataOf builds the honest minimal RevisionMetadata for an image-based App CR.
@@ -152,7 +157,7 @@ func dashStreamResourceTree(s *cloud.Service[state], c *zip.Ctx) error {
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("name must be a DNS-1123 label")
 	}
-	ns, err := sc.findNamespace(s, c, name)
+	ns, err := sc.findNamespace(s, c.Context(), name)
 	if err != nil {
 		return err // cross-tenant / unknown name → 404 BEFORE any stream is opened
 	}

@@ -16,6 +16,8 @@
 // those Kinds fail closed with ErrMPCNotConfigured.
 package wallets
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"crypto/rand"
@@ -101,19 +103,32 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the wallets surface. Static /v1/wallets/accounts routes
-// register BEFORE the /v1/wallets/:id param route so the static segment wins.
+// ops binds the wallets state to the typed handlers. A zip TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so the
+// service arrives as a RECEIVER and every op is a method value.
+type ops struct{ s *cloud.Service[state] }
+
+// routes registers the wallets surface. Every route is a zip TYPED op, so the REST
+// route, the OpenAPI document, the MCP tool and the CLI command all derive from ONE
+// declaration. Static /v1/wallets/accounts routes register BEFORE the
+// /v1/wallets/:id param route so the static segment wins.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/wallets")
-	g.Post("/accounts", cloud.Handle(s, createAccount))
-	g.Get("/accounts", cloud.Handle(s, listAccounts))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every op below resolves its
+	// tenant (and its ambient project) through the request it parks.
+	app.Group("/v1/wallets").Use(cloud.Bridge())
+
+	zip.Post(z, "/v1/wallets/accounts", o.createAccount)
+	zip.Get(z, "/v1/wallets/accounts", o.listAccounts)
 	// Collection root (/v1/wallets) stays flat — Group(p).Post("") yields "p/".
-	app.Post("/v1/wallets", cloud.Handle(s, createWallet))
-	app.Get("/v1/wallets", cloud.Handle(s, listWallets))
-	g.Get("/:id", cloud.Handle(s, getWallet))
-	g.Post("/:id/keys", cloud.Handle(s, rotateKeys))
-	g.Post("/:id/sign", cloud.Handle(s, sign))
-	g.Post("/:id/safe-tx", cloud.Handle(s, proposeSafeTx))
+	zip.Post(z, "/v1/wallets", o.createWallet)
+	zip.Get(z, "/v1/wallets", o.listWallets)
+	zip.Get(z, "/v1/wallets/:id", o.getWallet)
+	zip.Post(z, "/v1/wallets/:id/keys", o.rotateKeys)
+	zip.Post(z, "/v1/wallets/:id/sign", o.sign)
+	zip.Post(z, "/v1/wallets/:id/safe-tx", o.proposeSafeTx)
 }
 
 // buildCustody assembles the available custody backends. KMS is always present
@@ -206,67 +221,166 @@ func custodyFor(s *cloud.Service[state], kind Kind) (Custody, error) {
 
 // ── account handlers ─────────────────────────────────────────────────────────
 
-func createAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in")
-	}
-	var body struct {
-		Name string `json:"name"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := strings.TrimSpace(body.Name)
-	if name == "" {
-		return zip.ErrBadRequest("name is required")
-	}
-	a := &Account{ID: newID("acct"), Org: org, Name: name, CreatedAt: time.Now().Unix()}
-	if err := s.State.store.createAccount(c.Context(), a); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "create account: %v", err)
-	}
-	emitAudit(s, c.Context(), org, c.User(), "wallets.account.create", a.ID, map[string]any{"name": name})
-	return c.JSON(http.StatusOK, a)
+// ── wire shapes ──────────────────────────────────────────────────────────────
+//
+// Account and Wallet embed Scope, which Go's encoder INLINES: the bytes carry
+// org/project/agent/accountId at the top level. A schema generated off the Go
+// type states a nested "Scope" object instead — a shape no response has ever
+// had — so the boundary declares its own FLAT mirrors. Same json tags, same
+// values, one mapping each: what the document promises is what the wire sends.
+
+// walletView is one wallet as it goes on the wire. KeyRef is absent by
+// construction — it is the custody-internal handle and never serialized.
+type walletView struct {
+	// ID is the wallet id.
+	ID string `json:"id"`
+	// Org is the owning tenant — the isolation boundary, never crossed.
+	Org string `json:"org"`
+	// Project is the org project the wallet is narrowed to, absent when org-wide.
+	Project string `json:"project,omitempty"`
+	// Agent is the agent the wallet is narrowed to, absent when unassigned.
+	Agent string `json:"agent,omitempty"`
+	// AccountID is the account grouping the wallet belongs to.
+	AccountID string `json:"accountId"`
+	// Name is the human label for the wallet.
+	Name string `json:"name"`
+	// Custody is the signing backend: kms, mpc, treasury or safe.
+	Custody Kind `json:"custody"`
+	// Tier is one of the nine wallet tiers, e.g. hot or cold.
+	Tier Tier `json:"tier"`
+	// Chain is the EVM chain the wallet addresses, empty when chain-agnostic.
+	Chain string `json:"chain"`
+	// Address is the wallet's on-chain address, as custody provisioned it.
+	Address string `json:"address"`
+	// FinanceAccount is the ledger account this wallet backs, absent when unbound.
+	FinanceAccount string `json:"financeAccount,omitempty"`
+	// CreatedAt is the creation time, unix seconds.
+	CreatedAt int64 `json:"createdAt"`
 }
 
-func listAccounts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in")
+// toWalletView is the ONE wallet→wire mapping; every wallet-returning op goes
+// through it, so no op can drift from the declared shape.
+func toWalletView(w *Wallet) walletView {
+	return walletView{
+		ID: w.ID, Org: w.Org, Project: w.Project, Agent: w.Agent, AccountID: w.AccountID,
+		Name: w.Name, Custody: w.Custody, Tier: w.Tier, Chain: w.Chain, Address: w.Address,
+		FinanceAccount: w.FinanceAccount, CreatedAt: w.CreatedAt,
 	}
-	accounts, err := s.State.store.listAccounts(c.Context(), org)
+}
+
+// walletAccount is one account grouping as it goes on the wire.
+type walletAccount struct {
+	// ID is the account id, the value a wallet's accountId references.
+	ID string `json:"id"`
+	// Org is the owning tenant.
+	Org string `json:"org"`
+	// Name is the human label for the grouping.
+	Name string `json:"name"`
+	// CreatedAt is the creation time, unix seconds.
+	CreatedAt int64 `json:"createdAt"`
+}
+
+// toWalletAccount is the ONE account→wire mapping.
+func toWalletAccount(a Account) walletAccount {
+	return walletAccount{ID: a.ID, Org: a.Org, Name: a.Name, CreatedAt: a.CreatedAt}
+}
+
+// createAccountReq names a new wallet grouping.
+type createAccountReq struct {
+	// Name is the human label for the grouping. Required.
+	Name string `json:"name"`
+}
+
+// walletAccountList is the account-listing envelope.
+type walletAccountList struct {
+	// Accounts are the wallet groupings owned by the caller's org.
+	Accounts []walletAccount `json:"accounts"`
+}
+
+// createAccount creates a named wallet grouping in the caller's org. An account is
+// the addressing narrowing a wallet is later assigned to; it holds no key material.
+//
+// Example: {"name": "treasury"}
+func (o ops) createAccount(ctx context.Context, in *createAccountReq) (*walletAccount, error) {
+	c, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list accounts: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"accounts": accounts})
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, zip.ErrBadRequest("name is required")
+	}
+	a := &Account{ID: newID("acct"), Org: org, Name: name, CreatedAt: time.Now().Unix()}
+	if err := o.s.State.store.createAccount(ctx, a); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "create account: %v", err)
+	}
+	emitAudit(o.s, ctx, org, c.User(), "wallets.account.create", a.ID, map[string]any{"name": name})
+	out := toWalletAccount(*a)
+	return &out, nil
+}
+
+// listAccounts lists the wallet groupings the caller's org owns. Org is the bound
+// isolation boundary, so another tenant's accounts are never returned.
+//
+// Response: {"accounts": [{"id": "acct_9f2c", "org": "acme", "name": "treasury", "createdAt": 1780000000}]}
+func (o ops) listAccounts(ctx context.Context, _ *struct{}) (*walletAccountList, error) {
+	_, org, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	accounts, err := o.s.State.store.listAccounts(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list accounts: %v", err)
+	}
+	out := make([]walletAccount, 0, len(accounts))
+	for _, a := range accounts {
+		out = append(out, toWalletAccount(a))
+	}
+	return &walletAccountList{Accounts: out}, nil
 }
 
 // ── wallet handlers ──────────────────────────────────────────────────────────
 
-func createWallet(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in")
+// createWalletReq provisions one wallet under an account of the caller's org.
+type createWalletReq struct {
+	// AccountID is the account grouping the wallet belongs to. Required, and it
+	// must already exist in the caller's org.
+	AccountID string `json:"accountId"`
+	// Agent optionally narrows the wallet to one agent within the org.
+	Agent string `json:"agent"`
+	// Name is the human label for the wallet.
+	Name string `json:"name"`
+	// Custody selects the signing backend: kms, mpc, treasury or safe. Empty takes
+	// the deployment's default; mpc/treasury/safe are 503 until the ring is wired.
+	Custody string `json:"custody"`
+	// Tier is one of the nine wallet tiers (hot, warm, cold, gas, bridge,
+	// contract_admin, validator, quarantine, disaster_recovery). Empty means hot.
+	Tier string `json:"tier"`
+	// Chain is the EVM chain the wallet addresses; empty leaves it chain-agnostic.
+	Chain string `json:"chain"`
+}
+
+// createWallet provisions one wallet under an account of the caller's org. The
+// custody backend creates the signing material and returns its address; the
+// wallet's scope (org, ambient project, agent, account) is what its key material
+// is addressed by, so nothing here can reach another tenant's keys.
+//
+// Example: {"accountId": "acct_9f2c", "name": "ops hot wallet", "custody": "kms", "tier": "hot", "chain": "36963"}
+func (o ops) createWallet(ctx context.Context, in *createWalletReq) (*walletView, error) {
+	c, org, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body struct {
-		AccountID string `json:"accountId"`
-		Agent     string `json:"agent"`
-		Name      string `json:"name"`
-		Custody   string `json:"custody"`
-		Tier      string `json:"tier"`
-		Chain     string `json:"chain"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
+	s := o.s
 	accountID := strings.TrimSpace(body.AccountID)
 	if accountID == "" {
-		return zip.ErrBadRequest("accountId is required")
+		return nil, zip.ErrBadRequest("accountId is required")
 	}
-	if _, found, err := s.State.store.getAccount(c.Context(), org, accountID); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get account: %v", err)
+	if _, found, err := s.State.store.getAccount(ctx, org, accountID); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get account: %v", err)
 	} else if !found {
-		return zip.ErrNotFound("account not found")
+		return nil, zip.ErrNotFound("account not found")
 	}
 
 	// Resolve the wallet's scope within the org. Project is the request's ambient
@@ -281,7 +395,7 @@ func createWallet(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	agent := strings.TrimSpace(body.Agent)
 	if !validNarrowing(scopeProject) || !validNarrowing(agent) || !validNarrowing(accountID) {
-		return zip.ErrBadRequest("project, agent, and accountId must be url-safe segments")
+		return nil, zip.ErrBadRequest("project, agent, and accountId must be url-safe segments")
 	}
 
 	kind := Kind(strings.TrimSpace(body.Custody))
@@ -290,14 +404,14 @@ func createWallet(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	cust, err := custodyFor(s, kind)
 	if err != nil {
-		return custodyHTTPError(err)
+		return nil, custodyHTTPError(err)
 	}
 	tier := Tier(strings.TrimSpace(body.Tier))
 	if tier == "" {
 		tier = DefaultTier
 	}
 	if !validTier(tier) {
-		return zip.ErrBadRequest("invalid tier: " + string(tier))
+		return nil, zip.ErrBadRequest("invalid tier: " + string(tier))
 	}
 
 	w := &Wallet{
@@ -309,180 +423,265 @@ func createWallet(s *cloud.Service[state], c *zip.Ctx) error {
 		Chain:     strings.TrimSpace(body.Chain),
 		CreatedAt: time.Now().Unix(),
 	}
-	address, err := cust.Provision(c.Context(), w) // sets w.KeyRef
+	address, err := cust.Provision(ctx, w) // sets w.KeyRef
 	if err != nil {
-		return custodyHTTPError(err)
+		return nil, custodyHTTPError(err)
 	}
 	w.Address = address
-	if err := s.State.store.createWallet(c.Context(), w); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "create wallet: %v", err)
+	if err := s.State.store.createWallet(ctx, w); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "create wallet: %v", err)
 	}
-	emitAudit(s, c.Context(), org, c.User(), "wallets.wallet.create", w.ID,
+	emitAudit(s, ctx, org, c.User(), "wallets.wallet.create", w.ID,
 		map[string]any{"custody": string(kind), "tier": string(tier), "chain": w.Chain, "address": address,
 			"project": w.Project, "agent": w.Agent, "accountId": w.AccountID})
-	return c.JSON(http.StatusOK, w)
+	out := toWalletView(w)
+	return &out, nil
 }
 
-// listWallets lists the caller's wallets, optionally NARROWED within the org by the
-// ?project / ?agent / ?account query params — the API face of the ONE scope lookup
-// path. Org is always the bound isolation boundary; the narrowings only filter
-// within it, so a caller can never widen past its own org.
-func listWallets(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in")
+// walletFilter narrows a wallet listing WITHIN the caller's org. Org itself is
+// never a field here — it is the bound isolation boundary the server supplies.
+type walletFilter struct {
+	// Project narrows to one org project; empty means every project.
+	Project string `json:"project"`
+	// Agent narrows to one agent; empty means every agent.
+	Agent string `json:"agent"`
+	// Account narrows to one account grouping; empty means every account.
+	Account string `json:"account"`
+}
+
+// walletList is the wallet-listing envelope.
+type walletList struct {
+	// Wallets are the caller's own wallets matching the narrowings.
+	Wallets []walletView `json:"wallets"`
+}
+
+// listWallets lists the caller's wallets, narrowed within the org. Project, agent
+// and account are optional filters — the API face of the ONE scope lookup path —
+// while org is always the bound isolation boundary, so a caller can never widen
+// past its own org.
+//
+// Response: {"wallets": [{"id": "wal_3d81", "org": "acme", "accountId": "acct_9f2c", "name": "ops hot wallet", "custody": "kms", "tier": "hot", "chain": "36963", "address": "0x5b1c…", "createdAt": 1780000000}]}
+func (o ops) listWallets(ctx context.Context, in *walletFilter) (*walletList, error) {
+	_, org, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
 	}
 	sc := Scope{
 		Org:       org,
-		Project:   strings.TrimSpace(c.Query("project")),
-		Agent:     strings.TrimSpace(c.Query("agent")),
-		AccountID: strings.TrimSpace(c.Query("account")),
+		Project:   strings.TrimSpace(in.Project),
+		Agent:     strings.TrimSpace(in.Agent),
+		AccountID: strings.TrimSpace(in.Account),
 	}
 	if !validNarrowing(sc.Project) || !validNarrowing(sc.Agent) || !validNarrowing(sc.AccountID) {
-		return zip.ErrBadRequest("project, agent, and account filters must be url-safe segments")
+		return nil, zip.ErrBadRequest("project, agent, and account filters must be url-safe segments")
 	}
-	wallets, err := s.State.store.listWalletsByScope(c.Context(), sc)
+	wallets, err := o.s.State.store.listWalletsByScope(ctx, sc)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list wallets: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list wallets: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"wallets": wallets})
+	out := make([]walletView, 0, len(wallets))
+	for i := range wallets {
+		out = append(out, toWalletView(&wallets[i]))
+	}
+	return &walletList{Wallets: out}, nil
 }
 
-func getWallet(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in")
-	}
-	w, found, err := s.State.store.getWallet(c.Context(), org, idParam(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
-	}
-	if !found {
-		return zip.ErrNotFound("wallet not found") // tenant isolation: another org's id is not-found
-	}
-	return c.JSON(http.StatusOK, w)
+// walletRef addresses one wallet by id.
+type walletRef struct {
+	// ID is the wallet id from the path.
+	ID string `json:"id"`
 }
 
-func rotateKeys(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in")
-	}
-	w, found, err := s.State.store.getWallet(c.Context(), org, idParam(c))
+// getWallet reads one wallet of the caller's org. Another org's id is reported
+// not-found, so the wallet id space leaks no existence across tenants.
+//
+// Example: {"id": "wal_3d81"}
+func (o ops) getWallet(ctx context.Context, in *walletRef) (*walletView, error) {
+	_, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
+		return nil, err
+	}
+	w, found, err := o.s.State.store.getWallet(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
 	}
 	if !found {
-		return zip.ErrNotFound("wallet not found")
+		return nil, zip.ErrNotFound("wallet not found") // tenant isolation: another org's id is not-found
+	}
+	out := toWalletView(w)
+	return &out, nil
+}
+
+// rotateKeys rolls one wallet's signing material. The new material is created by
+// the wallet's own custody backend and its address persisted, while the wallet id
+// and scope are unchanged, so every reference to the wallet keeps resolving.
+//
+// Example: {"id": "wal_3d81"}
+func (o ops) rotateKeys(ctx context.Context, in *walletRef) (*walletView, error) {
+	c, org, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
+	w, found, err := s.State.store.getWallet(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
+	}
+	if !found {
+		return nil, zip.ErrNotFound("wallet not found")
 	}
 	cust, err := custodyFor(s, w.Custody)
 	if err != nil {
-		return custodyHTTPError(err)
+		return nil, custodyHTTPError(err)
 	}
-	address, err := cust.Rotate(c.Context(), w) // may set w.KeyRef
+	address, err := cust.Rotate(ctx, w) // may set w.KeyRef
 	if err != nil {
-		return custodyHTTPError(err)
+		return nil, custodyHTTPError(err)
 	}
 	w.Address = address
-	if err := s.State.store.updateWalletKey(c.Context(), org, w.ID, w.Address, w.KeyRef); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist rotation: %v", err)
+	if err := s.State.store.updateWalletKey(ctx, org, w.ID, w.Address, w.KeyRef); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist rotation: %v", err)
 	}
-	emitAudit(s, c.Context(), org, c.User(), "wallets.wallet.rotate", w.ID, map[string]any{"address": address})
-	return c.JSON(http.StatusOK, w)
+	emitAudit(s, ctx, org, c.User(), "wallets.wallet.rotate", w.ID, map[string]any{"address": address})
+	out := toWalletView(w)
+	return &out, nil
 }
 
-func sign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in")
-	}
-	w, found, err := s.State.store.getWallet(c.Context(), org, idParam(c))
+// signReq asks one wallet to sign a 32-byte digest.
+type signReq struct {
+	// ID is the wallet id from the path.
+	ID string `json:"id"`
+	// Message is plain text to hash into the digest. Ignored when digest is set.
+	Message string `json:"message"`
+	// Digest is a pre-computed 32-byte digest, hex, with or without the 0x prefix.
+	Digest string `json:"digest"`
+}
+
+// signOut is a wallet signature over one digest.
+type signOut struct {
+	// WalletID is the wallet that signed.
+	WalletID string `json:"walletId"`
+	// Address is the wallet's on-chain address.
+	Address string `json:"address"`
+	// Digest is the 32-byte digest that was signed, 0x-prefixed hex.
+	Digest string `json:"digest"`
+	// Signature is the produced signature, 0x-prefixed hex.
+	Signature string `json:"signature"`
+}
+
+// sign signs a 32-byte digest with one wallet of the caller's org. Signing runs in
+// that wallet's own custody backend, so the key material never leaves it; supply
+// digest directly, or message to have it hashed.
+//
+// Example: {"id": "wal_3d81", "message": "transfer 10 to 0x5b1c"}
+func (o ops) sign(ctx context.Context, in *signReq) (*signOut, error) {
+	c, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
+		return nil, err
+	}
+	s := o.s
+	w, found, err := s.State.store.getWallet(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
 	}
 	if !found {
-		return zip.ErrNotFound("wallet not found")
+		return nil, zip.ErrNotFound("wallet not found")
 	}
-	var body struct {
-		Message string `json:"message"`
-		Digest  string `json:"digest"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	digest, err := resolveDigest(body.Digest, body.Message)
+	digest, err := resolveDigest(in.Digest, in.Message)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	cust, err := custodyFor(s, w.Custody)
 	if err != nil {
-		return custodyHTTPError(err)
+		return nil, custodyHTTPError(err)
 	}
-	sig, err := cust.Sign(c.Context(), w, digest)
+	sig, err := cust.Sign(ctx, w, digest)
 	if err != nil {
-		return custodyHTTPError(err)
+		return nil, custodyHTTPError(err)
 	}
-	emitAudit(s, c.Context(), org, c.User(), "wallets.wallet.sign", w.ID,
+	emitAudit(s, ctx, org, c.User(), "wallets.wallet.sign", w.ID,
 		map[string]any{"digest": "0x" + hex.EncodeToString(digest)})
-	return c.JSON(http.StatusOK, map[string]any{
-		"walletId":  w.ID,
-		"address":   w.Address,
-		"digest":    "0x" + hex.EncodeToString(digest),
-		"signature": "0x" + hex.EncodeToString(sig),
-	})
+	return &signOut{
+		WalletID:  w.ID,
+		Address:   w.Address,
+		Digest:    "0x" + hex.EncodeToString(digest),
+		Signature: "0x" + hex.EncodeToString(sig),
+	}, nil
 }
 
-// proposeSafeTx composes the ring's Safe transaction propose + MPC-sign for a
-// KindSafe wallet (POST /v1/wallets/:id/safe-tx). The custody backend must
-// implement safeProposer (only safeCustody does); any other custody ⇒ 400. The
-// ring computes the EIP-712 Safe-tx hash (bound to the Safe contract + chainId)
-// and returns it with the threshold (r,s) its MPC produced — the owner approval.
-func proposeSafeTx(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in")
-	}
-	w, found, err := s.State.store.getWallet(c.Context(), org, idParam(c))
+// safeTxReq proposes one Safe transaction for a safe-custody wallet.
+type safeTxReq struct {
+	// ID is the wallet id from the path; it must be a safe-custody wallet.
+	ID string `json:"id"`
+	// To is the destination address of the Safe transaction.
+	To string `json:"to"`
+	// Value is the native-token amount, as a decimal string in base units.
+	Value string `json:"value"`
+	// Data is the calldata, hex, empty for a plain transfer.
+	Data string `json:"data"`
+	// ChainID is the EVM chain the Safe is bound to; 0 takes the wallet's chain.
+	ChainID int64 `json:"chainId"`
+	// Nonce is the Safe's transaction nonce.
+	Nonce int `json:"nonce"`
+}
+
+// safeTxOut is the ring's Safe-tx hash plus the threshold owner approval.
+type safeTxOut struct {
+	// WalletID is the safe-custody wallet the transaction was proposed for.
+	WalletID string `json:"walletId"`
+	// SafeAddress is the Safe contract address.
+	SafeAddress string `json:"safeAddress"`
+	// SafeTxHash is the EIP-712 Safe-tx hash the ring computed.
+	SafeTxHash string `json:"safeTxHash"`
+	// R is the r component of the threshold signature.
+	R string `json:"r"`
+	// S is the s component of the threshold signature.
+	S string `json:"s"`
+}
+
+// proposeSafeTx composes propose and MPC-sign for a safe-custody wallet. The ring
+// computes the EIP-712 Safe-tx hash — bound to the Safe contract and chain — and
+// returns it with the threshold (r,s) its MPC produced, which is the owner
+// approval; any other custody kind is a 400.
+//
+// Example: {"id": "wal_3d81", "to": "0x5b1c9e7a3f4d20e8b6c1a9d7f3025e4b8c6a1d90", "value": "1000000000000000000", "data": "0x", "chainId": 36963, "nonce": 7}
+func (o ops) proposeSafeTx(ctx context.Context, in *safeTxReq) (*safeTxOut, error) {
+	c, org, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
+		return nil, err
+	}
+	s := o.s
+	w, found, err := s.State.store.getWallet(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
 	}
 	if !found {
-		return zip.ErrNotFound("wallet not found")
+		return nil, zip.ErrNotFound("wallet not found")
 	}
 	cust, err := custodyFor(s, w.Custody)
 	if err != nil {
-		return custodyHTTPError(err)
+		return nil, custodyHTTPError(err)
 	}
 	proposer, ok := cust.(safeProposer)
 	if !ok {
-		return zip.ErrBadRequest("wallet custody " + string(w.Custody) + " does not support safe transactions")
+		return nil, zip.ErrBadRequest("wallet custody " + string(w.Custody) + " does not support safe transactions")
 	}
-	var body struct {
-		To      string `json:"to"`
-		Value   string `json:"value"`
-		Data    string `json:"data"`
-		ChainID int64  `json:"chainId"`
-		Nonce   int    `json:"nonce"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	res, err := proposer.ProposeTx(c.Context(), w, SafeTx{
-		To: strings.TrimSpace(body.To), Value: strings.TrimSpace(body.Value),
-		Data: strings.TrimSpace(body.Data), ChainID: body.ChainID, Nonce: body.Nonce,
+	res, err := proposer.ProposeTx(ctx, w, SafeTx{
+		To: strings.TrimSpace(in.To), Value: strings.TrimSpace(in.Value),
+		Data: strings.TrimSpace(in.Data), ChainID: in.ChainID, Nonce: in.Nonce,
 	})
 	if err != nil {
-		return custodyHTTPError(err)
+		return nil, custodyHTTPError(err)
 	}
-	emitAudit(s, c.Context(), org, c.User(), "wallets.wallet.safe_tx", w.ID,
-		map[string]any{"to": body.To, "chainId": body.ChainID, "safeTxHash": res.SafeTxHash})
-	return c.JSON(http.StatusOK, map[string]any{
-		"walletId":    w.ID,
-		"safeAddress": w.Address,
-		"safeTxHash":  res.SafeTxHash,
-		"r":           res.R,
-		"s":           res.S,
-	})
+	emitAudit(s, ctx, org, c.User(), "wallets.wallet.safe_tx", w.ID,
+		map[string]any{"to": in.To, "chainId": in.ChainID, "safeTxHash": res.SafeTxHash})
+	return &safeTxOut{
+		WalletID:    w.ID,
+		SafeAddress: w.Address,
+		SafeTxHash:  res.SafeTxHash,
+		R:           res.R,
+		S:           res.S,
+	}, nil
 }
 
 // ── finance seam (seam ONLY — no live wiring, does NOT touch treasury) ────────
@@ -529,7 +728,23 @@ func ResolvePaymentTarget(ctx context.Context, org, walletID string) (PaymentTar
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
+// begin resolves the request and the caller's org in ONE place. The org NEVER
+// comes from an In field — an In field is caller-supplied, so a tenant key read
+// from one is a cross-tenant read the caller asserted for itself. It comes from
+// the request cloud.Bridge parked; off the HTTP path (the CLI projection's
+// LocalInvoke) there is no request, so the op refuses. The request is returned
+// alongside because the audit trail records the acting user, not just the org.
+func (o ops) begin(ctx context.Context) (*zip.Ctx, string, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, "", zip.ErrForbidden("sign in")
+	}
+	org, ok := principal.Org(c)
+	if !ok {
+		return nil, "", zip.ErrForbidden("sign in")
+	}
+	return c, org, nil
+}
 
 // custodyHTTPError maps a custody error to the right HTTP status: fail-closed MPC
 // ⇒ 503, unknown custody ⇒ 400, delegation failures ⇒ 502, else 500.

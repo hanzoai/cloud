@@ -274,9 +274,16 @@ func (c *Client) Sign(ctx context.Context, keyRef string, payload []byte) ([]byt
 // SecretMeta is a secret's non-sensitive descriptor (never any ciphertext or
 // plaintext), returned by List for the console's secret browser.
 type SecretMeta struct {
-	Name   string `json:"name"`
-	Path   string `json:"path"`
-	Env    string `json:"env"`
+	// Name is the secret's name within its path.
+	Name string `json:"name"`
+	// Path is the org-qualified path it lives at, e.g. "/orgs/hanzo/ci".
+	Path string `json:"path"`
+	// Env is the environment it belongs to.
+	Env string `json:"env"`
+	// Scheme is how the value is sealed. Every secret written here goes through
+	// kmsstore.Seal, which is ModeStandard — "aead+mlkem": AES-256-GCM under an
+	// ML-KEM-wrapped DEK. The store's other two modes, "tfhe" and "ckks", are
+	// reported verbatim if a row carries one.
 	Scheme string `json:"scheme"`
 }
 

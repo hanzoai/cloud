@@ -151,7 +151,7 @@ func TestFriendlyBucketRoundTrips(t *testing.T) {
 }
 
 // TestPhysicalBucketMatchesProvisioningAndIsDNSSafe: the file manager's bucket
-// name MUST equal what provisioning allocates (so a POST /v1/s3 {name} bucket is
+// name MUST equal what provisioning allocates (so a POST /v1/object {name} bucket is
 // browsable here) AND be a DNS-safe S3 name (no '_', which SeaweedFS/S3 reject).
 // This locks in the fix for the underscore mismatch: physicalBucket used to
 // return the raw physicalName ("o<hash>_photos") which (a) differed from

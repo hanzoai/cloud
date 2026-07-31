@@ -67,8 +67,8 @@ type Zones interface {
 	EnsureZone(ctx context.Context, org, domainName string) (nameservers []string, err error)
 }
 
-// Record is the domain↔org ownership row Hanzo issues on a successful purchase.
-type Record struct {
+// Ownership is the domain↔org ownership row Hanzo issues on a successful purchase.
+type Ownership struct {
 	Org          string   `json:"org"`
 	Domain       string   `json:"domain"`
 	RegisteredAt int64    `json:"registeredAt"` // unix seconds
@@ -81,9 +81,9 @@ type Record struct {
 
 // Store persists ownership records.
 type Store interface {
-	Put(rec Record) error
-	Get(org, domainName string) (Record, bool, error)
-	ListByOrg(org string) ([]Record, error)
+	Put(rec Ownership) error
+	Get(org, domainName string) (Ownership, bool, error)
+	ListByOrg(org string) ([]Ownership, error)
 }
 
 // Config tunes pricing and the DNS handoff.

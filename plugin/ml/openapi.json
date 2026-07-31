@@ -30,20 +30,57 @@
     "/v1/ml/models": {
       "get": {
         "operationId": "get_v1_ml_models",
+        "summary": "listModels returns the caller's deployed inference models.",
+        "description": "listModels returns the caller's deployed inference models. A tenant namespace that\ndoes not exist yet is an empty list, not an error.",
         "tags": [
           "ml"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_ml_models",
         "tags": [
           "ml"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resource"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/ml/models/{name}": {
       "delete": {
-        "operationId": "delete_v1_ml_models_by_name",
+        "operationId": "delete_v1_ml_models_name",
+        "summary": "deleteModel undeploys one model and answers 204.",
+        "description": "deleteModel undeploys one model and answers 204. The serving endpoint stops as the\noperator tears the InferenceService down.",
         "tags": [
           "ml"
         ],
@@ -52,14 +89,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource name from the path, lower-cased.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sentiment"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_ml_models_by_name",
+        "operationId": "get_v1_ml_models_name",
+        "summary": "getModel returns one deployed model with its spec and live serving status.",
+        "description": "getModel returns one deployed model with its spec and live serving status.",
         "tags": [
           "ml"
         ],
@@ -68,11 +114,25 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource name from the path, lower-cased.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sentiment"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
         "operationId": "patch_v1_ml_models_by_name",
@@ -88,7 +148,19 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resource"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/ml/models/{name}/predict": {
@@ -112,20 +184,57 @@
     "/v1/train/experiments": {
       "get": {
         "operationId": "get_v1_train_experiments",
+        "summary": "listExperiments returns the caller's hyperparameter-search experiments.",
+        "description": "listExperiments returns the caller's hyperparameter-search experiments. A tenant\nnamespace that does not exist yet is an empty list, not an error.",
         "tags": [
           "train"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_train_experiments",
         "tags": [
           "train"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resource"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/train/experiments/{name}": {
       "delete": {
-        "operationId": "delete_v1_train_experiments_by_name",
+        "operationId": "delete_v1_train_experiments_name",
+        "summary": "deleteExperiment cancels one experiment and answers 204.",
+        "description": "deleteExperiment cancels one experiment and answers 204. Its trials are torn down\nwith it.",
         "tags": [
           "train"
         ],
@@ -134,14 +243,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource name from the path, lower-cased.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "lr-sweep"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_train_experiments_by_name",
+        "operationId": "get_v1_train_experiments_name",
+        "summary": "getExperiment returns one experiment with its search spec and best-trial status.",
+        "description": "getExperiment returns one experiment with its search spec and best-trial status.",
         "tags": [
           "train"
         ],
@@ -150,16 +268,32 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource name from the path, lower-cased.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "lr-sweep"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/train/experiments/{name}/trials": {
       "get": {
-        "operationId": "get_v1_train_experiments_by_name_trials",
+        "operationId": "get_v1_train_experiments_name_trials",
+        "summary": "trials lists the individual runs a hyperparameter experiment has spawned.",
+        "description": "trials lists the individual runs a hyperparameter experiment has spawned. The\nexperiment is read first, so a name that does not exist — or belongs to another\ntenant — is a clean 404 rather than a silently empty list.",
         "tags": [
           "train"
         ],
@@ -168,11 +302,25 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource name from the path, lower-cased.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "lr-sweep"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/train/health": {
@@ -186,20 +334,57 @@
     "/v1/train/jobs": {
       "get": {
         "operationId": "get_v1_train_jobs",
+        "summary": "listJobs returns the caller's training jobs.",
+        "description": "listJobs returns the caller's training jobs. A tenant namespace that does not exist\nyet is an empty list, not an error.",
         "tags": [
           "train"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_train_jobs",
         "tags": [
           "train"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resource"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/train/jobs/{name}": {
       "delete": {
-        "operationId": "delete_v1_train_jobs_by_name",
+        "operationId": "delete_v1_train_jobs_name",
+        "summary": "deleteJob cancels one training job and answers 204.",
+        "description": "deleteJob cancels one training job and answers 204. Compute stops as the operator\ntears the job down; anything already written to storage is kept.",
         "tags": [
           "train"
         ],
@@ -208,14 +393,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource name from the path, lower-cased.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "finetune-7b"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_train_jobs_by_name",
+        "operationId": "get_v1_train_jobs_name",
+        "summary": "getJob returns one training job with its spec and live run status.",
+        "description": "getJob returns one training job with its spec and live run status.",
         "tags": [
           "train"
         ],
@@ -224,11 +418,101 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource name from the path, lower-cased.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "finetune-7b"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Resource": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the resource was created, RFC3339.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the resource name, unique within the caller's tenant namespace.",
+            "type": "string"
+          },
+          "spec": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Spec is the resource spec as submitted; sent on single-object reads only.",
+            "type": "object"
+          },
+          "status": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Status is the operator-reported live status, absent until the operator writes one.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "ResourceCreate": {
+        "type": "object",
+        "properties": {
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "spec": {
+            "type": "string"
+          }
+        }
+      },
+      "ResourceList": {
+        "properties": {
+          "items": {
+            "description": "Items is the resources, without their specs.",
+            "items": {
+              "$ref": "#/components/schemas/Resource"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "TrialList": {
+        "properties": {
+          "experiment": {
+            "description": "Experiment is the owning experiment's name.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items is the trials, without their specs.",
+            "items": {
+              "$ref": "#/components/schemas/Resource"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

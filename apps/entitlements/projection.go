@@ -18,8 +18,8 @@ package entitlements
 
 import (
 	"context"
-	"net/http"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -30,24 +30,41 @@ import (
 // over it unconditionally; `tier` is "" when the org has no active licensing
 // subscription (the shell treats that as its free/locked default).
 type projectionView struct {
-	Tier string          `json:"tier"`
+	// Tier is the plan slug commerce resolved for the org, "" when it holds no
+	// active licensing subscription.
+	Tier string `json:"tier"`
+	// Apps maps each console app (studio, bot, world, platform, team, admin) to
+	// whether this caller may open it. Always all six keys, never null.
 	Apps map[string]bool `json:"apps"`
 }
 
-// projection serves GET /v1/entitlements for the CALLER's org.
-func (s *service) projection(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// none is the input of an op that takes none: no body, no query, no path param.
+// The caller's org is read from the validated principal, never from a field.
+type none struct{}
+
+// projection reports which console apps the CALLER's org may open, and the plan
+// tier that decided it. It reads the billing truth (commerce entitlement), not
+// the org's own enablement toggles, and reports an app LOCKED when commerce
+// cannot answer — the read fails safe-to-locked rather than 500.
+//
+// Response: {"tier": "pro", "apps": {"admin": false, "bot": true, "platform": true, "studio": true, "team": false, "world": false}}
+func (s *service) projection(ctx context.Context, _ *none) (*projectionView, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("no validated principal")
+		return nil, zip.ErrForbidden("no validated principal")
 	}
 
 	// "admin" is the platform-sudo predicate, not a commerce product: resolve it
 	// from the unforgeable X-User-IsAdmin bit, never via CheckEntitlement.
-	apps := map[string]bool{"admin": principal.IsSuperAdmin(c)}
+	super := false
+	if c, ok := cloud.Request(ctx); ok {
+		super = principal.IsSuperAdmin(c)
+	}
+	apps := map[string]bool{"admin": super}
 
 	tier := ""
 	for _, product := range appProducts {
-		active, plan, resolved := s.licensed(c.Context(), org, product)
+		active, plan, resolved := s.licensed(ctx, org, product)
 		apps[product] = active
 		// The resolved plan slug is the same for every product of one org (it is the
 		// org's subscription tier); capture the first commerce could name so a single
@@ -57,7 +74,7 @@ func (s *service) projection(c *zip.Ctx) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, projectionView{Tier: tier, Apps: apps})
+	return &projectionView{Tier: tier, Apps: apps}, nil
 }
 
 // licensed reports whether org holds an ACTIVE entitlement for product, plus the

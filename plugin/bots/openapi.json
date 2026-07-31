@@ -18,23 +18,58 @@
   "paths": {
     "/v1/bots": {
       "get": {
-        "operationId": "get_v1_bots",
+        "operationId": "botList",
+        "summary": "list returns the caller org's live bot runs.",
+        "description": "list returns the caller org's live bot runs. They are read from the runtime and\nprojected into the console contract, with sessionUrl derived here.\n\nThe org is ALWAYS the validated principal's org, NEVER a request field, and it is\nwhat scopes the runtime's answer — so one tenant can never enumerate another's\nruns. A runtime that cannot answer is an error, not an empty list: [] would tell\nthe caller \"your org has no runs\", which is a different claim from \"we could not\nask\", and the difference is the whole reason this endpoint exists.",
         "tags": [
           "bots"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bots": [
+                    {
+                      "runId": "run_1",
+                      "sessionUrl": "https://bot.hanzo.ai/vnc?nodeId=run_1",
+                      "startedAt": "2026-07-26T18:00:00Z",
+                      "status": "running",
+                      "surface": "desktop",
+                      "task": "summarise the inbox"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BotRunList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/bots/run": {
       "post": {
-        "operationId": "post_v1_bots_run",
+        "operationId": "botRun",
+        "summary": "run reports that launching a bot is not implemented, and answers 501.",
+        "description": "run reports that launching a bot is not implemented, and answers 501. There is no\nlaunch operation on the bot runtime, so nothing in cloud can start a sandbox.\n\nThis endpoint used to mint a run id, charge a flat per-run fee, and hand\nback a sessionUrl for a bot that never booted — an id the runtime had never heard\nof, pointing at a VNC node that did not exist, for money that was really taken.\n501 is the truth, and the truth is cheaper than a plausible lie.\n\nRestoring it needs a runtime-side launch operation first (TS, cross-repo); the\ngate and the meter belong in the same change that can prove a bot boots. It reads\nno body and has no success response, which is why both sides are void.",
         "tags": [
           "bots"
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       }
     },
     "/v1/bots/{runId}/stop": {
       "post": {
-        "operationId": "post_v1_bots_by_runid_stop",
+        "operationId": "botStop",
+        "summary": "stop terminates one of the caller org's own runs.",
+        "description": "stop terminates one of the caller org's own runs. The own-key guard is the org.\n\nIt is the caller's validated org, never theirs to\nchoose, and the runtime resolves the run id UNDER it. A run belonging to another\ntenant is not among this org's runs, so it answers absent — the same 404 a\nnonexistent id gets, which is what keeps this from being an oracle.\n\nAbsence is honoured ONLY when the runtime answers it. A runtime that does not\nserve stop reports nothing about the run, and reporting \"stopped\" on that basis\nwould be a stop that cannot fail — so it is a 502.",
         "tags": [
           "bots"
         ],
@@ -43,11 +78,109 @@
             "name": "runId",
             "in": "path",
             "required": true,
+            "description": "RunID is the run id, as returned by list. A run belonging to another org is\nnot among this org's runs and reads as not found.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "run_1"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "runId": "run_1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/BotRunRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "runId": "run_1",
+                  "status": "stopped"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/BotStopped"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BotRun": {
+        "properties": {
+          "runId": {
+            "description": "RunID is the run's id, which is also the VNC node id its session is\naddressable by.",
+            "type": "string"
+          },
+          "sessionUrl": {
+            "description": "SessionURL is the live VNC URL the console embeds to watch or attach. It is\nderived control-plane side from runId (the ONE place a session URL is built),\nso the runtime never has to know its own public origin.",
+            "type": "string"
+          },
+          "startedAt": {
+            "description": "StartedAt is RFC3339, as the runtime stamps it.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the runtime's own status for the run, defaulting to \"running\" when\nit names none.",
+            "type": "string"
+          },
+          "surface": {
+            "description": "Surface is what the bot drives — a desktop or terminal sandbox.",
+            "type": "string"
+          },
+          "task": {
+            "description": "Task is the task text the run was started with, as the runtime recorded it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BotRunList": {
+        "properties": {
+          "bots": {
+            "description": "Bots is the caller org's live runs. Never null.",
+            "items": {
+              "$ref": "#/components/schemas/BotRun"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "BotRunRef": {
+        "properties": {
+          "runId": {
+            "description": "RunID is the run id, as returned by list. A run belonging to another org is\nnot among this org's runs and reads as not found.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BotStopped": {
+        "properties": {
+          "runId": {
+            "description": "RunID is the run that was stopped.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"stopped\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

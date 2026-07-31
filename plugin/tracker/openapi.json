@@ -19,9 +19,36 @@
     "/v1/tracker/projects": {
       "get": {
         "operationId": "get_v1_tracker_projects",
+        "summary": "listProjects lists the caller org's tracker projects, newest first.",
+        "description": "listProjects lists the caller org's tracker projects, newest first.\nOnly the caller's own org is ever read: every store query binds org.",
         "tags": [
           "tracker"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": [
+                  {
+                    "createdAt": 1780000000,
+                    "id": "prj_1",
+                    "key": "ENG",
+                    "name": "Engineering",
+                    "org": "acme",
+                    "updatedAt": 1780000000
+                  }
+                ],
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/projectView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_tracker_projects",
@@ -32,7 +59,9 @@
     },
     "/v1/tracker/projects/{key}": {
       "delete": {
-        "operationId": "delete_v1_tracker_projects_by_key",
+        "operationId": "delete_v1_tracker_projects_key",
+        "summary": "deleteProject deletes a project and every issue in it, and answers 204.",
+        "description": "deleteProject deletes a project and every issue in it, and answers 204.\nA key another org owns is a 404, never a delete — the DELETE binds org.",
         "tags": [
           "tracker"
         ],
@@ -41,14 +70,23 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the project key from the path (e.g. \"ENG\"), matched case-insensitively.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "ENG"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_tracker_projects_by_key",
+        "operationId": "get_v1_tracker_projects_key",
+        "summary": "getProject returns one project of the caller org by key.",
+        "description": "getProject returns one project of the caller org by key.\nA key another org owns reads as not found — the query binds org.",
         "tags": [
           "tracker"
         ],
@@ -57,14 +95,30 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the project key from the path (e.g. \"ENG\"), matched case-insensitively.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "ENG"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/projectView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
-        "operationId": "patch_v1_tracker_projects_by_key",
+        "operationId": "patch_v1_tracker_projects_key",
+        "summary": "updateProject edits a project's name or description; an absent field is left alone.",
+        "description": "updateProject edits a project's name or description; an absent field is left alone.\nA key another org owns reads as not found — the query binds org.",
         "tags": [
           "tracker"
         ],
@@ -73,16 +127,46 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the project to update, taken from the path — a body key is ignored.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "ENG"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "key": "ENG",
+                "name": "Engineering"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/updateProjectReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/projectView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/tracker/projects/{key}/issues": {
       "get": {
-        "operationId": "get_v1_tracker_projects_by_key_issues",
+        "operationId": "get_v1_tracker_projects_key_issues",
+        "summary": "listIssues lists a project's issues, optionally narrowed by status, kind, repo or source.",
+        "description": "listIssues lists a project's issues, optionally narrowed by status, kind, repo or source.\nA filter value outside its closed set is a 400; a project another org owns\nreads as not found.",
         "tags": [
           "tracker"
         ],
@@ -91,11 +175,66 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the project key from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "ENG"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows to one lifecycle state (backlog|todo|in_progress|done|canceled).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind narrows to one work-item kind (issue|pr|epic).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "pr"
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "description": "Repo narrows to issues bound to one git repo.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "hanzoai/cloud"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "Source narrows to one origin (team|git|crm|helpdesk|cms|agent).",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/issueView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_tracker_projects_by_key_issues",
@@ -116,7 +255,9 @@
     },
     "/v1/tracker/projects/{key}/issues/{num}": {
       "delete": {
-        "operationId": "delete_v1_tracker_projects_by_key_issues_by_num",
+        "operationId": "delete_v1_tracker_projects_key_issues_num",
+        "summary": "deleteIssue deletes one issue of a project and answers 204.",
+        "description": "deleteIssue deletes one issue of a project and answers 204.\nAn issue in another org's project is a 404, never a delete — the query binds org.",
         "tags": [
           "tracker"
         ],
@@ -125,22 +266,33 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the project key from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "ENG"
           },
           {
             "name": "num",
             "in": "path",
             "required": true,
+            "description": "Number is the issue number from the path — the N in KEY-N.",
             "schema": {
-              "type": "string"
-            }
+              "type": "integer"
+            },
+            "example": 42
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_tracker_projects_by_key_issues_by_num",
+        "operationId": "get_v1_tracker_projects_key_issues_num",
+        "summary": "getIssue returns one issue of a project by its number.",
+        "description": "getIssue returns one issue of a project by its number.\nAn issue in another org's project reads as not found — every query binds org.",
         "tags": [
           "tracker"
         ],
@@ -149,22 +301,40 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the project key from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "ENG"
           },
           {
             "name": "num",
             "in": "path",
             "required": true,
+            "description": "Number is the issue number from the path — the N in KEY-N.",
             "schema": {
-              "type": "string"
-            }
+              "type": "integer"
+            },
+            "example": 42
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/issueView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
-        "operationId": "patch_v1_tracker_projects_by_key_issues_by_num",
+        "operationId": "patch_v1_tracker_projects_key_issues_num",
+        "summary": "updateIssue edits an issue's fields; an absent field is left alone.",
+        "description": "updateIssue edits an issue's fields; an absent field is left alone.\nAn unknown status, priority or label is a 400; an issue in another org's\nproject reads as not found.",
         "tags": [
           "tracker"
         ],
@@ -173,19 +343,199 @@
             "name": "key",
             "in": "path",
             "required": true,
+            "description": "Key is the project the issue belongs to, taken from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "ENG"
           },
           {
             "name": "num",
             "in": "path",
             "required": true,
+            "description": "Number is the issue number, taken from the path.",
             "schema": {
-              "type": "string"
-            }
+              "type": "integer"
+            },
+            "example": 42
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "assignee": "z",
+                "key": "ENG",
+                "num": 42,
+                "status": "in_progress"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/updateIssueReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/issueView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "issueView": {
+        "properties": {
+          "assignee": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "extRef": {
+            "description": "external anchor",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "identifier": {
+            "description": "KEY-\u003cnumber\u003e, the human handle",
+            "type": "string"
+          },
+          "kind": {
+            "description": "issue | pr | epic",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "projectKey": {
+            "type": "string"
+          },
+          "repo": {
+            "description": "git repo binding",
+            "type": "string"
+          },
+          "source": {
+            "description": "team | git | crm | helpdesk | cms | agent",
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "projectView": {
+        "properties": {
+          "createdAt": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "updateIssueReq": {
+        "properties": {
+          "assignee": {
+            "description": "Assignee sets the assignee handle; max 256 characters.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description replaces the description when present; max 8192 characters.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the project the issue belongs to, taken from the path.",
+            "type": "string"
+          },
+          "labels": {
+            "description": "Labels replaces the whole label set; a label may not contain a comma.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "num": {
+            "description": "Number is the issue number, taken from the path.",
+            "type": "integer"
+          },
+          "priority": {
+            "description": "Priority sets the priority (none|low|medium|high|urgent).",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status moves the issue in the lifecycle (backlog|todo|in_progress|done|canceled).",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title replaces the title when present; must be 1..512 characters.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "updateProjectReq": {
+        "properties": {
+          "description": {
+            "description": "Description replaces the description when present; max 8192 characters.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the project to update, taken from the path — a body key is ignored.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name replaces the display name when present; must be 1..256 characters.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

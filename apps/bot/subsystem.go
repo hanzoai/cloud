@@ -138,7 +138,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	reg := NewRegistry(opts...)
 
 	s := &cloud.Service[state]{Base: base, State: state{reg: reg}}
-	routes(app, s, deps)
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return errors.New("bot.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	routes(app, zapp, s, deps)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -174,7 +178,7 @@ func Shutdown(ctx context.Context) error {
 // any error a downstream handler PROPAGATES into a 500 — which would turn every
 // refusal here (the 403 that is the tenant boundary, the 404 that is a node in
 // another org) into an indistinguishable server error.
-func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
+func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state], deps cloud.Deps) {
 	// One transport for the process, not one per dial: it carries the uptime a
 	// node reads out of the handshake, which is the process's, not the socket's.
 	ws := NodeWS(s.State.reg, WSOptions{ServerVersion: deps.Version, Logger: s.Log})
@@ -190,7 +194,16 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 		return ws(c)
 	})))
 
-	app.Get("/v1/bot/nodes", cloud.Terminal(cloud.Handle(s, listNodes)))
+	// The node list is a TYPED op: the registry entry zip.Get makes is the ONE
+	// thing OpenAPI, MCP and the CLI project from, and it takes the ABSOLUTE path
+	// because the registry keys on it. It keeps the Terminal wrapper through
+	// zapp.With, so its 403 still reaches the client as a 403.
+	zip.Get(zapp.With(terminal), "/v1/bot/nodes", ops{s: s}.listNodes, zip.WithOperationID("botNodes"))
+
+	// invoke stays an untyped handler: its refusal is a deniedView written with a
+	// 403 (a stable `code` clients switch on), and a typed op can declare only its
+	// success response — converting it would replace that documented body with
+	// zip's generic error envelope.
 	app.Post("/v1/bot/nodes/:id/invoke", cloud.Terminal(cloud.Handle(s, invokeNode)))
 
 	// The machine hop. It carries no user identity and authenticates with its own
@@ -202,35 +215,56 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 // GET /v1/bot/nodes
 // ---------------------------------------------------------------------------
 
-// nodeView is one connected node as an operator sees it. Everything in it is the
+// ops binds the service to the typed handlers: a TypedHandler has no parameter for
+// the service, so it arrives as a RECEIVER and every op is a method value — the only
+// bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// terminal adapts cloud.Terminal to zip's Middleware signature so a typed op keeps
+// the in-band error write the untyped routes here rely on.
+func terminal(next zip.Handler) zip.Handler { return cloud.Terminal(next) }
+
+// BotNode is one connected node as an operator sees it. Everything in it is the
 // node's own self-report — useful to show, never load-bearing: what a node may
 // be ASKED to do is the allowlist and the declared commands, checked at the
 // socket, not this list.
-type nodeView struct {
-	ID          string   `json:"id"`
-	DisplayName string   `json:"displayName,omitempty"`
-	Platform    string   `json:"platform,omitempty"`
-	Version     string   `json:"version,omitempty"`
-	Caps        []string `json:"caps"`
-	Commands    []string `json:"commands"`
-	ConnectedAt string   `json:"connectedAt"`
+type BotNode struct {
+	// ID is the node id the socket registered under, unique within the org.
+	ID string `json:"id"`
+	// DisplayName is the node's self-reported friendly name.
+	DisplayName string `json:"displayName,omitempty"`
+	// Platform is the node's self-reported operating system.
+	Platform string `json:"platform,omitempty"`
+	// Version is the node agent's self-reported version.
+	Version string `json:"version,omitempty"`
+	// Caps are the capabilities the node declared at handshake. Never null.
+	Caps []string `json:"caps"`
+	// Commands are the command names the node declared it serves. Never null.
+	Commands []string `json:"commands"`
+	// ConnectedAt is RFC3339 UTC, when the socket was accepted.
+	ConnectedAt string `json:"connectedAt"`
 }
 
-type nodesView struct {
-	Nodes []nodeView `json:"nodes"`
+// BotNodeList is the GET /v1/bot/nodes envelope; Nodes is always non-nil, so an org
+// with nothing connected serializes as {"nodes":[]}.
+type BotNodeList struct {
+	// Nodes are this org's connected nodes, sorted by id.
+	Nodes []BotNode `json:"nodes"`
 }
 
-// listNodes returns the caller org's connected nodes — and only that org's,
-// because the org is half of every key in the table it reads.
-func listNodes(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// listNodes returns the caller org's connected nodes. Only that org's — the org is
+// half of every key in the table it reads.
+//
+// Response: {"nodes":[{"id":"n-1","displayName":"studio","platform":"darwin","version":"1.4.0","caps":["system.run"],"commands":["system.run"],"connectedAt":"2026-07-26T18:00:00Z"}]}
+func (o ops) listNodes(ctx context.Context, _ *struct{}) (*BotNodeList, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return nil, zip.ErrForbidden("X-Org-Id required")
 	}
-	sessions := s.State.reg.List(org)
-	out := make([]nodeView, 0, len(sessions))
+	sessions := o.s.State.reg.List(org)
+	out := make([]BotNode, 0, len(sessions))
 	for _, sess := range sessions {
-		out = append(out, nodeView{
+		out = append(out, BotNode{
 			ID:          sess.Key.NodeID,
 			DisplayName: sess.DisplayName,
 			Platform:    sess.Platform,
@@ -242,7 +276,7 @@ func listNodes(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	// A map has no order; a list a human reads should have one.
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return c.JSON(http.StatusOK, nodesView{Nodes: out})
+	return &BotNodeList{Nodes: out}, nil
 }
 
 func nonNil(v []string) []string {

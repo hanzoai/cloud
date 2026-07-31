@@ -1,5 +1,7 @@
 package domain
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"bytes"
 	"context"
@@ -70,20 +72,34 @@ func buildState(b cloud.Base) (state, error) {
 	return state{svc: svc, reg: reg, log: b.Log}, nil
 }
 
+// ops binds the domain state to the typed handlers. A zip TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so the
+// service arrives as a RECEIVER and every op is a method value.
+type ops struct{ s *cloud.Service[state] }
+
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Handlers mount AFTER commerce, whose /v1 error filter flattens a propagated
-	// error to 500 — so wrap in Terminal to preserve real 4xx/402/409 statuses.
-	h := func(fn func(*cloud.Service[state], *zip.Ctx) error) func(*zip.Ctx) error {
-		return cloud.Terminal(cloud.Handle(s, fn))
-	}
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
 	g := app.Group("/v1/domain")
+	// The bridge FIRST — fiber runs middleware in registration order, so one
+	// installed after these leaves would never run, and every op below resolves its
+	// tenant through the request it parks. Terminal rides with it because these
+	// handlers mount AFTER commerce, whose /v1 error filter flattens a propagated
+	// error to 500: without it the real 4xx/402/409 statuses are lost.
+	g.Use(cloud.Bridge(), terminal())
+
+	// health stays an untyped handler: its 503 answer carries a BODY (status,
+	// configured, reachable, error) that callers read, and a typed op has exactly
+	// one response object — the success one — so typing it would replace that body
+	// with zip's fixed error shape. Documented in prose, not in the registry.
 	g.Get("/health", cloud.Handle(s, health))
-	g.Get("/search", h(searchHandler))
-	g.Get("/availability", h(availabilityHandler))
-	g.Get("/domains", h(listHandler))
-	g.Post("/register", h(registerHandler))
-	g.Post("/renew", h(renewHandler))
-	g.Post("/transfer", h(transferHandler))
+
+	zip.Get(z, "/v1/domain/search", o.search)
+	zip.Get(z, "/v1/domain/availability", o.availability)
+	zip.Get(z, "/v1/domain/domains", o.list)
+	zip.Post(z, "/v1/domain/register", o.register)
+	zip.Post(z, "/v1/domain/renew", o.renew)
+	zip.Post(z, "/v1/domain/transfer", o.transfer)
 }
 
 // ── config ───────────────────────────────────────────────────────────────────────
@@ -236,6 +252,16 @@ func statusErr(err error) error {
 // health probes registrar reachability. Public (like every subsystem health) and
 // honest: it reports whether credentials are present and, if so, whether name.com
 // accepts them (the current go-live blocker surfaces here as ok:false + the reason).
+// terminal is cloud.Terminal as MIDDLEWARE. Terminal wraps ONE handler, but the
+// typed ops are registered on the App rather than wrapped one by one, so the guard
+// has to sit in the chain instead: it lets the rest of the chain run and flattens
+// whatever error comes back, exactly as the per-handler form did.
+func terminal() zip.Handler {
+	return func(c *zip.Ctx) error {
+		return cloud.Terminal(func(*zip.Ctx) error { return c.Continue() })(c)
+	}
+}
+
 func health(s *cloud.Service[state], c *zip.Ctx) error {
 	res := map[string]any{"service": "domain", "registrar": "name.com", "env": s.State.svc.Env()}
 	if !s.State.reg.Configured() {
@@ -255,36 +281,66 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func searchHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := org(c); !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// searchQuery asks the registrar for names built from a keyword.
+type searchQuery struct {
+	// Q is the keyword to build candidate names from. Required.
+	Q string `json:"q"`
+	// TLD optionally restricts the search to these TLDs, comma-separated.
+	TLD string `json:"tld"`
+}
+
+// offerList is the priced-result envelope search and availability share.
+type offerList struct {
+	// Results are the priced availability answers, one per candidate name.
+	Results []Offer `json:"results"`
+}
+
+// search asks the registrar for available names built from a keyword. Each
+// candidate is priced at the customer rate, nothing is reserved or charged, and
+// TLD narrows the candidates to a comma-separated list.
+//
+// Example: {"q": "hanzo", "tld": "ai,com"}
+func (o ops) search(ctx context.Context, in *searchQuery) (*offerList, error) {
+	if _, err := o.begin(ctx); err != nil {
+		return nil, err
 	}
-	q := strings.TrimSpace(c.Query("q"))
+	q := strings.TrimSpace(in.Q)
 	if q == "" {
-		return zip.ErrBadRequest("q (keyword) is required")
+		return nil, zip.ErrBadRequest("q (keyword) is required")
 	}
 	var tlds []string
-	if raw := strings.TrimSpace(c.Query("tld")); raw != "" {
+	if raw := strings.TrimSpace(in.TLD); raw != "" {
 		for _, t := range strings.Split(raw, ",") {
 			if t = strings.TrimSpace(t); t != "" {
 				tlds = append(tlds, t)
 			}
 		}
 	}
-	quotes, err := s.State.svc.Search(c.Context(), q, tlds...)
+	quotes, err := o.s.State.svc.Search(ctx, q, tlds...)
 	if err != nil {
-		return statusErr(err)
+		return nil, statusErr(err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"results": quotes})
+	return &offerList{Results: quotes}, nil
 }
 
-func availabilityHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := org(c); !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// availabilityQuery checks exact names rather than searching for candidates.
+type availabilityQuery struct {
+	// Domain is the exact name to check, comma-separated for several. Required.
+	Domain string `json:"domain"`
+}
+
+// availability checks exact domain names and prices each at the customer rate.
+// Comma-separate the domain value to check several at once; nothing is reserved
+// or charged.
+//
+// Example: {"domain": "hanzo.ai,hanzo.dev"}
+func (o ops) availability(ctx context.Context, in *availabilityQuery) (*offerList, error) {
+	if _, err := o.begin(ctx); err != nil {
+		return nil, err
 	}
-	raw := strings.TrimSpace(c.Query("domain"))
+	raw := strings.TrimSpace(in.Domain)
 	if raw == "" {
-		return zip.ErrBadRequest("domain is required (comma-separate for multiple)")
+		return nil, zip.ErrBadRequest("domain is required (comma-separate for multiple)")
 	}
 	var names []string
 	for _, n := range strings.Split(raw, ",") {
@@ -292,98 +348,137 @@ func availabilityHandler(s *cloud.Service[state], c *zip.Ctx) error {
 			names = append(names, n)
 		}
 	}
-	quotes, err := s.State.svc.Availability(c.Context(), names...)
+	quotes, err := o.s.State.svc.Availability(ctx, names...)
 	if err != nil {
-		return statusErr(err)
+		return nil, statusErr(err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"results": quotes})
+	return &offerList{Results: quotes}, nil
 }
 
-func listHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	o, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	recs, err := s.State.svc.ListByOrg(o)
+// recordList is the owned-domain envelope.
+type recordList struct {
+	// Domains are the domains this org owns, with what each cost and when it expires.
+	Domains []Ownership `json:"domains"`
+}
+
+// list lists the domains the caller's org owns. Each carries the price paid and the
+// expiry on record, and org is the bound isolation boundary, so another tenant's
+// domains are never returned.
+//
+// Response: {"domains": [{"org": "acme", "domain": "hanzo.ai", "registeredAt": 1780000000, "expiresAt": "2027-07-29T00:00:00Z", "priceCents": 8050, "costCents": 7000, "nameservers": ["ns1.hanzo.ai", "ns2.hanzo.ai"]}]}
+func (o ops) list(ctx context.Context, _ *struct{}) (*recordList, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return statusErr(err)
+		return nil, err
+	}
+	recs, err := o.s.State.svc.ListByOrg(org)
+	if err != nil {
+		return nil, statusErr(err)
 	}
 	if recs == nil {
-		recs = []Record{}
+		recs = []Ownership{}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"domains": recs})
+	return &recordList{Domains: recs}, nil
 }
 
-type registerReq struct {
-	Domain   string            `json:"domain"`
-	Years    int               `json:"years"`
+type purchaseReq struct {
+	// Domain is the exact name to buy. Required.
+	Domain string `json:"domain"`
+	// Years is the registration term; 0 means one year.
+	Years int `json:"years"`
+	// Contacts are the WHOIS contacts to register under; omitted uses the
+	// reseller account's defaults.
 	Contacts *namecom.Contacts `json:"contacts,omitempty"`
 }
 
-func registerHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	o, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	var body registerReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if strings.TrimSpace(body.Domain) == "" {
-		return zip.ErrBadRequest("domain is required")
-	}
-	res, err := s.State.svc.Register(c.Context(), o, body.Domain, body.Years, body.Contacts)
+// register buys a domain for the caller's org. The customer is charged only after
+// the registrar confirms, the zone is provisioned and the name points at Hanzo
+// nameservers, so a registrar failure leaves the balance untouched.
+//
+// Example: {"domain": "hanzo.ai", "years": 1}
+func (o ops) register(ctx context.Context, in *purchaseReq) (*RegisterResult, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return statusErr(err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, res)
+	if strings.TrimSpace(in.Domain) == "" {
+		return nil, zip.ErrBadRequest("domain is required")
+	}
+	res, err := o.s.State.svc.Register(ctx, org, in.Domain, in.Years, in.Contacts)
+	if err != nil {
+		return nil, statusErr(err)
+	}
+	return res, nil
 }
 
 type renewReq struct {
+	// Domain is the name to extend; the caller's org must already own it. Required.
 	Domain string `json:"domain"`
-	Years  int    `json:"years"`
+	// Years is how many years to add; 0 means one year.
+	Years int `json:"years"`
 }
 
-func renewHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	o, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	var body renewReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if strings.TrimSpace(body.Domain) == "" {
-		return zip.ErrBadRequest("domain is required")
-	}
-	res, err := s.State.svc.Renew(c.Context(), o, body.Domain, body.Years)
+// renew extends a domain the caller's org already owns. The renewal is re-quoted
+// at the current price before charging, and the stored expiry advances only after
+// the registrar confirms.
+//
+// Example: {"domain": "hanzo.ai", "years": 2}
+func (o ops) renew(ctx context.Context, in *renewReq) (*RenewResult, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return statusErr(err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, res)
+	if strings.TrimSpace(in.Domain) == "" {
+		return nil, zip.ErrBadRequest("domain is required")
+	}
+	res, err := o.s.State.svc.Renew(ctx, org, in.Domain, in.Years)
+	if err != nil {
+		return nil, statusErr(err)
+	}
+	return res, nil
 }
 
 type transferReq struct {
-	Domain   string `json:"domain"`
+	// Domain is the name to transfer in. Required.
+	Domain string `json:"domain"`
+	// AuthCode is the EPP authorization code from the losing registrar. Required.
 	AuthCode string `json:"authCode"`
-	Years    int    `json:"years"`
+	// Years is the term to add on transfer; 0 means one year.
+	Years int `json:"years"`
 }
 
-func transferHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	o, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	var body transferReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if strings.TrimSpace(body.Domain) == "" || strings.TrimSpace(body.AuthCode) == "" {
-		return zip.ErrBadRequest("domain and authCode are required")
-	}
-	res, err := s.State.svc.Transfer(c.Context(), o, body.Domain, body.AuthCode, body.Years)
+// transfer brings a domain registered elsewhere into the caller's org. It needs
+// the EPP authorization code from the losing registrar, and it prices and records
+// ownership exactly as a purchase does.
+//
+// Example: {"domain": "hanzo.ai", "authCode": "aG9sZGVy", "years": 1}
+func (o ops) transfer(ctx context.Context, in *transferReq) (*RegisterResult, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return statusErr(err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, res)
+	if strings.TrimSpace(in.Domain) == "" || strings.TrimSpace(in.AuthCode) == "" {
+		return nil, zip.ErrBadRequest("domain and authCode are required")
+	}
+	res, err := o.s.State.svc.Transfer(ctx, org, in.Domain, in.AuthCode, in.Years)
+	if err != nil {
+		return nil, statusErr(err)
+	}
+	return res, nil
+}
+
+// begin resolves the caller's org. The org NEVER comes from an In field — an In
+// field is caller-supplied, so a tenant key read from one is a cross-tenant read
+// the caller asserted for itself. It comes from the request cloud.Bridge parked;
+// off the HTTP path there is none, so the op refuses.
+func (o ops) begin(ctx context.Context) (string, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("a validated principal is required")
+	}
+	v, ok := org(c)
+	if !ok {
+		return "", zip.ErrForbidden("a validated principal is required")
+	}
+	return v, nil
 }

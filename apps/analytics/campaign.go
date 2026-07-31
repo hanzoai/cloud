@@ -16,10 +16,10 @@
 // warehouse: the /v1/campaign plane (clients/campaign) reads a campaign's funnel
 // from HERE rather than opening a second store. A campaign's results ARE an
 // analytics query scoped to the campaign — the utm_campaign-tagged events in
-// hanzo.events — so there is one metrics plane, not a parallel one.
+// event.event — so there is one metrics plane, not a parallel one.
 //
 // TENANCY: identical to every other query this package builds. campaignWhere
-// binds the org (tenant_id) AND the campaign id (utm_campaign) AND the optional
+// binds the org AND the campaign id (attributes['utm_campaign']) AND the optional
 // variant (utm_content) POSITIONALLY — nothing user-derived is ever interpolated,
 // so a caller can only ever read its OWN org's campaign, and the utm_campaign
 // filter can never escape into SQL. The variant arg powers the creative-A/B
@@ -33,7 +33,7 @@ import (
 	"github.com/hanzoai/cloud/apps/datastore"
 )
 
-// CampaignEvents is the per-campaign funnel read from hanzo.events, scoped to
+// CampaignEvents is the per-campaign funnel read from event.event, scoped to
 // (org, utm_campaign[, utm_content]). Impressions/clicks/conversions are counts
 // of the campaign's tagged events; Available is false (honest-empty) when the
 // events warehouse is not connected or the events table is not yet provisioned —
@@ -50,15 +50,15 @@ type CampaignEvents struct {
 }
 
 // campaignWhere is the org + campaign (+ optional variant) predicate over
-// hanzo.events. org (tenant_id) and campaignID (utm_campaign) are ALWAYS bound;
+// event.event. org and campaignID (attributes['utm_campaign']) are ALWAYS bound;
 // variant (utm_content) is appended only when non-empty. Time bounds are bound as
 // datastore DateTime literals (the proven cloud_usage transport). Same isolation
 // boundary as eventsWhere — the org is a bound parameter, never interpolated.
 func campaignWhere(org, campaignID, variant string, start, end time.Time) (string, []any) {
-	where := "timestamp >= ? AND timestamp < ? AND tenant_id = ? AND utm_campaign = ?"
+	where := "time >= ? AND time < ? AND org = ? AND attributes['utm_campaign'] = ?"
 	args := []any{tsLiteral(start), tsLiteral(end), org, campaignID}
 	if variant != "" {
-		where += " AND utm_content = ?"
+		where += " AND attributes['utm_content'] = ?"
 		args = append(args, variant)
 	}
 	return where, args
@@ -87,7 +87,7 @@ func CampaignMetrics(ctx context.Context, org, campaignID, variant string, start
 		"countIf(event = 'impression' OR event = 'ad_impression') AS impressions, " +
 		"countIf(event = 'click' OR event = 'ad_click') AS clicks, " +
 		"countIf(event = 'order_completed' OR event = 'signup' OR event = 'conversion') AS conversions, " +
-		"toFloat64(sum(revenue)) AS revenue, " +
+		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue, " +
 		"uniqExact(distinct_id) AS visitors " +
 		"FROM " + eventsTable + " WHERE " + where
 	rows, err := datastore.Query(ctx, sql, args...)

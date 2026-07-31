@@ -174,8 +174,8 @@ func TestRegisterHappyPath_BillsAndPointsNameservers(t *testing.T) {
 	if len(bill.captured) != 1 || bill.captured[0].cents != 6439 || bill.captured[0].ref != "domain:register:acme.ai" {
 		t.Fatalf("unexpected capture: %+v", bill.captured)
 	}
-	if res.Record.Order != 1001 || res.Record.ExpiresAt != "2027-01-01T00:00:00Z" {
-		t.Fatalf("record not populated from registrar: %+v", res.Record)
+	if res.Ownership.Order != 1001 || res.Ownership.ExpiresAt != "2027-01-01T00:00:00Z" {
+		t.Fatalf("record not populated from registrar: %+v", res.Ownership)
 	}
 	// Ownership recorded.
 	owned, _ := svc.ListByOrg("acme")
@@ -284,8 +284,8 @@ func TestRenewOwnedDomainBills(t *testing.T) {
 	if len(bill.captured) != captBefore+1 {
 		t.Fatalf("renewal not billed: %+v", bill.captured)
 	}
-	if res.Record.ExpiresAt != "2028-01-01T00:00:00Z" {
-		t.Fatalf("expiry not updated: %+v", res.Record)
+	if res.Ownership.ExpiresAt != "2028-01-01T00:00:00Z" {
+		t.Fatalf("expiry not updated: %+v", res.Ownership)
 	}
 }
 

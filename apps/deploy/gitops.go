@@ -23,12 +23,10 @@
 package deploy
 
 import (
-	"net/http"
+	"context"
 	"sort"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
-	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -90,22 +88,26 @@ type GitOpsPlane struct {
 	Applications []GitOpsApp `json:"applications"`
 }
 
-// gitOps lists every Hanzo CD Application in the cluster, newest deploy first.
-func gitOps(s *cloud.Service[state], c *zip.Ctx) error {
+// gitops reports the CD plane's own state: its git source, the commit it last
+// applied, and its deploy history. Fleet infrastructure with no tenant dimension,
+// so it is SuperAdmin-only. A cluster with no Hanzo CD installed answers
+// installed=false with the reason, never an error.
+func (o ops) gitops(ctx context.Context, _ *struct{}) (*GitOpsPlane, error) {
+	s := o.s
 	if err := ready(s); err != nil {
-		return err
+		return nil, err
 	}
 	// Cluster-wide: CD Applications live in the controller's namespace, and which
 	// namespace that is, is CD's business — not a constant this plane should hold.
-	list, err := s.State.dyn.Resource(k8s.CDApplications).Namespace("").List(c.Context(), metav1.ListOptions{})
+	list, err := s.State.dyn.Resource(k8s.CDApplications).Namespace("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return c.JSON(http.StatusOK, GitOpsPlane{
+			return &GitOpsPlane{
 				Reason:       "Hanzo CD is not installed in this cluster (no apps.hanzo.ai/Application CRD)",
 				Applications: []GitOpsApp{},
-			})
+			}, nil
 		}
-		return k8sErr(s, "list", err)
+		return nil, k8sErr(s, "list", err)
 	}
 	apps := make([]GitOpsApp, 0, len(list.Items))
 	for i := range list.Items {
@@ -117,7 +119,7 @@ func gitOps(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		return apps[i].Name < apps[j].Name
 	})
-	return c.JSON(http.StatusOK, GitOpsPlane{Installed: true, Applications: apps})
+	return &GitOpsPlane{Installed: true, Applications: apps}, nil
 }
 
 // observeGitOpsApp maps one Application CR to its view. Every field is read

@@ -11,6 +11,8 @@ package x402
 // later — the clean seam: x402 enforces payment; the marketplace declares what is
 // priced and who is paid.
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"encoding/hex"
@@ -163,9 +165,24 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// routes registers the read surface. The receipt read is a TYPED op, registered
+// on the App with its ABSOLUTE path because the op registry — the one value
+// OpenAPI, MCP and the CLI are projected from — keys on it. The bridge is
+// installed first (fiber runs middleware in registration order) so the op can
+// reach the request the payer identity is read off.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/x402")
-	g.Get("/settlements/:id", cloud.Handle(s, getSettlement))
+	app.Group("/v1/x402").Use(cloud.Bridge())
+	zip.Get(cloud.ZipApp(app), "/v1/x402/settlements/:id", ops{s: s}.getSettlement)
+}
+
+// ops binds the service to x402's typed handlers: a typed handler takes only a
+// context and its decoded In, so the service arrives as a RECEIVER.
+type ops struct{ s *cloud.Service[state] }
+
+// SettlementRef addresses one settlement receipt.
+type SettlementRef struct {
+	// ID is the settlement id — keccak(from|nonce), the settle-once key.
+	ID string `json:"id"`
 }
 
 // Enforce is the pay-per-use middleware a priced route group applies. It is a
@@ -316,21 +333,27 @@ func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, 
 	return nil
 }
 
-// getSettlement is the receipt lookup: GET /v1/x402/settlements/:id, scoped to the
-// caller's payer org so one tenant can never read another's settlement.
-func getSettlement(s *cloud.Service[state], c *zip.Ctx) error {
+// getSettlement returns one payment receipt, scoped to the caller's payer org.
+// A settlement billed to another org reads as not found.
+//
+// Example: {"id": "0x9f2c1ab4"}
+func (o ops) getSettlement(ctx context.Context, in *SettlementRef) (*Receipt, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("sign in")
+	}
 	payer := principal.Ledger(c)
 	if payer == "" {
-		return zip.ErrForbidden("sign in")
+		return nil, zip.ErrForbidden("sign in")
 	}
-	st, found, err := s.State.store.getScoped(c.Context(), payer, strings.TrimSpace(c.Param("id")))
+	st, found, err := o.s.State.store.getScoped(ctx, payer, strings.TrimSpace(in.ID))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get settlement: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get settlement: %v", err)
 	}
 	if !found {
-		return zip.ErrNotFound("settlement not found")
+		return nil, zip.ErrNotFound("settlement not found")
 	}
-	return c.JSON(http.StatusOK, receiptOf(st))
+	return receiptOf(st), nil
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

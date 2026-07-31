@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/admin/metrics", zip.Doc{
-		Description: "Metrics answers GET /v1/admin/metrics by aggregating commerce.events directly\n(fleet-wide, no per-org fan-out). SuperAdmin only.\n\n\tGET /v1/admin/metrics?window=30d&limit=20",
+		Description: "Metrics aggregates commerce.events directly. It is fleet-wide with no per-org fan-out,\nSuperAdmin only.\n\n\tGET /v1/admin/metrics?window=30d&limit=20",
 		Fields: map[string]string{
 			"MetricsIn.limit":  "Limit caps the top-customers table.",
 			"MetricsIn.window": "Window is the movement window the new/churned MRR and the recent feed are\nmeasured over. Anything unrecognised falls back to the board default.",

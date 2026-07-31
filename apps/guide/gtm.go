@@ -8,13 +8,13 @@ import (
 )
 
 // gtm.go is the Business AI Guide's ANALYTICS LENS: it reads the org's real funnel
-// from the shared analytics warehouse (hanzo.events — the SAME table + tenancy column
+// from the event plane (event.event — the SAME table + tenancy column
 // clients/analytics serves and the "analytics" detector probes) and turns it into
 // GTM recommendations. The Guide is the AI-GTM agent; this is the data it reasons
 // over so its guidance is grounded in what the funnel is actually doing, not generic
 // advice.
 //
-// The read is org-scoped POSITIONALLY (tenant_id = ?, nothing user-derived
+// The read is org-scoped POSITIONALLY (org = ?, nothing user-derived
 // interpolated) and honest-degrading: an unreachable/empty warehouse yields
 // available=false, never a fabricated number.
 
@@ -35,20 +35,20 @@ type Funnel struct {
 // funnelWindowDays is the trailing window the lens summarizes.
 const funnelWindowDays = 30
 
-// analyticsFunnel reads the org's funnel from hanzo.events. It binds the org
+// analyticsFunnel reads the org's funnel from event.event. It binds the org
 // positionally and returns available=false on any warehouse error (best-effort — the
 // GTM lens never fails the request over an unreachable warehouse) or when the org has
 // emitted nothing.
 func analyticsFunnel(ctx context.Context, org string) Funnel {
 	f := Funnel{WindowDays: funnelWindowDays}
 	const q = `SELECT
-		countIf(event = '$pageview') AS pageviews,
+		countIf(name = '$pageview') AS pageviews,
 		uniqExact(distinct_id) AS visitors,
-		countIf(event = 'signup_completed') AS signups,
-		countIf(event = 'order_completed') AS orders,
-		toFloat64(sum(revenue)) AS revenue
+		countIf(name = 'signup_completed') AS signups,
+		countIf(name = 'order_completed') AS orders,
+		sum(toFloat64OrZero(attributes['revenue'])) AS revenue
 	FROM ` + eventsTable + `
-	WHERE tenant_id = ? AND timestamp >= now() - INTERVAL 30 DAY`
+	WHERE org = ? AND time >= now() - INTERVAL 30 DAY`
 	rows, err := datastore.Query(ctx, q, org)
 	if err != nil || len(rows) == 0 {
 		return f

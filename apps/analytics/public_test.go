@@ -103,8 +103,8 @@ func TestAdmitPublic_CannotReachAttribution(t *testing.T) {
 }
 
 // TestAdmitPublic_DoorOwnsTheTenant pins the two-door reality after the fix, through the
-// REAL normalizer — the one function that stamps tenant_id. Whichever tenant the door
-// supplies, the row carries EXACTLY that and never the org the body named:
+// REAL normalizer — the one function that stamps org. Whichever tenant the door
+// supplies, the fact carries EXACTLY that and never the org the body named:
 //
 //   - every /v1 door passes the publicTenant constant (handle, event.go);
 //   - the published-site host passes the org the site resolver returned for that host
@@ -119,16 +119,15 @@ func TestAdmitPublic_DoorOwnsTheTenant(t *testing.T) {
 		if len(out) != 1 {
 			t.Fatalf("door %q: want 1 admitted event", doorOrg)
 		}
-		row, ok := normalizeEvent(doorOrg, time.Now(), out[0])
+		f, ok := normalize(doorOrg, time.Now(), out[0])
 		if !ok {
 			t.Fatalf("door %q: want routable", doorOrg)
 		}
-		if row.tenant != doorOrg {
-			t.Fatalf("row.tenant = %q, want the door's %q", row.tenant, doorOrg)
+		if f.org != doorOrg {
+			t.Fatalf("fact.org = %q, want the door's %q", f.org, doorOrg)
 		}
-		if row.groupID != "" || row.personID != "" || row.properties != "" {
-			t.Fatalf("door %q: a body claim reached the row: group=%q person=%q props=%q",
-				doorOrg, row.groupID, row.personID, row.properties)
+		if f.person != "" || len(f.attributes) != 0 {
+			t.Fatalf("door %q: a body claim reached the fact: person=%q attrs=%v", doorOrg, f.person, f.attributes)
 		}
 	}
 }
@@ -183,38 +182,53 @@ func TestAdmitPublic_ForeignOrgFieldsDropped(t *testing.T) {
 }
 
 // TestAdmitPublic_ForeignOrgNeverStamped drives the projection through the REAL
-// normalizer — the one function that stamps tenant_id — and proves the stored row
+// normalizer — the one function that stamps org — and proves the stored fact
 // carries the public tenant, not the org the body named.
 func TestAdmitPublic_ForeignOrgNeverStamped(t *testing.T) {
 	out, _ := admitPublic([]CaptureEvent{{Type: "pageview", GroupID: "maxpower"}})
 	// publicTenant is the org every /v1 door hands this lane (handle, event.go).
-	row, ok := normalizeEvent(publicTenant, time.Now(), out[0])
+	f, ok := normalize(publicTenant, time.Now(), out[0])
 	if !ok {
 		t.Fatal("want routable")
 	}
-	if row.tenant != publicTenant {
-		t.Fatalf("row.tenant = %q, want %q — an anonymous write must never land in a real org", row.tenant, publicTenant)
+	if f.org != publicTenant {
+		t.Fatalf("fact.org = %q, want %q — an anonymous write must never land in a real org", f.org, publicTenant)
 	}
-	if row.tenant == "maxpower" || row.groupID == "maxpower" {
-		t.Fatalf("the body-named org reached the row: tenant=%q group=%q", row.tenant, row.groupID)
+	if f.org == "maxpower" || f.attributes["group_id"] == "maxpower" {
+		t.Fatalf("the body-named org reached the fact: org=%q group=%q", f.org, f.attributes["group_id"])
 	}
 }
 
-// TestAdmitPublic_KindAllowlist: pageview and error are admitted; identify, group, and
-// every custom event are dropped and counted. This is the allowlist, not a denylist —
-// an unknown type folds to "event" (canonicalType) and is therefore dropped too.
-func TestAdmitPublic_KindAllowlist(t *testing.T) {
-	for _, kind := range []string{"pageview", "page", "error"} {
-		out, dropped := admitPublic([]CaptureEvent{{Type: kind, Error: &Exception{Message: "m"}}})
+// TestAdmitPublic_RouteAllowlist: a page view and an error are admitted; identify,
+// group, every custom event, and a service's own log/span/metric telemetry are dropped
+// and counted. This is an allowlist, not a denylist — an unknown type routes to a
+// tracked event and is therefore dropped too.
+func TestAdmitPublic_RouteAllowlist(t *testing.T) {
+	for _, typ := range []string{"pageview", "page", "error", "exception"} {
+		out, dropped := admitPublic([]CaptureEvent{{Type: typ, Error: &Exception{Message: "m"}}})
 		if len(out) != 1 || dropped != 0 {
-			t.Fatalf("kind %q must be admitted, got out=%d dropped=%d", kind, len(out), dropped)
+			t.Fatalf("type %q must be admitted, got out=%d dropped=%d", typ, len(out), dropped)
 		}
 	}
-	for _, kind := range []string{"identify", "group", "event", "", "purchase", "metering", "BILLING"} {
-		out, dropped := admitPublic([]CaptureEvent{{Type: kind, Event: "whatever"}})
+	for _, typ := range []string{"identify", "group", "event", "", "purchase", "metering", "BILLING", "log", "span", "metric"} {
+		out, dropped := admitPublic([]CaptureEvent{{Type: typ, Event: "whatever"}})
 		if len(out) != 0 || dropped != 1 {
-			t.Fatalf("kind %q must be dropped, got out=%d dropped=%d", kind, len(out), dropped)
+			t.Fatalf("type %q must be dropped, got out=%d dropped=%d", typ, len(out), dropped)
 		}
+	}
+}
+
+// TestAdmitPublic_KindIsNotCallerSettable: an anonymous caller may not set the `kind`
+// column. The projection rebuilds from the ROUTE, so a kind it did not approve cannot
+// ride in on a field the allowlist never looked at.
+func TestAdmitPublic_KindIsNotCallerSettable(t *testing.T) {
+	out, _ := admitPublic([]CaptureEvent{{Type: "pageview", Kind: "identify"}})
+	if len(out) != 1 {
+		t.Fatal("want 1 admitted")
+	}
+	f, ok := normalize(publicTenant, time.Now(), out[0])
+	if !ok || f.kind != kindPage {
+		t.Fatalf("kind = %q, want %q — a caller-set kind survived the projection", f.kind, kindPage)
 	}
 }
 
@@ -222,19 +236,20 @@ func TestAdmitPublic_KindAllowlist(t *testing.T) {
 // A caller cannot introduce a new event name into the read lenses, nor unbounded
 // cardinality into the table's ORDER BY key.
 func TestAdmitPublic_NameIsServerChosen(t *testing.T) {
-	cases := []struct{ kind, sent, want string }{
-		{"pageview", "attacker_chosen_name", "$pageview"},
-		{"pageview", "", "$pageview"},
-		{"error", strings.Repeat("x", 4096), "$error"},
-		{"error", "", "$error"},
+	cases := []struct{ typ, sent, want string }{
+		{"pageview", "attacker_chosen_name", "page_viewed"},
+		{"pageview", "", "page_viewed"},
+		{"error", strings.Repeat("x", 4096), "error"},
+		{"error", "", "error"},
 	}
 	for _, c := range cases {
-		out, _ := admitPublic([]CaptureEvent{{Type: c.kind, Event: c.sent}})
+		out, _ := admitPublic([]CaptureEvent{{Type: c.typ, Event: c.sent}})
 		if len(out) != 1 {
-			t.Fatalf("kind %q: want 1 admitted", c.kind)
+			t.Fatalf("type %q: want 1 admitted", c.typ)
 		}
-		if got := resolveEventName(out[0]); got != c.want {
-			t.Fatalf("kind %q sent name %q ⇒ stored %q, want %q", c.kind, truncate(c.sent), got, c.want)
+		f, ok := normalize(publicTenant, time.Now(), out[0])
+		if !ok || f.name != c.want {
+			t.Fatalf("type %q sent name %q ⇒ stored %q, want %q", c.typ, truncate(c.sent), f.name, c.want)
 		}
 	}
 }
@@ -246,12 +261,15 @@ func truncate(s string) string {
 	return s
 }
 
-// TestAdmitPublic_OnlyServerProperties: an anonymous row's properties are exactly what
-// the SERVER put there — the $exception the shared tail folds and the $source the write
-// core stamps. No key the caller chose can be persisted. This walks the SAME composition
-// the handler does: admitPublic (projection) → foldException (ingestDecoded's tail) →
-// withSource (write core) → normalizeEvent (the row).
-func TestAdmitPublic_OnlyServerProperties(t *testing.T) {
+// TestAdmitPublic_OnlyServerAttributes: an anonymous fact's attributes are exactly what
+// the SERVER put there — the `source` the ingest core stamps, and nothing else. No key
+// the caller chose can be persisted. This walks the SAME composition the handler does:
+// admitPublic (projection) → withSource (ingest core) → normalize (the fact).
+//
+// The typed error is no longer folded into a property: it becomes event.error's own
+// columns, which this also asserts — the exception must SURVIVE, as columns, while the
+// caller's property bag does not.
+func TestAdmitPublic_OnlyServerAttributes(t *testing.T) {
 	out, _ := admitPublic([]CaptureEvent{{
 		Type:       "error",
 		Error:      &Exception{Type: "TypeError", Message: "x is not a function"},
@@ -264,24 +282,19 @@ func TestAdmitPublic_OnlyServerProperties(t *testing.T) {
 	if len(out[0].Properties) != 0 {
 		t.Fatalf("the client property bag survived the projection: %v", out[0].Properties)
 	}
-	// The shared tail folds the typed error, and nothing else appears.
-	folded := foldException(out[0])
-	if len(folded.Properties) != 1 {
-		t.Fatalf("after the shared fold, properties must hold only $exception, got %v", folded.Properties)
-	}
-	if _, ok := folded.Properties["$exception"]; !ok {
-		t.Fatalf("the typed error must be folded to $exception, got %v", folded.Properties)
-	}
-	// Through the real normalizer the stored JSON carries $exception + $source, nothing else.
-	row, ok := normalizeEvent(publicTenant, time.Now(), CaptureEvent{
-		Type: folded.Type, Properties: withSource(folded.Properties, sourceEvent),
+	f, ok := normalize(publicTenant, time.Now(), CaptureEvent{
+		Type: out[0].Type, Error: out[0].Error, Properties: withSource(out[0].Properties, sourceEvent),
 	})
 	if !ok {
 		t.Fatal("want routable")
 	}
-	stored := decodeProps(t, row.properties)
-	if len(stored) != 2 || stored["$source"] != "event" {
-		t.Fatalf("stored properties = %v, want exactly {$exception,$source}", stored)
+	if len(f.attributes) != 1 || f.attributes["source"] != "event" {
+		t.Fatalf("stored attributes = %v, want exactly {source}", f.attributes)
+	}
+	// …and the exception reached its own columns rather than a property bag.
+	if f.signal != signalError || f.fault == nil || f.fault.class != "TypeError" ||
+		f.fault.message != "x is not a function" || f.fault.group == "" {
+		t.Fatalf("the typed error did not become error columns: %+v", f.fault)
 	}
 }
 

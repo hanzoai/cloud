@@ -31,6 +31,8 @@
 //	POST   /v1/automations/mcp                          MCP JSON-RPC tool surface
 package automations
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	_ "embed"
@@ -146,7 +148,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted = s
 
-	routes(app, s)
+	if err := routes(app, s); err != nil {
+		return err
+	}
 
 	// Register every connector action into the unified tool plane. The /v1/automations/mcp
 	// endpoint stays (connector-scoped MCP view); the plane surfaces the SAME tools org-wide.
@@ -167,28 +171,45 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 // routes registers the automations surface: the connector catalog, flow CRUD +
 // versioning + lifecycle, run history, and the MCP endpoint.
-func routes(app cloud.Router, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) error {
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("automations.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	o := ops{s: s}
 	g := app.Group("/v1/automations")
-	g.Get("/connectors", cloud.Handle(s, connectors))
+	// The bridge FIRST — fiber runs middleware in registration order — bounded to
+	// automations' own subtree; every op below resolves its tenant through it.
+	g.Use(cloud.Bridge())
+
+	zip.Get(zapp, "/v1/automations/connectors", o.connectors)
 	// Back-compat alias: the pre-rename /pieces path stays valid (same handler, same
 	// body) so live clients pinned to it keep working. "pieces" is the retired
 	// ActivePieces term; "connectors" is the ONE Hanzo name (HIP-0126).
-	g.Get("/pieces", cloud.Handle(s, connectors))
+	zip.Get(zapp, "/v1/automations/pieces", o.pieces)
 
-	g.Get("/flows", cloud.Handle(s, listFlows))
-	g.Post("/flows", cloud.Handle(s, createFlow))
-	g.Get("/flows/:id", cloud.Handle(s, getFlow))
-	g.Patch("/flows/:id", cloud.Handle(s, updateFlow))
-	g.Delete("/flows/:id", cloud.Handle(s, deleteFlow))
-	g.Get("/flows/:id/versions", cloud.Handle(s, listVersions))
-	g.Post("/flows/:id/versions", cloud.Handle(s, createVersion))
+	zip.Get(zapp, "/v1/automations/flows", o.listFlows)
+	zip.Post(zapp, "/v1/automations/flows", o.createFlow, zip.WithStatus(http.StatusCreated))
+	zip.Get(zapp, "/v1/automations/flows/:id", o.getFlow)
+	zip.Patch(zapp, "/v1/automations/flows/:id", o.updateFlow)
+	zip.Delete(zapp, "/v1/automations/flows/:id", o.deleteFlow)
+	zip.Get(zapp, "/v1/automations/flows/:id/versions", o.listVersions)
+	zip.Post(zapp, "/v1/automations/flows/:id/versions", o.createVersion, zip.WithStatus(http.StatusCreated))
+	// POST /flows/:id/operations stays a RAW handler: its response is a UNION —
+	// CHANGE_STATUS answers with the Flow, every other operation with the mutated
+	// FlowVersion — and a typed op emits exactly one response schema, so declaring
+	// either shape would be wrong for the other half of the route's traffic.
 	g.Post("/flows/:id/operations", cloud.Handle(s, applyOperation))
-	g.Post("/flows/:id/run", cloud.Handle(s, runFlow))
-	g.Post("/flows/:id/enable", cloud.Handle(s, enableFlow))
-	g.Post("/flows/:id/disable", cloud.Handle(s, disableFlow))
+	zip.Post(zapp, "/v1/automations/flows/:id/run", o.runFlow, zip.WithStatus(http.StatusCreated))
+	zip.Post(zapp, "/v1/automations/flows/:id/enable", o.enableFlow)
+	zip.Post(zapp, "/v1/automations/flows/:id/disable", o.disableFlow)
 
-	g.Get("/runs", cloud.Handle(s, listRuns))
-	g.Get("/runs/:id", cloud.Handle(s, getRun))
+	zip.Get(zapp, "/v1/automations/runs", o.listRuns)
+	zip.Get(zapp, "/v1/automations/runs/:id", o.getRun)
+	// POST /runs/:id/resume stays a RAW handler: the request body IS the waitpoint's
+	// resume value — an arbitrary JSON value, object or not — delivered verbatim into
+	// the workflow. A typed In would declare a named object the route does not have,
+	// and an array or scalar payload would fail to decode into it.
 	g.Post("/runs/:id/resume", cloud.Handle(s, resumeRun))
 
 	// Inbound event sink (IFTTT): an authenticated producer POSTs an event and every
@@ -196,9 +217,62 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// /hooks/* prefix — no wildcard, no shadow of the flow/run routes above. External
 	// provider webhooks (GitHub/Stripe) + inbound channels reach the SAME Deliver via
 	// the wire seam (SetTrigger), so this is one dispatch door, three entrances.
+	//
+	// RAW: the body is the producer's OWN event payload, an open object threaded to
+	// matching flows as {{trigger.*}}. There is no named shape to declare.
 	g.Post("/hooks/:source/:event", cloud.Handle(s, inboundHook))
 
+	// RAW: JSON-RPC. An undecodable body must answer HTTP 200 carrying a -32700 error
+	// object, which a typed op cannot express — zip rejects a bad body with 400 before
+	// the handler runs, and emits one success schema, not a result/error union.
 	g.Post("/mcp", cloud.Handle(s, mcp))
+	return nil
+}
+
+// ops binds the service to automations' typed handlers: a TypedHandler has no
+// parameter for the service, so it arrives as a RECEIVER — also the one bound form
+// cmd/zipdoc lifts prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// None is the input of an op that takes none: no body, no query, no path param.
+type None struct{}
+
+// Page bounds a list read.
+type Page struct {
+	// Limit caps the rows returned; 0 means 50 and nothing above 200 is honoured.
+	Limit int `json:"limit"`
+}
+
+// FlowRef addresses one of the caller org's flows by id.
+type FlowRef struct {
+	// ID is the flow id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// FlowPage bounds a list read scoped to one flow.
+type FlowPage struct {
+	// ID is the flow id from the path.
+	ID string `json:"id"`
+	// Limit caps the rows returned; 0 means 50 and nothing above 200 is honoured.
+	Limit int `json:"limit"`
+}
+
+// RunRef addresses one of the caller org's runs by id.
+type RunRef struct {
+	// ID is the run id from the path, as returned by run.
+	ID string `json:"id"`
+}
+
+// tenantOf resolves the caller's org for a typed op — the value cloud.Bridge
+// carried across the seam from the validated IAM owner claim — and additionally
+// validOrg-checks it, because the org is folded into per-org engine namespaces and
+// store keys. It is never an In field: an In field is caller-supplied.
+func tenantOf(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok || !validOrg(org) {
+		return "", zip.ErrForbidden("a validated principal is required")
+	}
+	return org, nil
 }
 
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.
@@ -216,116 +290,191 @@ func Shutdown(_ context.Context) error {
 
 // ── connectors ────────────────────────────────────────────────────────────────────
 
-func connectors(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := principal.Org(c); !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// connectors returns the connector catalogue — every connector this deployment
+// ships, with the actions and triggers each offers.
+func (o ops) connectors(ctx context.Context, _ *None) (*Catalog, error) {
+	if _, err := tenantOf(ctx); err != nil {
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, s.State.catalog)
+	return &o.s.State.catalog, nil
+}
+
+// pieces is the back-compat alias of connectors: the same catalogue at the
+// pre-rename path, so clients pinned to it keep working.
+func (o ops) pieces(ctx context.Context, in *None) (*Catalog, error) {
+	return o.connectors(ctx, in)
 }
 
 // ── flows ─────────────────────────────────────────────────────────────────────
 
-// populatedFlow is a flow plus its latest version — the shape the builder consumes.
-type populatedFlow struct {
-	Flow
+// PopulatedFlow is a flow plus its latest version — the shape the builder consumes.
+//
+// The flow's own fields are spelled out rather than embedded: Go INLINES an
+// embedded struct's fields into the object, but the schema projector renders an
+// embedded field as a nested $ref property — so an embedded Flow would put a
+// "Flow" object in every generated client that the wire never carries.
+type PopulatedFlow struct {
+	// ID is the flow id.
+	ID string `json:"id"`
+	// Org is the owning org, server-derived and never client-supplied.
+	Org string `json:"projectId"`
+	// ExternalID is the caller's own id for this flow.
+	ExternalID string `json:"externalId"`
+	// FolderID groups the flow in the builder.
+	FolderID string `json:"folderId"`
+	// Status is enabled or disabled; a fresh flow is disabled.
+	Status FlowStatus `json:"status"`
+	// PublishedVersionID is the version a run executes, when one is published.
+	PublishedVersionID string `json:"publishedVersionId"`
+	// Metadata is the caller's own opaque JSON.
+	Metadata json.RawMessage `json:"metadata,omitempty"`
+	// Created is the unix millisecond the flow was created.
+	Created int64 `json:"created"`
+	// Updated is the unix millisecond of the last change.
+	Updated int64 `json:"updated"`
+	// Version is the flow's latest version, absent when it has none.
 	Version *FlowVersion `json:"version,omitempty"`
 }
 
-type createFlowReq struct {
-	DisplayName string       `json:"displayName"`
-	ExternalID  string       `json:"externalId"`
-	FolderID    string       `json:"folderId"`
-	Trigger     *FlowTrigger `json:"trigger"`
+// populate projects a flow (and optionally its latest version) onto the wire shape.
+func populate(f Flow, v *FlowVersion) PopulatedFlow {
+	return PopulatedFlow{
+		ID: f.ID, Org: f.Org, ExternalID: f.ExternalID, FolderID: f.FolderID,
+		Status: f.Status, PublishedVersionID: f.PublishedVersionID, Metadata: f.Metadata,
+		Created: f.Created, Updated: f.Updated, Version: v,
+	}
 }
 
-func createFlow(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// CreateFlowRequest creates a flow and its initial draft version.
+type CreateFlowRequest struct {
+	// DisplayName names the initial draft version.
+	DisplayName string `json:"displayName"`
+	// ExternalID is the caller's own id for this flow.
+	ExternalID string `json:"externalId"`
+	// FolderID groups the flow in the builder.
+	FolderID string `json:"folderId"`
+	// Trigger is what fires the flow. A version with no trigger is not valid and
+	// cannot run.
+	Trigger *FlowTrigger `json:"trigger"`
+}
+
+// createFlow creates a flow and its initial draft version in one write, and
+// returns the flow with that version. The flow starts disabled.
+//
+// Example: {"displayName": "Nightly sync", "trigger": {"name": "cron", "type": "POLLING"}}
+func (o ops) createFlow(ctx context.Context, in *CreateFlowRequest) (*PopulatedFlow, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body createFlowReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if err := validateTrigger(body.Trigger); err != nil {
-		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
+	if err := validateTrigger(in.Trigger); err != nil {
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
 	now := time.Now().UnixMilli()
 	flowID, err := genID("flow")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	verID, err := genID("ver")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	f := Flow{
-		ID: flowID, Org: org, ExternalID: clip(body.ExternalID), FolderID: clip(body.FolderID),
+		ID: flowID, Org: org, ExternalID: clip(in.ExternalID), FolderID: clip(in.FolderID),
 		Status: FlowDisabled, Created: now, Updated: now,
 	}
-	if _, err := s.State.store.CreateFlow(c.Context(), f); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "create flow: %v", err)
+	if _, err := s.State.store.CreateFlow(ctx, f); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "create flow: %v", err)
 	}
 	v := FlowVersion{
-		ID: verID, Org: org, FlowID: flowID, DisplayName: clip(body.DisplayName),
-		Trigger: body.Trigger, Valid: body.Trigger != nil, State: VersionDraft,
+		ID: verID, Org: org, FlowID: flowID, DisplayName: clip(in.DisplayName),
+		Trigger: in.Trigger, Valid: in.Trigger != nil, State: VersionDraft,
 		SchemaVersion: LatestFlowSchemaVersion, Created: now, Updated: now,
 	}
-	saved, err := s.State.store.CreateVersion(c.Context(), v)
+	saved, err := s.State.store.CreateVersion(ctx, v)
 	if err != nil {
-		return mapStoreErr(err, "flow not found")
+		return nil, mapStoreErr(err, "flow not found")
 	}
-	return c.JSON(http.StatusCreated, populatedFlow{Flow: f, Version: &saved})
+	out := populate(f, &saved)
+	return &out, nil
 }
 
-func listFlows(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	rows, err := s.State.store.ListFlows(c.Context(), org, limitOf(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+// FlowList is the org's flows.
+type FlowList struct {
+	// Data is one row per flow, without its versions.
+	Data []Flow `json:"data"`
 }
 
-func getFlow(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	f, err := s.State.store.GetFlow(c.Context(), org, idParam(c))
+// listFlows returns the caller org's flows, most recently updated first.
+//
+// Example: {"limit": 50}
+func (o ops) listFlows(ctx context.Context, in *Page) (*FlowList, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return mapStoreErr(err, "flow not found")
+		return nil, err
 	}
-	out := populatedFlow{Flow: f}
-	if v, verr := s.State.store.LatestVersion(c.Context(), org, f.ID); verr == nil {
-		out.Version = &v
+	rows, err := s.State.store.ListFlows(ctx, org, limitBound(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
-	return c.JSON(http.StatusOK, out)
+	return &FlowList{Data: rows}, nil
 }
 
-type patchFlowReq struct {
-	FolderID           *string         `json:"folderId"`
-	ExternalID         *string         `json:"externalId"`
-	PublishedVersionID *string         `json:"publishedVersionId"`
-	Metadata           json.RawMessage `json:"metadata"`
+// getFlow returns one of the caller org's flows together with its latest version —
+// the shape the builder loads.
+//
+// Example: {"id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) getFlow(ctx context.Context, in *FlowRef) (*PopulatedFlow, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	f, err := s.State.store.GetFlow(ctx, org, clip(in.ID))
+	if err != nil {
+		return nil, mapStoreErr(err, "flow not found")
+	}
+	var latest *FlowVersion
+	if v, verr := s.State.store.LatestVersion(ctx, org, f.ID); verr == nil {
+		latest = &v
+	}
+	out := populate(f, latest)
+	return &out, nil
 }
 
-func updateFlow(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	f, err := s.State.store.GetFlow(c.Context(), org, idParam(c))
+// PatchFlowRequest updates a flow's metadata. An absent field is left unchanged.
+type PatchFlowRequest struct {
+	// ID is the flow id from the path; a body value is ignored.
+	ID string `json:"id"`
+	// FolderID regroups the flow when present.
+	FolderID *string `json:"folderId"`
+	// ExternalID resets the caller's own id when present.
+	ExternalID *string `json:"externalId"`
+	// PublishedVersionID selects the version runs execute. It must name a version
+	// OF THIS FLOW in this org; empty clears it.
+	PublishedVersionID *string `json:"publishedVersionId"`
+	// Metadata replaces the caller's opaque JSON when present.
+	Metadata json.RawMessage `json:"metadata"`
+}
+
+// updateFlow updates one of the caller org's flows: its folder, external id,
+// published version or metadata. An absent field is left unchanged, and a
+// published version must name a version of this same flow.
+//
+// Example: {"id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "publishedVersionId": "ver_9b1d3f5027a4c1e9b7a2d6f0538e4a7c"}
+func (o ops) updateFlow(ctx context.Context, in *PatchFlowRequest) (*Flow, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return mapStoreErr(err, "flow not found")
+		return nil, err
 	}
-	var body patchFlowReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	f, err := s.State.store.GetFlow(ctx, org, clip(in.ID))
+	if err != nil {
+		return nil, mapStoreErr(err, "flow not found")
 	}
+	body := in
 	if body.FolderID != nil {
 		f.FolderID = clip(*body.FolderID)
 	}
@@ -337,9 +486,9 @@ func updateFlow(s *cloud.Service[state], c *zip.Ctx) error {
 		// LOW-3: a published version must be an EXISTING version OF THIS FLOW in THIS
 		// org — never an unvalidated (possibly cross-tenant / dangling) id. Empty clears it.
 		if pv != "" {
-			ver, verr := s.State.store.GetVersion(c.Context(), org, pv)
+			ver, verr := s.State.store.GetVersion(ctx, org, pv)
 			if verr != nil || ver.FlowID != f.ID {
-				return zip.Errorf(http.StatusUnprocessableEntity, "publishedVersionId must name a version of this flow")
+				return nil, zip.Errorf(http.StatusUnprocessableEntity, "publishedVersionId must name a version of this flow")
 			}
 		}
 		f.PublishedVersionID = pv
@@ -348,75 +497,98 @@ func updateFlow(s *cloud.Service[state], c *zip.Ctx) error {
 		f.Metadata = body.Metadata
 	}
 	f.Updated = time.Now().UnixMilli()
-	saved, err := s.State.store.UpdateFlow(c.Context(), f)
+	saved, err := s.State.store.UpdateFlow(ctx, f)
 	if err != nil {
-		return mapStoreErr(err, "flow not found")
+		return nil, mapStoreErr(err, "flow not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
-func deleteFlow(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	deleted, err := s.State.store.DeleteFlow(c.Context(), org, idParam(c))
+// deleteFlow deletes one of the caller org's flows with its versions and runs, and
+// answers 204. A flow belonging to another org reads as not found.
+//
+// Example: {"id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) deleteFlow(ctx context.Context, in *FlowRef) (*struct{}, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := s.State.store.DeleteFlow(ctx, org, clip(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("flow not found")
+		return nil, zip.ErrNotFound("flow not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ── versions ──────────────────────────────────────────────────────────────────
 
-func listVersions(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	rows, err := s.State.store.ListVersions(c.Context(), org, idParam(c), limitOf(c))
+// VersionList is one flow's versions.
+type VersionList struct {
+	// Data is one row per version, most recent first.
+	Data []FlowVersion `json:"data"`
+}
+
+// listVersions returns the versions of one of the caller org's flows, most recent
+// first.
+//
+// Example: {"id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "limit": 50}
+func (o ops) listVersions(ctx context.Context, in *FlowPage) (*VersionList, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list versions: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	rows, err := s.State.store.ListVersions(ctx, org, clip(in.ID), limitBound(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list versions: %v", err)
+	}
+	return &VersionList{Data: rows}, nil
 }
 
-type createVersionReq struct {
-	DisplayName string       `json:"displayName"`
-	Trigger     *FlowTrigger `json:"trigger"`
+// CreateVersionRequest adds a draft version to a flow.
+type CreateVersionRequest struct {
+	// ID is the flow id from the path; a body value is ignored.
+	ID string `json:"id"`
+	// DisplayName names the version.
+	DisplayName string `json:"displayName"`
+	// Trigger is what fires the flow. A version with no trigger is not valid and
+	// cannot run.
+	Trigger *FlowTrigger `json:"trigger"`
 }
 
-func createVersion(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// createVersion adds a draft version to one of the caller org's flows and returns
+// it. The version starts as a draft with no steps.
+//
+// Example: {"id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "displayName": "v2", "trigger": {"name": "cron", "type": "POLLING"}}
+func (o ops) createVersion(ctx context.Context, in *CreateVersionRequest) (*FlowVersion, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	flowID := idParam(c)
-	var body createVersionReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if err := validateTrigger(body.Trigger); err != nil {
-		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
+	flowID := clip(in.ID)
+	if err := validateTrigger(in.Trigger); err != nil {
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
 	verID, err := genID("ver")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().UnixMilli()
 	v := FlowVersion{
-		ID: verID, Org: org, FlowID: flowID, DisplayName: clip(body.DisplayName),
-		Trigger: body.Trigger, Valid: body.Trigger != nil, State: VersionDraft,
+		ID: verID, Org: org, FlowID: flowID, DisplayName: clip(in.DisplayName),
+		Trigger: in.Trigger, Valid: in.Trigger != nil, State: VersionDraft,
 		SchemaVersion: LatestFlowSchemaVersion, Created: now, Updated: now,
 	}
-	saved, err := s.State.store.CreateVersion(c.Context(), v)
+	saved, err := s.State.store.CreateVersion(ctx, v)
 	if err != nil {
-		return mapStoreErr(err, "flow not found")
+		return nil, mapStoreErr(err, "flow not found")
 	}
-	return c.JSON(http.StatusCreated, saved)
+	return &saved, nil
 }
 
 // applyOperation applies a FlowOperation. CHANGE_STATUS is flow-scoped (routes to
@@ -567,67 +739,96 @@ func runBudgetPerMin() int {
 	return defaultRunBudgetPerMin
 }
 
-func runFlow(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	f, err := s.State.store.GetFlow(c.Context(), org, idParam(c))
+// runFlow starts a durable run of one of the caller org's flows, using its
+// published version when set and its latest otherwise. It answers 503 while the
+// engine is not ready and 429 when the org is over its concurrency or per-minute
+// run budget — never a run that was silently dropped.
+//
+// Example: {"id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) runFlow(ctx context.Context, in *FlowRef) (*FlowRun, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return mapStoreErr(err, "flow not found")
+		return nil, err
 	}
-	v, err := runVersion(s, c.Context(), org, f)
+	f, err := s.State.store.GetFlow(ctx, org, clip(in.ID))
 	if err != nil {
-		return mapStoreErr(err, "flow has no runnable version")
+		return nil, mapStoreErr(err, "flow not found")
+	}
+	v, err := runVersion(s, ctx, org, f)
+	if err != nil {
+		return nil, mapStoreErr(err, "flow has no runnable version")
 	}
 	runID, err := genID("run")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	// startRun applies the per-org bounds (concurrency + durable budget) uniformly for every
 	// run-start path. Manual run: depth 0, no trigger payload.
-	run, _, err := startRun(s, c.Context(), org, f, v, runID, 0, nil)
+	run, _, err := startRun(s, ctx, org, f, v, runID, 0, nil)
 	if err != nil {
-		return engineErr(err)
+		return nil, engineErr(err)
 	}
-	return c.JSON(http.StatusCreated, run)
+	return &run, nil
 }
 
-func listRuns(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	rows, err := s.State.store.ListRuns(c.Context(), org, clip(c.Query("flowId")), limitOf(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list runs: %v", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+// RunFilter narrows the run list.
+type RunFilter struct {
+	// FlowID keeps only that flow's runs; empty lists the org's runs.
+	FlowID string `json:"flowId"`
+	// Limit caps the rows returned; 0 means 50 and nothing above 200 is honoured.
+	Limit int `json:"limit"`
 }
 
-// getRun returns a run, refreshing a non-terminal status from the engine (scoped to
-// the org's namespace) so the caller sees live progress.
-func getRun(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	run, err := s.State.store.GetRun(c.Context(), org, idParam(c))
+// RunList is the org's runs.
+type RunList struct {
+	// Data is one row per run, most recent first.
+	Data []FlowRun `json:"data"`
+}
+
+// listRuns returns the caller org's runs, most recent first, optionally narrowed
+// to one flow.
+//
+// Example: {"flowId": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "limit": 50}
+func (o ops) listRuns(ctx context.Context, in *RunFilter) (*RunList, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return mapStoreErr(err, "run not found")
+		return nil, err
+	}
+	rows, err := s.State.store.ListRuns(ctx, org, clip(in.FlowID), limitBound(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list runs: %v", err)
+	}
+	return &RunList{Data: rows}, nil
+}
+
+// getRun returns one of the caller org's runs, refreshing a non-terminal status
+// from the engine first so the caller sees live progress.
+//
+// Example: {"id": "run_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) getRun(ctx context.Context, in *RunRef) (*FlowRun, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	run, err := s.State.store.GetRun(ctx, org, clip(in.ID))
+	if err != nil {
+		return nil, mapStoreErr(err, "run not found")
 	}
 	if !terminal(run.Status) {
-		if st, derr := describeRunStatus(c.Context(), org, run.WorkflowID); derr == nil && st != run.Status {
+		if st, derr := describeRunStatus(ctx, org, run.WorkflowID); derr == nil && st != run.Status {
 			finish := run.FinishTime
 			if terminal(st) {
 				finish = time.Now().UnixMilli()
 			}
-			if uerr := s.State.store.UpdateRunStatus(c.Context(), org, run.ID, st, finish, time.Now().UnixMilli()); uerr == nil {
+			if uerr := s.State.store.UpdateRunStatus(ctx, org, run.ID, st, finish, time.Now().UnixMilli()); uerr == nil {
 				run.Status, run.FinishTime = st, finish
 			}
 		}
 	}
-	return c.JSON(http.StatusOK, run)
+	return &run, nil
 }
 
 func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
@@ -710,32 +911,43 @@ func causationDepth(c *zip.Ctx) int {
 
 // ── enable / disable ──────────────────────────────────────────────────────────
 
-func enableFlow(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	return setEnabled(s, c, org, idParam(c), true)
-}
-
-func disableFlow(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	return setEnabled(s, c, org, idParam(c), false)
-}
-
-// setEnabled flips a rule's status and (dis)arms its trigger — the ONE reconfigure
-// path, shared by /enable, /disable, and the CHANGE_STATUS operation. Status and
-// trigger-arrival are decomplected: this owns the status flip; armTrigger owns the
-// arrival wiring.
-func setEnabled(s *cloud.Service[state], c *zip.Ctx, org, flowID string, enable bool) error {
-	f, err := s.State.store.GetFlow(c.Context(), org, flowID)
+// enableFlow enables one of the caller org's flows and arms its trigger: a polling
+// trigger gets a durable schedule, a webhook trigger a subscription in the routing
+// index.
+//
+// Example: {"id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) enableFlow(ctx context.Context, in *FlowRef) (*Flow, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return mapStoreErr(err, "flow not found")
+		return nil, err
 	}
-	v, verr := runVersion(s, c.Context(), org, f)
+	return switchFlow(o.s, ctx, org, clip(in.ID), true)
+}
+
+// disableFlow disables one of the caller org's flows and disarms its trigger, so a
+// disabled flow is never a live target.
+//
+// Example: {"id": "flow_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) disableFlow(ctx context.Context, in *FlowRef) (*Flow, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return switchFlow(o.s, ctx, org, clip(in.ID), false)
+}
+
+
+// switchFlow flips a rule's status and (dis)arms its trigger — the ONE reconfigure
+// core, shared by /enable, /disable, and the CHANGE_STATUS operation. Status and
+// trigger-arrival are decomplected: this owns the status flip; armTrigger owns the
+// arrival wiring. It returns the saved flow so both the typed ops and the raw
+// operation route render the same value.
+func switchFlow(s *cloud.Service[state], ctx context.Context, org, flowID string, enable bool) (*Flow, error) {
+	f, err := s.State.store.GetFlow(ctx, org, flowID)
+	if err != nil {
+		return nil, mapStoreErr(err, "flow not found")
+	}
+	v, verr := runVersion(s, ctx, org, f)
 
 	if enable {
 		f.Status = FlowEnabled
@@ -743,20 +955,29 @@ func setEnabled(s *cloud.Service[state], c *zip.Ctx, org, flowID string, enable 
 		f.Status = FlowDisabled
 	}
 	f.Updated = time.Now().UnixMilli()
-	saved, err := s.State.store.UpdateFlow(c.Context(), f)
+	saved, err := s.State.store.UpdateFlow(ctx, f)
 	if err != nil {
-		return mapStoreErr(err, "flow not found")
+		return nil, mapStoreErr(err, "flow not found")
 	}
 
-	if err := armTrigger(s, c.Context(), org, f, v, verr, enable); err != nil {
-		return err
+	if err := armTrigger(s, ctx, org, f, v, verr, enable); err != nil {
+		return nil, err
 	}
 
 	action := "automations.flow.disable"
 	if enable {
 		action = "automations.flow.enable"
 	}
-	auditEvent(s, c, org, action, f.ID, "ok", http.StatusOK)
+	auditCtx(s, ctx, org, action, f.ID, "ok", http.StatusOK)
+	return &saved, nil
+}
+
+// setEnabled is switchFlow for the raw CHANGE_STATUS arm of the operations route.
+func setEnabled(s *cloud.Service[state], c *zip.Ctx, org, flowID string, enable bool) error {
+	saved, err := switchFlow(s, c.Context(), org, flowID, enable)
+	if err != nil {
+		return err
+	}
 	return c.JSON(http.StatusOK, saved)
 }
 
@@ -895,6 +1116,14 @@ func emitRunEvent(s *cloud.Service[state], org string) {
 	}
 }
 
+// auditCtx is auditEvent for a typed op: it takes the request back off the context
+// cloud.Bridge parked it in, and is a no-op off the HTTP path.
+func auditCtx(s *cloud.Service[state], ctx context.Context, org, action, resourceID, result string, status int) {
+	if c, ok := cloud.Request(ctx); ok {
+		auditEvent(s, c, org, action, resourceID, result, status)
+	}
+}
+
 // auditEvent appends one tamper-evident audit record for an HTTP action. result is
 // "ok"|"error"; status is the HTTP status. Nil recorder → no-op.
 func auditEvent(s *cloud.Service[state], c *zip.Ctx, org, action, resourceID, result string, status int) {
@@ -952,6 +1181,12 @@ func idParam(c *zip.Ctx) string { return clip(c.Param("id")) }
 func limitOf(c *zip.Ctx) int {
 	n := 0
 	_, _ = fmt.Sscanf(c.Query("limit"), "%d", &n)
+	return limitBound(n)
+}
+
+// limitBound bounds a caller's page size: absent or non-positive means
+// defaultLimit, and nothing above maxLimit is honoured.
+func limitBound(n int) int {
 	if n <= 0 {
 		return defaultLimit
 	}

@@ -21,7 +21,116 @@
         "operationId": "post_v1_ask",
         "tags": [
           "ask"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AskRequest": {
+        "type": "object",
+        "properties": {
+          "followUps": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string"
+          },
+          "maxQueries": {
+            "type": "integer"
+          },
+          "maxSources": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "system": {
+            "type": "string"
+          }
+        }
+      },
+      "AskResponse": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "figures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            }
+          },
+          "followups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Fact": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
       }
     }
   }

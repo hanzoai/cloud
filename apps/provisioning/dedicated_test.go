@@ -119,16 +119,16 @@ func newDedicatedService(t *testing.T, orch orchestrator) *cloud.Service[state] 
 	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(), orch: orch}}
 }
 
-func doReq(t *testing.T, h zip.Handler, method, route, path, org, bodyStr string) *http.Response {
+func doReq(t *testing.T, h []zip.Handler, method, route, path, org, bodyStr string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	switch method {
 	case http.MethodGet:
-		app.Get(route, h)
+		app.Get(route, h...)
 	case http.MethodDelete:
-		app.Delete(route, h)
+		app.Delete(route, h...)
 	default:
-		app.Post(route, h)
+		app.Post(route, h...)
 	}
 	var rdr io.Reader
 	if bodyStr != "" {

@@ -138,21 +138,21 @@ func TestPublishValidation(t *testing.T) {
 	app := setup(t, "conn_gamma")
 
 	// Monetized with no recipient → 400.
-	code, _ := do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", publishReq{
+	code, _ := do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", PublishRequest{
 		Tool: "conn_gamma", Title: "Gamma", PriceCents: 500,
 	})
 	if code != 400 {
 		t.Fatalf("monetized listing without recipient want 400, got %d", code)
 	}
 	// Phantom tool → 422.
-	code, _ = do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", publishReq{
+	code, _ = do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", PublishRequest{
 		Tool: "ghost", Title: "Ghost",
 	})
 	if code != 422 {
 		t.Fatalf("phantom listing want 422, got %d", code)
 	}
 	// Valid free listing → 201.
-	code, body := do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", publishReq{
+	code, body := do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", PublishRequest{
 		Tool: "conn_gamma", Title: "Gamma", Public: true,
 	})
 	if code != 201 {
@@ -168,7 +168,7 @@ func TestMonetizedDispatchCharges(t *testing.T) {
 	app := setup(t, "conn_premium")
 
 	// Publish a monetized public listing.
-	code, body := do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", publishReq{
+	code, body := do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", PublishRequest{
 		Tool: "conn_premium", Title: "Premium", PriceCents: 750, Currency: "USD",
 		Recipient: "0xSELLERWALLET", Public: true,
 	})
@@ -209,7 +209,7 @@ func TestMonetizedDispatchCharges(t *testing.T) {
 // TestDiscovery: discovery returns the catalog with the listing overlay + installed flag.
 func TestDiscovery(t *testing.T) {
 	app := setup(t, "conn_delta")
-	do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", publishReq{
+	do(t, app, http.MethodPost, "/v1/marketplace/listings", "acme", PublishRequest{
 		Tool: "conn_delta", Title: "Delta Tool", Category: "search", Public: true,
 	})
 	do(t, app, http.MethodPost, "/v1/marketplace/install", "acme", map[string]any{"tool": "conn_delta"})

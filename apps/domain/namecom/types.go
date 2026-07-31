@@ -3,9 +3,9 @@ package namecom
 // The request/response shapes below mirror the name.com Core API v4 JSON. Only the
 // fields Hanzo Domains uses are modeled; unknown fields are ignored on decode.
 
-// Contact is a WHOIS/registration contact. name.com requires registrant/admin/tech/
+// WhoisContact is a WHOIS/registration contact. name.com requires registrant/admin/tech/
 // billing contacts on register; missing ones default to the reseller account.
-type Contact struct {
+type WhoisContact struct {
 	FirstName string `json:"firstName,omitempty"`
 	LastName  string `json:"lastName,omitempty"`
 	Company   string `json:"companyName,omitempty"`
@@ -22,10 +22,10 @@ type Contact struct {
 
 // Contacts is the four-role contact set for a domain.
 type Contacts struct {
-	Registrant *Contact `json:"registrant,omitempty"`
-	Admin      *Contact `json:"admin,omitempty"`
-	Tech       *Contact `json:"tech,omitempty"`
-	Billing    *Contact `json:"billing,omitempty"`
+	Registrant *WhoisContact `json:"registrant,omitempty"`
+	Admin      *WhoisContact `json:"admin,omitempty"`
+	Tech       *WhoisContact `json:"tech,omitempty"`
+	Billing    *WhoisContact `json:"billing,omitempty"`
 }
 
 // Domain is a domain record as name.com returns it (get/create/renew/setNameservers).

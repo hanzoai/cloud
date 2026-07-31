@@ -29,6 +29,8 @@ type state struct {
 var mounted atomic.Pointer[cloud.Service[state]]
 
 // Mount wires /v1/channels/* onto app and registers the ingress consumer.
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("channels.Mount: nil app")

@@ -46,7 +46,7 @@ type agentDeps struct {
 // A step with no bound tool is ASSISTED, not automated: the agent drafts guidance
 // (if a Draft prompt is present) and leaves the step in progress — it NEVER fakes a
 // done for work it did not actually perform.
-func runAgent(ctx context.Context, d agentDeps, org, payer string, step Step, emit func(event)) (State, error) {
+func runAgent(ctx context.Context, d agentDeps, org, payer string, step JourneyStep, emit func(event)) (State, error) {
 	emit(event{Type: "plan", Step: step.ID, Text: planText(step)})
 
 	// 1. Draft content with the embedded AI, if the step asks for it.
@@ -129,7 +129,7 @@ func runAgent(ctx context.Context, d agentDeps, org, payer string, step Step, em
 	return StateDone, nil
 }
 
-func planText(step Step) string {
+func planText(step JourneyStep) string {
 	if strings.TrimSpace(step.Tool) == "" {
 		return "Draft guidance for: " + step.Title
 	}

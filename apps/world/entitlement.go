@@ -42,11 +42,9 @@ package world
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/plan"
-	"github.com/zap-proto/zip"
 )
 
 // WorldLimits is the resolved World plan contract for one caller: the enforcement
@@ -102,30 +100,61 @@ func ResolveWorldLimits(ctx context.Context, planID string) (WorldLimits, error)
 	return WorldLimitsFromEntitlements(ent), nil
 }
 
-// getLimits serves GET /v1/world/limits?plan=<id> — the machine-readable contract
-// echo. It returns the resolved limits for the requested plan (default world-free)
-// so agents and the dashboard configure themselves against the live catalog
-// instead of hardcoding tier numbers. Always 200 with the fail-closed floor on a
-// resolution error, so a catalog blip never breaks the client.
-func (s *service) getLimits(c *zip.Ctx) error {
-	planID := strings.TrimSpace(c.Query("plan"))
+// planRef names the plan whose limits are asked for.
+type planRef struct {
+	// Plan is a World plan id (world-free, world-pro, world-team,
+	// world-enterprise). Empty resolves world-free.
+	Plan string `json:"plan"`
+}
+
+// limitsView is the machine-readable echo of one plan's World contract.
+type limitsView struct {
+	// Plan is the plan id the limits were resolved for.
+	Plan string `json:"plan"`
+	// Unit is the unit both rate limits are expressed in.
+	Unit string `json:"unit"`
+	// Limits is the resolved contract; -1 on a rate limit or count means unlimited.
+	Limits limitsBlock `json:"limits"`
+}
+
+type limitsBlock struct {
+	// APIRateLimit bounds REST /v1/world/* calls per minute.
+	APIRateLimit int `json:"apiRateLimit"`
+	// MCPRateLimit bounds MCP calls per minute.
+	MCPRateLimit int `json:"mcpRateLimit"`
+	// MaxAlerts bounds saved OSINT alert rules.
+	MaxAlerts int `json:"maxAlerts"`
+	// ModelAPI reports whether the plan grants /v1/world/model and the SSE stream.
+	ModelAPI bool `json:"modelApi"`
+}
+
+// getLimits echoes the World limits a plan grants, straight from the @hanzo/plans
+// catalog, so agents and dashboards configure themselves against the live catalog
+// instead of hardcoding tier numbers. It reports the requested plan, not the
+// caller's: it is a contract lookup, not an entitlement check. A catalog that
+// cannot be read yields the free-tier floor rather than an error.
+//
+// Example: {"plan": "world-pro"}
+// Response: {"plan": "world-pro", "unit": "requests/minute", "limits": {"apiRateLimit": 6000, "mcpRateLimit": 3000, "maxAlerts": -1, "modelApi": true}}
+func (s *service) getLimits(ctx context.Context, in *planRef) (*limitsView, error) {
+	planID := strings.TrimSpace(in.Plan)
 	if planID == "" {
 		planID = "world-free"
 	}
-	lim, err := ResolveWorldLimits(c.Context(), planID)
+	lim, err := ResolveWorldLimits(ctx, planID)
 	if err != nil {
 		s.log.Warn("world limits resolve failed; serving free floor", "plan", planID, "err", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"plan": planID,
-		"unit": "requests/minute",
-		"limits": map[string]any{
-			"apiRateLimit": lim.APIRateLimit,
-			"mcpRateLimit": lim.MCPRateLimit,
-			"maxAlerts":    lim.MaxAlerts,
-			"modelApi":     lim.ModelAPI,
+	return &limitsView{
+		Plan: planID,
+		Unit: "requests/minute",
+		Limits: limitsBlock{
+			APIRateLimit: lim.APIRateLimit,
+			MCPRateLimit: lim.MCPRateLimit,
+			MaxAlerts:    lim.MaxAlerts,
+			ModelAPI:     lim.ModelAPI,
 		},
-	})
+	}, nil
 }
 
 // entInt coerces an entitlement numeric value to int. Catalog values arrive as

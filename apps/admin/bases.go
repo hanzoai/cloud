@@ -82,7 +82,7 @@ func baseProxy(ctx context.Context, target, token string) (json.RawMessage, int,
 	return json.RawMessage(raw), resp.StatusCode, nil
 }
 
-// bases lists the tenant Base instances in the caller's window — a SuperAdmin sees every
+// bases lists the tenant Base instances in the caller's window. A SuperAdmin sees every
 // tenant's, anyone else only their own subtree's.
 //
 // The scope is enforced TWICE: the upstream is asked for the caller's org, AND every row

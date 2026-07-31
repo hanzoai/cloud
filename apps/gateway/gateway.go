@@ -25,8 +25,10 @@
 // remains ScopeRateLimit's commerce-configured domain (per (org,project,service)).
 package gateway
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 
 	"github.com/hanzoai/cloud"
@@ -61,42 +63,78 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the gateway config plane.
+// routes registers the gateway config plane. Both verbs are zip TYPED ops, so the
+// one declaration the router reads is the one the OpenAPI document, the MCP tool
+// list and the CLI read too.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/gateway")
-	g.Get("/config", cloud.Handle(s, get))
-	g.Put("/config", cloud.Handle(s, put))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: a typed op receives only its context and its decoded input,
+	// so the validated org and the request itself cross here — and fiber runs
+	// middleware in registration order, so one installed after these leaves would
+	// never run.
+	app.Group("/v1/gateway").Use(cloud.Bridge())
+	zip.Get(z, "/v1/gateway/config", o.get)
+	zip.Put(z, "/v1/gateway/config", o.put)
 }
 
-// get returns the EFFECTIVE edge policy the caller is subject to: the platform
-// CORS + per-IP cap in force, plus the caller's own OrgRPM ceiling. A SuperAdmin
-// may inspect a specific tenant with ?org=<slug>.
-func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if c.IsAdmin() {
-		if q := c.Query("org"); q != "" {
-			org = q
-		}
-	}
-	return c.JSON(200, s.State.store.Effective(org))
+// ops binds the policy store to the typed handlers: a TypedHandler takes only a
+// context and its input, so the service arrives as a RECEIVER.
+type ops struct{ s *cloud.Service[state] }
+
+// scope names the tenant a read is answered for. The org is NOT the caller's own
+// tenant key — that is read from the validated principal and can never be
+// asserted by a caller — it is the SuperAdmin-only override that lets an operator
+// inspect another tenant's row; it is ignored for everyone else.
+type scope struct {
+	// Org selects which tenant's effective policy to return, SuperAdmin only.
+	// Empty — and, for every other caller, always — means the caller's own org.
+	Org string `json:"org"`
 }
 
-// put writes a policy scope. A body carrying any PLATFORM field (cors_origins,
-// per_ip_rpm, window_sec) is a platform write and requires SuperAdmin; otherwise
-// it is a per-org write (org_rpm, cache_ttl_sec, cache_paths, methods) scoped to
-// the caller's own org (or, for a SuperAdmin, ?org=<slug>). The body is validated
-// (Validate) and metadata is server-stamped, never client-supplied.
-func put(s *cloud.Service[state], c *zip.Ctx) error {
+// get returns the effective edge policy the caller is subject to.
+//
+// That is the platform CORS allowlist + per-IP flood cap in force, fused with
+// the caller's own OrgRPM ceiling, cache TTL and method allowlist.
+// A SuperAdmin may inspect a specific tenant with ?org=<slug>.
+//
+// Example: {"org": "acme"}
+// Response: {"cors_origins": ["https://console.hanzo.ai"], "per_ip_rpm": 600, "window_sec": 60, "org_rpm": 1200}
+func (o ops) get(ctx context.Context, in *scope) (*edge.Policy, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("a validated principal is required")
+	}
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return nil, zip.ErrForbidden("a validated principal is required")
 	}
-	var in edge.Policy
-	if err := json.Unmarshal(c.Body(), &in); err != nil {
-		return zip.ErrBadRequest("invalid JSON body")
+	if c.IsAdmin() && in.Org != "" {
+		org = in.Org
+	}
+	p := o.s.State.store.Effective(org)
+	return &p, nil
+}
+
+// put writes one edge policy scope and returns the policy now in force.
+//
+// A body carrying any PLATFORM field (cors_origins, per_ip_rpm, window_sec) is a
+// platform write and requires SuperAdmin; otherwise it is a per-org write
+// (org_rpm, cache_ttl_sec, cache_paths, methods) scoped to the caller's own org
+// (or, for a SuperAdmin, ?org=<slug>).
+// Metadata is server-stamped, never client-supplied, and every field is
+// bounds-checked before it is persisted.
+//
+// Example: {"org_rpm": 1200, "cache_ttl_sec": 30, "methods": ["GET", "POST"]}
+func (o ops) put(ctx context.Context, in *edge.Policy) (*edge.Policy, error) {
+	s := o.s
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("a validated principal is required")
+	}
+	org, ok := principal.Org(c)
+	if !ok {
+		return nil, zip.ErrForbidden("a validated principal is required")
 	}
 	in.UpdatedBy = c.User() // server-stamped; a client-supplied value is ignored.
 
@@ -104,19 +142,19 @@ func put(s *cloud.Service[state], c *zip.Ctx) error {
 	platformWrite := len(in.CORSOrigins) > 0 || in.PerIPRPM > 0 || in.WindowSec > 0
 	if platformWrite {
 		if !c.IsAdmin() {
-			return zip.ErrForbidden("platform policy (cors/per-IP) requires SuperAdmin")
+			return nil, zip.ErrForbidden("platform policy (cors/per-IP) requires SuperAdmin")
 		}
 		if err := in.Validate(); err != nil {
-			return zip.ErrBadRequest(err.Error())
+			return nil, zip.ErrBadRequest(err.Error())
 		}
-		saved, err := s.State.store.PutPlatform(c.Context(), in)
+		saved, err := s.State.store.PutPlatform(ctx, *in)
 		if err != nil {
 			s.Log.Warn("gateway platform policy write failed", "err", err)
-			return zip.Errorf(503, "policy store unavailable")
+			return nil, zip.Errorf(503, "policy store unavailable")
 		}
 		s.Log.Info("gateway platform policy updated", "by", in.UpdatedBy,
 			"cors", len(saved.CORSOrigins), "per_ip_rpm", saved.PerIPRPM, "window_sec", saved.WindowSec)
-		return c.JSON(200, saved)
+		return &saved, nil
 	}
 
 	// Per-org scope: the tenant's OWN edge config — rate ceiling, cache policy,
@@ -131,23 +169,28 @@ func put(s *cloud.Service[state], c *zip.Ctx) error {
 		UpdatedBy:   in.UpdatedBy,
 	}
 	if orgCfg.OrgRPM <= 0 && orgCfg.CacheTTLSec <= 0 && len(orgCfg.CachePaths) == 0 && len(orgCfg.Methods) == 0 {
-		return zip.ErrBadRequest("nothing to set: provide org_rpm/cache_ttl_sec/cache_paths/methods, or cors_origins/per_ip_rpm/window_sec (SuperAdmin)")
+		return nil, zip.ErrBadRequest("nothing to set: provide org_rpm/cache_ttl_sec/cache_paths/methods, or cors_origins/per_ip_rpm/window_sec (SuperAdmin)")
 	}
 	if err := orgCfg.Validate(); err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	target := org
 	if c.IsAdmin() {
+		// The SuperAdmin write target rides the URL, not the body — the same
+		// ?org=<slug> the read takes. zip declares query parameters only on the
+		// bodyless methods, so it is read off the request here rather than named
+		// as an input field the document would then describe as part of the body.
 		if q := c.Query("org"); q != "" {
 			target = q // SuperAdmin sets a specific tenant's config.
 		}
 	}
-	saved, err := s.State.store.Put(c.Context(), target, orgCfg)
+	saved, err := s.State.store.Put(ctx, target, orgCfg)
 	if err != nil {
 		s.Log.Warn("gateway org policy write failed", "org", target, "err", err)
-		return zip.Errorf(503, "policy store unavailable")
+		return nil, zip.Errorf(503, "policy store unavailable")
 	}
 	s.Log.Info("gateway org policy updated", "org", target, "by", orgCfg.UpdatedBy,
 		"org_rpm", saved.OrgRPM, "cache_ttl_sec", saved.CacheTTLSec, "methods", len(saved.Methods))
-	return c.JSON(200, s.State.store.Effective(target))
+	eff := s.State.store.Effective(target)
+	return &eff, nil
 }

@@ -50,7 +50,7 @@ import (
 )
 
 // The four origins. A row always has exactly one: "nobody said" is the state
-// this file exists to abolish, so Entry.Origin is not omitempty either.
+// this file exists to abolish, so CatalogEntry.Origin is not omitempty either.
 const (
 	// OriginTemplate is one of OUR curated starters — the thing you fork FROM.
 	OriginTemplate = "template"

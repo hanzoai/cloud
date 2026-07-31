@@ -36,6 +36,8 @@
 // (DO_API_TOKEN, sourced from a KMSSecret on the cloud env) — never hard-coded.
 package do
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"errors"
@@ -127,39 +129,91 @@ func build(b cloud.Base) (state, error) {
 	return st, nil
 }
 
-// routes is the ONE place the surface is wired — shared by Mount (real godo) and
-// the test (injected fakes). Static list/create register before the :id param
-// route so an id can never shadow the collection handler.
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/vpcs", cloud.Handle(s, listVPCs))
-	app.Post("/v1/vpcs", cloud.Handle(s, createVPC))
-	app.Get("/v1/vpcs/:id", cloud.Handle(s, getVPC))
-	app.Delete("/v1/vpcs/:id", cloud.Handle(s, deleteVPC))
+// ops binds the do state to the typed handlers. A zip TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so the
+// service arrives as a RECEIVER and every op is a method value.
+type ops struct{ s *cloud.Service[state] }
 
-	app.Get("/v1/load-balancers", cloud.Handle(s, listLBs))
-	app.Post("/v1/load-balancers", cloud.Handle(s, createLB))
-	app.Get("/v1/load-balancers/:id", cloud.Handle(s, getLB))
-	app.Delete("/v1/load-balancers/:id", cloud.Handle(s, deleteLB))
+// routes is the ONE place the surface is wired — shared by Mount (real godo) and
+// the test (injected fakes). Every route is a zip TYPED op, so the REST route, the
+// OpenAPI document, the MCP tool and the CLI command all derive from ONE
+// declaration. Static list/create register before the :id param route so an id can
+// never shadow the collection handler.
+func routes(app cloud.Router, s *cloud.Service[state]) {
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every op below resolves
+	// its tenant through the request it parks. Bounded to do's own two subtrees.
+	app.Group("/v1/vpcs").Use(cloud.Bridge())
+	app.Group("/v1/load-balancers").Use(cloud.Bridge())
+
+	zip.Get(z, "/v1/vpcs", o.listVPCs)
+	zip.Post(z, "/v1/vpcs", o.createVPC, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/vpcs/:id", o.getVPC)
+	zip.Delete(z, "/v1/vpcs/:id", o.deleteVPC)
+
+	zip.Get(z, "/v1/load-balancers", o.listLBs)
+	zip.Post(z, "/v1/load-balancers", o.createLB, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/load-balancers/:id", o.getLB)
+	zip.Delete(z, "/v1/load-balancers/:id", o.deleteLB)
 }
 
 // ── request/response shapes (console VpcModule / LoadBalancerModule contract) ──
 
 type vpcView struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
-	CIDR    string   `json:"cidr"`
-	Region  string   `json:"region"`
+	// ID is DigitalOcean's own VPC id — the value GET and DELETE address.
+	ID string `json:"id"`
+	// Name is the FRIENDLY name the tenant supplied, with the org prefix stripped.
+	Name string `json:"name"`
+	// CIDR is the VPC's IP range in CIDR notation.
+	CIDR string `json:"cidr"`
+	// Region is the DigitalOcean region slug the VPC lives in.
+	Region string `json:"region"`
+	// Subnets is always empty: a DO VPC is a single IP range with no sub-network
+	// objects in the API.
 	Subnets []string `json:"subnets"`
-	Status  string   `json:"status"`
+	// Status is always "active" — DO VPCs have no lifecycle state.
+	Status string `json:"status"`
+}
+
+// vpcList is the list envelope the console's VpcModule reads.
+type vpcList struct {
+	// VPCs are the caller's own VPCs; another org's are invisible, not forbidden.
+	VPCs []vpcView `json:"vpcs"`
+}
+
+// vpcRef addresses one VPC by its DigitalOcean id.
+type vpcRef struct {
+	// ID is the DigitalOcean VPC id from the path.
+	ID string `json:"id"`
 }
 
 type lbView struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Targets int    `json:"targets"`
-	IP      string `json:"ip"`
-	Status  string `json:"status"`
+	// ID is DigitalOcean's own load balancer id — the value GET and DELETE address.
+	ID string `json:"id"`
+	// Name is the FRIENDLY name the tenant supplied, with the org prefix stripped.
+	Name string `json:"name"`
+	// Type is DO's load balancer type, e.g. REGIONAL or GLOBAL.
+	Type string `json:"type"`
+	// Targets is the count of backend droplets attached to the load balancer.
+	Targets int `json:"targets"`
+	// IP is the load balancer's public address, empty while it is still provisioning.
+	IP string `json:"ip"`
+	// Status is DO's own lifecycle value, e.g. new or active.
+	Status string `json:"status"`
+}
+
+// lbList is the list envelope the console's LoadBalancerModule reads.
+type lbList struct {
+	// LoadBalancers are the caller's own load balancers; another org's are invisible.
+	LoadBalancers []lbView `json:"loadBalancers"`
+}
+
+// lbRef addresses one load balancer by its DigitalOcean id.
+type lbRef struct {
+	// ID is the DigitalOcean load balancer id from the path.
+	ID string `json:"id"`
 }
 
 // vpcStatusActive — DO VPCs have NO lifecycle status field (they are created
@@ -197,14 +251,19 @@ func toLBView(friendly string, lb *godo.LoadBalancer) lbView {
 
 // ── VPC handlers ────────────────────────────────────────────────────────────
 
-func listVPCs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := begin(s, c)
+// listVPCs lists the VPCs owned by the caller's org, under their friendly names.
+// The account-wide DigitalOcean inventory is filtered to the caller's org prefix,
+// so another tenant's VPCs are invisible rather than forbidden.
+//
+// Response: {"vpcs": [{"id": "8a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9", "name": "web", "cidr": "10.10.0.0/20", "region": "nyc3", "subnets": [], "status": "active"}]}
+func (o ops) listVPCs(ctx context.Context, _ *struct{}) (*vpcList, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	all, err := allVPCs(s, c.Context())
+	all, err := allVPCs(o.s, ctx)
 	if err != nil {
-		return gatewayErr(err)
+		return nil, gatewayErr(err)
 	}
 	pfx := orgPrefix(org)
 	out := make([]vpcView, 0, len(all))
@@ -215,33 +274,39 @@ func listVPCs(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out = append(out, toVPCView(name, v))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"vpcs": out})
+	return &vpcList{VPCs: out}, nil
 }
 
 type createVPCReq struct {
-	Name    string `json:"name"`
-	Region  string `json:"region"`
+	// Name is the friendly VPC name, a DNS-safe slug of at most 40 characters.
+	// It is namespaced to the caller's org before it reaches DigitalOcean.
+	Name string `json:"name"`
+	// Region is the DigitalOcean region slug to create the VPC in. Required.
+	Region string `json:"region"`
+	// IPRange is the VPC's CIDR; empty lets DigitalOcean assign one.
 	IPRange string `json:"ip_range"`
 }
 
-func createVPC(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := begin(s, c)
+// createVPC creates a VPC in the caller's org under a friendly name.
+// Name and region are required; an empty ip_range lets DigitalOcean pick the CIDR.
+// A name already taken in this org is a 409.
+//
+// Example: {"name": "web", "region": "nyc3", "ip_range": "10.10.0.0/20"}
+func (o ops) createVPC(ctx context.Context, in *createVPCReq) (*vpcView, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var body createVPCReq
-	if err := c.Bind(&body); err != nil {
-		return zip.ErrBadRequest("invalid JSON body")
-	}
+	body := *in
 	name := strings.TrimSpace(body.Name)
 	if !nameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+		return nil, zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 	}
 	region := strings.TrimSpace(body.Region)
 	if region == "" {
-		return zip.ErrBadRequest("region is required")
+		return nil, zip.ErrBadRequest("region is required")
 	}
-	v, _, err := s.State.vpcs.Create(c.Context(), &godo.VPCCreateRequest{
+	v, _, err := o.s.State.vpcs.Create(ctx, &godo.VPCCreateRequest{
 		Name:        physicalName(org, name),
 		RegionSlug:  region,
 		IPRange:     strings.TrimSpace(body.IPRange), // empty → DO auto-assigns
@@ -249,67 +314,82 @@ func createVPC(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 	if err != nil {
 		if s := doStatus(err); s == http.StatusConflict || s == http.StatusUnprocessableEntity {
-			return zip.ErrConflict("a vpc with that name already exists")
+			return nil, zip.ErrConflict("a vpc with that name already exists")
 		}
-		return gatewayErr(err)
+		return nil, gatewayErr(err)
 	}
-	return c.JSON(http.StatusCreated, toVPCView(name, v))
+	out := toVPCView(name, v)
+	return &out, nil
 }
 
-func getVPC(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := begin(s, c)
+// getVPC reads one VPC the caller's org owns. A VPC in another org's namespace is
+// reported not-found, never forbidden, so the id space leaks no existence.
+//
+// Example: {"id": "8a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9"}
+func (o ops) getVPC(ctx context.Context, in *vpcRef) (*vpcView, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	id, ok := idParam(c)
+	id, ok := resourceID(in.ID)
 	if !ok {
-		return zip.ErrBadRequest("invalid id")
+		return nil, zip.ErrBadRequest("invalid id")
 	}
-	v, _, err := s.State.vpcs.Get(c.Context(), id)
+	v, _, err := o.s.State.vpcs.Get(ctx, id)
 	if err != nil {
-		return notFoundOr(err, "vpc not found")
+		return nil, notFoundOr(err, "vpc not found")
 	}
 	name, ok := friendlyName(orgPrefix(org), v.Name)
 	if !ok {
-		return zip.ErrNotFound("vpc not found") // not the caller's — existence-oracle guard
+		return nil, zip.ErrNotFound("vpc not found") // not the caller's — existence-oracle guard
 	}
-	return c.JSON(http.StatusOK, toVPCView(name, v))
+	out := toVPCView(name, v)
+	return &out, nil
 }
 
-func deleteVPC(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := begin(s, c)
+// deleteVPC deletes one VPC the caller's org owns. Ownership is confirmed before
+// the delete, so a cross-tenant id is a not-found rather than another org's loss.
+//
+// Example: {"id": "8a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9"}
+func (o ops) deleteVPC(ctx context.Context, in *vpcRef) (*struct{}, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	id, ok := idParam(c)
+	id, ok := resourceID(in.ID)
 	if !ok {
-		return zip.ErrBadRequest("invalid id")
+		return nil, zip.ErrBadRequest("invalid id")
 	}
 	// Confirm ownership by name prefix BEFORE deleting — a cross-tenant id is 404,
 	// never a delete of another org's VPC.
-	v, _, err := s.State.vpcs.Get(c.Context(), id)
+	v, _, err := o.s.State.vpcs.Get(ctx, id)
 	if err != nil {
-		return notFoundOr(err, "vpc not found")
+		return nil, notFoundOr(err, "vpc not found")
 	}
 	if _, ok := friendlyName(orgPrefix(org), v.Name); !ok {
-		return zip.ErrNotFound("vpc not found")
+		return nil, zip.ErrNotFound("vpc not found")
 	}
-	if _, err := s.State.vpcs.Delete(c.Context(), id); err != nil {
-		return notFoundOr(err, "vpc not found")
+	if _, err := o.s.State.vpcs.Delete(ctx, id); err != nil {
+		return nil, notFoundOr(err, "vpc not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ── Load Balancer handlers ──────────────────────────────────────────────────
 
-func listLBs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := begin(s, c)
+// listLBs lists the load balancers the caller's org owns, under their friendly names.
+// The account-wide DigitalOcean inventory is filtered to the caller's org prefix, so
+// another tenant's load balancers are invisible rather than forbidden.
+//
+// Response: {"loadBalancers": [{"id": "1b2c3d4e-5f60-7182-93a4-b5c6d7e8f901", "name": "edge", "type": "REGIONAL", "targets": 3, "ip": "203.0.113.7", "status": "active"}]}
+func (o ops) listLBs(ctx context.Context, _ *struct{}) (*lbList, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	all, err := allLBs(s, c.Context())
+	all, err := allLBs(o.s, ctx)
 	if err != nil {
-		return gatewayErr(err)
+		return nil, gatewayErr(err)
 	}
 	pfx := orgPrefix(org)
 	out := make([]lbView, 0, len(all))
@@ -321,40 +401,54 @@ func listLBs(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out = append(out, toLBView(name, &lb))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"loadBalancers": out})
+	return &lbList{LoadBalancers: out}, nil
 }
 
+// fwdRule is one entry→target port mapping on a load balancer.
 type fwdRule struct {
-	EntryProtocol  string `json:"entry_protocol"`
-	EntryPort      int    `json:"entry_port"`
+	// EntryProtocol is the protocol the load balancer listens with, e.g. http or https.
+	EntryProtocol string `json:"entry_protocol"`
+	// EntryPort is the port the load balancer listens on.
+	EntryPort int `json:"entry_port"`
+	// TargetProtocol is the protocol used to reach the backend droplets.
 	TargetProtocol string `json:"target_protocol"`
-	TargetPort     int    `json:"target_port"`
+	// TargetPort is the port on the backend droplets.
+	TargetPort int `json:"target_port"`
 }
 
 type createLBReq struct {
-	Name            string    `json:"name"`
-	Region          string    `json:"region"`
-	Type            string    `json:"type"`
-	Size            string    `json:"size"`
+	// Name is the friendly load balancer name, a DNS-safe slug of at most 40
+	// characters. It is namespaced to the caller's org before it reaches DigitalOcean.
+	Name string `json:"name"`
+	// Region is the DigitalOcean region slug to create the load balancer in. Required.
+	Region string `json:"region"`
+	// Type is DO's load balancer type; empty takes DO's default (REGIONAL).
+	Type string `json:"type"`
+	// Size is DO's size slug; empty takes DO's default.
+	Size string `json:"size"`
+	// ForwardingRules are the entry→target port mappings; empty defaults to HTTP 80→80.
 	ForwardingRules []fwdRule `json:"forwarding_rules"`
 }
 
-func createLB(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := begin(s, c)
+// createLB creates a load balancer in the caller's org under a friendly name. Name
+// and region are required; omitted forwarding rules default to plain HTTP 80→80, so
+// a minimal create still yields a usable load balancer, and a name already taken in
+// this org is a 409.
+//
+// Example: {"name": "edge", "region": "nyc3", "size": "lb-small", "forwarding_rules": [{"entry_protocol": "http", "entry_port": 80, "target_protocol": "http", "target_port": 8080}]}
+func (o ops) createLB(ctx context.Context, in *createLBReq) (*lbView, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var body createLBReq
-	if err := c.Bind(&body); err != nil {
-		return zip.ErrBadRequest("invalid JSON body")
-	}
+	body := *in
 	name := strings.TrimSpace(body.Name)
 	if !nameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+		return nil, zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 	}
 	region := strings.TrimSpace(body.Region)
 	if region == "" {
-		return zip.ErrBadRequest("region is required")
+		return nil, zip.ErrBadRequest("region is required")
 	}
 	// DO requires at least one forwarding rule. When the caller omits them, default
 	// to plain HTTP 80→80 — the same default DO's own console applies — so a
@@ -363,7 +457,7 @@ func createLB(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(rules) == 0 {
 		rules = []godo.ForwardingRule{{EntryProtocol: "http", EntryPort: 80, TargetProtocol: "http", TargetPort: 80}}
 	}
-	lb, _, err := s.State.lbs.Create(c.Context(), &godo.LoadBalancerRequest{
+	lb, _, err := o.s.State.lbs.Create(ctx, &godo.LoadBalancerRequest{
 		Name:            physicalName(org, name),
 		Region:          region,
 		Type:            strings.TrimSpace(body.Type), // empty → DO default (REGIONAL)
@@ -372,53 +466,63 @@ func createLB(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 	if err != nil {
 		if s := doStatus(err); s == http.StatusConflict || s == http.StatusUnprocessableEntity {
-			return zip.ErrConflict("a load balancer with that name already exists")
+			return nil, zip.ErrConflict("a load balancer with that name already exists")
 		}
-		return gatewayErr(err)
+		return nil, gatewayErr(err)
 	}
-	return c.JSON(http.StatusCreated, toLBView(name, lb))
+	out := toLBView(name, lb)
+	return &out, nil
 }
 
-func getLB(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := begin(s, c)
+// getLB reads one load balancer the caller's org owns. A load balancer in another
+// org's namespace is reported not-found, never forbidden.
+//
+// Example: {"id": "1b2c3d4e-5f60-7182-93a4-b5c6d7e8f901"}
+func (o ops) getLB(ctx context.Context, in *lbRef) (*lbView, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	id, ok := idParam(c)
+	id, ok := resourceID(in.ID)
 	if !ok {
-		return zip.ErrBadRequest("invalid id")
+		return nil, zip.ErrBadRequest("invalid id")
 	}
-	lb, _, err := s.State.lbs.Get(c.Context(), id)
+	lb, _, err := o.s.State.lbs.Get(ctx, id)
 	if err != nil {
-		return notFoundOr(err, "load balancer not found")
+		return nil, notFoundOr(err, "load balancer not found")
 	}
 	name, ok := friendlyName(orgPrefix(org), lb.Name)
 	if !ok {
-		return zip.ErrNotFound("load balancer not found")
+		return nil, zip.ErrNotFound("load balancer not found")
 	}
-	return c.JSON(http.StatusOK, toLBView(name, lb))
+	out := toLBView(name, lb)
+	return &out, nil
 }
 
-func deleteLB(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := begin(s, c)
+// deleteLB deletes one load balancer the caller's org owns. Ownership is confirmed
+// before the delete, so a cross-tenant id is a not-found rather than another org's loss.
+//
+// Example: {"id": "1b2c3d4e-5f60-7182-93a4-b5c6d7e8f901"}
+func (o ops) deleteLB(ctx context.Context, in *lbRef) (*struct{}, error) {
+	org, err := o.begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	id, ok := idParam(c)
+	id, ok := resourceID(in.ID)
 	if !ok {
-		return zip.ErrBadRequest("invalid id")
+		return nil, zip.ErrBadRequest("invalid id")
 	}
-	lb, _, err := s.State.lbs.Get(c.Context(), id)
+	lb, _, err := o.s.State.lbs.Get(ctx, id)
 	if err != nil {
-		return notFoundOr(err, "load balancer not found")
+		return nil, notFoundOr(err, "load balancer not found")
 	}
 	if _, ok := friendlyName(orgPrefix(org), lb.Name); !ok {
-		return zip.ErrNotFound("load balancer not found")
+		return nil, zip.ErrNotFound("load balancer not found")
 	}
-	if _, err := s.State.lbs.Delete(c.Context(), id); err != nil {
-		return notFoundOr(err, "load balancer not found")
+	if _, err := o.s.State.lbs.Delete(ctx, id); err != nil {
+		return nil, notFoundOr(err, "load balancer not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ── pagination ──────────────────────────────────────────────────────────────
@@ -465,9 +569,17 @@ func lastPage(resp *godo.Response) bool {
 
 // begin resolves the caller's org and enforces the fail-closed posture in ONE
 // place: 503 when DO is unconfigured, 403 when there is no validated principal.
-func begin(s *cloud.Service[state], c *zip.Ctx) (string, error) {
-	if !configured(s) {
+// The org NEVER comes from an In field — an In field is caller-supplied, so a
+// tenant key read from one is a cross-tenant read the caller asserted for itself.
+// It comes from the request cloud.Bridge parked, and off the HTTP path (the CLI
+// projection's LocalInvoke) there is no request, so the op refuses.
+func (o ops) begin(ctx context.Context) (string, error) {
+	if !configured(o.s) {
 		return "", zip.Errorf(http.StatusServiceUnavailable, "digitalocean is not configured (DO_API_TOKEN not set)")
+	}
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
 	}
 	org, ok := tenant(c)
 	if !ok {
@@ -521,8 +633,10 @@ func friendlyName(pfx, physical string) (string, bool) {
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-func idParam(c *zip.Ctx) (string, bool) {
-	id := strings.TrimSpace(c.Param("id"))
+// resourceID bounds the DO resource id the caller addressed. zip's binder fills it
+// from the path segment; a malformed id is a clean 400 before any DO call.
+func resourceID(raw string) (string, bool) {
+	id := strings.TrimSpace(raw)
 	if !idRE.MatchString(id) {
 		return "", false
 	}

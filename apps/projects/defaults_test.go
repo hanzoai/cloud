@@ -48,7 +48,7 @@ func TestCreateProject_AnalyticsDefaultOn(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p siteProject
 	if err := json.Unmarshal(body, &p); err != nil {
 		t.Fatalf("json: %v (%s)", err, body)
 	}
@@ -60,7 +60,7 @@ func TestCreateProject_AnalyticsDefaultOn(t *testing.T) {
 	}
 	// The default persists: a fresh GET reports the same wired defaults.
 	_, gb := do(t, app, http.MethodGet, "/v1/projects/"+p.Slug, "acme", nil)
-	var got projectView
+	var got siteProject
 	_ = json.Unmarshal(gb, &got)
 	if !got.Analytics || got.Space != p.Space {
 		t.Fatalf("persisted defaults drift: analytics=%v space=%q", got.Analytics, got.Space)
@@ -76,7 +76,7 @@ func TestCreateProject_AnalyticsOptOut(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p siteProject
 	if err := json.Unmarshal(body, &p); err != nil {
 		t.Fatalf("json: %v (%s)", err, body)
 	}
@@ -108,7 +108,7 @@ func TestCreateProject_ProvisionsSpace(t *testing.T) {
 	if calls != 1 || gotOrg != "acme" {
 		t.Fatalf("ensureSpace calls=%d org=%q want 1/acme", calls, gotOrg)
 	}
-	var p projectView
+	var p siteProject
 	_ = json.Unmarshal(body, &p)
 	if p.Space != "acme/"+p.Slug {
 		t.Fatalf("space want acme/%s, got %q", p.Slug, p.Space)
@@ -128,7 +128,7 @@ func TestCreateProject_ProvisionFailureIsFailSoft(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("provisioning failure must not fail create: want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p siteProject
 	if err := json.Unmarshal(body, &p); err != nil {
 		t.Fatalf("json: %v (%s)", err, body)
 	}

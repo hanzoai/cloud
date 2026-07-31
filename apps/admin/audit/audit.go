@@ -83,8 +83,8 @@ type RecordsOut struct {
 	Integrity *auditstore.Integrity `json:"integrity"`
 }
 
-// Records reads cloud's tamper-evident audit trail, newest first, with the chain's live
-// integrity attached so a listing can be badged as verified.
+// Records reads cloud's tamper-evident audit trail, newest first. The chain's live
+// integrity is attached, so a listing can be badged as verified.
 //
 // When cloud has no local store configured it falls back to forwarding IAM's own
 // get-records trail verbatim — a DIFFERENT trail, federated so the endpoint never
@@ -142,9 +142,9 @@ type VerifyOut struct {
 	Data   *auditstore.Integrity `json:"data"`
 }
 
-// Verify walks the WHOLE hash chain and reports whether it is intact: how many records
-// were checked, the head hash to pin externally against tail-truncation, and — when the
-// chain is broken — the seq of the first bad record and why.
+// Verify walks the WHOLE hash chain and reports whether it is intact. It returns how
+// many records were checked, the head hash to pin externally against tail-truncation,
+// and — when the chain is broken — the seq of the first bad record and why.
 //
 // brokenAt is -1 exactly when ok is true. An unconfigured store is an honest failure
 // here rather than a fabricated pass.

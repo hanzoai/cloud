@@ -94,15 +94,15 @@ type Template struct {
 // blueprint is skipped by resolution, falling through to the next tier). The four
 // arrays are the content. The engine runs on Curriculum() — the enabled projection.
 type Blueprint struct {
-	Version    string      `json:"version"`
-	Brand      string      `json:"brand,omitempty"`
-	Title      string      `json:"title,omitempty"`
-	Enabled    *bool       `json:"enabled,omitempty"`
-	Principles []Principle `json:"principles,omitempty"` // the 64-principle spine (Zen of Hanzo archetypes)
-	Sections   []Section   `json:"sections,omitempty"`
-	Steps      []Step      `json:"steps"`
-	Strategies []Strategy  `json:"strategies,omitempty"`
-	Templates  []Template  `json:"templates,omitempty"`
+	Version    string        `json:"version"`
+	Brand      string        `json:"brand,omitempty"`
+	Title      string        `json:"title,omitempty"`
+	Enabled    *bool         `json:"enabled,omitempty"`
+	Principles []Principle   `json:"principles,omitempty"` // the 64-principle spine (Zen of Hanzo archetypes)
+	Sections   []Section     `json:"sections,omitempty"`
+	Steps      []JourneyStep `json:"steps"`
+	Strategies []Strategy    `json:"strategies,omitempty"`
+	Templates  []Template    `json:"templates,omitempty"`
 }
 
 // Bounds on the corpus/collections so an org-custom or admin-authored blueprint can't
@@ -160,7 +160,7 @@ var defaultBlueprint = mustBlueprint(baseBlueprintYAML)
 func (b Blueprint) clone() Blueprint {
 	b.Principles = append([]Principle(nil), b.Principles...)
 	b.Sections = append([]Section(nil), b.Sections...)
-	b.Steps = append([]Step(nil), b.Steps...)
+	b.Steps = append([]JourneyStep(nil), b.Steps...)
 	b.Strategies = append([]Strategy(nil), b.Strategies...)
 	b.Templates = append([]Template(nil), b.Templates...)
 	return b
@@ -321,7 +321,7 @@ func (b Blueprint) Curriculum() Curriculum {
 			enabled[s.ID] = true
 		}
 	}
-	steps := make([]Step, 0, len(b.Steps))
+	steps := make([]JourneyStep, 0, len(b.Steps))
 	for _, s := range b.Steps {
 		if !enabled[s.ID] {
 			continue

@@ -37,8 +37,10 @@
 // upstream likewise returns an empty list — it NEVER fabricates an indexer or oracle row.
 package graph
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
-	"net/http"
+	"context"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -66,36 +68,70 @@ func build(b cloud.Base) (state, error) {
 	return st, nil
 }
 
-// routes is the ONE place the surface is wired.
+// routes is the ONE place the surface is wired. Both reads are zip TYPED ops, so
+// the REST route, the OpenAPI document, the MCP tool and the CLI command all come
+// from the one declaration. The bridge goes on FIRST — fiber runs middleware in
+// registration order — because a typed op is handed only a context, so the request
+// (and the validated principal it proves) is parked there.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/indexers", cloud.Handle(s, listIndexers))
-	app.Get("/v1/oracles", cloud.Handle(s, listOracles))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	app.Group("/v1/indexers").Use(cloud.Bridge())
+	app.Group("/v1/oracles").Use(cloud.Bridge())
+
+	zip.Get(z, "/v1/indexers", o.listIndexers, zip.WithOperationID("listIndexers"))
+	zip.Get(z, "/v1/oracles", o.listOracles, zip.WithOperationID("listOracles"))
 }
 
+// ops binds the service to graph's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value. That is also the only bound
+// form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
 // gate enforces the ONE tenancy boundary that applies to public chain data: a
-// validated IAM principal MUST be present (principal.Org), so an unauthenticated
+// validated IAM principal MUST be present (principal.OrgFrom), so an unauthenticated
 // caller reads nothing. The org itself is not a filter key here (a ledger is public
 // within a brand); it is the proof-of-auth gate, checked in ONE place before any
-// handler touches an upstream.
-func gate(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := principal.Org(c); !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// handler touches an upstream. It returns the request the upstream client needs to
+// forward the caller's own Authorization — absent off the HTTP path, where the
+// honest answer is that there is no caller, so the op refuses.
+func gate(ctx context.Context) (*zip.Ctx, error) {
+	if _, ok := principal.OrgFrom(ctx); !ok {
+		return nil, zip.ErrForbidden("X-Org-Id required")
 	}
-	return nil
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("X-Org-Id required")
+	}
+	return c, nil
 }
 
 // ---- indexers (luxfi/indexer explorer REST) ----
 
-// listIndexers reports the deployment's chain indexer(s). Identity + health come from
-// the indexer's /health; the latest indexed block (height + time) from
-// /v1/explorer/blocks. The row EXISTS if EITHER call reaches the indexer; when the
-// indexer is entirely unreachable it degrades to an honest-EMPTY list (200), not a
-// console-error 502. No chain HEAD is exposed by the indexer REST, so `lag` is
-// honestly omitted rather than fabricated.
-func listIndexers(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := gate(s, c); err != nil {
-		return err
+// IndexerList is the chain-indexer roster the console's Indexer page renders.
+type IndexerList struct {
+	// Indexers is one row per chain indexer this deployment is wired to; empty
+	// when no indexer is reachable, never a fabricated row.
+	Indexers []Indexer `json:"indexers"`
+}
+
+// listIndexers reports the deployment's chain indexer(s) and how far each has indexed.
+//
+// Identity and health come from the indexer's /health; the latest indexed block
+// (height and time) from /v1/explorer/blocks.
+// The row EXISTS if EITHER call reaches the indexer; when the indexer is entirely
+// unreachable it degrades to an honest-EMPTY list (200), not a console-error 502.
+// No chain HEAD is exposed by the indexer REST, so `lag` is honestly omitted
+// rather than fabricated.
+//
+// Response: {"indexers": [{"id": "Lux C-Chain", "chain": "Lux C-Chain", "network": "mainnet", "height": "12345", "status": "active", "updatedAt": "2024-04-01T00:00:00Z"}]}
+func (o ops) listIndexers(ctx context.Context, _ *struct{}) (*IndexerList, error) {
+	c, err := gate(ctx)
+	if err != nil {
+		return nil, err
 	}
+	s := o.s
 	health, hErr := s.State.cl.health(c)
 	block, bErr := s.State.cl.latestBlock(c)
 	if hErr != nil && bErr != nil {
@@ -104,32 +140,44 @@ func listIndexers(s *cloud.Service[state], c *zip.Ctx) error {
 		// indexer deployed. Same graceful fold as visor/clusters; an empty list is honest
 		// (no indexers), never a fabricated row.
 		s.Log.Warn("indexer unreachable; returning empty indexer list", "err", bErr)
-		return c.JSON(http.StatusOK, map[string]any{"indexers": []indexerView{}})
+		return &IndexerList{Indexers: []Indexer{}}, nil
 	}
-	iv := toIndexerView(health, block, s.Brand, s.Env)
-	return c.JSON(http.StatusOK, map[string]any{"indexers": []indexerView{iv}})
+	return &IndexerList{Indexers: []Indexer{toIndexerView(health, block, s.Brand, s.Env)}}, nil
 }
 
 // ---- oracles (luxfi/graph priceFeeds) ----
 
-// listOracles reports the on-chain price/data oracles from luxfi/graph's O-Chain
-// PriceFeed registry (a REAL registry — the graph's oracle resolver). A reachable
-// graph with no feeds returns an honest empty list; an unreachable or erroring graph
-// likewise degrades to an honest-EMPTY list (200), not a console-error 502. No feed is
-// ever fabricated.
-func listOracles(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := gate(s, c); err != nil {
-		return err
+// OracleList is the on-chain oracle roster the console's Oracles page renders.
+type OracleList struct {
+	// Oracles is one row per on-chain price feed; empty when the graph is
+	// unreachable or carries no feeds, never a fabricated feed.
+	Oracles []Oracle `json:"oracles"`
+}
+
+// listOracles reports the on-chain price and data oracles the graph indexes.
+//
+// The source is luxfi/graph's O-Chain PriceFeed registry — a REAL registry, the
+// graph's own oracle resolver.
+// A reachable graph with no feeds returns an honest empty list; an unreachable or
+// erroring graph likewise degrades to an honest-EMPTY list (200), not a 502.
+// No feed is ever fabricated.
+//
+// Response: {"oracles": [{"id": "LUX-USD", "name": "LUX/USD", "feed": "LUX/USD", "value": "2.50", "source": "O-Chain", "status": "active", "updatedAt": "2024-04-01T00:00:00Z"}]}
+func (o ops) listOracles(ctx context.Context, _ *struct{}) (*OracleList, error) {
+	c, err := gate(ctx)
+	if err != nil {
+		return nil, err
 	}
+	s := o.s
 	feeds, err := s.State.cl.priceFeeds(c)
 	if err != nil {
 		// Price-feed oracle unreachable — honest-EMPTY (200), not a 502 page error.
 		s.Log.Warn("oracle price feeds unreachable; returning empty oracle list", "err", err)
-		return c.JSON(http.StatusOK, map[string]any{"oracles": []oracleView{}})
+		return &OracleList{Oracles: []Oracle{}}, nil
 	}
-	out := make([]oracleView, 0, len(feeds))
+	out := make([]Oracle, 0, len(feeds))
 	for _, f := range feeds {
 		out = append(out, toOracleView(f))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"oracles": out})
+	return &OracleList{Oracles: out}, nil
 }

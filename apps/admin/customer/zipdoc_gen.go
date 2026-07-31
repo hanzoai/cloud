@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/admin/customers", zip.Doc{
-		Description: "Customers lists every customer org at a glance, sorted by slug: owner email, plan,\nsuspend status, member count, balance, month-to-date spend and MRR.\n\nEach row costs one IAM read plus the org's money reads, fanned out under a fixed\nconcurrency ceiling so a large fleet cannot stampede the upstreams. Every read is\nbest-effort per row: an upstream miss degrades THAT field to its honest zero rather\nthan failing the fleet.",
+		Description: "Customers lists every customer org at a glance, sorted by slug. Each row carries owner\nemail, plan, suspend status, member count, balance, month-to-date spend and MRR.\n\nEach row costs one IAM read plus the org's money reads, fanned out under a fixed\nconcurrency ceiling so a large fleet cannot stampede the upstreams. Every read is\nbest-effort per row: an upstream miss degrades THAT field to its honest zero rather\nthan failing the fleet.",
 		Fields: map[string]string{
 			"CustomerRow.status": "\"active\" | \"suspended\"",
 		},
@@ -37,7 +37,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","amountCents":5000,"currency":"usd","source":"trial","reason":"launch comp","actor":"z@hanzo.ai","createdAt":"2026-07-26T18:00:00Z","transactionId":"tx_01J","result":"success"}],"data2":1}`),
 	})
 	zip.Describe("POST /v1/admin/customers/:org/credit", zip.Doc{
-		Description: "GrantCredit issues a staff credit grant to the org named in the path — a comp, refund\nor promo — through the ONE credit-write path core.ApplyGrant, which validates the\namount against the per-grant cap, checks the org exists, moves the money and records\nthe tamper-evident audit row.\n\nThe credit lands on the account account.Payer resolves, NOT necessarily the org: name\na member of a pooled org and the pool is credited. The receipt echoes the subject so\nthe caller can see which.",
+		Description: "GrantCredit issues a staff credit grant to the org named in the path. The grant is a\ncomp, refund or promo, written through the ONE credit-write path core.ApplyGrant, which\nvalidates the amount against the per-grant cap, checks the org exists, moves the money\nand records the tamper-evident audit row.\n\nThe credit lands on the account account.Payer resolves, NOT necessarily the org: name\na member of a pooled org and the pool is credited. The receipt echoes the subject so\nthe caller can see which.",
 		Fields: map[string]string{
 			"GrantIn.amountCents": "AmountCents is the credit, in whole cents. Must be positive and within the\nper-grant cap.",
 			"GrantIn.currency":    "Currency is the ISO code, lower-cased. Empty means usd.",
@@ -61,7 +61,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"org":"acme","suspended":false,"affected":["ada","bob"],"failed":[]}}`),
 	})
 	zip.Describe("POST /v1/admin/customers/:org/suspend", zip.Doc{
-		Description: "SuspendCustomer cuts off every member of the org: IAM refuses a forbidden user at\nlogin AND at token issuance, so a suspended customer can neither sign in nor mint a\nfresh token. Fully reversible with ReactivateCustomer.\n\nThe result names every user updated and every user that was NOT — a partial failure\nleaves the org in a mixed state and says so instead of reporting a clean success.",
+		Description: "SuspendCustomer cuts off every member of the org. IAM refuses a forbidden user at\nlogin AND at token issuance, so a suspended customer can neither sign in nor mint a\nfresh token. Fully reversible with ReactivateCustomer.\n\nThe result names every user updated and every user that was NOT — a partial failure\nleaves the org in a mixed state and says so instead of reporting a clean success.",
 		Fields: map[string]string{
 			"AccessChange.affected":  "Affected lists the usernames that were updated.",
 			"AccessChange.failed":    "Failed lists the usernames that were NOT updated. Non-empty means the org is in\na mixed state and the action should be retried.",
@@ -72,7 +72,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"org":"acme","suspended":true,"affected":["ada","bob"],"failed":[]}}`),
 	})
 	zip.Describe("POST /v1/admin/grants", zip.Doc{
-		Description: "IssueGrant issues a credit grant to any org from the operator Grants view, with the\ntarget named in the body. It funnels through the SAME core.ApplyGrant that\nPOST /v1/admin/customers/:org/credit uses, so there is exactly ONE credit-write path\nand one audit trail behind both.",
+		Description: "IssueGrant issues a credit grant to any org from the operator Grants view. The target\nis named in the body. It funnels through the SAME core.ApplyGrant that\nPOST /v1/admin/customers/:org/credit uses, so there is exactly ONE credit-write path\nand one audit trail behind both.",
 		Fields: map[string]string{
 			"GrantIn.amountCents": "AmountCents is the credit, in whole cents. Must be positive and within the\nper-grant cap.",
 			"GrantIn.currency":    "Currency is the ISO code, lower-cased. Empty means usd.",
