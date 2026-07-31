@@ -41,9 +41,6 @@ var untypedByDesign = map[string]string{
 		"it either — a nil Out is stamped cmp.Or(op.Status, 204) over whatever was written.",
 
 	"POST /v1/event": canonWireReason,
-	"POST /v1/insights/e": "the PostHog wire (decodeInsights, insights.go) — an object, so the array " +
-		"blocker does not apply here, but admission does. " + admissionReason,
-
 	"POST /v1/event/{project}/envelope": "the Sentry error wire on the one event door: the body is a " +
 		"raw Sentry envelope stream and the credential is a DSN key the o11y consumer verifies itself " +
 		"(cloud.ObsErrorIngest) — no principal, no struct In, nothing for a typed op to say.",
@@ -189,7 +186,7 @@ var proseless = map[string]bool{
 	"LogBody": true, "SpanBody": true, "MetricBody": true, "Frame": true,
 	// Every door's receipt.
 	"CaptureResult": true,
-	// The PostHog wire (/v1/insights/e).
+	// The PostHog wire — now served on /v1/event, sniffed by decodeEvent.
 	"insightsBody": true, "insightsEvent": true,
 	// The health probe's report — the one body that is the same at 200 and 503.
 	"healthReport": true, "healthLenses": true, "healthLens": true,

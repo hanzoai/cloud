@@ -51,9 +51,13 @@ import (
 // TWO ENTRIES IS THE POINT: one door per WIRE. A path that merely renames a wire
 // already served here is an alias, and the set below is what makes adding one an
 // explicit act rather than a quiet convenience.
+// ONE ENTRY IS THE POINT, and it is a stronger statement than the two that preceded
+// it: a path per WIRE was still a path per SHAPE. /v1/insights/e was removed on
+// 2026-07-31 and its wire kept — decodeEvent sniffs `distinct_id`/`api_key` and hands
+// the PostHog body to decodeInsights — so the surface shrank without dropping a
+// caller. sourcePostHog survives as a $source value on rows the old door wrote.
 var wantDoors = []door{
-	{path: "/v1/event", decode: decodeIngest, source: sourceEvent},
-	{path: "/v1/insights/e", decode: decodeInsights, source: sourcePostHog},
+	{path: "/v1/event", decode: decodeEvent, source: sourceEvent},
 }
 
 // samePtr reports whether two func values are the SAME function, by code pointer.
@@ -87,6 +91,10 @@ func sameWire(a, b decode) bool { return samePtr(a, b) }
 // harness is the honest statement that ANALYTICS no longer answers there.
 var retiredDoors = []string{
 	"/v1/ingest",
+	// /v1/insights/e — the PostHog WIRE's own path. The wire is still served, on
+	// /v1/event; only the second path is gone. insights.hanzo.ai's /e, /batch and
+	// /capture reach it through the ingress rewrite, so no caller moved.
+	"/v1/insights/e",
 	"/v1/analytics", "/v1/analytics/batch", "/v1/tracker",
 }
 
@@ -798,9 +806,12 @@ func TestEveryDoorDeclaresItsPolymorphicWire(t *testing.T) {
 			continue
 		}
 		alts, _ := schema["oneOf"].([]any)
-		if len(alts) != 3 {
-			t.Errorf("POST %s declares %d alternatives, want the 3 decodeIngest accepts "+
-				"(Event, []Event, CaptureBatch)", d.path, len(alts))
+		// FOUR since /v1/insights/e was folded in: decodeEvent sniffs the wire, so the
+		// one door accepts the three canonical shapes AND the PostHog body. Declaring
+		// three would publish an ingest API that silently accepts a fourth.
+		if len(alts) != 4 {
+			t.Errorf("POST %s declares %d alternatives, want the 4 decodeEvent accepts "+
+				"(Event, []Event, CaptureBatch, insightsBody)", d.path, len(alts))
 		}
 	}
 }
