@@ -44,6 +44,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -205,12 +206,13 @@ func bounce(c *zip.Ctx, waitlistURL string) error {
 	return c.NoContent(http.StatusFound)
 }
 
-// apiKeyPrefixes are the Hanzo API-key families: a published key (pk-), a secret
-// key (sk-), and hk- (sk- under an older name, retired once IAM renames it). This MIRRORS cloud auth_identity.go APIKeyPrefixes (the ONE
-// authority) — kept local so admission stays self-contained (no cloud-internal
-// import) while agreeing on the exact contract: a token with one of these
-// prefixes is a possession-gated API key, not a session principal.
-var apiKeyPrefixes = []string{"pk-", "sk-", "hk-"}
+// The Hanzo API-key families — a published key (pk-), a secret key (sk-), and hk-
+// (sk- under an older name) — are cloud.APIKeyPrefixes, and this package READS that
+// list rather than restating it. It used to hold its own copy "so admission stays
+// self-contained (no cloud-internal import)", which was never true: waitlist.go in
+// this same package already imports cloud. So the copy bought nothing and cost the
+// one thing a copy always costs — a second place to edit, with the two agreeing only
+// by hand. A key family added to the authority now reaches this gate by construction.
 
 // carriesAPIKey reports whether the request authenticates with a Hanzo API key —
 // in the Authorization header (Bearer or Basic-username) or the common api-key /
@@ -233,7 +235,7 @@ func carriesAPIKey(c *zip.Ctx) bool {
 }
 
 func hasAPIKeyPrefix(tok string) bool {
-	for _, p := range apiKeyPrefixes {
+	for _, p := range cloud.APIKeyPrefixes {
 		if strings.HasPrefix(tok, p) {
 			return true
 		}
