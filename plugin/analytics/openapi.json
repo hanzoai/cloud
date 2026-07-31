@@ -28,8 +28,8 @@
     "/v1/analytics/health": {
       "get": {
         "operationId": "get_v1_analytics_health",
-        "summary": "Whether the analytics warehouse is reachable, and which lens tables exist",
-        "description": "Reports the analytics subsystem's own liveness: whether the shared warehouse connection is up, and — when it is — whether each read lens's table has been provisioned yet (the LLM usage ledger and the product-event table, each named in the report).\n\nIT DOES NOT PROBE THE WAREHOUSE TO EARN ITS 200. `datastore` here is the state of the process's own shared client — established, and not since closed — not the result of a query, so a warehouse that is accepting connections and failing reads still reports healthy. Degraded means only that the client never came up: 503, CARRYING the report (status, datastore:false, reason) as its body rather than an error envelope, so a readiness gate can read the cause off the same object it got at 200.\n\nA MISSING LENS TABLE IS NOT A FAILURE and never moves the status. The per-lens probe runs only once connected, and a lens reported available:false answers honest-empty rather than erroring — a fresh deployment whose collector has not emitted yet is legitimately 200 with the product-event lens unavailable. The lens block is absent entirely from a degraded report, which has nothing to say about tables it could not reach.\n\nUnauthenticated on purpose — liveness has to be probe-able — and it reads NO tenant data: table existence only, never a row.",
+        "summary": "Whether the event plane can take a write and the warehouse can answer a read",
+        "description": "Reports the analytics subsystem's own liveness in BOTH directions: `plane` is the event plane it WRITES (the bus and the JetStream stream every accepted event is published to, both named in the report), and `datastore` is the warehouse it READS, with each read lens's table reported as it is provisioned (the LLM usage ledger and the product-event table).\n\nEITHER ONE DOWN IS A 503, and the report says WHICH — they are probed independently and never collapse into a single bit. This endpoint used to report the read half only, and answered 200/ok while every POST /v1/event failed on a stream that could not bind: a total ingest outage behind a green probe. A readiness gate wired here now gates on the write path too.\n\n`plane.ready` IS A REAL PROBE and walks the ingest path itself — the same connection and the same stream a publish uses — so it cannot answer ready while a publish would 503. `plane.reason` carries the plane's own error text when it is false.\n\n`datastore` IS NOT PROBED WITH A QUERY. It is the state of the process's own shared client — established, and not since closed — so a warehouse accepting connections and failing reads still reports true. Degraded CARRIES the report (status, the failing half, reason) as its body rather than an error envelope, so a gate reads the cause off the same object it got at 200.\n\nA MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens reported available:false answers honest-empty rather than erroring, so a fresh deployment whose collector has not emitted yet is legitimately 200 with the product-event lens unavailable. The lens block is reported whenever the warehouse is REACHABLE — including on a report degraded by the plane, where the tables genuinely were probed — and is absent only when the warehouse is not, having nothing to say about tables it could not reach.\n\nUnauthenticated on purpose — liveness has to be probe-able — and it reads NO tenant data: table existence and stream presence only, never a row and never an event.",
         "tags": [
           "analytics"
         ],
@@ -217,7 +217,7 @@
       "get": {
         "operationId": "get_v1_errors",
         "summary": "Errors returns the caller org's most recently captured errors, newest first.",
-        "description": "Errors returns the caller org's most recently captured errors, newest first. The\nerror-tracking read view over the same table the capture doors write: only rows\nstored as type 'error', each with its captured exception lifted out of the property\nbag as a first-class field.\n\nThe org is the validated principal's — never a parameter — and this read requires a\nreal bearer, NEVER the write-only publishable key: pk- can attribute a write and can\nread nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.",
+        "description": "Errors returns the caller org's most recently captured errors, newest first. The\nerror-tracking read view over event.error — the plane table the write core's error\nfacts land in (errors are DELIBERATELY not on event.event) — each with its captured\nexception surfaced from the attributes map as a first-class field.\n\nThe org is the validated principal's — never a parameter — and this read requires a\nreal bearer, NEVER the write-only publishable key: pk- can attribute a write and can\nread nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.",
         "tags": [
           "errors"
         ],
@@ -358,7 +358,7 @@
       "get": {
         "operationId": "get_v1_insights_events",
         "summary": "InsightsEvents returns the caller org's most recent product events, newest first.",
-        "description": "InsightsEvents returns the caller org's most recent product events, newest first.\nThe console's raw-event view over the same table the capture doors write: one row\nper stored event, with the caller's own property bag returned verbatim.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
+        "description": "InsightsEvents returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
         "tags": [
           "insights"
         ],
@@ -1175,6 +1175,23 @@
           }
         }
       },
+      "healthPlane": {
+        "type": "object",
+        "properties": {
+          "bus": {
+            "type": "string"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "string"
+          }
+        }
+      },
       "healthReport": {
         "type": "object",
         "properties": {
@@ -1186,6 +1203,9 @@
           },
           "lost": {
             "$ref": "#/components/schemas/loss"
+          },
+          "plane": {
+            "$ref": "#/components/schemas/healthPlane"
           },
           "reason": {
             "type": "string"
@@ -1284,7 +1304,7 @@
             "type": "string"
           },
           "event": {
-            "description": "Event is the event name, e.g. $pageview.",
+            "description": "Event is the event name, e.g. page_viewed or signup_completed.",
             "type": "string"
           },
           "id": {
@@ -1300,7 +1320,7 @@
             "type": "string"
           },
           "properties": {
-            "description": "Properties is the caller's own property bag, returned verbatim as stored — any\nJSON object. Omitted when the row carries none or it did not parse."
+            "description": "Properties is the row's attributes map as a JSON object (string values — the\nplane stores Map(String,String), so a nested value the caller sent is a\nJSON-encoded string). Omitted when the row carries none."
           },
           "sessionId": {
             "description": "SessionID groups the events of one visit. Omitted when the client sent none.",
@@ -1311,7 +1331,7 @@
             "type": "string"
           },
           "type": {
-            "description": "Type is the canonical kind: pageview, error, identify, group or event.",
+            "description": "Type is the row's kind — the plane's discriminator: page, track, identify or\ngroup. (Errors are not here at all: they land on event.error and are read at\n/v1/errors.)",
             "type": "string"
           },
           "url": {
