@@ -1196,6 +1196,46 @@ components:
           description: XLink is the company's X (Twitter) URL.
           type: string
       type: object
+    Config:
+      properties:
+        max_age:
+          description: MaxAge caps message age, e.g. "24h" or "7d"; "0" (default)
+            is unlimited.
+          type: string
+        max_bytes:
+          description: MaxBytes caps the stream's total stored bytes; -1 (default)
+            is unlimited.
+          type: integer
+        max_msg_size:
+          description: MaxMsgSize caps one message's size in bytes; -1 (default) is
+            the broker's limit.
+          type: integer
+        max_msgs:
+          description: MaxMsgs caps the number of stored messages; -1 (default) is
+            unlimited.
+          type: integer
+        name:
+          description: Name is the stream name, unique within the org (alphanumeric,
+            hyphens, underscores).
+          type: string
+        num_replicas:
+          description: Replicas is the number of stream replicas (1–5); this plane
+            runs 1.
+          type: integer
+        retention:
+          description: 'Retention is the retention policy: limits (default), interest,
+            or workqueue.'
+          type: string
+        storage:
+          description: 'Storage is the storage backend: file (default) or memory.'
+          type: string
+        subjects:
+          description: 'Subjects are the org-relative subjects bound to this stream
+            (wildcards supported). Default: the stream name.'
+          items:
+            type: string
+          type: array
+      type: object
     ConnectorAction:
       properties:
         description:
@@ -1256,6 +1296,42 @@ components:
             $ref: '#/components/schemas/PropSpec'
           type: array
         strategy:
+          type: string
+      type: object
+    Consumer:
+      properties:
+        ack_floor:
+          $ref: '#/components/schemas/Sequences'
+          description: AckFloor is the highest contiguously acknowledged sequence
+            pair.
+        config:
+          $ref: '#/components/schemas/Durable'
+          description: Config is the consumer's configuration.
+        created:
+          description: Created is when the consumer was created.
+          format: date-time
+          type: string
+        delivered:
+          $ref: '#/components/schemas/Sequences'
+          description: Delivered is the highest delivered sequence pair.
+        name:
+          description: Name is the consumer name.
+          type: string
+        num_ack_pending:
+          description: AckPending is the number of delivered, not yet acknowledged
+            messages.
+          type: integer
+        num_pending:
+          description: Pending is the number of messages yet to be delivered.
+          type: integer
+        num_redelivered:
+          description: Redelivered is the number of messages currently being redelivered.
+          type: integer
+        num_waiting:
+          description: Waiting is the number of pull requests waiting for messages.
+          type: integer
+        stream_name:
+          description: Stream is the stream this consumer reads.
           type: string
       type: object
     Contact:
@@ -1721,6 +1797,49 @@ components:
           type: string
         size:
           description: Size is the target DigitalOcean size slug on resize, e.g. "s-4vcpu-8gb".
+          type: string
+      type: object
+    Durable:
+      properties:
+        ack_policy:
+          description: 'Ack is the acknowledgment policy: explicit (default), all,
+            or none.'
+          type: string
+        ack_wait:
+          description: AckWait is how long the broker waits for an ack before redelivering,
+            e.g. "30s" (default).
+          type: string
+        deliver_policy:
+          description: 'Deliver is where delivery starts: all (default), last, new,
+            by_start_sequence, by_start_time, or last_per_subject.'
+          type: string
+        description:
+          description: Description says what this consumer is for.
+          type: string
+        durable_name:
+          description: Name is the durable consumer name (alphanumeric, hyphens, underscores).
+          type: string
+        filter_subject:
+          description: Filter delivers only messages on this org-relative subject
+            (wildcards supported).
+          type: string
+        max_ack_pending:
+          description: MaxAckPending caps unacknowledged messages in flight (default
+            1000).
+          type: integer
+        max_deliver:
+          description: MaxDeliver caps delivery attempts per message; -1 (default)
+            is unlimited.
+          type: integer
+        opt_start_seq:
+          description: StartSeq is the starting sequence for deliver_policy by_start_sequence.
+          type: integer
+        opt_start_time:
+          description: StartTime is the starting instant for deliver_policy by_start_time.
+          format: date-time
+          type: string
+        replay_policy:
+          description: 'Replay is the replay pacing: instant (default) or original.'
           type: string
       type: object
     Endpoint:
@@ -2711,6 +2830,19 @@ components:
         total:
           type: integer
       type: object
+    Health:
+      properties:
+        status:
+          description: Status is ok when the message plane answers, degraded otherwise.
+          type: string
+        uptime:
+          description: Uptime is how long this surface has been mounted.
+          type: string
+        version:
+          description: Version is the connected broker's server version; empty while
+            degraded.
+          type: string
+      type: object
     Host:
       properties:
         addr:
@@ -3344,6 +3476,38 @@ components:
           items:
             $ref: '#/components/schemas/MemoryEntry'
           type: array
+      type: object
+    Message:
+      properties:
+        data:
+          description: Data is the payload, base64-encoded.
+          type: string
+        headers:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          description: Headers are the message headers, when any were published.
+          type: object
+        num_delivered:
+          description: Delivered is how many times a consumer has been handed this
+            message (pulls only).
+          type: integer
+        num_pending:
+          description: Remaining is how many messages follow this one for the consumer
+            (pulls only).
+          type: integer
+        sequence:
+          description: Sequence is the message's stream sequence.
+          type: integer
+        subject:
+          description: Subject is the org-relative subject the message was stored
+            under.
+          type: string
+        timestamp:
+          description: Timestamp is when the broker stored the message.
+          format: date-time
+          type: string
       type: object
     MetricBody:
       properties:
@@ -4203,6 +4367,19 @@ components:
         status:
           type: string
       type: object
+    Purge:
+      properties:
+        filter:
+          description: Filter purges only messages on this org-relative subject (wildcards
+            supported).
+          type: string
+        keep:
+          description: Keep retains that many newest messages.
+          type: integer
+        name:
+          description: Name is the stream name, from the path.
+          type: string
+      type: object
     Question:
       properties:
         account:
@@ -5003,6 +5180,15 @@ components:
             $ref: '#/components/schemas/Step'
           type: array
       type: object
+    Sequences:
+      properties:
+        consumer_seq:
+          description: Consumer is the consumer's own sequence.
+          type: integer
+        stream_seq:
+          description: Stream is the corresponding stream sequence.
+          type: integer
+      type: object
     SeriesPoint:
       properties:
         t:
@@ -5377,6 +5563,38 @@ components:
             $ref: '#/components/schemas/Variant'
           type: array
       type: object
+    State:
+      properties:
+        bytes:
+          description: Bytes is the total stored size.
+          type: integer
+        consumer_count:
+          description: Consumers is the number of consumers attached to this stream.
+          type: integer
+        first_seq:
+          description: FirstSeq is the sequence of the first stored message.
+          type: integer
+        first_ts:
+          description: FirstTS is the timestamp of the first stored message.
+          format: date-time
+          type: string
+        last_seq:
+          description: LastSeq is the sequence of the last stored message.
+          type: integer
+        last_ts:
+          description: LastTS is the timestamp of the last stored message.
+          format: date-time
+          type: string
+        messages:
+          description: Messages is the number of messages currently stored.
+          type: integer
+        num_deleted:
+          description: Deleted is the number of deleted messages (sequence gaps).
+          type: integer
+        num_subjects:
+          description: Subjects is the number of distinct subjects stored.
+          type: integer
+      type: object
     Status:
       properties:
         addr:
@@ -5551,6 +5769,33 @@ components:
           type: array
         workload:
           type: string
+      type: object
+    Stream:
+      properties:
+        config:
+          $ref: '#/components/schemas/Config'
+          description: Config is the stream's configuration.
+        created:
+          description: Created is when the stream was created.
+          format: date-time
+          type: string
+        name:
+          description: Name is the stream name within the org.
+          type: string
+        state:
+          $ref: '#/components/schemas/State'
+          description: State is the stream's current state.
+      type: object
+    Streams:
+      properties:
+        streams:
+          description: Streams is the page, ordered by name.
+          items:
+            $ref: '#/components/schemas/Stream'
+          type: array
+        total:
+          description: Total is the org's stream count before paging.
+          type: integer
       type: object
     Subject:
       properties:
@@ -12938,6 +13183,27 @@ components:
             $ref: '#/components/schemas/indexerView'
           type: array
       type: object
+    infoOut:
+      properties:
+        jetstream:
+          description: JetStream is true when durable streams are enabled.
+          type: boolean
+        max_payload:
+          description: MaxPayload is the broker's message-size ceiling in bytes.
+          type: integer
+        server_id:
+          description: Server is the broker's server id.
+          type: string
+        server_name:
+          description: Name is the broker's server name.
+          type: string
+        streams:
+          description: Streams is the org's stream count.
+          type: integer
+        version:
+          description: Version is the broker's server version.
+          type: string
+      type: object
     ingestOut:
       properties:
         attempts_ingested:
@@ -13628,6 +13894,35 @@ components:
         vcpu:
           type: integer
       type: object
+    makeIn:
+      properties:
+        ack_policy:
+          type: string
+        ack_wait:
+          type: string
+        deliver_policy:
+          type: string
+        description:
+          type: string
+        durable_name:
+          type: string
+        filter_subject:
+          type: string
+        max_ack_pending:
+          type: integer
+        max_deliver:
+          type: integer
+        opt_start_seq:
+          type: integer
+        opt_start_time:
+          format: date-time
+          type: string
+        replay_policy:
+          type: string
+        stream:
+          description: Stream is the stream name, from the path.
+          type: string
+      type: object
     marketCatalog:
       properties:
         items:
@@ -14203,6 +14498,26 @@ components:
           items:
             $ref: '#/components/schemas/NewsItem'
           type: array
+      type: object
+    nextIn:
+      properties:
+        batch:
+          description: Batch is how many messages to pull (1–1000, default 1).
+          type: integer
+        expires:
+          description: Expires is how long to wait for messages, e.g. "5s" (default
+            "30s", max "60s").
+          type: string
+        name:
+          description: Name is the consumer name, from the path.
+          type: string
+        no_wait:
+          description: NoWait answers immediately with whatever is available instead
+            of waiting.
+          type: boolean
+        stream:
+          description: Stream is the stream name, from the path.
+          type: string
       type: object
     noContent:
       properties: {}
@@ -14917,6 +15232,17 @@ components:
           type: string
         txn:
           type: string
+      type: object
+    pickOut:
+      properties:
+        consumers:
+          description: Consumers is the page, ordered by name.
+          items:
+            $ref: '#/components/schemas/Consumer'
+          type: array
+        total:
+          description: Total is the stream's consumer count before paging.
+          type: integer
       type: object
     pipelineReq:
       properties:
@@ -15980,6 +16306,12 @@ components:
           description: Zone is the 32-hex Cloudflare zone id, from the path.
           type: string
       type: object
+    purgeOut:
+      properties:
+        purged:
+          description: Purged is the number of messages removed.
+          type: integer
+      type: object
     pushEvent:
       properties:
         after:
@@ -16105,6 +16437,14 @@ components:
           type: string
         total:
           type: integer
+      type: object
+    readOut:
+      properties:
+        messages:
+          description: Messages is what was read, stream-ordered.
+          items:
+            $ref: '#/components/schemas/Message'
+          type: array
       type: object
     readmeJSON:
       properties:
@@ -40783,6 +41123,394 @@ paths:
           type: string
       tags:
       - ml
+  /v1/mq/health:
+    get:
+      description: Reports whether the message plane behind this surface answers.
+      operationId: get_v1_mq_health
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+          description: ok
+      summary: Reports whether the message plane behind this surface answers.
+      tags:
+      - mq
+  /v1/mq/info:
+    get:
+      description: Returns the broker's identity and the org's stream count.
+      operationId: get_v1_mq_info
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/infoOut'
+          description: ok
+      summary: Returns the broker's identity and the org's stream count.
+      tags:
+      - mq
+  /v1/mq/streams:
+    get:
+      description: Returns the org's streams, name-ordered, with their live state.
+      operationId: get_v1_mq_streams
+      parameters:
+      - description: Limit caps the streams returned (1–1000, default 100).
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      - description: Offset skips that many streams, name-ordered.
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Streams'
+          description: ok
+      summary: Returns the org's streams, name-ordered, with their live state.
+      tags:
+      - mq
+    post:
+      description: Creates a durable stream in the org's namespace and returns it.
+      operationId: post_v1_mq_streams
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Config'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stream'
+          description: created
+      summary: Creates a durable stream in the org's namespace and returns it.
+      tags:
+      - mq
+  /v1/mq/streams/{name}:
+    delete:
+      description: Removes a stream with all its messages and consumers. Irreversible.
+      operationId: delete_v1_mq_streams_name
+      parameters:
+      - description: Name is the stream name, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Removes a stream with all its messages and consumers.
+      tags:
+      - mq
+    get:
+      description: Returns one stream's configuration and live state.
+      operationId: get_v1_mq_streams_name
+      parameters:
+      - description: Name is the stream name, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stream'
+          description: ok
+      summary: Returns one stream's configuration and live state.
+      tags:
+      - mq
+    put:
+      description: |-
+        Reconfigures an existing stream; the path names the stream, and the
+        immutable fields (storage, retention) must restate what they are.
+      operationId: put_v1_mq_streams_name
+      parameters:
+      - description: Name is the stream name, unique within the org (alphanumeric,
+          hyphens, underscores).
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Config'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stream'
+          description: ok
+      summary: Reconfigures an existing stream; the path names the stream, and the
+        immutable fields (storage, retention) must restate what they are.
+      tags:
+      - mq
+  /v1/mq/streams/{name}/messages:
+    get:
+      description: |-
+        Reads stored messages without a consumer: by sequence, by newest on a
+        subject, or walking a subject forward from a sequence.
+      operationId: get_v1_mq_streams_name_messages
+      parameters:
+      - description: Name is the stream name, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: 'Seq reads the message at this sequence (with next_by_subject:
+          the walk''s start).'
+        in: query
+        name: seq
+        required: false
+        schema:
+          type: integer
+      - description: LastBySubject reads the newest message on this org-relative subject.
+        in: query
+        name: last_by_subject
+        required: false
+        schema:
+          type: string
+      - description: NextBySubject walks forward from seq collecting messages on this
+          org-relative subject (wildcards supported).
+        in: query
+        name: next_by_subject
+        required: false
+        schema:
+          type: string
+      - description: Limit caps a next_by_subject walk (1–1000, default 100).
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/readOut'
+          description: ok
+      summary: 'Reads stored messages without a consumer: by sequence, by newest on
+        a subject, or walking a subject forward from a sequence.'
+      tags:
+      - mq
+  /v1/mq/streams/{name}/messages/{seq}:
+    delete:
+      description: Erases one message by sequence; the sequence gap remains.
+      operationId: delete_v1_mq_streams_name_messages_seq
+      parameters:
+      - description: Name is the stream name, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Seq is the message's stream sequence, from the path.
+        in: path
+        name: seq
+        required: true
+        schema:
+          type: integer
+      responses:
+        "204":
+          description: no content
+      summary: Erases one message by sequence; the sequence gap remains.
+      tags:
+      - mq
+  /v1/mq/streams/{name}/purge:
+    post:
+      description: Removes messages from a stream, leaving its consumers in place.
+      operationId: post_v1_mq_streams_name_purge
+      parameters:
+      - description: Name is the stream name, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Purge'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/purgeOut'
+          description: ok
+      summary: Removes messages from a stream, leaving its consumers in place.
+      tags:
+      - mq
+  /v1/mq/streams/{stream}/consumers:
+    get:
+      description: Returns a stream's consumers, name-ordered, with delivery state.
+      operationId: get_v1_mq_streams_stream_consumers
+      parameters:
+      - description: Stream is the stream name, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      - description: Limit caps the consumers returned (1–1000, default 100).
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      - description: Offset skips that many consumers, name-ordered.
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pickOut'
+          description: ok
+      summary: Returns a stream's consumers, name-ordered, with delivery state.
+      tags:
+      - mq
+    post:
+      description: Creates a durable pull consumer on a stream and returns it.
+      operationId: post_v1_mq_streams_stream_consumers
+      parameters:
+      - description: Stream is the stream name, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/makeIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consumer'
+          description: created
+      summary: Creates a durable pull consumer on a stream and returns it.
+      tags:
+      - mq
+  /v1/mq/streams/{stream}/consumers/{name}:
+    delete:
+      description: |-
+        Removes a consumer and its delivery state; unacknowledged messages
+        stay in the stream.
+      operationId: delete_v1_mq_streams_stream_consumers_name
+      parameters:
+      - description: Stream is the stream name, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      - description: Name is the consumer name, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Removes a consumer and its delivery state; unacknowledged messages
+        stay in the stream.
+      tags:
+      - mq
+    get:
+      description: Returns one consumer's configuration and delivery state.
+      operationId: get_v1_mq_streams_stream_consumers_name
+      parameters:
+      - description: Stream is the stream name, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      - description: Name is the consumer name, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consumer'
+          description: ok
+      summary: Returns one consumer's configuration and delivery state.
+      tags:
+      - mq
+  /v1/mq/streams/{stream}/consumers/{name}/next:
+    post:
+      description: |-
+        Pulls the consumer's next batch. Delivered messages are acknowledged on
+        delivery — the broker will not redeliver what this call returns; an empty
+        wait answers 408.
+      operationId: post_v1_mq_streams_stream_consumers_name_next
+      parameters:
+      - description: Stream is the stream name, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      - description: Name is the consumer name, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/nextIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/readOut'
+          description: ok
+      summary: Pulls the consumer's next batch.
+      tags:
+      - mq
   /v1/networks:
     get:
       description: |-
@@ -48422,6 +49150,11 @@ tags:
     a thin, tenant-scoped bridge that turns three Kubeflow-family CustomResources
     into a small REST API.'
   name: ml
+- description: 'Package mq is Hanzo MQ, the managed message-queue product: org-scoped
+    administration of durable JetStream queues on the platform message plane — streams,
+    their messages, pull consumers and delivery — served at /v1/mq over the broker
+    apps/pubsub embeds.'
+  name: mq
 - name: networks
 - description: 'Package notify is the platform''s transactional sender: POST /v1/notify/send
     delivers one message by email or SMS through the caller org''s OWN KMS-held provider
