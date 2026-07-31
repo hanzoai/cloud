@@ -98,6 +98,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := routes(app, s); err != nil {
 		return err
 	}
+	// The wallet store lives here, so payee resolution answers here (rpc.go).
+	exposePayee()
 
 	_, mpcOK := custody[KindMPC]
 	log.Info("wallets mounted", "brand", deps.Brand, "defaultCustody", def, "mpcConfigured", mpcOK)
@@ -749,6 +751,15 @@ type PaymentTarget struct {
 	Org     string
 	Subject string // ledger subject for the earnings credit (the wallet id)
 }
+
+// Mounted reports whether this process holds the wallet store.
+//
+// It exists because ResolvePaymentTarget folds two facts into one false — "there is
+// no such wallet" and "the wallets subsystem is not in this binary" — and a caller
+// that must ask elsewhere when it is absent has to tell them apart. Answering the
+// first over a socket would be a second lookup of a question already answered NO;
+// answering the second in memory is impossible.
+func Mounted() bool { return mounted != nil }
 
 // ResolvePaymentTarget resolves a payout wallet {org, walletID} to its address +
 // ledger subject — the seam the x402 settlement uses to route payment to a

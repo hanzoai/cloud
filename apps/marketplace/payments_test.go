@@ -27,13 +27,14 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/finance"
-	"github.com/hanzoai/cloud/types"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/apps/wallets"
 	"github.com/hanzoai/cloud/apps/x402"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/types"
 	"github.com/luxfi/crypto"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
@@ -323,8 +324,8 @@ func TestPricedToolChallengedThenSettles(t *testing.T) {
 		t.Fatalf("still fails closed on an unwired charger, not an x402 challenge: %s", body)
 	}
 	req := m.challengeOf(hdr)
-	if req.Resource != resourceOf(tool) {
-		t.Fatalf("challenge names %q, want the tool resource %q", req.Resource, resourceOf(tool))
+	if req.Resource != plane.ToolResource(tool) {
+		t.Fatalf("challenge names %q, want the tool resource %q", req.Resource, plane.ToolResource(tool))
 	}
 	if req.Payee == "" {
 		t.Fatal("challenge names no payee address — nothing to pay")

@@ -18,4 +18,12 @@ func init() {
 			"settlementRef.id":   "ID is the settlement id from the URL — the deterministic keccak(from|nonce)\nkey an x402 receipt is issued under (the `id` field of a Receipt, and the\nvalue of the X-Payment-Response header a paid request answers with).",
 		},
 	})
+	zip.Describe("POST /x402/settle", zip.Doc{
+		Description: "Settle enforces payment for one priced resource on behalf of the calling tenant,\nand answers what happened.\n\nFREE FIRST: the price table is asked before anything is required of the world,\nbecause the tool plane offers EVERY dispatch to this seam and an unpriced call must\nnot need a payer, a proof or a wallet. A price that cannot be looked up is NOT\nfree — that is a refusal, and the caller must serve nothing.\n\nPAID: the client's signed authorization arrives on the request as proof, the\nsignature is verified against exactly the terms it was challenged with, and the\nsettlement runs ONCE — keyed on keccak(payer address | nonce), so a retried\nauthorization moves money at most once and answers with the same receipt.\n\nUNPAID: the challenge comes back as data, not as an error. A 402 carries the\namount, the payee address and the chain the client must sign over, and an error\nbody has no room for them — so the caller reads the refusal off the reply and puts\nthe challenge on the response it is writing.\n\nThe PAYER is the caller's own tenant, resolved at the edge that holds the request\nand delegated on the call. It is not a field: a caller that could name the payer\ncould spend another tenant's ledger.",
+		Fields: map[string]string{
+			"Settled.challenge": "the X-Payment-Required header value",
+			"Settled.receipt":   "the X-Payment-Receipt header value",
+			"Settled.status":    "the refusal's status: 402, 403 or 503",
+		},
+	})
 }
