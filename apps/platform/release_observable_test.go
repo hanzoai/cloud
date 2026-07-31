@@ -117,10 +117,10 @@ func TestReleasesAreNewestFirst(t *testing.T) {
 func TestAFailedBuildNeverReachesTheTag(t *testing.T) {
 	tagged := false
 	plan := releasePlan{
-		build:  func(context.Context) error { return errors.New("boom") },
-		smoke:  func(context.Context) error { return nil },
-		tag:    func(context.Context) error { tagged = true; return nil },
-		notify: func(context.Context) error { return nil },
+		build: func(context.Context) error { return errors.New("boom") },
+		smoke: func(context.Context) error { return nil },
+		tag:   func(context.Context) error { tagged = true; return nil },
+		pin:   func(context.Context) error { return nil },
 	}
 	reached, err := plan.run(context.Background())
 	if err == nil {
