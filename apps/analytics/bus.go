@@ -53,26 +53,37 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/apps/pubsub"
 	"github.com/hanzoai/commerce/infra"
 	"github.com/zap-proto/zip"
 )
 
-// stream is the JetStream stream every signal lands on, and subjects is the ONE
-// wildcard it binds. Upper-case is the NATS convention for a stream name; it is the
+// EventStream is the JetStream stream every signal lands on, and EventSubjects is the
+// ONE wildcard it binds. Upper-case is the NATS convention for a stream name; it is the
 // same word as the database and the subject root (plane, fact.go) — one name, three
 // layers.
-var stream = strings.ToUpper(plane)
+//
+// They are EXPORTED because JetStream enforces single ownership: a second stream
+// binding event.> is refused with "subjects overlap with an existing stream", which
+// takes down whichever subsystem loses the race. So a consumer (apps/webhooks) names
+// THIS stream rather than declaring one of its own — the compiler is what keeps the
+// two from drifting into an outage.
+var EventStream = strings.ToUpper(plane)
 
-// subjects is the stream's binding: every signal, present and future. A new signal is
-// a new constant in fact.go and a consumer that filters for it — never a stream edit.
-var subjects = []string{plane + ".>"}
+// EventSubjects is the stream's binding: every signal, present and future. A new signal
+// is a new constant in fact.go and a consumer that filters for it — never a stream edit.
+var EventSubjects = []string{plane + ".>"}
+
+// EventOrgKey is the ONE field an envelope on this plane names its tenant with. Every
+// consumer resolves the org by reading it, so a publisher that spelled it differently
+// would deliver to nobody rather than fail loudly — which is precisely why the spelling
+// is a constant here, in the plane's own package, and not a string literal at each end.
+const EventOrgKey = "org"
 
 // Retention. The stream is a HAND-OFF to the consumers, not the system of record — the
 // warehouse is — so it holds enough for a consumer to be down, redeployed or added and
@@ -82,32 +93,15 @@ const (
 	streamBytes = 8 << 30 // 8 GiB, the pod's ceiling for undrained facts
 )
 
-// busURLEnv overrides where the plane's bus lives; busPortEnv is the port the embedded
-// server (apps/pubsub) bound. Reading the SAME variable that server reads is what keeps
-// the two from disagreeing about the port after an ops change.
-const (
-	busURLEnv  = "CLOUD_EVENT_NATS_URL"
-	busPortEnv = "CLOUD_PUBSUB_PORT"
-)
-
 // publishTimeout bounds ONE batch's publish so an ingest request cannot hang on a
 // wedged bus; the caller gets an honest 503 instead.
 const publishTimeout = 5 * time.Second
 
-// busURL is where this process reaches the plane's bus. It defaults to the LOOPBACK
-// address of the embedded server this same binary runs (apps/pubsub), because that
-// server fails boot closed — a cloud that is up HAS a bus — so there is no
-// configuration a deployment must remember to set for ingest to work.
-func busURL() string {
-	if u := strings.TrimSpace(os.Getenv(busURLEnv)); u != "" {
-		return u
-	}
-	port := strings.TrimSpace(os.Getenv(busPortEnv))
-	if port == "" {
-		port = "4222"
-	}
-	return "nats://" + net.JoinHostPort("127.0.0.1", port)
-}
+// busURL is where this process reaches the plane's bus: the ONE address apps/pubsub
+// exports, which every app in this binary dials. It is not analytics' knob to own — a
+// private variable here would be one more place for a deployment to point half the
+// platform at a different bus. See the apps/pubsub package doc for the knob itself.
+func busURL() string { return pubsub.URL() }
 
 // bus holds the process's ONE connection to the plane, dialed on first use and reused.
 // It is a struct rather than a bare package var so the connect is guarded by a single
@@ -143,21 +137,33 @@ func (b *bus) connect(ctx context.Context) (*infra.PubSubClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: connect %s: %v", errBusUnavailable, busURL(), err)
 	}
-	if err := cl.EnsureStream(ctx, &infra.StreamConfig{
-		Name:        stream,
+	if err := EnsureEventStream(ctx, cl); err != nil {
+		_ = cl.Close()
+		return nil, fmt.Errorf("%w: ensure stream %s: %v", errBusUnavailable, EventStream, err)
+	}
+	b.client, b.ready = cl, true
+	return cl, nil
+}
+
+// EnsureEventStream creates the event plane if it is not there yet, with the retention
+// this package chose for it. It is idempotent (create-if-missing) and it is the ONE
+// declaration of the stream's configuration anywhere in the platform.
+//
+// It is EXPORTED so a consumer can make sure the plane exists before binding a durable
+// to it — a consumer that starts before the first ingest would otherwise find no stream
+// — WITHOUT holding a second copy of the config. Whoever calls it first creates the
+// stream, and because there is only one config, it does not matter who that is.
+func EnsureEventStream(ctx context.Context, cl *infra.PubSubClient) error {
+	return cl.EnsureStream(ctx, &infra.StreamConfig{
+		Name:        EventStream,
 		Description: "the event plane: every signal, one log",
-		Subjects:    subjects,
+		Subjects:    EventSubjects,
 		// LimitsPolicy — every consumer gets its own copy. See the file header.
 		Retention: infra.RetentionLimits,
 		Storage:   infra.StorageFile,
 		MaxAge:    streamAge,
 		MaxBytes:  streamBytes,
-	}); err != nil {
-		_ = cl.Close()
-		return nil, fmt.Errorf("%w: ensure stream %s: %v", errBusUnavailable, stream, err)
-	}
-	b.client, b.ready = cl, true
-	return cl, nil
+	})
 }
 
 // drop marks the connection dead so the next publish re-dials.
@@ -217,6 +223,126 @@ func publishToStream(ctx context.Context, facts []fact) error {
 // the caller's business.
 func busErr(err error) error {
 	return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+}
+
+// ── the accepted-batch fan-out ───────────────────────────────────────────────
+
+// EventEnvelope is what an ACCEPTED PRODUCT EVENT looks like on the plane: the
+// subscriber-facing projection of a SinkEvent, carrying the commerce and identity
+// fields a downstream integration converts on.
+//
+// Org is FIRST and it is the tenant, spelled EventOrgKey — the delivery engine
+// (apps/webhooks) resolves the subscriber's org from it, and an envelope without one is
+// delivered to nobody. It is stamped from the SERVER-resolved tenant, never from the
+// wire, on the same terms as fact.org.
+//
+// It is a SEPARATE type from message, and deliberately: message is the warehouse's
+// contract (its field names are the column names), this is the SUBSCRIBER's contract,
+// and folding them together would make a webhook payload change every time a table
+// gains a column. What they share is the one thing that must be shared — the tenant key.
+type EventEnvelope struct {
+	Org         string         `json:"org"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	DistinctID  string         `json:"distinct_id,omitempty"`
+	AnonymousID string         `json:"anonymous_id,omitempty"`
+	Time        time.Time      `json:"time"`
+	URL         string         `json:"url,omitempty"`
+	Path        string         `json:"path,omitempty"`
+	Referrer    string         `json:"referrer,omitempty"`
+	Revenue     float64        `json:"revenue,omitempty"`
+	Currency    string         `json:"currency,omitempty"`
+	ProductID   string         `json:"product_id,omitempty"`
+	Quantity    uint32         `json:"quantity,omitempty"`
+	Properties  map[string]any `json:"properties,omitempty"`
+}
+
+// subjectFor maps a canonical event name onto its bus subject. Names are caller-chosen
+// strings; a NATS subject token is not — so the name is folded to lowercase, runs of
+// anything outside [a-z0-9_] collapse to one '_', the canonical '$' prefix drops, and an
+// empty result (or one that would collide with wildcard grammar) lands on "custom".
+// Bounded so a hostile name cannot mint unbounded subject cardinality on the stream.
+//
+//	$pageview → event.pageview, $error → event.error,
+//	signup_completed → event.signup_completed
+//
+// This is the grammar an org subscribes to ("send me event.signup_completed"), so it is
+// a PUBLISHED contract: fold rules may gain cases, never change an existing mapping.
+func subjectFor(name string) string {
+	name = strings.TrimPrefix(strings.TrimSpace(name), "$")
+	var b strings.Builder
+	pendingSep := false
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
+			if pendingSep && b.Len() > 0 {
+				b.WriteByte('_')
+			}
+			pendingSep = false
+			b.WriteRune(r)
+		default:
+			pendingSep = true
+		}
+	}
+	token := b.String()
+	if token == "" {
+		token = "custom"
+	}
+	if len(token) > maxSubjectToken {
+		token = token[:maxSubjectToken]
+	}
+	return plane + "." + token
+}
+
+// maxSubjectToken bounds one folded name, so subject cardinality on the stream stays a
+// function of the product's vocabulary and not of what a caller can type.
+const maxSubjectToken = 48
+
+// PublishEvents puts an accepted batch on the plane, one publish per event, under the
+// batch's SERVER-resolved org. It is the ONE way a product event reaches the platform
+// bus, and it lives HERE because this package owns the plane: the stream, the subject
+// grammar, and the envelope are one decision, and a consumer that also published would
+// be a second owner of all three.
+//
+// FAIL-SOFT, unlike the fact path above. The batch is already durable in the warehouse
+// by the time this runs, so a bus that is down publishes nothing and says nothing to the
+// caller — the ingest already answered 200. It is called detached (forward.go), so a
+// slow bus costs a goroutine and never an ingest.
+func PublishEvents(org string, evs []SinkEvent) {
+	if org == "" || len(evs) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
+	defer cancel()
+	cl, err := conn.connect(ctx)
+	if err != nil {
+		return // bus down: the warehouse copy is the durable one
+	}
+	for _, e := range evs {
+		body, err := json.Marshal(EventEnvelope{
+			Org:         org,
+			ID:          e.MessageID,
+			Name:        e.Name,
+			DistinctID:  e.DistinctID,
+			AnonymousID: e.AnonymousID,
+			Time:        e.Time,
+			URL:         e.URL,
+			Path:        e.Path,
+			Referrer:    e.Referrer,
+			Revenue:     e.Revenue,
+			Currency:    e.Currency,
+			ProductID:   e.ProductID,
+			Quantity:    e.Quantity,
+			Properties:  e.Properties,
+		})
+		if err != nil {
+			continue
+		}
+		if _, err := cl.PublishToStream(ctx, subjectFor(e.Name), body); err != nil {
+			conn.drop() // re-dial on the next batch
+			return
+		}
+	}
 }
 
 // closeBus releases the ingest connection. Cloud calls it on graceful shutdown.

@@ -16,7 +16,7 @@ func testApp() *zip.App    { return zip.New(zip.Config{Logger: luxlog.New("test"
 // no-silent-half-embed guarantee.
 func TestMountFailsClosedWhenPubSubUnreachable(t *testing.T) {
 	broker = nil
-	t.Setenv("CLOUD_KAFKA_PUBSUB_URL", "nats://127.0.0.1:1") // connection refused, fast
+	t.Setenv("CLOUD_PUBSUB_URL", "nats://127.0.0.1:1") // the ONE bus knob; refused, fast
 	t.Setenv("CLOUD_KAFKA_PORT", "0")
 	if err := Mount(testApp(), testDeps()); err == nil {
 		t.Fatal("enabled Mount with unreachable pubsub must fail closed")
