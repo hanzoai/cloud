@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("POST /v1/search", zip.Doc{
-		Description: "Query is the typed op behind POST /v1/search. It does exactly two things the\nin-process entry point must not do: resolve the tenant from the validated\nprincipal, and refuse when there is none. Everything else is ForOrg.",
+		Description: "Is the typed op behind POST /v1/search. It does exactly two things the\nin-process entry point must not do: resolve the tenant from the validated\nprincipal, and refuse when there is none. Everything else is ForOrg.",
 		Fields: map[string]string{
 			"Request.doctypes":  "DocTypes restricts the semantic leg to a subset of indexed knowledge types.",
 			"Request.index":     "Index names the lexical index to query. Defaults to \"kb\".",

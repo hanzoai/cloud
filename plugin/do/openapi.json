@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package do is the org-scoped private-network surface — /v1/vpcs and /v1/load-balancers — carved out of Hanzo's OWN house DigitalOcean account.",
     "version": "v1"
   },
   "servers": [

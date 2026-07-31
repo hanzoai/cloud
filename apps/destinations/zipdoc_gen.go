@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/destinations/:platform", zip.Doc{
-		Description: "disconnect forgets a destination for the caller's org: every credential held in\nKMS, then the stored config. Idempotent, and it requires org admin.",
+		Description: "Forgets a destination for the caller's org: every credential held in\nKMS, then the stored config. Idempotent, and it requires org admin.",
 		Fields: map[string]string{
 			"destinationDisconnected.disconnected": "Disconnected is true when the credentials and the row are gone.",
 			"destinationRef.platform":              "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
@@ -18,7 +18,7 @@ func init() {
 		Example: json.RawMessage(`{"platform":"ga4"}`),
 	})
 	zip.Describe("GET /v1/destinations", zip.Doc{
-		Description: "list reports every destination this deployment can forward to, each with the\ncaller org's connection state: whether it is connected, whether it is enabled,\nwhether a credential resolves right now, and the config fields the console\nrenders for it.",
+		Description: "Reports every destination this deployment can forward to, each with the\ncaller org's connection state: whether it is connected, whether it is enabled,\nwhether a credential resolves right now, and the config fields the console\nrenders for it.",
 		Fields: map[string]string{
 			"DestinationField.example":     "a sample value of the right shape (\"G-XXXXXXX\"), when one helps",
 			"DestinationField.key":         "the camelCase key on both the connect body and the stored config",
@@ -38,7 +38,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/destinations/:platform", zip.Doc{
-		Description: "get reports one destination's card for the caller's org — its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
+		Description: "Reports one destination's card for the caller's org — its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
 		Fields: map[string]string{
 			"DestinationField.example":    "a sample value of the right shape (\"G-XXXXXXX\"), when one helps",
 			"DestinationField.key":        "the camelCase key on both the connect body and the stored config",
@@ -59,7 +59,7 @@ func init() {
 		Example: json.RawMessage(`{"platform":"ga4"}`),
 	})
 	zip.Describe("POST /v1/destinations/:platform/test", zip.Doc{
-		Description: "test sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
+		Description: "Sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
 		Fields: map[string]string{
 			"destinationRef.platform": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
 			"destinationTest.error":   "Error is the platform's rejection, present only on a failed send.",

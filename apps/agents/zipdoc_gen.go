@@ -97,6 +97,7 @@ func init() {
 			"sessionView.lastEvent": "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
 			"sessionView.org":       "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
 			"sessionView.project":   "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+			"sessionView.terminal":  "Terminal is where this session can be WATCHED — the URL the machine\npublished for its live terminal. Omitted when it publishes none.",
 		},
 		Example: json.RawMessage(`{"status":"running","limit":20}`),
 	})
@@ -108,6 +109,7 @@ func init() {
 			"sessionView.lastEvent": "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
 			"sessionView.org":       "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
 			"sessionView.project":   "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+			"sessionView.terminal":  "Terminal is where this session can be WATCHED — the URL the machine\npublished for its live terminal. Omitted when it publishes none.",
 		},
 		Example: json.RawMessage(`{"id":"sess_1"}`),
 	})
@@ -129,6 +131,7 @@ func init() {
 			"sessionView.lastEvent": "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
 			"sessionView.org":       "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
 			"sessionView.project":   "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+			"sessionView.terminal":  "Terminal is where this session can be WATCHED — the URL the machine\npublished for its live terminal. Omitted when it publishes none.",
 		},
 		Example: json.RawMessage(`{"id":"sess_1"}`),
 	})
@@ -177,13 +180,15 @@ func init() {
 	zip.Describe("PATCH /v1/agents/sessions/:id", zip.Doc{
 		Description: "PatchSession updates a session's surface-owned truth: its status, its title,\nthe run-target it is dispatched to, and the product it built plus whether that\nbuild's story is public. A FINISHED session stays finished — reopening a\ndone/error run would fabricate liveness — and publishing is refused unless the\nsession names the project it built, because the public build route is keyed on\n(org, project).",
 		Fields: map[string]string{
-			"patchSessionIn.id":      "ID is the session to update, from the path.",
-			"patchSessionIn.project": "Project tags the product this session built; Published is the author's\ndecision to let anyone read the story (provenance.go). Both are pointers so\n\"absent\" and \"cleared\" are different requests.",
-			"patchSessionIn.target":  "Target re-dispatches a session to a run-target (the #48 association). \"\" detaches.",
-			"sessionView.host":       "Execution context (mission-control): the machine/repo/cwd a card shows and\nthe run-target a session is dispatched to. Omitted when a surface didn't report it.",
-			"sessionView.lastEvent":  "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
-			"sessionView.org":        "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
-			"sessionView.project":    "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+			"patchSessionIn.id":       "ID is the session to update, from the path.",
+			"patchSessionIn.project":  "Project tags the product this session built; Published is the author's\ndecision to let anyone read the story (provenance.go). Both are pointers so\n\"absent\" and \"cleared\" are different requests.",
+			"patchSessionIn.target":   "Target re-dispatches a session to a run-target (the #48 association). \"\" detaches.",
+			"patchSessionIn.terminal": "Terminal publishes (or, with \"\", withdraws) the URL this session's live\nterminal can be watched at. A pointer so \"absent\" and \"withdrawn\" are\ndifferent requests: a session that stops sharing must be able to say so.",
+			"sessionView.host":        "Execution context (mission-control): the machine/repo/cwd a card shows and\nthe run-target a session is dispatched to. Omitted when a surface didn't report it.",
+			"sessionView.lastEvent":   "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
+			"sessionView.org":         "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
+			"sessionView.project":     "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+			"sessionView.terminal":    "Terminal is where this session can be WATCHED — the URL the machine\npublished for its live terminal. Omitted when it publishes none.",
 		},
 		Example: json.RawMessage(`{"id":"sess_1","status":"done"}`),
 	})
@@ -216,10 +221,12 @@ func init() {
 			"registerReq.host":      "Execution context — where this session runs (all optional).",
 			"registerReq.project":   "The readable build (provenance.go): which product this session builds, and\nwhether its story may be read by the world.",
 			"registerReq.provider":  "Account tag — the linked AI account this session ran under (login manager).",
+			"registerReq.terminal":  "Terminal is the URL this session's live terminal is published at, so the\nconsole can watch it. Optional — a session that publishes nothing is still\na session.",
 			"sessionView.host":      "Execution context (mission-control): the machine/repo/cwd a card shows and\nthe run-target a session is dispatched to. Omitted when a surface didn't report it.",
 			"sessionView.lastEvent": "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
 			"sessionView.org":       "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
 			"sessionView.project":   "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+			"sessionView.terminal":  "Terminal is where this session can be WATCHED — the URL the machine\npublished for its live terminal. Omitted when it publishes none.",
 		},
 		Example: json.RawMessage(`{"agent":"hanzo-dev","title":"ship the landing page","host":"gpu-01"}`),
 	})

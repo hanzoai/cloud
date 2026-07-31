@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package catalogsync is the REVERSE half of the storefront loop: it consumes the commerce COMMERCE stream and turns each `commerce.product.created` into ONE content.EnsureCatalogAsset call, so a newly-created catalog product gets its ecom asset rendered (design == slug) — the mirror of the forward edge (apps/content storefront.go) that publishes a rendered asset back onto the product image.",
     "version": "v1"
   },
   "servers": [

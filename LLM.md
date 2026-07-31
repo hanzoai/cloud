@@ -714,6 +714,27 @@ document pipeline" below.)
   product (`openapi.Product`), tagged onto each operation so a CLI can build
   `hanzo <product> <resource> <verb>` with no judgment. It is deliberately NOT the
   subsystem name: `apps/billing` also serves `/v1/finance/*`.
+  - **A tag's DESCRIPTION is the owning package's synopsis** (`openapi.Synopsis`,
+    openapi/synopsis.go). The owner is read from the app's own composition root —
+    `plugin/<app>/main.go` imports exactly the package it mounts — because four
+    apps are not named after their package (`audit`→`auditlog`, `evals`→`eval`,
+    `plugins`→`plugin`, `zero-trust`→`zt`) and one package backs two apps
+    (`account`, `account-bridge`), so a name-derived guess is right 107 times and
+    silently wrong 5. It is the comment that OPENS `Package …`, not go/doc's
+    first-file fallback: twenty packages open their alphabetically-first file with
+    a note about that file (`actions.go — the two GitOps write actions`) and state
+    the real package doc in `<name>.go`, so the fallback would publish a file note
+    as the `deploy` product's description.
+  - It is computed ONCE, when an app describes itself, and stamped into that app's
+    subset as `info.description` (describe.go); the weave lifts the tag prose off
+    the subsets it is already reading rather than looking the mapping up a second
+    time in a second process. The fleet identity (`fleetInfo`) stays the fallback
+    for a package with no doc, and the weave treats a part carrying it as having
+    said nothing. **106 of 112 apps** have a package doc; the tag NAME is never
+    conditional on one — the list stays a function of the document's operations,
+    so a consumer enumerating products loses none. Missing: `authz`, `licensing`,
+    `metrics` (their subsystem is another MODULE — nothing here to read), and
+    `commerce`, `security`, `bot` (local packages that document no package).
 - **What the router CANNOT tell you — do not try to fix this in the generator.**
   Method, path, path params, and product are derivable; request/response schemas,
   query/header params, status codes, and auth are NOT. The router holds a
@@ -869,6 +890,18 @@ one before it.
     document, so the prose never reached any of them either. `-run zipdoc` picks
     the directives out of `./...` by name, so a typed op added anywhere is
     covered and no unrelated generator fires.
+  - **The lifted prose no longer carries the handler's own name.** A Go doc
+    comment must open with the identifier it documents ("`GetSQL` returns one
+    database"), and that identifier is Go's, not the document's: it reached the
+    OpenAPI description, its derived summary, the MCP tool description an agent
+    reads, and the CLI help line — naming a function no caller can see. zip
+    v1.18.13 drops an EXACT leading match of the handler's own name and
+    re-capitalises ("Returns one database"); prose that merely opens with a
+    camel-case word keeps it. Requires zip >= v1.18.13. It strips only where the
+    comment names the function EXACTLY, so a method `revokeKey` whose comment
+    opens "RevokeKey revokes …" is left alone — the source is idiomatic Go either
+    way, and the rest of the fleet's leading identifiers go when their comments
+    match their handlers.
   - The same bug had a SECOND instance one projection over, and it outlived the
     first. zip's `mcpTools` read `op.Summary` — set only by an explicit
     `WithSummary`, which cloud uses nowhere because the doc comment is the source.

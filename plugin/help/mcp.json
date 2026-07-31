@@ -1,6 +1,6 @@
 [
   {
-    "description": "listArticles returns the public knowledge base: the help center's Published,\npublicly-visible articles as cards. The org is server-fixed and the\nstatus/is_public filter is server-set, so neither the tenant nor the visibility\ncan be widened by the caller. A deployment with no help center answers 404.",
+    "description": "Returns the public knowledge base: the help center's Published,\npublicly-visible articles as cards. The org is server-fixed and the\nstatus/is_public filter is server-set, so neither the tenant nor the visibility\ncan be widened by the caller. A deployment with no help center answers 404.",
     "inputSchema": {
       "properties": {
         "category": {
@@ -17,7 +17,7 @@
     "name": "get_v1_help_articles"
   },
   {
-    "description": "getArticle returns one public article by slug, with its body. A missing, Draft,\nor internal (non-public) article is 404 — fail-closed, so this route is no\nexistence oracle for anything beyond \"published and public\".",
+    "description": "Returns one public article by slug, with its body. A missing, Draft,\nor internal (non-public) article is 404 — fail-closed, so this route is no\nexistence oracle for anything beyond \"published and public\".",
     "inputSchema": {
       "properties": {
         "slug": {
@@ -30,7 +30,7 @@
     "name": "get_v1_help_articles_slug"
   },
   {
-    "description": "listCategories returns the knowledge-base sections for the public center's\nnavigation — but ONLY the sections that front at least one Published, public\narticle, so an internal (agent-only) category name or description never leaks. A\nsection with no public article is invisible; a center with no public articles has\nno sections, which is an empty list rather than an error.",
+    "description": "Returns the knowledge-base sections for the public center's\nnavigation — but ONLY the sections that front at least one Published, public\narticle, so an internal (agent-only) category name or description never leaks. A\nsection with no public article is invisible; a center with no public articles has\nno sections, which is an empty list rather than an error.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -38,7 +38,7 @@
     "name": "get_v1_help_categories"
   },
   {
-    "description": "fileTicket files a customer support ticket into the public help center. It\ncreates the ticket (status Open, source portal) with the customer's message on\nthe description, then records that same message as the opening entry of the\nticket's conversation thread; the description carries it regardless, so failing\nto write that entry loses nothing. Answers 201 with an opaque reference.\n\nA deployment with no help center answers 404, one whose center has not installed\nthe Help model answers 503, and a body over 64 KiB answers 413 — in that order,\nwhich is the order the route has always decided them in.",
+    "description": "Files a customer support ticket into the public help center. It\ncreates the ticket (status Open, source portal) with the customer's message on\nthe description, then records that same message as the opening entry of the\nticket's conversation thread; the description carries it regardless, so failing\nto write that entry loses nothing. Answers 201 with an opaque reference.\n\nA deployment with no help center answers 404, one whose center has not installed\nthe Help model answers 503, and a body over 64 KiB answers 413 — in that order,\nwhich is the order the route has always decided them in.",
     "inputSchema": {
       "properties": {
         "description": {

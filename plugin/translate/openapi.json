@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package translate serves POST /v1/translate — the ONE translation surface, two tiers behind one endpoint, one auth path, one meter (HIP-0516).",
     "version": "v1"
   },
   "servers": [

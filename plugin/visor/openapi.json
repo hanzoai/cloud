@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package visor mounts the Hanzo Cloud COMPUTE surface: the tenant's machines, GPUs and DOKS clusters, served as clean REST off the unified cloud binary and fronting Visor (the cloud OS at visor.hanzo.svc that OWNS compute).",
     "version": "v1"
   },
   "servers": [
@@ -34,8 +34,8 @@
     "/v1/clusters": {
       "get": {
         "operationId": "listClusters",
-        "summary": "listClusters returns the caller org's clusters from both sources: the managed clusters projected from Visor's node pools, and the BYO clusters attached to the caller's project.",
-        "description": "listClusters returns the caller org's clusters from both sources: the managed\nclusters projected from Visor's node pools, and the BYO clusters attached to the\ncaller's project. A Visor outage costs the managed half only — the BYO half\nstill lists, because a page that 502s on an optional provider is worse than a\npage that shows what it can.",
+        "summary": "Returns the caller org's clusters from both sources: the managed clusters projected from Visor's node pools, and the BYO clusters attached to the caller's project.",
+        "description": "Returns the caller org's clusters from both sources: the managed\nclusters projected from Visor's node pools, and the BYO clusters attached to the\ncaller's project. A Visor outage costs the managed half only — the BYO half\nstill lists, because a page that 502s on an optional provider is worse than a\npage that shows what it can.",
         "tags": [
           "clusters"
         ],
@@ -74,8 +74,8 @@
       },
       "post": {
         "operationId": "attachCluster",
-        "summary": "attachCluster attaches a BYO cluster to the caller's org — the kubeconfig is validated, KMS-sealed and added to the fleet — and answers 201 with the cluster as it now appears on GET /v1/clusters.",
-        "description": "attachCluster attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/clusters. Billed the nominal management fee: the\ncustomer brings the compute, Hanzo meters the management plane.",
+        "summary": "Attaches a BYO cluster to the caller's org — the kubeconfig is validated, KMS-sealed and added to the fleet — and answers 201 with the cluster as it now appears on GET /v1/clusters.",
+        "description": "Attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/clusters. Billed the nominal management fee: the\ncustomer brings the compute, Hanzo meters the management plane.",
         "tags": [
           "clusters"
         ],
@@ -121,8 +121,8 @@
     "/v1/clusters/{clusterId}/pools": {
       "post": {
         "operationId": "createNodePool",
-        "summary": "createPool adds a node pool to one of the caller org's clusters and answers 201 with the created pool.",
-        "description": "createPool adds a node pool to one of the caller org's clusters and answers 201\nwith the created pool. Only the CreateNodePoolSpec fields are forwarded;\nowner/provider/clusterId ride in the query exactly as Visor expects them.",
+        "summary": "Adds a node pool to one of the caller org's clusters and answers 201 with the created pool.",
+        "description": "Adds a node pool to one of the caller org's clusters and answers 201\nwith the created pool. Only the CreateNodePoolSpec fields are forwarded;\nowner/provider/clusterId ride in the query exactly as Visor expects them.",
         "tags": [
           "clusters"
         ],
@@ -177,8 +177,8 @@
     "/v1/clusters/{clusterId}/pools/{poolId}": {
       "delete": {
         "operationId": "deleteNodePool",
-        "summary": "deletePool removes a node pool from one of the caller org's clusters.",
-        "description": "deletePool removes a node pool from one of the caller org's clusters. The owner\nscopes the delete to the caller's tenant; provider+clusterId drive the\nprovider-side removal. Answers 204.",
+        "summary": "Removes a node pool from one of the caller org's clusters.",
+        "description": "Removes a node pool from one of the caller org's clusters. The owner\nscopes the delete to the caller's tenant; provider+clusterId drive the\nprovider-side removal. Answers 204.",
         "tags": [
           "clusters"
         ],
@@ -220,8 +220,8 @@
     "/v1/clusters/{clusterId}/pools/{poolId}/scale": {
       "post": {
         "operationId": "scaleNodePool",
-        "summary": "scalePool resizes a node pool to an absolute node count and returns the pool as Visor reports it after the change.",
-        "description": "scalePool resizes a node pool to an absolute node count and returns the pool as\nVisor reports it after the change.",
+        "summary": "Resizes a node pool to an absolute node count and returns the pool as Visor reports it after the change.",
+        "description": "Resizes a node pool to an absolute node count and returns the pool as\nVisor reports it after the change.",
         "tags": [
           "clusters"
         ],
@@ -281,8 +281,8 @@
     "/v1/clusters/{id}": {
       "delete": {
         "operationId": "detachCluster",
-        "summary": "detachCluster removes a BYO cluster from the caller org's fleet.",
-        "description": "detachCluster removes a BYO cluster from the caller org's fleet. It only ever\ntouches BYO clusters — a managed cluster's nodes are removed through the node-pool\nroutes — and answers 404 when the name is not in this org's fleet.",
+        "summary": "Removes a BYO cluster from the caller org's fleet.",
+        "description": "Removes a BYO cluster from the caller org's fleet. It only ever\ntouches BYO clusters — a managed cluster's nodes are removed through the node-pool\nroutes — and answers 404 when the name is not in this org's fleet.",
         "tags": [
           "clusters"
         ],
@@ -317,8 +317,8 @@
     "/v1/compute/bots": {
       "get": {
         "operationId": "listBots",
-        "summary": "listBots returns the caller org's bot machines — the kind=bot machines — each joined with the agent binding that says which cloud Agent it runs.",
-        "description": "listBots returns the caller org's bot machines — the kind=bot machines — each\njoined with the agent binding that says which cloud Agent it runs.\n\nThe bindings are read ONCE and joined by machine id, so the list is O(1) upstream\ncalls, not N+1. A bindings read that fails only costs the reconciled status: a bot\nstill lists without it.",
+        "summary": "Returns the caller org's bot machines — the kind=bot machines — each joined with the agent binding that says which cloud Agent it runs.",
+        "description": "Returns the caller org's bot machines — the kind=bot machines — each\njoined with the agent binding that says which cloud Agent it runs.\n\nThe bindings are read ONCE and joined by machine id, so the list is O(1) upstream\ncalls, not N+1. A bindings read that fails only costs the reconciled status: a bot\nstill lists without it.",
         "tags": [
           "compute"
         ],
@@ -362,8 +362,8 @@
     "/v1/compute/bots/{id}": {
       "delete": {
         "operationId": "deleteBot",
-        "summary": "deleteBot tears down both halves of a bot: it unbinds the agent (best-effort — a bot with no binding still deletes), then terminates the machine.",
-        "description": "deleteBot tears down both halves of a bot: it unbinds the agent (best-effort — a\nbot with no binding still deletes), then terminates the machine. Answers 204.",
+        "summary": "Tears down both halves of a bot: it unbinds the agent (best-effort — a bot with no binding still deletes), then terminates the machine.",
+        "description": "Tears down both halves of a bot: it unbinds the agent (best-effort — a\nbot with no binding still deletes), then terminates the machine. Answers 204.",
         "tags": [
           "compute"
         ],
@@ -386,8 +386,8 @@
       },
       "get": {
         "operationId": "getBot",
-        "summary": "getBot returns one of the caller org's bot machines with its agent binding.",
-        "description": "getBot returns one of the caller org's bot machines with its agent binding.\n\nA machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent\nbinding — either signal is authoritative, so a bot resolves even before its\ncloud-init has stamped every tag. A machine that is neither is 404: this route\nanswers for bots, not for machines.",
+        "summary": "Returns one of the caller org's bot machines with its agent binding.",
+        "description": "Returns one of the caller org's bot machines with its agent binding.\n\nA machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent\nbinding — either signal is authoritative, so a bot resolves even before its\ncloud-init has stamped every tag. A machine that is neither is 404: this route\nanswers for bots, not for machines.",
         "tags": [
           "compute"
         ],
@@ -472,8 +472,8 @@
     "/v1/fleet": {
       "get": {
         "operationId": "listFleet",
-        "summary": "listFleet returns every compute unit the caller's org has, from every source, each carrying its latest utilization: agent run-targets, the BYO machines that dialed in, attached BYO clusters and Visor-provisioned machines.",
-        "description": "listFleet returns every compute unit the caller's org has, from every source, each\ncarrying its latest utilization: agent run-targets, the BYO machines that dialed\nin, attached BYO clusters and Visor-provisioned machines.\n\nA unit with a live snapshot of its own keeps it; the rest are overlaid from the\nutilization series, and only when the sample agrees about the SOURCE — two planes\ncould mint the same unit id, and a board must never show one machine's load on\nanother's row. BYO GPU units also carry their gpu-jobs queue depth. Every source\nis folded in independently: a broken one costs its own rows and nothing else.",
+        "summary": "Returns every compute unit the caller's org has, from every source, each carrying its latest utilization: agent run-targets, the BYO machines that dialed in, attached BYO clusters and Visor-provisioned machines.",
+        "description": "Returns every compute unit the caller's org has, from every source, each\ncarrying its latest utilization: agent run-targets, the BYO machines that dialed\nin, attached BYO clusters and Visor-provisioned machines.\n\nA unit with a live snapshot of its own keeps it; the rest are overlaid from the\nutilization series, and only when the sample agrees about the SOURCE — two planes\ncould mint the same unit id, and a board must never show one machine's load on\nanother's row. BYO GPU units also carry their gpu-jobs queue depth. Every source\nis folded in independently: a broken one costs its own rows and nothing else.",
         "tags": [
           "fleet"
         ],
@@ -520,8 +520,8 @@
     "/v1/fleet/jobs": {
       "get": {
         "operationId": "listFleetJobs",
-        "summary": "listFleetJobs returns the caller org's gpu-jobs render queue, each row tagged with the GPU it targets (empty = the shared any-GPU lane) and the node claiming it, optionally narrowed to one GPU's queue and/or one status.",
-        "description": "listFleetJobs returns the caller org's gpu-jobs render queue, each row tagged with\nthe GPU it targets (empty = the shared any-GPU lane) and the node claiming it,\noptionally narrowed to one GPU's queue and/or one status.\n\nA job whose worker died — STARTED with an elapsed lease and not yet reclaimed —\nreads \"stalled\", not \"running\". Fail-soft: an unavailable tasks engine yields an\nempty queue rather than an error.",
+        "summary": "Returns the caller org's gpu-jobs render queue, each row tagged with the GPU it targets (empty = the shared any-GPU lane) and the node claiming it, optionally narrowed to one GPU's queue and/or one status.",
+        "description": "Returns the caller org's gpu-jobs render queue, each row tagged with\nthe GPU it targets (empty = the shared any-GPU lane) and the node claiming it,\noptionally narrowed to one GPU's queue and/or one status.\n\nA job whose worker died — STARTED with an elapsed lease and not yet reclaimed —\nreads \"stalled\", not \"running\". Fail-soft: an unavailable tasks engine yields an\nempty queue rather than an error.",
         "tags": [
           "fleet"
         ],
@@ -576,8 +576,8 @@
     "/v1/fleet/jobs/{id}/cancel": {
       "post": {
         "operationId": "cancelFleetJob",
-        "summary": "cancelFleetJob cancels a queued or running render in the caller's org.",
-        "description": "cancelFleetJob cancels a queued or running render in the caller's org. The engine\ncancel is org-scoped, so a tenant can only ever cancel its OWN job: a job in\nanother tenant's shard is 404, exactly like one that never existed. An\nalready-finished job is 409.",
+        "summary": "Cancels a queued or running render in the caller's org.",
+        "description": "Cancels a queued or running render in the caller's org. The engine\ncancel is org-scoped, so a tenant can only ever cancel its OWN job: a job in\nanother tenant's shard is 404, exactly like one that never existed. An\nalready-finished job is 409.",
         "tags": [
           "fleet"
         ],
@@ -626,8 +626,8 @@
     "/v1/fleet/samples": {
       "get": {
         "operationId": "listFleetSamples",
-        "summary": "listFleetSamples returns the caller org's utilization series, oldest first.",
-        "description": "listFleetSamples returns the caller org's utilization series, oldest first.\n\nA rejected narrower is a 400 carrying its own reason (the vocabulary is ours and\nsafe to echo); a warehouse failure is logged and answered 503 \"unavailable\",\nbecause a chart that silently reads \"no load\" when the truth is \"we cannot tell\"\nis worse than one that says so. An ABSENT warehouse is different again: it returns\nan empty series, which renders honestly as \"no samples yet\".",
+        "summary": "Returns the caller org's utilization series, oldest first.",
+        "description": "Returns the caller org's utilization series, oldest first.\n\nA rejected narrower is a 400 carrying its own reason (the vocabulary is ours and\nsafe to echo); a warehouse failure is logged and answered 503 \"unavailable\",\nbecause a chart that silently reads \"no load\" when the truth is \"we cannot tell\"\nis worse than one that says so. An ABSENT warehouse is different again: it returns\nan empty series, which renders honestly as \"no samples yet\".",
         "tags": [
           "fleet"
         ],
@@ -689,8 +689,8 @@
       },
       "post": {
         "operationId": "recordFleetSample",
-        "summary": "ingestSample records a BYO worker's live GPU utilization into the SAME series the fleet board overlays.",
-        "description": "ingestSample records a BYO worker's live GPU utilization into the SAME series the\nfleet board overlays. The org is the validated principal and source/kind are fixed\nserver-side, so a worker names only its own metrics — never another tenant or\nanother source. Answers 202: the warehouse write is DETACHED (its own bounded\ncontext, never in the response path), so a slow or absent warehouse cannot stall a\nheartbeat.",
+        "summary": "Records a BYO worker's live GPU utilization into the SAME series the fleet board overlays.",
+        "description": "Records a BYO worker's live GPU utilization into the SAME series the\nfleet board overlays. The org is the validated principal and source/kind are fixed\nserver-side, so a worker names only its own metrics — never another tenant or\nanother source. Answers 202: the warehouse write is DETACHED (its own bounded\ncontext, never in the response path), so a slow or absent warehouse cannot stall a\nheartbeat.",
         "tags": [
           "fleet"
         ],
@@ -733,8 +733,8 @@
     "/v1/fleet/workers": {
       "get": {
         "operationId": "listFleetWorkers",
-        "summary": "listFleetWorkers returns the caller org's BYO machines — the ones that dialed in via `hanzo link` — with everything each host reported about itself.",
-        "description": "listFleetWorkers returns the caller org's BYO machines — the ones that dialed in\nvia `hanzo link` — with everything each host reported about itself. The Machines\nand GPUs pages fold the same data into their normalized shapes; this is the\ncanonical raw list a fleet view (or the CLI's `status`) reads.",
+        "summary": "Returns the caller org's BYO machines — the ones that dialed in via `hanzo link` — with everything each host reported about itself.",
+        "description": "Returns the caller org's BYO machines — the ones that dialed in\nvia `hanzo link` — with everything each host reported about itself. The Machines\nand GPUs pages fold the same data into their normalized shapes; this is the\ncanonical raw list a fleet view (or the CLI's `status`) reads.",
         "tags": [
           "fleet"
         ],
@@ -774,8 +774,8 @@
     "/v1/gpus": {
       "get": {
         "operationId": "listGpus",
-        "summary": "listGPUs returns one row per physical accelerator the caller's org has, derived from its real GPU machines (the size slug says how many cards a node holds) and from the accelerators BYO workers report through nvidia-smi.",
-        "description": "listGPUs returns one row per physical accelerator the caller's org has, derived\nfrom its real GPU machines (the size slug says how many cards a node holds) and\nfrom the accelerators BYO workers report through nvidia-smi.\n\nLive telemetry is absent on Visor rows because Visor's machine object carries\nnone — an honest omission the console renders as \"—\", never a fabricated 0.",
+        "summary": "Returns one row per physical accelerator the caller's org has, derived from its real GPU machines (the size slug says how many cards a node holds) and from the accelerators BYO workers report through nvidia-smi.",
+        "description": "Returns one row per physical accelerator the caller's org has, derived\nfrom its real GPU machines (the size slug says how many cards a node holds) and\nfrom the accelerators BYO workers report through nvidia-smi.\n\nLive telemetry is absent on Visor rows because Visor's machine object carries\nnone — an honest omission the console renders as \"—\", never a fabricated 0.",
         "tags": [
           "gpus"
         ],
@@ -809,8 +809,8 @@
     "/v1/gpus/alerts": {
       "get": {
         "operationId": "listGpuAlerts",
-        "summary": "gpuAlerts is an HONEST empty surface: Visor exposes no GPU alert inventory, so this returns [] rather than fabricating alerts.",
-        "description": "gpuAlerts is an HONEST empty surface: Visor exposes no GPU alert inventory, so\nthis returns [] rather than fabricating alerts. It stays a real, tenant-gated\nroute so the console's alerts fetch resolves (200 [], not a 404) — an honest\n\"no alerts\", the same discipline the rest of the surface follows.",
+        "summary": "Is an HONEST empty surface: Visor exposes no GPU alert inventory, so this returns [] rather than fabricating alerts.",
+        "description": "Is an HONEST empty surface: Visor exposes no GPU alert inventory, so\nthis returns [] rather than fabricating alerts. It stays a real, tenant-gated\nroute so the console's alerts fetch resolves (200 [], not a 404) — an honest\n\"no alerts\", the same discipline the rest of the surface follows.",
         "tags": [
           "gpus"
         ],
@@ -834,8 +834,8 @@
     "/v1/k8s/clusters": {
       "get": {
         "operationId": "listKubernetesClusters",
-        "summary": "listK8sClusters lists the org's DOKS clusters (Visor, house account) folded with the org's BYO clusters — ONE fleet cluster view under the unified k8s noun.",
-        "description": "listK8sClusters lists the org's DOKS clusters (Visor, house account) folded with\nthe org's BYO clusters — ONE fleet cluster view under the unified k8s noun. A Visor\noutage is logged and skipped so a down optional provider never hides the BYO list.",
+        "summary": "Lists the org's DOKS clusters (Visor, house account) folded with the org's BYO clusters — ONE fleet cluster view under the unified k8s noun.",
+        "description": "Lists the org's DOKS clusters (Visor, house account) folded with\nthe org's BYO clusters — ONE fleet cluster view under the unified k8s noun. A Visor\noutage is logged and skipped so a down optional provider never hides the BYO list.",
         "tags": [
           "k8s"
         ],
@@ -868,8 +868,8 @@
       },
       "post": {
         "operationId": "createKubernetesCluster",
-        "summary": "createK8sCluster provisions a DOKS cluster for the caller's org and answers 201.",
-        "description": "createK8sCluster provisions a DOKS cluster for the caller's org and answers 201.\nADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because\nprovisioning spends real infrastructure on the house account. The request is\nvalidated at this boundary, then Visor owns provisioning and the hanzo-org\nownership tag.",
+        "summary": "Provisions a DOKS cluster for the caller's org and answers 201.",
+        "description": "Provisions a DOKS cluster for the caller's org and answers 201.\nADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because\nprovisioning spends real infrastructure on the house account. The request is\nvalidated at this boundary, then Visor owns provisioning and the hanzo-org\nownership tag.",
         "tags": [
           "k8s"
         ],
@@ -919,8 +919,8 @@
     "/v1/k8s/clusters/{id}": {
       "delete": {
         "operationId": "deleteKubernetesCluster",
-        "summary": "deleteK8sCluster destroys a DOKS cluster by id and answers 204.",
-        "description": "deleteK8sCluster destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like\ncreate. Visor scopes the delete to the org (refuses a foreign id), so this can\nonly ever remove the caller org's own cluster.",
+        "summary": "Destroys a DOKS cluster by id and answers 204.",
+        "description": "Destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like\ncreate. Visor scopes the delete to the org (refuses a foreign id), so this can\nonly ever remove the caller org's own cluster.",
         "tags": [
           "k8s"
         ],
@@ -943,8 +943,8 @@
       },
       "get": {
         "operationId": "getKubernetesCluster",
-        "summary": "getK8sCluster returns one cluster's detail: node pools + worker nodes.",
-        "description": "getK8sCluster returns one cluster's detail: node pools + worker nodes. Visor scopes\nthe lookup to the org (a foreign or missing id resolves to not-found), so a tenant\ncan never read another tenant's cluster by guessing an id.",
+        "summary": "Returns one cluster's detail: node pools + worker nodes.",
+        "description": "Returns one cluster's detail: node pools + worker nodes. Visor scopes\nthe lookup to the org (a foreign or missing id resolves to not-found), so a tenant\ncan never read another tenant's cluster by guessing an id.",
         "tags": [
           "k8s"
         ],
@@ -1000,8 +1000,8 @@
     "/v1/k8s/nodes": {
       "get": {
         "operationId": "listKubernetesNodes",
-        "summary": "listK8sNodes returns every DOKS worker node in the org's clusters as a machine — the SAME set the fleet folds in (managedMachines), exposed directly under the k8s noun.",
-        "description": "listK8sNodes returns every DOKS worker node in the org's clusters as a machine —\nthe SAME set the fleet folds in (managedMachines), exposed directly under the k8s\nnoun. House account (hanzo-org cluster tag) + BYOC, deduped by Visor.",
+        "summary": "Returns every DOKS worker node in the org's clusters as a machine — the SAME set the fleet folds in (managedMachines), exposed directly under the k8s noun.",
+        "description": "Returns every DOKS worker node in the org's clusters as a machine —\nthe SAME set the fleet folds in (managedMachines), exposed directly under the k8s\nnoun. House account (hanzo-org cluster tag) + BYOC, deduped by Visor.",
         "tags": [
           "k8s"
         ],
@@ -1034,8 +1034,8 @@
     "/v1/machines": {
       "get": {
         "operationId": "listMachines",
-        "summary": "listMachines returns every machine the caller's org has — Visor's registry, the live DigitalOcean droplets and the DOKS worker nodes (deduped into one union), plus the BYO machines that dialed in via `hanzo link` (provider \"byo\").",
-        "description": "listMachines returns every machine the caller's org has — Visor's registry, the\nlive DigitalOcean droplets and the DOKS worker nodes (deduped into one union),\nplus the BYO machines that dialed in via `hanzo link` (provider \"byo\").\n\nA source Visor cannot answer for is logged and skipped, never an error: one\nwedged upstream must not hide the machines the other sources can see.",
+        "summary": "Returns every machine the caller's org has — Visor's registry, the live DigitalOcean droplets and the DOKS worker nodes (deduped into one union), plus the BYO machines that dialed in via `hanzo link` (provider \"byo\").",
+        "description": "Returns every machine the caller's org has — Visor's registry, the\nlive DigitalOcean droplets and the DOKS worker nodes (deduped into one union),\nplus the BYO machines that dialed in via `hanzo link` (provider \"byo\").\n\nA source Visor cannot answer for is logged and skipped, never an error: one\nwedged upstream must not hide the machines the other sources can see.",
         "tags": [
           "machines"
         ],
@@ -1077,8 +1077,8 @@
     "/v1/machines/agents": {
       "get": {
         "operationId": "listMachineAgents",
-        "summary": "listAgents returns every agent↔machine binding in the caller's org — which machines are running which cloud Agent, with vm's own reconciled status.",
-        "description": "listAgents returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
+        "summary": "Returns every agent↔machine binding in the caller's org — which machines are running which cloud Agent, with vm's own reconciled status.",
+        "description": "Returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
         "tags": [
           "machines"
         ],
@@ -1109,8 +1109,8 @@
     "/v1/machines/{id}": {
       "delete": {
         "operationId": "deleteMachine",
-        "summary": "deleteMachine terminates one of the caller org's machines.",
-        "description": "deleteMachine terminates one of the caller org's machines. Visor takes the\nmachine identity as owner+name, and the owner is the validated principal, so a\ncaller can only ever terminate its own tenant's machine. Answers 204.",
+        "summary": "Terminates one of the caller org's machines.",
+        "description": "Terminates one of the caller org's machines. Visor takes the\nmachine identity as owner+name, and the owner is the validated principal, so a\ncaller can only ever terminate its own tenant's machine. Answers 204.",
         "tags": [
           "machines"
         ],
@@ -1133,8 +1133,8 @@
       },
       "get": {
         "operationId": "getMachine",
-        "summary": "getMachine returns one of the caller org's machines by its org-scoped name.",
-        "description": "getMachine returns one of the caller org's machines by its org-scoped name.\nVisor keys the lookup by owner/name, so an id belonging to another tenant\nresolves to not-found rather than another org's machine.",
+        "summary": "Returns one of the caller org's machines by its org-scoped name.",
+        "description": "Returns one of the caller org's machines by its org-scoped name.\nVisor keys the lookup by owner/name, so an id belonging to another tenant\nresolves to not-found rather than another org's machine.",
         "tags": [
           "machines"
         ],
@@ -1175,8 +1175,8 @@
     "/v1/machines/{id}/agent": {
       "delete": {
         "operationId": "unbindMachineAgent",
-        "summary": "unbindAgent detaches the agent runtime from one of the caller org's machines.",
-        "description": "unbindAgent detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204.",
+        "summary": "Detaches the agent runtime from one of the caller org's machines.",
+        "description": "Detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204.",
         "tags": [
           "machines"
         ],
@@ -1199,8 +1199,8 @@
       },
       "get": {
         "operationId": "getMachineAgent",
-        "summary": "getAgent returns the agent binding of one of the caller org's machines, or 404 when the machine runs no bot runtime.",
-        "description": "getAgent returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
+        "summary": "Returns the agent binding of one of the caller org's machines, or 404 when the machine runs no bot runtime.",
+        "description": "Returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
         "tags": [
           "machines"
         ],
@@ -1236,8 +1236,8 @@
       },
       "put": {
         "operationId": "bindMachineAgent",
-        "summary": "bindAgent binds a cloud Agent to one of the caller org's machines: the machine is recorded as running that Agent's @hanzo/bot runtime.",
-        "description": "bindAgent binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field.",
+        "summary": "Binds a cloud Agent to one of the caller org's machines: the machine is recorded as running that Agent's @hanzo/bot runtime.",
+        "description": "Binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field.",
         "tags": [
           "machines"
         ],

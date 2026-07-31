@@ -91,7 +91,11 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 	if !strings.Contains(get.Description, "org-scoped name") {
 		t.Errorf("description did not come from the handler doc comment: %q", get.Description)
 	}
-	if !strings.HasPrefix(get.Summary, "getMachine returns one of the caller org") {
+	// …and WITHOUT the leading `getMachine` the source comment opens with. The
+	// identifier belongs to Go's namespace, not the document's: zip strips an exact
+	// leading match of the handler's own name and re-capitalises (v1.18.13), so the
+	// summary reads as prose to the SDK, the MCP door and the CLI that print it.
+	if !strings.HasPrefix(get.Summary, "Returns one of the caller org") {
 		t.Errorf("summary = %q, want the doc comment's first sentence", get.Summary)
 	}
 	// A templated path MUST declare its parameter, and the parameter's help is the

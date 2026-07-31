@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package websearch exposes Hanzo-native Web Search + Scrape on the unified cloud-api /v1 plane, so hanzo.chat's web_search agent tool runs entirely on Hanzo infrastructure with NO external SaaS provider, per HIP-0106.",
     "version": "v1"
   },
   "servers": [

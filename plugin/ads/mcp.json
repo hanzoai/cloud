@@ -1,6 +1,6 @@
 [
   {
-    "description": "deleteCampaign removes one of the caller org's campaigns and answers 204 with\nno body. It deletes the stored record only: a campaign already launched keeps\nrunning on the ad network, which must be stopped there. An id another org owns\nreads as not found.",
+    "description": "Removes one of the caller org's campaigns and answers 204 with\nno body. It deletes the stored record only: a campaign already launched keeps\nrunning on the ad network, which must be stopped there. An id another org owns\nreads as not found.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -8,7 +8,7 @@
     "name": "delete_v1_ads_campaigns_id"
   },
   {
-    "description": "listCampaigns returns the caller org's ad campaigns, most recently updated\nfirst, optionally narrowed to one lifecycle status. The listing is bounded by\nthe org: another tenant's campaigns are not reachable from here at all.",
+    "description": "Returns the caller org's ad campaigns, most recently updated\nfirst, optionally narrowed to one lifecycle status. The listing is bounded by\nthe org: another tenant's campaigns are not reachable from here at all.",
     "inputSchema": {
       "properties": {
         "limit": {
@@ -25,7 +25,7 @@
     "name": "get_v1_ads_campaigns"
   },
   {
-    "description": "getCampaign returns one of the caller org's campaigns. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
+    "description": "Returns one of the caller org's campaigns. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -33,7 +33,7 @@
     "name": "get_v1_ads_campaigns_id"
   },
   {
-    "description": "summary rolls the caller org's ad campaigns up into four numbers: how many\ncampaigns exist, how many are active, and the summed budget and spend across\nall of them. Budget and spend are MINOR units (cents), the same units the\ncampaign rows carry. It counts only this org's campaigns.",
+    "description": "Rolls the caller org's ad campaigns up into four numbers: how many\ncampaigns exist, how many are active, and the summed budget and spend across\nall of them. Budget and spend are MINOR units (cents), the same units the\ncampaign rows carry. It counts only this org's campaigns.",
     "inputSchema": {
       "properties": {},
       "type": "object"
@@ -41,7 +41,7 @@
     "name": "get_v1_ads_summary"
   },
   {
-    "description": "createCampaign registers a new ad campaign for the caller's org and answers\n201 with the stored row. It only records the campaign — nothing is sent to the\nad network until POST /v1/ads/campaigns/{id}/launch runs it. The org is\nstamped by the server from the validated principal, so a body can never place\na campaign in another tenant.",
+    "description": "Registers a new ad campaign for the caller's org and answers\n201 with the stored row. It only records the campaign — nothing is sent to the\nad network until POST /v1/ads/campaigns/{id}/launch runs it. The org is\nstamped by the server from the validated principal, so a body can never place\na campaign in another tenant.",
     "inputSchema": {
       "properties": {
         "account": {
@@ -78,7 +78,7 @@
     "name": "post_v1_ads_campaigns"
   },
   {
-    "description": "updateCampaign replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution.",
+    "description": "Replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution.",
     "inputSchema": {
       "properties": {
         "account": {

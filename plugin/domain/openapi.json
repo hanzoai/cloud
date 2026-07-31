@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package domain is Hanzo Domains — the DOMAIN-REGISTRATION product: search a name, see its price (with Hanzo's markup), buy it billed through the customer's prepaid wallet, and have it born pointing at Hanzo's own authoritative nameservers.",
     "version": "v1"
   },
   "servers": [

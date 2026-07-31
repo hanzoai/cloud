@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package commerce is the merchant plane: checkout, subscriptions, invoices, spend alerts, payment webhooks and the store/catalog CMS, embedded from hanzoai/commerce and mounted on cloud's own router.",
     "version": "v1"
   },
   "servers": [
@@ -80,14 +80,6 @@
     "/v1/billing/payment-config": {
       "get": {
         "operationId": "get_v1_billing_payment-config",
-        "tags": [
-          "billing"
-        ]
-      }
-    },
-    "/v1/billing/payment-methods": {
-      "post": {
-        "operationId": "post_v1_billing_payment-methods",
         "tags": [
           "billing"
         ]

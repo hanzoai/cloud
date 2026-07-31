@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package admission is the launch-control GATE for Hanzo's hosted services — the COMPLETE waitlist feature, COMPOSING the ONE flag engine (apps/flags) one-way.",
     "version": "v1"
   },
   "servers": [

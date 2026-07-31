@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/world/limits", zip.Doc{
-		Description: "limits echoes a World plan's rate limits, alert quota and model-API grant, read\nstraight from the live @hanzo/plans catalog, so agents and dashboards configure\nthemselves against the catalog instead of hardcoding tier numbers.\n\nAn empty or unknown plan resolves world-free, and a catalog failure serves that\nsame free floor rather than erroring — so this always answers 200, and it can only\never under-grant. It reports the contract; it does not enforce it.",
+		Description: "Echoes a World plan's rate limits, alert quota and model-API grant, read\nstraight from the live @hanzo/plans catalog, so agents and dashboards configure\nthemselves against the catalog instead of hardcoding tier numbers.\n\nAn empty or unknown plan resolves world-free, and a catalog failure serves that\nsame free floor rather than erroring — so this always answers 200, and it can only\never under-grant. It reports the contract; it does not enforce it.",
 		Fields: map[string]string{
 			"limitsBlock.apiRateLimit": "APIRateLimit is requests per minute allowed against the REST /v1/world\nsurface. -1 means unlimited.",
 			"limitsBlock.maxAlerts":    "MaxAlerts is how many saved OSINT alert rules the plan allows. -1 means\nunlimited.",
@@ -21,7 +21,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/world/news", zip.Doc{
-		Description: "news returns the caller's merged world-news feed: every source their project's\npipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed —\nfetched concurrently, narrowed by the pipeline's keyword/region/source filters,\ndeduplicated by link and sorted freshest first, capped at 50 items.\n\nA project with no stored pipeline gets a sensible default set of world feeds\nrather than an empty answer. A source that fails or times out is SKIPPED: the feed\ndegrades to honest partial results and never 5xxs because one outlet was down.\nReading also publishes the result to the /v1/world/stream subscribers of the same\n(org, project), so a dashboard's own refresh updates every open tab.",
+		Description: "Returns the caller's merged world-news feed: every source their project's\npipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed —\nfetched concurrently, narrowed by the pipeline's keyword/region/source filters,\ndeduplicated by link and sorted freshest first, capped at 50 items.\n\nA project with no stored pipeline gets a sensible default set of world feeds\nrather than an empty answer. A source that fails or times out is SKIPPED: the feed\ndegrades to honest partial results and never 5xxs because one outlet was down.\nReading also publishes the result to the /v1/world/stream subscribers of the same\n(org, project), so a dashboard's own refresh updates every open tab.",
 		Fields: map[string]string{
 			"NewsItem.image":     "Image is a lead-image URL when the upstream carried one.",
 			"NewsItem.lang":      "Lang is the article's language code when the upstream reported one.",
@@ -34,7 +34,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/world/pipeline", zip.Doc{
-		Description: "pipeline returns the caller project's news pipeline: which feeds it reads and how\nthe merged result is filtered. A project that has never written one is answered\nwith the built-in world feeds and `default: true`, so a fresh project sees the\nsame feed /v1/world/news would actually serve rather than an empty configuration.",
+		Description: "Returns the caller project's news pipeline: which feeds it reads and how\nthe merged result is filtered. A project that has never written one is answered\nwith the built-in world feeds and `default: true`, so a fresh project sees the\nsame feed /v1/world/news would actually serve rather than an empty configuration.",
 		Fields: map[string]string{
 			"Filters.keywords":       "Keywords keeps only items whose TITLE contains one of these,\ncase-insensitively. They are also the GDELT queries the feed fans out to,\none per keyword of three characters or more — so a keyword both widens what\nis fetched and narrows what is kept.",
 			"Filters.regions":        "Regions keeps only items whose TITLE contains one of these, matched\ncase-insensitively as a substring. Empty keeps every region.",
@@ -49,7 +49,7 @@ func init() {
 		},
 	})
 	zip.Describe("PUT /v1/world/pipeline", zip.Doc{
-		Description: "setPipeline replaces the caller project's news pipeline and returns what was\nstored. It is a WHOLE replacement, not a patch: a field the request leaves out is\nstored empty, so sending only feeds clears the filters.\n\nEvery feed URL is validated HERE, at the write boundary — http(s) only, and the\nhost must be on the server's allowlist — so a stored pipeline can never name a\nhost the fetcher would later refuse, and the allowlist is one decision in one\nplace rather than a check at each fetch.",
+		Description: "Replaces the caller project's news pipeline and returns what was\nstored. It is a WHOLE replacement, not a patch: a field the request leaves out is\nstored empty, so sending only feeds clears the filters.\n\nEvery feed URL is validated HERE, at the write boundary — http(s) only, and the\nhost must be on the server's allowlist — so a stored pipeline can never name a\nhost the fetcher would later refuse, and the allowlist is one decision in one\nplace rather than a check at each fetch.",
 		Fields: map[string]string{
 			"Filters.keywords":       "Keywords keeps only items whose TITLE contains one of these,\ncase-insensitively. They are also the GDELT queries the feed fans out to,\none per keyword of three characters or more — so a keyword both widens what\nis fetched and narrows what is kept.",
 			"Filters.regions":        "Regions keeps only items whose TITLE contains one of these, matched\ncase-insensitively as a substring. Empty keeps every region.",

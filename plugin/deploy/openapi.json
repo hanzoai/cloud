@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package deploy is Hanzo CD: the GitOps plane at /v1/deploy — observe the operator-managed fleet (applications, resource tree, per-object health, live diff, logs), and reconcile it (sync, rollback, git → cluster with prune-safe self-heal).",
     "version": "v1"
   },
   "servers": [

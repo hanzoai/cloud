@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package analytics is the product-event plane: it owns the ingest door every Hanzo client posts to, lands each event in the `hanzo` warehouse, and serves the per-org read lenses — KPIs, time series, rankings, captured errors — over what it wrote.",
     "version": "v1"
   },
   "servers": [
@@ -267,6 +267,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/CaptureBatch"
+                  },
+                  {
+                    "$ref": "#/components/schemas/insightsBody"
                   }
                 ]
               }
@@ -337,35 +340,6 @@
               "schema": {
                 "type": "string",
                 "format": "binary"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/insights/e": {
-      "post": {
-        "operationId": "post_v1_insights_e",
-        "tags": [
-          "insights"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/insightsBody"
-              }
-            }
-          }
-        },
-        "responses": {
-          "2XX": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CaptureResult"
-                }
               }
             }
           }
