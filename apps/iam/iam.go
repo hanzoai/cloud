@@ -1,6 +1,9 @@
-// Package iam folds Hanzo IAM into the unified hanzoai/cloud binary as an
-// in-process subsystem (HIP-0106) — the LAST binary-consolidation piece:
-// "one Go binary (hanzoai/cloud) embeds IAM + KMS + o11y".
+// Package iam is Hanzo's identity provider: users, organizations, applications,
+// and the OIDC/OAuth2 endpoints every Hanzo service authenticates against.
+//
+// It folds Hanzo IAM into the unified hanzoai/cloud binary as an in-process
+// subsystem (HIP-0106) — the LAST binary-consolidation piece: "one Go binary
+// (hanzoai/cloud) embeds IAM + KMS + o11y".
 //
 // CLEAN IAM (v2). This subsystem embeds github.com/hanzoai/iam —
 // the clean-room identity rewrite on the native Hanzo stack (zip + hanzoai/orm +
