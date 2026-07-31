@@ -1,6 +1,11 @@
-// Package pricing mounts the @hanzo/pricing service into the unified cloud
-// binary under /v1/pricing/* (+ the /v1/models, /v1/gpu, /v1/tools aliases),
-// per HIP-0106.
+// Package pricing is the price list: what every model, provider, GPU tier, tool and
+// hosting plan costs, at /v1/pricing/* and /v1/pricing-policy — plus the enablement
+// registry that decides which catalog entries a caller may even see
+// (/v1/enablement{,/optin,/optout} and the SuperAdmin /v1/admin/{catalog,enablement}).
+//
+// It shares the @hanzo/plans catalog with apps/plan, so eight of its sections
+// (cloud, subscriptions, blockchain, gpu, tools, policy, and the cloud/{regions,storage}
+// pair) answer the same data /v1/plans/* answers at a second address.
 //
 // HONEST GOJA STATUS: @hanzo/pricing is an EXPRESS app. Express needs Node's
 // http/net stack and CANNOT run in goja. So the Express *transport* is dropped

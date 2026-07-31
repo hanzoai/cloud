@@ -1,3 +1,5 @@
+package pricing
+
 // The enablement REGISTRY surface (#30/#31) — the three-level model over the ONE
 // catalog overlay store: global off|beta|ga, per-org beta grants, and user
 // self-service beta opt-in. It reuses the SAME overlay the /v1/pricing catalog gate
@@ -18,7 +20,6 @@
 //     restores on the bearer-less path) — so a user can only ever enable their OWN
 //     org, and only for a BETA item: the store's OptIn refuses `ga` (already on)
 //     and `off` (the kill switch), so an opt-in can never bypass an admin `off`.
-package pricing
 
 import (
 	"context"
