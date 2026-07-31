@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -300,8 +301,11 @@ func (o ops) githubRepos(ctx context.Context, _ *noArgs) (*githubReposOut, error
 // import. Give repos[] or all:true — neither is a 400, because "import nothing"
 // is not a request worth queueing.
 type githubImportIn struct {
-	// Repos names the repositories to import: short names within the org's
-	// installation, with no owner prefix (a trailing ".git" is stripped).
+	// Repos names the repositories to import, either owner-qualified
+	// ("hanzo-apps/ai") or as a bare name ("ai"); a trailing ".git" is stripped.
+	// A bare name that matches more than one granted repository is an error
+	// rather than a guess, because one Hanzo org may hold several GitHub
+	// installations and a name is only unique within an owner.
 	// Ignored when all is true.
 	Repos []string `json:"repos"`
 	// All imports every repository the installation grants, instead of naming
@@ -334,6 +338,49 @@ type githubImportItem struct {
 //
 // Example: {"repos":["widgets"]}
 // Response: {"queued":1,"repos":["widgets"]}
+// selectImports resolves the caller's selectors against the installation's granted
+// set. A selector is either owner-qualified ("hanzo-apps/ai") or a bare name
+// ("ai"); the qualified form matches FullName and the bare form matches Name.
+//
+// A bare name is only unique within one owner, and a Hanzo org may hold several
+// GitHub installations — hanzoai/ai, hanzo-apps/ai and hanzo-docs/ai are three
+// repositories. A bare name reaching more than one of them is an error, so the
+// caller names the one it meant instead of receiving whichever the listing
+// reached first.
+func selectImports(granted []githubRepo, repos []string, all bool) ([]githubImportItem, error) {
+	want := map[string]bool{}
+	for _, n := range repos {
+		want[strings.TrimSuffix(strings.TrimSpace(n), ".git")] = true
+	}
+	hits := map[string][]string{} // selector -> the full names it reached
+	var items []githubImportItem
+	for _, r := range granted {
+		if r.Archived || r.Disabled { // un-fetchable — skip, never fabricate an import
+			continue
+		}
+		switch {
+		case all:
+		case want[r.FullName]:
+			hits[r.FullName] = append(hits[r.FullName], r.FullName)
+		case want[r.Name]:
+			hits[r.Name] = append(hits[r.Name], r.FullName)
+		default:
+			continue
+		}
+		items = append(items, githubImportItem{Name: r.Name, CloneURL: r.CloneURL})
+	}
+	for sel, full := range hits {
+		if len(full) > 1 {
+			sort.Strings(full)
+			return nil, zip.ErrBadRequest(fmt.Sprintf("%q matches %s; name one of them", sel, strings.Join(full, ", ")))
+		}
+	}
+	if len(items) == 0 {
+		return nil, zip.ErrBadRequest("no matching repositories are granted to the installation")
+	}
+	return items, nil
+}
+
 func (o ops) githubImport(ctx context.Context, in *githubImportIn) (*githubImportOut, error) {
 	org, err := authed(ctx, principalRequired)
 	if err != nil {
@@ -350,21 +397,9 @@ func (o ops) githubImport(ctx context.Context, in *githubImportIn) (*githubImpor
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
 	}
-	want := map[string]bool{}
-	for _, n := range in.Repos {
-		want[strings.TrimSuffix(strings.TrimSpace(n), ".git")] = true
-	}
-	var items []githubImportItem
-	for _, r := range granted {
-		if r.Archived || r.Disabled { // un-fetchable — skip, never fabricate an import
-			continue
-		}
-		if in.All || want[r.Name] {
-			items = append(items, githubImportItem{Name: r.Name, CloneURL: r.CloneURL})
-		}
-	}
-	if len(items) == 0 {
-		return nil, zip.ErrBadRequest("no matching repositories are granted to the installation")
+	items, err := selectImports(granted, in.Repos, in.All)
+	if err != nil {
+		return nil, err
 	}
 	spawnImport(org, items)
 	names := make([]string, 0, len(items))
