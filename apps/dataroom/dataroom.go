@@ -1,7 +1,10 @@
-// Package dataroom folds hanzoai/dataroom (a Papermark fork: Next.js + Prisma +
-// Postgres, "open-source DocSend/dataroom") FULLY into the unified hanzoai/cloud
-// binary as an in-process subsystem (HIP-0106, task #101 / epic #96). Cloud serves
-// the dataroom surface (/v1/dataroom/*) ITSELF — no standalone dataroom pod, no
+// Package dataroom is a secure document room you share by link and watch page by
+// page.
+//
+// It folds hanzoai/dataroom (a Papermark fork: Next.js + Prisma + Postgres,
+// "open-source DocSend/dataroom") FULLY into the unified hanzoai/cloud binary
+// as an in-process subsystem (HIP-0106, task #101 / epic #96). Cloud serves the
+// dataroom surface (/v1/dataroom/*) ITSELF — no standalone dataroom pod, no
 // Postgres, no Next.js.
 //
 // WRAP, DON'T REWRITE — the read-WRITE variant, on the SHARED binding. The dataroom

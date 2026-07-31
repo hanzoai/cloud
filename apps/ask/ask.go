@@ -1,6 +1,9 @@
-// Package ask is the UNIFIED GROUNDED ADVISOR: POST /v1/ask. A founder asks a plain-language
-// question ("what's my MRR?", "how long is my runway?") and gets an answer whose every figure is
-// a REAL value read from a domain endpoint in-process — never a number the model invented.
+// Package ask is a plain-language question about your business, answered with real numbers.
+//
+// It is the UNIFIED GROUNDED ADVISOR behind POST /v1/ask. A founder asks a
+// plain-language question ("what's my MRR?", "how long is my runway?") and gets
+// an answer whose every figure is a REAL value read from a domain endpoint
+// in-process — never a number the model invented.
 //
 // ONE AND ONE WAY. /v1/ask is DISTINCT from /v1/chat/completions (the ai subsystem's RAW model
 // completions) and from /v1/agent (the tool-calling orchestrator). Raw model → /v1/chat/completions;

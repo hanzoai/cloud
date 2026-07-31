@@ -1,7 +1,10 @@
-// Package knowledge is the org's knowledge base and agent memory at /v1/kb: wiki
-// pages, memories and connector-ingested documents are ONE framework document
-// store, indexed into the org's own vector namespace on every save and read back
-// as semantic search, a link graph, or an imported vault.
+// Package knowledge is your team's wiki and your agents' memory, searchable by
+// meaning.
+//
+// Wiki pages, memories and connector-ingested documents are ONE framework
+// document store at /v1/kb, indexed into the org's own vector namespace on
+// every save and read back as semantic search, a link graph, or an imported
+// vault.
 //
 // The model is declared here as DocType fixtures on the framework engine
 // (clients/framework), and index.go wires the ONE per-org vector path that turns

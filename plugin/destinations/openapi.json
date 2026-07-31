@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package destinations is server-side conversion forwarding: connect Google Analytics 4, Meta, X, LinkedIn, TikTok, Reddit, PostHog or Umami, and every event the org captures is translated into that platform's own conversion schema and sent from the server, with PII hashed on the way out.",
+    "description": "Package destinations is your events forwarded to the ad and analytics tools you use.",
     "version": "v1"
   },
   "servers": [

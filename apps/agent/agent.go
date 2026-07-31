@@ -1,7 +1,10 @@
-// Package agent mounts the hanzoai/agent orchestrator into cloud: POST /v1/agent
-// (+ /v1/agent/presets, /v1/agent/conversations). The orchestrator logic and its
+// Package agent is a conversation that uses your org's own tools to get an answer.
+//
+// It mounts the hanzoai/agent orchestrator into cloud: POST /v1/agent (+
+// /v1/agent/presets, /v1/agent/conversations). The orchestrator logic and its
 // per-org conversation history live in github.com/hanzoai/agent, which imports
-// NEITHER cloud NOR ai. Cloud is the composition root: it injects the two seams —
+// NEITHER cloud NOR ai. Cloud is the composition root: it injects the two seams
+// —
 //   - Completer: the ai subsystem's /v1/chat/completions, replayed in-process (the
 //     one path that returns tool_calls AND carries per-org reserve/settle billing);
 //   - ToolPlane: the unified tool registry (tools.Default()), so /v1/agent's

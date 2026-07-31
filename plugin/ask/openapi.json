@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package ask is the UNIFIED GROUNDED ADVISOR: POST /v1/ask.",
+    "description": "Package ask is a plain-language question about your business, answered with real numbers.",
     "version": "v1"
   },
   "servers": [

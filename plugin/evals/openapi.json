@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package eval is /v1/evals: score a model on YOUR data with YOUR judge — datasets, dataset items, evaluators, score configs, runs, scores and traces, per org.",
+    "description": "Package eval is scoring a model on your own data, with a judge you choose.",
     "version": "v1"
   },
   "servers": [

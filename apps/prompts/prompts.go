@@ -1,9 +1,10 @@
-// Package prompts mounts the Hanzo Cloud /v1/prompts surface: a per-org,
-// versioned prompt library. Every prompt belongs to exactly one org (the
-// gateway-minted X-Org-Id, HIP-0026); tenant isolation is the org column,
-// enforced on every query, so one tenant can never read or mutate another's
-// prompts. Creating a prompt whose name already exists appends a new version —
-// real, inspectable history, never a fabricated rollup.
+// Package prompts is your prompt library, versioned, so nothing changes silently.
+//
+// Every prompt belongs to exactly one org (the gateway-minted X-Org-Id,
+// HIP-0026); tenant isolation is the org column, enforced on every query, so
+// one tenant can never read or mutate another's prompts. Creating a prompt
+// whose name already exists appends a new version — real, inspectable history,
+// never a fabricated rollup.
 //
 // Surface (all org-scoped; the shape console's PromptsModule consumes):
 //

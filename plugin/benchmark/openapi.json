@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package benchmark mounts the Hanzo Cloud /v1/benchmark/* surface: the native benchmark ARENA — run the top-N canonical public benchmarks against any model or endpoint, under ONE standardized harness, measure Hanzo's own models (enso, zen), and reconcile any external provider-reported claim against that measurement.",
+    "description": "Package benchmark is one honest score for any model, on the tests everyone quotes.",
     "version": "v1"
   },
   "servers": [

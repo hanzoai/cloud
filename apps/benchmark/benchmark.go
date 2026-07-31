@@ -1,9 +1,11 @@
-// Package benchmark mounts the Hanzo Cloud /v1/benchmark/* surface: the native
-// benchmark ARENA — run the top-N canonical public benchmarks against any model or
-// endpoint, under ONE standardized harness, measure Hanzo's own models (enso, zen),
-// and reconcile any external provider-reported claim against that measurement.
-// Sibling to /v1/evals (evals = YOUR data + YOUR judge; benchmark =
-// the canonical public tests, comparable + provenance-first + leaderboard).
+// Package benchmark is one honest score for any model, on the tests everyone quotes.
+//
+// It is the native benchmark ARENA — run the top-N canonical public benchmarks
+// against any model or endpoint, under ONE standardized harness, measure
+// Hanzo's own models (enso, zen), and reconcile any external provider-reported
+// claim against that measurement. Sibling to /v1/evals (evals = YOUR data +
+// YOUR judge; benchmark = the canonical public tests, comparable +
+// provenance-first + leaderboard).
 //
 // Provenance-first, never blended: a `published_claim` (what a vendor reports) and a
 // `hanzo-measured` attempt (what OUR harness gets) are separate planes — the gap is
