@@ -8473,6 +8473,45 @@ components:
           description: AuthorizeURL is the provider consent (or bot deep-link) URL.
           type: string
       type: object
+    autoCreate:
+      properties:
+        data:
+          description: |-
+            Data is the flow graph — the product's nodes/edges document, verbatim:
+            nodes carry a piece type (webhook, schedule, http, set, branch) and its
+            config; edges wire them. Omit it to create an empty flow.
+        name:
+          description: Name is the flow's display name.
+          type: string
+      type: object
+    autoStart:
+      properties:
+        flow:
+          description: Flow is the id of the flow to run.
+          type: string
+        input:
+          description: |-
+            Input is the trigger payload handed to the run, verbatim JSON object.
+            The run's state starts as {"trigger": input}.
+      type: object
+    autoStatus:
+      properties:
+        reachable:
+          description: Reachable is true when the auto service answered its health
+            probe.
+          type: boolean
+      type: object
+    autoUpdate:
+      properties:
+        data:
+          description: Data replaces the flow graph when present, verbatim.
+        flow:
+          description: Flow is the flow's id, taken from the path.
+          type: string
+        name:
+          description: Name renames the flow when present.
+          type: string
+      type: object
     backfillQuery:
       properties:
         before:
@@ -25776,6 +25815,262 @@ paths:
       operationId: get_v1_authz_readyz
       tags:
       - authz
+  /v1/auto/flows:
+    get:
+      description: |-
+        Flows lists the caller's flows, newest first. The list is scoped by the
+        product to the caller's org — it can only ever hold the caller's own flows.
+      operationId: get_v1_auto_flows
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Flows lists the caller's flows, newest first.
+      tags:
+      - auto
+    post:
+      description: |-
+        FlowCreate creates a flow in the caller's org. The org is stamped
+        server-side from the validated principal — there is no field by which a
+        caller could place a flow in another org.
+      operationId: post_v1_auto_flows
+      requestBody:
+        content:
+          application/json:
+            example:
+              data:
+                edges: []
+                nodes:
+                - id: t
+                  type: webhook
+              name: notify-on-signup
+            schema:
+              $ref: '#/components/schemas/autoCreate'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: FlowCreate creates a flow in the caller's org.
+      tags:
+      - auto
+  /v1/auto/flows/{flow}:
+    delete:
+      description: |-
+        FlowDelete deletes one of the caller's flows. A foreign id answers 404 and
+        deletes nothing.
+      operationId: delete_v1_auto_flows_flow
+      parameters:
+      - description: Flow is the flow's id, taken from the path.
+        in: path
+        name: flow
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: FlowDelete deletes one of the caller's flows.
+      tags:
+      - auto
+    get:
+      description: |-
+        Flow reads one of the caller's flows — the full record, graph included. A
+        flow outside the caller's org answers 404, indistinguishable from one that
+        does not exist.
+      operationId: get_v1_auto_flows_flow
+      parameters:
+      - description: Flow is the flow's id, taken from the path.
+        in: path
+        name: flow
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Flow reads one of the caller's flows — the full record, graph included.
+      tags:
+      - auto
+    patch:
+      description: |-
+        FlowUpdate patches one of the caller's flows: the name, the graph, or both
+        — only the stated fields move.
+      operationId: patch_v1_auto_flows_flow
+      parameters:
+      - description: Flow is the flow's id, taken from the path.
+        in: path
+        name: flow
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: notify-on-signup-v2
+            schema:
+              $ref: '#/components/schemas/autoUpdate'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: 'FlowUpdate patches one of the caller''s flows: the name, the graph,
+        or both — only the stated fields move.'
+      tags:
+      - auto
+  /v1/auto/flows/{flow}/publish:
+    post:
+      description: |-
+        Publish snapshots the flow's current graph as its next immutable version
+        and arms the flow's triggers. Past versions stay addressable in the product
+        for rollback; runs always execute the graph as it was dispatched.
+      operationId: post_v1_auto_flows_flow_publish
+      parameters:
+      - description: Flow is the flow's id, taken from the path.
+        in: path
+        name: flow
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Publish snapshots the flow's current graph as its next immutable version
+        and arms the flow's triggers.
+      tags:
+      - auto
+  /v1/auto/pieces:
+    get:
+      description: |-
+        Pieces lists the product's built-in piece catalog: the trigger and action
+        types a flow's nodes can use (webhook, schedule, http, set, branch), each
+        with its input descriptors. The catalog is compiled into the product —
+        adding a piece is a product release, not a platform call.
+      operationId: get_v1_auto_pieces
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: 'Pieces lists the product''s built-in piece catalog: the trigger and
+        action types a flow''s nodes can use (webhook, schedule, http, set, branch),
+        each with its input descriptors.'
+      tags:
+      - auto
+  /v1/auto/runs:
+    get:
+      description: |-
+        Runs lists the caller's run records, newest first — optionally one flow's.
+        Each record carries the run's status (queued, running, completed, failed),
+        its input, and its output once the run finished.
+      operationId: get_v1_auto_runs
+      parameters:
+      - description: Flow narrows the list to one flow's runs when present.
+        in: query
+        name: flow
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Runs lists the caller's run records, newest first — optionally one
+        flow's.
+      tags:
+      - auto
+    post:
+      description: |-
+        Start begins one asynchronous run of a flow: the product dispatches the
+        graph to its durable execution engine (the hanzo tasks plane) and answers
+        immediately with the run record in status running. Poll the run until it
+        reaches completed — its output then holds each node's result keyed by node
+        id — or failed, with the error. A flow whose engine is unreachable answers
+        the product's 503: dispatch is real or it is refused, never queued into the
+        void.
+      operationId: post_v1_auto_runs
+      requestBody:
+        content:
+          application/json:
+            example:
+              flow: k2fj93m1x8qplzv
+              input:
+                who: world
+            schema:
+              $ref: '#/components/schemas/autoStart'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: 'Start begins one asynchronous run of a flow: the product dispatches
+        the graph to its durable execution engine (the hanzo tasks plane) and answers
+        immediately with the run record in status running.'
+      tags:
+      - auto
+  /v1/auto/runs/{run}:
+    get:
+      description: |-
+        Run reads one run record: status, input, output (each executed node's
+        result keyed by node id once completed), error detail if it failed, and
+        timestamps. A run outside the caller's org answers 404.
+      operationId: get_v1_auto_runs_run
+      parameters:
+      - description: Run is the run's id, taken from the path.
+        in: path
+        name: run
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: 'Run reads one run record: status, input, output (each executed node''s
+        result keyed by node id once completed), error detail if it failed, and timestamps.'
+      tags:
+      - auto
+  /v1/auto/status:
+    get:
+      description: |-
+        Status reports whether the auto service is reachable — its own health
+        endpoint as an honest lens for "is the automation plane up".
+      operationId: get_v1_auto_status
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/autoStatus'
+          description: ok
+      summary: Status reports whether the auto service is reachable — its own health
+        endpoint as an honest lens for "is the automation plane up".
+      tags:
+      - auto
   /v1/automations/connectors:
     get:
       description: |-
@@ -50383,6 +50678,9 @@ tags:
     you get paid.'
   name: authors
 - name: authz
+- description: 'Package auto is Hanzo Auto: durable workflow automation — flows built
+    from trigger/action pieces, executed as durable runs on the hanzo tasks plane.'
+  name: auto
 - description: Package automations is workflows that run themselves, on a schedule
     or a webhook.
   name: automations

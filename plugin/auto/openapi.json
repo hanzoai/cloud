@@ -1,0 +1,404 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package auto is Hanzo Auto: durable workflow automation — flows built from trigger/action pieces, executed as durable runs on the hanzo tasks plane.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "auto"
+    }
+  ],
+  "paths": {
+    "/v1/auto/flows": {
+      "get": {
+        "operationId": "get_v1_auto_flows",
+        "summary": "Flows lists the caller's flows, newest first.",
+        "description": "Flows lists the caller's flows, newest first. The list is scoped by the\nproduct to the caller's org — it can only ever hold the caller's own flows.",
+        "tags": [
+          "auto"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_auto_flows",
+        "summary": "FlowCreate creates a flow in the caller's org.",
+        "description": "FlowCreate creates a flow in the caller's org. The org is stamped\nserver-side from the validated principal — there is no field by which a\ncaller could place a flow in another org.",
+        "tags": [
+          "auto"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "data": {
+                  "edges": [],
+                  "nodes": [
+                    {
+                      "id": "t",
+                      "type": "webhook"
+                    }
+                  ]
+                },
+                "name": "notify-on-signup"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/autoCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/auto/flows/{flow}": {
+      "delete": {
+        "operationId": "delete_v1_auto_flows_flow",
+        "summary": "FlowDelete deletes one of the caller's flows.",
+        "description": "FlowDelete deletes one of the caller's flows. A foreign id answers 404 and\ndeletes nothing.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "flow",
+            "in": "path",
+            "required": true,
+            "description": "Flow is the flow's id, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_v1_auto_flows_flow",
+        "summary": "Flow reads one of the caller's flows — the full record, graph included.",
+        "description": "Flow reads one of the caller's flows — the full record, graph included. A\nflow outside the caller's org answers 404, indistinguishable from one that\ndoes not exist.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "flow",
+            "in": "path",
+            "required": true,
+            "description": "Flow is the flow's id, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patch_v1_auto_flows_flow",
+        "summary": "FlowUpdate patches one of the caller's flows: the name, the graph, or both — only the stated fields move.",
+        "description": "FlowUpdate patches one of the caller's flows: the name, the graph, or both\n— only the stated fields move.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "flow",
+            "in": "path",
+            "required": true,
+            "description": "Flow is the flow's id, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "notify-on-signup-v2"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/autoUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/auto/flows/{flow}/publish": {
+      "post": {
+        "operationId": "post_v1_auto_flows_flow_publish",
+        "summary": "Publish snapshots the flow's current graph as its next immutable version and arms the flow's triggers.",
+        "description": "Publish snapshots the flow's current graph as its next immutable version\nand arms the flow's triggers. Past versions stay addressable in the product\nfor rollback; runs always execute the graph as it was dispatched.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "flow",
+            "in": "path",
+            "required": true,
+            "description": "Flow is the flow's id, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/auto/pieces": {
+      "get": {
+        "operationId": "get_v1_auto_pieces",
+        "summary": "Pieces lists the product's built-in piece catalog: the trigger and action types a flow's nodes can use (webhook, schedule, http, set, branch), each with its input descriptors.",
+        "description": "Pieces lists the product's built-in piece catalog: the trigger and action\ntypes a flow's nodes can use (webhook, schedule, http, set, branch), each\nwith its input descriptors. The catalog is compiled into the product —\nadding a piece is a product release, not a platform call.",
+        "tags": [
+          "auto"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/auto/runs": {
+      "get": {
+        "operationId": "get_v1_auto_runs",
+        "summary": "Runs lists the caller's run records, newest first — optionally one flow's.",
+        "description": "Runs lists the caller's run records, newest first — optionally one flow's.\nEach record carries the run's status (queued, running, completed, failed),\nits input, and its output once the run finished.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "flow",
+            "in": "query",
+            "required": false,
+            "description": "Flow narrows the list to one flow's runs when present.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_auto_runs",
+        "summary": "Start begins one asynchronous run of a flow: the product dispatches the graph to its durable execution engine (the hanzo tasks plane) and answers immediately with the run record in status running.",
+        "description": "Start begins one asynchronous run of a flow: the product dispatches the\ngraph to its durable execution engine (the hanzo tasks plane) and answers\nimmediately with the run record in status running. Poll the run until it\nreaches completed — its output then holds each node's result keyed by node\nid — or failed, with the error. A flow whose engine is unreachable answers\nthe product's 503: dispatch is real or it is refused, never queued into the\nvoid.",
+        "tags": [
+          "auto"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "flow": "k2fj93m1x8qplzv",
+                "input": {
+                  "who": "world"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/autoStart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/auto/runs/{run}": {
+      "get": {
+        "operationId": "get_v1_auto_runs_run",
+        "summary": "Run reads one run record: status, input, output (each executed node's result keyed by node id once completed), error detail if it failed, and timestamps.",
+        "description": "Run reads one run record: status, input, output (each executed node's\nresult keyed by node id once completed), error detail if it failed, and\ntimestamps. A run outside the caller's org answers 404.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "required": true,
+            "description": "Run is the run's id, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/auto/status": {
+      "get": {
+        "operationId": "get_v1_auto_status",
+        "summary": "Status reports whether the auto service is reachable — its own health endpoint as an honest lens for \"is the automation plane up\".",
+        "description": "Status reports whether the auto service is reachable — its own health\nendpoint as an honest lens for \"is the automation plane up\".",
+        "tags": [
+          "auto"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/autoStatus"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "autoCreate": {
+        "properties": {
+          "data": {
+            "description": "Data is the flow graph — the product's nodes/edges document, verbatim:\nnodes carry a piece type (webhook, schedule, http, set, branch) and its\nconfig; edges wire them. Omit it to create an empty flow."
+          },
+          "name": {
+            "description": "Name is the flow's display name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "autoStart": {
+        "properties": {
+          "flow": {
+            "description": "Flow is the id of the flow to run.",
+            "type": "string"
+          },
+          "input": {
+            "description": "Input is the trigger payload handed to the run, verbatim JSON object.\nThe run's state starts as {\"trigger\": input}."
+          }
+        },
+        "type": "object"
+      },
+      "autoStatus": {
+        "properties": {
+          "reachable": {
+            "description": "Reachable is true when the auto service answered its health probe.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "autoUpdate": {
+        "properties": {
+          "data": {
+            "description": "Data replaces the flow graph when present, verbatim."
+          },
+          "flow": {
+            "description": "Flow is the flow's id, taken from the path.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name renames the flow when present.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}
