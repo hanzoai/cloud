@@ -59,7 +59,21 @@ const (
 
 	PlatformFleet   = "platform_fleet"
 	TreasuryReserve = "treasury_reserve"
+
+	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
+	HostStart = "host_start"
 )
+
+// HostApp is the socket name the fleet router answers on. It is not an app —
+// there is no manifest row, no Mount and no prefix — it is the process that
+// LOADS the apps, and the only one that can start one.
+//
+// It exists because a lazy app has exactly one trigger: a request reaching one
+// of its prefixes. A plane call never touches the router, so an app reached only
+// over its socket was never started and the socket was never bound. That is not
+// a bug in laziness; it is a second door the loader has to open, and this names
+// it.
+const HostApp = "host"
 
 // Money is one amount, exactly. Decimal is the amount's own text and Currency
 // its ISO-style code; the two travel together so they cannot be separated in
@@ -296,4 +310,20 @@ type ReserveIn struct {
 // Reserved reports what was held.
 type Reserved struct {
 	Amount Money `json:"amount"`
+}
+
+// ---- host.start — waking a lazy app ----------------------------------------
+
+// StartIn names the app to bring up. It is the one plane input that names an APP
+// rather than acting for a tenant: the router owns no tenant data, and starting a
+// process is not a read of anyone's books.
+type StartIn struct {
+	App string `json:"app" validate:"required"`
+}
+
+// Started reports the address the app now serves its own routes on. The caller
+// does not use it — it dials the app's canonical socket — but a start that
+// reports nothing is indistinguishable from one that did not happen.
+type Started struct {
+	Addr string `json:"addr"`
 }
