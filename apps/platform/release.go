@@ -10,12 +10,12 @@
 // smoke — never a trigger for a build that might fail. The order is inverted from
 // the old tag-triggers-build design (which left phantom tags with no image behind
 // them → ImagePullBackOff): main push → compute version → build → smoke → tag →
-// notify, so any failure fails BEFORE the tag and leaves no receipt.
+// pin, so any failure fails BEFORE the tag and leaves no receipt.
 //
 // The whole pipeline is four injectable seams (releasePlan) run in strict order
 // (run), so the ordering invariant is enforced by construction and unit-tested
 // hermetically, while each concrete step (a k8s Job for build/smoke, a GitHub API
-// call for tag/notify) is wired once in releaseFor.
+// call for the tag, a git push for the pin) is wired once in releaseFor.
 
 package platform
 
@@ -48,8 +48,9 @@ const (
 	releaseRepoSlug = "hanzoai/cloud"
 	releaseRepoURL  = "https://github.com/hanzoai/cloud"
 	releaseFloor    = "1.786.0"
-	// releaseServiceName is the operator Service CR metadata.name for cloud's own
-	// self-publish (crs/cloud.yaml) — the target of the CR rollout.
+	// releaseServiceName is cloud's own name in the fleet inventory — the basename
+	// of its declaration at universe charts/app/values/hanzo/cloud.yaml, which is
+	// the file the release pins (pin.go).
 	releaseServiceName = "cloud"
 )
 
@@ -136,7 +137,7 @@ const (
 	stepBuilt
 	stepSmoked
 	stepTagged
-	stepNotified
+	stepPinned
 )
 
 func (s releaseStep) String() string {
@@ -147,8 +148,8 @@ func (s releaseStep) String() string {
 		return "smoked"
 	case stepTagged:
 		return "tagged"
-	case stepNotified:
-		return "notified"
+	case stepPinned:
+		return "pinned"
 	default:
 		return "none"
 	}
@@ -158,12 +159,12 @@ func (s releaseStep) String() string {
 // STOPS at the first failure, returning the highest step that fully succeeded. The
 // invariant enforced by construction: the tag seam is reached ONLY after build AND
 // smoke returned nil, so a git tag can never exist without a built, pushed and
-// smoke-passed image; notify runs only after the tag is minted.
+// smoke-passed image; the pin moves only after the tag is minted.
 type releasePlan struct {
-	build  func(context.Context) error
-	smoke  func(context.Context) error
-	tag    func(context.Context) error
-	notify func(context.Context) error
+	build func(context.Context) error
+	smoke func(context.Context) error
+	tag   func(context.Context) error
+	pin   func(context.Context) error
 }
 
 func (p releasePlan) run(ctx context.Context) (releaseStep, error) {
@@ -174,7 +175,7 @@ func (p releasePlan) run(ctx context.Context) (releaseStep, error) {
 		{stepBuilt, p.build},
 		{stepSmoked, p.smoke},
 		{stepTagged, p.tag},
-		{stepNotified, p.notify},
+		{stepPinned, p.pin},
 	}
 	reached := stepNone
 	for _, s := range steps {
@@ -190,7 +191,7 @@ func (p releasePlan) run(ctx context.Context) (releaseStep, error) {
 
 // startRelease drives native release semantics for cloud's self-publish on
 // /v1/runner: pin the commit, compute the next version, then in a DETACHED goroutine
-// build → smoke → tag → notify (releasePlan.run). It returns 202 immediately with
+// build → smoke → tag → pin (releasePlan.run). It returns 202 immediately with
 // the computed version and image; the pipeline outlives the request (like
 // buildFromPush). Because the tag is minted only after a proven image, a failure at
 // build or smoke leaves NO tag and universe is never told of a phantom version.
@@ -230,7 +231,7 @@ type ReleaseState struct {
 	SHA string `json:"sha"`
 	// Status is "releasing", "released" or "failed".
 	Status string `json:"status"`
-	// Reached is the last pipeline step completed: built, smoked, tagged, notified.
+	// Reached is the last pipeline step completed: built, smoked, tagged, pinned.
 	Reached string `json:"reached,omitempty"`
 	// Error is why it stopped, when it failed.
 	Error string `json:"error,omitempty"`
@@ -296,7 +297,7 @@ func Releases() []ReleaseState {
 var releasing atomic.Bool
 
 // launchRelease pins the commit, computes the next version, and starts the
-// DETACHED build → smoke → tag → notify pipeline, returning the build id and the
+// DETACHED build → smoke → tag → pin pipeline, returning the build id and the
 // image it will publish. It is the ONE release entry point: the /v1/runner HTTP
 // path and the push trigger both come through here, so a release cut by either
 // is the same pipeline with the same guards. Errors are zip errors so the HTTP
@@ -361,11 +362,12 @@ func launchRelease(s *cloud.Service[state], ctx context.Context, ref, repo, dock
 }
 
 // releaseFor assembles the production pipeline for one version. Each seam is the REAL
-// action — a k8s Job for build and smoke, a GitHub API call for tag and notify —
+// action — a k8s Job for build and smoke, a GitHub API call for the tag, a git
+// push for the pin —
 // wired once here so run stays a pure ordering. build launches the ONE privileged
 // direct-build core (launchDirectBuild, the same /v1/runner uses) and waits for the
 // image to be pushed; smoke boots that pushed image and waits for "listening"; tag
-// mints the receipt; notify rolls it to universe.
+// mints the receipt; pin moves the value in universe that makes the image live.
 func releaseFor(s *cloud.Service[state], repoURL, sha, image, tag, dockerfile, bldID string) releasePlan {
 	return releasePlan{
 		build: func(ctx context.Context) error {
@@ -378,40 +380,34 @@ func releaseFor(s *cloud.Service[state], repoURL, sha, image, tag, dockerfile, b
 			}
 			return nil
 		},
-		smoke:  func(ctx context.Context) error { return smokeImage(s, ctx, image, bldID) },
-		tag:    func(ctx context.Context) error { return tagRelease(s, ctx, releaseRepoSlug, sha, tag) },
-		notify: func(ctx context.Context) error { return rolloutRelease(s, ctx, image, sha) },
+		smoke: func(ctx context.Context) error { return smokeImage(s, ctx, image, bldID) },
+		tag:   func(ctx context.Context) error { return tagRelease(s, ctx, releaseRepoSlug, sha, tag) },
+		pin:   func(ctx context.Context) error { return rolloutRelease(s, ctx, image, sha) },
 	}
 }
 
 // rolloutRelease rolls the proven image live. It is the release pipeline's final
 // step, reached only AFTER the tag receipt is minted (build + smoke passed).
 //
-// ONE WRITER: patch the operator hanzo.ai/v1 Service CR's spec.image
-// (cloud.OnServiceRelease → rollout.go releaseService) and let the operator
-// reconcile the Deployment. No ArgoCD, no repository_dispatch, no git round-trip.
+// ONE WRITER: move image.tag in universe's charts/app/values/hanzo/cloud.yaml
+// (pin.go pinUniverse) and let cd.hanzo.ai reconcile it. That scalar IS what runs —
+// the fleet ApplicationSet's git generator reads those files, and nothing else
+// makes an image live.
 //
-// It used to write TWICE — the CR patch plus a repository_dispatch mirror at
-// hanzoai/universe — composed best-effort so the step passed if EITHER landed.
-// That made "what is live" a question with two answers that could disagree, and
-// the composition hid the disagreement: the patch fails, the mirror succeeds, and
-// the cluster and git now describe different production states with nothing
-// reporting a problem. The mirror was also never actually running — it reads
-// UNIVERSE_DISPATCH_TOKEN, which is not configured on the cloud deployment, so it
-// failed closed on every release and every rollout in production was already the
-// CR patch alone. Deleting it removes a phantom second writer, not a second path.
+// It used to patch an operator hanzo.ai/v1 App CR instead. The CRD kind exists, but
+// there is no `cloud` CR: cloud is reconciled by cd.hanzo.ai from the values file,
+// not by the operator. So the patch had nothing to write to, every release failed
+// here with the image built, smoked and tagged but NOT live, and v1.801.335 had to
+// be pinned by hand. Two beliefs about what makes an image live disagreed in the
+// source; the values file wins, because it is the one the cluster reads.
 //
-// The remaining failure is therefore reported honestly rather than tolerated: if
-// the CR patch cannot happen, the image is built, smoke-passed and tagged but NOT
-// live, and a release that says otherwise is worse than one that fails.
+// The failure is reported honestly rather than tolerated: if the pin cannot move,
+// the image is built, smoke-passed and tagged but NOT live, and a release that says
+// otherwise is worse than one that fails.
 func rolloutRelease(s *cloud.Service[state], ctx context.Context, image, sha string) error {
-	if !cloud.ServiceReleaserRegistered() {
-		return fmt.Errorf("fleet board not co-resident: no CR releaser registered, image %s is tagged but NOT live", image)
+	if err := pinUniverse(s, ctx, releaseServiceName, image, sha); err != nil {
+		return fmt.Errorf("pin %s in universe (image %s is tagged but NOT live): %w", releaseServiceName, image, err)
 	}
-	if err := cloud.OnServiceRelease(ctx, cloud.ServiceReleaseEvent{Service: releaseServiceName, Image: image, SHA: sha}); err != nil {
-		return fmt.Errorf("roll out %s via operator CR patch: %w", releaseServiceName, err)
-	}
-	s.Log.Info("release rolled out via operator CR patch", "service", releaseServiceName, "image", image)
 	return nil
 }
 
@@ -634,7 +630,7 @@ func isHex40(s string) bool {
 	return true
 }
 
-// ── receipt + notify seams (GitHub API) ──────────────────────────────────────
+// ── receipt seam (GitHub API) ────────────────────────────────────────────────
 
 // tagRelease mints the git tag on repo at sha via the GitHub refs API — the native
 // equivalent of release.yml's `git tag && git push`. Called ONLY after build + smoke
@@ -675,7 +671,7 @@ var releaseHTTP = &http.Client{Timeout: 30 * time.Second}
 // githubJSON performs one GitHub REST call: it marshals body (if non-nil), sets the
 // bearer + JSON headers, and decodes the response into out (if non-nil), returning
 // the status code so each caller applies its own success/collision policy. It is the
-// single outbound seam the release path uses — DRY across list, resolve, tag, notify.
+// single outbound seam the release path uses — DRY across list, resolve and tag.
 func githubJSON(s *cloud.Service[state], ctx context.Context, method, path, token string, body, out any) (int, error) {
 	var rdr io.Reader
 	if body != nil {
