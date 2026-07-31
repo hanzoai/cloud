@@ -171,6 +171,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted = s
 	routes(app, s)
+	exposeSettle(s)
 	s.Log.Info("x402 mounted", "network", s.State.cfg.Network, "chainId", s.State.cfg.ChainID,
 		"token", s.State.cfg.Token != "", "meter", s.State.meter != nil && s.State.meter.Enabled())
 	return nil
@@ -247,7 +248,7 @@ func Enforce() zip.Handler {
 		if !priced {
 			return c.Next() // the TABLE says this route is free — an answer, not a silence
 		}
-		g := run(s, c.Context(), c, c.Path(), terms)
+		g := run(s, c.Context(), principal.Ledger(c), c.Header(HeaderProof), c.Path(), terms)
 		if g.receipt != nil {
 			served(s, c.Context(), c, g.receipt)
 			return c.Next()
@@ -285,7 +286,11 @@ func Settle(ctx context.Context, resource string) error {
 		return fmt.Errorf("%w: x402 is not mounted in this process", ErrUnavailable)
 	}
 	c, _ := cloud.Request(ctx) // nil off the HTTP path; run refuses a PRICED resource there
-	g := run(s, ctx, c, resource, terms)
+	var payer, proof string
+	if c != nil {
+		payer, proof = principal.Ledger(c), c.Header(HeaderProof)
+	}
+	g := run(s, ctx, payer, proof, resource, terms)
 	if g.receipt != nil {
 		served(s, ctx, c, g.receipt)
 		return nil
@@ -300,16 +305,23 @@ func Settle(ctx context.Context, resource string) error {
 }
 
 // priceOf is THE free/priced decision, asked of the published price table. ok=false
-// means the resource costs nothing — no table published, no entry, or an entry whose
+// means the resource costs nothing — no table anywhere, no entry, or an entry whose
 // price is not positive, which are the same fact and answer the same way.
 //
 // It is deliberately separate from run and takes no service: whether something is
 // free must be answerable with nothing mounted and no request in hand, or a caller
 // that offers EVERY call to the payment seam cannot exist.
+//
+// TWO TRANSPORTS, ONE TABLE. The published Registry is a process-global installed
+// by marketplace.Mount, and the fleet runs one process per app — so in the x402
+// binary it is nil, and reading that as "nothing is priced" was the fail-OPEN half
+// of this defect. Nil now means "the table is not HERE", and the process that owns
+// it is asked. Only ErrNoPeer — a fleet with no marketplace in it at all — restores
+// the old answer, because then there really is no table to disagree with.
 func priceOf(ctx context.Context, resource string) (Terms, bool, error) {
 	r := currentRegistry()
 	if r == nil {
-		return Terms{}, false, nil // no price table ⇒ nothing is priced
+		return pricePeer(ctx, resource)
 	}
 	terms, priced, err := r.Price(ctx, resource)
 	if err != nil {
@@ -334,24 +346,25 @@ type gate struct {
 }
 
 // run is THE x402 enforcement for one PRICED resource: unpaid → challenge; paid →
-// verify, settle once, receipt. c carries the payer and the proof and is nil off the
-// HTTP path, where a priced resource has no attested payer and is refused rather
-// than served.
-func run(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, resource string, terms Terms) gate {
-	if c == nil {
-		return gate{status: http.StatusServiceUnavailable, code: "no_request",
-			msg: "a priced resource requires an attested request"}
-	}
-
+// verify, settle once, receipt.
+//
+// It takes the payer and the proof as VALUES rather than a *zip.Ctx, because the
+// process that holds the request is no longer necessarily the one that holds the
+// rail. Three callers pass them from three places and the policy is written once:
+// Enforce reads them off the request it is middleware on, Settle off the request
+// parked on the context, and the plane op off the capability and the body of an
+// internal call made by the process that does hold one. An empty payer is the same
+// refusal in all three — nobody to charge — whether that is an anonymous request or
+// no request at all.
+func run(s *cloud.Service[state], ctx context.Context, payer, proofHdr, resource string, terms Terms) gate {
 	// Ledger settlement debits an ORG ledger, so a validated payer is required.
-	payer := principal.Ledger(c)
 	if payer == "" {
 		return gate{status: http.StatusForbidden, code: "unbillable", msg: "sign in"}
 	}
 
 	// Resolve the recipient wallet the marketplace named (org-scoped in wallets, so
 	// a listing can only ever be paid into a wallet of its OWN publisher org).
-	target, ok := wallets.ResolvePaymentTarget(ctx, terms.RecipientOrg, terms.RecipientWalletID)
+	target, ok := payeeOf(ctx, terms.RecipientOrg, terms.RecipientWalletID)
 	if !ok {
 		s.Log.Error("x402: recipient wallet unresolved",
 			"resource", resource, "recipientOrg", terms.RecipientOrg, "wallet", terms.RecipientWalletID)
@@ -362,7 +375,7 @@ func run(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, resource stri
 	req := requirements(s.State.cfg, resource, terms, target.Address)
 
 	// CHALLENGE: no proof yet → 402 with the payment requirements.
-	proofHdr := strings.TrimSpace(c.Header(HeaderProof))
+	proofHdr = strings.TrimSpace(proofHdr)
 	if proofHdr == "" {
 		return challenge(req, "payment_required", "payment required for "+resource)
 	}
@@ -487,29 +500,75 @@ func settle(s *cloud.Service[state], ctx context.Context, req PaymentRequirement
 // that cannot move both sides does not happen at all; the caller answers 503 and the
 // resource is never served, so the worst case is an outage rather than a silent
 // half-transfer nobody can reconcile.
+//
+// The prepaid ledger has ONE writer and it is commerce's process, so in the shipped
+// fleet neither backend is here: both halves cross the plane, to the same peer, and
+// a debit that lands means the peer is up for the credit that follows. A credit that
+// fails anyway is REVERSED — same ledger, same idempotency discipline — because
+// "both sides or neither" is the property, and a compensating entry is how it stays
+// true once the first write has already landed.
 func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, payeeSubject string, amount money.Amount) error {
-	m := s.State.meter
-	if m == nil || !m.Enabled() {
-		return errors.New("x402: no metering spine to debit the payer")
+	if st.PayeeOrg == "" {
+		return errors.New("x402: no payee org to credit")
 	}
-	if _, err := m.Record(ctx, metering.Usage{
-		User: st.PayerOrg, Org: st.PayerOrg, Amount: amount, Currency: "usd",
-		Provider: providerLabel, Service: providerLabel, Model: st.Resource,
-		RequestID: st.ID, Status: "success",
-	}); err != nil {
+	if err := debitPayer(s, ctx, st, amount); err != nil {
 		return err
 	}
-	fin := finance.Current()
-	if fin == nil || st.PayeeOrg == "" {
-		return errors.New("x402: no ledger to credit the payee")
-	}
-	if _, err := fin.Deposit(ctx, types.DepositInput{
-		Org: st.PayeeOrg, Subject: payeeSubject, Amount: amount, Currency: "usd",
-		Ref: st.ID, Notes: "x402:" + st.Resource, Tags: "x402",
-	}); err != nil {
+	if err := creditPayee(ctx, st, payeeSubject, amount); err != nil {
+		if rerr := reversePayer(ctx, st, amount); rerr != nil {
+			// The buyer is down the money and the seller was never paid. Nothing
+			// is served (the caller answers 503 and no receipt is issued), so this
+			// is a number somebody has to find — it says so, with the id both
+			// entries are keyed on.
+			s.Log.Error("x402: settlement half-landed and would not reverse",
+				"id", st.ID, "payer", st.PayerOrg, "amount", amount.String(),
+				"credit", err, "reversal", rerr)
+		}
 		return err
 	}
 	return nil
+}
+
+// debitPayer moves the buyer's half. The metering spine when it is configured here
+// — which is also how paid usage reaches billing/usage — else the ledger's own
+// process over the plane, with the settlement id as the idempotency key on both.
+func debitPayer(s *cloud.Service[state], ctx context.Context, st *Settlement, amount money.Amount) error {
+	if m := s.State.meter; m != nil && m.Enabled() {
+		_, err := m.Record(ctx, metering.Usage{
+			User: st.PayerOrg, Org: st.PayerOrg, Amount: amount, Currency: "usd",
+			Provider: providerLabel, Service: providerLabel, Model: st.Resource,
+			RequestID: st.ID, Status: "success",
+		})
+		return err
+	}
+	return debitPeer(st, amount)
+}
+
+// creditPayee moves the seller's half, into the ledger of the org that published
+// the listing — never one the buyer named.
+func creditPayee(ctx context.Context, st *Settlement, payeeSubject string, amount money.Amount) error {
+	if fin := finance.Current(); fin != nil {
+		_, err := fin.Deposit(ctx, types.DepositInput{
+			Org: st.PayeeOrg, Subject: payeeSubject, Amount: amount, Currency: "usd",
+			Ref: st.ID, Notes: "x402:" + st.Resource, Tags: "x402",
+		})
+		return err
+	}
+	return creditPeer(st.PayeeOrg, payeeSubject, amount, st.ID, "x402:"+st.Resource)
+}
+
+// reversePayer undoes a debit whose credit did not land. Keyed on the settlement id
+// too, so the reversal is as exactly-once as the thing it reverses.
+func reversePayer(ctx context.Context, st *Settlement, amount money.Amount) error {
+	ref := st.ID + ":reversal"
+	if fin := finance.Current(); fin != nil {
+		_, err := fin.Deposit(ctx, types.DepositInput{
+			Org: st.PayerOrg, Subject: st.PayerOrg, Amount: amount, Currency: "usd",
+			Ref: ref, Notes: "x402:reversal:" + st.Resource, Tags: "x402",
+		})
+		return err
+	}
+	return creditPeer(st.PayerOrg, st.PayerOrg, amount, ref, "x402:reversal:"+st.Resource)
 }
 
 // settlementRef addresses one settlement by the id its receipt carries.

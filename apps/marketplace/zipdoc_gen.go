@@ -48,6 +48,9 @@ func init() {
 			"listingPage.listings": "Listings is every listing this org has published, private ones included\n(Public says which are discoverable by others).",
 		},
 	})
+	zip.Describe("POST /market/price", zip.Doc{
+		Description: "Price resolves what one resource costs and which wallet receives payment for it —\nthe listing store's answer, projected onto the internal plane for the process that\nenforces payment.\n\npriced=false means FREE, and it is an ANSWER: an unlisted tool, a listing with no\nprice, and any resource that is not a tool id all land there. A store failure is an\nERROR instead, because a caller must never read \"I could not look it up\" as \"it\ncosts nothing\".\n\nIt takes no tenant and reads none: the listings it answers from are the PUBLIC\nones, identical for every caller.\n\nThe recipient org and wallet come off the listing ROW — its publisher, and the\npayout wallet that publisher named — so they are on the reply and could not be on\nthe request. A buyer that could state either could buy at its own price or redirect\nthe credit.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+	})
 	zip.Describe("POST /v1/marketplace/install", zip.Doc{
 		Description: "Install activates one tool for the caller's own org and project. A marketplace\ninstall IS the tool plane's activation write — one store, one truth — so an\ninstalled capability is immediately dispatchable and a monetized one is priced\nfrom its listing at every call. The tool must resolve in the caller's scope, so\ninstalling something that does not exist is refused rather than recorded.",
 		Fields: map[string]string{
