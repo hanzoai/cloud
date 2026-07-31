@@ -66,31 +66,42 @@ package analytics
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
-// Event is the canonical analytics event — the entire ingest contract in four
+// Event is the canonical analytics event — the entire ingest contract in five
 // fields. Only these are first-class; everything else a caller wants to record
 // travels in Properties (the scrubber runs over it downstream, same as every
 // event). The tenant is NOT a field: it is resolved server-side from IAM, so a
 // caller can only ever write into its OWN org's partition.
 type Event struct {
 	Event      string         `json:"event"`      // event name (required; empty ⇒ dropped as unroutable)
+	Type       string         `json:"type"`       // canonical kind: pageview | error | identify | group | event (default)
 	DistinctID string         `json:"distinctId"` // the person/visitor id the caller owns
 	Time       string         `json:"time"`       // optional RFC3339; clamped to server-now on skew/absent
 	Properties map[string]any `json:"properties"` // everything non-core
 }
 
 // toCapture adapts the canonical Event onto the internal CaptureEvent the write
-// core consumes. Type is left empty (canonicalType ⇒ "event"); no $-property is
-// promoted to a column here — /v1/event stays a strict four-field contract, and
-// every non-core field the caller sent stays in Properties.
+// core consumes. No $-property is promoted to a column here — every non-core
+// field the caller sent stays in Properties.
+//
+// TYPE IS CARRIED, and it has to be. The kind is what the ANONYMOUS lane admits
+// on (publicKinds, public.go): canonicalType maps an empty Type to "event", which
+// is NOT allowlisted, so an Event that cannot say "pageview" is dropped — with a
+// 200 receipt — every single time. That made two of the three shapes this door
+// PUBLISHES (openapi.OneOf{Event, []Event, CaptureBatch}) totally lossy without a
+// credential while the third worked, which is a document that lies to any SDK
+// generated from it. One wire, three spellings, ONE meaning: whatever CaptureBatch
+// can express, the bare object and the bare array express too.
 func (e Event) toCapture() CaptureEvent {
 	return CaptureEvent{
 		Event:      e.Event,
+		Type:       e.Type,
 		DistinctID: e.DistinctID,
 		Timestamp:  e.Time,
 		Properties: e.Properties,
@@ -341,8 +352,36 @@ func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, dropped i
 //
 // So: identifiable credential that fails ⇒ 403. Unidentifiable bearer ⇒ the anonymous
 // lane, exactly as before this file learned about team tokens.
+// WHY bearerAPIKey IS HERE AND ingestKey IS NOT WIDENED. ingestKey returns only a
+// pk- so this door never SHADOWS the identity path: an hk-/sk- bearer is IAM's to
+// validate, and it arrives here already resolved (tenant ⇒ full capability) or not
+// at all. That is right, and it is not the question presented() asks. presented()
+// asks whether the caller PRESENTED an identifiable credential, and an hk-/sk-
+// bearer is identifiable by the SAME prefix authority every other carrier is judged
+// by — so a FAILED one is a misconfiguration and must refuse, exactly as the same
+// key refuses today on x-api-key. Without this it took the anonymous lane instead:
+// 200, with the caller's rows filed under $public, a partition its owner cannot
+// read. That is the precise silent-misfiling failure this function exists to
+// prevent, reached through the one carrier every Hanzo caller reaches for first.
 func presented(c *zip.Ctx) bool {
-	return ingestKey(c) != "" || projectKey(c) != "" || teamPresented(c)
+	return ingestKey(c) != "" || projectKey(c) != "" || bearerAPIKey(c) || teamPresented(c)
+}
+
+// bearerAPIKey reports whether Authorization carries an opaque platform key. It
+// reads cloud.APIKeyPrefixes — THE authority (auth_identity.go) — rather than
+// spelling the prefixes again, so widening the key family cannot leave this
+// predicate behind.
+func bearerAPIKey(c *zip.Ctx) bool {
+	tok := teamBearer(c.Header("Authorization"))
+	if tok == "" {
+		return false
+	}
+	for _, p := range cloud.APIKeyPrefixes {
+		if strings.HasPrefix(tok, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // handle is THE ingest pipeline and the ONE place in this package where trust level is
