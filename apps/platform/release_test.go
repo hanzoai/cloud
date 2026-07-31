@@ -139,8 +139,13 @@ func TestLaunchSmokeJob_CreatesJob(t *testing.T) {
 	if len(cmd) != 3 || cmd[0] != "/bin/sh" {
 		t.Fatalf("want sh wrapper, got %v", cmd)
 	}
-	if !strings.Contains(cmd[2], `"message":"listening"`) {
-		t.Fatalf("smoke script does not gate on \"listening\": %s", cmd[2])
+	// The needle must be the line the binary WRITES. This asserted
+	// `"message":"listening"` — which the zip transport has never logged, it logs
+	// "zip listening" — so it held the smoke gate to a string that could not match
+	// and the release could never pass smoke. A test that pins the wrong end of a
+	// contract is how the gate stayed broken while looking covered.
+	if !strings.Contains(cmd[2], `"message":"zip listening"`) {
+		t.Fatalf("smoke script does not gate on the line zip logs: %s", cmd[2])
 	}
 	env, _, _ := unstructured.NestedSlice(cm, "env")
 	got := map[string]string{}
@@ -151,9 +156,12 @@ func TestLaunchSmokeJob_CreatesJob(t *testing.T) {
 	if got["CLOUD_ENV"] != "smoke" || got["CLOUD_DATA_DIR"] != "/data" || got["CLOUD_KMS_MASTER_KEY_REF"] == "" {
 		t.Fatalf("smoke boot env wrong: %v", got)
 	}
+	// The secret must be one the build namespace actually holds. This named
+	// `kaniko-ghcr`, which does not exist there, so every smoke fell back to an
+	// anonymous pull — asserting the name proved only that the name was constant.
 	pull, _, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "imagePullSecrets")
-	if len(pull) != 1 || pull[0].(map[string]any)["name"] != "kaniko-ghcr" {
-		t.Fatalf("smoke must pull the image from GHCR: %v", pull)
+	if len(pull) != 1 || pull[0].(map[string]any)["name"] != buildPullSecret {
+		t.Fatalf("smoke must pull with the build namespace's credential: %v", pull)
 	}
 }
 
