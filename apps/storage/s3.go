@@ -1,8 +1,10 @@
-// Package s3 is the Fiber-facing subsystem that exposes an org-scoped S3
-// object-storage file manager as /v1/s3/* on the unified Hanzo Cloud binary
-// (HIP-0106). It is the DATA plane over the shared object store (SeaweedFS S3
-// gateway) — the companion to clients/provisioning, which is the CONTROL plane
-// (allocate/list/drop the s3 RESOURCE at /v1/s3 and /v1/s3/:name).
+// Package storage is object storage (/v1/s3): an org's buckets and the objects
+// inside them — list, create, delete, and presigned upload/download URLs — over
+// the shared SeaweedFS S3 gateway.
+//
+// It is the DATA plane over that store — the companion to apps/provisioning,
+// which is the CONTROL plane (allocate/list/drop the s3 RESOURCE at /v1/s3 and
+// /v1/s3/:name).
 //
 //	GET    /v1/s3/health                              — real probe (503 fail-closed); public
 //	GET    /v1/s3/buckets                             — list the caller's buckets;       JWT, org-scoped
