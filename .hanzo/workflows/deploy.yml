@@ -1,0 +1,309 @@
+# cloud — build the image, prove it boots, tag it, then ship it.
+#
+#   git.hanzo.ai push → act_runner (in-cluster, privileged dind)
+#   → docker build → ghcr.io/hanzoai/cloud:v<semver>
+#   → smoke → git tag → universe pin → cd.hanzo.ai reconciles
+#
+# THE RELEASE MOVED HERE FROM INSIDE CLOUD ITSELF. It used to live in
+# apps/platform/release.go, reached by POST /v1/runner {release:true}, which ran
+# build → smoke → tag → rollout in a goroutine detached with
+# context.WithoutCancel. That owner could not survive its own deploy.
+#
+# cloud runs at replicas: 1 with strategy: Recreate, and the LAST thing a release
+# does is move the pin that rolls that replica. Any sync of charts/app/values/
+# hanzo/cloud.yaml — a release's own pin, or an unrelated env edit by someone
+# else — terminates the only pod, and the detached goroutine dies with it,
+# mid-pipeline. The image is already pushed by then; the smoke, the tag and the
+# pin are not. What is left is a published version nobody can identify.
+#
+# That is not a race to tune. It is visible in the tag list: v1.801.326, 327,
+# 329 and 335 exist; 328, 330-334 and 336+ do not. Every gap is an orphaned
+# build. 336 and 337 were orphaned this way, and 338 died the same afternoon
+# when an unrelated CLOUD_ALERTS_SLACK_CHANNEL restore synced and rolled the pod
+# out from under it.
+#
+# So the release runs where every other service's release runs. cloud was the
+# only one doing it differently, and being different is what broke it.
+#
+# THE TWO REASONS IT WAS IN GO NO LONGER HOLD.
+#
+#   "The runtime image is alpine with git and no bash, curl or jq, and pin.sh
+#    needs all three." True of the RUNTIME image, and irrelevant here — that was
+#    only ever a constraint because the release was put inside the runtime. The
+#    forge runner is catthehacker/ubuntu:act-24.04 and has all three, which is
+#    why insights, analytics, studio and bot-hub already call pin.sh from it.
+#
+#   "pin.sh strips the leading v and this registry holds the v, so it would fail
+#    its own probe." Fixed since, in universe c58c1a808: pin.sh reads the prefix
+#    off the CURRENT pin and carries it through (PREFIX from CURRENT,
+#    TAG="${PREFIX}${VERSION}"). A v-prefixed service stays v-prefixed. cloud is
+#    v-prefixed like analytics, so this file follows analytics' shape.
+#
+# WHAT IS PRESERVED FROM THE GO PATH, because it was right:
+#
+#   The version maxes over BOTH published image tags AND git tags, never one
+#   alone (release.go nextVersion). The registry is the authority on what has
+#   been USED — an orphaned build publishes an image and no tag, so git alone
+#   would re-emit a live tag. But a tag can also outlive its image, so git alone
+#   is not a superset either. Taking the max of both is the only form that cannot
+#   collide, and the 1.786.0 floor rides along in the same sort.
+#
+#   The smoke gate, unchanged and still BEFORE the tag and BEFORE the pin. It is
+#   the reason cloud's releases are trustworthy: it boots the pushed image and
+#   requires it to reach "zip listening" with no crash signature. A tag is a
+#   receipt for an image that booted, so the tag can never name one that did not.
+#
+# WHY SMOKE RUNS IN DOCKER HERE AND NOT AS AN IN-CLUSTER JOB. release.go's
+# launchSmokeJob was itself described as "the in-container mirror of release.yml's
+# docker-run smoke" — the Job was the transplant, docker was the original. Coming
+# back to docker needs no kubeconfig, no RBAC in CI and no second failure domain,
+# and this runner already has the daemon it uses to build. The boot env is the
+# one smokeJobSpec used: a writable /data, CLOUD_ENV=smoke and a throwaway KMS
+# master key so the KMS plane mounts on its normal ready path.
+name: deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloud-${{ github.ref }}
+  # NOT cancel-in-progress. A cancelled release is precisely the failure this
+  # file exists to end: the image is pushed early and the tag and pin come last,
+  # so killing a run midway leaves another orphan. Releases queue instead — the
+  # version is derived at build time from what is published, so a queued run
+  # simply reads a newer registry and takes the next number.
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Must name a label a runner ACTUALLY advertises. The git-runners offer
+    # hanzo-build-linux-amd64; a label nothing offers does not fail, it queues
+    # until the 24h timeout — silence, not an error.
+    runs-on: [hanzo-build-linux-amd64]
+    # cloud builds ~28 subsystems and has run 15m, 17m and 20m42s. buildDeadline
+    # was raised 20m -> 30m in release.go for exactly this; the same bound
+    # applies here, plus room for smoke and the pin.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USER }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      # Derived from what is PUBLISHED **and** what is TAGGED, then proven unused
+      # before anything is pushed. See the header: neither source alone is a
+      # superset of the other, and cloud has live examples of both gaps.
+      - name: Next patch semver
+        id: ver
+        env:
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -fsSL -u "$GHCR_USER:$GHCR_TOKEN" \
+            "https://ghcr.io/token?scope=repository:hanzoai/cloud:pull&service=ghcr.io" | jq -r .token)
+
+          # What has been PUBLISHED.
+          REG=$(curl -fsSL -H "Authorization: Bearer $TOKEN" \
+            "https://ghcr.io/v2/hanzoai/cloud/tags/list?n=10000" \
+            | jq -r '.tags[]? | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' \
+            | sed 's/^v//')
+
+          # What has been TAGGED. ls-remote rather than /repos/../tags because the
+          # REST list paginates at 100 and this repo carries ~1700 refs; a page
+          # boundary that hides the newest tag would silently re-emit it.
+          #
+          # github.com, not the forge: release.go minted tags through the GitHub
+          # API, so that is where cloud's tags actually are. git.hanzo.ai's copy
+          # trails at v1.801.280 and reading it would compute v1.801.281 — a
+          # collision with fifty published images.
+          GIT=$(git ls-remote --tags "https://x-access-token:${GH_PAT}@github.com/hanzoai/cloud" \
+            | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' || true)
+
+          # The 1.786.0 floor is release.go's and rides along in the same sort.
+          LAST=$(printf '%s\n%s\n%s\n' "$REG" "$GIT" "1.786.0" \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+
+          # Fail loudly rather than guessing. A silent fallback would eventually
+          # re-emit a live tag, which is what this step exists to prevent.
+          if [ -z "${LAST:-}" ]; then
+            echo "::error::could not read published or tagged semver for cloud — refusing to guess the next patch"
+            exit 1
+          fi
+
+          IFS=. read -r MAJ MIN PAT <<<"$LAST"
+          NEXT="$MAJ.$MIN.$((PAT + 1))"
+
+          # 404 is the ONLY acceptable answer: anything else means the tag is
+          # taken (200) or we cannot tell (network/auth), and pushing on either
+          # risks a second digest behind an existing name.
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json' \
+            "https://ghcr.io/v2/hanzoai/cloud/manifests/v$NEXT")
+          if [ "$CODE" != "404" ]; then
+            echo "::error::refusing to push v$NEXT — manifest probe returned $CODE, expected 404 (tag taken, or existence unverifiable)"
+            exit 1
+          fi
+
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "highest seen v$LAST (registry + git tags) -> building v$NEXT"
+
+      - uses: docker/setup-buildx-action@v3
+        with: { driver: docker-container, driver-opts: network=host }
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}
+          # VERSION is what the binary reports as X-Api-Version. Without it the
+          # ldflag falls back to the `dev` default and a released image cannot
+          # say which release it is.
+          build-args: |
+            VERSION=v${{ steps.ver.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=v${{ steps.ver.outputs.version }}
+            org.opencontainers.image.source=https://github.com/hanzoai/cloud
+          secrets: |
+            GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
+
+      # build-push-action can exit 0 before the manifest resolves, so a green run
+      # could still mean a future ImagePullBackOff. Prove it pulls BEFORE the pin
+      # moves — pinning an image the registry cannot serve has no rollback path.
+      - name: Verify the pushed image resolves
+        run: |
+          set -euo pipefail
+          img="ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}"
+          for i in 1 2 3 4 5 6; do
+            docker buildx imagetools inspect "$img" >/dev/null 2>&1 && { echo "resolved $img"; exit 0; }
+            sleep 5
+          done
+          echo "::error::pushed image never resolved: $img"; exit 1
+
+      # THE GATE. Boot the image that was actually pushed and require it to reach
+      # "zip listening" without a crash signature. Byte-for-byte release.go's
+      # smokeScript, on release.go's boot env — a writable /data, CLOUD_ENV=smoke
+      # and a throwaway 32-byte master key so the KMS plane mounts on its normal
+      # ready path rather than a degraded one.
+      #
+      # The script is handed over base64 because it contains both single and
+      # double quotes (the `"message":"zip listening"` needle), and re-quoting it
+      # for `sh -c` is how a gate quietly stops matching what it is looking for.
+      - name: Smoke the pushed image
+        run: |
+          set -euo pipefail
+          img="ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}"
+
+          SMOKE_B64=$(base64 -w0 <<'SMOKE'
+          set -u
+          /cloud >/tmp/boot.log 2>&1 &
+          pid=$!
+          listening=0
+          for _ in $(seq 1 180); do
+            if grep -q '"message":"zip listening"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          cat /tmp/boot.log
+          if grep -Eiq 'metrics\.Mount|mount metrics|panic|want \*zip\.App' /tmp/boot.log; then echo 'SMOKE FAIL: startup-crash signature'; exit 1; fi
+          if [ "$listening" -ne 1 ]; then echo 'SMOKE FAIL: never reached listening'; exit 1; fi
+          kill -0 "$pid" 2>/dev/null || { echo 'SMOKE FAIL: exited after listening'; exit 1; }
+          echo 'SMOKE PASS'
+          SMOKE
+          )
+
+          docker run --rm \
+            --entrypoint /bin/sh \
+            --tmpfs /data:rw \
+            -e CLOUD_DATA_DIR=/data \
+            -e CLOUD_ENV=smoke \
+            -e CLOUD_KMS_MASTER_KEY_REF="$(head -c 32 /dev/urandom | base64 -w0)" \
+            "$img" -c "echo $SMOKE_B64 | base64 -d | sh"
+
+      # The receipt, minted only now: build pushed it, smoke proved it boots. A
+      # tag can therefore never name an image that did not start. Mirrors
+      # release.go tagRelease — same endpoint, same 422-is-a-collision reading —
+      # and points at github.com because that is where cloud's tags live.
+      - name: Tag the release
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          TAG="v${{ steps.ver.outputs.version }}"
+          CODE=$(curl -s -o /tmp/tag.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${GH_PAT}" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/hanzoai/cloud/git/refs" \
+            -d "{\"ref\":\"refs/tags/${TAG}\",\"sha\":\"${{ github.sha }}\"}")
+          if [ "$CODE" = "422" ]; then
+            echo "::error::tag ${TAG} already exists (collision)"; cat /tmp/tag.json; exit 1
+          fi
+          if [ "$CODE" != "201" ]; then
+            echo "::error::create tag ${TAG}: status $CODE"; cat /tmp/tag.json; exit 1
+          fi
+          echo "minted ${TAG} at ${{ github.sha }}"
+
+      # THE DEPLOY. Everything above publishes and proves an image; this is what
+      # makes production run it. cd.hanzo.ai watches hanzoai/universe, not the
+      # registry, so an image nothing points at is just bytes in ghcr.
+      - name: Ship it
+        env:
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          KMS_ORG: ${{ vars.KMS_ORG || 'hanzo' }}
+          KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
+          # pin.sh probes the registry before it moves anything; these let it read
+          # a private manifest instead of falling back to anonymous.
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          # Secrets come from KMS, never from a file or a repo variable.
+          KMS_TOKEN=$(curl -fsS "${KMS_ENDPOINT}/v1/kms/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
+            | jq -r '.accessToken // empty')
+          [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
+
+          PIN_TOKEN=$(curl -fsS \
+            "${KMS_ENDPOINT}/v1/kms/orgs/${KMS_ORG}/secrets/deploy/UNIVERSE_PIN_TOKEN?env=${KMS_SECRET_ENV}" \
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty')
+          [ -n "$PIN_TOKEN" ] || { echo "::error::UNIVERSE_PIN_TOKEN missing in KMS at ${KMS_ORG}/deploy (env ${KMS_SECRET_ENV})"; exit 1; }
+          echo "::add-mask::${PIN_TOKEN}"
+
+          # Shallow: universe is ~600MB of history and this needs one file from
+          # the tip.
+          git clone --quiet --depth 1 \
+            "https://x-access-token:${PIN_TOKEN}@git.hanzo.ai/hanzo/universe" /tmp/universe
+
+          # Another service can land its own pin between our clone and our push.
+          # That is a normal race, not a failure — but a shallow clone has no
+          # common history to rebase onto, so RE-APPLY rather than merge: reset to
+          # the new tip and pin again. Pinning is idempotent and derives
+          # everything from the file it finds, so the retry also re-checks the
+          # monotonic guard against whatever just landed.
+          for attempt in 1 2 3 4 5; do
+            /tmp/universe/charts/app/pin.sh cloud "$VERSION"
+
+            if git -C /tmp/universe push --quiet origin HEAD:main 2>/dev/null; then
+              echo "pinned cloud to v${VERSION}"; exit 0
+            fi
+
+            echo "universe moved under us (attempt ${attempt}/5) — re-applying on the new tip"
+            git -C /tmp/universe fetch --quiet --depth 1 origin main
+            git -C /tmp/universe reset --hard --quiet FETCH_HEAD
+          done
+          echo "::error::could not push the pin after 5 attempts"; exit 1
