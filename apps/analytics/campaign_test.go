@@ -16,8 +16,8 @@ func TestCampaignWhere_BindsOrgAndCampaignPositionally(t *testing.T) {
 	end := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 	where, args := campaignWhere("acme", "cmp_1", "", start, end)
 
-	if !strings.Contains(where, "tenant_id = ?") || !strings.Contains(where, "utm_campaign = ?") {
-		t.Fatalf("org + campaign must be bound placeholders, got %q", where)
+	if !strings.Contains(where, "org = ?") || !strings.Contains(where, "attributes['utm_campaign'] = ?") {
+		t.Fatalf("org + campaign must be bound placeholders (campaign via the attributes map), got %q", where)
 	}
 	if strings.Contains(where, "utm_content") {
 		t.Fatalf("no variant clause expected for whole-campaign read, got %q", where)
@@ -38,8 +38,8 @@ func TestCampaignWhere_VariantAppended(t *testing.T) {
 	start := time.Unix(0, 0).UTC()
 	end := time.Unix(1000, 0).UTC()
 	where, args := campaignWhere("acme", "cmp_1", "hero-b", start, end)
-	if !strings.Contains(where, "utm_content = ?") {
-		t.Fatalf("variant must add a bound utm_content clause, got %q", where)
+	if !strings.Contains(where, "attributes['utm_content'] = ?") {
+		t.Fatalf("variant must add a bound attributes['utm_content'] clause, got %q", where)
 	}
 	if len(args) != 5 || args[4] != "hero-b" {
 		t.Fatalf("variant must be the trailing bound arg, got %v", args)

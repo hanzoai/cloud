@@ -119,16 +119,16 @@ func TestAdmitPublic_DoorOwnsTheTenant(t *testing.T) {
 		if len(out) != 1 {
 			t.Fatalf("door %q: want 1 admitted event", doorOrg)
 		}
-		row, ok := normalizeEvent(doorOrg, time.Now(), out[0])
+		f, ok := normalize(doorOrg, time.Now(), out[0])
 		if !ok {
 			t.Fatalf("door %q: want routable", doorOrg)
 		}
-		if row.tenant != doorOrg {
-			t.Fatalf("row.tenant = %q, want the door's %q", row.tenant, doorOrg)
+		if f.org != doorOrg {
+			t.Fatalf("fact org = %q, want the door's %q", f.org, doorOrg)
 		}
-		if row.groupID != "" || row.personID != "" || row.properties != "" {
-			t.Fatalf("door %q: a body claim reached the row: group=%q person=%q props=%q",
-				doorOrg, row.groupID, row.personID, row.properties)
+		if f.attributes["group_id"] != "" || f.person != "" || len(f.attributes) != 0 {
+			t.Fatalf("door %q: a body claim reached the fact: group=%q person=%q attrs=%v",
+				doorOrg, f.attributes["group_id"], f.person, f.attributes)
 		}
 	}
 }
@@ -183,20 +183,20 @@ func TestAdmitPublic_ForeignOrgFieldsDropped(t *testing.T) {
 }
 
 // TestAdmitPublic_ForeignOrgNeverStamped drives the projection through the REAL
-// normalizer — the one function that stamps tenant_id — and proves the stored row
-// carries the public tenant, not the org the body named.
+// normalizer — the one function that stamps the fact's org — and proves the stored
+// fact carries the public tenant, not the org the body named.
 func TestAdmitPublic_ForeignOrgNeverStamped(t *testing.T) {
 	out, _ := admitPublic([]CaptureEvent{{Type: "pageview", GroupID: "maxpower"}})
 	// publicTenant is the org every /v1 door hands this lane (handle, event.go).
-	row, ok := normalizeEvent(publicTenant, time.Now(), out[0])
+	f, ok := normalize(publicTenant, time.Now(), out[0])
 	if !ok {
 		t.Fatal("want routable")
 	}
-	if row.tenant != publicTenant {
-		t.Fatalf("row.tenant = %q, want %q — an anonymous write must never land in a real org", row.tenant, publicTenant)
+	if f.org != publicTenant {
+		t.Fatalf("fact org = %q, want %q — an anonymous write must never land in a real org", f.org, publicTenant)
 	}
-	if row.tenant == "maxpower" || row.groupID == "maxpower" {
-		t.Fatalf("the body-named org reached the row: tenant=%q group=%q", row.tenant, row.groupID)
+	if f.org == "maxpower" || f.attributes["group_id"] == "maxpower" {
+		t.Fatalf("the body-named org reached the fact: org=%q group=%q", f.org, f.attributes["group_id"])
 	}
 }
 
@@ -246,11 +246,11 @@ func truncate(s string) string {
 	return s
 }
 
-// TestAdmitPublic_OnlyServerProperties: an anonymous row's properties are exactly what
+// TestAdmitPublic_OnlyServerProperties: an anonymous fact's attributes are exactly what
 // the SERVER put there — the $exception the shared tail folds and the $source the write
 // core stamps. No key the caller chose can be persisted. This walks the SAME composition
 // the handler does: admitPublic (projection) → foldException (ingestDecoded's tail) →
-// withSource (write core) → normalizeEvent (the row).
+// withSource (write core) → normalize (the fact).
 func TestAdmitPublic_OnlyServerProperties(t *testing.T) {
 	out, _ := admitPublic([]CaptureEvent{{
 		Type:       "error",
@@ -272,16 +272,18 @@ func TestAdmitPublic_OnlyServerProperties(t *testing.T) {
 	if _, ok := folded.Properties["$exception"]; !ok {
 		t.Fatalf("the typed error must be folded to $exception, got %v", folded.Properties)
 	}
-	// Through the real normalizer the stored JSON carries $exception + $source, nothing else.
-	row, ok := normalizeEvent(publicTenant, time.Now(), CaptureEvent{
-		Type: folded.Type, Properties: withSource(folded.Properties, sourceEvent),
+	// Through the real normalizer the stored attributes carry $exception + $source,
+	// nothing else. (The typed error itself also fills the fault body — the error
+	// fact's first-class message/class/group — but the attributes map is the one
+	// place a caller-chosen KEY could survive, so it is the map that is pinned.)
+	f, ok := normalize(publicTenant, time.Now(), CaptureEvent{
+		Type: folded.Type, Error: folded.Error, Properties: withSource(folded.Properties, sourceEvent),
 	})
 	if !ok {
 		t.Fatal("want routable")
 	}
-	stored := decodeProps(t, row.properties)
-	if len(stored) != 2 || stored["$source"] != "event" {
-		t.Fatalf("stored properties = %v, want exactly {$exception,$source}", stored)
+	if len(f.attributes) != 2 || f.attributes["$source"] != "event" || f.attributes["$exception"] == "" {
+		t.Fatalf("stored attributes = %v, want exactly {$exception,$source}", f.attributes)
 	}
 }
 
