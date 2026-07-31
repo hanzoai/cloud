@@ -52,7 +52,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -214,31 +213,112 @@ func EnsureEventsTable(ctx context.Context) error {
 // these; the server owns the tenant (tenant_id is NOT a field here — it can never
 // be set by the client).
 type CaptureEvent struct {
-	MessageID   string         `json:"messageId"`  // client idempotency id; server mints one if empty
-	Type        string         `json:"type"`       // pageview | event | identify | group
-	Event       string         `json:"event"`      // event name (type=event); pageview→$pageview
-	Timestamp   string         `json:"timestamp"`  // RFC3339; clamped to server-now on skew/absent
-	DistinctID  string         `json:"distinctId"` // resolved person/visitor id
-	AnonymousID string         `json:"anonymousId"`
-	PersonID    string         `json:"personId"`
-	SessionID   string         `json:"sessionId"`
-	Product     string         `json:"product"` // emitting surface: console|chat|app|site|admin
-	URL         string         `json:"url"`
-	Path        string         `json:"path"`
-	Referrer    string         `json:"referrer"`
-	UTM         UTM            `json:"utm"`
-	RefCode     string         `json:"refCode"`
-	Channel     string         `json:"channel"`
-	GroupID     string         `json:"groupId"`
-	SignupWeek  string         `json:"signupWeek"`
-	ProductID   string         `json:"productId"`
-	Quantity    uint32         `json:"quantity"`
-	Revenue     float64        `json:"revenue"`
-	Currency    string         `json:"currency"`
-	Error       *Exception     `json:"error"` // set on type:'error' events (folded into properties.$exception)
-	Properties  map[string]any `json:"properties"`
-	Library     string         `json:"library"`
-	LibraryVer  string         `json:"libraryVersion"`
+	MessageID   string     `json:"messageId"`  // client idempotency id; server mints one if empty
+	Type        string     `json:"type"`       // pageview | event | identify | group
+	Event       string     `json:"event"`      // event name (type=event); pageview→$pageview
+	Timestamp   string     `json:"timestamp"`  // RFC3339; clamped to server-now on skew/absent
+	DistinctID  string     `json:"distinctId"` // resolved person/visitor id
+	AnonymousID string     `json:"anonymousId"`
+	PersonID    string     `json:"personId"`
+	SessionID   string     `json:"sessionId"`
+	Product     string     `json:"product"` // emitting surface: console|chat|app|site|admin
+	URL         string     `json:"url"`
+	Path        string     `json:"path"`
+	Referrer    string     `json:"referrer"`
+	UTM         UTM        `json:"utm"`
+	RefCode     string     `json:"refCode"`
+	Channel     string     `json:"channel"`
+	GroupID     string     `json:"groupId"`
+	SignupWeek  string     `json:"signupWeek"`
+	ProductID   string     `json:"productId"`
+	Quantity    uint32     `json:"quantity"`
+	Revenue     float64    `json:"revenue"`
+	Currency    string     `json:"currency"`
+	Error       *Exception `json:"error"` // set on type:'error' events (folded into properties.$exception)
+
+	// THE OTEL SIGNALS. One envelope carries all four — event, log, span, metric —
+	// because they differ in their BODY, not in who sent them or when. Splitting the
+	// envelope per signal duplicates org, time, session and identity four ways and
+	// lets them drift; the fact plane (fact.go) reads one shape and writes one row.
+	//
+	// Each is a pointer so absent is distinct from empty: a pageview carries no Span,
+	// and a zero-valued one would be a span of duration 0 rather than no span at all.
+	Log    *LogBody    `json:"log"`
+	Span   *SpanBody   `json:"span"`
+	Metric *MetricBody `json:"metric"`
+
+	// Kind narrows Type when the surface knows more than the wire word does — a
+	// span's client/server role, a page's navigation kind. Empty means the route's
+	// own default, which is what every existing client sends.
+	Kind string `json:"kind"`
+
+	// SITE is the deployed property a signal came from, and it is carried on EVERY
+	// event, not only on a failure.
+	//
+	// It lived on the exception alone, so sentry.hanzo.ai could group faults by site
+	// while analytics.hanzo.ai — reading the event stream — had no site column at
+	// all, and "all sites" was a question the data could not answer. One property
+	// per row is what makes the two surfaces read the same world.
+	Site string `json:"site"`
+
+	// Level, Release, Environment and Service qualify a signal the same way for
+	// every kind: which severity, which build, which deployment, which service. They
+	// are not error-only either, for the same reason Site is not.
+	Level       string `json:"level"`
+	Release     string `json:"release"`
+	Environment string `json:"environment"`
+	Service     string `json:"service"`
+
+	// TraceID and SpanID correlate a signal to a trace whatever its body is, so a log
+	// and the span it was emitted inside join without either owning the other.
+	TraceID    string         `json:"traceId"`
+	SpanID     string         `json:"spanId"`
+	Properties map[string]any `json:"properties"`
+	Library    string         `json:"library"`
+	LibraryVer string         `json:"libraryVersion"`
+}
+
+// LogBody is the body of a log signal: OTel severity, its numeric rank, and the
+// message. The body is scrubbed at the one point it enters a fact, never here.
+type LogBody struct {
+	// Severity is the OTel severity text, lowercased on the way into a fact.
+	Severity string `json:"severity"`
+	// Number is the OTel severity NUMBER (1..24), which orders severities without
+	// parsing their text and survives a client that spells one differently.
+	Number uint8 `json:"number"`
+	// Body is the log message. It is scrubbed where it enters a fact, not here, so
+	// there is one scrub on one path.
+	Body string `json:"body"`
+}
+
+// SpanBody is the body of a span: its place in the trace and how it ended. ID and
+// Trace are carried here as well as on the envelope because a client that sends a
+// span knows them precisely, while a log only correlates.
+type SpanBody struct {
+	// ID is this span's own id, which a client emitting a span knows precisely.
+	ID string `json:"id"`
+	// Trace is the trace this span belongs to.
+	Trace string `json:"trace"`
+	// Parent is the enclosing span's id, empty for a root span.
+	Parent string `json:"parent"`
+	// Kind is the span's role — client, server, producer, consumer, internal.
+	Kind string `json:"kind"`
+	// Status is how the span ended: ok, error, or unset.
+	Status string `json:"status"`
+	// Duration is the elapsed time in nanoseconds. Unsigned because a span cannot
+	// take negative time.
+	Duration uint64 `json:"duration"`
+}
+
+// MetricBody is the body of a metric sample: what was measured, its value, and the
+// labels it is sliced by.
+type MetricBody struct {
+	// Name is what was measured, and it is also the fact's event name for a metric.
+	Name string `json:"name"`
+	// Value is the sample.
+	Value float64 `json:"value"`
+	// Labels are the dimensions the sample is sliced by.
+	Labels map[string]any `json:"labels"`
 }
 
 // UTM is the first-touch attribution the client persists and re-sends per event.
@@ -636,10 +716,9 @@ var resolveKeyOrg = cloud.OrgForKey
 // can read — the site-host carve could file a customer's beacons under the public
 // tenant, or the reverse, and every status code would be identical. The row's
 // tenant_id is the fact that matters here, so it has to be reachable.
-var (
-	warehouseReady = datastore.Ready
-	warehouseExec  = datastore.Exec
-)
+// warehouseReady and warehouseExec now live in warehouse.go, beside the writer that
+// uses them — one declaration, so a test substituting the store cannot substitute
+// only half of it.
 
 // projectKey returns the project/API key a keyed SDK presents OUT-OF-BAND of the
 // Authorization header — the transports SanitizeIdentity does NOT mint identity

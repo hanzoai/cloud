@@ -896,18 +896,28 @@ components:
           type: string
         distinctId:
           type: string
+        environment:
+          type: string
         error:
           $ref: '#/components/schemas/Exception'
         event:
           type: string
         groupId:
           type: string
+        kind:
+          type: string
+        level:
+          type: string
         library:
           type: string
         libraryVersion:
           type: string
+        log:
+          $ref: '#/components/schemas/LogBody'
         messageId:
           type: string
+        metric:
+          $ref: '#/components/schemas/MetricBody'
         path:
           type: string
         personId:
@@ -925,13 +935,25 @@ components:
           type: string
         referrer:
           type: string
+        release:
+          type: string
         revenue:
           type: number
+        service:
+          type: string
         sessionId:
           type: string
         signupWeek:
           type: string
+        site:
+          type: string
+        span:
+          $ref: '#/components/schemas/SpanBody'
+        spanId:
+          type: string
         timestamp:
+          type: string
+        traceId:
           type: string
         type:
           type: string
@@ -1911,6 +1933,10 @@ components:
       type: object
     Exception:
       properties:
+        frames:
+          items:
+            $ref: '#/components/schemas/Frame'
+          type: array
         handled:
           type: boolean
         message:
@@ -2385,6 +2411,17 @@ components:
           description: Name is the founder's full legal name, as it appears on the
             formation documents.
           type: string
+      type: object
+    Frame:
+      properties:
+        column:
+          type: integer
+        file:
+          type: string
+        function:
+          type: string
+        line:
+          type: integer
       type: object
     Funnel:
       properties:
@@ -3095,6 +3132,15 @@ components:
         status:
           type: string
       type: object
+    LogBody:
+      properties:
+        body:
+          type: string
+        number:
+          type: integer
+        severity:
+          type: string
+      type: object
     MCPServer:
       properties:
         authHeader:
@@ -3175,6 +3221,16 @@ components:
           items:
             $ref: '#/components/schemas/MemoryEntry'
           type: array
+      type: object
+    MetricBody:
+      properties:
+        labels:
+          additionalProperties: {}
+          type: object
+        name:
+          type: string
+        value:
+          type: number
       type: object
     Metrics:
       properties:
@@ -5027,6 +5083,21 @@ components:
         symbol:
           type: string
         tier:
+          type: string
+      type: object
+    SpanBody:
+      properties:
+        duration:
+          type: integer
+        id:
+          type: string
+        kind:
+          type: string
+        parent:
+          type: string
+        status:
+          type: string
+        trace:
           type: string
       type: object
     Spec:
@@ -43772,6 +43843,20 @@ paths:
           type: string
       tags:
       - sentry
+  /v1/sessions:
+    get:
+      operationId: get_v1_sessions
+      tags:
+      - sessions
+    post:
+      operationId: post_v1_sessions
+      tags:
+      - sessions
+  /v1/sessions/:id:
+    delete:
+      operationId: delete_v1_sessions_id
+      tags:
+      - sessions
   /v1/settings/{product}:
     get:
       description: |-
@@ -47793,6 +47878,7 @@ tags:
 - name: search-docs
 - name: security
 - name: sentry
+- name: sessions
 - name: settings
 - name: share
 - name: sites

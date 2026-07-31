@@ -637,6 +637,9 @@
           "distinctId": {
             "type": "string"
           },
+          "environment": {
+            "type": "string"
+          },
           "error": {
             "$ref": "#/components/schemas/Exception"
           },
@@ -646,14 +649,26 @@
           "groupId": {
             "type": "string"
           },
+          "kind": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
           "library": {
             "type": "string"
           },
           "libraryVersion": {
             "type": "string"
           },
+          "log": {
+            "$ref": "#/components/schemas/LogBody"
+          },
           "messageId": {
             "type": "string"
+          },
+          "metric": {
+            "$ref": "#/components/schemas/MetricBody"
           },
           "path": {
             "type": "string"
@@ -680,8 +695,14 @@
           "referrer": {
             "type": "string"
           },
+          "release": {
+            "type": "string"
+          },
           "revenue": {
             "type": "number"
+          },
+          "service": {
+            "type": "string"
           },
           "sessionId": {
             "type": "string"
@@ -689,7 +710,19 @@
           "signupWeek": {
             "type": "string"
           },
+          "site": {
+            "type": "string"
+          },
+          "span": {
+            "$ref": "#/components/schemas/SpanBody"
+          },
+          "spanId": {
+            "type": "string"
+          },
           "timestamp": {
+            "type": "string"
+          },
+          "traceId": {
             "type": "string"
           },
           "type": {
@@ -764,6 +797,12 @@
       "Exception": {
         "type": "object",
         "properties": {
+          "frames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Frame"
+            }
+          },
           "handled": {
             "type": "boolean"
           },
@@ -775,6 +814,23 @@
           },
           "type": {
             "type": "string"
+          }
+        }
+      },
+      "Frame": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "integer"
+          },
+          "file": {
+            "type": "string"
+          },
+          "function": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
           }
         }
       },
@@ -826,6 +882,35 @@
           }
         },
         "type": "object"
+      },
+      "LogBody": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "severity": {
+            "type": "string"
+          }
+        }
+      },
+      "MetricBody": {
+        "type": "object",
+        "properties": {
+          "labels": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        }
       },
       "ModelRow": {
         "properties": {
@@ -922,6 +1007,29 @@
           }
         },
         "type": "object"
+      },
+      "SpanBody": {
+        "type": "object",
+        "properties": {
+          "duration": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "trace": {
+            "type": "string"
+          }
+        }
       },
       "Timeseries": {
         "properties": {
