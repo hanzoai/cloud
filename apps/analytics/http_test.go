@@ -25,6 +25,13 @@ func mountApp(t *testing.T) *zip.App {
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
+	// A test process is not the fleet. Mount starts the event sink, and a sink that
+	// reaches a bus consumes whatever is on it — including whatever an earlier run
+	// left on a DURABLE stream — writing it through warehouseExec, the same
+	// process-global var a test substitutes to read its own rows back. Stopping it
+	// here rather than only in fakeWarehouse is what makes the two independent of the
+	// order they are called in.
+	stopSink()
 	return app
 }
 

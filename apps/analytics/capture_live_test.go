@@ -41,6 +41,7 @@ func liveApp(t *testing.T) *zip.App {
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("live")}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
+	stopSink() // see mountApp: a test process holds no live consumer
 	return app
 }
 

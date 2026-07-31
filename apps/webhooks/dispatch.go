@@ -86,11 +86,20 @@ var retryBackoff = []time.Duration{1 * time.Second, 5 * time.Second, 25 * time.S
 // Declaring it here (rather than trying keys until one hits) means a stream whose
 // publisher renames its tenant field goes red at this table instead of silently
 // resolving every event to "" and delivering to nobody.
+//
+// notMineKey is the same idea one level down. A plane may carry MORE than one
+// vocabulary, and this package speaks exactly one of them: the subscriber envelope. The
+// event plane also carries the warehouse's facts, whose subjects overlap the envelope
+// subjects (a product event named "$error" folds onto event.error, which is also the
+// error signal's subject), so subject matching alone cannot tell them apart. A message
+// carrying this field is the OTHER vocabulary and is not this package's to deliver.
+// Empty ⇒ the stream carries one vocabulary and everything on it is ours.
 type streamSource struct {
-	stream   string
-	subjects []string
-	orgKey   string
-	ensure   func(context.Context, *infra.PubSubClient) error
+	stream     string
+	subjects   []string
+	orgKey     string
+	notMineKey string
+	ensure     func(context.Context, *infra.PubSubClient) error
 }
 
 // streams is the consumed set: COMMERCE (commerce.>), owned by hanzoai/commerce, and the
@@ -105,10 +114,11 @@ var streams = []streamSource{
 		ensure:   ensureCommerceStream,
 	},
 	{
-		stream:   analytics.EventStream,
-		subjects: analytics.EventSubjects,
-		orgKey:   analytics.EventOrgKey,
-		ensure:   analytics.EnsureEventStream,
+		stream:     analytics.EventStream,
+		subjects:   analytics.EventSubjects,
+		orgKey:     analytics.EventOrgKey,
+		notMineKey: analytics.EventSignalKey,
+		ensure:     analytics.EnsureEventStream,
 	},
 }
 
@@ -299,6 +309,14 @@ func (d *dispatcher) consume(ctx context.Context, cl *infra.PubSubClient) error 
 // subscriber, no match) ACKs so a no-op message is never redelivered forever.
 func (d *dispatcher) handle(ctx context.Context, s streamSource, m *infra.StreamMessage) error {
 	subject := m.Subject
+	// Another vocabulary on the same plane (streamSource.notMineKey) — the warehouse's
+	// facts, which share subjects with the subscriber envelopes this package delivers.
+	// Acked and skipped: delivering one would send a subscriber a body in a shape its
+	// endpoint has never been promised, and send it a SECOND time for an event it was
+	// already delivered.
+	if s.notMineKey != "" && orgOf(m.Data, s.notMineKey) != "" {
+		return nil
+	}
 	org := orgOf(m.Data, s.orgKey)
 	if org == "" {
 		// No org on the envelope ⇒ deliver to nobody (never cross-tenant). Log once.
