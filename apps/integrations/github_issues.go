@@ -229,13 +229,9 @@ func (o ops) githubIssuesBackfill(ctx context.Context, in *githubBackfillIn) (*g
 	default:
 		return nil, zip.ErrBadRequest("state must be open|closed|all")
 	}
-	tok, herr := githubTokenForOrg(ctx, org)
-	if herr != nil {
-		return nil, herr
-	}
-	repos, err := installationRepos(ctx, tok)
+	repos, err := reachableRepos(ctx, org)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
+		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, backfillBudget)
 	defer cancel()
@@ -250,6 +246,16 @@ func (o ops) githubIssuesBackfill(ctx context.Context, in *githubBackfillIn) (*g
 			break
 		}
 		out.Repos++
+		// The token must come from the account that owns this repo — one account's
+		// token grants nothing on another's. Minting is cached per installation, so
+		// resolving per repo costs a map lookup, not an API call.
+		owner, _, _ := splitFullName(r.FullName)
+		tok, terr := InstallationToken(ctx, org, owner)
+		if terr != nil {
+			out.Failed++
+			o.s.Log.Warn("github backfill: token", "org", org, "repo", r.Name, "err", terr)
+			continue
+		}
 		issues, ierr := installationIssues(ctx, tok, r.FullName, issueState)
 		if ierr != nil {
 			out.Failed++

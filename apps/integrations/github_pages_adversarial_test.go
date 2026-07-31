@@ -26,11 +26,11 @@ type advMock struct {
 	authSeen []string // Authorization header for every /repos/*/pages call
 	bodies   []string // request body for every /repos/*/pages call
 
-	grants     map[string][]map[string]any // token -> granted repos
-	pagesCode  int                         // status for the site GET/POST/PUT/DELETE (0 => sensible default)
-	pagesBody  string                      // body for the site resource
-	echoAuth   bool                        // reflect the Authorization header into the pages error body
-	srv        *httptest.Server
+	grants    map[string][]map[string]any // token -> granted repos
+	pagesCode int                         // status for the site GET/POST/PUT/DELETE (0 => sensible default)
+	pagesBody string                      // body for the site resource
+	echoAuth  bool                        // reflect the Authorization header into the pages error body
+	srv       *httptest.Server
 }
 
 var mintIDRE = regexp.MustCompile(`/app/installations/(\d+)/access_tokens`)
@@ -186,19 +186,19 @@ func TestAdv_OwnerPathInjection(t *testing.T) {
 	connectOrg(t, "acme", "777", "acct")
 
 	payloads := []string{
-		"acme-gh%2Fwidgets",              // encoded slash: try to inject owner
-		"..%2F..%2Fother-org%2Fwidgets",  // encoded traversal
-		"widgets%2F..%2Fsecret",          // encoded traversal off widgets
-		"widgets%2Fpages",                // encoded slash to widen path
-		"widgets/../secret",              // raw traversal
-		"..",                             // dot-dot
-		".git",                           // strips to empty
-		"widgets%00",                     // null byte
-		"widgets%0d%0aX-Injected:%201",   // CRLF in the segment
-		"WIDGETS",                        // case variant (must not reach acme-gh/widgets)
-		"wîdgets",                        // unicode homoglyph
-		"other",                          // simply ungranted
-		"acme-gh",                        // the owner as a repo name (ungranted)
+		"acme-gh%2Fwidgets",             // encoded slash: try to inject owner
+		"..%2F..%2Fother-org%2Fwidgets", // encoded traversal
+		"widgets%2F..%2Fsecret",         // encoded traversal off widgets
+		"widgets%2Fpages",               // encoded slash to widen path
+		"widgets/../secret",             // raw traversal
+		"..",                            // dot-dot
+		".git",                          // strips to empty
+		"widgets%00",                    // null byte
+		"widgets%0d%0aX-Injected:%201",  // CRLF in the segment
+		"WIDGETS",                       // case variant (must not reach acme-gh/widgets)
+		"wîdgets",                       // unicode homoglyph
+		"other",                         // simply ungranted
+		"acme-gh",                       // the owner as a repo name (ungranted)
 	}
 	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
 		for _, p := range payloads {

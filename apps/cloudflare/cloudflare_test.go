@@ -428,7 +428,7 @@ func TestStoredAccountSkipsDiscovery(t *testing.T) {
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
 	stored := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	prev := connectionFor
-	connectionFor = func(org, provider string) (integrations.Connection, bool) {
+	connectionFor = func(org, provider, owner string) (integrations.Connection, bool) {
 		if org == "orga" && provider == providerCloudflare {
 			return integrations.Connection{ExternalID: stored}, true
 		}
