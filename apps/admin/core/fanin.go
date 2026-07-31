@@ -46,7 +46,7 @@ func ListOrgs(s *cloud.Service[State], ctx context.Context, cr iam.Creds) ([]iam
 // `//go:build cloud` and are NOT compiled into this binary, so the admin commerce client's
 // S2S reads self-dispatch by PATH into cloud's OWN handlers: GET /v1/billing/balance
 // re-enters the customer balance handler with no principal (401) and GET
-// /v1/billing/usage-rollup is unrouted (404). Reading commerce over HTTP would therefore
+// /v1/billing/usage/rollup is unrouted (404). Reading commerce over HTTP would therefore
 // fail for EVERY org and falsely mark the money source DOWN while real money sits in the
 // co-resident ledger. So — exactly as clients/billing.balance()/usage() and
 // core.grantDeposit already resolve it — prefer the co-resident finance ledger

@@ -297,10 +297,10 @@ func TestTopupTokenShadowsBridge(t *testing.T) {
 	assertPostShadowsBridge(t, "/v1/billing/topup/token", "/v1/billing/topup/token")
 }
 
-// TestPaymentMethodsShadowsBridge — the save-card write (POST /v1/billing/payment-methods →
+// TestPaymentMethodsShadowsBridge — the save-card write (POST /v1/billing/methods →
 // commerce CreatePaymentMethod), same self-dispatch class, now shadowed co-resident.
 func TestPaymentMethodsShadowsBridge(t *testing.T) {
-	assertPostShadowsBridge(t, "/v1/billing/payment-methods", "/v1/billing/payment-methods")
+	assertPostShadowsBridge(t, "/v1/billing/methods", "/v1/billing/methods")
 }
 
 // TestSubscriptionCancelShadowsBridge — POST /v1/billing/subscriptions/:id/cancel →

@@ -21,7 +21,7 @@ import (
 //
 //   - /v1/billing/webhooks       provider HMAC is the auth (Square et al); the
 //     session-gated bridge 403'd it.
-//   - /v1/billing/auto-recharge  the durable cron's billing-autorecharge poke
+//   - /v1/billing/recharge  the durable cron's billing-autorecharge poke
 //     (COMMERCE_SERVICE_TOKEN bearer); without the prefix the poke 403'd at the
 //     bridge ("sign in to view billing") — exactly how the first live fires
 //     failed, and how the commerce unfork regressed it once already.
@@ -31,7 +31,7 @@ import (
 //     org (the karma /v1/store/current outage). It is metadata, never LLM inference.
 func TestCommercePrefixesPinned(t *testing.T) {
 	want := map[string]bool{
-		"/v1/billing/auto-recharge": false,
+		"/v1/billing/recharge": false,
 		"/v1/billing/webhooks":      false,
 		"/v1/store":                 false,
 		"/v1/catalog":               false,

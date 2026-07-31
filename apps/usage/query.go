@@ -195,7 +195,7 @@ type ledgerTxn struct {
 	CreatedAt string `json:"createdAt"`
 }
 
-// rollupWire mirrors commerce GET /v1/billing/usage-rollup (the authoritative
+// rollupWire mirrors commerce GET /v1/billing/usage/rollup (the authoritative
 // month-to-date consumed + wallet balance).
 type rollupWire struct {
 	ConsumedCents int64 `json:"consumedCents"`

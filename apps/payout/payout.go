@@ -106,7 +106,7 @@ func (c *Client) Deposit(ctx context.Context, org, user string, amountCents int6
 	return out.TransactionID, nil
 }
 
-// SpendCents reads GET /v1/billing/usage-rollup and returns consumedCents. Zero
+// SpendCents reads GET /v1/billing/usage/rollup and returns consumedCents. Zero
 // (not an error) when commerce is unconfigured so a partial deploy degrades to
 // "no spend to accrue yet" rather than a 5xx.
 func (c *Client) SpendCents(ctx context.Context, org, user string) (int64, error) {
@@ -114,7 +114,7 @@ func (c *Client) SpendCents(ctx context.Context, org, user string) (int64, error
 		return 0, nil
 	}
 	q := url.Values{"user": {user}}
-	raw, err := c.do(ctx, http.MethodGet, "/v1/billing/usage-rollup", q, org, nil)
+	raw, err := c.do(ctx, http.MethodGet, "/v1/billing/usage/rollup", q, org, nil)
 	if err != nil {
 		return 0, err
 	}

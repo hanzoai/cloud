@@ -94,7 +94,7 @@ var unreachable = []string{
 	// than resolved. It is resolved now: analytics dropped the claim (its wire is
 	// /v1/event), the tracker product keeps the name, and this ledger records only
 	// paths that are still owned twice.
-	// /v1/billing/payment-methods is no longer here either, and it went the same
+	// /v1/billing/methods is no longer here either, and it went the same
 	// way. apps/commerce registered a POST at an address manifest.Apps gives to the
 	// BILLING app — which serves both methods there, because the GET is billing's
 	// proxy to commerce's /v1/billing/portal/payment-methods and the host claims a

@@ -11,7 +11,7 @@ import (
 
 // createCreditGrant mints credit for one org. It is the ONE admin mint surface, and it
 // does NOT mint in-process: it forwards the request to commerce's already-mint-gated
-// POST /v1/billing/credit-grants, authenticated by the service token and scoped to the
+// POST /v1/billing/credits, authenticated by the service token and scoped to the
 // target org, then writes one tamper-evident compliance record. Commerce stays the sole
 // credit ledger; this is a thin, audited relay so there is exactly one place credit is
 // created.
