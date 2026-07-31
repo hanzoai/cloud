@@ -10,7 +10,7 @@
 // closed `metricColumn` allowlist (a caller's `metric=` can only ever select one
 // of three fixed column names, or be rejected), and (b) the LIMIT, a server-
 // clamped int. This mirrors the proven house pattern (ai/object cloud_usage.go
-// whereClause, clients/analytics query.go llmWhere): org bound positionally, the
+// whereClause, apps/analytics query.go llmWhere): org bound positionally, the
 // bucket/limit a closed enum / validated int. The builders return (sql, args) so
 // a test can assert a hostile org slug or metric lands in args (or is rejected),
 // never in the SQL string.

@@ -34,7 +34,7 @@
 // email-shaped value before the row is built (scrubProps). Only user/org
 // identifiers (distinct_id, person_id, group_id, org) are retained as identity.
 //
-// ONE datastore client: writes ride clients/datastore — the SAME pooled,
+// ONE datastore client: writes ride apps/datastore — the SAME pooled,
 // KMS-credentialed connection the read side queries through — so there is no
 // second transport, pool, or credential path.
 package analytics

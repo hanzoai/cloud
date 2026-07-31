@@ -1,8 +1,10 @@
-// Package destinations is the native fan-out plane: it TRANSLATES the canonical
-// /v1/event stream (clients/analytics) into each connected ad/analytics platform's
-// own conversion schema and forwards it server-side — Google Analytics 4
-// (Measurement Protocol) + Meta (Conversions API) end-to-end, with X/LinkedIn/
-// TikTok/Reddit against the same interface.
+// Package destinations is server-side conversion forwarding: connect Google
+// Analytics 4, Meta, X, LinkedIn, TikTok, Reddit, PostHog or Umami, and every
+// event the org captures is translated into that platform's own conversion schema
+// and sent from the server, with PII hashed on the way out.
+//
+// It is a CONSUMER of the canonical /v1/event stream (apps/analytics), installed
+// as a sink at Mount — never a second collector and never a second ingest door.
 //
 // The plane is four decomplected concerns, one per file group:
 //
@@ -16,10 +18,10 @@
 //   - per-org registry (store.go + KMS custody in destinations.go): the connected
 //     destinations + their non-secret ids (measurement/pixel), with the API secrets
 //     KMS-sealed per org.
-//   - fan-out consumer (fanout.go): the clients/analytics sink — for each of an
+//   - fan-out consumer (fanout.go): the apps/analytics sink — for each of an
 //     org's enabled destinations, translate + Send, bounded and fail-soft.
 //
-// SECRET CUSTODY mirrors clients/integrations: a destination's API secret lives ONLY
+// SECRET CUSTODY mirrors apps/integrations: a destination's API secret lives ONLY
 // in KMS (sealed, per org, at /orgs/{org}/destinations/{platform}); the store holds
 // only the non-secret ids. A destination may instead ride an existing integrations
 // connection's token (Meta CAPI reuses the meta_ads OAuth token) — Spec.Fallback.

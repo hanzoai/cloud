@@ -1,17 +1,19 @@
-// Package social mounts the Hanzo Cloud /v1/social/* surface: a native-Go,
-// per-org social-media store on Base/SQLite. It is the in-process fold of the live
-// social stack (github.com/hanzoai/social — the social-backend / social-frontend /
-// social-orchestrator pods, a Postiz-style scheduler) onto the ONE cloud framework
-// (zip/Fiber + cloud.Deps + per-org SQLite) — the same shape every other in-repo
-// subsystem uses (clients/crm is the twin, clients/marketing the sibling fold), NOT
-// a proxy to the standalone social pods.
+// Package social is social publishing: an org's connected channels (X, Facebook,
+// Instagram, LinkedIn, TikTok, YouTube, Threads) and the posts it publishes now or
+// schedules to them.
 //
-// Two entities, faithful to the live stack's Public API (see clients/content
-// publish.go, which already talks to it): an Account is a connected channel (the
-// stack's "integration": GET /public/v1/integrations), and a Post is content
-// published or scheduled to a channel (POST /public/v1/posts {type:now|schedule,
-// date, …}). Scheduling is not a third entity — it is a Post with Status=="scheduled"
+// Two entities. An Account is a connected channel (the hanzoai/social stack's
+// "integration": GET /public/v1/integrations), and a Post is content published or
+// scheduled to a channel (POST /public/v1/posts {type:now|schedule, date, …}).
+// Scheduling is not a third entity — it is a Post with Status=="scheduled"
 // carrying a future ScheduleAt.
+//
+// This is the in-process fold of the standalone social pods onto the cloud
+// framework. apps/content still reaches the SAME upstream over HTTP
+// (channels.go → api.social.hanzo.ai), so social publishing has two paths today
+// and this one — which owns the accounts, the scheduler and the publish edge — is
+// the one. apps/marketing's content calendar is a third scheduled-post store; it
+// has no publisher wired and answers 501.
 //
 // The publish edge (publish.go) and the scheduler (scheduler.go) ARE folded: a post
 // fans out to its channel's connected accounts through the Publisher seam, on an
