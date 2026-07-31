@@ -178,6 +178,32 @@ func Describe(path, method, summary, description string) {
 	registry[key] = reg
 }
 
+// DescribeRest declares prose for every method at path that nothing has described
+// yet, and is how an address bound with All() is covered WITHOUT a hand-copied list
+// of methods.
+//
+// A wildcard route accepts every method this generator publishes, but the
+// interesting ones are described individually — GET reads, POST acts, PUT is not
+// routed — and each site then enumerated the methods it cared about and stopped.
+// Every one of them stopped at the same five, so OPTIONS and TRACE were published
+// bare from six different addresses: the same omission written six times, which is
+// what a hand-copied list of a thing the generator owns always becomes.
+//
+// So the leftovers are asked for rather than listed. Call it AFTER the per-method
+// prose for that path; it skips what is already declared, so it cannot collide with
+// them, and a method added to the generator is covered here the day it appears
+// instead of the day somebody notices.
+func DescribeRest(path, summary, description string) {
+	for _, m := range Methods() {
+		regMu.Lock()
+		done := registry[opKey{method: m, path: path}].described
+		regMu.Unlock()
+		if !done {
+			Describe(path, m, summary, description)
+		}
+	}
+}
+
 // registered returns the declaration for a live route, or nil.
 func registered(method, path string) *registration {
 	regMu.Lock()
