@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the tools app.
@@ -27,6 +27,12 @@ func main() {
 		Prefixes: manifest.PrefixesFor("tools"),
 		Mount:    tools.Mount,
 		Shutdown: tools.Shutdown,
+		// The per-caller half of the fleet's ONE MCP door. This app's typed ops are
+		// projected into mcp.json at build time like every other app's; what cannot
+		// be projected is the caller's OWN tools — its connectors, skills, agents,
+		// and the external servers it enabled — because those are rows. The host
+		// declares this app Open (manifest/apps.go) and asks it per caller.
+		Door: tools.Door(),
 	}}, []string{"tools"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
