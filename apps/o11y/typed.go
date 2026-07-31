@@ -4,24 +4,25 @@ package o11y
 // place this package reaches for the request at all.
 //
 // A typed op — func(context.Context, *In) (*Out, error) — receives a context and
-// its decoded input and nothing else, so three facts the o11y handlers need are
-// not in its hands: the validated tenant, platform-sudo-ness, and the caller's
-// project scope. All three are per-request VALUES the typed signature drops, so
-// they are resolved here and nowhere else:
+// its decoded input and nothing else, so four facts the o11y handlers need are
+// not in its hands: the validated tenant, validated-ness itself, platform-sudo-ness
+// and the caller's project scope. All four are per-request VALUES the typed
+// signature drops, so they are resolved here and nowhere else:
 //
-//   - the TENANT comes off the context, parked there by cloud.Bridge (installed
-//     at the top of MountO11y). It is NEVER an In field: an In field is
-//     caller-supplied, so a tenant key read from one is a cross-tenant read the
-//     caller asserted for itself.
-//   - ADMIN-NESS and VALIDATED-NESS live in headers (X-User-IsAdmin, X-User-Id)
-//     that principal.OrgFrom does not carry, so they need the REQUEST.
+//   - the TENANT and VALIDATED-NESS both come off the context, parked there by
+//     cloud.Bridge (installed at the top of MountO11y) — principal.OrgFrom and
+//     principal.ValidatedFrom, the two facts a gate turns on. Neither is EVER an
+//     In field: an In field is caller-supplied, so a tenant key read from one is
+//     a cross-tenant read the caller asserted for itself.
+//   - ADMIN-NESS lives in a header (X-User-IsAdmin) that neither of those
+//     carries, so it needs the REQUEST.
 //   - the PROJECT is a server-minted header too (X-Project-Id), read through
 //     principal.ProjectScope so the "default == empty == whole org" convention
 //     stays in the one place that owns it.
 //
-// Concentrating the three cloud.Request calls in this file is deliberate: the
-// escape hatch is pinned (cloud/typed_request_gate_test.go), and one seam file
-// with one justification beats the same call scattered across three handlers.
+// Concentrating the two remaining cloud.Request calls in this file is deliberate:
+// the escape hatch is pinned (cloud/typed_request_gate_test.go), and one seam
+// file with one justification beats the same call scattered across handlers.
 //
 // Every one FAILS CLOSED off the HTTP path — the CLI projection's LocalInvoke
 // runs an op with no request at all. No request means no attested caller: not an
@@ -76,11 +77,13 @@ func callerIsAdmin(ctx context.Context) bool {
 // org). The status read gates on this one: infra health is not tenant-
 // partitioned, so an org-less but validated caller is served. False off the HTTP
 // path.
+//
+// It reads the bit Bridge PARKED, beside the org. This used to reach for the
+// request to recompute principal.Validated(c) — the same answer by the longer
+// way, and the ONE of this file's three resolvers that never needed a header of
+// its own.
 func callerValidated(ctx context.Context) bool {
-	if c, ok := cloud.Request(ctx); ok {
-		return principal.Validated(c)
-	}
-	return false
+	return principal.ValidatedFrom(ctx)
 }
 
 // callerProject is principal.ProjectScope for a typed op: the caller's project

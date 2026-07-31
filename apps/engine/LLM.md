@@ -42,7 +42,18 @@ the ledger pins it.
 The engine deployment is ONE shared runtime with no per-org primitive, so
 every read here is a deployment-global platform fact: the gate is
 authentication (validated principal or 403, before any upstream byte), and
-there is no org scoping because there are no per-org rows to scope. That same
+there is no org scoping because there are no per-org rows to scope.
+
+It reads `principal.ValidatedFrom(ctx)` — the bit `cloud.Bridge` parks beside
+the org — and NOT `principal.OrgFrom`, which answers with an org or refuses:
+that would 403 a signed-in caller whose token names no home org (a machine
+token, or one minted before IAM's `orgs` claim), which on a tenant-less plane
+is exactly the operator this lens exists for. `TestOrgLessButValidatedIsServed`
+is that half of the gate and `TestNoPrincipalIs403AndNoUpstreamByte` the other,
+so neither can be narrowed silently. The gate therefore does NOT take the
+pinned `cloud.Request` escape hatch (`typed_request_gate_test.go`) — reaching
+for the request here would recompute `principal.Validated(c)`, the same answer
+by the longer way. That same
 fact is why every MUTATION the product's server exposes (models/unload,
 models/reload, models/tune, re_isq, system/doctor) is REFUSED: an org-scoped
 route onto a shared runtime hands each tenant every other tenant's
