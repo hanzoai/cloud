@@ -87,32 +87,29 @@ func purgeEdge(s *cloud.Service[state], ctx context.Context, org string, p *Proj
 	p.LastPurgeAt = time.Now().Unix()
 }
 
-// purge is POST /v1/projects/:slug/purge: a first-class edge cache purge with NO
-// redeploy. It flushes the project's edge cache-tag site-<org>-<slug> and stamps
-// LastPurgeAt, but NEVER writes or deletes the S3 origin — the live build keeps
-// serving from S3; only stale edge copies drop. Org-scoped exactly like deploy: the
-// tenant is the gateway-minted X-Org-Id (403 without one); an unknown (org,slug) is
-// 404. An edge purge miss (unconfigured/failing CF token) is non-fatal — LastPurgeAt
-// is still stamped and the response is 200. Returns the updated Project view so the
-// caller sees the new lastPurgeAt.
-func purge(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+// PurgeProject flushes the site's edge cache without redeploying anything.
+//
+// It invalidates the edge cache-tag `site-<org>-<slug>` and stamps `lastPurgeAt`
+// (unix seconds), and it NEVER writes or deletes the S3 origin — the live build
+// keeps serving; only stale copies held at the edge drop, so the next request
+// re-fetches the current artifact from origin. Idempotent, and an edge that is
+// unconfigured or failing is not fatal: `lastPurgeAt` is still stamped and the
+// answer is still the updated project.
+//
+// Scope: a validated principal is required (403 without one) and the project is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) purge(ctx context.Context, in *projectsRef) (*projectsProject, error) {
+	_, org, p, err := o.siteOf(ctx, in.Slug)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	purgeEdge(s, c.Context(), org, &p)
+	purgeEdge(o.s, ctx, org, &p)
 	p.UpdatedAt = time.Now().Unix()
-	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+	if err := o.s.State.store.UpdateProject(ctx, p); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
-	return c.JSON(http.StatusOK, toProjectView(p))
+	out := toProject(p)
+	return &out, nil
 }
 
 // siteURL is the canonical public URL of a deployed site: the pretty bare host
@@ -209,12 +206,9 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+	p, err := loadProject(s, c.Context(), org, slugParam(c))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return err
 	}
 
 	// Fail-closed hosting gate BEFORE any deploy work (both modes are billable):
@@ -279,8 +273,8 @@ func deployGit(s *cloud.Service[state], c *zip.Ctx, org string, p Project) error
 	// bucket credential of its own (grant.go). Best-effort: a deployment whose
 	// grant could not be minted is still queued and still completable — the caller
 	// just has to have its own way to write, and sees no `upload` in the response.
-	view := toDeploymentView(d)
-	grant, gErr := mintUploadGrant(c.Context(), s.State.blob, d.Prefix, time.Now())
+	view := toDeployment(d)
+	grant, gErr := mintGrant(c.Context(), s.State.blob, d.Prefix, time.Now())
 	if gErr != nil {
 		s.Log.Warn("mint upload grant failed (deployment still queued)", "slug", p.Slug, "err", gErr)
 	}
@@ -327,7 +321,7 @@ func deployArtifact(s *cloud.Service[state], c *zip.Ctx, org string, p Project) 
 		}
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
-	return c.JSON(http.StatusOK, toDeploymentView(d))
+	return c.JSON(http.StatusOK, toDeployment(d))
 }
 
 // artifactFields are the multipart form field names an upload may use for the
@@ -380,7 +374,11 @@ func readArtifactBody(c *zip.Ctx) ([]byte, error) {
 	return raw, nil
 }
 
-type completeReq struct {
+type projectsComplete struct {
+	// Slug is the project the deployment belongs to, from the path.
+	Slug string `json:"slug"`
+	// ID is the queued deployment to complete, from the path.
+	ID      string `json:"id"`
 	Status  string `json:"status"` // live | error
 	Commit  string `json:"commit"`
 	LiveURL string `json:"liveUrl"`
@@ -395,36 +393,45 @@ type completeReq struct {
 	Keys []string `json:"keys,omitempty"`
 }
 
-// completeDeployment is the CI completion hook for the git path: after CI syncs
-// the built site to S3 it flips the queued deployment to live (or error). It is
-// org-scoped like every other route; CI authenticates with an org-scoped token
-// through the gateway, so the X-Org-Id binds the call to the right tenant.
-func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// CompleteDeployment is the CI completion hook that flips a queued git
+// deployment to live (or error) once CI has synced the built site to S3.
+//
+// `status` must be `live` or `error`. On a LIVE completion the public host is
+// claimed FIRST, so the deployment reports the URL it actually OWNS — a
+// CI-supplied `liveUrl` is a hint that can refine that URL but can never assert
+// a subdomain another tenant holds. `keys` is the manifest CI just uploaded,
+// relative to the deployment prefix: cloud reconciles the prefix against it so a
+// page deleted from the build actually stops serving. Omit `keys` and nothing is
+// deleted — the prefix only grows. Reconciliation runs only on a live completion
+// (pruning against a failed build's manifest would delete the site the last good
+// build is still serving) and is best-effort, so a stale leftover never turns a
+// successful deploy into a 500. A live completion is also the one billable
+// moment on the git path; an error completion bills nothing.
+//
+// Scope: a validated principal is required (403 without one). CI authenticates
+// with an org-scoped token through the gateway, so the deployment is resolved
+// within that principal's org and another tenant's slug or deployment id is a
+// 404.
+func (o ops) completeDeployment(ctx context.Context, in *projectsComplete) (*projectsDeployment, error) {
+	c, org, p, err := o.siteOf(ctx, in.Slug)
+	if err != nil {
+		return nil, err
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
+	s := o.s
+	d, err := s.State.store.GetDeployment(ctx, org, p.ID, strings.TrimSpace(in.ID))
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
+		return nil, zip.ErrNotFound("deployment not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
 	}
-	d, err := s.State.store.GetDeployment(c.Context(), org, p.ID, strings.TrimSpace(c.Param("id")))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("deployment not found")
+	if err := requireBody(c); err != nil {
+		return nil, err
 	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
-	}
-	var body completeReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := in
 	status := strings.ToLower(strings.TrimSpace(body.Status))
 	if status != "live" && status != "error" {
-		return zip.ErrBadRequest("status must be live or error")
+		return nil, zip.ErrBadRequest("status must be live or error")
 	}
 	now := time.Now().Unix()
 	d.Status = status
@@ -438,7 +445,7 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 		// Claim the host first, so the git/CI path reports the URL it OWNS — the
 		// same rule publishSite follows. A CI-supplied LiveURL is a hint only: it
 		// cannot assert a subdomain another tenant holds.
-		live, note := onPublish(s, c.Context(), org, &p)
+		live, note := onPublish(s, ctx, org, &p)
 		if live != "" {
 			if hint := strings.TrimSpace(body.LiveURL); hint != "" {
 				live = hint
@@ -448,8 +455,8 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		d.LiveURL = live
 	}
-	if err := s.State.store.UpdateDeployment(c.Context(), d); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "update deployment: %v", err)
+	if err := s.State.store.UpdateDeployment(ctx, d); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "update deployment: %v", err)
 	}
 
 	// Reconcile the prefix against what CI says it uploaded, so a deleted page
@@ -466,7 +473,7 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		if cli, cErr := s.State.blob.client(); cErr != nil {
 			s.Log.Warn("reconcile skipped (no s3 client)", "slug", p.Slug, "err", cErr)
-		} else if removed, rErr := reconcilePrefix(c.Context(), cli, d.Bucket, d.Prefix, keep); rErr != nil {
+		} else if removed, rErr := reconcilePrefix(ctx, cli, d.Bucket, d.Prefix, keep); rErr != nil {
 			s.Log.Warn("reconcile failed (new content is live; stale files remain)", "slug", p.Slug, "err", rErr)
 		} else if removed > 0 {
 			s.Log.Info("reconciled site prefix", "slug", p.Slug, "prefix", d.Prefix, "removed", removed)
@@ -483,19 +490,20 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	} else {
 		p.Status = "error"
 	}
-	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "update project: %v", err)
+	if err := s.State.store.UpdateProject(ctx, p); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "update project: %v", err)
 	}
 	if status == "live" {
-		emitProjectLifecycle(c.Context(), cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+d.LiveURL+")")
+		emitProjectLifecycle(ctx, cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+d.LiveURL+")")
 		// Bill the git/CI path HERE — this is where the deploy actually goes live. The
 		// enqueue (deployGit, via deploy's gate) already passed the gate; a "live"
 		// completion is the one billable success, an "error" completion bills nothing.
 		meterDeploy(s, c, cloud.ResourceFeeCents(deployFeeEnvPrefix, deployKind))
 	} else {
-		emitProjectLifecycle(c.Context(), cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+nonEmptyStr(d.Message, "deploy failed"))
+		emitProjectLifecycle(ctx, cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+nonEmptyStr(d.Message, "deploy failed"))
 	}
-	return c.JSON(http.StatusOK, toDeploymentView(d))
+	out := toDeployment(d)
+	return &out, nil
 }
 
 // nonEmptyStr returns s trimmed, or fallback when blank.
@@ -506,49 +514,55 @@ func nonEmptyStr(s, fallback string) string {
 	return s
 }
 
-func listDeployments(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+// ListDeployments returns a project's deploy history, newest version first.
+//
+// Every deploy of the project is a row — uploads, generated sites, and git/CI
+// builds alike — carrying its version, status, source, commit, live URL, file
+// count and byte count. The short-lived upload grant a queued git deployment was
+// handed is NOT replayed here: it exists only on the 202 that minted it, so a
+// grant cannot outlive its build by being fetched again.
+//
+// Scope: a validated principal is required (403 without one) and the project is
+// resolved within that principal's org, so another tenant's slug is a 404.
+func (o ops) listDeployments(ctx context.Context, in *projectsRef) (*projectsDeployments, error) {
+	_, org, p, err := o.siteOf(ctx, in.Slug)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	rows, err := s.State.store.ListDeployments(c.Context(), org, p.ID)
+	rows, err := o.s.State.store.ListDeployments(ctx, org, p.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
 	}
-	out := make([]deploymentView, 0, len(rows))
+	out := make(projectsDeployments, 0, len(rows))
 	for _, d := range rows {
-		out = append(out, toDeploymentView(d))
+		out = append(out, toDeployment(d))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
-func getDeployment(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// GetDeployment returns one deployment of a project by id.
+//
+// It is how a console follows a build: the status (`queued`, `uploading`,
+// `live`, `error`), the message a failure left, and the URL and prefix it went
+// live at. Like the history, it never replays the upload grant.
+//
+// Scope: a validated principal is required (403 without one). Both the project
+// and the deployment are resolved within that principal's org, so a deployment
+// of another project — or of another tenant — is a 404.
+func (o ops) getDeployment(ctx context.Context, in *projectsDeploymentRef) (*projectsDeployment, error) {
+	_, org, p, err := o.siteOf(ctx, in.Slug)
+	if err != nil {
+		return nil, err
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
+	d, err := o.s.State.store.GetDeployment(ctx, org, p.ID, strings.TrimSpace(in.ID))
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
+		return nil, zip.ErrNotFound("deployment not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
 	}
-	d, err := s.State.store.GetDeployment(c.Context(), org, p.ID, strings.TrimSpace(c.Param("id")))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("deployment not found")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
-	}
-	return c.JSON(http.StatusOK, toDeploymentView(d))
+	out := toDeployment(d)
+	return &out, nil
 }
 
 // genID returns "<prefix>_<22-char-url-safe-token>" (96 bits of entropy).

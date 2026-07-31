@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/projects"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the projects app.
@@ -17,8 +18,13 @@ import (
 // `projects openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Serve([]cloud.Plugin{{
-		Name:     "projects",
-		Price:    cloud.Metered,
+		Name:  "projects",
+		Price: cloud.Metered,
+		// This app answers on THREE subtrees, not the /v1/<name> convention, and it
+		// installs the typed-op bridge + the money envelope on each of them. Read from
+		// the manifest so the host's view of what projects serves and the app's own
+		// view of what it may gate are one list, not two that can drift.
+		Prefixes: manifest.PrefixesFor("projects"),
 		Mount:    projects.Mount,
 		Shutdown: cloud.CtxShutdown(projects.Shutdown),
 	}}, []string{"projects"}); err != nil {

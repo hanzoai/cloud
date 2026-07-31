@@ -37,18 +37,18 @@ Site requirements:
 - Fully self-contained: inline all CSS and JS. NO external network requests — no CDNs, no remote fonts, no remote images, no <script src> or <link href> to other origins. It must be CSP-safe.
 - It MUST render correctly from 390px wide (mobile) through desktop.`
 
-// genFile is one file in a site manifest: a relative path and its full contents.
+// projectsFile is one file in a site manifest: a relative path and its full contents.
 // It is the shape of BOTH the model's manifest entries AND the raw deploy_site
 // JSON body, so one validator (siteFromFiles) serves both paths.
-type genFile struct {
+type projectsFile struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
 }
 
 // genManifest is the JSON object the model must emit for POST /v1/sites.
 type genManifest struct {
-	Name  string    `json:"name"`
-	Files []genFile `json:"files"`
+	Name  string         `json:"name"`
+	Files []projectsFile `json:"files"`
 }
 
 // maxBriefBytes caps the natural-language brief accepted by POST /v1/sites.
@@ -123,7 +123,7 @@ func parseManifest(raw string) (string, *site, error) {
 // root; and GUARANTEES responsiveness by passing every *.html file through
 // ensureViewport so a mobile viewport meta tag is always present, even if the
 // model or caller omitted it.
-func siteFromFiles(files []genFile) (*site, error) {
+func siteFromFiles(files []projectsFile) (*site, error) {
 	if len(files) == 0 {
 		return nil, errors.New("site has no files")
 	}
@@ -262,20 +262,22 @@ func stripFences(s string) string {
 
 // ---- request/response shapes ----
 
-type buildSiteReq struct {
+type projectsBuildSite struct {
 	Brief string `json:"brief"`
 	Slug  string `json:"slug"`
 	Name  string `json:"name"`
 	Model string `json:"model"`
 }
 
-type deploySiteReq struct {
-	Slug  string    `json:"slug"`
-	Name  string    `json:"name"`
-	Files []genFile `json:"files"`
+type projectsDeploySite struct {
+	Slug  string         `json:"slug"`
+	Name  string         `json:"name"`
+	Files []projectsFile `json:"files"`
 }
 
-type siteView struct {
+// projectsSite is one live site in the org's list: the pretty URL it serves at,
+// and the project state behind it.
+type projectsSite struct {
 	Slug      string `json:"slug"`
 	URL       string `json:"url"`
 	Name      string `json:"name"`
@@ -283,171 +285,237 @@ type siteView struct {
 	UpdatedAt int64  `json:"updatedAt"`
 }
 
-// siteResponse is the published-site response shared by buildSite and
-// deploySiteFiles: the pretty URL, the resolved slug/name, the deployment id, the
-// sorted file list, and the live status.
-func siteResponse(p Project, d Deployment, st *site) map[string]any {
+// projectsSites is the org's live sites. A defined slice type, so the list has a
+// NAME in the document and a generated SDK returns a list of the same Site.
+type projectsSites []projectsSite
+
+// projectsSiteDeploy is what a published site answers with: where it is serving,
+// which project and deployment it became, and exactly which files went up.
+//
+// FIELD ORDER IS ALPHABETICAL BY JSON TAG, once and deliberately: this answer
+// used to be a map[string]any, which encoding/json serialises in sorted key
+// order, so declaring the fields in reading order would have reordered the
+// object. Object member order carries no meaning, but it costs nothing to keep
+// and it makes "the typed op answers what the handler answered" checkable byte
+// for byte rather than merely equal as JSON.
+type projectsSiteDeploy struct {
+	// DeploymentID is the deployment this publish recorded, for the history.
+	DeploymentID string `json:"deploymentId"`
+	// Files are the site-relative paths that were uploaded, sorted.
+	Files []string `json:"files"`
+	// Name is the project's display name.
+	Name string `json:"name"`
+	// Slug is the project the site was published into, created on the fly when
+	// the slug was free.
+	Slug string `json:"slug"`
+	// Status is the deployment status, "live" on success.
+	Status string `json:"status"`
+	// URL is the canonical live URL, https://<slug>.<apex> — empty when the
+	// subdomain belongs to another tenant and this site has none.
+	URL string `json:"url"`
+}
+
+// siteResponse is the published-site answer shared by BuildSite and DeploySite,
+// so the generated and the hand-supplied path describe a publish identically.
+func siteResponse(p Project, d Deployment, st *site) *projectsSiteDeploy {
 	paths := make([]string, 0, len(st.files))
 	for k := range st.files {
 		paths = append(paths, k)
 	}
 	sort.Strings(paths)
-	return map[string]any{
-		"url":          d.LiveURL,
-		"slug":         p.Slug,
-		"name":         p.Name,
-		"deploymentId": d.ID,
-		"files":        paths,
-		"status":       d.Status,
+	return &projectsSiteDeploy{
+		URL: d.LiveURL, Slug: p.Slug, Name: p.Name,
+		DeploymentID: d.ID, Files: paths, Status: d.Status,
 	}
 }
 
 // ---- handlers ----
 
-// buildSite generates a responsive static site from a brief and deploys it live.
-// Order: org gate → config checks → validate brief → HOSTING GATE (before any
-// inference/upload work) → generate → resolve slug → ensure project → publish →
-// meter once → notify. A denied gate returns 402/503 with NOTHING generated or
-// uploaded; a generation/parse failure is 400; a failed upload is never billed.
-func buildSite(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// BuildSite generates a self-contained, mobile-responsive static site from a
+// natural-language brief and deploys it live in one call.
+//
+// One inference call turns `brief` (capped at 8 KiB) into a file manifest, which
+// then runs through the SAME validation, guards and viewport guarantee as a
+// hand-supplied manifest: index.html required at the root, absolute and
+// traversal paths rejected, per-file and total size capped, and a mobile
+// viewport meta tag injected into every HTML document that lacks one. The
+// generated site is fully inline — no CDNs, no remote fonts or images — so it is
+// CSP-safe. `slug` and `name` are optional: the model's own title is preferred,
+// and a slug is derived or minted when none is given.
+//
+// It writes into the SAME org-scoped store as /v1/projects — it ensures a
+// project (framework `static`) for the resolved slug and records a deployment —
+// so this is a second door onto one publish pipeline, not a second copy of
+// project state. Ordering is the billing contract: the hosting gate runs BEFORE
+// any inference or upload, so a denied gate generates and uploads NOTHING, and
+// the debit lands once, only after the site is actually live. The tokens are
+// billed to the same ledger the hosting fee was reserved against.
+//
+// Answers 503 when object storage or inference is unconfigured, and 400 when the
+// model's manifest cannot be parsed or fails the guards.
+//
+// Scope: a validated principal is required (403 without one) and the site is
+// published into THAT principal's org.
+func (o ops) buildSite(ctx context.Context, in *projectsBuildSite) (*projectsSiteDeploy, error) {
+	c, org, err := o.callerOf(ctx)
+	if err != nil {
+		return nil, err
 	}
+	s := o.s
 	if !s.State.blob.configured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
 	}
 	if s.State.ai == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "inference is not configured on this deployment")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "inference is not configured on this deployment")
 	}
-	var body buildSiteReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	if err := requireBody(c); err != nil {
+		return nil, err
 	}
-	brief := strings.TrimSpace(body.Brief)
+	brief := strings.TrimSpace(in.Brief)
 	if brief == "" {
-		return zip.ErrBadRequest("brief is required")
+		return nil, zip.ErrBadRequest("brief is required")
 	}
 	if len(brief) > maxBriefBytes {
-		return zip.ErrBadRequest("brief too large")
+		return nil, zip.ErrBadRequest("brief too large")
 	}
 
 	fee, gErr := gateHosting(s, c)
 	if gErr != nil {
-		return cloud.DenyResource(c, gErr)
+		return nil, cloud.Denied(gErr)
 	}
 
 	// principal.Ledger(c) is the payer gateHosting just reserved the fee against — the
 	// tokens must land on the same ledger, resolved the same way, or the request bills
 	// its two halves to two different accounts.
-	name, st, err := generateSite(c.Context(), s.State.ai, strings.TrimSpace(body.Model), brief, org, principal.Ledger(c))
+	name, st, err := generateSite(ctx, s.State.ai, strings.TrimSpace(in.Model), brief, org, principal.Ledger(c))
 	if err != nil {
-		return zip.ErrBadRequest("site generation failed: " + err.Error())
+		return nil, zip.ErrBadRequest("site generation failed: " + err.Error())
 	}
 	if name == "" {
-		name = strings.TrimSpace(body.Name)
+		name = strings.TrimSpace(in.Name)
 	}
 	if name == "" {
 		name = "Site"
 	}
 
-	slug, err := resolveSlug(body.Slug, name)
+	slug, err := resolveSlug(in.Slug, name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	p, err := ensureProject(s, c.Context(), org, slug, name)
+	p, err := ensureProject(s, ctx, org, slug, name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	d, err := publishSite(s, c.Context(), org, p, st, "generated")
+	d, err := publishSite(s, ctx, org, p, st, "generated")
 	if err != nil {
 		if d.Status == "error" {
-			return zip.Errorf(http.StatusBadGateway, "%v", err)
+			return nil, zip.Errorf(http.StatusBadGateway, "%v", err)
 		}
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
 	meterDeploy(s, c, fee)
-	notifyDeploy(c.Context(), org, p.Slug, d)
-	return c.JSON(http.StatusOK, siteResponse(p, d, st))
+	notifyDeploy(ctx, org, p.Slug, d)
+	return siteResponse(p, d, st), nil
 }
 
-// deploySiteFiles is the raw deploy_site capability: it deploys a caller-supplied
-// file manifest (the same shape the model emits). Files run through the SAME
-// validation + viewport-injection + guards as generation (siteFromFiles), so a
-// hand-built site is exactly as safe and responsive as a generated one.
-func deploySiteFiles(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	if !s.State.blob.configured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
-	}
-	var body deploySiteReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if len(body.Files) == 0 {
-		return zip.ErrBadRequest("files is required")
-	}
-	if len(body.Files) > maxFiles {
-		return zip.ErrBadRequest("too many files")
-	}
-	st, err := siteFromFiles(body.Files)
+// DeploySite deploys a caller-supplied file manifest — the deploy_site
+// capability an agent calls — and answers with where it went live.
+//
+// `files` is a list of {path, content} pairs, the same shape the brief build
+// emits, and it runs through the SAME guards: index.html required at the root,
+// absolute and traversal paths rejected, per-file and total size capped, and a
+// mobile viewport meta tag injected into every HTML document that lacks one — so
+// a hand-built site is exactly as safe and as responsive as a generated one.
+// `slug` and `name` are optional; a slug is derived from the name or minted.
+//
+// It writes into the SAME org-scoped store as /v1/projects, ensuring a project
+// (framework `static`) for the resolved slug and recording a deployment. The
+// hosting gate runs before the upload and the debit lands once, after the site
+// is live — a failed upload is never billed. Answers 503 when object storage is
+// unconfigured.
+//
+// Scope: a validated principal is required (403 without one) and the site is
+// published into THAT principal's org.
+func (o ops) deploySite(ctx context.Context, in *projectsDeploySite) (*projectsSiteDeploy, error) {
+	c, org, err := o.callerOf(ctx)
 	if err != nil {
-		return zip.ErrBadRequest("invalid site: " + err.Error())
+		return nil, err
 	}
-	name := strings.TrimSpace(body.Name)
+	s := o.s
+	if !s.State.blob.configured() {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
+	}
+	if err := requireBody(c); err != nil {
+		return nil, err
+	}
+	if len(in.Files) == 0 {
+		return nil, zip.ErrBadRequest("files is required")
+	}
+	if len(in.Files) > maxFiles {
+		return nil, zip.ErrBadRequest("too many files")
+	}
+	st, err := siteFromFiles(in.Files)
+	if err != nil {
+		return nil, zip.ErrBadRequest("invalid site: " + err.Error())
+	}
+	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		name = "Site"
 	}
 
 	fee, gErr := gateHosting(s, c)
 	if gErr != nil {
-		return cloud.DenyResource(c, gErr)
+		return nil, cloud.Denied(gErr)
 	}
 
-	slug, err := resolveSlug(body.Slug, name)
+	slug, err := resolveSlug(in.Slug, name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	p, err := ensureProject(s, c.Context(), org, slug, name)
+	p, err := ensureProject(s, ctx, org, slug, name)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	d, err := publishSite(s, c.Context(), org, p, st, "deploy")
+	d, err := publishSite(s, ctx, org, p, st, "deploy")
 	if err != nil {
 		if d.Status == "error" {
-			return zip.Errorf(http.StatusBadGateway, "%v", err)
+			return nil, zip.Errorf(http.StatusBadGateway, "%v", err)
 		}
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
 	meterDeploy(s, c, fee)
-	notifyDeploy(c.Context(), org, p.Slug, d)
-	return c.JSON(http.StatusOK, siteResponse(p, d, st))
+	notifyDeploy(ctx, org, p.Slug, d)
+	return siteResponse(p, d, st), nil
 }
 
-// listSites lists the org's deployed (live) sites at their pretty URLs.
-func listSites(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.ListProjects(c.Context(), org)
+// ListSites returns the org's deployed sites at the pretty URLs they serve at.
+//
+// It reads the SAME org-scoped store as /v1/projects and keeps only the projects
+// that are actually `live`, so a draft or a failed build is not advertised as a
+// site.
+//
+// Scope: a validated principal is required (403 without one) and the list is
+// keyed by that principal's org.
+func (o ops) listSites(ctx context.Context, _ *void) (*projectsSites, error) {
+	_, org, err := o.callerOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	out := make([]siteView, 0, len(rows))
+	rows, err := o.s.State.store.ListProjects(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	out := make(projectsSites, 0, len(rows))
 	for _, p := range rows {
 		if p.Status != "live" {
 			continue
 		}
-		out = append(out, siteView{
-			Slug: p.Slug, URL: siteURL(s, org, p.Slug), Name: p.Name,
+		out = append(out, projectsSite{
+			Slug: p.Slug, URL: siteURL(o.s, org, p.Slug), Name: p.Name,
 			Status: p.Status, UpdatedAt: p.UpdatedAt,
 		})
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
 // ---- slug + project helpers ----
