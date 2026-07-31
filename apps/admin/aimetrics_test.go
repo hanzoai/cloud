@@ -28,9 +28,15 @@ func TestAimSQL_ReadsCanonicalTables(t *testing.T) {
 		name, sql, table string
 		wantQMarks       int
 	}{
-		{"o11yAiTotals", aimO11yAITotalsSQL(), "o11y_ai.observations", 1},
-		{"o11yAiLatency", aimO11yAILatencySQL(), "o11y_ai.observations", 1},
-		{"o11yAiModels", aimO11yAIModelsSQL(), "o11y_ai.observations", 1},
+		// The pin moved off "o11y_ai.observations" on 2026-07-31: there is no o11y_ai
+		// DATABASE (checked against system.tables), so every AI number read zero while
+		// 8,867 observations sat in `console`. A pin is only worth having if it names a
+		// table that exists — this one was pinning the fiction. `console` is a SURFACE
+		// name on a store and is wrong too; it moves to o11y.spans with #102, and this
+		// pin moves with it.
+		{"o11yAiTotals", aimO11yAITotalsSQL(), "console.observations", 1},
+		{"o11yAiLatency", aimO11yAILatencySQL(), "console.observations", 1},
+		{"o11yAiModels", aimO11yAIModelsSQL(), "console.observations", 1},
 		{"usageTotals", aimUsageTotalsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", aimTopModelsSQL(), "hanzo.cloud_usage", 1},
 		{"evalTraces", aimEvalTracesSQL(), "hanzo.eval_traces", 1},
