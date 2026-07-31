@@ -27,6 +27,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -77,8 +78,11 @@ func rank(s Source) int {
 // the x402 Charger seam (registry.go) — this is only the DECLARATION a marketplace
 // listing carries. A nil Price means the tool is free (no x402 settlement).
 type Price struct {
-	// AmountCents is what ONE call costs, in minor units of Currency.
-	AmountCents int64 `json:"amountCents"`
+	// Amount is what ONE call costs, EXACTLY: an 18-decimal USD value, so a
+	// per-call price of $0.0025 is $0.0025 and not a cent-floored zero. Cents
+	// cannot hold a per-token price, and a tool plane is where per-token prices
+	// live.
+	Amount money.Amount `json:"amount"`
 	// Currency is the ISO 4217 code, e.g. "USD". Empty means USD.
 	Currency string `json:"currency"`
 	// Recipient is the payout wallet ref the marketplace seller is paid at.

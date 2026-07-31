@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"github.com/hanzoai/cloud/apps/money"
 )
 
 // fakeProvider is a test source: a fixed tool list and a dispatch that echoes which
@@ -111,25 +113,25 @@ func TestActivationGate(t *testing.T) {
 	}
 }
 
-// fakeCharger records charges and returns a programmed error.
+// fakeCharger records the tools it was asked to settle and returns a programmed error.
 type fakeCharger struct {
 	err     error
-	charged []Charge
+	charged []string
 }
 
-func (f *fakeCharger) Charge(_ context.Context, ch Charge) error {
-	f.charged = append(f.charged, ch)
+func (f *fakeCharger) Charge(_ context.Context, tool string) error {
+	f.charged = append(f.charged, tool)
 	return f.err
 }
 
-// TestPricedFailsClosed: a priced tool with NO charger wired fails closed
-// (ErrChargerUnset) — a paid tool is never served free. With a charger it settles
-// through the seam (recipient + amount preserved), and a payment failure surfaces
-// as ErrPaymentRequired without dispatching.
+// TestPricedFailsClosed: a tool that DECLARES a price with no charger wired fails
+// closed (ErrChargerUnset) — a paid tool is never served free. With a charger every
+// dispatch is offered to the seam by name, and a payment failure surfaces as
+// ErrPaymentRequired without dispatching.
 func TestPricedFailsClosed(t *testing.T) {
 	r := freshRegistry(t)
 	priced := tool("premium_search", SourceMCP)
-	priced.Price = &Price{AmountCents: 250, Currency: "USD", Recipient: "0xSELLER"}
+	priced.Price = &Price{Amount: money.FromCents(250), Currency: "USD", Recipient: "wal_seller"}
 	r.Register(&fakeProvider{src: SourceMCP, tools: []Tool{priced}})
 	if err := r.activation.Activate(context.Background(), "acme", "", "premium_search", SourceMCP, "u"); err != nil {
 		t.Fatalf("activate: %v", err)
@@ -149,17 +151,40 @@ func TestPricedFailsClosed(t *testing.T) {
 		t.Fatalf("declined payment must be ErrPaymentRequired, got %v", err)
 	}
 
-	// Payment settled → dispatch runs, charge carried the price + recipient + payer.
+	// Payment settled → dispatch runs, and the seam was asked about THIS tool.
 	ok := &fakeCharger{}
 	r.SetCharger(ok)
 	if _, err := r.Dispatch(context.Background(), Principal{Org: "acme", Owner: "payer-org"}, "premium_search", nil); err != nil {
 		t.Fatalf("settled payment must dispatch, got %v", err)
 	}
-	if len(ok.charged) != 1 {
-		t.Fatalf("expected 1 charge, got %d", len(ok.charged))
+	if len(ok.charged) != 1 || ok.charged[0] != "premium_search" {
+		t.Fatalf("charger must be asked once, for premium_search; got %v", ok.charged)
 	}
-	c := ok.charged[0]
-	if c.Cents != 250 || c.Recipient != "0xSELLER" || c.Currency != "USD" || c.Payer != "payer-org" {
-		t.Fatalf("charge mismatch: %+v", c)
+}
+
+// TestUnpricedToolStillSettles: a tool that declares NO price is still offered to
+// the charger — "is this priced" is the payment layer's question, answered from its
+// own table, and asking it twice is how a gate and a settlement come to disagree.
+// A charger that settles it for nothing lets the call run.
+func TestUnpricedToolStillSettles(t *testing.T) {
+	r := freshRegistry(t)
+	r.Register(&fakeProvider{src: SourceMCP, tools: []Tool{tool("free_search", SourceMCP)}})
+	if err := r.activation.Activate(context.Background(), "acme", "", "free_search", SourceMCP, "u"); err != nil {
+		t.Fatalf("activate: %v", err)
+	}
+
+	// No charger, no declared price → runs free.
+	if _, err := r.Dispatch(context.Background(), Principal{Org: "acme"}, "free_search", nil); err != nil {
+		t.Fatalf("unpriced tool with no charger must run, got %v", err)
+	}
+
+	// With a charger, it is still consulted — and settling for nothing serves.
+	ok := &fakeCharger{}
+	r.SetCharger(ok)
+	if _, err := r.Dispatch(context.Background(), Principal{Org: "acme"}, "free_search", nil); err != nil {
+		t.Fatalf("unpriced tool must run once settled, got %v", err)
+	}
+	if len(ok.charged) != 1 || ok.charged[0] != "free_search" {
+		t.Fatalf("every dispatch is offered to the seam; got %v", ok.charged)
 	}
 }
