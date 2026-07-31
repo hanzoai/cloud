@@ -55,17 +55,21 @@ package cloud
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	luxlog "github.com/luxfi/log"
-	luxmetric "github.com/luxfi/metric"
 	luxtrace "github.com/luxfi/trace"
 	"github.com/luxfi/zap"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/otlptranslator"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -161,6 +165,85 @@ func TraceInprocEnabled() bool {
 	}
 }
 
+// metricRegistry is where this process's measurements are collected. It is
+// private and NOT prometheus.DefaultRegisterer: the default is a global that any
+// linked library can also write to, and the exposition served from it is a
+// published surface — what appears on it should be what this process chose to
+// instrument, not whatever happened to be compiled in.
+var metricRegistry = prometheus.NewRegistry()
+
+// Metrics serves this process's measurements in Prometheus exposition format, so
+// a scrape can collect what InstallTelemetry's meter provider records.
+//
+// The handler is here, with the provider that fills it, and the LISTENER is not:
+// binding a port is a decision about one process, and every plugin child in this
+// fleet shares the host's environment, so a listener opened here would have every
+// child fighting for one address (the trap listenOn documents). The app that owns
+// the fleet prober owns the listener that publishes it — see apps/o11y.
+func Metrics() http.Handler {
+	return promhttp.HandlerFor(metricRegistry, promhttp.HandlerOpts{
+		// A scrape that fails should say so to the scraper, which records it as a
+		// failed scrape; writing a 200 with a partial body would report a healthy
+		// collection that did not happen.
+		ErrorHandling: promhttp.HTTPErrorOnError,
+	})
+}
+
+// installMeter installs this process's meter provider and returns it with a
+// shutdown. The provider is ALWAYS installed and the shutdown is ALWAYS non-nil,
+// including when the exporter cannot be built — without a provider here every
+// instrument in the process binds to the global no-op and every measurement is
+// discarded while the code looks perfectly instrumented, which is exactly what
+// cloud's request counters (metrics_http.go) did before this existed.
+//
+// ONE reader, and it is a PULL: the provider collects into this process's
+// registry (metricRegistry) and something scrapes the exposition apps/o11y
+// serves. Metrics used to leave over the ZAP wire instead, to match traces and
+// logs — one transport for all three signals, which reads well and did not
+// survive contact with where metrics are actually kept. That wire ends at o11y's
+// receiver, which writes the datastore; but the store every metric READER in
+// this codebase queries is VictoriaMetrics — vmquery.go, the SuperAdmin VM
+// proxy, status.go's up-inventory and /v1/summary — and VM is filled by
+// scraping. A push into a store nothing reads is not a second transport, it is a
+// missing one: the wire endpoint is empty in every deployment we run, which
+// luxfi/metric silently resolved to 127.0.0.1:4317 — the OTLP trace receiver,
+// not the metric one — so the fleet availability gauge was recorded 21 times a
+// minute into a provider with no way out. Exposing the registry puts the
+// measurements where the readers already look.
+func installMeter(log luxlog.Logger, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context)) {
+	exp, err := otelprom.New(
+		otelprom.WithRegisterer(metricRegistry),
+		// Our instruments are already NAMED in Prometheus convention
+		// (hanzo_service_up, hanzo_http_requests_total,
+		// hanzo_service_probe_duration_seconds). Translating would append suffixes
+		// a second time and yield ..._seconds_seconds, so the series the prober
+		// writes would not be the series /v1/summary reads.
+		otelprom.WithTranslationStrategy(otlptranslator.NoTranslation),
+		// The instrumentation scope is a fact about which library emitted a point,
+		// not about the thing measured; as labels it multiplies every series
+		// without narrowing any query anyone runs.
+		otelprom.WithoutScopeInfo(),
+		// The scrape supplies this target's identity (job, instance). target_info
+		// would restate it under dotted label names that PromQL can only reach
+		// through quoting.
+		otelprom.WithoutTargetInfo(),
+	)
+	if err != nil {
+		log.Warn("metric reader unavailable; this process publishes no metrics", "err", err)
+		return nil, func(context.Context) {}
+	}
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(exp),
+		sdkmetric.WithResource(res),
+	)
+	otel.SetMeterProvider(mp)
+	return mp, func(ctx context.Context) {
+		if err := mp.Shutdown(ctx); err != nil {
+			log.Warn("meter provider shutdown", "err", err)
+		}
+	}
+}
+
 // InstallTelemetry installs this process's OTel tracer and meter providers and
 // returns a shutdown that flushes and stops both. The returned func is ALWAYS
 // non-nil, so callers defer it unconditionally.
@@ -182,19 +265,38 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 	}
 	log = log.New("subsystem", "telemetry")
 
-	// Enable when a ZAP endpoint is set OR (legacy) any OTLP endpoint is set OR a
-	// co-resident sink is expected (spans route in-process, no wire endpoint
-	// needed). Keep the clean no-op-when-unset posture so this is safe before any
-	// path is live.
+	if v := strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME")); v != "" {
+		serviceName = v
+	}
+
+	res := resource.NewSchemaless(
+		attribute.String("service.name", serviceName),
+		// deployment.environment on the RESOURCE so o11y's Environment column
+		// resolves instead of defaulting to "default". Every span and metric this
+		// process exports (cloud's own + the adopted ai gen_ai spans) inherits it.
+		attribute.String("deployment.environment", deploymentEnvironment()),
+	)
+
+	// METRICS FIRST, and unconditionally. A meter is only a place to put numbers;
+	// its reader keeps them until something collects. There is no endpoint to
+	// configure and therefore nothing to gate on — so metrics are NOT behind the
+	// span-destination check below. They used to be, which made the fleet
+	// availability gauge's liveness depend on an unrelated tracing setting: turn
+	// off O11Y_TRACES_ZAP_INPROCESS and hanzo_service_up silently stops existing,
+	// with /v1/summary answering 503 for a reason nothing in tracing explains.
+	// Two signals, two destinations, two decisions.
+	mp, stopMeter := installMeter(log, res)
+
+	// TRACES. Enabled when a ZAP endpoint is set OR (legacy) any OTLP endpoint is
+	// set OR a co-resident sink is expected (spans route in-process, no wire
+	// endpoint needed). Keep the clean no-op-when-unset posture so this is safe
+	// before any path is live.
 	zapEndpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_ZAP_ENDPOINT"))
 	legacy := firstNonEmptyEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
 	if zapEndpoint == "" && legacy == "" && !TraceInprocEnabled() {
-		log.Info("telemetry disabled: no span destination configured",
+		log.Info("tracing disabled: no span destination configured (metrics are unaffected)",
 			"hint", "set O11Y_TRACES_ZAP_INPROCESS=true (o11y linked in) or OTEL_EXPORTER_ZAP_ENDPOINT=<host:port> (o11y as a plugin or remote)")
-		return func(context.Context) {}
-	}
-	if v := strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME")); v != "" {
-		serviceName = v
+		return stopMeter
 	}
 
 	// Resolve the wire fallback: an explicit ZAP endpoint, else (legacy OTLP
@@ -223,40 +325,11 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 		}
 	}
 
-	res := resource.NewSchemaless(
-		attribute.String("service.name", serviceName),
-		// deployment.environment on the RESOURCE so o11y's Environment column
-		// resolves instead of defaulting to "default". Every span and metric this
-		// process exports (cloud's own + the adopted ai gen_ai spans) inherits it.
-		attribute.String("deployment.environment", deploymentEnvironment()),
-	)
-
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(&routerTraceExporter{router: traceRouter, dest: traceDest, wire: wire}),
 		sdktrace.WithResource(res),
 	)
 	otel.SetTracerProvider(tp)
-
-	// The SAME composition-root ownership applies to metrics. Without a provider
-	// installed here every instrument in the process binds to the global no-op and
-	// every measurement is discarded while the code looks instrumented — which is
-	// exactly what cloud's request counters (metrics_http.go) did before this.
-	// luxfi/metric adapts the OTel SDK onto the ZAP wire, so metrics reach o11y the
-	// way traces and logs do.
-	var mp *sdkmetric.MeterProvider
-	if mexp, err := luxmetric.NewOTelZAPExporter(luxmetric.ZAPExporterConfig{
-		Endpoint: wireEndpoint,
-		AppName:  serviceName,
-		Resource: map[string]string{"deployment.environment": deploymentEnvironment()},
-	}); err != nil {
-		log.Warn("metric exporter unavailable; metrics disabled", "err", err)
-	} else {
-		mp = sdkmetric.NewMeterProvider(
-			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(mexp)),
-			sdkmetric.WithResource(res),
-		)
-		otel.SetMeterProvider(mp)
-	}
 
 	// Latch BEFORE MountAll runs, so the composition root can adopt this provider
 	// into subsystems that emit their own spans. Without that adoption ai's
@@ -280,7 +353,8 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 		"service.name", serviceName,
 		"environment", deploymentEnvironment(),
 		"inproc_sink", TraceInprocEnabled(),
-		"wire", wireDesc)
+		"wire", wireDesc,
+		"metrics", mp != nil)
 
 	return func(ctx context.Context) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -288,13 +362,7 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 		if err := tp.Shutdown(ctx); err != nil {
 			log.Warn("tracer provider shutdown", "err", err)
 		}
-		// The periodic reader owns a goroutine and a buffer; stopping it is what
-		// flushes the final interval.
-		if mp != nil {
-			if err := mp.Shutdown(ctx); err != nil {
-				log.Warn("meter provider shutdown", "err", err)
-			}
-		}
+		stopMeter(ctx)
 		tracerProviderInstalled.Store(false)
 	}
 }
