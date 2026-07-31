@@ -164,8 +164,8 @@ func TestMount_HostCarve_IngestsForSiteOrg(t *testing.T) {
 		}
 	}
 
-	// PostHog wire on /v1/insights/e.
-	code := postHost(t, app, "yadota.hanzo.app", "/v1/insights/e",
+	// PostHog wire on the ONE door /v1/event (decodeEvent falls back to the PostHog decoder).
+	code := postHost(t, app, "yadota.hanzo.app", "/v1/event",
 		`{"event":"$pageview","distinct_id":"d","properties":{"space":"attacker"}}`,
 		map[string]string{"X-Org-Id": "attacker"})
 	if code != http.StatusServiceUnavailable {
