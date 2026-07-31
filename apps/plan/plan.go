@@ -1,5 +1,8 @@
-// Package plan mounts the @hanzo/plans catalog into the unified cloud
-// binary under /v1/plans/*, per HIP-0106.
+// Package plan is the plan catalog at /v1/plans/*: every purchasable tier — cloud,
+// subscription, blockchain, DNS, GPU, storage — with what it costs, what it grants
+// (the entitlement vocabulary and its JSON Schema), and a resolver from a plan id to
+// both. It is the catalog of RECORD; apps/pricing reads the same @hanzo/plans source
+// and answers eight of these sections again under /v1/pricing/*.
 //
 // STRATEGY: wrap, don't rewrite. @hanzo/plans is a Node data package (JSON
 // catalog + entitlements.mjs transforms). We do NOT reimplement the entitlement
@@ -8,7 +11,7 @@
 //   - github.com/hanzoai/plans (the service repo's Go embed module) ships
 //     goja/bundle.js — the ESM-free port of entitlements.mjs + the /v1/plans
 //     route table — plus the embedded *.json catalog (plans.Data()).
-//   - This wrapper loads that bundle into a goja runtime (clients/goja),
+//   - This wrapper loads that bundle into a goja runtime (apps/goja),
 //     injects the catalog as globalThis.__PLANS_DATA__, and declares one TYPED op
 //     per address (ops.go) that calls globalThis.handle({route, params, tenant}).
 //     The entitlement transforms (fromLegacy/toLicenseFeatures/resolvePlan) run in

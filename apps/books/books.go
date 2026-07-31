@@ -1,17 +1,19 @@
-// Package books is the revenue BOOKS spine: a native double-entry ledger that records
-// hanzo.ai's real prepaid-credit revenue on per-org Base/SQLite, exposed at /v1/books.
+// Package books is double-entry accounting at /v1/books: a fixed chart of accounts, an
+// append-only general ledger, bank feeds with reconciliation, receipt scanning, and the
+// trial-balance / P&L / balance-sheet reports that prove the books balance.
 //
-// WHY THIS EXISTS. commerce holds the money (a prepaid wallet: deposits + withdraws);
-// finance.go PROJECTS that wallet for the customer UI. Neither keeps BOOKS — a
-// double-entry general ledger with a chart of accounts, revenue recognition, and a trial
-// balance that proves the books balance. This domain ports ERPNext's Accounts SEMANTICS
-// (process_gl_map: merge → toggle → round-off → the debit==credit invariant) to Go, with
-// ZERO of its Python/Postgres, and books commerce's transactions into it.
+// WHY THIS EXISTS. finance holds the money (a prepaid wallet: deposits + usage debits);
+// billing PROJECTS that wallet for the customer UI. Neither keeps BOOKS — a general
+// ledger with a chart of accounts, revenue recognition, and a trial balance. This domain
+// ports ERPNext's Accounts SEMANTICS (process_gl_map: merge → toggle → round-off → the
+// debit==credit invariant) to Go, with ZERO of its Python/Postgres.
 //
-// THE ONE POSTING SOURCE. commerce GET /v1/billing/transactions is the SOLE source
-// (ingest.go). This domain is READ-ONLY against commerce — it never mints a deposit,
-// credit, or payout. It only READS money that already moved and writes the accounting
-// twin. So the books can restate but never create money.
+// IT RECORDS MONEY, IT NEVER MOVES IT. Three sources post: commerce
+// GET /v1/billing/transactions (ingest.go), a read-only bank connector (bank.go), and a
+// reviewed receipt scan (scan.go). Every one of them lands through the SAME post() choke
+// point, and none of them can mint a deposit, credit, or payout — this domain only READS
+// money that already moved and writes the accounting twin, so the books can restate but
+// never create money.
 //
 // TENANT ISOLATION. Every read resolves the caller's OWN org from the validated
 // principal (principal.Org — the gateway-minted X-Org-Id, HIP-0026), and each org's

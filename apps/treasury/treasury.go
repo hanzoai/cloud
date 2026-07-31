@@ -1,16 +1,20 @@
-// Package treasury mounts the Hanzo Cloud /v1/finance/* surface: the platform's
-// OWN fund/reserve accounting, one layer ABOVE the per-org commerce credit ledger.
-// Where commerce tracks what each CUSTOMER holds and spends, treasury tracks the
-// PLATFORM's books — a real, backed reserve fund that stands behind the growth-loop
-// payouts (referrals, affiliates, OSS authors) so a payout is a debit against funded
-// capital, never unbounded minting.
+// Package treasury is the platform's OWN reserve fund: a real, backed pool of capital
+// that stands behind the growth-loop payouts (referrals, affiliates, OSS authors), so a
+// payout is a debit against funded capital and never unbounded minting. Where finance
+// tracks what each CUSTOMER holds and spends, treasury tracks what the PLATFORM holds.
+//
+// It answers on TWO prefixes and owns neither whole: GET /v1/finance/{treasury,accounts}
+// beside billing's six commerce-projected /v1/finance/* customer reads, and the
+// SuperAdmin /v1/admin/treasury/* reserve mutations. The routes are disjoint; the full
+// table is below.
 //
 // It is the cloud-facing adapter around the ledger-of-record PORT (ledger.Backend):
 // this file owns HTTP, tenant scoping, audit and the KMS-signed L1 anchor + the Hanzo
 // policy/fund/payout logic; the backend owns the double-entry. Two backends satisfy
-// the port — the native Base/SQLite engine (clients/treasury/ledger, offline/default)
-// and the Formance adapter (clients/treasury/formance, the Postgres-backed ledger of
-// record when FORMANCE_LEDGER_URL is wired). Selecting one is a config flip.
+// the port — the native Base/SQLite engine (apps/treasury/ledger, offline/default,
+// and the SAME engine apps/finance keeps each org's prepaid wallet in) and the Formance
+// adapter (apps/treasury/formance, the Postgres-backed ledger of record when
+// FORMANCE_LEDGER_URL is wired). Selecting one is a config flip.
 //
 // Storage tiers (OLTP → OLAP): the authoritative double-entry is the ledger-of-record
 // backend (single-writer, overdraw-guarded — reserve/revenue/house on the house
@@ -30,13 +34,14 @@
 //	POST /v1/admin/treasury/policy     (SuperAdmin) set the revenue-share %
 //	POST /v1/admin/treasury/sweep      (SuperAdmin) accrue the revenue-share into the fund for a period
 //	POST /v1/admin/treasury/seed       (SuperAdmin) inject bootstrap capital into the fund
-//	POST /v1/admin/treasury/anchor     (SuperAdmin) anchor the ledger root on Hanzo L1
+//	POST /v1/admin/treasury/anchor       (SuperAdmin) anchor the ledger root on Hanzo L1
+//	POST /v1/admin/treasury/bind-anchor  (SuperAdmin) bind the deployed L1 anchor contract
 //
 // The three surfaces (admin.hanzo.ai SuperAdmin, console.hanzo.ai per-org customer,
 // finance.hanzo.ai per-org operator) are the SAME engine projected by IAM scope. A
 // separate frontend agent builds the console + finance surfaces against this contract.
 // The reserve-fund admin board is the `treasury` admin head (distinct from the
-// existing /v1/admin/finance COGS/margin god-view in clients/admin — they compose,
+// existing /v1/admin/finance COGS/margin god-view in apps/admin — they compose,
 // never collide).
 //
 // serve.go auto-registers GET /v1/finance/health.
