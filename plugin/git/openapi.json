@@ -248,15 +248,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/noContent"
-                }
-              }
-            },
-            "description": "ok"
+          "204": {
+            "description": "no content"
           }
         }
       }
@@ -353,15 +346,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/noContent"
-                }
-              }
-            },
-            "description": "ok"
+          "204": {
+            "description": "no content"
           }
         }
       },
@@ -844,15 +830,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/noContent"
-                }
-              }
-            },
-            "description": "ok"
+          "204": {
+            "description": "no content"
           }
         }
       }
@@ -1138,15 +1117,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/noContent"
-                }
-              }
-            },
-            "description": "ok"
+          "204": {
+            "description": "no content"
           }
         }
       }
@@ -2169,10 +2141,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "noContent": {
-        "properties": {},
         "type": "object"
       },
       "patchIn": {
