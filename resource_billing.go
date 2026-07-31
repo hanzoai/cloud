@@ -218,35 +218,92 @@ func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 	}()
 }
 
-// DenyResource renders the Gate denial outcomes as the SAME JSON the edge gate
-// returns (denyBilling), so every Hanzo surface emits one error contract:
-// 402 insufficient_balance / 503 balance_unavailable.
-func DenyResource(c *zip.Ctx, err error) error {
+// denial is the ONE decision behind a refused Gate: which status the money wire
+// answers with, and the code+message it carries. Both renderings below read it,
+// so an untyped handler and a typed op can never describe the same refusal two
+// different ways.
+func denial(err error) (int, string, string) {
+	switch {
 	// Funded but over a per-scope cap (issue #70): the DISTINCT 402, mirroring the
 	// edge gate — never the 503 out-of-funds/unavailable shape (wrong code + a
 	// retry storm against a cap that will not clear until the period rolls over).
-	if errors.Is(err, metering.ErrSpendCapExceeded) {
-		return c.JSON(http.StatusPaymentRequired, map[string]any{
-			"error": map[string]string{
-				"code":    "spend_cap_exceeded",
-				"message": "Spend cap reached for this scope. Raise it at console.hanzo.ai/limits",
-			},
-		})
+	case errors.Is(err, metering.ErrSpendCapExceeded):
+		return http.StatusPaymentRequired, "spend_cap_exceeded",
+			"Spend cap reached for this scope. Raise it at console.hanzo.ai/limits"
+	case errors.Is(err, metering.ErrInsufficientBalance):
+		return http.StatusPaymentRequired, "insufficient_balance", "Add credits at console.hanzo.ai"
+	default:
+		return http.StatusServiceUnavailable, "balance_unavailable", "Billing temporarily unavailable"
 	}
-	if errors.Is(err, metering.ErrInsufficientBalance) {
-		return c.JSON(http.StatusPaymentRequired, map[string]any{
-			"error": map[string]string{
-				"code":    "insufficient_balance",
-				"message": "Add credits at console.hanzo.ai",
-			},
-		})
+}
+
+// denyBody is the money wire's body: the NESTED {"error":{"code","message"}} the
+// edge gate emits, so every Hanzo surface refuses in one contract.
+func denyBody(code, msg string) map[string]any {
+	return map[string]any{"error": map[string]string{"code": code, "message": msg}}
+}
+
+// DenyResource renders the Gate denial outcomes as the SAME JSON the edge gate
+// returns (denyBilling), so every Hanzo surface emits one error contract:
+// 402 insufficient_balance / 503 balance_unavailable.
+//
+// It WRITES the response, which is what an untyped handler wants and what a
+// typed op cannot use: zip stamps the op's own status over a hand-written one
+// after the handler returns, so a typed op refuses with Denied instead.
+func DenyResource(c *zip.Ctx, err error) error {
+	status, code, msg := denial(err)
+	return c.JSON(status, denyBody(code, msg))
+}
+
+// deniedErr carries a refused Gate as an ERROR, which is the only refusal
+// channel a typed op has. It holds the money wire's own status and body, and
+// DenyEnvelope writes them back untouched — so a typed op refuses with exactly
+// the bytes DenyResource writes beside it, rather than reshaping a 402 the whole
+// fleet reads by `error.code` into zip's flat {status,code,error}.
+//
+// It is not an escape from typing. The op still declares its In and its Out, so
+// the document, the MCP tool, the CLI command and the SDK method all exist; what
+// it declines to do is invent a SECOND vocabulary for a refusal the platform
+// already has words for.
+type deniedErr struct {
+	status int
+	code   string
+	msg    string
+}
+
+func (e *deniedErr) Error() string { return e.msg }
+
+// Unwrap gives the refusal a status and a message OFF the HTTP path, where there
+// is no response to write bytes into: an MCP tools/call and an in-process CLI
+// invoke run the op without passing through DenyEnvelope, so zip's own error
+// handler renders this instead — the same status and sentence in zip's envelope,
+// rather than a blanket 500 that loses both.
+func (e *deniedErr) Unwrap() error {
+	return &zip.HTTPError{Status: e.status, Code: e.code, Msg: e.msg}
+}
+
+// Denied turns a refused Gate into the error a TYPED op returns. Pair it with
+// DenyEnvelope on the routes that can refuse; without the envelope the refusal
+// still carries the right status and sentence (Unwrap), just in zip's shape.
+func Denied(err error) error {
+	status, code, msg := denial(err)
+	return &deniedErr{status: status, code: code, msg: msg}
+}
+
+// DenyEnvelope writes a Denied refusal back as the money wire's own bytes.
+// Install it on the group whose typed ops gate on balance — and BEFORE those
+// routes, since fiber runs middleware in registration order — so the REST
+// projection answers the 402/503 contract it always has. Anything else passes
+// through untouched.
+func DenyEnvelope() zip.Handler {
+	return func(c *zip.Ctx) error {
+		err := c.Continue()
+		var d *deniedErr
+		if errors.As(err, &d) {
+			return c.JSON(d.status, denyBody(d.code, d.msg))
+		}
+		return err
 	}
-	return c.JSON(http.StatusServiceUnavailable, map[string]any{
-		"error": map[string]string{
-			"code":    "balance_unavailable",
-			"message": "Billing temporarily unavailable",
-		},
-	})
 }
 
 // ResourceFeeCents resolves the flat create fee (in cents) for kind from

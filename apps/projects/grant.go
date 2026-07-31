@@ -48,11 +48,11 @@ const (
 	grantMaxObjectBytes = maxFileBytes
 )
 
-// uploadGrant is a short-lived, prefix-scoped permission to write a site's
+// projectsUploadGrant is a short-lived, prefix-scoped permission to write a site's
 // objects straight to S3. Fields are the form values a POST must carry verbatim
 // alongside `key` and `file`; the signature covers them, so changing any of them
 // — including widening the key — invalidates the grant.
-type uploadGrant struct {
+type projectsUploadGrant struct {
 	URL       string            `json:"url"`
 	Fields    map[string]string `json:"fields"`
 	Prefix    string            `json:"prefix"`
@@ -60,14 +60,14 @@ type uploadGrant struct {
 	MaxBytes  int64             `json:"maxBytes"`
 }
 
-// mintUploadGrant issues a grant for exactly one site's prefix.
+// mintGrant issues a grant for exactly one site's prefix.
 //
 // It signs against the PUBLIC endpoint, because CI resolves s3.hanzo.ai from
 // outside the cluster and the signature covers the host — a grant signed for the
 // in-cluster admin endpoint would be rejected when posted to the public one.
 // Returns nil (no error) when presigning is unavailable, so a deployment is still
 // created and the response simply carries no grant.
-func mintUploadGrant(ctx context.Context, b *blobStore, prefix string, now time.Time) (*uploadGrant, error) {
+func mintGrant(ctx context.Context, b *blobStore, prefix string, now time.Time) (*projectsUploadGrant, error) {
 	if b == nil || !b.admin.PresignConfigured() {
 		return nil, nil
 	}
@@ -97,7 +97,7 @@ func mintUploadGrant(ctx context.Context, b *blobStore, prefix string, now time.
 	if err != nil {
 		return nil, fmt.Errorf("presign post policy: %w", err)
 	}
-	return &uploadGrant{
+	return &projectsUploadGrant{
 		URL: u.String(), Fields: fields, Prefix: prefix,
 		ExpiresAt: expires.Unix(), MaxBytes: grantMaxObjectBytes,
 	}, nil

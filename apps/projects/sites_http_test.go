@@ -387,7 +387,7 @@ func TestListSites(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d", code)
 	}
-	var sites []siteView
+	var sites []projectsSite
 	mustJSON(t, body, &sites)
 	if len(sites) != 1 {
 		t.Fatalf("acme must see exactly its 1 live site, got %d: %+v", len(sites), sites)
@@ -404,7 +404,7 @@ func TestListSites(t *testing.T) {
 		t.Fatalf("seed draft: %v", err)
 	}
 	_, body2 := doSite(t, app, http.MethodGet, "/v1/sites", "acme", nil)
-	var sites2 []siteView
+	var sites2 []projectsSite
 	mustJSON(t, body2, &sites2)
 	if len(sites2) != 1 {
 		t.Fatalf("draft must be excluded; got %d sites", len(sites2))
