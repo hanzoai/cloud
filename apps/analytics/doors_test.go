@@ -130,44 +130,42 @@ func doorPaths() []string {
 
 // ── a warehouse a test can read back ────────────────────────────────────────
 
-// warehouse is a substituted datastore: it reports ready and records every batch
-// INSERT, so a test can read the TENANT and the $source a lane actually wrote.
-// Without it the pipeline stops at the readiness gate and every lane looks alike —
-// a site-host beacon filed under the public tenant, or a stranger's payload filed
-// under a customer's org, produce byte-identical responses.
-// warehouse records BOTH halves of what one ingest committed: rows is the legacy wide
-// INSERT into hanzo.events, facts is what went onto the event plane. They are separate
-// because they are separate commits with separate failure modes, and a test that cares
-// which signal an event became can only see it in facts — the wide table has one shape
-// for every signal, so an error is indistinguishable from a pageview there.
+// warehouse is a substituted datastore: it reports ready and records what the write
+// path actually committed, so a test can read the TENANT and the $source a lane
+// actually wrote. Without it the pipeline stops at the readiness gate and every lane
+// looks alike — a site-host beacon filed under the public tenant, or a stranger's
+// payload filed under a customer's org, produce byte-identical responses.
+//
+// facts is the ONE storage commit (the publish the sink lands in event.*); stmts is
+// every statement that reached warehouseExec. The flip made stmts a NEGATIVE space on
+// the ingest path — no DDL (the plane's owner is hanzoai/o11y) and no wide INSERT
+// (hanzo.events' second projection is gone) — so tests assert it stays EMPTY, which
+// is what pins "one write path" as a fact rather than a comment.
 type warehouse struct {
+	stmts []string
 	rows  [][]any
 	facts []fact
 }
 
 // fakeWarehouse substitutes the write path's THREE seams for this test and restores
-// them after. It also clears the DDL latch, which is process-global: a real earlier
-// test could otherwise leave it set and skip the CREATE, or this test could leave it
-// set and make a later one skip a real one.
+// them after.
 //
-// It stops the SINK for the same reason. warehouseExec is a process-global var and the
-// drain writes through it too, so a running consumer is a SECOND writer into the very
-// slice this test is about to assert on — and it does not even need this process to
-// have published anything, because a durable stream hands it whatever an earlier run
-// left behind. Left up, it appended a 35-arg event.error insert into a fake expecting
-// 30-column hanzo.events rows. A test that substitutes the write path has to OWN it.
+// It stops the SINK first. warehouseExec is a process-global var and the drain writes
+// through it too, so a running consumer is a SECOND writer into the very slice this
+// test is about to assert on — and it does not even need this process to have
+// published anything, because a durable stream hands it whatever an earlier run left
+// behind. A test that substitutes the write path has to OWN it.
 func fakeWarehouse(t *testing.T) *warehouse {
 	t.Helper()
 	w := &warehouse{}
 	stopSink()
 	origReady, origExec, origPublish := warehouseReady, warehouseExec, publish
-	eventsTableReady.Store(false)
 	warehouseReady = func() bool { return true }
 	warehouseExec = func(_ context.Context, stmt string, args ...any) error {
-		if len(args) > 0 { // the DDL carries none; only INSERTs land here
+		w.stmts = append(w.stmts, stmt)
+		if len(args) > 0 {
 			w.rows = append(w.rows, args)
 		}
-		_ = stmt
 		return nil
 	}
 	publish = func(_ context.Context, facts []fact) error {
@@ -176,7 +174,6 @@ func fakeWarehouse(t *testing.T) *warehouse {
 	}
 	t.Cleanup(func() {
 		warehouseReady, warehouseExec, publish = origReady, origExec, origPublish
-		eventsTableReady.Store(false)
 	})
 	return w
 }
@@ -219,47 +216,27 @@ func TestWritePathSeamsDefaultToTheRealThing(t *testing.T) {
 	}
 }
 
-// col reads one column of one written row by NAME, so these tests bind to the
-// schema's column list rather than to offsets that a new column would shift.
-func (w *warehouse) col(t *testing.T, row int, name string) any {
-	t.Helper()
-	idx := -1
-	for i, c := range eventColumns {
-		if c == name {
-			idx = i
-		}
-	}
-	if idx < 0 {
-		t.Fatalf("no column %q in eventColumns", name)
-	}
-	flat := w.rows[row]
-	if len(flat)%len(eventColumns) != 0 {
-		t.Fatalf("row %d has %d args, not a multiple of %d columns", row, len(flat), len(eventColumns))
-	}
-	return flat[idx]
-}
-
-// tenants returns the tenant_id of every row written — the fact the site-host lane
+// tenants returns the org of every fact committed — the fact the site-host lane
 // and the anonymous lane must disagree about, and the only place that disagreement
-// is visible.
+// is visible. The wide row died with hanzo.events, so the fact's own envelope is
+// where the tenant stamp is read now.
 func (w *warehouse) tenants(t *testing.T) []string {
 	t.Helper()
-	out := make([]string, 0, len(w.rows))
-	for i := range w.rows {
-		s, _ := w.col(t, i, "tenant_id").(string)
-		out = append(out, s)
+	out := make([]string, 0, len(w.facts))
+	for _, f := range w.facts {
+		out = append(out, f.org)
 	}
 	return out
 }
 
-// sources returns each written row's properties.$source — the door it arrived
-// through, and the signal the alias sunset is decided on.
+// sources returns each committed fact's attributes['$source'] — the door it arrived
+// through, and the signal the alias sunset is decided on. The write core stamps it
+// into properties and the plane normalizer carries it into the attributes map.
 func (w *warehouse) sources(t *testing.T) []string {
 	t.Helper()
-	out := make([]string, 0, len(w.rows))
-	for i := range w.rows {
-		raw, _ := w.col(t, i, "properties").(string)
-		out = append(out, decodeProps(t, raw)["$source"].(string))
+	out := make([]string, 0, len(w.facts))
+	for _, f := range w.facts {
+		out = append(out, f.attributes["$source"])
 	}
 	return out
 }

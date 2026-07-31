@@ -9,9 +9,11 @@ package analytics
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -19,24 +21,32 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// ── normalizeEvent: tenancy + event-name + clock skew ────────────────────────
+// ── normalize: tenancy + event-name + clock skew ─────────────────────────────
+//
+// These used to drive normalizeEvent, the wide-row projection. The flip left ONE
+// normalizer — normalize (fact.go), the plane's — so the same properties are now
+// pinned on the fact: org stamp, name resolution, id minting, attribute derivation.
 
-func TestNormalizeEvent_TenantAlwaysServerOrg(t *testing.T) {
+func TestNormalize_TenantAlwaysServerOrg(t *testing.T) {
 	// Even a client that stuffs a foreign org into every field cannot change the
-	// stored tenant: normalizeEvent stamps org verbatim, ignoring client input.
+	// stored tenant: normalize stamps org verbatim, ignoring client input.
 	e := CaptureEvent{Type: "event", Event: "signup_completed", DistinctID: "u1"}
-	row, ok := normalizeEvent("acme", time.Now(), e)
+	f, ok := normalize("acme", time.Now(), e)
 	if !ok {
 		t.Fatal("want ok")
 	}
-	if row.tenant != "acme" {
-		t.Fatalf("tenant = %q, want acme", row.tenant)
+	if f.org != "acme" {
+		t.Fatalf("org = %q, want acme", f.org)
 	}
-	if row.event != "signup_completed" || row.eventType != "event" {
-		t.Fatalf("event/type = %q/%q", row.event, row.eventType)
+	if f.name != "signup_completed" || f.signal != signalEvent || f.kind != kindTrack {
+		t.Fatalf("name/signal/kind = %q/%q/%q", f.name, f.signal, f.kind)
 	}
 }
 
+// TestResolveEventName pins the SUBSCRIBER vocabulary: the $-names the destinations
+// fan-out and webhook envelopes carry (a published grammar — orgs subscribe to
+// event.pageview et al). The STORED vocabulary is resolveName's (kind=page,
+// name=page_viewed); both drop the same unnamed tracked event.
 func TestResolveEventName(t *testing.T) {
 	for _, tc := range []struct {
 		typ, name, want string
@@ -58,8 +68,8 @@ func TestResolveEventName(t *testing.T) {
 	}
 }
 
-func TestNormalizeEvent_UnroutableDropped(t *testing.T) {
-	if _, ok := normalizeEvent("acme", time.Now(), CaptureEvent{Type: "event"}); ok {
+func TestNormalize_UnroutableDropped(t *testing.T) {
+	if _, ok := normalize("acme", time.Now(), CaptureEvent{Type: "event"}); ok {
 		t.Fatal("event with no name must be dropped (ok=false)")
 	}
 }
@@ -85,11 +95,11 @@ func TestClampTS(t *testing.T) {
 }
 
 // TestBackdatedTimestampIsClamped is the PAST bound, and it guards a warehouse property
-// rather than a data-quality one. `timestamp` is caller-chosen and leads ORDER BY, so an
-// unbounded past lets one small batch produce a part whose key range spans years — and a
-// MergeTree part is skippable only when its range misses the query's, so that one part is
-// scanned for every window every tenant asks for. O(1) to write, O(table) to read, and
-// the reader is not the attacker.
+// rather than a data-quality one. `time` is caller-chosen and sits in event.event's
+// ORDER BY ((org, time, id)), so an unbounded past lets one small batch produce a part
+// whose key range spans years — and a MergeTree part is skippable only when its range
+// misses the query's, so that one part is scanned for every window every tenant asks
+// for. O(1) to write, O(table) to read, and the reader is not the attacker.
 //
 // The boundary cases are the test: `maxBackdate` exactly is INSIDE (a late beacon flush
 // is real traffic and must survive), one second past it is not.
@@ -114,65 +124,90 @@ func TestBackdatedTimestampIsClamped(t *testing.T) {
 	}
 }
 
-// TestRetentionIsNotARequestParameter: the TTL clause and the INSERT column list are two
-// halves of ONE property — a row expires on a clock the wire cannot reach. Either half
-// alone proves nothing: a TTL over ingested_at is worthless once ingested_at becomes
-// settable, and keeping it unsettable is worthless while the TTL reads the caller's
-// timestamp. Over `timestamp` the failure is a write that answers 200, fans out to every
-// destination in forward.go, and is expirable before the reply lands.
+// TestRetentionIsNotARequestParameter: the plane's TTL is measured from ingested_at,
+// a server-stamped column DEFAULT — and the half of that property THIS repo owns is
+// the INSERT list: no writer may bind ingested_at, or the caller sets the clock its
+// own row expires on (a write that answers 200, fans out, and is TTL-eligible before
+// the reply lands). The TTL clause itself lives in the plane's DDL, whose one owner
+// is hanzoai/o11y; the pin over the DDL string moved there with the DDL.
 func TestRetentionIsNotARequestParameter(t *testing.T) {
-	if !strings.Contains(eventsTableDDL, "TTL ingested_at + INTERVAL 2 YEAR") {
-		t.Errorf("retention is not measured from the server-stamped ingested_at:\n%s", eventsTableDDL)
+	for _, w := range writers {
+		for _, c := range w.columns {
+			if strings.Contains(c, "ingested_at") {
+				t.Errorf("%s writer binds ingested_at — the caller can set the column retention is measured from", w.signal)
+			}
+		}
 	}
-	if strings.Contains(eventsTableDDL, "TTL timestamp") {
-		t.Error("retention is measured from the CALLER's timestamp — a back-dated row inserts, fans out, and is immediately TTL-eligible")
-	}
-	if !strings.Contains(eventsTableDDL, "ingested_at DateTime DEFAULT now()") {
-		t.Errorf("ingested_at is not server-stamped, so the TTL column has no value of its own:\n%s", eventsTableDDL)
-	}
-	for _, c := range eventColumns {
+	for _, c := range envelopeColumns {
 		if c == "ingested_at" {
-			t.Error("ingested_at is in the INSERT column list, so the caller can set the column retention is measured from")
+			t.Error("ingested_at is in the envelope column list, so every writer binds the TTL anchor")
 		}
 	}
 }
 
-// TestTenantIsThePartitionBoundary: unpartitioned, every tenant shares one "all"
-// partition, so ONE tenant's part range is compared against EVERY tenant's query and a
-// wide-ranged part defeats primary-index pruning for all of them. Partitioning on
-// (tenant, month) makes that impossible by layout rather than by key range — a part
-// cannot be scanned for a tenant it does not belong to — and both halves of the key are
-// exactly the read lens's own predicate (query.go filters a timestamp window AND
-// tenant_id), so pruning happens before the primary index is consulted.
-func TestTenantIsThePartitionBoundary(t *testing.T) {
-	if !strings.Contains(eventsTableDDL, "PARTITION BY (tenant_id, toYYYYMM(timestamp))") {
-		t.Errorf("hanzo.events is not partitioned on (tenant, month):\n%s", eventsTableDDL)
+// TestCloudDoesNotPartitionByTenant — THE INVERTED PIN. Its predecessor
+// (TestTenantIsThePartitionBoundary) asserted the OPPOSITE: that this package's DDL
+// partitioned hanzo.events BY (tenant_id, toYYYYMM). Measurement then showed that
+// key IS the 59.7-byte/row defect — one partition-set per tenant per month explodes
+// the part count, and the well-engineered plane table (event.event: PARTITION BY
+// toYYYYMM(ingested_at) ONLY, ORDER BY (org, time, id)) stores the same stream at
+// the 2.8-byte/row class. Tenant isolation is the ORDER BY prefix + the bound-org
+// predicate, not the partition key.
+//
+// So the pin now protects the FIX the way it used to protect the bug: cloud owns NO
+// events-table DDL at all — no CREATE, no PARTITION BY — and therefore cannot
+// reintroduce a tenant-partitioned events table. The one owner of the plane's schema
+// is hanzoai/o11y. The scan reads this package's non-test sources, which is exactly
+// the scope a re-grown DDL would have to appear in.
+func TestCloudDoesNotPartitionByTenant(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
 	}
-	// The partition key is only bounded because the clamp bounds its time half. Without
-	// the floor, a caller-chosen month is a caller-chosen partition, and the same batch
-	// that used to widen one part's key range instead proliferates partitions.
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(src), "PARTITION BY") {
+			t.Errorf("%s declares a PARTITION BY — cloud owns no events DDL; the plane's owner is hanzoai/o11y", name)
+		}
+		if strings.Contains(string(src), "CREATE TABLE") {
+			t.Errorf("%s declares a CREATE TABLE — cloud is a writer/reader of the plane, never a creator", name)
+		}
+	}
+	// The time half of the ORDER BY key stays bounded by the clamp: without the
+	// floor, a caller-chosen `time` is a caller-chosen key range, and one wide part
+	// defeats pruning for every window read.
 	if maxBackdate <= 0 || maxBackdate > 90*24*time.Hour {
-		t.Errorf("maxBackdate = %s: the month half of the partition key is caller-chosen and only this bounds it", maxBackdate)
+		t.Errorf("maxBackdate = %s: the caller-chosen time column is only bounded by this", maxBackdate)
 	}
 }
 
-func TestNormalizeEvent_MintsIDWhenAbsent(t *testing.T) {
-	row, _ := normalizeEvent("acme", time.Now(), CaptureEvent{Type: "pageview"})
-	if row.id == "" {
+func TestNormalize_MintsIDWhenAbsent(t *testing.T) {
+	f, _ := normalize("acme", time.Now(), CaptureEvent{Type: "pageview"})
+	if f.id == "" {
 		t.Fatal("server must mint an id when messageId is absent")
 	}
-	row2, _ := normalizeEvent("acme", time.Now(), CaptureEvent{Type: "pageview", MessageID: "m-123"})
-	if row2.id != "m-123" {
-		t.Fatalf("client messageId must be preserved, got %q", row2.id)
+	// id is THE idempotency key: event.event is a ReplacingMergeTree keyed
+	// (org, time, id), so a retried batch must carry the same ids — the client's
+	// messageId is preserved verbatim.
+	f2, _ := normalize("acme", time.Now(), CaptureEvent{Type: "pageview", MessageID: "m-123"})
+	if f2.id != "m-123" {
+		t.Fatalf("client messageId must be preserved, got %q", f2.id)
 	}
 }
 
-func TestNormalizeEvent_ReferrerDomain(t *testing.T) {
-	row, _ := normalizeEvent("acme", time.Now(), CaptureEvent{
+func TestNormalize_ReferrerDomain(t *testing.T) {
+	f, _ := normalize("acme", time.Now(), CaptureEvent{
 		Type: "pageview", Referrer: "https://news.ycombinator.com/item?id=42",
 	})
-	if row.referrerDomain != "news.ycombinator.com" {
-		t.Fatalf("referrerDomain = %q", row.referrerDomain)
+	if f.attributes["referrer_domain"] != "news.ycombinator.com" {
+		t.Fatalf("attributes[referrer_domain] = %q", f.attributes["referrer_domain"])
 	}
 }
 
@@ -231,18 +266,19 @@ func TestScrubProps_Empty(t *testing.T) {
 }
 
 // TestStoredPropertiesAreScrubbed pins the scrub's CALL SITE, not the scrub: every
-// test above calls scrubProps directly, so the privacy boundary was proven correct and
-// proven nowhere in particular. normalizeEvent is the ONE place a property bag becomes
-// a column value, and storing e.Properties raw there keeps the whole suite green while
-// every secret and every email a caller ever sent goes to rest in the warehouse.
+// test above calls scrubProps/scrubMap directly, so the privacy boundary was proven
+// correct and proven nowhere in particular. normalize is the ONE place a property bag
+// becomes column values (the attributes map), and carrying e.Properties raw there
+// keeps the whole suite green while every secret and every email a caller ever sent
+// goes to rest in the warehouse — and onto the bus every consumer reads.
 //
 // It runs on the VOUCHED-FOR lane on purpose: the anonymous lane never reaches this at
 // all (admitPublic REBUILDS the event without Properties, so its rows carry only what
 // the server put there). A bearer's properties are the only ones that reach the column,
 // which makes this lane the whole exposure.
 //
-// The legit key is asserted to SURVIVE. Without it the case also passes when the row
-// stores nothing at all, which is the cheapest way to make a privacy assertion vacuous.
+// The legit key is asserted to SURVIVE. Without it the case also passes when the fact
+// carries nothing at all, which is the cheapest way to make a privacy assertion vacuous.
 func TestStoredPropertiesAreScrubbed(t *testing.T) {
 	w := fakeWarehouse(t)
 	app := mountApp(t)
@@ -251,24 +287,24 @@ func TestStoredPropertiesAreScrubbed(t *testing.T) {
 		`"callback":"https://x.test/cb?access_token=abcdef0123456789"}}]}`
 	code, resp := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme", body)
 	if code != http.StatusOK {
-		t.Fatalf("bearer ingest = %d (%s), want 200 (written to the fake warehouse)", code, resp)
+		t.Fatalf("bearer ingest = %d (%s), want 200 (committed to the fake plane)", code, resp)
 	}
-	if len(w.rows) != 1 {
-		t.Fatalf("wrote %d rows, want 1", len(w.rows))
+	if len(w.facts) != 1 {
+		t.Fatalf("committed %d facts, want 1", len(w.facts))
 	}
-	stored, _ := w.col(t, 0, "properties").(string)
-	props := decodeProps(t, stored)
-	if _, bad := props["password"]; bad {
-		t.Errorf("a credential-shaped KEY reached the row: %s", stored)
+	attrs := w.facts[0].attributes
+	if _, bad := attrs["password"]; bad {
+		t.Errorf("a credential-shaped KEY reached the fact: %v", attrs)
 	}
+	stored := fmt.Sprintf("%v", attrs)
 	if strings.Contains(stored, "@hanzo.ai") {
-		t.Errorf("a PII-shaped VALUE reached the row unredacted: %s", stored)
+		t.Errorf("a PII-shaped VALUE reached the fact unredacted: %s", stored)
 	}
 	if strings.Contains(stored, "abcdef0123456789") {
-		t.Errorf("a query-string secret reached the row unredacted: %s", stored)
+		t.Errorf("a query-string secret reached the fact unredacted: %s", stored)
 	}
-	if props["plan"] != "pro" {
-		t.Errorf("the legit property did not survive (%s) — a row that stores nothing "+
+	if attrs["plan"] != "pro" {
+		t.Errorf("the legit property did not survive (%s) — a fact that stores nothing "+
 			"passes every assertion above without scrubbing anything", stored)
 	}
 }
@@ -285,45 +321,53 @@ func decodeProps(t *testing.T, s string) map[string]any {
 	return m
 }
 
-// ── buildEventsInsert: shape + positional integrity ──────────────────────────
+// ── the event writer: shape + positional integrity ──────────────────────────
+//
+// These pins moved with the write path. buildEventsInsert rendered
+// "INSERT INTO hanzo.events (…)" — the statement whose target table WAS the
+// measured 59.7-byte/row defect — and the flip's INSERT is the event writer's
+// (warehouse.go), targeting the plane. The prefix pin flips with it: the one
+// statement that lands a product event now opens "INSERT INTO event.event (".
 
-func TestBuildEventsInsert_Shape(t *testing.T) {
-	rows := []eventRow{
-		{id: "a", tenant: "acme", event: "$pageview", eventType: "pageview"},
-		{id: "b", tenant: "acme", event: "signup_completed", eventType: "event"},
+func TestEventWriterStatementTargetsThePlane(t *testing.T) {
+	var ew writer
+	for _, w := range writers {
+		if w.signal == signalEvent {
+			ew = w
+		}
 	}
-	stmt, args := buildEventsInsert(rows)
-	if !strings.HasPrefix(stmt, "INSERT INTO hanzo.events (") {
-		t.Fatalf("stmt prefix: %s", stmt)
+	stmt := ew.statement()
+	if !strings.HasPrefix(stmt, "INSERT INTO event.event (") {
+		t.Fatalf("stmt prefix: %s — the ONE product-event INSERT lands on the plane, "+
+			"never on the retired wide table", stmt)
 	}
-	// one placeholder group per row, each with len(eventColumns) '?'.
-	if got := strings.Count(stmt, "?"); got != len(rows)*len(eventColumns) {
-		t.Fatalf("placeholder count = %d, want %d", got, len(rows)*len(eventColumns))
+	if strings.Contains(stmt, "hanzo.events") {
+		t.Fatalf("the event writer still names the retired wide table: %s", stmt)
 	}
-	if len(args) != len(rows)*len(eventColumns) {
-		t.Fatalf("args len = %d, want %d", len(args), len(rows)*len(eventColumns))
+	// The batching lives in the store (async_insert), which is what keeps one
+	// statement per fact affordable — the settings must render before VALUES.
+	if !strings.Contains(stmt, insertSettings+" VALUES") {
+		t.Fatalf("insert settings must render before VALUES: %s", stmt)
 	}
-	// tenant sits at column index 2 (id, timestamp, tenant_id, ...) for row 0.
-	if args[2] != "acme" {
-		t.Fatalf("tenant arg = %v, want acme (server tenant, positional)", args[2])
-	}
-	// row 1 tenant at offset len(eventColumns)+2.
-	if args[len(eventColumns)+2] != "acme" {
-		t.Fatalf("row1 tenant arg = %v", args[len(eventColumns)+2])
+	// One placeholder per bound value: the el tuple binds six, every other
+	// envelope column one.
+	want := len(envelopeColumns) - 1 + 6
+	if got := strings.Count(stmt, "?"); got != want {
+		t.Fatalf("placeholder count = %d, want %d", got, want)
 	}
 }
 
-func TestBuildEventsInsert_Empty(t *testing.T) {
-	if stmt, args := buildEventsInsert(nil); stmt != "" || args != nil {
-		t.Fatalf("empty rows must yield no statement, got %q / %v", stmt, args)
-	}
-}
-
-func TestEventColumnsMatchArgsWidth(t *testing.T) {
-	// The row's positional args MUST be exactly as wide as the column list, or the
+func TestEnvelopeColumnsMatchArgsWidth(t *testing.T) {
+	// The positional args MUST be exactly as wide as the placeholder list, or the
 	// INSERT binds the wrong column — the one invariant that silently corrupts data.
-	if got := len(eventRow{}.args()); got != len(eventColumns) {
-		t.Fatalf("eventRow.args width = %d, eventColumns = %d", got, len(eventColumns))
+	// (el is one column bound as a six-element tuple, hence the +5.)
+	if got, want := len(envelopeArgs(message{})), len(envelopeColumns)+5; got != want {
+		t.Fatalf("envelopeArgs width = %d, want %d (envelopeColumns + el's extra 5)", got, want)
+	}
+	// org leads: the tenant is the first bound value of every fact insert.
+	args := envelopeArgs(message{Org: "acme"})
+	if args[0] != "acme" {
+		t.Fatalf("org arg = %v, want acme (server tenant, positional)", args[0])
 	}
 }
 
