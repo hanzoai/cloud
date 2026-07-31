@@ -1181,6 +1181,9 @@
           "lenses": {
             "$ref": "#/components/schemas/healthLenses"
           },
+          "lost": {
+            "$ref": "#/components/schemas/loss"
+          },
           "reason": {
             "type": "string"
           },
@@ -1259,6 +1262,17 @@
           }
         },
         "type": "object"
+      },
+      "loss": {
+        "type": "object",
+        "properties": {
+          "exhausted": {
+            "type": "integer"
+          },
+          "undecodable": {
+            "type": "integer"
+          }
+        }
       },
       "productEvent": {
         "properties": {

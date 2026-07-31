@@ -5661,6 +5661,97 @@ components:
             running, since it IS the bits. Empty for the other sources.
           type: string
       type: object
+    StatusComponent:
+      properties:
+        current_status:
+          description: |-
+            CurrentStatus is this component's own condition: "full_outage" for a
+            service that did not answer its health probe at all.
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+      type: object
+    StatusIncident:
+      properties:
+        affected_components:
+          items:
+            $ref: '#/components/schemas/StatusComponent'
+          type: array
+        current_worst_impact:
+          description: |-
+            CurrentWorstImpact is the incident's impact on the PLATFORM, which is not
+            the same question as the component's own condition above.
+          type: string
+        id:
+          type: string
+        last_update_at:
+          description: |-
+            LastUpdateAt is when the failing measurement this incident reports was
+            read, RFC3339 UTC.
+          type: string
+        last_update_message:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        url:
+          type: string
+      type: object
+    StatusMaintenance:
+      properties:
+        affected_components:
+          items:
+            $ref: '#/components/schemas/StatusComponent'
+          type: array
+        ends_at:
+          type: string
+        id:
+          type: string
+        last_update_at:
+          type: string
+        last_update_message:
+          type: string
+        name:
+          type: string
+        starts_at:
+          type: string
+        status:
+          type: string
+        url:
+          type: string
+      type: object
+    StatusSummary:
+      properties:
+        checked_at:
+          description: |-
+            CheckedAt is when the underlying availability read was taken, RFC3339 UTC.
+            Not part of the status-page schema the panel parses (which ignores unknown
+            fields); it is here because a status document with no timestamp cannot be
+            told apart from a stale one.
+          type: string
+        in_progress_maintenances:
+          items:
+            $ref: '#/components/schemas/StatusMaintenance'
+          type: array
+        ongoing_incidents:
+          items:
+            $ref: '#/components/schemas/StatusIncident'
+          type: array
+        page_title:
+          type: string
+        page_url:
+          description: |-
+            PageURL is the HUMAN status page — an HTML page for people, distinct from
+            this JSON endpoint. Every link in this document points there.
+          type: string
+        scheduled_maintenances:
+          items:
+            $ref: '#/components/schemas/StatusMaintenance'
+          type: array
+      type: object
     Step:
       properties:
         body:
@@ -13138,6 +13229,8 @@ components:
           type: boolean
         lenses:
           $ref: '#/components/schemas/healthLenses'
+        lost:
+          $ref: '#/components/schemas/loss'
         reason:
           type: string
         service:
@@ -14214,6 +14307,13 @@ components:
         view:
           description: '"infra" (admin) | "request" (per-org)'
           type: string
+      type: object
+    loss:
+      properties:
+        exhausted:
+          type: integer
+        undecodable:
+          type: integer
       type: object
     machineList:
       properties:
@@ -52388,6 +52488,30 @@ paths:
       summary: Mint your org's least-privilege storefront read key
       tags:
       - store
+  /v1/summary:
+    get:
+      description: |-
+        GetSummary reports whether the platform is up. It returns the public status
+        document: the incidents currently open against Hanzo's own services, derived
+        from the fleet health probes, plus the address of the human status page. No
+        authentication is required and no tenant data is involved — the answer is the
+        same for every caller.
+
+        A service that fails its health probe becomes one incident naming that service.
+        When the availability source itself cannot be read the endpoint answers 503
+        rather than an empty incident list, because "we cannot tell" and "everything is
+        fine" are different answers and only one of them is true.
+      operationId: get_v1_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusSummary'
+          description: ok
+      summary: GetSummary reports whether the platform is up.
+      tags:
+      - summary
   /v1/sync:
     get:
       description: |-
@@ -56392,6 +56516,9 @@ tags:
 - description: 'Package commerce is selling: checkout, subscriptions, invoices, spend
     alerts, payment webhooks and the storefront catalog.'
   name: store
+- description: 'Package o11y is your logs, metrics and traces: ship them in, query
+    them, chart them.'
+  name: summary
 - description: 'Package sync is data sync: link two endpoints and keep them in step,
     on a webhook, on a schedule, or on demand.'
   name: sync
