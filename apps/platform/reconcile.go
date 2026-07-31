@@ -30,7 +30,21 @@ const (
 	// buildDeadline bounds a single build+push. A deployment "building" longer
 	// than this (Job stuck, node lost, TTL-cleaned) is failed honestly rather
 	// than left pending forever.
-	buildDeadline = 20 * time.Minute
+	//
+	// It is set ABOVE the observed range, not on it. At 20m it sat on top of how
+	// long cloud's own image actually takes — three consecutive builds ran 15m,
+	// 17m and 20m42s — so the release became a coin flip, and losing the toss cost
+	// more than the wait: the build had already pushed its image, so failing the
+	// wait discarded a good image AND burned that version number permanently
+	// (nextVersion folds published image tags in, by design, so the number is never
+	// reused). A deadline exists to catch a Job that is STUCK; it should not be
+	// close enough to a healthy build to fire on one.
+	//
+	// The expected direction is DOWN, not up: the build cache now lives in the
+	// registry (buildFrontendCmd), so the Go compiles that took 11 minutes from
+	// cold should mostly become cache hits. This bound is the stuck-Job catch, not
+	// a target.
+	buildDeadline = 30 * time.Minute
 )
 
 // runBuildReconciler ticks reconcileBuilds until ctx is cancelled (Shutdown).
