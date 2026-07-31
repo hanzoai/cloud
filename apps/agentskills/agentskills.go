@@ -24,6 +24,23 @@
 // so these exact routes win Fiber's first-match scan, and before the console
 // catch-all `/*`. Public: the routes are installed as plain app routes; the
 // discovery surface carries no secrets and needs no bearer.
+//
+// NEITHER ROUTE CAN BE A TYPED OP, so neither carries a schema or a description
+// in the generated document, the MCP tool list or the CLI. That is a property of
+// what they serve, not an omission:
+//
+//   - SKILL.md answers text/markdown. A typed op marshals its Out as JSON and has
+//     no vocabulary for another media type, so typing it would change what the
+//     route sends.
+//   - index.json answers the EMBEDDED BYTES verbatim, with a Cache-Control the
+//     handler sets. Its schema is owned by hanzoai/openapi's skills.py, which
+//     generates the catalogue; declaring a Go shape for it here would fork that
+//     schema, and marshalling through the fork would re-encode the exact bytes
+//     whose sha256 digests the catalogue publishes.
+//
+// The skills themselves are not undocumented — each SKILL.md IS the description,
+// generated from the same per-service specs. The right consumer of this surface
+// is a skills client reading the catalogue, not an SDK method.
 package agentskills
 
 import (

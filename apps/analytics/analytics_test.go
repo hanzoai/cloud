@@ -47,14 +47,14 @@ func TestLLMWhereBindsOrgPositionally(t *testing.T) {
 	}
 }
 
-// TestEventsWhereBindsOrgPositionally: the events lens keys on tenant_id, same
+// TestEventsWhereBindsOrgPositionally: the event plane keys on org, same
 // bound-parameter discipline.
 func TestEventsWhereBindsOrgPositionally(t *testing.T) {
 	start := time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	sql, args := eventsWhere("maxpower", start, end)
-	if !strings.Contains(sql, "tenant_id = ?") {
-		t.Fatalf("eventsWhere must bind tenant_id: %q", sql)
+	if !strings.Contains(sql, "org = ?") {
+		t.Fatalf("eventsWhere must bind org: %q", sql)
 	}
 	if strings.Contains(sql, "maxpower") {
 		t.Fatalf("org must not be interpolated: %q", sql)
@@ -182,7 +182,7 @@ func TestBuildTopProductsHonestEmpty(t *testing.T) {
 	if tp.Items == nil || len(tp.Items) != 0 {
 		t.Fatalf("items must be an empty (non-nil) slice, got %#v", tp.Items)
 	}
-	if tp.Reason == "" || tp.Source != "hanzo.events" {
+	if tp.Reason == "" || tp.Source != eventsTable {
 		t.Fatalf("must carry honest reason + source, got %+v", tp)
 	}
 }
@@ -191,22 +191,22 @@ func TestBuildTopProductsHonestEmpty(t *testing.T) {
 
 // TestBreakdownSQLBindsOrgPositionally: EVERY behavior lens inherits the tenancy
 // invariant — the org is the trailing bound parameter (never interpolated), the
-// predicate binds tenant_id, and the read is restricted to $pageview rows. The
+// predicate binds org, and the read is restricted to page-view rows. The
 // group key is a server-chosen constant (safe to interpolate) and the limit is a
 // validated int. This is the SQL-boundary isolation proof for the new lenses.
 func TestBreakdownSQLBindsOrgPositionally(t *testing.T) {
 	start := time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	const org = "o'; DROP TABLE hanzo.events; --" // hostile slug must NOT escape into SQL
+	const org = "o'; DROP TABLE event.event; --" // hostile slug must NOT escape into SQL
 	for _, keyExpr := range []string{pageKeyExpr, referrerKeyExpr, sourceKeyExpr} {
 		sql, args := breakdownSQL(keyExpr, org, start, end, 10)
 		if strings.Contains(sql, org) {
 			t.Fatalf("org %q must NOT be interpolated into sql: %q", org, sql)
 		}
-		if !strings.Contains(sql, "tenant_id = ?") {
-			t.Fatalf("breakdown must bind tenant_id positionally: %q", sql)
+		if !strings.Contains(sql, "org = ?") {
+			t.Fatalf("breakdown must bind org positionally: %q", sql)
 		}
-		if !strings.Contains(sql, "timestamp >= ? AND timestamp < ?") {
+		if !strings.Contains(sql, "time >= ? AND time < ?") {
 			t.Fatalf("time bounds must be parameterized: %q", sql)
 		}
 		if len(args) != 3 {
@@ -215,8 +215,8 @@ func TestBreakdownSQLBindsOrgPositionally(t *testing.T) {
 		if got, ok := args[2].(string); !ok || got != org {
 			t.Fatalf("org must be the trailing bound arg verbatim, want %q got %v", org, args[2])
 		}
-		if !strings.Contains(sql, "event = '$pageview'") {
-			t.Fatalf("behavior lenses count only $pageview rows: %q", sql)
+		if !strings.Contains(sql, "kind = 'page'") {
+			t.Fatalf("behavior lenses count only page-view rows: %q", sql)
 		}
 		if !strings.Contains(sql, keyExpr) {
 			t.Fatalf("breakdown must group by the key expr %q: %q", keyExpr, sql)
@@ -270,8 +270,8 @@ func TestBuildBreakdownPctShareOfTotal(t *testing.T) {
 	if b.Items[0].Pct != 60 || b.Items[1].Pct != 20 {
 		t.Fatalf("pct must be share of the in-window total: %v / %v", b.Items[0].Pct, b.Items[1].Pct)
 	}
-	if b.Source != "hanzo.events" {
-		t.Fatalf("source want hanzo.events, got %q", b.Source)
+	if b.Source != eventsTable {
+		t.Fatalf("source want %q, got %q", eventsTable, b.Source)
 	}
 }
 
@@ -286,7 +286,7 @@ func TestBuildBreakdownHonestEmpty(t *testing.T) {
 	if b.Items == nil || len(b.Items) != 0 {
 		t.Fatalf("items must be an empty (non-nil) slice, got %#v", b.Items)
 	}
-	if b.Reason == "" || b.Source != "hanzo.events" {
+	if b.Reason == "" || b.Source != eventsTable {
 		t.Fatalf("must carry honest reason + source, got %+v", b)
 	}
 }

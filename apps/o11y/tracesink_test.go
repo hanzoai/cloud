@@ -32,22 +32,21 @@ func (f *fakeConsumer) ConsumeTraces(_ context.Context, td ptrace.Traces) error 
 	return nil
 }
 
-// TestTracing_EndToEnd_WithO11yLinkedIn is the proof the split had to keep: with
-// clients/o11y LINKED INTO this binary, a span opened on the process-global
-// tracer — the handle every caller in cloud already holds — arrives at o11y's
-// sink, converted to the pdata the datastore exporter consumes.
+// TestTracing_SameProcessCostsNoSocket is the SAME-PROCESS rung, end to end and in
+// the one process it applies to: a span opened on the process-global tracer — the
+// handle every caller already holds — arrives at o11y's own sink, converted to the
+// pdata the warehouse exporter consumes, without a socket.
 //
 // It crosses the whole seam and nothing else: cloud.InstallTelemetry builds the
-// provider (host side), cloud.RegisterTraceSink carries the batch across, and
-// traceSink — the exact function mountTraceSink registers in production —
-// converts it. Before the split this path only existed because clients/o11y's
-// init() ran in the host; the plugin cut that wire and tracing went dark with no
-// test to notice.
-func TestTracing_EndToEnd_WithO11yLinkedIn(t *testing.T) {
+// provider, cloud.RegisterTraceSink carries the batch across, and traceSink — the
+// exact function mountTraceSink registers in production — converts it. This path
+// once existed only because o11y's init() ran in the host; making o11y a plugin cut
+// that wire and tracing went dark with no test to notice.
+func TestTracing_SameProcessCostsNoSocket(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_ZAP_ENDPOINT", "")
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
-	t.Setenv("O11Y_TRACES_ZAP_INPROCESS", "true")
+	t.Setenv("OTEL_SDK_DISABLED", "")
 
 	sink := &fakeConsumer{}
 	cloud.RegisterTraceSink(traceSink(sink))

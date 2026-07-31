@@ -8,6 +8,7 @@ package books
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/hanzoai/cloud"
@@ -16,15 +17,90 @@ import (
 )
 
 // bankRoutes registers the bank surface on the existing books app (called from routes()).
-func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
+// The group is built here, from a literal prefix, because that is what makes each typed
+// op's path — and therefore its identity in every projection — resolvable from this file.
+// It sits under the /v1/books group's Bridge + noStore, which match by prefix.
+func bankRoutes(app cloud.Router, s *cloud.Service[*state]) error {
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("books.bankRoutes: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	o := booksOps{s: s}
+	zip.Get(zapp, "/v1/books/bank/transactions", o.listBankTxns)
+	zip.Get(zapp, "/v1/books/bank/unreconciled", o.listUnreconciled)
+	// The connector pull. It takes nothing off the wire but the ?sandbox selector,
+	// which stays on the URL (query, typed.go) rather than moving into the body a
+	// typed POST's In is documented as.
+	zip.Post(zapp, "/v1/books/bank/sync", o.syncBank)
+
+	// UNTYPED, each for a stated reason. import takes RAW statement bytes (OFX/QFX/CSV)
+	// as its body: zip's typed decoder unmarshals the body as JSON, so an OFX upload
+	// would answer 400 instead of importing — there is no JSON In that names a file.
+	// link-token and exchange always answer 501, and a typed op publishes a SUCCESS
+	// response (its Out schema, or the 204 a void op declares) that neither has ever
+	// sent — an invented contract every generated SDK would carry a return type for.
 	app.Post("/v1/books/bank/import", cloud.Handle(s, bankImportHandler))
-	app.Post("/v1/books/bank/sync", cloud.Handle(s, bankSyncHandler))
-	app.Get("/v1/books/bank/transactions", cloud.Handle(s, bankTxnsHandler))
-	app.Get("/v1/books/bank/unreconciled", cloud.Handle(s, bankUnreconciledHandler))
-	// Link plumbing the Plaid/Teller connectors implement — stubbed 501 until then so the
-	// route exists and the frontend contract is stable.
 	app.Post("/v1/books/bank/link-token", cloud.Handle(s, bankLinkTokenHandler))
 	app.Post("/v1/books/bank/exchange", cloud.Handle(s, bankExchangeHandler))
+	return nil
+}
+
+// bankTxnList is the org's normalized bank rows as the route answers them: a bare array.
+type bankTxnList []BankTxnRow
+
+// unreconciledOut pairs the unmatched inflows with the open questions they raised.
+type unreconciledOut struct {
+	// Questions is the open clarifying question per unmatched inflow.
+	Questions []BankQuestion `json:"questions"`
+	// Transactions is every bank row still unmatched against the ledger.
+	Transactions []BankTxnRow `json:"transactions"`
+}
+
+// bankLimitIn is a page of the org's bank rows.
+type bankLimitIn struct {
+	// Sandbox reads the org's SANDBOX ledger when it is exactly "true".
+	Sandbox string `json:"sandbox"`
+	// Limit caps how many rows come back; 500 when absent or not positive.
+	Limit int `json:"limit"`
+}
+
+// ListBankTransactions returns the org's normalized bank transactions, newest first.
+// Every row the import and connector paths have ingested is here, with its amount in
+// exact cents, its direction, and whether it has been matched to a voucher yet.
+//
+// Example: {"limit": 100}
+func (o booksOps) listBankTxns(ctx context.Context, in *bankLimitIn) (*bankTxnList, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view bank transactions")
+	if err != nil {
+		return nil, err
+	}
+	rows, err := st.listBankTxns(ctx, limitOr(in.Limit, 500))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "bank transactions read failed")
+	}
+	out := bankTxnList(rows)
+	return &out, nil
+}
+
+// ListUnreconciled returns the org's unmatched bank inflows and their open questions.
+// It is the queue a human answers so an unexplained deposit is never guessed into
+// revenue.
+//
+// Example: {"sandbox": "false"}
+func (o booksOps) listUnreconciled(ctx context.Context, in *ledgerIn) (*unreconciledOut, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view unreconciled bank items")
+	if err != nil {
+		return nil, err
+	}
+	txns, err := st.listUnreconciled(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "bank unreconciled read failed")
+	}
+	questions, err := st.listQuestions(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "bank questions read failed")
+	}
+	return &unreconciledOut{Questions: questions, Transactions: txns}, nil
 }
 
 // bankImportHandler ingests an uploaded OFX/QFX/CSV file body: it parses it with the
@@ -56,64 +132,39 @@ func bankImportHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	return booksJSON(c, tally)
 }
 
-// bankSyncHandler pulls every pull-based connector (Plaid/Teller) for the caller's org,
-// mapping + posting each transaction idempotently and advancing per-connector cursors.
-func bankSyncHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to sync bank")
-	}
-	tally, err := s.State.syncBank(c.Context(), org, sandboxQuery(c))
+// SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each
+// fetched transaction to a posting and books it idempotently, then advances that
+// connector's cursor so the next sync resumes where this one stopped. One connector's
+// outage is skipped rather than failing the whole sync. It reports the batch: how many
+// transactions were seen, how many vouchers posted, how many inflows reconciled against
+// the processor clearing account, how many raised a question, how many were own-account
+// transfers, and how many were already-processed no-ops. It is READ-ONLY against the
+// bank — it ingests, it never sends money.
+func (o booksOps) syncBank(ctx context.Context, _ *syncIn) (*BankTally, error) {
+	org, err := tenant(ctx, "sync bank")
 	if err != nil {
-		s.State.log.Warn("books bank sync failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "bank sync failed")
+		return nil, err
 	}
-	return booksJSON(c, tally)
+	tally, err := o.s.State.syncBank(ctx, org, sandboxOf(query(ctx, "sandbox")))
+	if err != nil {
+		o.s.State.log.Warn("books bank sync failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "bank sync failed")
+	}
+	return &tally, nil
 }
 
-// bankTxnsHandler returns the org's normalized bank transactions (newest first, ?limit=).
-func bankTxnsHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view bank transactions")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
-	}
-	rows, err := st.listBankTxns(c.Context(), atoiDefault(c.Query("limit"), 500))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "bank transactions read failed")
-	}
-	return booksJSON(c, rows)
-}
-
-// bankUnreconciledHandler returns the org's unmatched inflows and their open clarifying
-// questions — the queue a human answers so an unexplained deposit is never guessed into
-// revenue.
-func bankUnreconciledHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view unreconciled bank items")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
-	}
-	txns, err := st.listUnreconciled(c.Context())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "bank unreconciled read failed")
-	}
-	questions, err := st.listQuestions(c.Context())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "bank questions read failed")
-	}
-	return booksJSON(c, map[string]any{"transactions": txns, "questions": questions})
-}
-
-// bankLinkTokenHandler / bankExchangeHandler are the Plaid/Teller link-flow endpoints. They
-// exist here so the route contract is stable; the connectors implement the token exchange
-// (storing the resulting access_token in KMS, never books.db).
+// bankLinkTokenHandler / bankExchangeHandler are the Plaid/Teller link-flow endpoints, and
+// both answer 501 unconditionally.
+//
+// The connectors BEHIND them are written: plaidConn.LinkToken mints the browser Link
+// session's link_token, plaidConn.Exchange trades Link's public_token for the durable
+// access_token and seals it into KMS, and tellerConn.exchange/linkConfig are the Teller
+// half. Nothing on the HTTP path calls any of them — only their tests do — so the link
+// flow is implemented end to end and unreachable, and no org can connect a bank through
+// the API. Wiring them is a WIRE change (a route that has only ever answered 501 would
+// start answering 200 with a body nothing has specified), which is why these two are the
+// books routes left untyped: a typed op must state what it answers on success, and the
+// honest answer today is that neither ever succeeds.
 func bankLinkTokenHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	if _, ok := principal.Org(c); !ok {
 		return zip.ErrUnauthorized("sign in to link a bank")

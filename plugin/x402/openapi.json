@@ -18,7 +18,9 @@
   "paths": {
     "/v1/x402/settlements/{id}": {
       "get": {
-        "operationId": "get_v1_x402_settlements_by_id",
+        "operationId": "get_v1_x402_settlements_id",
+        "summary": "getSettlement returns one payment receipt, scoped to the caller's payer org.",
+        "description": "getSettlement returns one payment receipt, scoped to the caller's payer org.\nA settlement billed to another org reads as not found.",
         "tags": [
           "x402"
         ],
@@ -27,11 +29,72 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the settlement id — keccak(from|nonce), the settle-once key.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "0x9f2c1ab4"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Receipt": {
+        "properties": {
+          "amount": {
+            "description": "exact 18-dp USD (money.Amount string)",
+            "type": "string"
+          },
+          "from": {
+            "description": "payer address",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string"
+          },
+          "payee": {
+            "description": "recipient address",
+            "type": "string"
+          },
+          "payeeOrg": {
+            "type": "string"
+          },
+          "payer": {
+            "description": "payer ORG (the debited ledger)",
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "settledAt": {
+            "type": "integer"
+          },
+          "settledVia": {
+            "description": "\"ledger\" (live) | \"chain\" (seam)",
+            "type": "string"
+          },
+          "txHash": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

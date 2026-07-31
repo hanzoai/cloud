@@ -14,8 +14,6 @@ package leaderboard
 
 import (
 	"context"
-	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -23,28 +21,53 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-func leaderboardHandler(s *cloud.Service[state], c *zip.Ctx) error {
+// BoardQuery selects a leaderboard view.
+type BoardQuery struct {
+	// Scope is personal (your rank among your org), org (your org's board) or global
+	// (the top orgs). Empty means personal.
+	Scope string `json:"scope"`
+	// Metric is what the board ranks on: tokens, requests or cost. Empty means tokens.
+	Metric string `json:"metric"`
+	// Period is the window: day, week, month or all.
+	Period string `json:"period"`
+	// Limit caps the rows returned, clamped to 1..100. 0 means 10.
+	Limit int `json:"limit"`
+}
+
+// leaderboard returns the ranked usage board for one scope, metric and period. Peers
+// are anonymized unless they opted into public listing (an org admin sees their own
+// org's members named), cross-org cost is SuperAdmin-only, and the caller's own rank
+// is always included even when it falls outside the page. A warehouse that is not
+// connected answers available:false rather than a fabricated rank.
+//
+// Example: {"scope": "org", "metric": "tokens", "period": "week", "limit": 10}
+func (o ops) leaderboard(ctx context.Context, in *BoardQuery) (*LeaderboardView, error) {
+	s := o.s
+	c, hasReq := o.request(ctx)
+	if !hasReq {
+		return nil, zip.ErrUnauthorized("sign in to view the leaderboard")
+	}
 	org, ok := tenant(c)
 	if !ok {
-		return zip.ErrUnauthorized("sign in to view the leaderboard")
+		return nil, zip.ErrUnauthorized("sign in to view the leaderboard")
 	}
-	scope := strings.ToLower(strings.TrimSpace(c.Query("scope")))
+	scope := strings.ToLower(strings.TrimSpace(in.Scope))
 	if scope == "" {
 		scope = "personal"
 	}
-	metricLabel := strings.ToLower(strings.TrimSpace(c.Query("metric")))
+	metricLabel := strings.ToLower(strings.TrimSpace(in.Metric))
 	if metricLabel == "" {
 		metricLabel = "tokens"
 	}
 	metricCol, ok := resolveMetric(metricLabel)
 	if !ok {
-		return zip.ErrBadRequest("metric must be tokens|requests|cost")
+		return nil, zip.ErrBadRequest("metric must be tokens|requests|cost")
 	}
-	w, err := resolvePeriod(c.Query("period"), nowFn())
+	w, err := resolvePeriod(in.Period, nowFn())
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
-	limit := clampLimit(atoiDefault(c.Query("limit"), 0), 10)
+	limit := clampLimit(in.Limit, 10)
 
 	// Per-tenant analytics must never be cached by a browser or intermediary.
 	c.SetHeader("Cache-Control", "no-store")
@@ -62,27 +85,25 @@ func leaderboardHandler(s *cloud.Service[state], c *zip.Ctx) error {
 	// Honest-empty when the warehouse is not connected or the rollup is not ready —
 	// never a fabricated rank.
 	if !datastoreEnabled() {
-		return c.JSON(http.StatusOK, base)
+		return &base, nil
 	}
-	ctx := c.Context()
 	if err := EnsureUsageRollup(ctx); err != nil {
 		s.Log.Debug("rollup ensure failed; leaderboard honest-empty", "err", err)
-		return c.JSON(http.StatusOK, base)
+		return &base, nil
 	}
 
 	switch scope {
 	case "personal", "org":
-		return userBoard(s, c, base, org, scope, metricLabel, metricCol, w, limit)
+		return userBoard(ctx, s, c, base, org, scope, metricLabel, metricCol, w, limit)
 	case "global":
-		return orgBoard(s, c, base, org, metricLabel, metricCol, w, limit)
+		return orgBoard(ctx, s, c, base, org, metricLabel, metricCol, w, limit)
 	default:
-		return zip.ErrBadRequest("scope must be personal|org|global")
+		return nil, zip.ErrBadRequest("scope must be personal|org|global")
 	}
 }
 
 // userBoard ranks the users of the caller's own org (scope personal|org).
-func userBoard(s *cloud.Service[state], c *zip.Ctx, base LeaderboardView, org, scope, metricLabel, metricCol string, w window, limit int) error {
-	ctx := c.Context()
+func userBoard(ctx context.Context, s *cloud.Service[state], c *zip.Ctx, base LeaderboardView, org, scope, metricLabel, metricCol string, w window, limit int) (*LeaderboardView, error) {
 	base.Subject = "user"
 
 	// NAMED disclosure only for an admin viewing the ORG board; personal is always the
@@ -96,7 +117,7 @@ func userBoard(s *cloud.Service[state], c *zip.Ctx, base LeaderboardView, org, s
 	rows, err := queryDatastore(ctx, sqlStr, args...)
 	if err != nil {
 		s.Log.Debug("user board query failed; honest-empty", "org", org, "err", err)
-		return c.JSON(http.StatusOK, base)
+		return &base, nil
 	}
 	aggs := decodeAggRows(rows, "user_id")
 
@@ -123,7 +144,7 @@ func userBoard(s *cloud.Service[state], c *zip.Ctx, base LeaderboardView, org, s
 	if selfID != "" {
 		base.Self = userSelfRank(ctx, s, org, selfID, selfHandle, selfListed, metricLabel, metricCol, w, base.Total)
 	}
-	return c.JSON(http.StatusOK, base)
+	return &base, nil
 }
 
 // userSelfRank computes the caller's own standing even when they fall outside the
@@ -157,15 +178,14 @@ func userSelfRank(ctx context.Context, s *cloud.Service[state], org, selfID, sel
 }
 
 // orgBoard ranks organizations (scope global).
-func orgBoard(s *cloud.Service[state], c *zip.Ctx, base LeaderboardView, org, metricLabel, metricCol string, w window, limit int) error {
-	ctx := c.Context()
+func orgBoard(ctx context.Context, s *cloud.Service[state], c *zip.Ctx, base LeaderboardView, org, metricLabel, metricCol string, w window, limit int) (*LeaderboardView, error) {
 	base.Subject = "org"
 	super := principal.IsSuperAdmin(c)
 
 	// Cross-org SPEND is platform-admin-only; an org opting into the public board
 	// consents to volume (tokens/requests), not to publishing its bill.
 	if metricLabel == "cost" && !super {
-		return zip.ErrForbidden("the global cost leaderboard is restricted to platform admins")
+		return nil, zip.ErrForbidden("the global cost leaderboard is restricted to platform admins")
 	}
 	costVisible := super
 
@@ -202,7 +222,7 @@ func orgBoard(s *cloud.Service[state], c *zip.Ctx, base LeaderboardView, org, me
 	base.Self = orgSelfRank(ctx, s, org, metricLabel, metricCol, w, super, orgs, callerOrgListed, base.Total)
 
 	if !super && len(orgs) == 0 {
-		return c.JSON(http.StatusOK, base) // no org opted in yet → empty board, self-rank only
+		return &base, nil // no org opted in yet → empty board, self-rank only
 	}
 
 	sqlStr, args := buildOrgBoardSQL(w, metricCol, limit, orgs)
@@ -210,11 +230,11 @@ func orgBoard(s *cloud.Service[state], c *zip.Ctx, base LeaderboardView, org, me
 	if err != nil {
 		s.Log.Debug("org board query failed; honest-empty", "err", err)
 		base.Rows = []LeaderboardRow{}
-		return c.JSON(http.StatusOK, base)
+		return &base, nil
 	}
 	aggs := decodeAggRows(rows, "organization")
 	base.Rows = buildOrgRows(aggs, metricLabel, super, displays, costVisible)
-	return c.JSON(http.StatusOK, base)
+	return &base, nil
 }
 
 // orgSelfRank computes the caller's own org standing. For a regular caller whose org
@@ -263,13 +283,6 @@ func scalar(ctx context.Context, sqlStr string, args []any) (int64, error) {
 		return aInt64(v), nil
 	}
 	return 0, nil
-}
-
-func atoiDefault(s string, def int) int {
-	if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
-		return n
-	}
-	return def
 }
 
 func windowStart(w window) string {

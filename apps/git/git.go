@@ -173,11 +173,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("git.Mount: nil app")
 	}
-	// git registers TYPED ops, which live on the *zip.App's registry (ops.go).
-	// Resolved before anything is built so a Router that cannot carry them fails
-	// the mount rather than serving a surface no projection knows about.
-	zapp := cloud.ZipApp(app)
-	if zapp == nil {
+	// git registers TYPED ops, which live on the *zip.App's registry (ops.go) —
+	// they are DECLARED on the /v1/git group (routes below), which resolves to
+	// that same registry. Checked before anything is built so a Router that
+	// cannot carry them fails the mount rather than serving a surface no
+	// projection knows about.
+	if cloud.ZipApp(app) == nil {
 		return fmt.Errorf("git.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 	if deps.Logger == nil {
@@ -208,7 +209,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted.Store(s)
 
-	routes(app, zapp, s)
+	routes(app, s)
 	registerLifecycleReactors()
 	// Install the git object-plane importer so the integrations plane (GitHub App)
 	// can create + mirror-in + fast-forward-sync repos with no integrations⇄git cycle.
@@ -253,30 +254,38 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 // routes registers the git control plane + smart-HTTP + SSH-key + ZAP surface.
 //
-// Two registrars, one router. zip.<Verb>(zapp, …) registers a TYPED op — a route
-// plus the registry entry OpenAPI / MCP / the CLI are projected from (ops.go) —
-// and takes the ABSOLUTE path, since the registry keys on it. g.<Verb>(…) stays
-// for the routes a typed op cannot express: a 201, a raw pack stream, an HTML
-// page. The two are interleaved in the ORIGINAL order because fiber resolves by
+// Two registrars, one router. zip.<Verb>(z, …) registers a TYPED op — a route
+// plus the registry entry OpenAPI / MCP / the CLI are projected from (ops.go).
+// Its path is spelled WHOLE, because that path is both the op's identity in
+// every projection and the key cmd/zipdoc files the handler's prose under: the
+// router composes a group's prefix into the op's path, the extractor reads the
+// literal it was handed, so a group-relative op is documented at a path nothing
+// asks for. g.<Verb>(…) stays for the routes a typed op cannot express: a raw
+// pack stream, an HTML page, a webhook whose HMAC covers the raw bytes, a ZAP
+// envelope — those keep the group, whose prefix the router composes for them.
+// The two are interleaved in the ORIGINAL order because fiber resolves by
 // registration order, and that order is load-bearing here (see below).
-func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
 	g := app.Group("/v1/git")
+	// The typed-op registry the group resolves to; Mount refused a Router that
+	// could not reach one, so it is non-nil here.
+	z := cloud.ZipApp(app)
 	// The principal bridge first: every typed op below reads its tenant off the
 	// request context, and a Use only runs ahead of routes registered after it.
 	g.Use(bridgePrincipal)
 
 	// Control plane (JSON). Static /repos + /usage register before the
 	// smart-HTTP :org/:repo params so a real org can never shadow them.
-	g.Post("/repos", cloud.Handle(s, create))
-	zip.Get(zapp, "/v1/git/repos", o.listRepos)
-	zip.Get(zapp, "/v1/git/usage", o.usage)
-	zip.Get(zapp, "/v1/git/repos/:name", o.getRepo)
-	zip.Patch(zapp, "/v1/git/repos/:name", o.setVisibility)
-	zip.Delete(zapp, "/v1/git/repos/:name", o.deleteRepo)
+	zip.Post(z, "/v1/git/repos", o.createRepo, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/git/repos", o.listRepos)
+	zip.Get(z, "/v1/git/usage", o.usage)
+	zip.Get(z, "/v1/git/repos/:name", o.getRepo)
+	zip.Patch(z, "/v1/git/repos/:name", o.setVisibility)
+	zip.Delete(z, "/v1/git/repos/:name", o.deleteRepo)
 	// Push generated files without a local git client (hanzo.app builder).
 	// A distinct trailing segment, so it never shadows the :org/:repo routes.
-	zip.Post(zapp, "/v1/git/repos/:name/push", o.pushFiles)
+	zip.Post(z, "/v1/git/repos/:name/push", o.pushFiles)
 	// Canonical-forge push ingest (webhook.go): git.hanzo.ai is a separate process,
 	// so its pushes reach the ONE push-to-deploy trigger through this door. A static
 	// segment that never shadows the :org/:repo smart-HTTP routes; PUBLIC at the JWT
@@ -290,39 +299,39 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// reconstruct what it just parsed.
 	g.Post("/webhook", cloud.Terminal(cloud.Handle(s, webhook)))
 	// SSH public-key registry (per-user keys for `git clone git@…`).
-	g.Post("/keys", cloud.Handle(s, registerKey))
-	zip.Get(zapp, "/v1/git/keys", o.listKeys)
-	zip.Delete(zapp, "/v1/git/keys/:id", o.deleteKey)
+	zip.Post(z, "/v1/git/keys", o.registerKey, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/git/keys", o.listKeys)
+	zip.Delete(z, "/v1/git/keys/:id", o.deleteKey)
 	// Mirror an external repo into <org>/:name (creates the repo on first use).
 	// A distinct trailing segment, so it never shadows the :org/:repo smart-HTTP
 	// routes below.
-	zip.Post(zapp, "/v1/git/repos/:name/mirror", o.mirror)
+	zip.Post(z, "/v1/git/repos/:name/mirror", o.mirror)
 	// Repack a repo with a reachability bitmap + commit-graph so its next clone
 	// serves fast (bitmap reuse, no full object-graph walk). Distinct trailing
 	// segment, like /mirror — never shadows the :org/:repo smart-HTTP routes.
-	zip.Post(zapp, "/v1/git/repos/:name/gc", o.gc)
+	zip.Post(z, "/v1/git/repos/:name/gc", o.gc)
 
 	// Repo-lifecycle config: Slack-channel subscriptions (notify.go) + downstream
 	// mirror targets (mirror_out.go). Distinct trailing segments, so they never
 	// shadow the :org/:repo smart-HTTP routes below. Org-scoped like every repo op.
-	g.Post("/repos/:name/subscriptions", cloud.Handle(s, subscribe))
-	zip.Get(zapp, "/v1/git/repos/:name/subscriptions", o.listSubscriptions)
-	zip.Delete(zapp, "/v1/git/repos/:name/subscriptions/:id", o.unsubscribe)
-	g.Post("/repos/:name/mirrors", cloud.Handle(s, addMirror))
-	zip.Get(zapp, "/v1/git/repos/:name/mirrors", o.listMirrors)
-	zip.Delete(zapp, "/v1/git/repos/:name/mirrors/:id", o.deleteMirror)
+	zip.Post(z, "/v1/git/repos/:name/subscriptions", o.subscribe, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/git/repos/:name/subscriptions", o.listSubscriptions)
+	zip.Delete(z, "/v1/git/repos/:name/subscriptions/:id", o.unsubscribe)
+	zip.Post(z, "/v1/git/repos/:name/mirrors", o.addMirror, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/git/repos/:name/mirrors", o.listMirrors)
+	zip.Delete(z, "/v1/git/repos/:name/mirrors/:id", o.deleteMirror)
 
 	// Read/browse surface (JSON) for the console repo-browser: refs, tree, blob,
 	// commits, readme. ref + path ride as ?ref=&path= query params (the UI's own
 	// convention), so a slashed branch is unambiguous. Distinct trailing segments —
 	// they never shadow the :org/:repo smart-HTTP routes below. Org-scoped like every
 	// repo op; the JSON twin of the HTML browser in ui.go (one set of read helpers).
-	zip.Get(zapp, "/v1/git/repos/:name/refs", o.browseRefs)
-	zip.Get(zapp, "/v1/git/repos/:name/tree", o.browseTree)
-	zip.Get(zapp, "/v1/git/repos/:name/files", o.browseFiles)
-	zip.Get(zapp, "/v1/git/repos/:name/blob", o.browseBlob)
-	zip.Get(zapp, "/v1/git/repos/:name/commits", o.browseCommits)
-	zip.Get(zapp, "/v1/git/repos/:name/readme", o.browseReadme)
+	zip.Get(z, "/v1/git/repos/:name/refs", o.browseRefs)
+	zip.Get(z, "/v1/git/repos/:name/tree", o.browseTree)
+	zip.Get(z, "/v1/git/repos/:name/files", o.browseFiles)
+	zip.Get(z, "/v1/git/repos/:name/blob", o.browseBlob)
+	zip.Get(z, "/v1/git/repos/:name/commits", o.browseCommits)
+	zip.Get(z, "/v1/git/repos/:name/readme", o.browseReadme)
 
 	// Smart-HTTP git protocol. These live under /v1/git/:org/:repo/* so
 	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively.
@@ -409,30 +418,41 @@ func onGitHost(host string) func(zip.Handler) zip.Handler {
 
 // ---- control-plane handlers ----
 
+// createReq is the create-repo request body, and the In of createRepo. It is the
+// ONE shape both transports decode into — the ZAP procedure (zap.go) fills it
+// from its own envelope and hands it to the same core func.
 type createReq struct {
-	Name        string `json:"name"`
-	Project     string `json:"project"`
+	// Name is the repo's handle, unique within the scope, and the last segment of
+	// both clone URLs. Must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$; a trailing
+	// ".git" is stripped first. Required.
+	Name string `json:"name"`
+	// Project narrows the repo to a sub-scope of the org. Omit it to use the
+	// caller's own X-Project-Id scope; it can never widen past the caller's org.
+	Project string `json:"project"`
+	// Description is a free-form blurb, max 4KiB.
 	Description string `json:"description"`
-	Public      bool   `json:"public"`
+	// Public grants ANONYMOUS read (fetch) only; push and the whole control plane
+	// stay org-authed. Defaults to false.
+	Public bool `json:"public"`
 }
 
-// create answers 201, which a typed op cannot express — zip writes 200 for a
-// value and 204 for none, with no status seam — so it stays a raw handler. The
-// core it calls is the same one the ZAP procedure and the CLI reach.
-func create(s *cloud.Service[state], c *zip.Ctx) error {
-	t, err := tenantFrom(c)
+// createRepo provisions an empty bare repository in the caller's scope and
+// returns it with its clone URLs. Answers 201. The name must be unique within
+// the scope — a repeat is a 409, never a silent overwrite of an existing repo.
+// The org comes from the validated principal, so a repo is always born owned by
+// the caller's own tenant.
+//
+// Example: {"name": "widgets", "description": "the widget service"}
+func (o ops) createRepo(ctx context.Context, in *createReq) (*repoView, error) {
+	t, err := tenantOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var body createReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	view, err := coreCreate(s, c.Context(), t.org, t.project, body)
+	view, err := coreCreate(o.s, ctx, t.org, t.project, *in)
 	if err != nil {
-		return createErr(err)
+		return nil, createErr(err)
 	}
-	return c.JSON(http.StatusCreated, view)
+	return &view, nil
 }
 
 // patchIn carries the mutable repo settings. Public is a pointer so "absent" and

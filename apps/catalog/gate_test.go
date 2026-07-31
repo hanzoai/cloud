@@ -48,7 +48,7 @@ func TestGateHoldsJunk(t *testing.T) {
 		"https://real3.x": strings.Repeat("<p>a third real page, different again</p>", 60),
 		"https://gone.x":  "", // unreachable: unread is unjudged
 	})
-	rows := []Entry{
+	rows := []CatalogEntry{
 		{ID: "hanzo/probe", URL: "https://probe.x"},
 		{ID: "hanzo/ok", URL: "https://ok.x"},
 		{ID: "hanzo/next", URL: "https://next.x"},
@@ -100,7 +100,7 @@ func TestGateHoldsJunk(t *testing.T) {
 func TestGateHoldsTheSecondCopy(t *testing.T) {
 	page := strings.Repeat("<p>the very same application, entered twice</p>", 60)
 	serve(t, map[string]string{"https://a.x": page, "https://z.x": page})
-	rows := []Entry{{ID: "hanzo/zeta", URL: "https://z.x"}, {ID: "hanzo/alpha", URL: "https://a.x"}}
+	rows := []CatalogEntry{{ID: "hanzo/zeta", URL: "https://z.x"}, {ID: "hanzo/alpha", URL: "https://a.x"}}
 
 	for pass := range 3 {
 		pub, held := admit(context.Background(), rows)
@@ -120,7 +120,7 @@ func TestGateHoldsTheSecondCopy(t *testing.T) {
 func TestGateFailsOpen(t *testing.T) {
 	t.Run("unreadable is admitted", func(t *testing.T) {
 		serve(t, nil) // every fetch errors
-		pub, held := admit(context.Background(), []Entry{{ID: "hanzo/a", URL: "https://a.x"}})
+		pub, held := admit(context.Background(), []CatalogEntry{{ID: "hanzo/a", URL: "https://a.x"}})
 		if len(pub) != 1 || len(held) != 0 {
 			t.Fatalf("pub=%+v held=%+v; an unread page must be admitted", pub, held)
 		}
@@ -130,7 +130,7 @@ func TestGateFailsOpen(t *testing.T) {
 			"https://a.x": probePage, "https://b.x": probePage2, "https://c.x": probeOK,
 			"https://d.x": strings.Repeat("<p>the one real page here</p>", 60),
 		})
-		pub, held := admit(context.Background(), []Entry{
+		pub, held := admit(context.Background(), []CatalogEntry{
 			{ID: "hanzo/a", URL: "https://a.x"}, {ID: "hanzo/b", URL: "https://b.x"},
 			{ID: "hanzo/c", URL: "https://c.x"}, {ID: "hanzo/d", URL: "https://d.x"},
 		})
@@ -205,7 +205,7 @@ func serve(t *testing.T, pages map[string]string) {
 	t.Cleanup(func() { fetchBody = prev })
 }
 
-func published(rows []Entry, id string) bool {
+func published(rows []CatalogEntry, id string) bool {
 	for _, e := range rows {
 		if e.ID == id {
 			return true

@@ -19,8 +19,20 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// mountApp builds the app under test.
+//
+// It pins the plane DETERMINISTICALLY. Publish is the door's commit point, so with no
+// substitution installed a door would dial a real bus — and whether it answered 200 or
+// 503 would depend on whether anything happens to be listening on the machine running
+// the suite. Every test in this package that reads a status code as "admitted" would
+// then be ambient. So: if a test has not already installed its own plane, install one
+// that REFUSES, and 503 means "reached the plane" on any box. A test that wants to read
+// back what a lane published installs fakePlane first, and that substitution wins.
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
+	if samePtr(publish, publishToStream) {
+		refusePlane(t)
+	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("Mount: %v", err)

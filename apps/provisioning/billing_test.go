@@ -95,7 +95,7 @@ func newBilledService(t *testing.T, commerceURL string, kinds ...string) (*cloud
 func postCreate(t *testing.T, s *cloud.Service[state], kind, org, name string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/"+kind, create(s, kind))
+	app.Post("/v1/"+kind, create(s, kind)...)
 	req, _ := http.NewRequest("POST", "/v1/"+kind, strings.NewReader(`{"name":"`+name+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {

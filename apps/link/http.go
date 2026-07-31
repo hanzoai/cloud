@@ -1,5 +1,7 @@
 package link
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"crypto/rand"
@@ -88,27 +90,36 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every op below resolves
+	// its caller through the request it parks.
+	app.Group("/v1/links").Use(cloud.Bridge())
+
 	// Collection root stays flat: Group("/v1/links").Post("") would register
 	// "/v1/links/", not the bare collection path.
-	app.Post("/v1/links", cloud.Handle(s, upsertLink))
-	app.Get("/v1/links", cloud.Handle(s, listLinks))
+	zip.Post(z, "/v1/links", o.upsertLink, zip.WithStatus(http.StatusCreated))
+	zip.Get(z, "/v1/links", o.listLinks)
 
 	g := app.Group("/v1/links")
 	// Static literals before the :id param — Fiber matches in registration order,
 	// so "route"/"devices"/"usage" must win over :id.
-	g.Get("/route", cloud.Handle(s, routePlan))
-	// The account-usage plane (usage.go): report samples, one account's own dash,
-	// and the global view across every account + Hanzo-routed usage.
+	zip.Get(z, "/v1/links/route", o.routePlan)
+	// reportUsage stays an untyped handler: its body is one-or-many, built on an
+	// EMBEDDED sampleReq that Go inlines but the schema generator does not, so any
+	// single declared schema would state a nested object the wire never carries.
+	// An undeclared route is honest; a wrongly-declared one poisons every consumer.
 	g.Post("/usage", cloud.Handle(s, reportUsage))
-	g.Get("/usage/summary", cloud.Handle(s, usageSummary))
+	zip.Get(z, "/v1/links/usage/summary", o.usageSummary)
 	// The per-account SERVER-ROUTED breakdown (usage_accounts.go). Static, so it must
 	// register before the "/usage" catch and the ":id" param.
-	g.Get("/usage/accounts", cloud.Handle(s, usageAccounts))
-	g.Get("/usage", cloud.Handle(s, usageDash))
-	g.Get("/devices/:machine", cloud.Handle(s, deviceDetail))
-	g.Post("/devices/:machine/revoke", cloud.Handle(s, revokeDevice))
-	g.Get("/:id", cloud.Handle(s, getLink))
-	g.Delete("/:id", cloud.Handle(s, revokeLink))
+	zip.Get(z, "/v1/links/usage/accounts", o.usageAccounts)
+	zip.Get(z, "/v1/links/usage", o.usageDash)
+	zip.Get(z, "/v1/links/devices/:machine", o.deviceDetail)
+	zip.Post(z, "/v1/links/devices/:machine/revoke", o.revokeDevice)
+	zip.Get(z, "/v1/links/:id", o.getLink)
+	zip.Delete(z, "/v1/links/:id", o.revokeLink)
 
 	log.Info("link mounted", "brand", deps.Brand)
 	return nil
@@ -210,7 +221,7 @@ func devicesOf(links []Link) []deviceView {
 
 // ---- handlers ----
 
-type registerReq struct {
+type enrollReq struct {
 	Machine  string          `json:"machine"`
 	Host     string          `json:"host"`
 	OS       string          `json:"os"`
@@ -221,42 +232,66 @@ type registerReq struct {
 	Usage    json.RawMessage `json:"usage"`
 }
 
-func upsertLink(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
+// ops binds the link state to the typed handlers. A zip TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so the
+// service arrives as a RECEIVER and every op is a method value.
+type ops struct{ s *cloud.Service[state] }
+
+// begin resolves the caller's org and subject in ONE place. Neither ever comes
+// from an In field — an In field is caller-supplied, so an identity read from one
+// is a cross-tenant read the caller asserted for itself. Both come from the
+// request cloud.Bridge parked; off the HTTP path there is none, so the op refuses.
+func (o ops) begin(ctx context.Context) (org, user string, err error) {
+	c, ok := cloud.Request(ctx)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return "", "", zip.ErrForbidden("X-Org-Id required")
 	}
-	var body registerReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	org, user, ok = caller(c)
+	if !ok {
+		return "", "", zip.ErrForbidden("X-Org-Id required")
 	}
+	return org, user, nil
+}
+
+// upsertLink registers or refreshes one machine's provider account for the caller.
+// Machine and provider identify the link, so reporting the same pair again updates
+// the existing row rather than adding a second one.
+//
+// Example: {"machine": "m_7f31", "host": "spark", "os": "linux", "provider": "anthropic", "account": "z@hanzo.ai", "plan": "max", "kind": "subscription"}
+func (o ops) upsertLink(ctx context.Context, in *enrollReq) (*linkView, error) {
+	org, user, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
+	body := *in
 	machine := trim(body.Machine)
 	if machine == "" {
-		return zip.ErrBadRequest("machine is required")
+		return nil, zip.ErrBadRequest("machine is required")
 	}
 	provider := trim(body.Provider)
 	if provider == "" {
-		return zip.ErrBadRequest("provider is required")
+		return nil, zip.ErrBadRequest("provider is required")
 	}
 	if len(machine) > maxMachine || len(provider) > maxProvider ||
 		len(trim(body.Host)) > maxHost || len(trim(body.OS)) > maxOS ||
 		len(trim(body.Account)) > maxAccount || len(trim(body.Plan)) > maxPlan {
-		return zip.ErrBadRequest("field too long")
+		return nil, zip.ErrBadRequest("field too long")
 	}
 	kind := trim(body.Kind)
 	if kind == "" {
 		kind = KindSubscription
 	}
 	if !validKind(kind) {
-		return zip.ErrBadRequest("kind must be subscription or apikey")
+		return nil, zip.ErrBadRequest("kind must be subscription or apikey")
 	}
 	usageJSON, err := normalizeUsage(body.Usage)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	id, err := genID("link")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
 	l := Link{
@@ -265,11 +300,12 @@ func upsertLink(s *cloud.Service[state], c *zip.Ctx) error {
 		Kind: kind, Status: StatusLinked, LastSeen: now, Usage: usageJSON,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	stored, err := s.State.store.Upsert(c.Context(), l)
+	stored, err := s.State.store.Upsert(ctx, l)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toLinkView(stored))
+	out := toLinkView(stored)
+	return &out, nil
 }
 
 // normalizeUsage parses, clamps, and re-marshals a usage snapshot so the stored
@@ -296,69 +332,108 @@ func normalizeUsage(raw json.RawMessage) (string, error) {
 	return string(b), nil
 }
 
-func listLinks(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	links, err := s.State.store.List(c.Context(), org, user)
+// linkList is the caller's links, both flat and grouped by the machine they run on.
+type linkList struct {
+	// Links are every account link the caller has, newest first.
+	Links []linkView `json:"links"`
+	// Devices are the same links grouped by machine, one entry per device.
+	Devices []deviceView `json:"devices"`
+}
+
+// listLinks lists the caller's own account links, flat and grouped by device.
+// It answers only for the calling subject in the calling org — another user's
+// links are never included.
+//
+// Response: {"links": [{"id": "link_4c1e", "user": "z@hanzo.ai", "machine": "m_7f31", "host": "spark", "provider": "anthropic", "kind": "subscription", "billing": "plan", "status": "linked", "createdAt": "2026-07-29T11:00:00Z", "updatedAt": "2026-07-29T11:00:00Z"}], "devices": []}
+func (o ops) listLinks(ctx context.Context, _ *struct{}) (*linkList, error) {
+	org, user, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	links, err := o.s.State.store.List(ctx, org, user)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	views := make([]linkView, 0, len(links))
 	for _, l := range links {
 		views = append(views, toLinkView(l))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"links": views, "devices": devicesOf(links)})
+	return &linkList{Links: views, Devices: devicesOf(links)}, nil
 }
 
-func getLink(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// linkRef addresses one link by id.
+type linkRef struct {
+	// ID is the link id from the path.
+	ID string `json:"id"`
+}
+
+// getLink reads one of the caller's own account links. A link belonging to another
+// user or org is reported not-found, so the id space leaks no existence.
+//
+// Example: {"id": "link_4c1e9b7a2d6f0538"}
+func (o ops) getLink(ctx context.Context, in *linkRef) (*linkView, error) {
+	org, user, err := o.begin(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := trim(c.Param("id"))
-	l, err := s.State.store.Get(c.Context(), org, user, id)
+	l, err := o.s.State.store.Get(ctx, org, user, trim(in.ID))
 	if err == errNotFound {
-		return zip.ErrNotFound("link not found")
+		return nil, zip.ErrNotFound("link not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	return c.JSON(http.StatusOK, toLinkView(l))
+	out := toLinkView(l)
+	return &out, nil
 }
 
-func deviceDetail(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	machine := trim(c.Param("machine"))
-	accounts, err := s.State.store.ListDevice(c.Context(), org, user, machine)
+// deviceRef addresses one device by its machine id.
+type deviceRef struct {
+	// Machine is the machine id from the path.
+	Machine string `json:"machine"`
+}
+
+// deviceDetail reads one of the caller's devices: every provider account linked on
+// that machine, plus how many sessions the caller currently runs there.
+//
+// Example: {"machine": "m_7f31"}
+func (o ops) deviceDetail(ctx context.Context, in *deviceRef) (*deviceView, error) {
+	org, user, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "device: %v", err)
+		return nil, err
+	}
+	machine := trim(in.Machine)
+	accounts, err := o.s.State.store.ListDevice(ctx, org, user, machine)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "device: %v", err)
 	}
 	if len(accounts) == 0 {
-		return zip.ErrNotFound("device not found")
+		return nil, zip.ErrNotFound("device not found")
 	}
 	d := deviceView{Machine: machine, Host: accounts[0].Host, OS: accounts[0].OS, LastSeen: rfc3339(accounts[0].LastSeen)}
 	for _, a := range accounts {
 		d.Accounts = append(d.Accounts, toLinkView(a))
 	}
-	d.ActiveSessions = countActive(s, c.Context(), org, SessionMatch{Subject: user, Host: d.Host})
-	return c.JSON(http.StatusOK, d)
+	d.ActiveSessions = countActive(o.s, ctx, org, SessionMatch{Subject: user, Host: d.Host})
+	return &d, nil
 }
 
-func routePlan(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	linked, err := s.State.store.ListLinked(c.Context(), org, user)
+// routePlan ranks the caller's linked accounts into a redundancy plan. It says which
+// one to send the next request to and what to fall back to: subscription accounts
+// come before metered API keys, and within a group the most headroom wins.
+//
+// Response: {"candidates": [{"provider": "anthropic", "kind": "subscription", "billing": "plan", "available": true, "headroomPct": 53, "linkId": "link_4c1e"}], "generatedAt": "2026-07-29T11:00:00Z"}
+func (o ops) routePlan(ctx context.Context, _ *struct{}) (*RoutePlan, error) {
+	org, user, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "route: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, Plan(linked, time.Now()))
+	linked, err := o.s.State.store.ListLinked(ctx, org, user)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "route: %v", err)
+	}
+	plan := Plan(linked, time.Now())
+	return &plan, nil
 }
 
 type revokeResp struct {
@@ -367,43 +442,53 @@ type revokeResp struct {
 	Links           []linkView `json:"links,omitempty"`
 }
 
-func revokeLink(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	id := trim(c.Param("id"))
-	l, found, err := s.State.store.Revoke(c.Context(), org, user, id, time.Now().Unix())
+// revokeLink revokes one account link and stops the sessions running on it. The row
+// is kept and marked revoked so the history stays inspectable, and a link of another
+// user or org is reported not-found.
+//
+// Example: {"id": "link_4c1e9b7a2d6f0538"}
+func (o ops) revokeLink(ctx context.Context, in *linkRef) (*revokeResp, error) {
+	org, user, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "revoke: %v", err)
+		return nil, err
+	}
+	s := o.s
+	l, found, err := s.State.store.Revoke(ctx, org, user, trim(in.ID), time.Now().Unix())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "revoke: %v", err)
 	}
 	if !found {
-		return zip.ErrNotFound("link not found")
+		return nil, zip.ErrNotFound("link not found")
 	}
-	stopped := stopSessions(s, c.Context(), org, SessionMatch{Subject: user, Host: l.Host, Provider: l.Provider, Account: l.Account})
-	return c.JSON(http.StatusOK, revokeResp{Revoked: 1, SessionsStopped: stopped, Links: []linkView{toLinkView(l)}})
+	stopped := stopSessions(s, ctx, org, SessionMatch{Subject: user, Host: l.Host, Provider: l.Provider, Account: l.Account})
+	return &revokeResp{Revoked: 1, SessionsStopped: stopped, Links: []linkView{toLinkView(l)}}, nil
 }
 
-func revokeDevice(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	machine := trim(c.Param("machine"))
-	revoked, err := s.State.store.RevokeDevice(c.Context(), org, user, machine, time.Now().Unix())
+// revokeDevice revokes every account the caller linked on one machine. It stops the
+// sessions they were running there and is the "I lost this laptop" verb, and other
+// users' links on the same machine are untouched.
+//
+// Example: {"machine": "m_7f31"}
+func (o ops) revokeDevice(ctx context.Context, in *deviceRef) (*revokeResp, error) {
+	org, user, err := o.begin(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "revoke device: %v", err)
+		return nil, err
+	}
+	s := o.s
+	revoked, err := s.State.store.RevokeDevice(ctx, org, user, trim(in.Machine), time.Now().Unix())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "revoke device: %v", err)
 	}
 	if len(revoked) == 0 {
-		return zip.ErrNotFound("device not found or already revoked")
+		return nil, zip.ErrNotFound("device not found or already revoked")
 	}
 	// Stop every session THIS USER ran on the device (all their accounts).
-	stopped := stopSessions(s, c.Context(), org, SessionMatch{Subject: user, Host: revoked[0].Host})
+	stopped := stopSessions(s, ctx, org, SessionMatch{Subject: user, Host: revoked[0].Host})
 	views := make([]linkView, 0, len(revoked))
 	for _, l := range revoked {
 		views = append(views, toLinkView(l))
 	}
-	return c.JSON(http.StatusOK, revokeResp{Revoked: len(revoked), SessionsStopped: stopped, Links: views})
+	return &revokeResp{Revoked: len(revoked), SessionsStopped: stopped, Links: views}, nil
 }
 
 // stopSessions forwards to the sessions seam, tolerating a nil seam (unit test /

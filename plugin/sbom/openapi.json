@@ -19,17 +19,82 @@
     "/v1/sbom": {
       "post": {
         "operationId": "post_v1_sbom",
+        "summary": "ingest persists a CycloneDX SBOM's components keyed by image digest.",
+        "description": "ingest persists a CycloneDX SBOM's components keyed by image digest.\n\nGated to a validated SuperAdmin (owner == AdminOrg) — the canonical cloud\nsuper-admin check, which the build fleet / CI carries.\nRe-ingest is idempotent: rows share the (digest, name, version, purl) ORDER BY,\nso ReplacingMergeTree keeps the latest by ingested_at (and resolve reads FINAL).",
         "tags": [
           "sbom"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "document": {
+                  "components": [
+                    {
+                      "name": "golang.org/x/net",
+                      "purl": "pkg:golang/golang.org/x/net@v0.38.0",
+                      "type": "library",
+                      "version": "v0.38.0"
+                    }
+                  ]
+                },
+                "format": "cyclonedx",
+                "gitSha": "6625b5d",
+                "imageDigest": "sha256:9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60",
+                "imageRef": "ghcr.io/hanzoai/cloud:v1.801.94",
+                "sourceRepo": "hanzoai/cloud"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/SbomIngest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "componentCount": 1,
+                  "imageDigest": "sha256:9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/sbomIngested"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/sbom/health": {
       "get": {
         "operationId": "get_v1_sbom_health",
+        "summary": "health reports liveness and whether the global SBOM store is reachable.",
+        "description": "health reports liveness and whether the global SBOM store is reachable.\n\nIt is a pure probe: not JWT-gated, and always 200.\nA disconnected datastore is degraded-but-alive, reported as datastore:false\nhere and as a 503 by the routes that need it.",
         "tags": [
           "sbom"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "datastore": true,
+                  "service": "sbom",
+                  "status": "ok",
+                  "table": "hanzo.sbom_component"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/sbomHealth"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/sbom/{wildcard1}": {
@@ -48,6 +113,76 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SbomIngest": {
+        "properties": {
+          "document": {
+            "description": "Document is the raw CycloneDX document.\nIts components[] are flattened and persisted; the document itself is not\nstored, and a malformed one is refused rather than half-ingested.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "format": {
+            "description": "Format names the document dialect. Only cyclonedx is parsed.",
+            "type": "string"
+          },
+          "gitSha": {
+            "description": "GitSha is the commit the image was built from, recorded for provenance.",
+            "type": "string"
+          },
+          "imageDigest": {
+            "description": "ImageDigest is the content-addressed image key, sha256:… — REQUIRED, and\nthe key everything is filed and resolved under.",
+            "type": "string"
+          },
+          "imageRef": {
+            "description": "ImageRef is the human image reference the digest was published as, so a\nconsole can resolve by tag as well as by digest.",
+            "type": "string"
+          },
+          "sourceRepo": {
+            "description": "SourceRepo is the repo the image was built from, recorded for provenance.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sbomHealth": {
+        "properties": {
+          "datastore": {
+            "description": "Datastore reports whether the datastore connection is up.\nFalse means the data routes answer 503; the process is still alive.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service is always \"sbom\" — which subsystem answered.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is always \"ok\": the route answers 200 whenever the process is alive.",
+            "type": "string"
+          },
+          "table": {
+            "description": "Table is the global, cross-tenant table components are filed in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sbomIngested": {
+        "properties": {
+          "componentCount": {
+            "description": "ComponentCount is how many components the document flattened to.\nA valid document with no components is 0, not an error.",
+            "type": "integer"
+          },
+          "imageDigest": {
+            "description": "ImageDigest is the content-addressed key the components were filed under.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

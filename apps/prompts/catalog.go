@@ -1,13 +1,13 @@
 package prompts
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -21,8 +21,8 @@ import (
 //go:embed catalog.json
 var catalogJSON []byte
 
-// CatalogEntry is one starter prompt as the console browse UI consumes it.
-type CatalogEntry struct {
+// starterPrompt is one starter prompt as the console browse UI consumes it.
+type starterPrompt struct {
 	Name   string   `json:"name"`
 	Type   string   `json:"type"`
 	Prompt string   `json:"prompt"`
@@ -33,12 +33,12 @@ type CatalogEntry struct {
 // starterCatalog decodes and validates the embedded library once. Entries that
 // would fail the create-handler guards (name shape, reserved, size) are dropped
 // so anything the browse UI offers can actually be imported via POST.
-var starterCatalog = sync.OnceValues(func() ([]CatalogEntry, error) {
-	var all []CatalogEntry
+var starterCatalog = sync.OnceValues(func() ([]starterPrompt, error) {
+	var all []starterPrompt
 	if err := json.Unmarshal(catalogJSON, &all); err != nil {
 		return nil, fmt.Errorf("prompts: decode embedded catalog: %w", err)
 	}
-	out := make([]CatalogEntry, 0, len(all))
+	out := make([]starterPrompt, 0, len(all))
 	for _, e := range all {
 		if e.Name == "" || reserved[e.Name] || !nameRE.MatchString(e.Name) || len(e.Prompt) > maxContent {
 			continue
@@ -51,13 +51,15 @@ var starterCatalog = sync.OnceValues(func() ([]CatalogEntry, error) {
 	return out, nil
 })
 
-// catalog → the read-only starter library { data: [CatalogEntry] }. Not
-// org-scoped (static reference content), but served under the authenticated
-// /v1/prompts surface like the rest of the module.
-func catalog(s *cloud.Service[state], c *zip.Ctx) error {
+// catalog lists the vendored Hanzo starter prompt library. It is READ-ONLY
+// reference content, identical for every caller and never an org's own data;
+// importing a starter is an ordinary create.
+//
+// Response: {"data": [{"name": "summarize", "type": "text", "prompt": "Summarize the following: {{input}}", "tags": ["writing"], "labels": ["starter"]}]}
+func (o ops) catalog(ctx context.Context, _ *struct{}) (*catalogOut, error) {
 	entries, err := starterCatalog()
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "catalog: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "catalog: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": entries})
+	return &catalogOut{Data: entries}, nil
 }

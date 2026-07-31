@@ -192,9 +192,9 @@ func op(id string) zip.OpOption { return zip.WithOperationID(id) }
 
 // ── /v1/admin/me — operator identity (AdminMe) ───────────────────────────────
 
-// me answers with the validated operator identity — who the console is signed in as,
-// which tier they are, and how wide their tenant window is. The fields come from the
-// sanitized identity headers the gate just read, so they are authoritative and never
+// me answers with the validated operator identity. It reports who the console is signed
+// in as, which tier they are, and how wide their tenant window is. The fields come from
+// the sanitized identity headers the gate just read, so they are authoritative and never
 // client-forgeable; nothing is looked up.
 //
 // Response: {"status":"ok","msg":"","data":{"owner":"admin","name":"z","email":"z@hanzo.ai",
@@ -226,8 +226,9 @@ func (o ops) me(ctx context.Context, _ *core.None) (*meOut, error) {
 
 // ── /v1/admin/orgs — tenant directory (OrgRow[]) ─────────────────────────────
 
-// orgs lists the tenant directory one row per org, sorted by slug: member count and the
-// org's month-to-date spend and credit balance, read live from IAM and commerce.
+// orgs lists the tenant directory, one row per org, sorted by slug. Each row carries the
+// member count and the org's month-to-date spend and credit balance, read live from IAM
+// and commerce.
 //
 // The rows are the caller's tenant window, not the fleet: a SuperAdmin gets every org, a
 // white-label admin only their own subtree. A per-org read that fails degrades THAT row
@@ -361,9 +362,9 @@ func (o ops) roles(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
 	return o.iamPassthrough(ctx, in, "/v1/iam/roles")
 }
 
-// applications lists IAM applications for one owner org, forwarded VERBATIM from IAM's
-// get-applications. These are the platform's OIDC clients — the console reads clientId
-// off each row.
+// applications lists IAM applications for one owner org. The rows are forwarded VERBATIM
+// from IAM's get-applications — these are the platform's OIDC clients, and the console
+// reads clientId off each row.
 //
 // Example: {"owner":"admin","p":"1","pageSize":"50"}
 // Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"data2":1}
@@ -407,8 +408,8 @@ func (o ops) iamPassthrough(ctx context.Context, in *iamPageIn, path string) (*i
 
 // ── /v1/admin/usage — fleet usage roll-up (UsageData) ────────────────────────
 
-// usage returns the month-to-date money totals: one org's when org names one, else the
-// fleet sum across every org a SuperAdmin can see.
+// usage returns the month-to-date money totals. It answers for one org when org names
+// one, else the fleet sum across every org a SuperAdmin can see.
 //
 // series and byProduct are ALWAYS empty. A daily trend and a per-product split are not
 // derivable from the commerce billing API — they live in insights/datastore — so this
@@ -466,8 +467,9 @@ func (o ops) usage(ctx context.Context, in *usageIn) (*usageOut, error) {
 
 // ── /v1/admin/overview — Platform Overview tiles (OverviewData) ───────────────
 
-// overview is the Platform Overview tiles: how many orgs and users are in the caller's
-// tenant window, the fleet workload counts, and month-to-date spend and credits.
+// overview is the Platform Overview tiles. They report how many orgs and users are in
+// the caller's tenant window, the fleet workload counts, and month-to-date spend and
+// credits.
 //
 // It ALWAYS answers 200 — a tile board that fails as a whole because one upstream is
 // down is useless. Instead every upstream reports itself in sources[]: ok, degraded, or

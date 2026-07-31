@@ -30,19 +30,36 @@
 package translate
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// POST /v1/translate declares its body and reply through the schema-only bridge
+// rather than as a typed op: the tier gate answers a caller who is out of funds
+// or over a spend cap with the shared `{error:{code,message}}` envelope written
+// straight onto the response (cloud.DenyResource), and a typed handler — which
+// returns (*Out, error) and lets zip render the error — cannot reproduce that
+// wire shape. The body and the success reply are still exactly these two types.
+func init() {
+	openapi.Register("/v1/translate", "POST", Request{}, Response{})
+}
 
 // Tier selects the engine. Two values, one endpoint.
 type Tier string
@@ -115,10 +132,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		bulk:    newBulk(),
 	}
 	s := &cloud.Service[*state]{Base: b, State: mounted}
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("translate.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	// The bridge FIRST — fiber runs middleware in registration order, so one
+	// installed after these leaves would never run, and the review-lane ops below
+	// resolve their tenant through it. Bounded to translate's own subtree.
+	app.Group("/v1/translate").Use(cloud.Bridge())
 	app.Post("/v1/translate", cloud.Handle(s, serve))
-	g := app.Group("/v1/translate")
-	g.Get("/memory", cloud.Handle(s, list))
-	g.Put("/memory", cloud.Handle(s, review))
+	// The review lane, as TYPED ops on the absolute path: the registry keys on it,
+	// and cmd/zipdoc at the pinned zip reads the path argument literally, so a
+	// group-relative registration would document an address that does not exist.
+	o := ops{s: s}
+	zip.Get(zapp, "/v1/translate/memory", o.listMemory)
+	zip.Put(zapp, "/v1/translate/memory", o.reviewMemory)
 	b.Log.Info("translate mounted", "prefix", "/v1/translate", "tiers", "quality,bulk", "bulk_backend", bulkURL() != "")
 	return nil
 }
@@ -296,98 +324,156 @@ func serve(s *cloud.Service[*state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// list answers GET /v1/translate/memory — the review lane's read: the org's own
-// entries, newest first, optionally narrowed to one target language or one state.
-func list(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// ops binds the service to translate's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value (o.listMemory), which is
+// also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[*state] }
+
+// tenant resolves the validated org a review-lane op reads and writes under. It
+// is the org cloud.Bridge parked on the context, never an In field: an In field
+// is caller-supplied, so a tenant key read from one is a cross-tenant read the
+// caller asserted for itself. An op that cannot name its tenant refuses.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrUnauthorized("sign in to read the translation memory")
+		return "", zip.ErrUnauthorized("sign in to use the translation memory")
+	}
+	return org, nil
+}
+
+// MemoryQuery narrows a review-lane read. Every field is optional.
+type MemoryQuery struct {
+	// Target narrows to one target language tag, e.g. "es" or "pt-BR"; empty
+	// reads every language.
+	Target string `json:"target"`
+	// State narrows to one rung of the review ladder: machine, suggested,
+	// approved or published. Empty reads every rung.
+	State State `json:"state"`
+	// Limit caps the rows returned; 0 means 200 and nothing above 1000 is
+	// honoured.
+	Limit int `json:"limit"`
+}
+
+// MemoryPage is a page of the caller org's translation memory.
+type MemoryPage struct {
+	// Data is the matching entries, newest first.
+	Data []Entry `json:"data"`
+}
+
+// listMemory reads the caller org's stored translations, newest first.
+// It is the review lane's read — it reports what is remembered and translates
+// nothing — and it narrows to one target language, one rung of the review
+// ladder, or both.
+//
+// Example: {"target": "es", "state": "suggested", "limit": 50}
+func (o ops) listMemory(ctx context.Context, in *MemoryQuery) (*MemoryPage, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	target := ""
-	if v := strings.TrimSpace(c.Query("target")); v != "" {
+	if v := strings.TrimSpace(in.Target); v != "" {
 		t, err := lang(v)
 		if err != nil {
-			return zip.ErrBadRequest("target must be a language tag")
+			return nil, zip.ErrBadRequest("target must be a language tag")
 		}
 		target = t
 	}
 	var st State
-	if v := strings.TrimSpace(c.Query("state")); v != "" {
+	if v := strings.TrimSpace(string(in.State)); v != "" {
 		filter, err := stateOf(State(v), true)
 		if err != nil {
-			return zip.ErrBadRequest(err.Error())
+			return nil, zip.ErrBadRequest(err.Error())
 		}
 		st = filter
 	}
 	limit := listLimit
-	if n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit"))); err == nil && n > 0 {
-		limit = min(n, maxListLimit)
+	if in.Limit > 0 {
+		limit = min(in.Limit, maxListLimit)
 	}
-	mem, err := s.State.stores.For(org, "")
+	mem, err := o.s.State.stores.For(org, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
 	}
-	rows, err := mem.list(c.Context(), target, st, limit)
+	rows, err := mem.list(ctx, target, st, limit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	return &MemoryPage{Data: rows}, nil
 }
 
 // ReviewRequest is the human write: the same tuple a translate call carries, plus
 // the reviewed text and its new position on the ladder.
 type ReviewRequest struct {
-	Source   string            `json:"source"`
-	Target   string            `json:"target"`
-	Tier     Tier              `json:"tier"`
+	// Source is the original string being reviewed. Required.
+	Source string `json:"source"`
+	// Target is the language tag the string was translated into, e.g. "pt-BR".
+	Target string `json:"target"`
+	// Tier is the tier the entry was translated at — quality or bulk. It is part
+	// of the entry's identity, so it must match the call that produced it.
+	Tier Tier `json:"tier"`
+	// Glossary is the terminology the entry was translated under; its digest is
+	// part of the entry's identity.
 	Glossary map[string]string `json:"glossary"`
-	Text     string            `json:"text"`
-	State    State             `json:"state"`
+	// Text is the reviewed translation to store.
+	Text string `json:"text"`
+	// State is the rung to move the entry to: suggested, approved or published.
+	// machine is engine-only and is refused here.
+	State State `json:"state"`
 }
 
-// review answers PUT /v1/translate/memory — the review lane's write. A human write
-// always wins over the stored value, and once it lands at approved or published no
-// machine write can move it again.
-func review(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to review translations")
-	}
-	var in ReviewRequest
-	if err := c.Bind(&in); err != nil {
-		return err
+// reviewMemory stores one human-reviewed translation in the caller org's memory.
+// A human write always wins over the stored value, and once an entry lands at
+// approved or published no machine write can move it again — which is what
+// makes a locale rebuild safe to re-run.
+//
+// State may not be set to machine: that rung is the engine's, and a human write
+// may not demote a string back into the churn.
+//
+// Example: {"source": "Save changes", "target": "es", "text": "Guardar cambios", "state": "approved"}
+func (o ops) reviewMemory(ctx context.Context, in *ReviewRequest) (*Entry, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(in.Source) == "" {
-		return zip.ErrBadRequest("source is required")
+		return nil, zip.ErrBadRequest("source is required")
 	}
 	if len(in.Source) > maxChars || len(in.Text) > maxChars {
-		return zip.ErrBadRequest(fmt.Sprintf("a string may not exceed %d characters", maxChars))
+		return nil, zip.ErrBadRequest(fmt.Sprintf("a string may not exceed %d characters", maxChars))
 	}
 	target, err := lang(in.Target)
 	if err != nil {
-		return zip.ErrBadRequest("target must be a language tag (e.g. \"es\", \"pt-BR\")")
+		return nil, zip.ErrBadRequest("target must be a language tag (e.g. \"es\", \"pt-BR\")")
 	}
 	tier, err := tierOf(in.Tier)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	// machine is engine-only: a human may not demote a string back into the churn.
 	st, err := stateOf(in.State, false)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
-	mem, err := s.State.stores.For(org, "")
+	mem, err := o.s.State.stores.For(org, "")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
+	}
+	// The actor is the VALIDATED caller off the live request, never an input
+	// field: an actor a caller could name is an attribution it could forge.
+	actor := ""
+	if c, ok := cloud.Request(ctx); ok {
+		actor = c.User()
 	}
 	e := Entry{
 		Source: in.Source, Target: target, Tier: tier, Glossary: version(in.Glossary),
-		Text: in.Text, State: st, Actor: c.User(), UpdatedAt: time.Now().Unix(),
+		Text: in.Text, State: st, Actor: actor, UpdatedAt: time.Now().Unix(),
 	}
-	if err := mem.put(c.Context(), e, true); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
+	if err := mem.put(ctx, e, true); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
 	}
-	return c.JSON(http.StatusOK, e)
+	return &e, nil
 }
 
 // ---- request parsing ----

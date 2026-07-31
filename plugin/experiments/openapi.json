@@ -18,29 +18,104 @@
   "paths": {
     "/v1/experiments": {
       "get": {
-        "operationId": "get_v1_experiments",
+        "operationId": "listExperiments",
+        "summary": "list returns every experiment in the caller's org and project scope.",
+        "description": "list returns every experiment in the caller's org and project scope.",
         "tags": [
           "experiments"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_experiments",
+        "operationId": "createExperiment",
+        "summary": "create opens an experiment and answers 201.",
+        "description": "create opens an experiment and answers 201. It writes the multivariate ASSIGNMENT\nflag first, then the registry row. The project and the author are server-stamped\nfrom the validated principal. Fails closed if the flag write fails — an experiment\nwith no assignment flag would assign nothing.",
         "tags": [
           "experiments"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "checkout-copy",
+                "metricEvent": "purchase",
+                "name": "Checkout copy",
+                "subjectKind": "user",
+                "variants": [
+                  {
+                    "control": true,
+                    "key": "control",
+                    "weight": 50
+                  },
+                  {
+                    "key": "bold",
+                    "weight": 50
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Experiment"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/experiments/health": {
       "get": {
-        "operationId": "get_v1_experiments_health",
+        "operationId": "experimentsHealth",
+        "summary": "health reports that the experiments subsystem is mounted and serving.",
+        "description": "health reports that the experiments subsystem is mounted and serving. It reads no\nstore and needs no identity.",
         "tags": [
           "experiments"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "ok": true,
+                  "subsystem": "experiments"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/experiments/{id}": {
       "get": {
-        "operationId": "get_v1_experiments_by_id",
+        "operationId": "getExperiment",
+        "summary": "get returns one of the caller org's experiments.",
+        "description": "get returns one of the caller org's experiments. An id belonging to another org\nreads as not found.",
         "tags": [
           "experiments"
         ],
@@ -49,11 +124,25 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the experiment id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "checkout-copy"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Experiment"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/experiments/{id}/analyze": {
@@ -76,7 +165,9 @@
     },
     "/v1/experiments/{id}/assign": {
       "get": {
-        "operationId": "get_v1_experiments_by_id_assign",
+        "operationId": "assignExperiment",
+        "summary": "assign resolves one subject's arm by evaluating the experiment's assignment flag.",
+        "description": "assign resolves one subject's arm by evaluating the experiment's assignment flag.\nIt is deterministic — the same subject always lands in the same variant — and reads\nnothing but the flag definition, so it never records an exposure.",
         "tags": [
           "experiments"
         ],
@@ -85,16 +176,58 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the experiment id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "checkout-copy"
+          },
+          {
+            "name": "subject",
+            "in": "query",
+            "required": true,
+            "description": "Subject is the subject to assign — the distinct id the bucketing hashes.\nRequired.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "u_1"
+          },
+          {
+            "name": "props",
+            "in": "query",
+            "required": false,
+            "description": "Props is an optional JSON object of person properties the flag's targeting\nreads. Invalid JSON is ignored.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "{\"plan\":\"pro\"}"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "experiment": "checkout-copy",
+                  "on": true,
+                  "subject": "u_1",
+                  "variant": "bold"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Assignment"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/experiments/{id}/decide": {
       "post": {
-        "operationId": "post_v1_experiments_by_id_decide",
+        "operationId": "decideExperiment",
+        "summary": "decide promotes a winning variant to the whole rollout.",
+        "description": "decide promotes a winning variant to the whole rollout. It rewrites the assignment\nflag so the winner serves 100% and every other arm 0%, then records the decision and\nreturns the decided experiment. Requires own-org admin — the promotion IS a\nproduction flag write. An unknown experiment reads as not found before the admin\ncheck, so an id is never confirmed to a caller who cannot see it.",
         "tags": [
           "experiments"
         ],
@@ -103,11 +236,222 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the experiment id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "checkout-copy"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "checkout-copy",
+                "winner": "bold"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/decideBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Experiment"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Assignment": {
+        "properties": {
+          "experiment": {
+            "description": "Experiment is the experiment id that was resolved.",
+            "type": "string"
+          },
+          "on": {
+            "description": "On is whether the assignment flag evaluated on for this subject.",
+            "type": "boolean"
+          },
+          "payload": {
+            "description": "Payload is the variant's opaque payload — a feature config, a creative id,\na model id. The experiment primitive never interprets it; null when the\nvariant carries none.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "subject": {
+            "description": "Subject is the subject the assignment was computed for.",
+            "type": "string"
+          },
+          "variant": {
+            "description": "Variant is the arm the subject falls in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Experiment": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "decidedAt": {
+            "type": "string"
+          },
+          "decidedBy": {
+            "type": "string"
+          },
+          "exposureEvent": {
+            "type": "string"
+          },
+          "flagKey": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "metricEvent": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subjectKind": {
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/Variant"
+            },
+            "type": "array"
+          },
+          "winner": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ExperimentList": {
+        "properties": {
+          "data": {
+            "description": "Data is every experiment in the caller's org and project scope.",
+            "items": {
+              "$ref": "#/components/schemas/Experiment"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many were returned.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "ok": {
+            "description": "OK is true whenever the subsystem is mounted.",
+            "type": "boolean"
+          },
+          "subsystem": {
+            "description": "Subsystem names the subsystem that answered (\"experiments\").",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Variant": {
+        "properties": {
+          "control": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "payload": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "weight": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "createBody": {
+        "properties": {
+          "exposureEvent": {
+            "description": "ExposureEvent is the enrollment marker; empty means $feature_flag_called.",
+            "type": "string"
+          },
+          "flagKey": {
+            "description": "FlagKey names the assignment flag; empty derives exp_\u003cid\u003e.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the experiment slug, unique within the org's project.",
+            "type": "string"
+          },
+          "metricEvent": {
+            "description": "MetricEvent is the conversion event. Required.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the human label.",
+            "type": "string"
+          },
+          "subjectKind": {
+            "description": "SubjectKind is the unit assigned and measured: user, org, session or\naudience. Empty means user.",
+            "type": "string"
+          },
+          "variants": {
+            "description": "Variants is the arms; at least two, weights summing to 100 (all-zero\nweights become an even split).",
+            "items": {
+              "$ref": "#/components/schemas/Variant"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "decideBody": {
+        "properties": {
+          "id": {
+            "description": "ID is the experiment id from the path.",
+            "type": "string"
+          },
+          "winner": {
+            "description": "Winner is the variant key to serve to 100% of the rollout. Required, and it\nmust be one of the experiment's variants.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "winner"
+        ],
+        "type": "object"
       }
     }
   }

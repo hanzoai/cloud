@@ -432,7 +432,8 @@ func mountProjection(t *testing.T, commerce cloud.CommerceClient) *zip.App {
 	t.Helper()
 	s := &service{store: openTestStore(t), commerce: commerce, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Get("/v1/entitlements", s.projection)
+	app.Use(cloud.Bridge())
+	zip.Get(app, "/v1/entitlements", s.projection)
 	return app
 }
 

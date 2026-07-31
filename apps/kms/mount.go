@@ -25,8 +25,10 @@
 // and it is what keeps one org from addressing another's records.
 package kms
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -39,6 +41,17 @@ import (
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 )
+
+// ops binds the subsystem to kms's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so
+// it arrives as a RECEIVER and every op is a method value (o.listSecrets), which
+// is also the only bound form cmd/zipdoc can lift prose from. It carries the two
+// deployment facts the console config answers with, and no logic.
+type ops struct {
+	s      *cloud.Service[state]
+	brand  string
+	issuer string
+}
 
 // state is kms's own data; shared deps live in the embedded cloud.Base. It holds
 // the CONCRETE embedded *Client the routes serve from — distinct from Base.KMS,
@@ -93,13 +106,24 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		}
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "kms"), State: state{kms: kc, iamTokenURL: tokenURL}}
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("kms.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	o := ops{s: s, brand: deps.Brand, issuer: strings.TrimRight(strings.TrimSpace(deps.IAMIssuer), "/")}
 
 	// Plain /v1/kms surface. The /v1/kms/auth login broker below keeps its OWN
 	// group because it carries a per-source-IP rate-limit middleware this group
 	// must not apply.
 	g := app.Group("/v1/kms")
+	// The request bridge FIRST: fiber runs middleware in registration order, so
+	// one installed after these leaves would never run — and every typed op below
+	// takes the request (and with it the validated principal the org gate reads)
+	// off the context it parks. Bounded to kms's own subtree; Serve installs one
+	// app-wide too and nesting is harmless.
+	g.Use(cloud.Bridge())
 	g.Get("/health", cloud.Handle(s, health))
-	g.Get("/config", configHandler(deps))
+	zip.Get(zapp, "/v1/kms/config", o.config)
 	// The login broker is PUBLIC (it IS the credential exchange) and independent of
 	// the local store: the kms-operator POSTs its per-tenant clientId/clientSecret
 	// here to mint the owner-scoped IAM bearer it then carries on the org-scoped
@@ -135,9 +159,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// unreachable. `+` requires a non-empty name, so the bare path falls through
 	// to the exact list route.
 	// The tenant surface: the caller's OWN secrets. No org in the path.
-	g.Get("/secrets", guard(s, cloud.Handle(s, listSecrets)))
+	//
+	// The two exact-path routes are TYPED ops, so their shape and prose reach the
+	// document, the MCP tool list and the CLI. They carry the org gate INSIDE the
+	// handler (o.admit) rather than as a wrapper, because a typed op has no
+	// middleware slot and those projections never touch this router — a gate that
+	// lived only here would not run for them.
+	//
+	// The two value routes keep the required-greedy `+` wildcard, so they cannot
+	// be typed at all: zip renders the op path verbatim while the router's own
+	// projection renders `{wildcard1}`, and the two disagreeing aborts the whole
+	// app's document.
+	zip.Get(zapp, "/v1/kms/secrets", o.listSecrets)
 	g.Get("/secrets/+", guard(s, cloud.Handle(s, getSecret)))
-	g.Post("/secrets", guard(s, cloud.Handle(s, putSecret)))
+	zip.Post(zapp, "/v1/kms/secrets", o.putSecret)
 	g.Delete("/secrets/+", guard(s, cloud.Handle(s, deleteSecret)))
 
 	s.Log.Info(
@@ -202,21 +237,44 @@ func newEmbeddedClient(cfg *cloud.Config, log luxlog.Logger) (cloud.KMSClient, e
 // case-insensitive authz check would let org "Acme" reach org "acme"'s namespace.
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(ctx *zip.Ctx) error {
-		// A validated principal FIRST: the identity middleware restores a client
-		// X-Org-Id on the bearer-less path, so an unvalidated ctx.Org() is just a
-		// header an off-gateway caller chose. Refuse before reading it.
-		if !principal.Validated(ctx) {
-			return zip.ErrForbidden("no validated principal")
-		}
-		org := reqOrg(ctx)
-		if !validOrg(org) {
-			return zip.ErrBadRequest("org must be a DNS-1123 label")
-		}
-		if !s.State.kms.Ready() {
-			return zip.Errorf(http.StatusServiceUnavailable, "%s", ErrMasterKeyMissing.Error())
+		if _, err := admit(s, ctx); err != nil {
+			return err
 		}
 		return h(ctx)
 	}
+}
+
+// admit IS the gate — the one predicate, taken as a function so the wrapper
+// above and the typed ops below decide identically. It returns the org the
+// caller may address, which is the only org there is.
+func admit(s *cloud.Service[state], ctx *zip.Ctx) (string, error) {
+	// A validated principal FIRST: the identity middleware restores a client
+	// X-Org-Id on the bearer-less path, so an unvalidated ctx.Org() is just a
+	// header an off-gateway caller chose. Refuse before reading it.
+	if !principal.Validated(ctx) {
+		return "", zip.ErrForbidden("no validated principal")
+	}
+	org := reqOrg(ctx)
+	if !validOrg(org) {
+		return "", zip.ErrBadRequest("org must be a DNS-1123 label")
+	}
+	if !s.State.kms.Ready() {
+		return "", zip.Errorf(http.StatusServiceUnavailable, "%s", ErrMasterKeyMissing.Error())
+	}
+	return org, nil
+}
+
+// admit for a typed op, which is handed a context and nothing else. It reads the
+// SAME request the wrapper reads (cloud.Bridge parks it) and runs the SAME
+// predicate, so the REST route, the MCP tool and the CLI command are gated once.
+// Off the HTTP path there is no request and therefore no principal, so it
+// refuses rather than serving a tenant nobody proved.
+func (o ops) admit(ctx context.Context) (string, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("no validated principal")
+	}
+	return admit(o.s, c)
 }
 
 // ── health + config ────────────────────────────────────────────────────────────
@@ -241,52 +299,130 @@ func health(s *cloud.Service[state], ctx *zip.Ctx) error {
 	return ctx.JSON(http.StatusOK, res)
 }
 
-// configHandler serves the KMS console SPA's runtime config (the OIDC issuer the
-// console logs in against + the KMS API base). Kept under the /v1/kms namespace
-// (not /v1/admin) so a gateway that admin-gates the /v1/admin/* prefix cannot
-// block the console's legitimate public config fetch. No secrets, so it is public.
-func configHandler(deps cloud.Deps) zip.Handler {
-	issuer := strings.TrimRight(strings.TrimSpace(deps.IAMIssuer), "/")
-	return func(ctx *zip.Ctx) error {
-		return ctx.JSON(http.StatusOK, map[string]any{
-			"brand":     deps.Brand,
-			"issuer":    issuer,
-			"apiBase":   "/v1/kms",
-			"loginPath": "/v1/kms/auth/login",
-		})
-	}
+// secretsConfig is the KMS console's runtime configuration: where it signs in
+// and where it talks.
+type secretsConfig struct {
+	// Brand is the white-label the deployment serves as.
+	Brand string `json:"brand"`
+	// Issuer is the OIDC issuer the console authenticates against.
+	Issuer string `json:"issuer"`
+	// APIBase is the path prefix every secrets call is made under.
+	APIBase string `json:"apiBase"`
+	// LoginPath is where a machine credential is exchanged for a bearer.
+	LoginPath string `json:"loginPath"`
+}
+
+// config answers the KMS console's runtime settings — the OIDC issuer it signs
+// in against and the API base it calls. It carries no secret and needs no
+// bearer, and it lives under /v1/kms rather than /v1/admin so a gateway that
+// admin-gates the admin prefix cannot block the console's own config fetch.
+//
+// Response: {"brand": "hanzo", "issuer": "https://hanzo.id", "apiBase": "/v1/kms", "loginPath": "/v1/kms/auth/login"}
+func (o ops) config(ctx context.Context, _ *struct{}) (*secretsConfig, error) {
+	return &secretsConfig{
+		Brand:     o.brand,
+		Issuer:    o.issuer,
+		APIBase:   "/v1/kms",
+		LoginPath: "/v1/kms/auth/login",
+	}, nil
 }
 
 // ── secrets CRUD (org-scoped, sealed) ──────────────────────────────────────────
 
-// secretPutRequest is the POST body: the secret to upsert. env defaults to
-// "default"; path is optional (relative to the org root); name is required.
+// secretPutRequest is the POST body: the secret to upsert. env is required (a
+// silent default would split the write from the record readers resolve); path is
+// optional (relative to the org root); name is required.
+//
+// The three required fields carry NO `validate:"required"` tag deliberately: the
+// handler already refuses each one with a message that names the exact rule it
+// broke ("'env' is required — there is no default…"), and a declared tag would
+// pre-empt that with a generic one. The doc comments below say what is required;
+// the handler stays the single place that says why.
 type secretPutRequest struct {
-	Path  string `json:"path"`  // optional subpath under the org, e.g. "/ci"
-	Name  string `json:"name"`  // required
-	Env   string `json:"env"`   // optional, default "default"
-	Value string `json:"value"` // required; sealed before storage
+	// Path is an optional subpath under the org, e.g. "ci". Empty stores at the
+	// org root.
+	Path string `json:"path"`
+	// Name is the secret's name within its path. Required.
+	Name string `json:"name"`
+	// Env is the environment the value belongs to — a first-class part of the
+	// storage key, never defaulted on a write. Required.
+	Env string `json:"env"`
+	// Value is the plaintext to seal. Required; it is sealed under a fresh
+	// per-secret key before it reaches disk.
+	Value string `json:"value"`
 }
 
-// listSecrets returns the metadata (no ciphertext) of the org's secrets at a
-// path/env. ?path= narrows to a subpath; ?env= selects the environment.
-func listSecrets(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	// The KMS operator (the fleet's only machine consumer) spells these
-	// `environment` and `secretPath`; this plane's own clients use `env` and
-	// `path`. Accept both so one endpoint serves both callers — the operator can
-	// be repointed here without a lockstep operator release.
-	env := envOr(firstQuery(ctx, "env", "environment"))
-	if !validEnv(env) {
-		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
-	}
-	sub := firstQuery(ctx, "path", "secretPath")
-	if !ValidSubpath(sub) {
-		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
-	}
-	metas, err := s.State.kms.List(orgPath(org, sub), env)
+// secretQuery narrows a listing to one subpath and environment. Each has two
+// spellings: the KMS operator (the fleet's only machine consumer) writes
+// `environment` and `secretPath`, this plane's own clients write `env` and
+// `path`, and the primary spelling wins when both are given.
+type secretQuery struct {
+	// Env selects the environment to list. Empty means the default environment.
+	Env string `json:"env"`
+	// Environment is the operator's spelling of env, honoured when env is absent.
+	Environment string `json:"environment"`
+	// Path narrows to a subpath under the org. Empty lists the org root.
+	Path string `json:"path"`
+	// SecretPath is the operator's spelling of path, honoured when path is absent.
+	SecretPath string `json:"secretPath"`
+}
+
+// kmsSecrets is a listing of secret DESCRIPTORS — name, path, environment and
+// scheme. No value and no ciphertext is ever in it.
+type kmsSecrets struct {
+	// Secrets is the full descriptor of each secret found.
+	Secrets []SecretMeta `json:"secrets"`
+	// Total is how many were found.
+	Total int `json:"total"`
+	// Names is the same set as bare names, the shape the KMS operator reads.
+	Names []string `json:"names"`
+}
+
+// secretStored confirms a write and names the coordinate it landed on.
+type secretStored struct {
+	// Stored is true when the value was sealed and committed.
+	Stored bool `json:"stored"`
+	// Name is the secret that was written.
+	Name string `json:"name"`
+	// Env is the environment it was written to.
+	Env string `json:"env"`
+}
+
+// listSecrets lists the caller org's secrets at one path and environment, as
+// metadata only — name, path, environment, scheme. No value and no ciphertext
+// is returned, so it is the safe way to see what exists.
+//
+// Example: {"env": "prod", "path": "ci"}
+// Response: {"secrets": [{"name": "STRIPE_KEY", "path": "/orgs/hanzo/ci", "env": "prod", "scheme": "aead+mlkem"}], "total": 1, "names": ["STRIPE_KEY"]}
+func (o ops) listSecrets(ctx context.Context, in *secretQuery) (*kmsSecrets, error) {
+	org, err := o.admit(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "%v", err)
+		return nil, err
+	}
+	alias := func(k string) string {
+		switch k {
+		case "env":
+			return in.Env
+		case "environment":
+			return in.Environment
+		case "path":
+			return in.Path
+		case "secretPath":
+			return in.SecretPath
+		}
+		return ""
+	}
+	env := envOr(firstNonEmpty(alias, "env", "environment"))
+	if !validEnv(env) {
+		return nil, zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
+	}
+	sub := firstNonEmpty(alias, "path", "secretPath")
+	if !ValidSubpath(sub) {
+		return nil, zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
+	}
+	metas, err := o.s.State.kms.List(orgPath(org, sub), env)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "%v", err)
 	}
 	// Superset response: `secrets`/`total` for this plane's clients, `names` for
 	// the operator, which reads that key. Emitting both means the standalone KMS
@@ -295,18 +431,12 @@ func listSecrets(s *cloud.Service[state], ctx *zip.Ctx) error {
 	for _, m := range metas {
 		names = append(names, m.Name)
 	}
-	return ctx.JSON(http.StatusOK, map[string]any{"secrets": metas, "total": len(metas), "names": names})
+	return &kmsSecrets{Secrets: metas, Total: len(metas), Names: names}, nil
 }
 
-// firstQuery returns the first non-empty value among alias query keys, so one
-// handler serves callers that spell the same parameter differently.
-func firstQuery(ctx *zip.Ctx, keys ...string) string {
-	return firstNonEmpty(ctx.Query, keys...)
-}
-
-// firstNonEmpty is firstQuery's lookup rule, taken as a plain function so the
-// precedence (primary before alias, empty treated as absent) is testable without
-// standing up a request context.
+// firstNonEmpty is the alias lookup rule — primary spelling before alias, empty
+// treated as absent — taken as a plain function over a getter so it is one rule
+// whether the values arrive as query keys or as decoded input fields.
 func firstNonEmpty(get func(string) string, keys ...string) string {
 	for _, k := range keys {
 		if v := get(k); v != "" {
@@ -338,21 +468,28 @@ func getSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
 	return ctx.JSON(http.StatusOK, map[string]any{"name": name, "env": env, "value": string(val)})
 }
 
-// putSecret seals + upserts a secret. Body: {path?, name, env?, value}. The value
-// is sealed under a fresh per-secret DEK (master-key-wrapped) before storage —
-// plaintext never touches disk.
-func putSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	var req secretPutRequest
-	if err := json.Unmarshal(ctx.Body(), &req); err != nil {
-		return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
+// putSecret seals a value and stores it at (path, name, env) under the caller's
+// own org. The value is sealed under a fresh per-secret key, master-key-wrapped,
+// before it is written — plaintext never touches disk. An existing secret at the
+// same coordinate is overwritten.
+//
+// env is REQUIRED and is never defaulted on a write: it is part of the storage
+// key, so a silent default would commit the value to a bucket the readers that
+// resolve project/env/path never look in.
+//
+// Example: {"path": "ci", "name": "STRIPE_KEY", "env": "prod", "value": "sk-live-…"}
+// Response: {"stored": true, "name": "STRIPE_KEY", "env": "prod"}
+func (o ops) putSecret(ctx context.Context, req *secretPutRequest) (*secretStored, error) {
+	org, err := o.admit(ctx)
+	if err != nil {
+		return nil, err
 	}
 	name := strings.TrimSpace(req.Name)
 	if !validName(name) {
-		return zip.ErrBadRequest("'name' is required and must not contain '/', control characters, or exceed 253 bytes")
+		return nil, zip.ErrBadRequest("'name' is required and must not contain '/', control characters, or exceed 253 bytes")
 	}
 	if req.Value == "" {
-		return zip.ErrBadRequest("'value' is required")
+		return nil, zip.ErrBadRequest("'value' is required")
 	}
 	// env is a first-class component of the storage key
 	// (kms/secrets/{path}/{env}/{name}); it can never be aliased. A silent
@@ -364,19 +501,19 @@ func putSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
 	// readers that omit env must keep working).
 	env := strings.TrimSpace(req.Env)
 	if env == "" {
-		return zip.ErrBadRequest(`'env' is required — there is no default. A silent default would split this write from the project/env/path record that readers resolve.`)
+		return nil, zip.ErrBadRequest(`'env' is required — there is no default. A silent default would split this write from the project/env/path record that readers resolve.`)
 	}
 	if !validEnv(env) {
-		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
+		return nil, zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
 	}
 	if !ValidSubpath(req.Path) {
-		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
+		return nil, zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
 	path := orgPath(org, req.Path)
-	if err := s.State.kms.Put(path, name, env, []byte(req.Value)); err != nil {
-		return zip.Errorf(http.StatusBadGateway, "%v", err)
+	if err := o.s.State.kms.Put(path, name, env, []byte(req.Value)); err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "%v", err)
 	}
-	return ctx.JSON(http.StatusOK, map[string]any{"stored": true, "name": name, "env": env})
+	return &secretStored{Stored: true, Name: name, Env: env}, nil
 }
 
 // deleteSecret removes one secret. The trailing wildcard is the sub-path + name.

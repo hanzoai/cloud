@@ -31,81 +31,555 @@
     "/v1/commerce/topup/rails": {
       "get": {
         "operationId": "get_v1_commerce_topup_rails",
+        "summary": "TopupRails lists the accepted (chain, token, treasury) triples, so a browser can\nrender \"send USDC here\" without the addresses being baked into its bundle.\n\nThis exists because the console previously gated its top-up UI on\nNEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants.",
+        "description": "TopupRails lists the accepted (chain, token, treasury) triples, so a browser can\nrender \"send USDC here\" without the addresses being baked into its bundle.\n\nThis exists because the console previously gated its top-up UI on\nNEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants. Enabling a rail\ntherefore meant rebuilding and redeploying the frontend, and with them unset the\nUI reported \"not available yet\" no matter what the server could actually accept.\nServing the set at runtime keeps ONE source of truth (the server's config) and\nlets a rail be switched on without shipping a bundle.\n\nEverything here is public on-chain data; no secret is exposed, and the set is\nempty on a deployment that accepts no crypto rail.",
         "tags": [
           "commerce"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/railList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/commerce/topup/wallet": {
       "post": {
         "operationId": "post_v1_commerce_topup_wallet",
+        "summary": "WalletTopup credits the caller's org for a stablecoin transfer they already sent\nto the treasury.",
+        "description": "WalletTopup credits the caller's org for a stablecoin transfer they already sent\nto the treasury. It reads the receipt from that rail's chain, confirms a mined,\nsuccessful ERC-20 Transfer to the rail's treasury, derives USD cents from the\non-chain value using the token's own decimals, records the credit, and returns\nthe amount plus the new balance.\n\nThe credited amount is the ON-CHAIN value, never a number the caller sends, and\nthe credit lands on the caller's own validated org — there is no way to name a\nthird-party subject. Nothing is credited that the chain did not confirm: a\nmissing, failed or non-matching transaction is refused, and a deployment with no\npayment rail enabled says so rather than inventing a credit.",
         "tags": [
           "commerce"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "rail": "base-usdc",
+                "txHash": "0x0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/walletTopupReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/walletTopupResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/csrf": {
       "get": {
         "operationId": "get_v1_csrf",
+        "summary": "IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on\nevery money write (mint/revoke a key, top up, onboard, and the billing/commerce\nwrite verbs).",
+        "description": "IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on\nevery money write (mint/revoke a key, top up, onboard, and the billing/commerce\nwrite verbs). The token is bound to the caller's validated identity and expires,\nso one minted for one identity cannot authorize a write as another.\n\nIt is answered no-store, so it is never cached by a shared proxy. This is the\nsame-origin endpoint the embedded console reads — the Same-Origin Policy is what\nstops a cross-site page from reading the response and forging a write.",
         "tags": [
           "csrf"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/csrfResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/embed-status": {
       "get": {
         "operationId": "get_v1_embed-status",
+        "summary": "EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself.",
+        "description": "EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself. ENTITLEMENT is\nserver-authoritative: each app is a single shared per-BRAND instance, so only a\nmember of the owning brand org — or a SuperAdmin — is given the embed URL; every\nother caller gets phase \"not-entitled\" and no URL. REACHABILITY is a probe of\nthat origin, which a cross-origin page cannot read for itself.\n\nThe probed host is always \u003capp\u003e.\u003cthis deployment's own brand domain\u003e: no part of\nit comes from the request, so this can never be steered into probing an\narbitrary origin.",
         "tags": [
           "embed-status"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "description": "App is the embedded app to report on: cms (Content Studio), erp or help.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cms"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/embedStatusResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/iam/keys": {
       "delete": {
         "operationId": "delete_v1_iam_keys",
+        "summary": "RevokeKey revokes the caller's own API key of the requested class.",
+        "description": "RevokeKey revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "publishable"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/revokedKey"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
         "operationId": "get_v1_iam_keys",
+        "summary": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago.",
+        "description": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
         "tags": [
           "iam"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/apiKeyList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_iam_keys",
+        "summary": "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE.",
+        "description": "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
         "tags": [
           "iam"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "type": "publishable"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/keyTypeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mintedKey"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/iam/onboard": {
       "post": {
         "operationId": "post_v1_iam_onboard",
+        "summary": "Onboard creates the caller's organization.",
+        "description": "Onboard creates the caller's organization. Two flows, keyed on whether the caller\nalready has a home org (mirrors app/onboard/route.ts):\n\n  - FIRST-RUN (no owner): create + MOVE the user in as admin, so their next JWT\n    carries the new owner and the cloud scopes everything to it.\n  - ADDITIONAL (owner set): create the org but do NOT move the user — a move\n    changes their IAM owner (stripping a SuperAdmin's status + orphaning their\n    current org). They reach the new org via the OrgSwitcher, which re-scopes\n    X-Org-Id without touching IAM membership. A personal-org request from someone\n    who already has an org is meaningless → 409.",
         "tags": [
           "iam"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "Acme"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/onboardReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/onboardResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/keys": {
       "delete": {
         "operationId": "delete_v1_keys",
+        "summary": "RevokeKey revokes the caller's own API key of the requested class.",
+        "description": "RevokeKey revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
         "tags": [
           "keys"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "publishable"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/revokedKey"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
         "operationId": "get_v1_keys",
+        "summary": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago.",
+        "description": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
         "tags": [
           "keys"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/apiKeyList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_keys",
+        "summary": "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE.",
+        "description": "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
         "tags": [
           "keys"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "type": "publishable"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/keyTypeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mintedKey"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "apiKey": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the key last changed, as IAM records it.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the FULL value, and is present for a publishable key only: it is\npublic by construction and useless to its holder if it cannot be read back.",
+            "type": "string"
+          },
+          "prefix": {
+            "description": "Prefix is the recognizable, non-secret head of the key — enough to tell two\nkeys apart, never enough to use one.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the key class: secret (sk-) or publishable (pk-).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "apiKeyList": {
+        "properties": {
+          "keys": {
+            "description": "Keys is every key the caller holds, at most one per type.",
+            "items": {
+              "$ref": "#/components/schemas/apiKey"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "csrfResp": {
+        "properties": {
+          "csrfToken": {
+            "description": "Token is the value to send back in the X-CSRF-Token header. It is bound to the\ncaller's identity, so it authorizes writes as them and as nobody else.",
+            "type": "string"
+          },
+          "expiresIn": {
+            "description": "ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;\na write with an expired token is refused.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "embedStatusResp": {
+        "properties": {
+          "app": {
+            "description": "App is the app this verdict is about.",
+            "type": "string"
+          },
+          "embedUrl": {
+            "description": "EmbedURL is the in-app landing URL to frame. Empty when the caller is not\nentitled — a non-entitled caller never receives it.",
+            "type": "string"
+          },
+          "entitled": {
+            "description": "Entitled is whether the caller's org may frame this brand-owned app.",
+            "type": "boolean"
+          },
+          "origin": {
+            "description": "Origin is the app's origin on this deployment's own brand domain.",
+            "type": "string"
+          },
+          "phase": {
+            "description": "Phase is the verdict in one word: not-entitled, not-provisioned or ready.",
+            "type": "string"
+          },
+          "reachable": {
+            "description": "Reachable is whether the app answered the liveness probe.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "keyTypeIn": {
+        "properties": {
+          "type": {
+            "description": "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "mintedKey": {
+        "properties": {
+          "accessKey": {
+            "description": "AccessKey is the same value under its predecessor name, carried so callers\nwritten against the older field keep working. One value, two names.",
+            "type": "string"
+          },
+          "key": {
+            "description": "Key is the credential, returned ONCE — a secret key is unreadable afterwards.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the class of key that was minted.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "onboardReq": {
+        "properties": {
+          "name": {
+            "description": "Name is the organization's display name. Ignored when personal is true, which\nderives the name from the caller's own username instead.",
+            "type": "string"
+          },
+          "personal": {
+            "description": "Personal asks for the caller's own workspace: the name is derived from their\nusername and the slug auto-suffixes to stay unique. Meaningless — and refused\n— for a caller who already has an organization.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "onboardResp": {
+        "properties": {
+          "additional": {
+            "description": "Additional is true when the caller already had an organization and this one\nwas created WITHOUT moving them into it — they reach it via the org switcher.",
+            "type": "boolean"
+          },
+          "displayName": {
+            "description": "DisplayName is the organization's human name.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the created organization's slug, which is what X-Org-Id carries.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "railList": {
+        "properties": {
+          "rails": {
+            "description": "Rails is every (chain, token, treasury) triple this deployment accepts.",
+            "items": {
+              "$ref": "#/components/schemas/railView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "railView": {
+        "properties": {
+          "chain": {
+            "description": "Chain is the human chain name, e.g. \"Base\".",
+            "type": "string"
+          },
+          "chainId": {
+            "description": "ChainID is the EIP-155 chain id the wallet must be on.",
+            "type": "integer"
+          },
+          "decimals": {
+            "description": "Decimals is the token's decimal places — 6 for USDC, 18 for an 18-decimal\ntoken. Cents are derived per-rail from it.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the stable rail id to name when submitting a transfer, e.g. \"base-usdc\".",
+            "type": "string"
+          },
+          "symbol": {
+            "description": "Symbol is the display symbol, e.g. \"USDC\".",
+            "type": "string"
+          },
+          "token": {
+            "description": "Token is the ERC-20 contract address to transfer.",
+            "type": "string"
+          },
+          "treasury": {
+            "description": "Treasury is the address on this chain to send funds to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "revokedKey": {
+        "properties": {
+          "ok": {
+            "description": "OK is true when the key was revoked. A failure is an error status, never a\nfalse here.",
+            "type": "boolean"
+          },
+          "type": {
+            "description": "Type is the key class that was revoked, resolved — so a caller that named\nnothing can see it revoked the secret key.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "walletTopupReq": {
+        "properties": {
+          "fromAddress": {
+            "description": "FromAddress is the wallet the transfer was sent from. Optional; when given it\nmust match the transfer's on-chain sender.",
+            "type": "string"
+          },
+          "rail": {
+            "description": "Which accepted rail the transfer was sent on, e.g. \"base-usdc\". The client\nnames it rather than the server guessing from the tx: the same address can\nexist on several chains, so inferring would risk crediting against the wrong\ntreasury. It may be omitted only while exactly one rail is enabled.",
+            "type": "string"
+          },
+          "txHash": {
+            "description": "TxHash is the hash of the ERC-20 transfer that was already sent to the rail's\ntreasury. The receipt is read from that chain; nothing is credited that the\nchain did not confirm.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "walletTopupResp": {
+        "properties": {
+          "balance": {
+            "description": "Balance is the org's new USD-ledger balance in cents. Best-effort: a read\nfailure reports 0, and the credit has already landed either way.",
+            "type": "integer"
+          },
+          "creditedCents": {
+            "description": "CreditedCents is the USD credit recorded, derived from the ON-CHAIN value\nusing the token's own decimals — never a client-supplied number.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is how commerce recorded the payment.",
+            "type": "string"
+          },
+          "txHash": {
+            "description": "TxHash is the transfer that was credited.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

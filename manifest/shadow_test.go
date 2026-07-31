@@ -9,8 +9,8 @@ import "testing"
 // identical patterns, appending the later handler behind the earlier one. The
 // earlier handler is a proxy that never calls Next(), so a duplicated prefix
 // does not conflict loudly — the second app simply never runs. Two shipped
-// examples: provisioning's "/v1/s3" sat behind storage's (provisioning
-// registered nothing there, so it was pure shadow), and zen's "/v1" sits behind
+// examples: provisioning's "/v1/s3" sat behind storage's, which cost it four
+// real routes (its s3-kind CRUD, now at /v1/object), and zen's "/v1" sits behind
 // commerce's, which silently disables zen's Claim() metering middleware.
 //
 // manifest_test.go asserts only that mounting does not panic, which is why both

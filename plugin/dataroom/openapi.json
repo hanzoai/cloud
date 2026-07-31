@@ -154,10 +154,28 @@
     },
     "/v1/dataroom/health": {
       "get": {
-        "operationId": "get_v1_dataroom_health",
+        "operationId": "dataroomHealth",
+        "summary": "health reports that the dataroom surface is serving.",
+        "description": "health reports that the dataroom surface is serving.\n\nIt answers before the bundle, the link index and object storage are wired, so\nliveness never depends on them and a degraded mount still probes green.",
         "tags": [
           "dataroom"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "service": "dataroom",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/dataroom/links": {
@@ -252,6 +270,23 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Health": {
+        "properties": {
+          "service": {
+            "description": "Service is always \"dataroom\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is always \"ok\" — the route answers before any fallible setup, so\nreaching it IS the liveness signal.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

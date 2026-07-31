@@ -26,16 +26,18 @@
 // /v1/audit before the ai subsystem's /v1/* catch-all (150).
 package auditlog
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
+	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
@@ -56,40 +58,94 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("auditlog.Mount: nil deps.Logger")
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "audit"), State: state{store: deps.Audit}}
-	routes(app, s)
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("auditlog.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	routes(zapp, s)
 	s.Log.Info("org-scoped audit surface mounted", "prefix", "/v1/audit", "store", s.State.store != nil)
 	return nil
 }
 
-// routes registers the org-scoped audit surface.
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/audit", cloud.Handle(s, list))
+// routes registers the org-scoped audit surface. The read is a TYPED op: the
+// registry entry zip.Get makes is the ONE thing OpenAPI, MCP and the CLI project
+// from, and it takes the ABSOLUTE path because the registry keys on it.
+func routes(zapp *zip.App, s *cloud.Service[state]) {
+	o := ops{s: s}
+	zip.Get(zapp, "/v1/audit", o.list, zip.WithOperationID("auditTrail"))
 }
 
-// list answers GET /v1/audit — the caller's OWN org audit trail, newest first.
-// Filters (all optional, applied on top of the pinned org): sub (a user in the
-// org), action, resource (type), resourceId, result (success|deny|error), since,
-// until (RFC3339), pageSize (default 100, cap 1000), p (1-based page). Response is
-// the /v1 list envelope { data:[audit.Wire], data2:total } the console decodes —
-// the SAME shape /v1/admin/audit returns, so ONE console adapter reads either.
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// ops binds the service to the typed handler: a TypedHandler has no parameter for
+// the service, so it arrives as a RECEIVER and the op is a method value — which is
+// also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// TrailQuery is the GET /v1/audit filter. Every field is optional and narrows
+// WITHIN the caller's own org; there is deliberately no org field, because an org
+// read from the input is one the caller asserted for itself.
+type TrailQuery struct {
+	// Sub restricts the trail to one actor — the validated subject that made the
+	// request.
+	Sub string `json:"sub"`
+	// Action restricts it to one action name, e.g. "kms.secret.read".
+	Action string `json:"action"`
+	// Resource restricts it to one resource kind, e.g. "secret".
+	Resource string `json:"resource"`
+	// ResourceID restricts it to one resource instance.
+	ResourceID string `json:"resourceId"`
+	// Result restricts it to "success", "deny" or "error".
+	Result string `json:"result"`
+	// Since is the inclusive lower time bound, RFC3339. An unparseable value is
+	// ignored rather than refused — one malformed filter must not hide the trail.
+	Since string `json:"since"`
+	// Until is the upper time bound, RFC3339, with the same tolerance.
+	Until string `json:"until"`
+	// PageSize is rows per page; absent or non-positive means 100.
+	PageSize int `json:"pageSize"`
+	// Page is the 1-based page number, driving the offset.
+	Page int `json:"p"`
+}
+
+// Trail is the GET /v1/audit envelope — the SAME { status, msg, data, data2 }
+// shape /v1/admin/audit returns, so ONE console adapter reads either.
+type Trail struct {
+	// Status is "ok" on a served read.
+	Status string `json:"status"`
+	// Msg is empty on a served read.
+	Msg string `json:"msg"`
+	// Data is the page of records, newest first. Never null; [] when the org has no
+	// matching events.
+	Data []audit.Wire `json:"data"`
+	// Data2 is the total number of matching records, before paging.
+	Data2 int `json:"data2"`
+}
+
+// list reads the caller's OWN org audit trail, newest first. Every row carries its
+// own hash-chain linkage.
+//
+// The org is the validated principal's, pinned server-side, so a caller can only
+// ever read its own tenant. Answers 501 when no local tamper-evident store is
+// configured, rather than falling back to a different trail.
+//
+// Example: {"action":"kms.secret.read","result":"deny","since":"2026-07-01T00:00:00Z","pageSize":50}
+// Response: {"status":"ok","msg":"","data":[{"seq":41,"time":"2026-07-26T18:00:00.123456789Z","org":"acme","sub":"z@hanzo.ai","action":"kms.secret.read","resource":"secret","result":"deny","status":403,"isAdmin":false,"hash":"9f2c","prevHash":"41ab"}],"data2":1}
+func (o ops) list(ctx context.Context, in *TrailQuery) (*Trail, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		// A customer's OWN audit trail — an absent identity is a true "not signed
 		// in" (401), never a 403 "not authorized for this surface".
-		return zip.ErrUnauthorized("sign in to view the audit trail")
+		return nil, zip.ErrUnauthorized("sign in to view the audit trail")
 	}
-	if s.State.store == nil {
+	if o.s.State.store == nil {
 		// No local tamper-evident store wired. Fail closed with an honest 501 rather
 		// than the admin view's IAM-proxy fallback (that is a fleet-operator concern).
-		return zip.Errorf(http.StatusNotImplemented, "audit trail is not configured")
+		return nil, zip.Errorf(http.StatusNotImplemented, "audit trail is not configured")
 	}
 
-	f := orgFilterFromQuery(c, org)
-	rows, total, err := s.State.store.Query(c.Context(), f)
+	rows, total, err := o.s.State.store.Query(ctx, in.filter(org))
 	if err != nil {
-		s.Log.Warn("org audit query failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "audit query failed")
+		o.s.Log.Warn("org audit query failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "audit query failed")
 	}
 
 	out := make([]audit.Wire, 0, len(rows))
@@ -99,48 +155,41 @@ func list(s *cloud.Service[state], c *zip.Ctx) error {
 
 	// Per-tenant security events must never be cached by the browser or an
 	// intermediary.
-	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, map[string]any{
-		"status": "ok",
-		"msg":    "",
-		"data":   out,
-		"data2":  total,
-	})
+	if c, ok := cloud.Request(ctx); ok {
+		c.SetHeader("Cache-Control", "no-store")
+	}
+	return &Trail{Status: "ok", Data: out, Data2: total}, nil
 }
 
-// orgFilterFromQuery builds the audit.Filter for an org-scoped read. Org is PINNED
-// to the caller's validated org (a client `org` param is IGNORED — the caller can
+// filter builds the audit.Filter for an org-scoped read. Org is PINNED to the
+// caller's validated org (an `org` input field does not exist — the caller can
 // never widen scope). Every other field is an optional narrowing within that org.
-func orgFilterFromQuery(c *zip.Ctx, org string) audit.Filter {
+func (in TrailQuery) filter(org string) audit.Filter {
 	f := audit.Filter{
-		Org:        org, // PINNED — never c.Query("org")
-		Sub:        strings.TrimSpace(c.Query("sub")),
-		Action:     strings.TrimSpace(c.Query("action")),
-		Resource:   strings.TrimSpace(c.Query("resource")),
-		ResourceID: strings.TrimSpace(c.Query("resourceId")),
-		Result:     strings.TrimSpace(c.Query("result")),
+		Org:        org, // PINNED — never anything the caller sent
+		Sub:        strings.TrimSpace(in.Sub),
+		Action:     strings.TrimSpace(in.Action),
+		Resource:   strings.TrimSpace(in.Resource),
+		ResourceID: strings.TrimSpace(in.ResourceID),
+		Result:     strings.TrimSpace(in.Result),
 	}
-	if v := strings.TrimSpace(c.Query("since")); v != "" {
+	if v := strings.TrimSpace(in.Since); v != "" {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			f.Since = t
 		}
 	}
-	if v := strings.TrimSpace(c.Query("until")); v != "" {
+	if v := strings.TrimSpace(in.Until); v != "" {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			f.Until = t
 		}
 	}
 	pageSize := 100
-	if v := strings.TrimSpace(c.Query("pageSize")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			pageSize = n
-		}
+	if in.PageSize > 0 {
+		pageSize = in.PageSize
 	}
 	f.Limit = pageSize
-	if v := strings.TrimSpace(c.Query("p")); v != "" {
-		if page, err := strconv.Atoi(v); err == nil && page > 1 {
-			f.Offset = (page - 1) * pageSize
-		}
+	if in.Page > 1 {
+		f.Offset = (in.Page - 1) * pageSize
 	}
 	return f
 }

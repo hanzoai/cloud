@@ -49,18 +49,14 @@
 //
 // The tenant is whatever IAM resolves the key to, never a body or header claim,
 // so the tenant invariant the rest of the plane enforces holds here too. Every
-// door funnels through the SAME write core (ingestEvents) into the SAME
-// hanzo.events table: one write path, many front doors.
+// door funnels through the SAME ingest core (ingestEvents) onto the SAME event
+// plane: one ingest path, many front doors.
 package analytics
 
 import (
-	"encoding/json"
-	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -95,113 +91,29 @@ func ingestKey(c *zip.Ctx) string {
 	return ""
 }
 
-// ── error (exception) folding ────────────────────────────────────────────────
+// ── the captured error ───────────────────────────────────────────────────────
 
-// Exception is the captured error carried on a type:'error' WireEvent (mirrors
-// @hanzo/event's Exception). The ingest folds it into properties.$exception so
-// the ONE events schema needs no new columns and the /v1/errors lens can surface
-// it straight from the properties JSON.
+// Exception is the captured error carried on a type:'error' event (mirrors
+// @hanzo/event's Exception). It becomes event.error's own columns — class, message,
+// handled and the frames.* arrays — so a stack frame is QUERYABLE rather than buried
+// in an opaque blob ("which file throws most" is a GROUP BY, not a JSON scan).
 type Exception struct {
 	Type    string `json:"type,omitempty"`
 	Message string `json:"message"`
 	Stack   string `json:"stack,omitempty"`
 	Handled *bool  `json:"handled,omitempty"`
+	// Frames is the STRUCTURED stack, when the client can send one — it holds the
+	// source map, so its frames beat anything parsed out of the text Stack here.
+	// Absent, parseStack (fact.go) reads the text form every browser SDK emits.
+	Frames []Frame `json:"frames,omitempty"`
 }
 
-// foldException normalizes a type:'error' event so the write core stores it as a
-// first-class error: it defaults the type to "error", and lifts the top-level
-// `error` object into properties.$exception (never mutating the caller's map).
-// A non-error event passes through unchanged.
-func foldException(e CaptureEvent) CaptureEvent {
-	if e.Error == nil {
-		return e
-	}
-	if strings.TrimSpace(e.Type) == "" {
-		e.Type = "error"
-	}
-	props := make(map[string]any, len(e.Properties)+1)
-	for k, v := range e.Properties {
-		props[k] = v
-	}
-	// Redact the exception's free-text (message/stack) at the fold point so the
-	// stored row AND the raw destinations fan-out (forward.go, which sees events
-	// BEFORE the warehouse scrub) both carry a clean $exception — never a token,
-	// query secret, or PII lifted from a stack frame.
-	props["$exception"] = scrubException(e.Error)
-	e.Properties = props
-	e.Error = nil
-	return e
+// Frame is one structured stack frame on the wire.
+type Frame struct {
+	Function string `json:"function"`
+	File     string `json:"file"`
+	Line     uint32 `json:"line"`
+	Column   uint32 `json:"column"`
 }
 
 // ── handlers ─────────────────────────────────────────────────────────────────
-
-// errorsLens answers GET /v1/errors — the error-tracking read view: recent
-// type:'error' events for the org, newest first. Tenant-scoped server-side and
-// gated on a VALIDATED principal (tenant()), NOT the publishable key — reads
-// require real auth, reinforcing that pk- is write-only. The captured exception
-// is surfaced straight from properties.$exception. limit defaults 50, caps 200.
-func errorsLens(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	limit, _ := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	rows, err := datastore.Query(c.Context(), `
-		SELECT id, timestamp, event, distinct_id, session_id, product, url, path,
-		       library, library_version, properties
-		FROM hanzo.events
-		WHERE tenant_id = ? AND event_type = 'error'
-		ORDER BY timestamp DESC
-		LIMIT ?`, org, limit)
-	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
-	}
-	type errEvent struct {
-		ID         string          `json:"id"`
-		Timestamp  string          `json:"timestamp"`
-		Event      string          `json:"event"`
-		DistinctID string          `json:"distinctId,omitempty"`
-		SessionID  string          `json:"sessionId,omitempty"`
-		Product    string          `json:"product,omitempty"`
-		URL        string          `json:"url,omitempty"`
-		Path       string          `json:"path,omitempty"`
-		Library    string          `json:"library,omitempty"`
-		LibraryVer string          `json:"libraryVersion,omitempty"`
-		Exception  json.RawMessage `json:"exception,omitempty"`
-		Properties json.RawMessage `json:"properties,omitempty"`
-	}
-	out := make([]errEvent, 0, len(rows))
-	for _, r := range rows {
-		e := errEvent{
-			ID: asStr(r["id"]), Timestamp: asStr(r["timestamp"]), Event: asStr(r["event"]),
-			DistinctID: asStr(r["distinct_id"]), SessionID: asStr(r["session_id"]),
-			Product: asStr(r["product"]), URL: asStr(r["url"]), Path: asStr(r["path"]),
-			Library: asStr(r["library"]), LibraryVer: asStr(r["library_version"]),
-		}
-		if p := asStr(r["properties"]); p != "" && json.Valid([]byte(p)) {
-			e.Properties = json.RawMessage(p)
-			e.Exception = extractException(p)
-		}
-		out = append(out, e)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
-}
-
-// extractException pulls the $exception object out of a properties JSON blob so
-// the errors lens surfaces it as a first-class field. "" (nil) when absent.
-func extractException(props string) json.RawMessage {
-	var m map[string]json.RawMessage
-	if json.Unmarshal([]byte(props), &m) != nil {
-		return nil
-	}
-	if ex, ok := m["$exception"]; ok {
-		return ex
-	}
-	return nil
-}

@@ -207,8 +207,8 @@ func (in *GrantIn) credit() core.CreditRequest {
 	}
 }
 
-// IssueGrant issues a credit grant to any org from the operator Grants view, with the
-// target named in the body. It funnels through the SAME core.ApplyGrant that
+// IssueGrant issues a credit grant to any org from the operator Grants view. The target
+// is named in the body. It funnels through the SAME core.ApplyGrant that
 // POST /v1/admin/customers/:org/credit uses, so there is exactly ONE credit-write path
 // and one audit trail behind both.
 //

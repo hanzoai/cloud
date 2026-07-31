@@ -19,17 +19,95 @@
     "/v1/content/board": {
       "get": {
         "operationId": "get_v1_content_board",
+        "summary": "getBoard merges the org's content items across every publishable type into one queue.",
+        "description": "getBoard merges the org's content items across every publishable type into one queue.\nIt is the cross-type read the framework's per-type list cannot give, and never 5xxs on a\npartial failure: a type the org has not installed, or one whose read errors, is\nskipped rather than fatal.",
         "tags": [
           "content"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows to one lifecycle state; an unknown state is rejected.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "review"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows to one brand/site sub-scope.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "doctype",
+            "in": "query",
+            "required": false,
+            "description": "DocType narrows to one content type; anything not publishable is rejected.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the items returned; 0 means 200 and nothing above 1000 is honoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BoardView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/content/channels": {
       "get": {
         "operationId": "get_v1_content_channels",
+        "summary": "getChannels returns the distribution channels the org has connected.",
+        "description": "getChannels returns the distribution channels the org has connected. They are the\ntargets a publish fans out to, and a disabled channel is listed and skipped on send.",
         "tags": [
           "content"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "disabled": false,
+                      "id": "int_9f2",
+                      "name": "@acme",
+                      "provider": "x"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/content/generate": {
@@ -37,28 +115,112 @@
         "operationId": "post_v1_content_generate",
         "tags": [
           "content"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/content/lifecycle": {
       "get": {
         "operationId": "get_v1_content_lifecycle",
+        "summary": "getLifecycle returns the content state machine — every state and its legal moves.",
+        "description": "getLifecycle returns the content state machine — every state and its legal moves. It\nis the same graph the transition endpoint enforces, so a\nclient can render only the moves that will be accepted.",
         "tags": [
           "content"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "initial": "draft",
+                  "live": "published",
+                  "states": [
+                    "draft",
+                    "review",
+                    "scheduled",
+                    "queued",
+                    "published",
+                    "archived"
+                  ],
+                  "transitions": {
+                    "draft": [
+                      "review",
+                      "archived"
+                    ]
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/stateGraph"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/content/publish": {
       "post": {
         "operationId": "post_v1_content_publish",
+        "summary": "postPublish distributes one content item to the org's connected channels.",
+        "description": "postPublish distributes one content item to the org's connected channels. Publishing\nis best effort per channel: the reply carries the honest per-channel outcome, and a\nsend failure is reported rather than raised, so a partial fan-out is visible instead\nof lost. A scheduleAt in the future queues the send instead of making it now.",
         "tags": [
           "content"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "doctype": "SocialPost",
+                "name": "spring-launch",
+                "scheduleAt": "2026-04-01T15:00:00Z"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/PublishInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/content/{doctype}/{name}/transition": {
       "post": {
-        "operationId": "post_v1_content_by_doctype_by_name_transition",
+        "operationId": "post_v1_content_doctype_name_transition",
+        "summary": "postTransition moves one content item to a new lifecycle state.",
+        "description": "postTransition moves one content item to a new lifecycle state. It fans the item out\nto the org's channels when the target state distributes, and the edge is checked here and\nre-checked at the storage boundary, so an illegal move is refused twice; the\ndistribution side effect is best effort and never rolls back the status change.",
         "tags": [
           "content"
         ],
@@ -67,19 +229,335 @@
             "name": "doctype",
             "in": "path",
             "required": true,
+            "description": "DocType is the content type from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "SocialPost"
           },
           {
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the document name from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "spring-launch"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "doctype": "SocialPost",
+                "name": "spring-launch",
+                "to": "published"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/TransitionReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransitionResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BoardView": {
+        "properties": {
+          "count": {
+            "description": "Count is how many items are in Data.",
+            "type": "integer"
+          },
+          "data": {
+            "description": "Data is the items, most recently updated first.",
+            "items": {
+              "$ref": "#/components/schemas/boardItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Channel": {
+        "properties": {
+          "disabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "description": "the social integration id to target in a post",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provider": {
+            "description": "\"x\" | \"instagram\" | \"tiktok\" | ...",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChannelList": {
+        "properties": {
+          "data": {
+            "description": "Data is the channels a publish can target.",
+            "items": {
+              "$ref": "#/components/schemas/Channel"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ChannelResult": {
+        "properties": {
+          "channel": {
+            "description": "the social integration id targeted",
+            "type": "string"
+          },
+          "error": {
+            "description": "short reason, when it failed",
+            "type": "string"
+          },
+          "externalId": {
+            "description": "social post id, when it went out",
+            "type": "string"
+          },
+          "provider": {
+            "description": "\"x\" | \"instagram\" | ... when known",
+            "type": "string"
+          },
+          "status": {
+            "description": "\"distributed\" | \"scheduled\" | \"failed\"",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GenerateInput": {
+        "type": "object",
+        "properties": {
+          "brief": {
+            "type": "string"
+          },
+          "channels": {
+            "type": "string"
+          },
+          "design": {
+            "type": "string"
+          },
+          "doctype": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "source_media": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "tone": {
+            "type": "string"
+          },
+          "voice": {
+            "type": "string"
+          }
+        }
+      },
+      "GenerateResult": {
+        "type": "object",
+        "properties": {
+          "doctype": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "PublishInput": {
+        "properties": {
+          "doctype": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scheduleAt": {
+            "description": "\"\" = now",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PublishResult": {
+        "properties": {
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "externalIds": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelResult"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "StorefrontResult": {
+        "properties": {
+          "imageUrl": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "store": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TransitionReq": {
+        "properties": {
+          "doctype": {
+            "description": "DocType is the content type from the path.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the document name from the path.",
+            "type": "string"
+          },
+          "scheduleAt": {
+            "description": "ScheduleAt is an RFC3339 instant to distribute at; empty distributes now.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the target lifecycle state. Required, and the edge from the current state must be legal.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to"
+        ],
+        "type": "object"
+      },
+      "TransitionResult": {
+        "properties": {
+          "distribution": {
+            "$ref": "#/components/schemas/PublishResult"
+          },
+          "doctype": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "storefront": {
+            "$ref": "#/components/schemas/StorefrontResult"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "boardItem": {
+        "properties": {
+          "doctype": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "stateGraph": {
+        "properties": {
+          "initial": {
+            "type": "string"
+          },
+          "live": {
+            "type": "string"
+          },
+          "states": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "transitions": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
       }
     }
   }

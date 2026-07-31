@@ -79,36 +79,46 @@ const (
 
 // ── earnings (the per-affiliate share-ledger projection) ────────────────────────
 
-type periodEarningView struct {
+type AffiliatePeriodEarning struct {
 	Period          string `json:"period"`
 	MarginCents     int64  `json:"marginCents"`
 	CommissionCents int64  `json:"commissionCents"`
 }
 
-// orgEarningView is the affiliate's per-referred-org contribution: the affiliate's OWN
+// AffiliateOrgEarning is the affiliate's per-referred-org contribution: the affiliate's OWN
 // aggregate SHARE from that referral. It deliberately omits the margin/spend so the
 // referred org's gross usage is never restated to the affiliate (only the affiliate's
 // own earned share, which it is entitled to).
-type orgEarningView struct {
+type AffiliateOrgEarning struct {
 	ReferredOrg     string `json:"referredOrg"`
 	CommissionCents int64  `json:"commissionCents"`
 }
 
-// myEarnings answers GET /v1/affiliates/me/earnings — the caller's per-period share
-// ledger (margin base + share) and its per-referred-org aggregate share. Approved
-// affiliates get an opportunistic lazy sweep first so the numbers are current.
-func myEarnings(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// myEarnings reads the caller's commission ledger. It answers one row per accrual
+// period — the platform margin the commission was taken from, and the share earned
+// — and one per referred org carrying that referral's aggregate share.
+//
+// The per-org rows deliberately omit margin and spend, so a referred org's gross
+// usage is never restated to the affiliate — only the share the affiliate earned.
+// Approved affiliates get an opportunistic lazy sweep first so the numbers are
+// current; a caller who has not applied gets {isAffiliate:false}.
+//
+// The response is the open earnings document: the enrolled and not-enrolled answers
+// carry different keys, so no single struct states it truthfully.
+//
+// Response: {"isAffiliate":true,"marginBps":1500,"accruedCents":1250,"pendingCents":1250,"paidCents":0,"byPeriod":[{"period":"2026-07","marginCents":6250,"commissionCents":1250}],"byReferredOrg":[{"referredOrg":"globex","commissionCents":1250}]}
+func (o ops) myEarnings(ctx context.Context, _ *struct{}) (*map[string]any, error) {
+	s := o.s
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to view your affiliate earnings")
+		return nil, zip.ErrForbidden("sign in to view your affiliate earnings")
 	}
-	ctx := c.Context()
 	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
-		return c.JSON(http.StatusOK, map[string]any{"isAffiliate": false})
+		return &map[string]any{"isAffiliate": false}, nil
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
 	}
 	if a.Status == StatusApproved {
 		if _, _, serr := sweepAffiliate(s, ctx, a); serr != nil {
@@ -121,22 +131,22 @@ func myEarnings(s *cloud.Service[state], c *zip.Ctx) error {
 
 	byPeriod, err := s.State.store.EarningsByPeriod(ctx, a.ID, earningsLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "earnings by period: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "earnings by period: %v", err)
 	}
 	byOrg, err := s.State.store.EarningsByReferredOrg(ctx, a.ID, earningsLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "earnings by org: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "earnings by org: %v", err)
 	}
 
-	periods := make([]periodEarningView, 0, len(byPeriod))
+	periods := make([]AffiliatePeriodEarning, 0, len(byPeriod))
 	for _, p := range byPeriod {
-		periods = append(periods, periodEarningView{Period: p.Period, MarginCents: p.MarginCents, CommissionCents: p.CommissionCents})
+		periods = append(periods, AffiliatePeriodEarning{Period: p.Period, MarginCents: p.MarginCents, CommissionCents: p.CommissionCents})
 	}
-	orgs := make([]orgEarningView, 0, len(byOrg))
+	orgs := make([]AffiliateOrgEarning, 0, len(byOrg))
 	for _, o := range byOrg {
-		orgs = append(orgs, orgEarningView{ReferredOrg: o.ReferredOrg, CommissionCents: o.CommissionCents})
+		orgs = append(orgs, AffiliateOrgEarning{ReferredOrg: o.ReferredOrg, CommissionCents: o.CommissionCents})
 	}
-	return c.JSON(http.StatusOK, map[string]any{
+	return &map[string]any{
 		"isAffiliate":   true,
 		"marginBps":     affiliateMarginBps(),
 		"accruedCents":  a.AccruedCents,
@@ -144,15 +154,15 @@ func myEarnings(s *cloud.Service[state], c *zip.Ctx) error {
 		"paidCents":     a.PaidCents,
 		"byPeriod":      periods,
 		"byReferredOrg": orgs,
-	})
+	}, nil
 }
 
 // ── shareable links ─────────────────────────────────────────────────────────────
 
-// linkView is one shareable link with its derived stats: clicks (tracked), signups
+// AffiliateLinkView is one shareable link with its derived stats: clicks (tracked), signups
 // (orgs attributed with this code), conversions (of those, how many produced a
 // commission). Signups/conversions are DERIVED from the ledger, never stored.
-type linkView struct {
+type AffiliateLinkView struct {
 	Code        string `json:"code"`
 	Label       string `json:"label"`
 	URL         string `json:"url"`
@@ -162,48 +172,58 @@ type linkView struct {
 	CreatedAt   int64  `json:"createdAt"`
 }
 
-// myLinks answers GET /v1/affiliates/me/links — the caller's shareable links with
-// per-link click/signup/conversion stats.
-func myLinks(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// myLinks reads the caller's shareable referral links. Each row carries that link's
+// click, signup and conversion counts.
+//
+// Signups (orgs attributed with that code) and conversions (of those, how many
+// produced commission) are DERIVED from the ledger, never stored. Pending public
+// clicks are folded into the store first, so the counters are current. A caller who
+// has not applied gets {isAffiliate:false} with the per-affiliate link cap.
+//
+// The response is the open links document: the enrolled and not-enrolled answers
+// carry different keys, so no single struct states it truthfully.
+//
+// Response: {"isAffiliate":true,"status":"approved","maxLinks":50,"links":[{"code":"acme","label":"launch post","url":"https://hanzo.ai/?aff=acme","clicks":128,"signups":4,"conversions":2,"createdAt":1780000000}]}
+func (o ops) myLinks(ctx context.Context, _ *struct{}) (*map[string]any, error) {
+	s := o.s
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to view your referral links")
+		return nil, zip.ErrForbidden("sign in to view your referral links")
 	}
-	ctx := c.Context()
 	// Fold any pending public clicks into the money DB before reading (batched, bounded), so
 	// the counters are current without a per-click money-DB write.
 	flushClicks(s, ctx)
 	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
-		return c.JSON(http.StatusOK, map[string]any{"isAffiliate": false, "maxLinks": maxLinksPerAffiliate})
+		return &map[string]any{"isAffiliate": false, "maxLinks": maxLinksPerAffiliate}, nil
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
 	}
 	links, err := s.State.store.ListLinks(ctx, a.ID, linkLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list links: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list links: %v", err)
 	}
 	signups, err := s.State.store.SignupsByCode(ctx, a.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "signups: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "signups: %v", err)
 	}
 	conversions, err := s.State.store.ConversionsByCode(ctx, a.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "conversions: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "conversions: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{
+	return &map[string]any{
 		"isAffiliate": true,
 		"status":      a.Status,
 		"maxLinks":    maxLinksPerAffiliate,
 		"links":       linkViews(s, links, signups, conversions),
-	})
+	}, nil
 }
 
-func linkViews(s *cloud.Service[state], links []Link, signups, conversions map[string]int) []linkView {
-	out := make([]linkView, 0, len(links))
+func linkViews(s *cloud.Service[state], links []Link, signups, conversions map[string]int) []AffiliateLinkView {
+	out := make([]AffiliateLinkView, 0, len(links))
 	for _, l := range links {
-		out = append(out, linkView{
+		out = append(out, AffiliateLinkView{
 			Code: l.Code, Label: l.Label, URL: affiliateLink(s, l.Code), Clicks: l.Clicks,
 			Signups: signups[l.Code], Conversions: conversions[l.Code], CreatedAt: l.CreatedAt,
 		})
@@ -211,42 +231,53 @@ func linkViews(s *cloud.Service[state], links []Link, signups, conversions map[s
 	return out
 }
 
-// createLinkRequest is POST /v1/affiliates/me/links: an optional label + optional
-// vanity code (a free code is minted when omitted).
-type createLinkRequest struct {
+// AffiliateLinkRequest is the POST /v1/affiliates/me/links body.
+type AffiliateLinkRequest struct {
+	// Label is a free-text note for the affiliate's own use, sanitized and bounded.
 	Label string `json:"label"`
-	Code  string `json:"code"`
+	// Code is an optional vanity slug — 3–32 chars of a–z, 0–9 and hyphen — which
+	// must be free across the whole code directory. Empty mints a random one.
+	Code string `json:"code"`
 }
 
-// createLink answers POST /v1/affiliates/me/links — mint a new shareable link for the
-// caller's (approved) affiliate. A requested vanity code must be valid + free across
-// the global directory; an omitted code is minted randomly.
-func createLink(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// AffiliateLinkCreated is the POST /v1/affiliates/me/links answer.
+type AffiliateLinkCreated struct {
+	// Link is the new link. Its click, signup and conversion counts are 0 — they are
+	// derived on read, and nothing has happened yet.
+	Link AffiliateLinkView `json:"link"`
+}
+
+// createLink mints a new shareable referral link. The affiliate must be approved,
+// and is capped at 50 links.
+//
+// A requested vanity code
+// must be valid and free across the whole code directory (409 if taken); an omitted
+// code is minted randomly. Answers 201.
+//
+// Example: {"label":"launch post","code":"acme-launch"}
+// Response: {"link":{"code":"acme-launch","label":"launch post","url":"https://hanzo.ai/?aff=acme-launch","clicks":0,"signups":0,"conversions":0,"createdAt":1780000000}}
+func (o ops) createLink(ctx context.Context, body *AffiliateLinkRequest) (*AffiliateLinkCreated, error) {
+	s := o.s
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to create a referral link")
+		return nil, zip.ErrForbidden("sign in to create a referral link")
 	}
-	var body createLinkRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	ctx := c.Context()
 	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
-		return zip.ErrForbidden("apply to the affiliate program first")
+		return nil, zip.ErrForbidden("apply to the affiliate program first")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
 	}
 	if a.Status != StatusApproved {
-		return zip.ErrBadRequest("your affiliate application must be approved before you can create links")
+		return nil, zip.ErrBadRequest("your affiliate application must be approved before you can create links")
 	}
 	n, err := s.State.store.CountLinks(ctx, a.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "count links: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "count links: %v", err)
 	}
 	if n >= maxLinksPerAffiliate {
-		return zip.ErrBadRequest("link limit reached")
+		return nil, zip.ErrBadRequest("link limit reached")
 	}
 	label := sanitizeLabel(body.Label)
 
@@ -254,20 +285,20 @@ func createLink(s *cloud.Service[state], c *zip.Ctx) error {
 	// (retry a handful of times on the vanishingly rare random collision).
 	if req := normalizeCode(body.Code); req != "" {
 		link, err := mintLink(s, ctx, a.ID, req, label)
-		return createLinkResult(s, c, link, err)
+		return createLinkResult(s, link, err)
 	}
 	for attempt := 0; attempt < 8; attempt++ {
 		code, gerr := randomLinkCode()
 		if gerr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
+			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
 		}
 		link, err := mintLink(s, ctx, a.ID, code, label)
 		if err == errCodeTaken {
 			continue
 		}
-		return createLinkResult(s, c, link, err)
+		return createLinkResult(s, link, err)
 	}
-	return zip.Errorf(http.StatusInternalServerError, "could not mint a unique link code")
+	return nil, zip.Errorf(http.StatusInternalServerError, "could not mint a unique link code")
 }
 
 func mintLink(s *cloud.Service[state], ctx context.Context, affiliateID, code, label string) (Link, error) {
@@ -278,28 +309,40 @@ func mintLink(s *cloud.Service[state], ctx context.Context, affiliateID, code, l
 	return s.State.store.CreateLink(ctx, id, affiliateID, code, label, time.Now().Unix())
 }
 
-func createLinkResult(s *cloud.Service[state], c *zip.Ctx, link Link, err error) error {
+func createLinkResult(s *cloud.Service[state], link Link, err error) (*AffiliateLinkCreated, error) {
 	switch err {
 	case nil:
-		return c.JSON(http.StatusCreated, map[string]any{
-			"link": linkView{Code: link.Code, Label: link.Label, URL: affiliateLink(s, link.Code), CreatedAt: link.CreatedAt},
-		})
+		return &AffiliateLinkCreated{
+			Link: AffiliateLinkView{Code: link.Code, Label: link.Label, URL: affiliateLink(s, link.Code), CreatedAt: link.CreatedAt},
+		}, nil
 	case errInvalidCode:
-		return zip.ErrBadRequest("code must be 3–32 chars of a–z, 0–9, hyphen")
+		return nil, zip.ErrBadRequest("code must be 3–32 chars of a–z, 0–9, hyphen")
 	case errCodeTaken:
-		return zip.ErrConflict("that code is already taken")
+		return nil, zip.ErrConflict("that code is already taken")
 	default:
-		return zip.Errorf(http.StatusInternalServerError, "create link: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "create link: %v", err)
 	}
 }
 
-// clickRequest is POST /v1/affiliates/click: the code a public visitor clicked.
-type clickRequest struct {
-	Code string `json:"code"`
+// AffiliateClick is the POST /v1/affiliates/click body.
+type AffiliateClick struct {
+	// Code is the affiliate or link code the visitor clicked. Required. Any code is
+	// accepted without an existence check — codes are public by design, and this is
+	// deliberately not a code-existence oracle.
+	Code string `json:"code" validate:"required"`
 }
 
-// clickLink answers POST /v1/affiliates/click — a PUBLIC (no-principal) ping that bumps
-// a link's click counter. The ping folds into an in-memory coalescing buffer and NEVER
+// AffiliateClickCounted is the POST /v1/affiliates/click answer.
+type AffiliateClickCounted struct {
+	// Counted reports that the ping was accepted into the coalescing buffer — not
+	// that the code names a real link. An unknown code no-ops at flush time.
+	Counted bool `json:"counted"`
+}
+
+// clickLink counts a click on a shareable referral link. It is PUBLIC — a visitor
+// clicking a link has no session yet — so it takes no principal.
+//
+// The ping folds into an in-memory coalescing buffer and NEVER
 // writes the money DB synchronously, so a click flood cannot contend with the accrual /
 // payout write path; the buffer is flushed, batched, on the next links read + on shutdown.
 // The counter is a vanity metric only — it never touches accrual or payout (those key on
@@ -307,16 +350,12 @@ type clickRequest struct {
 // design (they live in shareable links), so this accepts any code without checking
 // existence: it is intentionally NOT a code-existence oracle (an unknown code simply
 // no-ops at flush time), and "counted" reports buffer acceptance, not that the code is real.
-func clickLink(s *cloud.Service[state], c *zip.Ctx) error {
-	var body clickRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+func (o ops) clickLink(_ context.Context, body *AffiliateClick) (*AffiliateClickCounted, error) {
 	code := normalizeCode(body.Code)
 	if code == "" {
-		return zip.ErrBadRequest("code is required")
+		return nil, zip.ErrBadRequest("code is required")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"counted": s.State.clicks.add(code)})
+	return &AffiliateClickCounted{Counted: o.s.State.clicks.add(code)}, nil
 }
 
 // flushClicks folds any pending public clicks into the money DB (batched, one tx) before a
@@ -332,46 +371,52 @@ func flushClicks(s *cloud.Service[state], ctx context.Context) {
 
 // ── opt-in leaderboard handle ───────────────────────────────────────────────────
 
-type handleRequest struct {
+// AffiliateHandle is the POST /v1/affiliates/me/handle body and its answer.
+type AffiliateHandle struct {
+	// Handle is the public leaderboard display name — 2–24 chars of letters, digits,
+	// space, hyphen, underscore or dot. Empty opts the affiliate OUT of being named
+	// on the public board; its own rank stays visible to itself.
 	Handle string `json:"handle"`
 }
 
-// setHandle answers POST /v1/affiliates/me/handle — set (or clear) the caller's opt-in
-// public leaderboard display name. An empty handle opts the affiliate OUT of the
-// public board by name (its own rank stays private-visible).
-func setHandle(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// setHandle sets or clears the caller's public leaderboard handle. The affiliate
+// must have applied.
+//
+// An empty handle opts out of being NAMED on the
+// board — the affiliate still occupies its rank, it is simply not listed. Answers the
+// handle as stored.
+//
+// Example: {"handle":"Acme Labs"}
+// Response: {"handle":"Acme Labs"}
+func (o ops) setHandle(ctx context.Context, body *AffiliateHandle) (*AffiliateHandle, error) {
+	s := o.s
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to set your leaderboard handle")
-	}
-	var body handleRequest
-	if err := c.Bind(&body); err != nil {
-		return err
+		return nil, zip.ErrForbidden("sign in to set your leaderboard handle")
 	}
 	handle := strings.TrimSpace(body.Handle)
 	if handle != "" && !validHandle(handle) {
-		return zip.ErrBadRequest("handle must be 2–24 chars of letters, digits, space, or - _ .")
+		return nil, zip.ErrBadRequest("handle must be 2–24 chars of letters, digits, space, or - _ .")
 	}
-	ctx := c.Context()
 	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
-		return zip.ErrForbidden("apply to the affiliate program first")
+		return nil, zip.ErrForbidden("apply to the affiliate program first")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
 	}
 	updated, err := s.State.store.SetHandle(ctx, a.ID, handle)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "set handle: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "set handle: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"handle": updated.Handle})
+	return &AffiliateHandle{Handle: updated.Handle}, nil
 }
 
 // ── leaderboard (privacy-preserving) ────────────────────────────────────────────
 
-// leaderboardRow is one public leaderboard entry: rank + opt-in handle + aggregate
+// AffiliateRankRow is one public leaderboard entry: rank + opt-in handle + aggregate
 // share + referred count. NEVER an org identity. IsYou flags the caller's own row.
-type leaderboardRow struct {
+type AffiliateRankRow struct {
 	Rank          int    `json:"rank"`
 	Handle        string `json:"handle"`
 	AccruedCents  int64  `json:"accruedCents"`
@@ -379,20 +424,39 @@ type leaderboardRow struct {
 	IsYou         bool   `json:"isYou,omitempty"`
 }
 
-// leaderboard answers GET /v1/affiliates/leaderboard — the privacy-preserving board:
-// the top OPT-IN affiliates by lifetime accrued share (by handle, aggregate only) plus
-// the CALLER'S OWN exact rank (always visible, even when the caller is anonymous or
-// outside the top N). No org identity, no referred-org data, ever.
-func leaderboard(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// AffiliateBoard is the GET /v1/affiliates/leaderboard answer.
+type AffiliateBoard struct {
+	// Leaders are the opt-in affiliates in the top page, by handle and aggregate
+	// share only — never an org identity. Never null.
+	Leaders []AffiliateRankRow `json:"leaders"`
+	// Total is how many approved affiliates the ranking covers. Absent when the top
+	// page was truncated and the caller has no rank of their own to resolve it from.
+	Total *int `json:"total,omitempty"`
+	// You is the caller's OWN row with their exact global rank, present only for an
+	// approved affiliate. It is accurate even outside the top page.
+	You *AffiliateRankRow `json:"you,omitempty"`
+}
+
+// leaderboard reads the privacy-preserving affiliate board. It answers the top
+// OPT-IN affiliates by lifetime accrued share, plus the caller's OWN exact rank.
+//
+// Rows carry a handle and aggregate numbers only — never an org identity and never
+// any referred-org data. Affiliates without a handle still occupy their rank, they
+// are simply not listed. The caller's own rank is computed over the WHOLE approved
+// set, so it is accurate even outside the top page, and only an approved affiliate
+// has one.
+//
+// Response: {"leaders":[{"rank":1,"handle":"Acme Labs","accruedCents":1250,"referredCount":4}],"total":9,"you":{"rank":3,"handle":"Globex","accruedCents":400,"referredCount":1,"isYou":true}}
+func (o ops) leaderboard(ctx context.Context, _ *struct{}) (*AffiliateBoard, error) {
+	s := o.s
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("sign in to view the leaderboard")
+		return nil, zip.ErrForbidden("sign in to view the leaderboard")
 	}
-	ctx := c.Context()
 
 	top, err := s.State.store.LeaderboardTop(ctx, leaderboardLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "leaderboard: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "leaderboard: %v", err)
 	}
 
 	// The caller's own affiliate (for the "you" row + isYou flagging). A non-affiliate
@@ -400,27 +464,27 @@ func leaderboard(s *cloud.Service[state], c *zip.Ctx) error {
 	me, meErr := s.State.store.GetByOrg(ctx, org)
 	haveMe := meErr == nil
 	if meErr != nil && meErr != errNotFound {
-		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", meErr)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", meErr)
 	}
 
 	// The public rows carry the affiliate's GLOBAL rank (its index in the accrued-
 	// ordered set — LeaderboardTop and RankOf share the same DESC,id tiebreak) but only
 	// opt-in (handled) rows are shown by name. Anonymous affiliates still occupy their
 	// rank; they are simply not listed.
-	leaders := make([]leaderboardRow, 0, len(top))
+	leaders := make([]AffiliateRankRow, 0, len(top))
 	for i, e := range top {
 		if strings.TrimSpace(e.Handle) == "" {
 			continue
 		}
-		leaders = append(leaders, leaderboardRow{
+		leaders = append(leaders, AffiliateRankRow{
 			Rank: i + 1, Handle: e.Handle, AccruedCents: e.AccruedCents, ReferredCount: e.ReferredCount,
 			IsYou: haveMe && e.AffiliateID == me.ID,
 		})
 	}
 
-	resp := map[string]any{"leaders": leaders}
+	board := AffiliateBoard{Leaders: leaders}
 	if total := leaderboardTotal(top); total >= 0 {
-		resp["total"] = total
+		board.Total = &total
 	}
 
 	// The caller's own row: exact global rank computed over the WHOLE approved set, so
@@ -428,18 +492,18 @@ func leaderboard(s *cloud.Service[state], c *zip.Ctx) error {
 	if haveMe && me.Status == StatusApproved {
 		rank, total, rerr := s.State.store.RankOf(ctx, me.ID, me.AccruedCents)
 		if rerr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "rank: %v", rerr)
+			return nil, zip.Errorf(http.StatusInternalServerError, "rank: %v", rerr)
 		}
 		count, cerr := s.State.store.CountReferrals(ctx, me.ID)
 		if cerr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "count referrals: %v", cerr)
+			return nil, zip.Errorf(http.StatusInternalServerError, "count referrals: %v", cerr)
 		}
-		resp["total"] = total
-		resp["you"] = leaderboardRow{
+		board.Total = &total
+		board.You = &AffiliateRankRow{
 			Rank: rank, Handle: me.Handle, AccruedCents: me.AccruedCents, ReferredCount: count, IsYou: true,
 		}
 	}
-	return c.JSON(http.StatusOK, resp)
+	return &board, nil
 }
 
 // leaderboardTotal returns the number of rows the top query saw (a lower bound on the
@@ -454,39 +518,47 @@ func leaderboardTotal(top []LeaderboardEntry) int {
 
 // ── SuperAdmin set-rate ─────────────────────────────────────────────────────────
 
-type setRateRequest struct {
+// AffiliateRate is the POST /v1/admin/affiliates/:id/rate input.
+type AffiliateRate struct {
+	// ID is the affiliate id from the path.
+	ID string `json:"id"`
+	// RateBps is the DIRECT (L1) commission rate in basis points. It is capped below
+	// 10000 to leave headroom for the L2 and L3 upline, and the live cap is quoted in
+	// the refusal because it moves with the upline schedule.
 	RateBps int64 `json:"rateBps"`
 }
 
-// adminSetRate answers POST /v1/admin/affiliates/:id/rate — set an affiliate's DIRECT
-// (L1) commission rate. It is capped at maxL1RateBps so the whole L1+L2+L3 schedule
-// can never exceed 100% of the margin (the share ≤ margin guarantee). SuperAdmin only.
-func adminSetRate(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// adminSetRate sets an affiliate's DIRECT (L1) commission rate. It is capped so the
+// whole L1+L2+L3 schedule can never exceed the platform margin — the share ≤ margin
+// guarantee.
+//
+// The cap moves with the upline switches, so
+// it is resolved per request and quoted in the refusal rather than hardcoded.
+// SuperAdmin only.
+//
+// Example: {"id":"aff_9f2a","rateBps":2500}
+// Response: {"status":"ok","msg":"","data":{"affiliate":{"id":"aff_9f2a","org":"acme","code":"acme","status":"approved","rateBps":2500,"referredCount":0,"accruedCents":0,"pendingCents":0,"paidCents":0,"createdAt":1780000000,"approvedAt":1780000100,"suspendedAt":0}}}
+func (o ops) adminSetRate(ctx context.Context, in *AffiliateRate) (*AffiliateOne, error) {
+	if err := admit(ctx); err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
-	var body setRateRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	s := o.s
 	// The cap moves with the L2/L3 switches, so it is resolved per request and quoted
 	// in the refusal — a hardcoded 9300 would start lying the moment an owner edits the
 	// upline schedule, and the caller would have no way to learn the real bound.
-	if cap := maxL1RateBps(); body.RateBps < 0 || body.RateBps > cap {
-		return zip.ErrBadRequest(fmt.Sprintf(
+	if cap := maxL1RateBps(); in.RateBps < 0 || in.RateBps > cap {
+		return nil, zip.ErrBadRequest(fmt.Sprintf(
 			"rateBps must be between 0 and %d (leaving headroom for the L2+L3 upline so a share can never exceed the margin)", cap))
 	}
-	ctx := c.Context()
-	a, err := s.State.store.SetRate(ctx, id, body.RateBps)
+	a, err := s.State.store.SetRate(ctx, strings.TrimSpace(in.ID), in.RateBps)
 	if err != nil {
 		if err == errNotFound {
-			return zip.ErrNotFound("affiliate not found")
+			return nil, zip.ErrNotFound("affiliate not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "set rate: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "set rate: %v", err)
 	}
 	emitAudit(s, ctx, "affiliate.rate", a, map[string]any{"rateBps": a.RateBps})
-	return adminOK(c, map[string]any{"affiliate": adminViewOf(a, 0)})
+	return &AffiliateOne{Status: "ok", Data: AffiliateOneData{Affiliate: adminViewOf(a, 0)}}, nil
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────────

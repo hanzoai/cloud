@@ -164,9 +164,9 @@ type aimScorePoint struct {
 	Count    int64   `json:"count"`
 }
 
-// aimetrics is the fleet AI board: O11yAI generations (count, cost, avg/p95 latency,
-// per-model), per-model usage from the live cloud_usage ledger, and the eval plane
-// (traces, scores, score names, runs, and the average-score trend).
+// aimetrics is the fleet AI board. It carries O11yAI generations (count, cost, avg/p95
+// latency, per-model), per-model usage from the live cloud_usage ledger, and the eval
+// plane (traces, scores, score names, runs, and the average-score trend).
 //
 // Every signal degrades INDEPENDENTLY — a table that is absent or errors contributes its
 // zero value and the read still succeeds. O11yAI latency is a SEPARATE query from

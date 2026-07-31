@@ -43,10 +43,10 @@ func echoBody(c *zip.Ctx) error {
 func pinApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	// MountAccount installs the identity middleware PinBillingSubject relies on; mounting
+	// Mount installs the identity middleware PinBillingSubject relies on; mounting
 	// it keeps the probe on the same trust plane as the real co-resident registration.
-	if err := MountAccount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
-		t.Fatalf("MountAccount: %v", err)
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
+		t.Fatalf("Mount: %v", err)
 	}
 	app.Get("/probe", PinBillingSubject(), echoQuery)
 	app.Post("/probe", PinBillingSubject(), echoBody)

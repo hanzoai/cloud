@@ -14,9 +14,9 @@ import (
 
 // TestToCapture_PreservesUTMAttribution proves the PostHog-wire adapter carries the
 // BARE utm_* campaign params (what PostHog SDKs emit) through to the native
-// CaptureEvent — and thence, via normalizeEvent, into the hanzo.events utm_*
-// columns the INSERT binds. Regression guard: these were previously dropped, so
-// every campaign-attributed pageview lost its source/medium/campaign on the
+// CaptureEvent — and thence, via normalize, into the utm_* attributes the writer
+// binds. Regression guard: these were previously dropped, so every
+// campaign-attributed page view lost its source/medium/campaign on the
 // /v1/insights/e front door and the web/commerce lens could never attribute it.
 func TestToCapture_PreservesUTMAttribution(t *testing.T) {
 	e := insightsEvent{
@@ -36,39 +36,43 @@ func TestToCapture_PreservesUTMAttribution(t *testing.T) {
 		cap.UTM.Campaign != "launch" || cap.UTM.Term != "analytics" || cap.UTM.Content != "hero-cta" {
 		t.Fatalf("UTM not mapped from PostHog wire: %+v", cap.UTM)
 	}
-	// End-to-end through the normalizer into the positional row the INSERT binds.
-	row, ok := normalizeEvent("acme", time.Now(), cap)
+	// End-to-end through the normalizer into the attributes the fact carries.
+	f, ok := normalize("acme", time.Now(), cap)
 	if !ok {
 		t.Fatal("want ok")
 	}
-	if row.utmSource != "newsletter" || row.utmMedium != "email" ||
-		row.utmCampaign != "launch" || row.utmTerm != "analytics" || row.utmContent != "hero-cta" {
-		t.Fatalf("UTM lost before the events row: src=%q med=%q camp=%q term=%q content=%q",
-			row.utmSource, row.utmMedium, row.utmCampaign, row.utmTerm, row.utmContent)
+	for k, want := range map[string]string{
+		"utm_source": "newsletter", "utm_medium": "email", "utm_campaign": "launch",
+		"utm_term": "analytics", "utm_content": "hero-cta",
+	} {
+		if got := f.attributes[k]; got != want {
+			t.Fatalf("UTM lost before the fact: attributes[%q] = %q, want %q", k, got, want)
+		}
 	}
 }
 
 // TestToCapture_IdempotencyID proves the client event id (PostHog top-level `uuid`,
-// or the `$insert_id` property fallback) is preserved as the stable row id, so a
-// retried batch does not mint a fresh id per attempt — while an absent id still
+// or the `$insert_id` property fallback) is preserved as the stable fact id, so a
+// retried batch does not mint a fresh id per attempt — which is also what makes the
+// warehouse consumer's redelivery collapse instead of duplicate — while an absent id still
 // falls back to a server-minted one (existing behavior unchanged).
 func TestToCapture_IdempotencyID(t *testing.T) {
 	// top-level uuid wins
-	row, _ := normalizeEvent("acme", time.Now(),
+	f, _ := normalize("acme", time.Now(),
 		insightsEvent{Event: "signup", DistinctID: "u1", UUID: "evt-abc"}.toCapture())
-	if row.id != "evt-abc" {
-		t.Fatalf("top-level uuid not preserved as row id, got %q", row.id)
+	if f.id != "evt-abc" {
+		t.Fatalf("top-level uuid not preserved as the fact id, got %q", f.id)
 	}
 	// $insert_id property fallback when no top-level uuid
-	row2, _ := normalizeEvent("acme", time.Now(),
+	f2, _ := normalize("acme", time.Now(),
 		insightsEvent{Event: "signup", DistinctID: "u1", Properties: map[string]any{"$insert_id": "ins-9"}}.toCapture())
-	if row2.id != "ins-9" {
-		t.Fatalf("$insert_id fallback not preserved, got %q", row2.id)
+	if f2.id != "ins-9" {
+		t.Fatalf("$insert_id fallback not preserved, got %q", f2.id)
 	}
 	// absent → server still mints a non-empty id
-	row3, _ := normalizeEvent("acme", time.Now(),
+	f3, _ := normalize("acme", time.Now(),
 		insightsEvent{Event: "signup", DistinctID: "u1"}.toCapture())
-	if row3.id == "" {
+	if f3.id == "" {
 		t.Fatal("server must still mint an id when the client sends none")
 	}
 }

@@ -22,14 +22,41 @@
     "/v1/entitlements": {
       "get": {
         "operationId": "get_v1_entitlements",
+        "summary": "projection reports which console apps the CALLER's org may open, and the plan\ntier that decided it.",
+        "description": "projection reports which console apps the CALLER's org may open, and the plan\ntier that decided it. It reads the billing truth (commerce entitlement), not\nthe org's own enablement toggles, and reports an app LOCKED when commerce\ncannot answer — the read fails safe-to-locked rather than 500.",
         "tags": [
           "entitlements"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "apps": {
+                    "admin": false,
+                    "bot": true,
+                    "platform": true,
+                    "studio": true,
+                    "team": false,
+                    "world": false
+                  },
+                  "tier": "pro"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/projectionView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/orgs/{org}/entitlements": {
       "get": {
-        "operationId": "get_v1_orgs_by_org_entitlements",
+        "operationId": "get_v1_orgs_org_entitlements",
+        "summary": "get lists the products the org has turned on.",
+        "description": "get lists the products the org has turned on. The list is the org's own\nINTENT (the enablement store), not what its plan grants — GET /v1/entitlements\nanswers that.",
         "tags": [
           "orgs"
         ],
@@ -38,14 +65,36 @@
             "name": "org",
             "in": "path",
             "required": true,
+            "description": "Org is the org whose entitlements are read. It must be the caller's own\nvalidated org unless the caller is a platform SuperAdmin, who may name any.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "enabled": [
+                    "chat",
+                    "engine"
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/entitlementsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_orgs_by_org_entitlements",
+        "operationId": "post_v1_orgs_org_entitlements",
+        "summary": "post turns products on and off for one org.",
+        "description": "post turns products on and off for one org. Enabling requires the product to\nbe an active entitlement of the org's plan (a SuperAdmin bypasses that gate);\ndisabling is never gated. Add and remove are applied in one transaction and\nthe full resulting set is returned.",
         "tags": [
           "orgs"
         ],
@@ -54,11 +103,105 @@
             "name": "org",
             "in": "path",
             "required": true,
+            "description": "Org is the org whose entitlements are written. It must be the caller's own\nvalidated org unless the caller is a platform SuperAdmin, who may name any.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "add": [
+                  "chat"
+                ],
+                "org": "acme",
+                "remove": [
+                  "bot"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/mutateReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "enabled": [
+                    "chat",
+                    "engine"
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/entitlementsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "entitlementsView": {
+        "properties": {
+          "enabled": {
+            "description": "Enabled is the sorted list of canonical product ids the org has turned on,\nempty (never null) when it has turned none on.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "mutateReq": {
+        "properties": {
+          "add": {
+            "description": "Add lists product ids to turn ON. Each must already be an ACTIVE\nentitlement of the org's plan in commerce, unless the caller is a\nSuperAdmin; anything else is refused with 402.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "org": {
+            "description": "Org is the org whose entitlements are written. It must be the caller's own\nvalidated org unless the caller is a platform SuperAdmin, who may name any.",
+            "type": "string"
+          },
+          "remove": {
+            "description": "Remove lists product ids to turn OFF. Never gated — disabling a product is\nalways allowed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "projectionView": {
+        "properties": {
+          "apps": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "Apps maps each console app (studio, bot, world, platform, team, admin) to\nwhether this caller may open it. Always all six keys, never null.",
+            "type": "object"
+          },
+          "tier": {
+            "description": "Tier is the plan slug commerce resolved for the org, \"\" when it holds no\nactive licensing subscription.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

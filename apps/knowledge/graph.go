@@ -1,13 +1,11 @@
 package knowledge
 
 import (
-	"net/http"
+	"context"
 	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
-	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/zap-proto/zip"
 )
 
 // graph.go serves GET /v1/kb/graph: the org's knowledge as a node/edge graph shaped
@@ -42,53 +40,77 @@ type graphEdge struct {
 	Kind string `json:"kind"` // parent | link | provenance
 }
 
-// graph fetches the org's knowledge documents and shapes them into the graph.
-func graph(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
+// graphQuery narrows the graph read to one project scope.
+type graphQuery struct {
+	// Project narrows every node to that project scope; empty means the whole org.
+	Project string `json:"project"`
+}
+
+// graphView is the org's knowledge as a node/edge graph for a force-directed
+// renderer. degraded is present only when the store was unreachable and the empty
+// graph is an honest "unavailable", not "you know nothing".
+type graphView struct {
+	// Nodes are the pages, memories, sources and connectors.
+	Nodes []graphNode `json:"nodes"`
+	// Edges are the parent tree, the wikilinks and the connector provenance.
+	Edges []graphEdge `json:"edges"`
+	// Degraded is true only when the document store was unavailable.
+	Degraded bool `json:"degraded,omitempty"`
+}
+
+// graph returns the caller org's knowledge as a node/edge graph for a renderer.
+// Nodes are pages, memories, sources and connectors; edges are the parent tree,
+// the wikilinks and the connector provenance. A store outage degrades to an empty
+// graph with degraded=true, never a 5xx.
+//
+// Example: {"project": "platform"}
+// Response: {"nodes": [{"id": "kb-page:runbook", "type": "kb-page", "title": "Runbook"}], "edges": [{"from": "kb-page:runbook", "to": "kb-page:index", "kind": "link"}]}
+func (o ops) graph(ctx context.Context, in *graphQuery) (*graphView, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	project := strings.TrimSpace(c.Query("project"))
+	s := o.s
+	project := strings.TrimSpace(in.Project)
 	scope := map[string]string{}
 	if project != "" {
 		scope["project"] = project
 	}
-	ctx := c.Context()
 
 	pages, err := framework.Search(ctx, org, DTPage, scope, graphNodeLimit)
 	if err != nil {
-		return graphUnavailable(s, c, org, err)
+		return graphUnavailable(s, org, err)
 	}
 	memories, err := framework.Search(ctx, org, DTMemory, scope, graphNodeLimit)
 	if err != nil {
-		return graphUnavailable(s, c, org, err)
+		return graphUnavailable(s, org, err)
 	}
 	sources, err := framework.Search(ctx, org, DTSource, scope, graphNodeLimit)
 	if err != nil {
-		return graphUnavailable(s, c, org, err)
+		return graphUnavailable(s, org, err)
 	}
 	// Connectors carry no project field, so they are fetched org-wide; only those a
 	// provenance edge reaches are emitted as nodes.
 	connectors, err := framework.Search(ctx, org, DTConnector, nil, 100)
 	if err != nil {
-		return graphUnavailable(s, c, org, err)
+		return graphUnavailable(s, org, err)
 	}
 	// kb-link edges: fetched org-wide, then filtered to sources that are in the
 	// (project-scoped) page set during the build.
 	links, err := framework.Search(ctx, org, DTLink, nil, graphEdgeLimit)
 	if err != nil {
-		return graphUnavailable(s, c, org, err)
+		return graphUnavailable(s, org, err)
 	}
 
 	nodes, edges := buildGraph(pages, memories, sources, connectors, links)
-	return c.JSON(http.StatusOK, map[string]any{"nodes": nodes, "edges": edges})
+	return &graphView{Nodes: nodes, Edges: edges}, nil
 }
 
 // graphUnavailable degrades a store outage to an honest empty graph (never a 5xx),
 // mirroring the search handler's fail-honest contract for the RAG path.
-func graphUnavailable(s *cloud.Service[state], c *zip.Ctx, org string, err error) error {
+func graphUnavailable(s *cloud.Service[state], org string, err error) (*graphView, error) {
 	s.Log.Warn("kb graph failed", "org", org, "err", err)
-	return c.JSON(http.StatusOK, map[string]any{"nodes": []graphNode{}, "edges": []graphEdge{}, "degraded": true})
+	return &graphView{Nodes: []graphNode{}, Edges: []graphEdge{}, Degraded: true}, nil
 }
 
 // buildGraph assembles the node/edge graph from the org's documents. It is pure

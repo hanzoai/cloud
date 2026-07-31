@@ -3,8 +3,8 @@
 // console modules EXACTLY so the Indexer and Oracles pages render with no front-end
 // change:
 //
-//   - indexerView -> console IndexerModule.tsx  Indexer {id,chain,network,height,lag,status,updatedAt}
-//   - oracleView  -> console OraclesModule.tsx  Oracle  {id,name,feed,value,source,status,updatedAt}
+//   - Indexer -> console IndexerModule.tsx  Indexer {id,chain,network,height,lag,status,updatedAt}
+//   - Oracle  -> console OraclesModule.tsx  Oracle  {id,name,feed,value,source,status,updatedAt}
 //
 // Every field is a REAL upstream value or an honest omission. Data the upstream does
 // not carry — the chain HEAD (hence true indexing lag) — is left off so the UI renders
@@ -20,28 +20,43 @@ import (
 
 // ---- console view structs ----
 
-// indexerView is the shape console IndexerModule (Indexer) consumes. `lag` is
+// Indexer is the shape console IndexerModule (Indexer) consumes. `lag` is
 // deliberately absent from the output (the indexer REST exposes the indexed height
 // but not the chain HEAD, so lag is not derivable — omitted, never invented).
-type indexerView struct {
-	ID        string `json:"id"`
-	Chain     string `json:"chain,omitempty"`
-	Network   string `json:"network,omitempty"`
-	Height    string `json:"height,omitempty"`
-	Lag       string `json:"lag,omitempty"`
-	Status    string `json:"status"`
+type Indexer struct {
+	// ID identifies the indexer — its chain name, else chain id, else the brand.
+	ID string `json:"id"`
+	// Chain is the indexed chain's name as the indexer reports it.
+	Chain string `json:"chain,omitempty"`
+	// Network is the deployment's network tier: mainnet, testnet or devnet.
+	Network string `json:"network,omitempty"`
+	// Height is the latest indexed block height; empty when nothing is indexed yet.
+	Height string `json:"height,omitempty"`
+	// Lag is always absent: the indexer REST exposes no chain HEAD, so lag is not
+	// derivable and is omitted rather than invented.
+	Lag string `json:"lag,omitempty"`
+	// Status is active, or degraded when /health explicitly reports unhealthy.
+	Status string `json:"status"`
+	// UpdatedAt is the latest indexed block's time, RFC3339 UTC.
 	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
-// oracleView is the shape console OraclesModule (Oracle) consumes — one row per
+// Oracle is the shape console OraclesModule (Oracle) consumes — one row per
 // on-chain price feed. requests/telemetry the graph does not carry are omitted.
-type oracleView struct {
-	ID        string `json:"id"`
-	Name      string `json:"name,omitempty"`
-	Feed      string `json:"feed,omitempty"`
-	Value     string `json:"value,omitempty"`
-	Source    string `json:"source,omitempty"`
-	Status    string `json:"status"`
+type Oracle struct {
+	// ID identifies the feed — its upstream id, else the trading pair.
+	ID string `json:"id"`
+	// Name is the human label for the feed, normally the trading pair.
+	Name string `json:"name,omitempty"`
+	// Feed is the trading pair the oracle prices, e.g. LUX/USD.
+	Feed string `json:"feed,omitempty"`
+	// Value is the feed's latest price, verbatim from the graph.
+	Value string `json:"value,omitempty"`
+	// Source is the oracle network the feed originates from.
+	Source string `json:"source,omitempty"`
+	// Status is active for any listed feed.
+	Status string `json:"status"`
+	// UpdatedAt is the feed's own timestamp, RFC3339 UTC.
 	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
@@ -55,7 +70,7 @@ type oracleView struct {
 //   - height/updatedAt ← the latest indexed block (blank when none indexed yet).
 //   - status ← "degraded" only when /health explicitly reports unhealthy; otherwise a
 //     reachable indexer is "active". lag is omitted (not derivable — never faked).
-func toIndexerView(health, block map[string]any, brand, env string) indexerView {
+func toIndexerView(health, block map[string]any, brand, env string) Indexer {
 	chainName := str(health, "chain_name")
 	id := firstNonEmpty(chainName, str(health, "chain_id"), brand, "indexer")
 
@@ -66,7 +81,7 @@ func toIndexerView(health, block map[string]any, brand, env string) indexerView 
 		}
 	}
 
-	return indexerView{
+	return Indexer{
 		ID:        id,
 		Chain:     firstNonEmpty(chainName, brand),
 		Network:   env,
@@ -80,10 +95,10 @@ func toIndexerView(health, block map[string]any, brand, env string) indexerView 
 // row. name/feed are the trading pair (e.g. "LUX/USD"); value is the feed's price
 // verbatim; source is the O-Chain oracle network these feeds originate from; a listed
 // feed carrying a price is "active"; updatedAt is the feed's timestamp.
-func toOracleView(f map[string]any) oracleView {
+func toOracleView(f map[string]any) Oracle {
 	pair := firstNonEmpty(str(f, "pair"), str(f, "symbol"))
 	id := firstNonEmpty(str(f, "id"), pair)
-	return oracleView{
+	return Oracle{
 		ID:        id,
 		Name:      firstNonEmpty(pair, id),
 		Feed:      pair,

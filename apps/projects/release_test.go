@@ -79,9 +79,9 @@ func publish(t *testing.T, app *zip.App, org, slug, source string) (int, []byte)
 		map[string]any{"source": source})
 }
 
-func decodeRelease(t *testing.T, body []byte) releaseView {
+func decodeRelease(t *testing.T, body []byte) siteRelease {
 	t.Helper()
-	var v releaseView
+	var v siteRelease
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode release view: %v (%s)", err, body)
 	}
@@ -398,7 +398,7 @@ func TestRelease_RollbackRestoresThePriorRelease(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("list releases want 200, got %d (%s)", code, body)
 	}
-	var list []releaseView
+	var list []siteRelease
 	if err := json.Unmarshal(body, &list); err != nil {
 		t.Fatalf("decode list: %v (%s)", err, body)
 	}

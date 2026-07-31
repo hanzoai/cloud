@@ -21,18 +21,165 @@
   "paths": {
     "/v1/indexers": {
       "get": {
-        "operationId": "get_v1_indexers",
+        "operationId": "listIndexers",
+        "summary": "listIndexers reports the deployment's chain indexer(s) and how far each has indexed.",
+        "description": "listIndexers reports the deployment's chain indexer(s) and how far each has indexed.\n\nIdentity and health come from the indexer's /health; the latest indexed block\n(height and time) from /v1/explorer/blocks.\nThe row EXISTS if EITHER call reaches the indexer; when the indexer is entirely\nunreachable it degrades to an honest-EMPTY list (200), not a console-error 502.\nNo chain HEAD is exposed by the indexer REST, so `lag` is honestly omitted\nrather than fabricated.",
         "tags": [
           "indexers"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "indexers": [
+                    {
+                      "chain": "Lux C-Chain",
+                      "height": "12345",
+                      "id": "Lux C-Chain",
+                      "network": "mainnet",
+                      "status": "active",
+                      "updatedAt": "2024-04-01T00:00:00Z"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/IndexerList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/oracles": {
       "get": {
-        "operationId": "get_v1_oracles",
+        "operationId": "listOracles",
+        "summary": "listOracles reports the on-chain price and data oracles the graph indexes.",
+        "description": "listOracles reports the on-chain price and data oracles the graph indexes.\n\nThe source is luxfi/graph's O-Chain PriceFeed registry — a REAL registry, the\ngraph's own oracle resolver.\nA reachable graph with no feeds returns an honest empty list; an unreachable or\nerroring graph likewise degrades to an honest-EMPTY list (200), not a 502.\nNo feed is ever fabricated.",
         "tags": [
           "oracles"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "oracles": [
+                    {
+                      "feed": "LUX/USD",
+                      "id": "LUX-USD",
+                      "name": "LUX/USD",
+                      "source": "O-Chain",
+                      "status": "active",
+                      "updatedAt": "2024-04-01T00:00:00Z",
+                      "value": "2.50"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/OracleList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Indexer": {
+        "properties": {
+          "chain": {
+            "description": "Chain is the indexed chain's name as the indexer reports it.",
+            "type": "string"
+          },
+          "height": {
+            "description": "Height is the latest indexed block height; empty when nothing is indexed yet.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID identifies the indexer — its chain name, else chain id, else the brand.",
+            "type": "string"
+          },
+          "lag": {
+            "description": "Lag is always absent: the indexer REST exposes no chain HEAD, so lag is not\nderivable and is omitted rather than invented.",
+            "type": "string"
+          },
+          "network": {
+            "description": "Network is the deployment's network tier: mainnet, testnet or devnet.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is active, or degraded when /health explicitly reports unhealthy.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the latest indexed block's time, RFC3339 UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "IndexerList": {
+        "properties": {
+          "indexers": {
+            "description": "Indexers is one row per chain indexer this deployment is wired to; empty\nwhen no indexer is reachable, never a fabricated row.",
+            "items": {
+              "$ref": "#/components/schemas/Indexer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Oracle": {
+        "properties": {
+          "feed": {
+            "description": "Feed is the trading pair the oracle prices, e.g. LUX/USD.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID identifies the feed — its upstream id, else the trading pair.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the human label for the feed, normally the trading pair.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the oracle network the feed originates from.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is active for any listed feed.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the feed's own timestamp, RFC3339 UTC.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the feed's latest price, verbatim from the graph.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "OracleList": {
+        "properties": {
+          "oracles": {
+            "description": "Oracles is one row per on-chain price feed; empty when the graph is\nunreachable or carries no feeds, never a fabricated feed.",
+            "items": {
+              "$ref": "#/components/schemas/Oracle"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

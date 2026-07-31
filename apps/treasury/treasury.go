@@ -62,6 +62,8 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // Program identifiers for backed payouts — the ONE place the growth loops name
 // themselves to the treasury, so a payout sink account id is never re-spelled.
 const (
@@ -145,22 +147,58 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return cloud.PutI64(cents), nil
 	})
 
-	// ONE scope-aware /v1/finance/* engine, three tenancy surfaces (HIP finance):
-	// per-org reads derive the tenant from the validated IAM identity and see ONLY
-	// their own accounts; the reserve fund + revenue-share + house mutations are
-	// locked to SuperAdmin under /v1/admin/treasury* (the console admin-proxy
-	// convention, enveloped).
-	app.Get("/v1/finance/treasury", cloud.Handle(s, myTreasury))                 // per-org: reserve transparency + policy
-	app.Get("/v1/finance/accounts", cloud.Handle(s, myAccounts))                 // per-org: own ledger accounts (admin: ?org=/?scope=house)
-	app.Get("/v1/admin/treasury", cloud.Handle(s, adminReport))                  // SuperAdmin: report + journal + anchor
-	app.Post("/v1/admin/treasury/policy", cloud.Handle(s, adminSetPolicy))       // SuperAdmin: set revenue-share %
-	app.Post("/v1/admin/treasury/sweep", cloud.Handle(s, adminSweep))            // SuperAdmin: accrue revenue-share
-	app.Post("/v1/admin/treasury/seed", cloud.Handle(s, adminSeed))              // SuperAdmin: inject reserve capital
-	app.Post("/v1/admin/treasury/anchor", cloud.Handle(s, adminAnchor))          // SuperAdmin: anchor ledger root on Hanzo L1
-	app.Post("/v1/admin/treasury/bind-anchor", cloud.Handle(s, adminBindAnchor)) // SuperAdmin: bind the reserve MPC wallet as the anchor signer
+	if err := routes(app, s); err != nil {
+		return err
+	}
 
 	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.State.anchor.configured())
 	return nil
+}
+
+// ops binds the ledger of record to the typed handlers: a TypedHandler takes only
+// (context, *In), so the service arrives as a RECEIVER.
+type ops struct{ s *cloud.Service[state] }
+
+// routes registers the treasury surface. ONE scope-aware /v1/finance/* engine, three
+// tenancy surfaces (HIP finance): per-org reads derive the tenant from the validated
+// IAM identity and see ONLY their own accounts; the reserve fund + revenue-share +
+// house mutations are locked to SuperAdmin under /v1/admin/treasury* (the console
+// admin-proxy convention, enveloped).
+func routes(app cloud.Router, s *cloud.Service[state]) error {
+	z := cloud.ZipApp(app)
+	if z == nil {
+		return fmt.Errorf("treasury.routes: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	o := ops{s: s}
+	// The bridge FIRST — a typed op is handed only a context, so the request its
+	// SuperAdmin predicate and validated org are read from is parked there. Bounded to
+	// treasury's declared prefixes; Serve installs one app-wide too, harmlessly.
+	app.Use(cloud.Bridge())
+	zip.Get(z, "/v1/finance/treasury", o.treasury, opID("financeTreasury"))                      // per-org: reserve transparency + policy
+	zip.Get(z, "/v1/finance/accounts", o.accounts, opID("financeAccounts"))                      // per-org: own ledger accounts (admin: ?org=/?scope=house)
+	zip.Get(z, "/v1/admin/treasury", o.report, opID("adminTreasury"))                            // SuperAdmin: report + journal + anchor
+	zip.Post(z, "/v1/admin/treasury/policy", o.setPolicy, opID("adminTreasuryPolicy"))           // SuperAdmin: set revenue-share %
+	zip.Post(z, "/v1/admin/treasury/sweep", o.sweep, opID("adminTreasurySweep"))                 // SuperAdmin: accrue revenue-share
+	zip.Post(z, "/v1/admin/treasury/seed", o.seed, opID("adminTreasurySeed"))                    // SuperAdmin: inject reserve capital
+	zip.Post(z, "/v1/admin/treasury/anchor", o.anchor, opID("adminTreasuryAnchor"))              // SuperAdmin: anchor ledger root on Hanzo L1
+	zip.Post(z, "/v1/admin/treasury/bind-anchor", o.bindAnchor, opID("adminTreasuryBindAnchor")) // SuperAdmin: bind the reserve MPC wallet as the anchor signer
+	return nil
+}
+
+// opID is the per-route stable operation id — the name the OpenAPI document, the MCP
+// tool and the CLI command all take. The summary is NOT set here: cmd/zipdoc lifts it
+// from each handler's own doc comment.
+func opID(id string) zip.OpOption { return zip.WithOperationID(id) }
+
+// admit is the SuperAdmin gate for a typed op: the request a typed handler cannot see
+// is parked on its context by cloud.Bridge. Fails CLOSED off the HTTP path, where
+// there is no validated identity to admit.
+func admit(ctx context.Context) (*zip.Ctx, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok || !c.IsAdmin() {
+		return nil, zip.ErrForbidden("SuperAdmin required")
+	}
+	return c, nil
 }
 
 // ── the backed-payout seam (the ONE helper the 3 growth loops call) ──────────
@@ -252,56 +290,88 @@ func Credit(ctx context.Context, program, ref, memo string, amountCents int64) (
 
 // ── customer surface ─────────────────────────────────────────────────────────
 
-// myTreasury answers GET /v1/finance/treasury for any validated caller: the
-// reserve-fund health + the revenue-share policy. This is a TRANSPARENCY view — a
-// partner/author can see the pool that backs their payouts is solvent — not per-org
-// money (that is the customer's commerce balance at /v1/billing/balance). Policy is
-// read-only here; only SuperAdmin sets it.
-func myTreasury(s *cloud.Service[state], c *zip.Ctx) error {
+// treasury reports the reserve fund's health and the revenue-share policy. Any
+// validated caller may read it: this is a TRANSPARENCY view — a partner or author can
+// see the pool that backs their payouts is solvent — not per-org money, which is the
+// customer's commerce balance at /v1/billing/balance. Policy is read-only here; only
+// SuperAdmin sets it.
+//
+// Response: {"reserveCents": 1250000, "accruedCents": 4000000, "paidCents": 2750000, "byProgramCents": {"referral": 2750000}, "policy": {"revenueShareBps": 2000, "updatedAt": 1780000000}, "solventForPayout": true}
+func (o ops) treasury(ctx context.Context, _ *struct{}) (*ledger.Report, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("sign in to view the treasury")
+	}
 	if _, ok := principal.Org(c); !ok {
-		return zip.ErrForbidden("sign in to view the treasury")
+		return nil, zip.ErrForbidden("sign in to view the treasury")
 	}
-	rep, err := s.State.record.Snapshot(c.Context())
+	rep, err := o.s.State.record.Snapshot(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "treasury snapshot: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "treasury snapshot: %v", err)
 	}
-	return c.JSON(http.StatusOK, rep)
+	return &rep, nil
 }
 
 // accountView is one row of the scope-aware accounts read.
 type accountView struct {
-	Address      string `json:"address"`
-	BalanceCents int64  `json:"balanceCents"`
+	// Address is the ledger account address, e.g. "fund:reserve" or "org:acme:wallet".
+	Address string `json:"address"`
+	// BalanceCents is that account's balance in minor units.
+	BalanceCents int64 `json:"balanceCents"`
 }
 
-// myAccounts answers GET /v1/finance/accounts — the scope-aware ledger-account read
-// that the console (surface #2) and finance.hanzo.ai (surface #3) consume. It is
-// tenant-isolated SERVER-SIDE: a per-org caller sees ONLY accounts under its own
-// "org:<tenant>:" prefix, never house or another tenant's accounts. SuperAdmin may
-// widen with ?scope=house (the reserve/revenue/payout house accounts) or ?org=<t> (a
-// specific tenant) — the ONLY way to cross the tenant boundary, and only for admins.
-// Honest empty until a tenant has ledger postings (the commerce→ledger projection is
-// the rebrand/datastore agents' concurrent work; this contract is stable for them).
-func myAccounts(s *cloud.Service[state], c *zip.Ctx) error {
+// AccountsQuery widens the accounts read. Both fields are honoured for SuperAdmin
+// ONLY; a per-org caller's scope is fixed to its own tenant whatever it sends.
+type AccountsQuery struct {
+	// Scope is "house" to read the reserve/revenue/payout house accounts.
+	// SuperAdmin only.
+	Scope string `json:"scope"`
+	// Org reads one specific tenant's accounts. SuperAdmin only.
+	Org string `json:"org"`
+}
+
+// AccountsView is the scope-aware ledger-account read.
+type AccountsView struct {
+	// Scope is the scope that was served: "org" or "house".
+	Scope string `json:"scope"`
+	// Tenant is the org the accounts belong to; empty under house scope.
+	Tenant string `json:"tenant"`
+	// Accounts is one row per ledger account in scope.
+	Accounts []accountView `json:"accounts"`
+}
+
+// accounts lists the caller's ledger accounts and their balances. Tenant isolation is
+// enforced SERVER-SIDE: a per-org caller sees ONLY accounts under its own
+// "org:<tenant>:" prefix, never house accounts and never another tenant's. SuperAdmin
+// may widen with scope=house or org=<tenant> — the ONLY way to cross the tenant
+// boundary. Honest empty until a tenant has ledger postings.
+//
+// Example: {"scope": "house"}
+// Response: {"scope": "house", "tenant": "hanzo", "accounts": [{"address": "fund:reserve", "balanceCents": 1250000}]}
+func (o ops) accounts(ctx context.Context, in *AccountsQuery) (*AccountsView, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("sign in to view accounts")
+	}
 	tenant, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrForbidden("sign in to view accounts")
+		return nil, zip.ErrForbidden("sign in to view accounts")
 	}
 	prefix := "org:" + tenant + ":"
 	scope := "org"
 	if c.IsAdmin() {
-		switch strings.TrimSpace(c.Query("scope")) {
+		switch strings.TrimSpace(in.Scope) {
 		case "house":
 			prefix, scope = "", "house" // all accounts; the report separates house from tenant
 		default:
-			if org := strings.TrimSpace(c.Query("org")); org != "" {
+			if org := strings.TrimSpace(in.Org); org != "" {
 				prefix, scope, tenant = "org:"+org+":", "org", org
 			}
 		}
 	}
-	balances, err := s.State.record.AccountsWithPrefix(c.Context(), prefix)
+	balances, err := o.s.State.record.AccountsWithPrefix(ctx, prefix)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "accounts: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "accounts: %v", err)
 	}
 	accounts := make([]accountView, 0, len(balances))
 	for addr, bal := range balances {
@@ -311,57 +381,94 @@ func myAccounts(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		accounts = append(accounts, accountView{Address: addr, BalanceCents: bal})
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"scope":    scope,
-		"tenant":   tenant,
-		"accounts": accounts,
-	})
+	return &AccountsView{Scope: scope, Tenant: tenant, Accounts: accounts}, nil
 }
 
 // ── admin surface (SuperAdmin, fail-closed) ────────────────────────────────
 
-// adminReport answers GET /v1/admin/treasury — the full fund report, the recent
-// journal (double-entry postings), and the Hanzo L1 anchor status. SuperAdmin only.
-func adminReport(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// JournalQuery bounds how much of the journal a report carries.
+type JournalQuery struct {
+	// Limit caps the journal entries returned. 0 or below means the default;
+	// anything above the maximum is clamped to it.
+	Limit int `json:"limit"`
+}
+
+// TreasuryReport is the SuperAdmin fund view.
+type TreasuryReport struct {
+	// Report is the reserve-fund health snapshot.
+	Report ledger.Report `json:"report"`
+	// Journal is the most recent double-entry postings, newest first.
+	Journal []ledger.Entry `json:"journal"`
+	// Anchor is the Hanzo L1 anchor status for the current ledger root.
+	Anchor AnchorStatus `json:"anchor"`
+}
+
+// TreasuryReportOut is the admin envelope the console's admin proxy unwraps.
+type TreasuryReportOut struct {
+	Status string          `json:"status"`
+	Msg    string          `json:"msg"`
+	Data   *TreasuryReport `json:"data"`
+}
+
+// report returns the fund, its journal and its anchor status in one read. The journal
+// is the recent double-entry postings; the anchor is the Hanzo L1 commit state of the
+// current ledger root. SuperAdmin only.
+//
+// Example: {"limit": 50}
+func (o ops) report(ctx context.Context, in *JournalQuery) (*TreasuryReportOut, error) {
+	if _, err := admit(ctx); err != nil {
+		return nil, err
 	}
-	ctx := c.Context()
-	rep, err := s.State.record.Snapshot(ctx)
+	rep, err := o.s.State.record.Snapshot(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "treasury snapshot: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "treasury snapshot: %v", err)
 	}
-	entries, err := s.State.record.Entries(ctx, journalLimitOf(c))
+	entries, err := o.s.State.record.Entries(ctx, journalLimitOf(in.Limit))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "journal: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "journal: %v", err)
 	}
-	return adminOK(c, map[string]any{
-		"report":  rep,
-		"journal": entries,
-		"anchor":  s.State.anchor.status(ctx, s.State.record),
-	})
+	return &TreasuryReportOut{Status: "ok", Data: &TreasuryReport{
+		Report:  rep,
+		Journal: entries,
+		Anchor:  o.s.State.anchor.status(ctx, o.s.State.record),
+	}}, nil
 }
 
 // policyRequest is the POST /v1/admin/treasury/policy body.
 type policyRequest struct {
+	// RevenueShareBps is the share of net platform revenue a sweep accrues into
+	// the reserve fund, in basis points (0–10000).
 	RevenueShareBps int64 `json:"revenueShareBps"`
 }
 
-// adminSetPolicy sets the revenue-share basis points (0–10000). SuperAdmin only.
-func adminSetPolicy(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// PolicyOut is the admin envelope carrying the policy as it stands after the write.
+type PolicyOut struct {
+	Status string      `json:"status"`
+	Msg    string      `json:"msg"`
+	Data   *PolicyData `json:"data"`
+}
+
+// PolicyData wraps the stored revenue-share policy.
+type PolicyData struct {
+	// Policy is the revenue-share policy now in force.
+	Policy ledger.Policy `json:"policy"`
+}
+
+// setPolicy sets the revenue-share basis points a sweep accrues. The value is 0–10000
+// and the answer carries the policy as it now stands. SuperAdmin only; the write is
+// audited.
+//
+// Example: {"revenueShareBps": 2000}
+func (o ops) setPolicy(ctx context.Context, in *policyRequest) (*PolicyOut, error) {
+	if _, err := admit(ctx); err != nil {
+		return nil, err
 	}
-	var body policyRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	pol, err := s.State.record.SetPolicy(c.Context(), body.RevenueShareBps, time.Now().Unix())
+	pol, err := o.s.State.record.SetPolicy(ctx, in.RevenueShareBps, time.Now().Unix())
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
-	emitAudit(s, c.Context(), "treasury.policy", "", "", map[string]any{"revenueShareBps": pol.RevenueShareBps})
-	return adminOK(c, map[string]any{"policy": pol})
+	emitAudit(o.s, ctx, "treasury.policy", "", "", map[string]any{"revenueShareBps": pol.RevenueShareBps})
+	return &PolicyOut{Status: "ok", Data: &PolicyData{Policy: pol}}, nil
 }
 
 // sweepRequest is the POST /v1/admin/treasury/sweep body. RevenueCents is the net
@@ -369,98 +476,134 @@ func adminSetPolicy(s *cloud.Service[state], c *zip.Ctx) error {
 // supplies it from the revenue view; treasury does the accounting, not the metering,
 // keeping the concerns orthogonal). Period defaults to the current UTC month.
 type sweepRequest struct {
-	Period       string `json:"period"`
-	RevenueCents int64  `json:"revenueCents"`
+	// Period is the accounting period, "YYYY-MM"; empty means the current UTC month.
+	Period string `json:"period"`
+	// RevenueCents is the net platform revenue measured for that period, in minor
+	// units. Must be >= 0.
+	RevenueCents int64 `json:"revenueCents"`
 }
 
-// adminSweep posts the revenue-share accrual for a period (revenue → fund),
-// idempotent per period. SuperAdmin only.
-func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// SweepData is one period's accrual result.
+type SweepData struct {
+	// Period is the period that was accrued.
+	Period string `json:"period"`
+	// RevenueCents echoes the revenue the accrual was computed from.
+	RevenueCents int64 `json:"revenueCents"`
+	// AccruedCents is the amount posted into the reserve fund.
+	AccruedCents int64 `json:"accruedCents"`
+	// Created is false when this period was already swept (idempotent no-op).
+	Created bool `json:"created"`
+	// ReserveCents is the fund balance after the accrual.
+	ReserveCents int64 `json:"reserveCents"`
+}
+
+// SweepOut is the admin envelope around a sweep result.
+type SweepOut struct {
+	Status string     `json:"status"`
+	Msg    string     `json:"msg"`
+	Data   *SweepData `json:"data"`
+}
+
+// sweep posts one period's revenue-share accrual into the fund. It reports the fund
+// balance after it. Idempotent per period: a repeat returns created=false and posts
+// nothing. SuperAdmin only; the accrual is audited. Treasury does the accounting, not
+// the metering — the caller supplies the measured revenue.
+//
+// Example: {"period": "2026-07", "revenueCents": 4000000}
+func (o ops) sweep(ctx context.Context, in *sweepRequest) (*SweepOut, error) {
+	if _, err := admit(ctx); err != nil {
+		return nil, err
 	}
-	var body sweepRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	period := strings.TrimSpace(body.Period)
+	period := strings.TrimSpace(in.Period)
 	if period == "" {
 		period = time.Now().UTC().Format("2006-01")
 	}
-	if body.RevenueCents < 0 {
-		return zip.ErrBadRequest("revenueCents must be >= 0")
+	if in.RevenueCents < 0 {
+		return nil, zip.ErrBadRequest("revenueCents must be >= 0")
 	}
-	entry, created, err := s.State.record.Accrue(c.Context(), period, body.RevenueCents, time.Now().Unix())
+	entry, created, err := o.s.State.record.Accrue(ctx, period, in.RevenueCents, time.Now().Unix())
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "sweep: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "sweep: %v", err)
 	}
 	if created {
-		emitAudit(s, c.Context(), "treasury.sweep", "", entry.ID, map[string]any{
-			"period": period, "revenueCents": body.RevenueCents, "accruedCents": entry.Amount.Cents(),
+		emitAudit(o.s, ctx, "treasury.sweep", "", entry.ID, map[string]any{
+			"period": period, "revenueCents": in.RevenueCents, "accruedCents": entry.Amount.Cents(),
 		})
 	}
-	reserve, _ := s.State.record.ReserveCents(c.Context())
-	return adminOK(c, map[string]any{
-		"period":       period,
-		"revenueCents": body.RevenueCents,
-		"accruedCents": entry.Amount.Cents(),
-		"created":      created,
-		"reserveCents": reserve,
-	})
+	reserve, _ := o.s.State.record.ReserveCents(ctx)
+	return &SweepOut{Status: "ok", Data: &SweepData{
+		Period:       period,
+		RevenueCents: in.RevenueCents,
+		AccruedCents: entry.Amount.Cents(),
+		Created:      created,
+		ReserveCents: reserve,
+	}}, nil
 }
 
 // seedRequest is the POST /v1/admin/treasury/seed body — a bootstrap capital
 // injection into the reserve fund. Ref (optional) is an idempotency key; without one
 // each seed is a distinct injection.
 type seedRequest struct {
-	AmountCents int64  `json:"amountCents"`
-	Memo        string `json:"memo"`
-	Ref         string `json:"ref"`
+	// AmountCents is the capital to inject, in minor units. Must be > 0.
+	AmountCents int64 `json:"amountCents"`
+	// Memo describes the injection; empty defaults to "reserve capital injection".
+	Memo string `json:"memo"`
+	// Ref is an idempotency key. Without one each seed is a distinct injection.
+	Ref string `json:"ref"`
 }
 
-// adminSeed injects bootstrap capital into the reserve fund so backed payouts can
-// begin before the first revenue-share sweep. SuperAdmin only.
-func adminSeed(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// SeedData is one capital injection's result.
+type SeedData struct {
+	// Entry is the journal entry the injection posted.
+	Entry ledger.Entry `json:"entry"`
+	// Created is false when this ref was already seeded (idempotent no-op).
+	Created bool `json:"created"`
+	// ReserveCents is the fund balance after the injection.
+	ReserveCents int64 `json:"reserveCents"`
+}
+
+// SeedOut is the admin envelope around a capital injection.
+type SeedOut struct {
+	Status string    `json:"status"`
+	Msg    string    `json:"msg"`
+	Data   *SeedData `json:"data"`
+}
+
+// seed injects bootstrap capital into the reserve fund. It is how backed payouts
+// begin before the first revenue-share sweep. Idempotent by ref: a repeat with the
+// same ref returns created=false and posts nothing. SuperAdmin only; the injection is
+// audited.
+//
+// Example: {"amountCents": 1000000, "memo": "seed round", "ref": "seed-2026-07"}
+func (o ops) seed(ctx context.Context, in *seedRequest) (*SeedOut, error) {
+	if _, err := admit(ctx); err != nil {
+		return nil, err
 	}
-	var body seedRequest
-	if err := c.Bind(&body); err != nil {
-		return err
+	if in.AmountCents <= 0 {
+		return nil, zip.ErrBadRequest("amountCents must be > 0")
 	}
-	if body.AmountCents <= 0 {
-		return zip.ErrBadRequest("amountCents must be > 0")
-	}
-	ref := strings.TrimSpace(body.Ref)
+	ref := strings.TrimSpace(in.Ref)
 	if ref == "" {
 		ref = "seed:" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	}
-	memo := strings.TrimSpace(body.Memo)
+	memo := strings.TrimSpace(in.Memo)
 	if memo == "" {
 		memo = "reserve capital injection"
 	}
-	entry, created, err := s.State.record.Seed(c.Context(), ref, memo, body.AmountCents, time.Now().Unix())
+	entry, created, err := o.s.State.record.Seed(ctx, ref, memo, in.AmountCents, time.Now().Unix())
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "seed: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "seed: %v", err)
 	}
 	if created {
-		emitAudit(s, c.Context(), "treasury.seed", "", entry.ID, map[string]any{
-			"amountCents": body.AmountCents, "ref": ref, "entryId": entry.ID,
+		emitAudit(o.s, ctx, "treasury.seed", "", entry.ID, map[string]any{
+			"amountCents": in.AmountCents, "ref": ref, "entryId": entry.ID,
 		})
 	}
-	reserve, _ := s.State.record.ReserveCents(c.Context())
-	return adminOK(c, map[string]any{"entry": entry, "created": created, "reserveCents": reserve})
+	reserve, _ := o.s.State.record.ReserveCents(ctx)
+	return &SeedOut{Status: "ok", Data: &SeedData{Entry: entry, Created: created, ReserveCents: reserve}}, nil
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-// adminOK writes the { status:"ok", msg, data } envelope the console's admin
-// surface (originGet/originPost via app/admin/aggregate) unwraps — identical to
-// clients/admin and clients/referrals. The customer /v1/finance surface stays bare
-// JSON (read via the /cloud proxy + restGet).
-func adminOK(c *zip.Ctx, data any) error {
-	return cloud.OK(c, data)
-}
 
 // emitAudit records a treasury money action in cloud's tamper-evident trail.
 // Best-effort; a nil store is a no-op. The actor is the treasury engine (a system
@@ -490,9 +633,8 @@ func mustJSON(v any) json.RawMessage {
 	return b
 }
 
-func journalLimitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
+func journalLimitOf(n int) int {
+	if n <= 0 {
 		return journalLimit
 	}
 	if n > maxJournalLimit {

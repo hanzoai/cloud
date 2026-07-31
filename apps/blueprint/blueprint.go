@@ -47,7 +47,10 @@
 // /v1/blueprint/health, so serve.go skips the generic liveness route.
 package blueprint
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -75,6 +78,12 @@ type state struct{}
 
 // Mount wires the blueprint surface and validates every embedded blueprint at boot.
 func Mount(app cloud.Router, deps cloud.Deps) error {
+	// The index and health reads are TYPED ops, and the op registry lives on the
+	// *zip.App — a Router that is not backed by one has nowhere to put them, so the
+	// mount fails rather than serving routes no projection knows about.
+	if app != nil && cloud.ZipApp(app) == nil {
+		return fmt.Errorf("blueprint.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
 	rates = rateCardFromEnv() // overlay operator rate-card knobs once, at mount
 	return cloud.Mount(app, deps, "blueprint", build, routes)
 }
@@ -106,12 +115,50 @@ func build(b cloud.Base) (state, error) {
 
 // routes registers the read surface. Health is registered before nothing greedy
 // (the paths are exact), and is not JWT-gated (liveness must be probe-able).
+//
+// The index and health reads are typed ops, registered on the App with their
+// ABSOLUTE path because the op registry — the one value OpenAPI, MCP and the CLI
+// are projected from — keys on it. /sbom stays a raw handler: it answers ONE
+// Estimate for ?template=<id> and the batch envelope {data:[Estimate]} without,
+// and a typed op has a single Out that cannot state both shapes.
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	z := cloud.ZipApp(app)
 	g := app.Group("/v1/blueprint")
-	g.Get("/health", cloud.Handle(s, health))
 	g.Get("/sbom", cloud.Handle(s, sbomRead))
+	zip.Get(z, "/v1/blueprint/health", health)
 	// Collection root stays flat — Group("/v1/blueprint").Get("") yields "/v1/blueprint/".
-	app.Get("/v1/blueprint", cloud.Handle(s, listIDs))
+	zip.Get(z, "/v1/blueprint", listBlueprints)
+}
+
+// ── declared shapes ──────────────────────────────────────────────────────────
+
+// BlueprintRow is one line of the blueprint index.
+type BlueprintRow struct {
+	// TemplateID is the blueprint id, the same slug /v1/blueprint/sbom?template= takes.
+	TemplateID string `json:"templateId"`
+	// Services is how many container services the stack runs.
+	Services int `json:"services"`
+	// CentsPerMonth is the estimated compute cost of running the stack for a month.
+	CentsPerMonth int64 `json:"estCentsPerMonth"`
+}
+
+// BlueprintList is the blueprint index, one row per embedded blueprint.
+type BlueprintList struct {
+	// Data is the rows, ordered by blueprint id.
+	Data []BlueprintRow `json:"data"`
+}
+
+// Health is the blueprint liveness answer: it also echoes the active rate card,
+// so an operator can confirm a tuned knob took effect.
+type Health struct {
+	// Service is the subsystem name, always "blueprint".
+	Service string `json:"service"`
+	// Status is "ok" whenever the surface answers.
+	Status string `json:"status"`
+	// Blueprints is how many blueprints are embedded in this binary.
+	Blueprints int `json:"blueprints"`
+	// RateCard is the rate the estimates are priced with, after the env overlay.
+	RateCard RateCard `json:"rateCard"`
 }
 
 // ── in-process seam (deploy / metering / authors) ────────────────────────────
@@ -201,39 +248,31 @@ func sbomRead(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, est)
 }
 
-// listIDs answers GET /v1/blueprint: a lightweight index (id + service count +
-// monthly cost) the console lists before drilling into one blueprint's SBOM.
-func listIDs(s *cloud.Service[state], c *zip.Ctx) error {
+// listBlueprints lists every blueprint with its service count and monthly cost estimate.
+// It is the index the console renders before drilling into one blueprint's SBOM.
+//
+// Response: {"data": [{"templateId": "postgres", "services": 1, "estCentsPerMonth": 1051}]}
+func listBlueprints(ctx context.Context, _ *struct{}) (*BlueprintList, error) {
 	ids, err := catalogIDs()
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "blueprint: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "blueprint: %v", err)
 	}
-	type row struct {
-		TemplateID    string `json:"templateId"`
-		Services      int    `json:"services"`
-		CentsPerMonth int64  `json:"estCentsPerMonth"`
-	}
-	out := make([]row, 0, len(ids))
+	out := make([]BlueprintRow, 0, len(ids))
 	for _, id := range ids {
 		est, ok := EstimateTemplate(id)
 		if !ok {
 			continue
 		}
-		out = append(out, row{TemplateID: id, Services: len(est.SBOM), CentsPerMonth: est.CentsPerMonth})
+		out = append(out, BlueprintRow{TemplateID: id, Services: len(est.SBOM), CentsPerMonth: est.CentsPerMonth})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &BlueprintList{Data: out}, nil
 }
 
-// health is a pure liveness probe that also echoes the active rate card, so an
-// operator can confirm the tuned knobs took effect. Not JWT-gated, always 200.
-func health(s *cloud.Service[state], c *zip.Ctx) error {
+// health reports blueprint liveness, the embedded blueprint count and the active rate card.
+// Not JWT-gated — liveness must be probe-able — and always 200.
+func health(ctx context.Context, _ *struct{}) (*Health, error) {
 	ids, _ := catalogIDs()
-	return c.JSON(http.StatusOK, map[string]any{
-		"service":    "blueprint",
-		"status":     "ok",
-		"blueprints": len(ids),
-		"rateCard":   rates,
-	})
+	return &Health{Service: "blueprint", Status: "ok", Blueprints: len(ids), RateCard: rates}, nil
 }
 
 // ── rate-card env overlay ────────────────────────────────────────────────────

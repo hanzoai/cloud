@@ -120,29 +120,29 @@ func (s *Store) nextTemplateVersion(ctx context.Context, org, templateID string)
 }
 
 // SaveTemplateOverride persists a new version of an org's template and returns it.
-func (s *Store) SaveTemplateOverride(ctx context.Context, org string, t Template) (Template, error) {
+func (s *Store) SaveTemplateOverride(ctx context.Context, org string, t DocumentTemplate) (DocumentTemplate, error) {
 	version, err := s.nextTemplateVersion(ctx, org, t.ID)
 	if err != nil {
-		return Template{}, err
+		return DocumentTemplate{}, err
 	}
 	t.Version, t.Origin = version, "org"
 	fieldsJSON, err := json.Marshal(t.Fields)
 	if err != nil {
-		return Template{}, fmt.Errorf("encode fields: %w", err)
+		return DocumentTemplate{}, fmt.Errorf("encode fields: %w", err)
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO legal_template (org, template_id, version, category, title, counsel_review, fields_json, body, created_at)
 		 VALUES (?,?,?,?,?,?,?,?,?)`,
 		org, t.ID, t.Version, string(t.Category), t.Title, boolInt(t.CounselReview), string(fieldsJSON), t.Body, nowUnix())
 	if err != nil {
-		return Template{}, fmt.Errorf("save template override: %w", err)
+		return DocumentTemplate{}, fmt.Errorf("save template override: %w", err)
 	}
 	return t, nil
 }
 
 // latestOverride returns the org's latest override for a template id, or false.
-func (s *Store) latestOverride(ctx context.Context, org, templateID string) (Template, bool, error) {
-	var t Template
+func (s *Store) latestOverride(ctx context.Context, org, templateID string) (DocumentTemplate, bool, error) {
+	var t DocumentTemplate
 	var category, fieldsJSON string
 	var counsel int
 	err := s.db.QueryRowContext(ctx,
@@ -151,10 +151,10 @@ func (s *Store) latestOverride(ctx context.Context, org, templateID string) (Tem
 		   ORDER BY version DESC LIMIT 1`, org, templateID).
 		Scan(&t.ID, &t.Version, &category, &t.Title, &counsel, &fieldsJSON, &t.Body)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Template{}, false, nil
+		return DocumentTemplate{}, false, nil
 	}
 	if err != nil {
-		return Template{}, false, fmt.Errorf("latest override: %w", err)
+		return DocumentTemplate{}, false, fmt.Errorf("latest override: %w", err)
 	}
 	t.Category, t.CounselReview, t.Origin = Category(category), counsel != 0, "org"
 	_ = json.Unmarshal([]byte(fieldsJSON), &t.Fields)
@@ -163,22 +163,22 @@ func (s *Store) latestOverride(ctx context.Context, org, templateID string) (Tem
 
 // ResolveTemplate returns the ACTIVE template for an org: its latest override if any,
 // else the built-in. errNotFound when neither exists.
-func (s *Store) ResolveTemplate(ctx context.Context, org, templateID string) (Template, error) {
+func (s *Store) ResolveTemplate(ctx context.Context, org, templateID string) (DocumentTemplate, error) {
 	if t, ok, err := s.latestOverride(ctx, org, templateID); err != nil {
-		return Template{}, err
+		return DocumentTemplate{}, err
 	} else if ok {
 		return t, nil
 	}
 	if t, ok := builtin(templateID); ok {
 		return t, nil
 	}
-	return Template{}, errNotFound
+	return DocumentTemplate{}, errNotFound
 }
 
 // ResolveCatalog returns the org's active catalog: every built-in, with the org's
 // overrides applied, plus any org-only templates.
-func (s *Store) ResolveCatalog(ctx context.Context, org string) ([]Template, error) {
-	catalog := map[string]Template{}
+func (s *Store) ResolveCatalog(ctx context.Context, org string) ([]DocumentTemplate, error) {
+	catalog := map[string]DocumentTemplate{}
 	for _, t := range Builtins() {
 		catalog[t.ID] = t
 	}
@@ -193,7 +193,7 @@ func (s *Store) ResolveCatalog(ctx context.Context, org string) ([]Template, err
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
-		var t Template
+		var t DocumentTemplate
 		var category, fieldsJSON string
 		var counsel int
 		if err := rows.Scan(&t.ID, &t.Version, &category, &t.Title, &counsel, &fieldsJSON, &t.Body); err != nil {
@@ -206,7 +206,7 @@ func (s *Store) ResolveCatalog(ctx context.Context, org string) ([]Template, err
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	out := make([]Template, 0, len(catalog))
+	out := make([]DocumentTemplate, 0, len(catalog))
 	for _, t := range catalog {
 		out = append(out, t)
 	}
@@ -285,7 +285,7 @@ func (s *Store) ListDocuments(ctx context.Context, org string, limit int) ([]Doc
 
 // ---- filings ----
 
-func (s *Store) CreateFiling(ctx context.Context, f Filing) error {
+func (s *Store) CreateFiling(ctx context.Context, f DocumentFiling) error {
 	ids, _ := json.Marshal(f.DocumentIDs)
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO legal_filing (id, org, document_ids, jurisdiction, provider, status, note, created_at, updated_at)
@@ -297,7 +297,7 @@ func (s *Store) CreateFiling(ctx context.Context, f Filing) error {
 	return nil
 }
 
-func (s *Store) ListFilings(ctx context.Context, org string, limit int) ([]Filing, error) {
+func (s *Store) ListFilings(ctx context.Context, org string, limit int) ([]DocumentFiling, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, org, document_ids, jurisdiction, provider, status, note, created_at, updated_at
 		   FROM legal_filing WHERE org=? ORDER BY created_at DESC LIMIT ?`, org, capLimit(limit))
@@ -305,9 +305,9 @@ func (s *Store) ListFilings(ctx context.Context, org string, limit int) ([]Filin
 		return nil, fmt.Errorf("list filings: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var out []Filing
+	var out []DocumentFiling
 	for rows.Next() {
-		var f Filing
+		var f DocumentFiling
 		var ids, status string
 		if err := rows.Scan(&f.ID, &f.Org, &ids, &f.Jurisdiction, &f.Provider, &status, &f.Note, &f.CreatedAt, &f.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan filing: %w", err)

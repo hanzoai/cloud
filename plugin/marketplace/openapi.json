@@ -19,36 +19,138 @@
     "/v1/marketplace": {
       "get": {
         "operationId": "get_v1_marketplace",
+        "summary": "discover lists every tool and agent resolvable in the caller's (org, project),",
+        "description": "discover lists every tool and agent resolvable in the caller's (org, project),\noverlaid with any public listing's title, category and price, and flags the\nones the caller already has installed.",
         "tags": [
           "marketplace"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "items": [
+                    {
+                      "installed": true,
+                      "name": "conn_alpha",
+                      "title": "Alpha"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Discovery"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/marketplace/install": {
       "post": {
         "operationId": "post_v1_marketplace_install",
+        "summary": "install activates a tool for the caller's (org, project) — the marketplace",
+        "description": "install activates a tool for the caller's (org, project) — the marketplace\n\"install\" IS the tool-plane activation write, so the two never drift.",
         "tags": [
           "marketplace"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "tool": "conn_alpha"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/InstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "installed": true,
+                  "tool": "conn_alpha"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/InstallResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/marketplace/listings": {
       "get": {
         "operationId": "get_v1_marketplace_listings",
+        "summary": "listListings returns the listings the caller's org has published, monetized or not.",
+        "description": "listListings returns the listings the caller's org has published, monetized or not.",
         "tags": [
           "marketplace"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_marketplace_listings",
+        "summary": "publish records a listing for a tool the publisher can actually offer (it must\nresolve in the publisher's scope).",
+        "description": "publish records a listing for a tool the publisher can actually offer (it must\nresolve in the publisher's scope). A monetized listing (priceCents\u003e0) MUST name a\nrecipient wallet — the x402 payout target. Ownership policy (who may monetize a\nplatform-owned tool) is a follow-on; existence is enforced here.",
         "tags": [
           "marketplace"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "currency": "usd",
+                "priceCents": 500,
+                "public": true,
+                "recipient": "0xabc",
+                "title": "Alpha",
+                "tool": "conn_alpha"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Listing"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/marketplace/listings/{id}": {
       "delete": {
-        "operationId": "delete_v1_marketplace_listings_by_id",
+        "operationId": "delete_v1_marketplace_listings_id",
+        "summary": "unpublish removes one of the caller org's listings and answers 204.",
+        "description": "unpublish removes one of the caller org's listings and answers 204. A listing\nbelonging to another org reads as not found.",
         "tags": [
           "marketplace"
         ],
@@ -57,19 +159,248 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the listing id from the path, as returned by publish.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "lst_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       }
     },
     "/v1/marketplace/uninstall": {
       "post": {
         "operationId": "post_v1_marketplace_uninstall",
+        "summary": "uninstall deactivates a tool for the caller's (org, project).",
+        "description": "uninstall deactivates a tool for the caller's (org, project).",
         "tags": [
           "marketplace"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "tool": "conn_alpha"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/InstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "installed": false,
+                  "tool": "conn_alpha"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/InstallResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Discovery": {
+        "properties": {
+          "items": {
+            "description": "Items is the catalog, one entry per resolvable tool or agent.",
+            "items": {
+              "$ref": "#/components/schemas/MarketItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "InstallRequest": {
+        "properties": {
+          "tool": {
+            "description": "Tool is the registry tool name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "InstallResult": {
+        "properties": {
+          "installed": {
+            "description": "Installed is the resulting activation state for the caller's (org, project).",
+            "type": "boolean"
+          },
+          "tool": {
+            "description": "Tool is the tool the write applied to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Listing": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "priceCents": {
+            "type": "integer"
+          },
+          "public": {
+            "type": "boolean"
+          },
+          "publisherOrg": {
+            "type": "string"
+          },
+          "recipient": {
+            "description": "seller payout wallet (x402 Payee).",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ListingList": {
+        "properties": {
+          "listings": {
+            "description": "Listings is the caller org's listings; empty, never null, when it has none.",
+            "items": {
+              "$ref": "#/components/schemas/Listing"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ListingPrice": {
+        "properties": {
+          "amountCents": {
+            "description": "AmountCents is the per-call price in minor units.",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is the ISO 4217 code; empty means USD.",
+            "type": "string"
+          },
+          "recipient": {
+            "description": "Recipient is the seller payout wallet the x402 settlement targets.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MarketItem": {
+        "properties": {
+          "activated": {
+            "description": "Activated reports whether the tool is switched on for the caller's scope.",
+            "type": "boolean"
+          },
+          "category": {
+            "description": "Category is the listing's shop category, present only for a listed tool.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the tool's own one-line description.",
+            "type": "string"
+          },
+          "dispatchable": {
+            "description": "Dispatchable reports whether the tool can be called, not merely listed.",
+            "type": "boolean"
+          },
+          "inputSchema": {
+            "description": "Schema is the tool's JSON-Schema input contract, absent when it declares none.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "installed": {
+            "description": "Installed reports whether the tool is activated for the caller's scope.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name is the tool's registry name, unique in the caller's scope.",
+            "type": "string"
+          },
+          "price": {
+            "$ref": "#/components/schemas/ListingPrice",
+            "description": "Price is the per-call price, present only for a monetized listing."
+          },
+          "source": {
+            "description": "Source is the plane the tool comes from (builtin, mcp, connector, ...).",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the listing's shop title, present only for a listed tool.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PublishRequest": {
+        "properties": {
+          "category": {
+            "description": "Category groups the listing in discovery.",
+            "type": "string"
+          },
+          "currency": {
+            "description": "Currency is the price's currency code.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the shop copy, at most 4096 characters.",
+            "type": "string"
+          },
+          "priceCents": {
+            "description": "PriceCents is the per-call price in minor units; 0 publishes it free.",
+            "type": "integer"
+          },
+          "public": {
+            "description": "Public exposes the listing in every org's discovery, not just the publisher's.",
+            "type": "boolean"
+          },
+          "recipient": {
+            "description": "Recipient is the seller payout wallet, required when priceCents is above 0.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the shop title, required, at most 200 characters.",
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool is the registry tool name to list; it must resolve in the publisher's scope.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

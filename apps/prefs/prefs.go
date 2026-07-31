@@ -32,6 +32,8 @@
 // an org admin the owner of everyone's UI.
 package prefs
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"encoding/json"
@@ -68,9 +70,17 @@ var mounted *service
 // server does not interpret a preference's meaning, only its shape, so a surface
 // can add a key without a server change.
 type prefsView struct {
-	Prefs     json.RawMessage `json:"prefs"`
-	UpdatedAt int64           `json:"updatedAt,omitempty"`
+	// Prefs is the caller's whole preference document, verbatim.
+	// A user who has never written one reads an empty object, not a 404.
+	Prefs json.RawMessage `json:"prefs"`
+	// UpdatedAt is unix seconds of the last write, absent until the first one.
+	UpdatedAt int64 `json:"updatedAt,omitempty"`
 }
+
+// noInput is the In of an op addressed entirely by the caller's own identity: it
+// takes nothing off the wire, because there is no preference document to name but
+// the caller's own.
+type noInput struct{}
 
 // Mount registers the prefs surface on app per HIP-0106.
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -95,8 +105,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	mounted = s
 
 	g := app.Group("/v1/prefs")
-	g.Get("", s.getPrefs)
-	g.Patch("", s.patchPrefs)
+	// The bridge FIRST: a typed op receives only its context and its decoded
+	// input, so the request the subject is derived from crosses here — and fiber
+	// runs middleware in registration order, so one installed after the leaves it
+	// serves would never run.
+	g.Use(cloud.Bridge())
+	// The read is a typed op, so the document, the MCP tool list and the CLI all
+	// read the ONE declaration the router reads. The PATCH stays a raw handler:
+	// its body is an OPEN object (any key a surface owns), which the typed seam
+	// can only state as an unnamed map — no schema, and none of the size/key
+	// bounds decodePatch enforces. See patchPrefs.
+	zip.Get(cloud.ZipApp(app), "/v1/prefs", s.prefs)
+	// Spelled the same way the typed op spells it, so the surface is ONE path
+	// with two methods rather than two paths that differ by a trailing slash.
+	// Routing is unaffected: fiber matches both forms.
+	app.Patch("/v1/prefs", s.patchPrefs)
 
 	log.Info("prefs surface mounted", "prefix", "/v1/prefs", "brand", deps.Brand)
 	return nil
@@ -143,23 +166,41 @@ func (s *service) subject(c *zip.Ctx) (string, bool) {
 	return owner + "/" + name, true
 }
 
-func (s *service) getPrefs(c *zip.Ctx) error {
+// prefs returns the caller's own preference document.
+//
+// A user who has never saved one reads an empty object rather than a 404: "I
+// have no preferences yet" is a successful answer, and the user menu has to
+// render either way.
+// There is no path to another person's document — not for an org admin, not for
+// a platform SuperAdmin — so the subject is never named on the wire.
+//
+// Response: {"prefs": {"theme": "dark", "density": "compact"}, "updatedAt": 1780000000}
+func (s *service) prefs(ctx context.Context, _ *noInput) (*prefsView, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("a validated principal is required")
+	}
 	subject, ok := s.subject(c)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return nil, zip.ErrForbidden("a validated principal is required")
 	}
-	p, err := s.store.Get(c.Context(), subject)
+	p, err := s.store.Get(ctx, subject)
 	if err == errNotFound {
-		// Never written any — an honest empty document. NOT a 404: "I have no
-		// preferences yet" is a successful answer, and the menu must render.
-		return c.JSON(http.StatusOK, prefsView{Prefs: json.RawMessage(`{}`)})
+		return &prefsView{Prefs: json.RawMessage(`{}`)}, nil
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get prefs: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get prefs: %v", err)
 	}
-	return c.JSON(http.StatusOK, prefsView{Prefs: json.RawMessage(p.Doc), UpdatedAt: p.UpdatedAt})
+	return &prefsView{Prefs: json.RawMessage(p.Doc), UpdatedAt: p.UpdatedAt}, nil
 }
 
+// patchPrefs merges a caller-owned key set into the caller's own document.
+//
+// It stays a RAW handler, deliberately: the body is an open JSON object whose
+// keys belong to whichever surface is saving (the console saves theme, insights
+// saves density), so the only In a typed op could state is an unnamed map — which
+// the document cannot describe and which would drop the size and key bounds
+// decodePatch enforces on an unaudited personal row.
 func (s *service) patchPrefs(c *zip.Ctx) error {
 	subject, ok := s.subject(c)
 	if !ok {

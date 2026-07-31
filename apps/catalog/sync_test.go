@@ -119,8 +119,8 @@ func TestSiteCarriesItsSource(t *testing.T) {
 		HTMLURL: "https://github.com/hanzo-templates/kart-racer", PushedAt: "2026-01-01T00:00:00Z",
 	}, tpl)
 
-	got := map[string]Entry{}
-	for _, e := range publish(t, []Entry{repo}) {
+	got := map[string]CatalogEntry{}
+	for _, e := range publish(t, []CatalogEntry{repo}) {
 		got[e.ID] = e
 	}
 	if len(got) != 2 {
@@ -166,7 +166,7 @@ func TestForkableDiscriminates(t *testing.T) {
 		"hanzo/engine":     false, // a fork of a third-party upstream — theirs, not ours
 		"hanzo/ex-askdocs": false, // live, but there is no source to hand anyone
 	}
-	for _, e := range publish(t, []Entry{ours, theirs}) {
+	for _, e := range publish(t, []CatalogEntry{ours, theirs}) {
 		if w, ok := want[e.ID]; ok && e.Forkable != w {
 			t.Errorf("%s forkable = %v, want %v (repo %q)", e.ID, e.Forkable, w, e.Repo)
 		}
@@ -201,8 +201,8 @@ func TestProvenanceSurvivesTheSync(t *testing.T) {
 	// GitHub fork — so the repo half infers "ours". That is the trap.
 	kitRepo := fromRepo(ghRepo{Name: "kinetic", HTMLURL: "https://github.com/hanzo-templates/kinetic"}, tpl)
 
-	got := map[string]Entry{}
-	for _, e := range publish(t, []Entry{kitRepo}) {
+	got := map[string]CatalogEntry{}
+	for _, e := range publish(t, []CatalogEntry{kitRepo}) {
 		got[e.ID] = e
 	}
 	if e := got["hanzo/ex-kanban"]; !e.Forkable {
@@ -254,10 +254,10 @@ func TestOneIdOneRepo(t *testing.T) {
 
 // publish runs the reconcile with a fixed repo set standing in for GitHub, and
 // returns the published corpus.
-func publish(t *testing.T, repos []Entry) []Entry {
+func publish(t *testing.T, repos []CatalogEntry) []CatalogEntry {
 	t.Helper()
 	prev := fromOrgs
-	fromOrgs = func(context.Context) ([]Entry, error) { return repos, nil }
+	fromOrgs = func(context.Context) ([]CatalogEntry, error) { return repos, nil }
 	t.Cleanup(func() { fromOrgs = prev })
 	pub, _, _ := corpus(context.Background())
 	return pub

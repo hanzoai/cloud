@@ -16,20 +16,127 @@
     }
   ],
   "paths": {
-    "/v1/share/": {
+    "/v1/share": {
       "get": {
-        "operationId": "get_v1_share",
+        "operationId": "listShares",
+        "summary": "listShares returns the caller org's active shares.",
+        "description": "listShares returns the caller org's active shares.\n\nA READ degrades to an honest-empty list when the org has no share account yet\nor the controller is unreachable, so the console never error-toasts on load.",
         "tags": [
           "share"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "shares": [
+                    {
+                      "backend": "http://localhost:3000",
+                      "backendMode": "proxy",
+                      "createdAt": 1780000000,
+                      "token": "abc123",
+                      "url": "https://abc123.share.hanzo.ai"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ShareList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/share/enable": {
       "post": {
-        "operationId": "post_v1_share_enable",
+        "operationId": "enableShare",
+        "summary": "enable provisions the caller org's share account and returns its credential.",
+        "description": "enable provisions the caller org's share account and returns its credential.\n\nProvisioning is idempotent and the account is keyed deterministically off the\norg, so this is a pure function of the validated identity — a caller can only\never provision their OWN org's account.",
         "tags": [
           "share"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accountToken": "tok_live",
+                  "controller": "https://share.hanzo.ai",
+                  "namespace": "public",
+                  "urlTemplate": "https://{token}.share.hanzo.ai"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Credential"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Credential": {
+        "properties": {
+          "accountToken": {
+            "description": "AccountToken is the org's zrok account token the CLI enables with.",
+            "type": "string"
+          },
+          "controller": {
+            "description": "Controller is the public zrok controller endpoint to enable against.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace is the public frontend the share is published under.",
+            "type": "string"
+          },
+          "urlTemplate": {
+            "description": "URLTemplate is the share URL shape, with the token placeholder left in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Share": {
+        "properties": {
+          "backend": {
+            "description": "Backend is the local endpoint the share proxies to.",
+            "type": "string"
+          },
+          "backendMode": {
+            "description": "BackendMode is how the share serves its backend, e.g. proxy or web.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is the share's creation time, unix seconds.",
+            "type": "integer"
+          },
+          "token": {
+            "description": "Token is the share's zrok token, the key in its public URL.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the share's public URL.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ShareList": {
+        "properties": {
+          "shares": {
+            "description": "Shares is one row per active share across the org's environments.",
+            "items": {
+              "$ref": "#/components/schemas/Share"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

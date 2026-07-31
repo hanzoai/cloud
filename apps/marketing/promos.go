@@ -403,9 +403,9 @@ type RedeemResult struct {
 	AlreadyRedeemed bool `json:"alreadyRedeemed"`
 }
 
-// listPromos returns every promo the deployment offers with its live counters:
-// how many orgs have redeemed it and how many redemptions remain under the cap.
-// The promos are fleet-wide, not per-org — only the counters move.
+// listPromos returns every promo the deployment offers, with its live counters.
+// The counters are how many orgs have redeemed it and how many redemptions remain
+// under the cap. The promos are fleet-wide, not per-org — only the counters move.
 //
 // Response: {"data": [{"promo": {"code": "first1000", "percentOff": 90, "maxRedemptions": 1000, "active": true}, "redeemed": 137, "remaining": 863}]}
 func (o ops) listPromos(ctx context.Context, _ *struct{}) (*PromoList, error) {

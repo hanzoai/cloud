@@ -48,6 +48,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -135,8 +136,52 @@ type state struct {
 	commerce *commerceProxy
 }
 
+// ops carries the mounted Service into a TYPED op. zip fixes a typed handler's
+// signature at (context.Context, *In) → (*Out, error), so the Service arrives on
+// the receiver rather than as the parameter cloud.Handle passes a raw handler. A
+// METHOD, not a wrapped free function, is what cmd/zipdoc lifts the doc comment
+// off — the prose named at the registration is the prose the document carries.
+type ops struct{ *cloud.Service[state] }
+
+// noArgs is the input of an op that takes nothing — a read scoped entirely by the
+// validated principal, with nothing left for a caller to say.
+type noArgs struct{}
+
+// caller is the ONE thing every typed op here opens with: the REQUEST behind the
+// typed context and the caller's OWN validated org. A customer's own billing is
+// never admin-gated, so an absent identity is a true "not signed in" (401),
+// matching the raw handlers beside it. Off the HTTP path there is no principal,
+// so it refuses the same way — one gate, not two.
+func caller(ctx context.Context, what string) (*zip.Ctx, string, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, "", zip.ErrUnauthorized("sign in to view " + what)
+	}
+	org, ok := principal.Org(c)
+	if !ok {
+		return nil, "", zip.ErrUnauthorized("sign in to view " + what)
+	}
+	return c, org, nil
+}
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, the ONLY way prose reaches the published document, the MCP tool
+// list and the CLI help — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // Mount registers the customer-facing /v1/billing/* read surface on app.
 func Mount(app cloud.Router, deps cloud.Deps) error {
+	if app == nil {
+		return fmt.Errorf("billing.Mount: nil app")
+	}
+	// A typed op is a route PLUS a registry entry, and the registry lives on the
+	// App. Checked HERE because cloud.Mount's routes hook cannot fail, and a
+	// subsystem that cannot reach the registry must refuse to mount rather than
+	// serve routes no projection knows about.
+	if cloud.ZipApp(app) == nil {
+		return fmt.Errorf("billing.Mount: router carries no typed-op registry")
+	}
 	return cloud.Mount(app, deps, "billing", build, routes)
 }
 
@@ -151,13 +196,29 @@ func build(b cloud.Base) (state, error) {
 // routes registers the customer-facing /v1/billing/* read surface plus the
 // /v1/finance/* projection (same commerceProxy).
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	// Bridge carries into a typed op the request facts its signature drops — here
+	// the validated principal every read resolves its org from. It installs BEFORE
+	// the leaves it serves; fiber runs middleware in registration order.
+	app.Group("/v1/billing").Use(cloud.Bridge())
+	app.Group("/v1/finance").Use(cloud.Bridge())
+	// Non-nil: Mount refused the router otherwise.
+	zapp := cloud.ZipApp(app)
+	o := ops{s}
+
+	// RAW: usage forwards commerce's per-request ledger BODY AND STATUS verbatim
+	// (billing.go's passthrough contract) — the shape is commerce's and this
+	// package does not know it, so there is no Out to name.
 	app.Get("/v1/billing/usage", cloud.Handle(s, usage))
 	// The per-account routed-usage breakdown the dashboard reads, in the billing
 	// namespace beside /v1/billing/usage. The data is owned by clients/link (the
 	// linked-account plane); this thin handler asks it, scoped to the caller's OWN
 	// (org, subject). Registered here — not from link — so it shadows the console
 	// pkg's /v1/billing/* wildcard exactly like the other specific customer routes.
-	app.Get("/v1/billing/usage/accounts", cloud.Handle(s, usageAccounts))
+	zip.Get(zapp, "/v1/billing/usage/accounts", o.usageAccounts)
+	// RAW: balance answers a typed commerceBalance co-resident but FORWARDS
+	// commerce's body and status on the split deploy, and one typed Out cannot
+	// state both. Its co-resident shape is declared as a schema instead (the
+	// openapi.Register block below), which is all a schema-only seam can carry.
 	app.Get("/v1/billing/balance", cloud.Handle(s, balance))
 	// GPU launch gate + saved cards — the customer half of the prepay-only GPU rule
 	// commerce enforces server-side (api/billing/gpu_charge.go). Same org-scoping as
@@ -166,6 +227,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// another tenant's. These SPECIFIC customer routes register before (and so shadow)
 	// the console pkg's /v1/billing/* wildcard, giving an unauthenticated call an honest
 	// 401 (route exists) instead of the wildcard's admin-shaped 403.
+	//
+	// RAW, all three: each forwards commerce's body AND STATUS verbatim. For
+	// gpu-charge the status IS the contract (201 charged / 402 card_required |
+	// insufficient_prepaid), which is exactly what a typed op cannot state — it has
+	// one success status and renders every other outcome as zip's fixed error body.
 	app.Get("/v1/billing/gpu-eligibility", cloud.Handle(s, gpuEligibility))
 	app.Post("/v1/billing/gpu-charge", cloud.Handle(s, gpuCharge))
 	app.Get("/v1/billing/payment-methods", cloud.Handle(s, paymentMethods))
@@ -173,7 +239,18 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// The customer-facing /v1/finance/* PROJECTION of this same commerce plane (the
 	// finance.hanzo.ai + console Finance surfaces). It reuses this package's commerceProxy
 	// + per-org subject-pinning; the treasury lane owns /v1/finance/treasury alongside it.
-	mountFinance(s, app)
+	mountFinance(o, zapp)
+}
+
+// The ONE body this surface can state without being able to type its route.
+// /v1/billing/balance answers commerceBalance co-resident and forwards commerce's
+// own {balance,holds,available} on the split deploy — the same shape either way —
+// but it writes the upstream's STATUS verbatim, so it cannot be a typed op. A
+// schema-only registration is what is left: it buys the document's response shape
+// and the generated SDK's type, and carries no prose (Register has no field for
+// it), so this route stays absent from the MCP tool list and the CLI.
+func init() {
+	openapi.Register("/v1/billing/balance", "GET", nil, commerceBalance{})
 }
 
 // billingSubjectKeys — every query/body param through which a commerce billing endpoint

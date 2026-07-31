@@ -22,8 +22,11 @@
 // knowledge.
 package knowledge
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
-	"net/http"
+	"context"
+	"fmt"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -39,6 +42,12 @@ type state struct{}
 // Mount wires the KB control-plane onto app per HIP-0106. CRUD + fixtures are the
 // framework's surface; this adds only retrieval + connectors.
 func Mount(app cloud.Router, deps cloud.Deps) error {
+	// Every route but the upload is a TYPED op, and the op registry lives on the
+	// *zip.App — a Router that is not backed by one has nowhere to put them, so
+	// the mount fails rather than serving routes no projection knows about.
+	if app != nil && cloud.ZipApp(app) == nil {
+		return fmt.Errorf("knowledge.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
 	// kbAI reaches the lazy index() singleton (built on first use, without deps)
 	// so embeddings run through the org/project-aligned EMBED client — the read-only
 	// (pk-) credential, split from the completions (M2M) client (deps.AI).
@@ -56,18 +65,61 @@ func build(b cloud.Base) (state, error) {
 
 // routes registers the retrieval + connector surface at /v1/kb. One prefix: the
 // same handler reachable at two paths is two answers to "where is this".
+//
+// Every route is a TYPED op — registered on the App with its ABSOLUTE path,
+// because the op registry (the one value OpenAPI, MCP and the CLI are projected
+// from) keys on it — except the import: it takes a multipart "file" or a RAW
+// archive body (readUpload), and a typed op decodes its input as JSON, so typing
+// it would reject every real upload.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	for _, p := range []string{"/v1/kb"} {
-		app.Post(p+"/search", cloud.Handle(s, search))                 // RAG entry point
-		app.Get(p+"/graph", cloud.Handle(s, graph))                    // force-directed knowledge graph
-		app.Post(p+"/import", cloud.Handle(s, importVault))            // Obsidian/Notion/Roam/Evernote import
-		app.Get(p+"/connectors", cloud.Handle(s, listConnectors))      // per-org OAuth ingestion
-		app.Get(p+"/connectors/catalog", cloud.Handle(s, listCatalog)) // the ONE catalog
-		app.Get(p+"/connectors/:provider/connect", cloud.Handle(s, connectStart))
-		app.Get(p+"/connectors/:provider/callback", cloud.Handle(s, connectCallback))
-		app.Post(p+"/connectors/:provider/sync", cloud.Handle(s, syncConnector))
-		app.Delete(p+"/connectors/:provider", cloud.Handle(s, disconnectConnector))
+	z := cloud.ZipApp(app)
+	o := ops{s: s}
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every op below resolves
+	// its tenant through it.
+	app.Group("/v1/kb").Use(cloud.Bridge())
+	zip.Post(z, "/v1/kb/search", o.search)                  // RAG entry point
+	zip.Get(z, "/v1/kb/graph", o.graph)                     // force-directed knowledge graph
+	app.Post("/v1/kb/import", cloud.Handle(s, importVault)) // raw/multipart upload — see above
+	zip.Get(z, "/v1/kb/connectors", o.listConnectors)       // per-org OAuth ingestion
+	zip.Get(z, "/v1/kb/connectors/catalog", o.listCatalog)  // the ONE catalog
+	zip.Get(z, "/v1/kb/connectors/:provider/connect", o.connectStart)
+	zip.Get(z, "/v1/kb/connectors/:provider/callback", o.connectCallback)
+	zip.Post(z, "/v1/kb/connectors/:provider/sync", o.syncConnector)
+	zip.Delete(z, "/v1/kb/connectors/:provider", o.disconnectConnector)
+}
+
+// ops binds the service to knowledge's typed handlers: a typed handler takes only
+// a context and its decoded In, so the service arrives as a RECEIVER.
+type ops struct{ s *cloud.Service[state] }
+
+// tenant resolves the org — the ONE tenant boundary — for a typed op. The org is
+// exactly what SanitizeIdentity minted from the validated IAM owner claim,
+// carried across the typed seam by cloud.Bridge, and NEVER an input field: an
+// input is what the caller says about itself. Off the HTTP path there is none,
+// so the op refuses rather than reading across orgs.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("valid principal required")
 	}
+	return org, nil
+}
+
+// providerRef addresses one connector provider.
+type providerRef struct {
+	// Provider is the connector id from the path (slack, github, google, …).
+	Provider string `json:"provider"`
+}
+
+// searchResult is the retrieval answer. degraded is present only when the index
+// was unreachable and the empty hit list is an honest "no context", not "nothing
+// matched" — the RAG caller degrades instead of failing the turn.
+type searchResult struct {
+	// Hits are the matching documents, best score first.
+	Hits []hit `json:"hits"`
+	// Degraded is true only when retrieval was unavailable and hits is empty.
+	Degraded bool `json:"degraded,omitempty"`
 }
 
 // searchBody is the POST /v1/kb/search request. `query` is the natural-language
@@ -76,9 +128,14 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // knowledge doctypes. There is NO org field — the org is the validated tenant, so a
 // client can never search another org's knowledge by asking.
 type searchBody struct {
-	Query    string   `json:"query"`
-	Limit    int      `json:"limit,omitempty"`
-	Project  string   `json:"project,omitempty"`
+	// Query is the natural-language question. Required.
+	Query string `json:"query" validate:"required"`
+	// Limit bounds the hits returned; default 10, max 50.
+	Limit int `json:"limit,omitempty"`
+	// Project narrows retrieval to one project scope.
+	Project string `json:"project,omitempty"`
+	// DocTypes restricts retrieval to a subset of kb-page, kb-memory, kb-source.
+	// An empty or foreign list means all indexed knowledge doctypes.
 	DocTypes []string `json:"doctypes,omitempty"`
 }
 
@@ -87,34 +144,33 @@ type searchBody struct {
 // retrieval is impossible: the collection AND the payload filter are both pinned to
 // this org. An unreachable/disabled index returns an honest empty result set, never
 // a 5xx — the RAG caller degrades to no-context rather than failing the turn.
-func search(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
+//
+// Example: {"query": "how do we rotate the signing key", "limit": 10}
+// Response: {"hits": [{"doctype": "kb-page", "name": "runbook", "title": "Key rotation", "score": 0.82}]}
+func (o ops) search(ctx context.Context, in *searchBody) (*searchResult, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body searchBody
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if strings.TrimSpace(body.Query) == "" {
-		return zip.ErrBadRequest("query is required")
+	if strings.TrimSpace(in.Query) == "" {
+		return nil, zip.ErrBadRequest("query is required")
 	}
 
 	req := searchReq{
 		org:      org,
-		query:    body.Query,
-		limit:    body.Limit,
-		project:  strings.TrimSpace(body.Project),
-		doctypes: sanitizeDocTypes(body.DocTypes),
+		query:    in.Query,
+		limit:    in.Limit,
+		project:  strings.TrimSpace(in.Project),
+		doctypes: sanitizeDocTypes(in.DocTypes),
 	}
-	hits, err := index().searchDoc(c.Context(), req)
+	hits, err := index().searchDoc(ctx, req)
 	if err != nil {
 		// Log-and-empty: a retrieval outage must not surface as a hard error to the
 		// agent turn. The framework CRUD store is unaffected.
-		s.Log.Warn("kb search failed", "org", org, "err", err)
-		return c.JSON(http.StatusOK, map[string]any{"hits": []hit{}, "degraded": true})
+		o.s.Log.Warn("kb search failed", "org", org, "err", err)
+		return &searchResult{Hits: []hit{}, Degraded: true}, nil
 	}
-	return c.JSON(http.StatusOK, map[string]any{"hits": hits})
+	return &searchResult{Hits: hits}, nil
 }
 
 // sanitizeDocTypes restricts a client-supplied doctype filter to the KB knowledge

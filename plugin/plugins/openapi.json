@@ -19,8 +19,8 @@
     "/v1/admin/plugins": {
       "get": {
         "operationId": "adminPlugins",
-        "summary": "list reports what each host is actually running: every loaded plugin with its\nversion, pid, uptime, reload and restart counts, and its measured CPU, RSS,\nthread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED.",
-        "description": "list reports what each host is actually running: every loaded plugin with its\nversion, pid, uptime, reload and restart counts, and its measured CPU, RSS,\nthread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
+        "summary": "list reports what each host is actually running.",
+        "description": "list reports what each host is actually running. Every loaded plugin is listed\nwith its version, pid, uptime, reload and restart counts, and its measured CPU,\nRSS, thread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
         "tags": [
           "admin"
         ],
@@ -141,8 +141,8 @@
     "/v1/admin/plugins/{name}/enable": {
       "post": {
         "operationId": "adminEnablePlugin",
-        "summary": "enable brings a stopped or disabled plugin back on the artifact it already\nhas: the zero Plugin names no new artifact, so Reload reuses the loaded spec\nand clears the disabled flag.",
-        "description": "enable brings a stopped or disabled plugin back on the artifact it already\nhas: the zero Plugin names no new artifact, so Reload reuses the loaded spec\nand clears the disabled flag. Named for what an operator means by it.",
+        "summary": "enable restarts a stopped or disabled plugin on the artifact it already has.",
+        "description": "enable restarts a stopped or disabled plugin on the artifact it already has. The\nzero Plugin names no new artifact, so Reload reuses the loaded spec and clears\nthe disabled flag. Named for what an operator means by it.",
         "tags": [
           "admin"
         ],

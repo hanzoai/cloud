@@ -33,6 +33,8 @@
 // empty esign pod is retired by this fold.
 package esign
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"encoding/json"
@@ -82,10 +84,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("esign.Mount: %w", err)
 	}
 
-	// Native health endpoint — always answers (HealthOwner), no JS, no auth.
-	app.Get("/v1/esign/health", func(c *zip.Ctx) error {
-		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "service": "esign"})
-	})
+	// Native health endpoint — always answers (HealthOwner), no JS, no auth. A
+	// TYPED op: the registry entry zip.Get makes is the ONE thing OpenAPI, MCP and
+	// the CLI project from, and it takes the ABSOLUTE path because the registry
+	// keys on it.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("esign.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	zip.Get(zapp, "/v1/esign/health", health, zip.WithOperationID("esignHealth"))
 
 	// esign persists PDF BYTES on the object-storage seam (deps.VFS), NOT inline in
 	// the per-tenant SQLite — a 32 MiB base64 PDF in a TEXT column would bloat the
@@ -129,8 +136,30 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// EsignHealth is the GET /v1/esign/health answer.
+type EsignHealth struct {
+	// Status is "ok" — the route answers whenever the process is up.
+	Status string `json:"status"`
+	// Service is "esign".
+	Service string `json:"service"`
+}
+
+// health reports that the e-signature subsystem is serving. It takes no tenant and
+// touches no store, so it answers for an unauthenticated probe too.
+//
+// Response: {"status":"ok","service":"esign"}
+func health(_ context.Context, _ *struct{}) (*EsignHealth, error) {
+	return &EsignHealth{Status: "ok", Service: "esign"}, nil
+}
+
 // routes wires the /v1/esign/* owner + recipient-token surface. The native
 // /v1/esign/health route stays inline in Mount (registered before the host build).
+//
+// These twelve stay UNTYPED, and cannot be otherwise: each is a closure returned by
+// owner/ownerID/token, the request body is decoded into `any` because its shape is
+// defined by the goja bundle rather than by any Go type, and the answer is the
+// bundle's own bytes written at the bundle's own status. Declaring Go types here
+// would be inventing a contract this package does not hold.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/esign")
 	// Owner routes — tenant = validated principal org. GET reads carry no body.

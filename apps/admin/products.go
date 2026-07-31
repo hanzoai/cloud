@@ -23,9 +23,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// products lists the fleet workload registry: every operator App CR across the platform
-// namespaces with its declared vs running image tag, reconciled health/phase and drift
-// verdict. Optionally narrowed by kind, tier or env, each an exact match.
+// products lists the fleet workload registry. It reports every operator App CR across
+// the platform namespaces with its declared vs running image tag, reconciled health/phase
+// and drift verdict, optionally narrowed by kind, tier or env, each an exact match.
 //
 // The rows are the SAME observation /v1/platform/fleet renders — read through the in-process
 // platform seam, not a second k8s client — so the two boards can never disagree about what

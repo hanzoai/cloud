@@ -22,11 +22,19 @@ package admin
 // connection.
 //
 // Signals, each from its canonical table in the one datastore:
-//   - LLM usage  → hanzo.cloud_usage         : requests, tokens, cost, errors, top orgs, top models
-//   - Traces     → o11y_traces.distributed_o11y_index_v3 : request count, latency p50/p95/p99,
-//                                                              error rate, top services
-//   - Logs       → o11y_logs.distributed_logs_v2 : fleet log volume + volume-over-time
-//   - LLM gens   → o11y_ai.observations      : generations + cost (fleet-wide; honest-empty today)
+//   - LLM usage  → hanzo.cloud_usage : requests, tokens, cost, errors, top orgs, top models
+//   - Spans      → event.span        : request count, latency p50/p95/p99, error rate,
+//                                      top services
+//   - Logs       → event.log         : fleet log volume + volume-over-time
+//   - LLM gens   → event.span        : the gen_ai spans ai/object emits — generations and
+//                                      provider cost, fleet-wide
+//
+// The gen_ai rollup reads the SPAN plane, not a table of its own. A generation IS
+// a span the ai module already emits (gen_ai.system, gen_ai.request.model, the
+// _o11y.gen_ai.* cost attributes), so a second table for it would be a second
+// ingestion contract for one fact — and the one that used to be named here,
+// o11y_ai.observations, has never existed on this warehouse, which is why this
+// half of the board read a permanent honest zero.
 //
 // SUPERADMIN ONLY (core.Admit, the op's first line): the gateway strips a client
 // X-Org-Id and re-mints from the JWT owner, and this handler applies NO org filter,
@@ -50,25 +58,27 @@ import (
 	"github.com/hanzoai/cloud/apps/datastore"
 )
 
-// Fully-qualified datastore tables. admin only READS these — the ZAP collector
-// (o11y_*), the ai ledger (hanzo.cloud_usage), and O11yAI own their writes.
+// admin only READS these — the ai ledger (hanzo.cloud_usage) and the event-plane
+// writers own their writes. The event tables are named once, in apps/datastore,
+// beside the connection every one of these queries runs on.
 const (
 	o11yUsageTable   = "hanzo.cloud_usage"
-	o11yTraceTable   = "o11y_traces.distributed_o11y_index_v3"
-	o11yLogTable     = "o11y_logs.distributed_logs_v2"
-	o11yAIObs        = "o11y_ai.observations"
 	o11yTopN         = 10
 	o11yServiceLimit = 12
 
-	// o11yServiceCol is the v3 index's materialized service-name column, and
-	// o11yDurationCol its span duration. The v3 schema is snake_case and spells
-	// resource attributes with a $$ separator — it is NOT `serviceName`/`durationNano`
-	// (that was the v2 index). Naming the v2 columns does not error loudly here: the
-	// query fails, the caller's `if err == nil` swallows it, and the whole trace half of
-	// the board renders honest-looking zeros forever. Pinned as constants so the two
-	// queries below and the per-subsystem board all spell them once.
-	o11yServiceCol  = "resource_string_service$$name"
-	o11yDurationCol = "duration_nano"
+	// service and duration are ENVELOPE/signal columns on event.span, so they are
+	// spelled as themselves. They used to be `resource_string_service$$name` and
+	// `duration_nano` — a materialized resource attribute and a unit-suffixed name —
+	// and getting either wrong did not error loudly: the query failed, the caller's
+	// `if err == nil` swallowed it, and the whole span half of the board rendered
+	// honest-looking zeros forever. That failure mode is why they were pinned as
+	// constants; the names are now plain enough that the constants are gone.
+	//
+	// genAISystem is the attribute every gen_ai span carries (ai/object stamps
+	// gen_ai.system), and genAICost the provider cost it stamps in dollars. They
+	// are the ONE way a generation is distinguished from any other span.
+	genAISystem = "gen_ai.system"
+	genAICost   = "_o11y.gen_ai.total_cost"
 )
 
 // o11yGlobal is the whole fleet o11y board payload.
@@ -97,14 +107,14 @@ type o11yTotals struct {
 	Errors           int64 `json:"errors"`
 	Orgs             int64 `json:"orgs"`
 	Models           int64 `json:"models"`
-	// Traces (o11y_index_v3), all services.
+	// Spans (event.span), all services.
 	TraceCount     int64   `json:"traceCount"`
 	LatencyP50Ms   float64 `json:"latencyP50Ms"`
 	LatencyP95Ms   float64 `json:"latencyP95Ms"`
 	LatencyP99Ms   float64 `json:"latencyP99Ms"`
 	TraceErrorRate float64 `json:"traceErrorRate"` // percent (0..100)
 	Services       int64   `json:"services"`
-	// Logs (distributed_logs_v2), fleet volume over the window.
+	// Logs (event.log), fleet volume over the window.
 	LogVolume int64 `json:"logVolume"`
 }
 
@@ -147,15 +157,15 @@ type o11ySvcStat struct {
 	LatencyP95Ms float64 `json:"latencyP95Ms"`
 }
 
-// o11yLLM is the fleet-wide O11yAI generation rollup (near-empty today → honest).
+// o11yLLM is the fleet-wide gen_ai generation rollup, read off the span plane.
 type o11yLLM struct {
 	Generations int64   `json:"generations"`
 	CostUsd     float64 `json:"costUsd"`
 }
 
-// o11y is the fleet-wide observability board: LLM usage (requests, tokens, cost,
-// errors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in ms,
-// error rate, top services), fleet log volume, and the O11yAI generation rollup — all
+// o11y is the fleet-wide observability board. It carries LLM usage (requests, tokens,
+// cost, errors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in
+// ms, error rate, top services), fleet log volume, and the gen_ai generation rollup — all
 // aggregated across EVERY tenant, with no org filter applied.
 //
 // Every signal degrades INDEPENDENTLY. A table that is absent or errors contributes its
@@ -192,20 +202,23 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 		return &o11yOut{Status: core.OK, Data: &payload}, nil
 	}
 
-	sinceTS := chTS(since)         // DateTime literal — cloud_usage.timestamp, traces.timestamp
-	sinceNanos := since.UnixNano() // UInt64 nanos — logs.timestamp
+	// ONE time bound for the whole board. Every event-plane table spells its
+	// instant `time` as a DateTime64, so the same literal binds against spans and
+	// logs alike — the log half used to need a separate UInt64-nanosecond bound
+	// because its old table stored the instant as a raw integer.
+	sinceTS := chTS(since)
 	interval := o11yBucket(rangeLabel)
 
 	// LLM usage totals (all orgs).
 	if rows, err := datastore.Query(ctx, o11yUsageTotalsSQL(), sinceTS); err == nil {
 		fillUsageTotals(&payload.Totals, firstRowOr(rows))
 	}
-	// Trace RED metrics (all services).
+	// Span RED metrics (all services).
 	if rows, err := datastore.Query(ctx, o11yTraceTotalsSQL(), sinceTS); err == nil {
 		fillTraceTotals(&payload.Totals, firstRowOr(rows))
 	}
 	// Fleet log volume.
-	if rows, err := datastore.Query(ctx, o11yLogVolumeSQL(), sinceNanos); err == nil {
+	if rows, err := datastore.Query(ctx, o11yLogVolumeSQL(), sinceTS); err == nil {
 		payload.Totals.LogVolume = chInt64(firstRowOr(rows)["c"])
 	}
 	// Usage time-series (fleet).
@@ -213,7 +226,7 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 		payload.Series = usageSeriesFromRows(rows)
 	}
 	// Log-volume time-series (fleet).
-	if rows, err := datastore.Query(ctx, o11yLogSeriesSQL(interval), sinceNanos); err == nil {
+	if rows, err := datastore.Query(ctx, o11yLogSeriesSQL(interval), sinceTS); err == nil {
 		payload.LogSeries = logSeriesFromRows(rows)
 	}
 	// Top orgs by usage.
@@ -228,7 +241,7 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 	if rows, err := datastore.Query(ctx, o11yTopServicesSQL(), sinceTS); err == nil {
 		payload.TopServices = topServicesFromRows(rows)
 	}
-	// Fleet LLM generations (O11yAI) — best-effort; near-empty today.
+	// Fleet gen_ai generations — best-effort, off the span plane.
 	if rows, err := datastore.Query(ctx, o11yLLMSQL(), sinceTS); err == nil {
 		r := firstRowOr(rows)
 		payload.LLM = o11yLLM{Generations: chInt64(r["gens"]), CostUsd: chFloat64(r["cost"])}
@@ -256,16 +269,16 @@ func o11yUsageTotalsSQL() string {
 
 func o11yTraceTotalsSQL() string {
 	return "SELECT count() AS traces, " +
-		"round(quantile(0.5)(" + o11yDurationCol + ") / 1e6, 2) AS p50, " +
-		"round(quantile(0.95)(" + o11yDurationCol + ") / 1e6, 2) AS p95, " +
-		"round(quantile(0.99)(" + o11yDurationCol + ") / 1e6, 2) AS p99, " +
-		"round(100 * countIf(has_error) / greatest(count(), 1), 3) AS err_rate, " +
-		"uniqExact(" + o11yServiceCol + ") AS services " +
-		"FROM " + o11yTraceTable + " WHERE timestamp >= ?"
+		"round(quantile(0.5)(duration) / 1e6, 2) AS p50, " +
+		"round(quantile(0.95)(duration) / 1e6, 2) AS p95, " +
+		"round(quantile(0.99)(duration) / 1e6, 2) AS p99, " +
+		"round(100 * countIf(status = '" + datastore.SpanError + "') / greatest(count(), 1), 3) AS err_rate, " +
+		"uniqExact(service) AS services " +
+		"FROM " + datastore.Span + " WHERE time >= ?"
 }
 
 func o11yLogVolumeSQL() string {
-	return "SELECT count() AS c FROM " + o11yLogTable + " WHERE timestamp >= ?"
+	return "SELECT count() AS c FROM " + datastore.Log + " WHERE time >= ?"
 }
 
 func o11yUsageSeriesSQL(interval string) string {
@@ -276,8 +289,8 @@ func o11yUsageSeriesSQL(interval string) string {
 }
 
 func o11yLogSeriesSQL(interval string) string {
-	return "SELECT toStartOfInterval(toDateTime(timestamp / 1000000000), INTERVAL " + interval + ") AS ts, " +
-		"count() AS c FROM " + o11yLogTable + " WHERE timestamp >= ? GROUP BY ts ORDER BY ts"
+	return "SELECT toStartOfInterval(time, INTERVAL " + interval + ") AS ts, " +
+		"count() AS c FROM " + datastore.Log + " WHERE time >= ? GROUP BY ts ORDER BY ts"
 }
 
 func o11yTopOrgsSQL() string {
@@ -293,16 +306,20 @@ func o11yTopModelsSQL() string {
 }
 
 func o11yTopServicesSQL() string {
-	return "SELECT " + o11yServiceCol + " AS service, count() AS requests, " +
-		"round(100 * countIf(has_error) / greatest(count(), 1), 3) AS error_rate, " +
-		"round(quantile(0.95)(" + o11yDurationCol + ") / 1e6, 2) AS p95 " +
-		"FROM " + o11yTraceTable + " WHERE timestamp >= ? AND " + o11yServiceCol + " != '' " +
+	return "SELECT service, count() AS requests, " +
+		"round(100 * countIf(status = '" + datastore.SpanError + "') / greatest(count(), 1), 3) AS error_rate, " +
+		"round(quantile(0.95)(duration) / 1e6, 2) AS p95 " +
+		"FROM " + datastore.Span + " WHERE time >= ? AND service != '' " +
 		"GROUP BY service ORDER BY requests DESC LIMIT " + strconv.Itoa(o11yServiceLimit)
 }
 
+// o11yLLMSQL rolls up the fleet's generations from the gen_ai spans in the span
+// plane. A generation is a span, so this is the same table every other signal on
+// this board reads — one plane, one time column, one predicate shape. The cost
+// attribute is in dollars.
 func o11yLLMSQL() string {
-	return "SELECT count() AS gens, toFloat64(sum(total_cost)) AS cost FROM " + o11yAIObs +
-		" WHERE type = 'GENERATION' AND start_time >= ?"
+	return "SELECT count() AS gens, sum(toFloat64OrZero(attributes['" + genAICost + "'])) AS cost " +
+		"FROM " + datastore.Span + " WHERE time >= ? AND attributes['" + genAISystem + "'] != ''"
 }
 
 // ── pure row parsers (unit-tested) ──

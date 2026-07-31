@@ -105,6 +105,9 @@ func mountWith(t *testing.T, rt Runtime) *zip.App {
 		State: state{gateway: gatewayBase(), runtime: rt},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	// Serve installs this globally before MountAll; a typed op resolves its
+	// validated org through it, so the test wires it the same way.
+	app.Use(cloud.Bridge())
 	routes(app, s)
 	return app
 }
@@ -129,7 +132,7 @@ func call(t *testing.T, app *zip.App, method, path, org string) (int, []byte) {
 
 func listRunIDs(t *testing.T, body []byte) []string {
 	t.Helper()
-	var v botsView
+	var v BotRunList
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode list: %v (%s)", err, body)
 	}
@@ -190,14 +193,14 @@ func TestListRowShape(t *testing.T) {
 	app := mountWith(t, rt)
 
 	_, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
-	var v botsView
+	var v BotRunList
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(v.Bots) != 1 {
 		t.Fatalf("want 1 row, got %d", len(v.Bots))
 	}
-	want := botView{
+	want := BotRun{
 		RunID: "run_1", Task: "ship it", Surface: "terminal", Status: "running",
 		SessionURL: "https://bot.example.test/vnc?nodeId=run_1",
 		StartedAt:  "2023-11-14T22:13:20Z",
@@ -301,7 +304,7 @@ func TestStopHaltsTheRun(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("stop want 200, got %d (%s)", code, body)
 	}
-	var v stopView
+	var v BotStopped
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

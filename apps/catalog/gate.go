@@ -87,8 +87,8 @@ var scaffolds = []string{
 // The pass runs in ID order, not the store's newest-first order, so the row that
 // WINS a duplicate is the same row every hour. A catalog that renamed its own
 // survivor on every sync would be worse than the duplicate it removed.
-func admit(ctx context.Context, rows []Entry) (pub, held []Entry) {
-	rows = append([]Entry(nil), rows...)
+func admit(ctx context.Context, rows []CatalogEntry) (pub, held []CatalogEntry) {
+	rows = append([]CatalogEntry(nil), rows...)
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 	served := bodies(ctx, rows)
 	seen := map[string]string{}
@@ -131,8 +131,8 @@ func admit(ctx context.Context, rows []Entry) (pub, held []Entry) {
 
 // bodies reads every row's page, at most readers at a time. A page that errors is
 // simply absent from the result — the caller reads that as "unjudged".
-func bodies(ctx context.Context, rows []Entry) map[string][]byte {
-	out, work := make(map[string][]byte, len(rows)), make(chan Entry)
+func bodies(ctx context.Context, rows []CatalogEntry) map[string][]byte {
+	out, work := make(map[string][]byte, len(rows)), make(chan CatalogEntry)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for range readers {

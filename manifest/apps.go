@@ -37,21 +37,13 @@ var Apps = []App{
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing", "/v1/pricing-policy"}},
+	// /v1/s3 is the FULL S3 API over hanzoai/s3 — buckets, objects, health, op —
+	// and storage is its one owner. provisioning also wanted the bare path for the
+	// s3 slice of its 7-kind CRUD loop; that is S3-INSTANCE provisioning, a
+	// different concern, and it now lives at /v1/object (apps/provisioning
+	// prefix()), so both are reachable and neither shadows the other.
 	{Name: "storage", Prefixes: []string{"/v1/s3"}},
-	// No "/v1/s3" here, and that is NOT because provisioning serves nothing there
-	// — it registers four routes (provisioning.go:431-434: POST /v1/s3, GET
-	// /v1/s3, GET+DELETE /v1/s3/:name, the S3 slice of its 7-kind loop). Storage
-	// also claims bare /v1/s3 and won the duplicate-pattern merge, so those four
-	// have been unreachable through the fleet router either way: declared and
-	// shadowed before, undeclared now. Dropping the prefix keeps one owner per
-	// path; it does not fix the four routes.
-	//
-	// OPEN, needs a product decision: provisioning creates S3 INSTANCES while
-	// storage performs S3 OPERATIONS, and both want the bare path. Until an owner
-	// picks, provisioning's create/list/get/drop for the s3 kind are dead
-	// addresses — and openapi/weave_test.go's UNROUTED check is the thing that
-	// should have been failing on them all along.
-	{Name: "provisioning", Prefixes: []string{"/v1/datastore", "/v1/docdb", "/v1/kv", "/v1/search", "/v1/sql", "/v1/vector"}},
+	{Name: "provisioning", Prefixes: []string{"/v1/datastore", "/v1/docdb", "/v1/kv", "/v1/object", "/v1/search", "/v1/sql", "/v1/vector"}},
 	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/gpu-charge", "/v1/billing/gpu-eligibility", "/v1/billing/payment-methods", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	{Name: "account-bridge", Prefixes: []string{"/v1/billing", "/v1/commerce"}},

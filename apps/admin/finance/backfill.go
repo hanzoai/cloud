@@ -34,8 +34,8 @@ type BackfillOut struct {
 	Data   *Backfilled `json:"data"`
 }
 
-// Backfill carries ONE org's current commerce prepaid balance into the native finance
-// wallet — the one-time cutover between the two ledgers.
+// Backfill carries ONE org's prepaid balance into the native finance wallet. It is the
+// one-time cutover from the commerce ledger.
 //
 // It is IDEMPOTENT: the deposit uses the fixed ref "backfill:<org>", so re-running it
 // credits the wallet at most once. Safe to retry.

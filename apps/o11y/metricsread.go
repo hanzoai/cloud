@@ -3,8 +3,6 @@ package o11y
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/datastore"
@@ -12,10 +10,10 @@ import (
 
 // metricsread.go serves GET /v1/o11y/metrics — REAL per-org RED (rate / errors /
 // latency) for a product, plus the org's LLM usage. The RED series come from
-// org-tagged request spans in o11y_traces (attributes_string['hanzo.org']), which
-// the cloud TracingMiddleware already stamps — so this is genuine per-tenant data,
-// not VictoriaMetrics infra metrics (those carry no org label). Usage comes from the
-// hanzo.cloud_usage ledger (organization=<org>).
+// org-tagged request spans in event.span, which the cloud TracingMiddleware
+// already stamps — so this is genuine per-tenant data, not VictoriaMetrics infra
+// metrics (those carry no org label). Usage comes from the hanzo.cloud_usage
+// ledger (organization=<org>).
 //
 // TENANT ISOLATION: org is the validated tenant, bound as a positional datastore
 // parameter (never interpolated), the FIRST predicate on every query. A tenant can
@@ -33,15 +31,26 @@ const (
 )
 
 type point struct {
-	T string  `json:"t"` // RFC3339 bucket start (UTC)
+	// T is the bucket start, RFC3339 in UTC.
+	T string `json:"t"`
+	// V is the bucket's value.
 	V float64 `json:"v"`
 }
 
-type usagePoint struct {
-	T         string `json:"t"`
-	Calls     int64  `json:"calls"`
-	Tokens    int64  `json:"tokens"`
-	CostCents int64  `json:"costCents"`
+// usageBucket is one time bucket of an org's LLM usage. NOT admin's usagePoint
+// (a DAILY {date,requests,spendCents,tokens} roll-up on the fleet board): these
+// are two different shapes, and the fleet document has ONE schema namespace, so
+// they must not share a name — the weave gate refuses it, because a generated
+// SDK would bind whichever it read last.
+type usageBucket struct {
+	// T is the bucket start, RFC3339 in UTC.
+	T string `json:"t"`
+	// Calls is how many LLM calls landed in the bucket.
+	Calls int64 `json:"calls"`
+	// Tokens is how many tokens they consumed.
+	Tokens int64 `json:"tokens"`
+	// CostCents is what they cost, in cents.
+	CostCents int64 `json:"costCents"`
 }
 
 // metricsResponse is the scoped RED-metrics + usage response for one product.
@@ -58,10 +67,10 @@ type metricsResponse struct {
 		LatencyP95Ms []point `json:"latencyP95Ms"`
 	} `json:"series"`
 	Usage struct {
-		Calls     int64        `json:"calls"`
-		Tokens    int64        `json:"tokens"`
-		CostCents int64        `json:"costCents"`
-		Series    []usagePoint `json:"series"`
+		Calls     int64         `json:"calls"`
+		Tokens    int64         `json:"tokens"`
+		CostCents int64         `json:"costCents"`
+		Series    []usageBucket `json:"series"`
 	} `json:"usage"`
 	Summary struct {
 		Requests  int64   `json:"requests"`
@@ -104,22 +113,22 @@ func queryMetrics(ctx context.Context, q metricsQuery) (metricsResponse, error) 
 // A non-admin is pinned to its own org; an admin sees the whole product.
 func redSeries(ctx context.Context, q metricsQuery, resp *metricsResponse) error {
 	routePrefix := "/v1/" + q.svc.ID
-	sql := "SELECT toStartOfInterval(timestamp, toIntervalSecond(?)) AS bucket, " +
+	sql := "SELECT toStartOfInterval(time, toIntervalSecond(?)) AS bucket, " +
 		"count() AS reqs, " +
-		// response_status_code is LowCardinality(String) in o11y; coerce before the
-		// numeric compare (a raw >= 500 raises NO_COMMON_TYPE). status_code is the
-		// numeric span status (2 = ERROR).
-		"countIf(toInt32OrZero(response_status_code) >= 500 OR status_code = 2) AS errs, " +
-		"quantile(0.5)(duration_nano) AS p50, " +
-		"quantile(0.95)(duration_nano) AS p95 " +
-		"FROM o11y_traces.distributed_o11y_index_v3 " +
-		"WHERE (httpRoute = ? OR startsWith(httpRoute, ?) OR serviceName = ?) " +
-		"AND timestamp > now64() - toIntervalSecond(?)"
-	args := []any{q.stepSec, routePrefix, routePrefix + "/", q.svc.App, q.rangeSec}
+		// The HTTP status is an attribute (a String), so coerce before the numeric
+		// compare — a raw >= 500 raises NO_COMMON_TYPE. status is the span's own
+		// outcome and is already the word.
+		"countIf(toInt32OrZero(attributes['http.response.status_code']) >= 500 OR status = ?) AS errs, " +
+		"quantile(0.5)(duration) AS p50, " +
+		"quantile(0.95)(duration) AS p95 " +
+		"FROM " + datastore.Span + " " +
+		"WHERE (path = ? OR startsWith(path, ?) OR service = ?) " +
+		"AND time > now64() - toIntervalSecond(?)"
+	args := []any{q.stepSec, datastore.SpanError, routePrefix, routePrefix + "/", q.svc.App, q.rangeSec}
 	// THE tenant gate. A non-admin is pinned to rows carrying its own org
 	// attribution; a validated SuperAdmin sees the whole product (no org predicate).
 	if !q.admin {
-		sql += " AND attributes_string['hanzo.org'] = ?"
+		sql += " AND org = ?"
 		args = append(args, q.org)
 	}
 	sql += " GROUP BY bucket ORDER BY bucket ASC"
@@ -176,23 +185,24 @@ func usageSeries(ctx context.Context, org string, rangeSec, stepSec int, resp *m
 		calls := asInt64(r["calls"])
 		tokens := asInt64(r["tokens"])
 		cost := asInt64(r["cost"])
-		resp.Usage.Series = append(resp.Usage.Series, usagePoint{T: t, Calls: calls, Tokens: tokens, CostCents: cost})
+		resp.Usage.Series = append(resp.Usage.Series, usageBucket{T: t, Calls: calls, Tokens: tokens, CostCents: cost})
 		resp.Usage.Calls += calls
 		resp.Usage.Tokens += tokens
 		resp.Usage.CostCents += cost
 	}
 	if resp.Usage.Series == nil {
-		resp.Usage.Series = []usagePoint{}
+		resp.Usage.Series = []usageBucket{}
 	}
 	return nil
 }
 
 // ── range/step + helpers ──────────────────────────────────────────────────────
 
-// boundRangeSec clamps the client `range` (seconds) to [1, maxRangeSec].
-func boundRangeSec(raw string) int {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n <= 0 {
+// boundRangeSec clamps the client `range` (seconds) to [1, maxRangeSec]. A
+// missing or unparseable query value arrives as 0 and takes the default — the
+// same branch a malformed string took when this parsed the query itself.
+func boundRangeSec(n int) int {
+	if n <= 0 {
 		return defaultRangeSec
 	}
 	if n > maxRangeSec {
@@ -201,13 +211,11 @@ func boundRangeSec(raw string) int {
 	return n
 }
 
-// stepFor picks a bucket width: an explicit ?stepSec (clamped), else ~60 buckets
+// stepFor picks a bucket width: an explicit stepSec (clamped), else ~60 buckets
 // across the range (clamped to [minStepSec, maxStepSec]).
-func stepFor(rangeSec int, rawStep string) int {
-	if v := strings.TrimSpace(rawStep); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return clampInt(n, minStepSec, maxStepSec)
-		}
+func stepFor(rangeSec, step int) int {
+	if step > 0 {
+		return clampInt(step, minStepSec, maxStepSec)
 	}
 	return clampInt(rangeSec/60, minStepSec, maxStepSec)
 }
@@ -236,7 +244,7 @@ func ensureSeries(resp *metricsResponse) {
 		resp.Series.LatencyP95Ms = []point{}
 	}
 	if resp.Usage.Series == nil {
-		resp.Usage.Series = []usagePoint{}
+		resp.Usage.Series = []usageBucket{}
 	}
 }
 

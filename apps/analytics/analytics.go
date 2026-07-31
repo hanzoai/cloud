@@ -12,14 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package analytics mounts the Hanzo Cloud /v1/analytics/* surface: a native-Go,
-// per-org analytics read API over the `hanzo` datastore warehouse (the
-// `datastore` cluster). It is the backend for the console Native Analytics module
-// (unified-analytics.md §5) — two read lenses over one warehouse:
+// Package analytics mounts the Hanzo Cloud /v1/analytics/* surface AND the /v1 event
+// doors: the read lenses and the ingest that fills them, over the `event` plane.
 //
-//   - LLM lens (REAL today): hanzo.cloud_usage, the live per-org usage ledger the
-//     cloud o11y path already writes (requests, tokens, spend, models, errors).
-//   - Web/commerce lens (honest-empty until the collector emits): hanzo.events.
+//   - LLM lens: hanzo.cloud_usage, the per-org usage ledger the cloud o11y path
+//     writes (requests, tokens, spend, models, errors).
+//   - Web/commerce lens: event.event, filled by this package's own ingest doors.
+//
+// THE PLANE, in four files. An EVENT is the FACT; a MESSAGE is the container it
+// travels in, and the two are not conflated anywhere:
+//
+//	capture.go   the WIRE — decode, scrub, clamp, and the core every door calls.
+//	fact.go      the FACT — the envelope, the signal, the route. Pure.
+//	bus.go       the CONTAINER — publishing a fact to the EVENT stream.
+//	warehouse.go the SINK — the durable consumer that lands facts in their tables.
+//
+// A signal's SUBJECT and its TABLE are the same name (event.error on the bus is
+// event.error in the store), so transport and storage cannot drift apart.
 //
 // ONE datastore client. This package does NOT open its own connection: it reads
 // through clients/datastore, the leaf that holds the warehouse connection for the
@@ -51,7 +60,19 @@
 // generic GET /v1/<name>/health so the always-ok route never shadows the real
 // probe — the same flag the kms/paas/s3 subsystems use. Order 132 binds
 // /v1/analytics/* before the ai subsystem's /v1/* catch-all (150).
+//
+// THE READ LENSES ARE TYPED OPS (zip.Get with concrete In/Out structs), so REST,
+// the OpenAPI document, the MCP tool list and the CLI all derive from the one
+// registration; handler prose is lifted into the spec at build time by cmd/zipdoc.
+// The INGEST doors are not, and cannot be: each speaks a raw wire (canonical,
+// PostHog, team) over bytes, accepting a single event, a bare array or {batch:[…]}
+// — a union no In struct states — and each is registered from the doors list rather
+// than a constant path literal. The /health probes stay untyped for the same kind of
+// reason: their 503 body IS the readiness contract, and a typed op has one success
+// status and no vocabulary for a second response.
 package analytics
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
 	"context"
@@ -59,8 +80,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -68,6 +89,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/hanzoai/types"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -92,14 +114,48 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // build carries no per-subsystem state — analytics reads the shared warehouse. It
 // records the informative mount line and installs the site-host ingest carve.
 func build(b cloud.Base) (state, error) {
-	b.Log.Info("analytics surface", "warehouse", "hanzo", "brand", b.Brand)
+	b.Log.Info("event plane", "database", plane, "stream", stream, "brand", b.Brand)
 	installHostCarve(b)
+	startDrain(b.Log)
 	return state{}, nil
+}
+
+// sinkDrain is the process's warehouse drain — the consumer that lands published facts
+// in their tables (warehouse.go). ONE per process, not one per mount: the durables are
+// named for the plane, so a second set of consumers on the same durable would only
+// split the same stream between two copies of the same code for no gain, and every
+// extra copy is another reconnect loop. sync.Once is what makes "one" a property of the
+// code rather than of how many times Mount happens to be called.
+var (
+	sinkDrain *drain
+	drainOnce sync.Once
+)
+
+// startDrain brings the warehouse consumer up. It is deliberately NOT on the request
+// path: a store or a bus that is down delays LANDING, never ACCEPTING, so this never
+// fails a mount.
+func startDrain(log luxlog.Logger) {
+	drainOnce.Do(func() {
+		sinkDrain = &drain{log: log.New("plane", plane)}
+		sinkDrain.start()
+	})
+}
+
+// Shutdown stops the warehouse drain and releases the ingest connection. Registered as
+// the subsystem's Shutdown hook (plugin/analytics), so a graceful stop drains rather
+// than dropping the connection mid-publish.
+func Shutdown(_ context.Context) error {
+	if sinkDrain != nil {
+		sinkDrain.stop()
+		sinkDrain = nil
+	}
+	closeBus()
+	return nil
 }
 
 // installHostCarve wires the published-site-host beacon ingest (the twin of base's
 // sites.SetBaseHostHandler): a page served on a site host can POST its OWN analytics
-// beacon to an ingest door and have it ingested into hanzo.events under the site's
+// beacon to an ingest door and have it ingested into event.event under the site's
 // resolved Org — the server-supplied, host-derived tenant, never a body/header claim.
 //
 // It goes STRAIGHT to the ANONYMOUS lane (publicIngest), and this is the honest
@@ -146,15 +202,24 @@ func installHostCarve(b cloud.Base) {
 // explicitly (not JWT-gated: liveness must be probe-able); the data endpoints are
 // all org-gated in-handler.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/analytics/health", cloud.Handle(s, health))
-	app.Get("/v1/analytics/overview", cloud.Handle(s, overview))
-	app.Get("/v1/analytics/timeseries", cloud.Handle(s, timeseries))
-	app.Get("/v1/analytics/top", cloud.Handle(s, top))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every typed read below
+	// resolves its tenant through it. app.Use on a scoped router installs it once
+	// per DECLARED prefix, which is exactly the set of read routes; the ingest doors
+	// are outside those prefixes and stay ungated here, as they must be.
+	app.Use(cloud.Bridge())
 
-	// Capture (WRITE) side — the ingest that fills hanzo.events. Every ingest door
+	app.Get("/v1/analytics/health", cloud.Handle(s, health))
+	zip.Get(z, "/v1/analytics/overview", o.overview)
+	zip.Get(z, "/v1/analytics/timeseries", o.timeseries)
+	zip.Get(z, "/v1/analytics/top", o.top)
+
+	// Capture (WRITE) side — the ingest that fills event.event. Every ingest door
 	// is registered HERE and only here, from doors (event.go): one Post per declared
 	// door, no hand-written path beside it. A door contributes its WIRE and nothing
-	// else — admission (handle) and the write core (ingestEvents) are shared — so
+	// else — admission (handle) and the ingest core (ingestEvents) are shared — so
 	// this is one pipeline behind N paths, and a path that is not in doors is not an
 	// ingest door anywhere: not routed, and not carved on a site host either.
 	for _, d := range doors {
@@ -165,13 +230,71 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// principal, since a read never accepts the write-only publishable key. MINTING is
 	// a different concern and lives on the key resource, not here: POST /v1/keys with
 	// {"type":"publishable"}.
-	app.Get("/v1/errors", cloud.Handle(s, errorsLens))
+	zip.Get(z, "/v1/errors", o.errors)
 
 	// /v1/insights — console reads over the SAME engine. The PostHog-wire INGEST at
 	// /v1/insights/e is a door and is registered in the loop above. Flags live at
 	// /v1/flags.
-	app.Get("/v1/insights/health", cloud.Handle(s, insightsHealth))
-	app.Get("/v1/insights/events", cloud.Handle(s, insightsEvents))
+	zip.Get(z, "/v1/insights/health", o.insightsHealth)
+	zip.Get(z, "/v1/insights/events", o.insightsEvents)
+}
+
+// ops binds the service to analytics' typed read handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, the only bound form
+// cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// Window is the read window every lens accepts: a named range, or an explicit
+// start/end pair.
+type Window struct {
+	// Range is 24h, 7d or 30d; empty means 24h. Ignored when start and end are given.
+	Range string `json:"range"`
+	// Start is the RFC3339 window start; honoured only together with end.
+	Start string `json:"start"`
+	// End is the RFC3339 window end; honoured only together with start.
+	End string `json:"end"`
+}
+
+// TopWindow is a read window plus the cardinality of each top-N breakdown.
+type TopWindow struct {
+	// Range is 24h, 7d or 30d; empty means 24h. Ignored when start and end are given.
+	Range string `json:"range"`
+	// Start is the RFC3339 window start; honoured only together with end.
+	Start string `json:"start"`
+	// End is the RFC3339 window end; honoured only together with start.
+	End string `json:"end"`
+	// Limit is how many rows each breakdown returns; 0 means 10, capped at 100.
+	Limit int `json:"limit"`
+}
+
+// Feed is the bound on a raw-event read.
+type Feed struct {
+	// Limit is how many events to return, newest first; 0 means 50, capped at 200.
+	Limit int `json:"limit"`
+}
+
+// tenantFrom resolves the org — the tenant-isolation KEY — for a typed read. It is
+// what SanitizeIdentity minted from the validated bearer owner claim, carried across
+// the typed seam by cloud.Bridge, so a caller with no validated principal reads
+// nothing and the org is never an input field.
+func tenantFrom(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("valid bearer required")
+	}
+	return org, nil
+}
+
+// windowOf resolves the [start,end) window + bucket interval from a lens input,
+// reusing hanzoai/types.ParseWindow so analytics and the console Overview share ONE
+// window grammar (24h|7d|30d|custom). A bad range is a 400.
+func windowOf(rangeIn, startIn, endIn string) (time.Time, time.Time, types.Interval, string, error) {
+	w, err := types.ParseWindow(rangeIn, startIn, endIn, time.Now())
+	if err != nil {
+		return time.Time{}, time.Time{}, "", "", zip.ErrBadRequest(err.Error())
+	}
+	return w.Start, w.End, w.Interval, w.Label, nil
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────
@@ -185,17 +308,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // stable owned copy — the retained-buffer fix.
 func tenant(c *zip.Ctx) (string, bool) {
 	return principal.Org(c)
-}
-
-// window resolves the [start,end) window + bucket interval from ?range/?start/?end,
-// reusing hanzoai/types.ParseWindow so analytics and the console Overview share ONE
-// window grammar (24h|7d|30d|custom). A bad range is a 400.
-func window(c *zip.Ctx) (time.Time, time.Time, types.Interval, string, error) {
-	w, err := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), time.Now())
-	if err != nil {
-		return time.Time{}, time.Time{}, "", "", zip.ErrBadRequest(err.Error())
-	}
-	return w.Start, w.End, w.Interval, w.Label, nil
 }
 
 // requireDatastore returns the honest 503 when the datastore ledger is not
@@ -249,9 +361,10 @@ func isWarehouseUnreachable(err error) bool {
 	return false
 }
 
-func topLimit(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
+// topLimit bounds a breakdown's cardinality: absent or non-positive means
+// defaultTop, and nothing above maxTop is honoured.
+func topLimit(n int) int {
+	if n <= 0 {
 		return defaultTop
 	}
 	if n > maxTop {
@@ -260,26 +373,180 @@ func topLimit(c *zip.Ctx) int {
 	return n
 }
 
+// feedLimit bounds a raw-event read: absent or non-positive means 50, capped at 200.
+func feedLimit(n int) int {
+	if n <= 0 {
+		return 50
+	}
+	if n > 200 {
+		return 200
+	}
+	return n
+}
+
+// RawEvent is one row of the raw event feed. Properties and Exception are the
+// event's own JSON objects, passed through exactly as stored.
+type RawEvent struct {
+	// ID is the event id.
+	ID string `json:"id"`
+	// Timestamp is when the event happened, RFC3339 UTC.
+	Timestamp string `json:"timestamp"`
+	// Event is the event name (page_viewed, a product event, an error class).
+	Event string `json:"event"`
+	// Type is the `kind` column — what the caller did (track, page, identify, group).
+	Type string `json:"type,omitempty"`
+	// Group is the error's grouping fingerprint. Set on the error feed only; it is
+	// the key an issue's lifecycle row is kept under.
+	Group string `json:"group,omitempty"`
+	// DistinctID is the client-side identity the event was captured under.
+	DistinctID string `json:"distinctId,omitempty"`
+	// SessionID groups events from one browsing session.
+	SessionID string `json:"sessionId,omitempty"`
+	// Product names the product surface the event came from.
+	Product string `json:"product,omitempty"`
+	// URL is the full page address the event was captured on.
+	URL string `json:"url,omitempty"`
+	// Path is the URL path alone.
+	Path string `json:"path,omitempty"`
+	// Library is the SDK that sent the event.
+	Library string `json:"library,omitempty"`
+	// LibraryVer is that SDK's version.
+	LibraryVer string `json:"libraryVersion,omitempty"`
+	// Exception is the error's class, message, level and stack frames, assembled
+	// back from event.error's own columns.
+	Exception any `json:"exception,omitempty"`
+	// Properties is the event's attributes, already scrubbed at capture.
+	Properties any `json:"properties,omitempty"`
+}
+
+// EventFeed is a page of raw events, newest first.
+type EventFeed struct {
+	// Data is the page; an empty array when the org has captured nothing in range.
+	Data []RawEvent `json:"data"`
+}
+
+// InsightsHealth is the liveness of the unified insights surface.
+type InsightsHealth struct {
+	// OK is true whenever the surface is serving.
+	OK bool `json:"ok"`
+	// Engine names the analytics engine behind it.
+	Engine string `json:"engine"`
+	// Surface is the path prefix this health answer covers.
+	Surface string `json:"surface"`
+}
+
+// errors returns the caller org's most recent captured exceptions, newest first, each
+// with its class, message, grouping fingerprint and stack frames. It reads event.error,
+// the table the ingest doors land an error signal in — so the frames are real columns
+// and "which file throws most" is a GROUP BY rather than a scan of an opaque blob. A
+// read always needs a validated principal, never the write-only publishable key.
+//
+// Example: {"limit": 100}
+func (o ops) errors(ctx context.Context, in *Feed) (*EventFeed, error) {
+	org, err := tenantFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := datastore.Query(ctx, `
+		SELECT id, time, name, kind, distinct_id, session_id, product, url, path,
+		       attributes, `+"`group`"+`, message, class, level, handled,
+		       `+"`frames.function`"+` AS fn, `+"`frames.file`"+` AS file,
+		       `+"`frames.line`"+` AS line, `+"`frames.own`"+` AS own
+		FROM `+errorsTable+`
+		WHERE org = ?
+		ORDER BY time DESC
+		LIMIT ?`, org, feedLimit(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+	}
+	out := make([]RawEvent, 0, len(rows))
+	for _, r := range rows {
+		e := RawEvent{
+			ID: asStr(r["id"]), Timestamp: asStr(r["time"]), Event: asStr(r["name"]),
+			Type:       asStr(r["kind"]),
+			DistinctID: asStr(r["distinct_id"]), SessionID: asStr(r["session_id"]),
+			Product: asStr(r["product"]), URL: asStr(r["url"]), Path: asStr(r["path"]),
+			Library: attrOf(r, "library"), LibraryVer: attrOf(r, "library_version"),
+			Group:     asStr(r["group"]),
+			Exception: exceptionOf(r),
+		}
+		e.Properties = attributes(r)
+		out = append(out, e)
+	}
+	return &EventFeed{Data: out}, nil
+}
+
+// insightsEvents returns the caller org's most recent captured events of every
+// kind, newest first — the console's live event feed.
+//
+// Example: {"limit": 100}
+func (o ops) insightsEvents(ctx context.Context, in *Feed) (*EventFeed, error) {
+	org, err := tenantFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := datastore.Query(ctx, `
+		SELECT id, time, name, kind, distinct_id, session_id,
+		       product, url, path, attributes
+		FROM `+eventsTable+`
+		WHERE org = ?
+		ORDER BY time DESC
+		LIMIT ?`, org, feedLimit(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+	}
+	out := make([]RawEvent, 0, len(rows))
+	for _, r := range rows {
+		e := RawEvent{
+			ID: asStr(r["id"]), Timestamp: asStr(r["time"]), Event: asStr(r["name"]),
+			Type: asStr(r["kind"]), DistinctID: asStr(r["distinct_id"]),
+			SessionID: asStr(r["session_id"]), Product: asStr(r["product"]),
+			URL: asStr(r["url"]), Path: asStr(r["path"]),
+			Library: attrOf(r, "library"), LibraryVer: attrOf(r, "library_version"),
+		}
+		e.Properties = attributes(r)
+		out = append(out, e)
+	}
+	return &EventFeed{Data: out}, nil
+}
+
+// insightsHealth reports that the unified insights surface is serving. It reads no
+// tenant data and touches no warehouse, so it is safe as a liveness probe.
+//
+// Response: {"ok": true, "engine": "hanzo-analytics", "surface": "/v1/insights"}
+func (o ops) insightsHealth(ctx context.Context, _ *struct{}) (*InsightsHealth, error) {
+	return &InsightsHealth{OK: true, Engine: "hanzo-analytics", Surface: "/v1/insights"}, nil
+}
+
 // ── /v1/analytics/overview ──────────────────────────────────────────────────
 
-func overview(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	start, end, interval, rangeLabel, err := window(c)
+// overview reports the caller org's headline analytics for a window: the LLM lens
+// (requests, tokens, spend, distinct models and providers, errors) from the usage
+// ledger, plus the web and commerce lenses (pageviews, visitors, sessions, orders,
+// revenue) from the events warehouse. A lens whose table is not yet provisioned
+// reports available:false rather than fabricated zeros; an unreachable warehouse is
+// a 503, never invented numbers.
+//
+// Example: {"range": "7d"}
+func (o ops) overview(ctx context.Context, in *Window) (*Overview, error) {
+	s := o.s
+	org, err := tenantFrom(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	start, end, interval, rangeLabel, err := windowOf(in.Range, in.Start, in.End)
+	if err != nil {
+		return nil, err
 	}
 	if err := requireDatastore(); err != nil {
-		return err
+		return nil, err
 	}
-	ctx := c.Context()
 	// Ensure the ai-owned ledger table exists (idempotent, latched) so a fresh
-	// warehouse yields honest zeros, not an error. We NEVER create hanzo.events —
-	// that table is operator-owned (unified-analytics.md §3.1).
+	// warehouse yields honest zeros, not an error. We NEVER create the event tables —
+	// their schema is applied to the store out of band, which is also why nothing in
+	// this package carries a CREATE TABLE for them.
 	if err := datastore.EnsureCloudUsage(ctx); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 
 	// LLM lens — REAL per-org KPIs.
@@ -290,16 +557,20 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 		"countIf(status = 'error') AS errors FROM " + llmTable + " WHERE " + where
 	llmRows, err := datastore.Query(ctx, llmSQL, args...)
 	if err != nil {
-		return warehouseErr("llm", err)
+		return nil, warehouseErr("llm", err)
 	}
 	llm := buildLLMOverview(firstRow(llmRows))
 
 	// Web/commerce lens — one events query; degrades to honest-empty if the events
 	// table is absent (not yet provisioned) or errors.
 	ewhere, eargs := eventsWhere(org, start, end)
-	eventsSQL := "SELECT countIf(event = '$pageview') AS pageviews, uniqExact(distinct_id) AS visitors, " +
-		"uniqExact(session_id) AS sessions, countIf(event = 'order_completed') AS orders, " +
-		"toFloat64(sum(revenue)) AS revenue FROM " + eventsTable + " WHERE " + ewhere
+	// Page views come from the `kind` discriminator, not a magic name; revenue and
+	// quantity are attributes, so they parse out of the Map with toFloat64OrZero —
+	// which yields 0 for both an absent key and an unparseable value, exactly as the
+	// old Float64 column yielded 0 for an unset one.
+	eventsSQL := "SELECT countIf(kind = '" + kindPage + "') AS pageviews, uniqExact(distinct_id) AS visitors, " +
+		"uniqExact(session_id) AS sessions, countIf(name = 'order_completed') AS orders, " +
+		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue FROM " + eventsTable + " WHERE " + ewhere
 	eventsRows, eerr := datastore.Query(ctx, eventsSQL, eargs...)
 	eventsOK := eerr == nil
 	if eerr != nil {
@@ -307,7 +578,7 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	erow := firstRow(eventsRows)
 
-	return c.JSON(http.StatusOK, Overview{
+	return &Overview{
 		Range:    rangeLabel,
 		Start:    start.UTC().Format(time.RFC3339),
 		End:      end.UTC().Format(time.RFC3339),
@@ -316,26 +587,31 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 		LLM:      llm,
 		Web:      buildWebOverview(erow, eventsOK),
 		Commerce: buildCommerceOverview(erow, eventsOK),
-	})
+	}, nil
 }
 
 // ── /v1/analytics/timeseries ────────────────────────────────────────────────
 
-func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	start, end, interval, rangeLabel, err := window(c)
+// timeseries reports the caller org's LLM usage bucketed over a window — requests,
+// tokens and spend per hour or per day, with empty buckets filled in so the series
+// is continuous. The bucket size follows the window; an unreachable warehouse is a
+// 503, never fabricated points.
+//
+// Example: {"range": "30d"}
+func (o ops) timeseries(ctx context.Context, in *Window) (*Timeseries, error) {
+	org, err := tenantFrom(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	start, end, interval, rangeLabel, err := windowOf(in.Range, in.Start, in.End)
+	if err != nil {
+		return nil, err
 	}
 	if err := requireDatastore(); err != nil {
-		return err
+		return nil, err
 	}
-	ctx := c.Context()
 	if err := datastore.EnsureCloudUsage(ctx); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 
 	// bucketFn is a CLOSED server-chosen enum, so interpolating it is injection-safe;
@@ -351,10 +627,10 @@ func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
 		bucketFn, llmTable, where)
 	rows, err := datastore.Query(ctx, seriesSQL, args...)
 	if err != nil {
-		return warehouseErr("timeseries", err)
+		return nil, warehouseErr("timeseries", err)
 	}
 
-	return c.JSON(http.StatusOK, Timeseries{
+	return &Timeseries{
 		Range:    rangeLabel,
 		Start:    start.UTC().Format(time.RFC3339),
 		End:      end.UTC().Format(time.RFC3339),
@@ -362,28 +638,35 @@ func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
 		Scope:    Scope{Org: org},
 		Series:   buildSeries(start, end, interval, rows),
 		Source:   llmTable,
-	})
+	}, nil
 }
 
 // ── /v1/analytics/top ───────────────────────────────────────────────────────
 
-func top(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	start, end, _, rangeLabel, err := window(c)
+// top reports the caller org's leaderboards for a window: the models it spent the
+// most on (from the usage ledger), and — from the events warehouse — its best
+// selling products, most visited pages, and the referrers and campaign sources that
+// brought people in. Each events-backed lens reports available:false when its table
+// is not provisioned rather than an empty answer that looks like real zero traffic.
+//
+// Example: {"range": "7d", "limit": 20}
+func (o ops) top(ctx context.Context, in *TopWindow) (*Top, error) {
+	s := o.s
+	org, err := tenantFrom(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	start, end, _, rangeLabel, err := windowOf(in.Range, in.Start, in.End)
+	if err != nil {
+		return nil, err
 	}
 	if err := requireDatastore(); err != nil {
-		return err
+		return nil, err
 	}
-	ctx := c.Context()
 	if err := datastore.EnsureCloudUsage(ctx); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
-	limit := topLimit(c)
+	limit := topLimit(in.Limit)
 
 	// Top models — REAL. limit is a validated int (never user text) so %d is safe;
 	// org + time stay bound parameters.
@@ -393,17 +676,18 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 		"GROUP BY model ORDER BY cost_cents DESC, requests DESC LIMIT %d", llmTable, where, limit)
 	modelRows, err := datastore.Query(ctx, modelSQL, args...)
 	if err != nil {
-		return warehouseErr("top-models", err)
+		return nil, warehouseErr("top-models", err)
 	}
 
 	// Top products — honest-empty until commerce emits order events.
 	ewhere, eargs := eventsWhere(org, start, end)
-	prodSQL := fmt.Sprintf("SELECT product_id AS productId, countIf(event = 'order_completed') AS orders, "+
-		"toFloat64(sum(revenue)) AS revenue, sum(quantity) AS units FROM %s WHERE %s AND product_id != '' "+
-		"GROUP BY product_id ORDER BY revenue DESC LIMIT %d", eventsTable, ewhere, limit)
+	prodSQL := fmt.Sprintf("SELECT attributes['product_id'] AS productId, countIf(name = 'order_completed') AS orders, "+
+		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue, "+
+		"sum(toUInt64OrZero(attributes['quantity'])) AS units FROM %s WHERE %s AND attributes['product_id'] != '' "+
+		"GROUP BY productId ORDER BY revenue DESC LIMIT %d", eventsTable, ewhere, limit)
 	prodRows, perr := datastore.Query(ctx, prodSQL, eargs...)
 
-	// Behavior lenses over hanzo.events — WHERE people go / WHAT they look at
+	// Behavior lenses over event.event — WHERE people go / WHAT they look at
 	// (topPages) and where they come FROM (topReferrers organic/referral,
 	// topSources campaigns). Each is ONE pageview breakdown that degrades to
 	// honest-empty if the events table is absent or the query errors — never a 500
@@ -424,7 +708,7 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 		s.Log.Debug("topSources lens unavailable (honest-empty)", "err", srcErr)
 	}
 
-	return c.JSON(http.StatusOK, Top{
+	return &Top{
 		Range:     rangeLabel,
 		Start:     start.UTC().Format(time.RFC3339),
 		End:       end.UTC().Format(time.RFC3339),
@@ -434,7 +718,7 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 		Pages:     buildBreakdown(pageRows, pageErr == nil),
 		Referrers: buildBreakdown(refRows, refErr == nil),
 		Sources:   buildBreakdown(srcRows, srcErr == nil),
-	})
+	}, nil
 }
 
 // ── /v1/analytics/health ────────────────────────────────────────────────────

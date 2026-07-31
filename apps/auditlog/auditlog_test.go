@@ -40,6 +40,9 @@ func newStore(t *testing.T) *audit.Recorder {
 func mountApp(t *testing.T, store *audit.Recorder) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// Serve installs this globally before MountAll; a typed op resolves its
+	// validated org through it, so the test wires it the same way.
+	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Audit: store}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

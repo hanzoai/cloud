@@ -41,6 +41,15 @@ type service struct {
 }
 
 // Mount registers the /v1/bot/* surface on app per HIP-0106.
+//
+// The one route here cannot be a typed op, and that is a property of what it IS
+// rather than an omission. It is a WILDCARD (/v1/bot/*), which a typed op may never
+// carry — the router's translation of `*` and zip's disagree, so declaring one fails
+// the whole app's projection — and it is a verbatim RELAY: the body is whatever bytes
+// the caller sent, forwarded unread, and the answer is the upstream's own bytes at
+// the upstream's own status and content type. Declaring Go types for either would be
+// inventing a contract this package does not hold; the shapes belong to the runtime
+// that serves them.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("runtime.Mount: nil app")

@@ -7,9 +7,8 @@ package o11y
 
 import (
 	"log/slog"
-	"os"
-	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/o11y/pkg/datastoremetrics"
 	"github.com/hanzoai/o11y/pkg/telemetrystore"
 	"github.com/hanzoai/o11y/pkg/zapmetricreceiver"
@@ -33,17 +32,17 @@ var metricsIngest *zapmetricreceiver.Receiver
 // forked ch-go; this native path does not, so it composes with the upstream
 // ch-go the query plane pins.
 //
-// OPT-IN + fail-soft by design. It is gated on O11Y_METRICS_ZAP_LISTEN and is a
-// no-op until an operator sets it, so activating the embed never forces the
-// metrics WRITE path on before it has been verified against the live datastore.
-// Once verified, the standalone metrics collector (and its agents) can repoint
-// here and be retired (verify-then-cutover). Any startup error is logged and
-// swallowed — metrics ingest must never take the query plane down.
+// It binds cloud.O11yMetricPort — the SAME port cloud/telemetry.go dials for the
+// metric signal, named there once. It used to be an operator string
+// (O11Y_METRICS_ZAP_LISTEN) with no counterpart on the dialling side, which is
+// how the fleet's meter provider ended up pointed at the SPAN port: the span
+// receiver decodes MsgSpanBatch, so every MsgMetricBatch that arrived was
+// dropped. A port that two halves must agree on is one fact, so it has one name.
+//
+// Fail-soft by design: any startup error is logged and swallowed — metrics
+// ingest must never take the query plane down.
 func startNativeMetricsIngest(store telemetrystore.TelemetryStore, log luxlog.Logger) {
-	listen := strings.TrimSpace(os.Getenv("O11Y_METRICS_ZAP_LISTEN"))
-	if listen == "" {
-		return // disabled — the standalone collector keeps the metrics path
-	}
+	listen := bindAll(cloud.O11yMetricPort)
 	if store == nil {
 		log.Warn("native metrics ingest: no telemetry store; skipping", "listen", listen)
 		return

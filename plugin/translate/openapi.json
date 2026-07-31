@@ -21,21 +21,282 @@
         "operationId": "post_v1_translate",
         "tags": [
           "translate"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/translate/memory": {
       "get": {
         "operationId": "get_v1_translate_memory",
+        "summary": "listMemory reads the caller org's stored translations, newest first.",
+        "description": "listMemory reads the caller org's stored translations, newest first.\nIt is the review lane's read — it reports what is remembered and translates\nnothing — and it narrows to one target language, one rung of the review\nladder, or both.",
         "tags": [
           "translate"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "description": "Target narrows to one target language tag, e.g. \"es\" or \"pt-BR\"; empty\nreads every language.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "es"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "State narrows to one rung of the review ladder: machine, suggested,\napproved or published. Empty reads every rung.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "suggested"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is\nhonoured.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryPage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_translate_memory",
+        "summary": "reviewMemory stores one human-reviewed translation in the caller org's memory.",
+        "description": "reviewMemory stores one human-reviewed translation in the caller org's memory.\nA human write always wins over the stored value, and once an entry lands at\napproved or published no machine write can move it again — which is what\nmakes a locale rebuild safe to re-run.\n\nState may not be set to machine: that rung is the engine's, and a human write\nmay not demote a string back into the churn.",
         "tags": [
           "translate"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "source": "Save changes",
+                "state": "approved",
+                "target": "es",
+                "text": "Guardar cambios"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Entry"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Entry": {
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "glossary_version": {
+            "description": "Glossary is the glossary VERSION the entry was translated under — the digest\nversion() derives from the terms, so changing a term changes the key and the\nstale rendering can never be served.",
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "MemoryPage": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching entries, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Request": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "format": {
+            "type": "string"
+          },
+          "glossary": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string"
+          }
+        }
+      },
+      "Response": {
+        "type": "object",
+        "properties": {
+          "detected_source": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string"
+          },
+          "translations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Translation"
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        }
+      },
+      "ReviewRequest": {
+        "properties": {
+          "glossary": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Glossary is the terminology the entry was translated under; its digest is\npart of the entry's identity.",
+            "type": "object"
+          },
+          "source": {
+            "description": "Source is the original string being reviewed. Required.",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is the rung to move the entry to: suggested, approved or published.\nmachine is engine-only and is refused here.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Target is the language tag the string was translated into, e.g. \"pt-BR\".",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is the reviewed translation to store.",
+            "type": "string"
+          },
+          "tier": {
+            "description": "Tier is the tier the entry was translated at — quality or bulk. It is part\nof the entry's identity, so it must match the call that produced it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Translation": {
+        "type": "object",
+        "properties": {
+          "cached": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "Usage": {
+        "type": "object",
+        "properties": {
+          "cached": {
+            "type": "integer"
+          },
+          "characters": {
+            "type": "integer"
+          },
+          "strings": {
+            "type": "integer"
+          },
+          "translated": {
+            "type": "integer"
+          }
+        }
       }
     }
   }

@@ -21,66 +21,673 @@
   "paths": {
     "/v1/admin/treasury": {
       "get": {
-        "operationId": "get_v1_admin_treasury",
+        "operationId": "adminTreasury",
+        "summary": "report returns the fund, its journal and its anchor status in one read.",
+        "description": "report returns the fund, its journal and its anchor status in one read. The journal\nis the recent double-entry postings; the anchor is the Hanzo L1 commit state of the\ncurrent ledger root. SuperAdmin only.",
         "tags": [
           "admin"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the journal entries returned. 0 or below means the default;\nanything above the maximum is clamped to it.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreasuryReportOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/treasury/anchor": {
       "post": {
-        "operationId": "post_v1_admin_treasury_anchor",
+        "operationId": "adminTreasuryAnchor",
+        "summary": "anchor commits the current ledger root to Hanzo L1.",
+        "description": "anchor commits the current ledger root to Hanzo L1. It answers with the anchor\nstatus. SuperAdmin only. When the chain path is wired it signs and submits the\nanchor transaction and records it; otherwise it reports the root that WOULD be\ncommitted plus the exact remaining step, and records nothing false. A failed submit\nanswers status=error with the reason rather than a fabricated anchored state.",
         "tags": [
           "admin"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnchorOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/treasury/bind-anchor": {
       "post": {
-        "operationId": "post_v1_admin_treasury_bind-anchor",
+        "operationId": "adminTreasuryBindAnchor",
+        "summary": "bindAnchor binds the treasury MPC wallet as the on-chain anchor signer.",
+        "description": "bindAnchor binds the treasury MPC wallet as the on-chain anchor signer. Subsequent\nanchor commits are then signed BY THE QUORUM WALLET instead of the lone KMS key. It\nprovisions-or-resolves the caller org's treasury wallet on the deployed MPC\nring and installs it. SuperAdmin only, and idempotent — a repeat resolves the same\nwallet. Answers with the bound EVM address so the operator can fund it for gas.",
         "tags": [
           "admin"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BoundSignerOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/treasury/policy": {
       "post": {
-        "operationId": "post_v1_admin_treasury_policy",
+        "operationId": "adminTreasuryPolicy",
+        "summary": "setPolicy sets the revenue-share basis points a sweep accrues.",
+        "description": "setPolicy sets the revenue-share basis points a sweep accrues. The value is 0–10000\nand the answer carries the policy as it now stands. SuperAdmin only; the write is\naudited.",
         "tags": [
           "admin"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "revenueShareBps": 2000
+              },
+              "schema": {
+                "$ref": "#/components/schemas/policyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/treasury/seed": {
       "post": {
-        "operationId": "post_v1_admin_treasury_seed",
+        "operationId": "adminTreasurySeed",
+        "summary": "seed injects bootstrap capital into the reserve fund.",
+        "description": "seed injects bootstrap capital into the reserve fund. It is how backed payouts\nbegin before the first revenue-share sweep. Idempotent by ref: a repeat with the\nsame ref returns created=false and posts nothing. SuperAdmin only; the injection is\naudited.",
         "tags": [
           "admin"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "amountCents": 1000000,
+                "memo": "seed round",
+                "ref": "seed-2026-07"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/seedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/treasury/sweep": {
       "post": {
-        "operationId": "post_v1_admin_treasury_sweep",
+        "operationId": "adminTreasurySweep",
+        "summary": "sweep posts one period's revenue-share accrual into the fund.",
+        "description": "sweep posts one period's revenue-share accrual into the fund. It reports the fund\nbalance after it. Idempotent per period: a repeat returns created=false and posts\nnothing. SuperAdmin only; the accrual is audited. Treasury does the accounting, not\nthe metering — the caller supplies the measured revenue.",
         "tags": [
           "admin"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "period": "2026-07",
+                "revenueCents": 4000000
+              },
+              "schema": {
+                "$ref": "#/components/schemas/sweepRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SweepOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/finance/accounts": {
       "get": {
-        "operationId": "get_v1_finance_accounts",
+        "operationId": "financeAccounts",
+        "summary": "accounts lists the caller's ledger accounts and their balances.",
+        "description": "accounts lists the caller's ledger accounts and their balances. Tenant isolation is\nenforced SERVER-SIDE: a per-org caller sees ONLY accounts under its own\n\"org:\u003ctenant\u003e:\" prefix, never house accounts and never another tenant's. SuperAdmin\nmay widen with scope=house or org=\u003ctenant\u003e — the ONLY way to cross the tenant\nboundary. Honest empty until a tenant has ledger postings.",
         "tags": [
           "finance"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "description": "Scope is \"house\" to read the reserve/revenue/payout house accounts.\nSuperAdmin only.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "house"
+          },
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "description": "Org reads one specific tenant's accounts. SuperAdmin only.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accounts": [
+                    {
+                      "address": "fund:reserve",
+                      "balanceCents": 1250000
+                    }
+                  ],
+                  "scope": "house",
+                  "tenant": "hanzo"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/finance/treasury": {
       "get": {
-        "operationId": "get_v1_finance_treasury",
+        "operationId": "financeTreasury",
+        "summary": "treasury reports the reserve fund's health and the revenue-share policy.",
+        "description": "treasury reports the reserve fund's health and the revenue-share policy. Any\nvalidated caller may read it: this is a TRANSPARENCY view — a partner or author can\nsee the pool that backs their payouts is solvent — not per-org money, which is the\ncustomer's commerce balance at /v1/billing/balance. Policy is read-only here; only\nSuperAdmin sets it.",
         "tags": [
           "finance"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accruedCents": 4000000,
+                  "byProgramCents": {
+                    "referral": 2750000
+                  },
+                  "paidCents": 2750000,
+                  "policy": {
+                    "revenueShareBps": 2000,
+                    "updatedAt": 1780000000
+                  },
+                  "reserveCents": 1250000,
+                  "solventForPayout": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccountsView": {
+        "properties": {
+          "accounts": {
+            "description": "Accounts is one row per ledger account in scope.",
+            "items": {
+              "$ref": "#/components/schemas/accountView"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "description": "Scope is the scope that was served: \"org\" or \"house\".",
+            "type": "string"
+          },
+          "tenant": {
+            "description": "Tenant is the org the accounts belong to; empty under house scope.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Amount": {
+        "properties": {},
+        "type": "object"
+      },
+      "AnchorData": {
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/AnchorStatus",
+            "description": "Anchor is the anchor status after the attempt."
+          }
+        },
+        "type": "object"
+      },
+      "AnchorOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AnchorData"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AnchorStatus": {
+        "properties": {
+          "chainId": {
+            "description": "ChainID is the Hanzo L1 chain the root is committed to.",
+            "type": "integer"
+          },
+          "contract": {
+            "description": "Contract is the deployed anchor contract address, empty until deployed.",
+            "type": "string"
+          },
+          "currentRoot": {
+            "description": "CurrentRoot is the 0x… root of the journal as it stands now.",
+            "type": "string"
+          },
+          "entryCount": {
+            "description": "EntryCount is how many journal entries the current root covers.",
+            "type": "integer"
+          },
+          "lastAt": {
+            "description": "LastAt is when it landed, unix seconds.",
+            "type": "integer"
+          },
+          "lastBlock": {
+            "description": "LastBlock is the block it landed in.",
+            "type": "integer"
+          },
+          "lastRoot": {
+            "description": "LastRoot is the last root committed on-chain; empty before the first submit.",
+            "type": "string"
+          },
+          "lastTxHash": {
+            "description": "LastTxHash is that commit's transaction hash.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note states the remaining step, in plain words.",
+            "type": "string"
+          },
+          "rpcConfigured": {
+            "description": "RPCConfigured and SignerConfigured report which half of the chain path is wired.",
+            "type": "boolean"
+          },
+          "signerConfigured": {
+            "type": "boolean"
+          },
+          "status": {
+            "description": "Status is pending, anchored or error.",
+            "type": "string"
+          },
+          "synced": {
+            "description": "Synced is true when the last anchored root equals the current root.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "BoundSigner": {
+        "properties": {
+          "boundAnchorSigner": {
+            "description": "BoundAnchorSigner is the EVM address of the bound MPC wallet — fund it for gas.",
+            "type": "string"
+          },
+          "chainId": {
+            "description": "ChainID is the Hanzo L1 chain the signer was bound for.",
+            "type": "integer"
+          },
+          "org": {
+            "description": "Org is the org whose treasury wallet was resolved.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BoundSignerOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BoundSigner"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Entry": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Amount"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "memo": {
+            "type": "string"
+          },
+          "postings": {
+            "items": {
+              "$ref": "#/components/schemas/Posting"
+            },
+            "type": "array"
+          },
+          "program": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Policy": {
+        "properties": {
+          "revenueShareBps": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "PolicyData": {
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/Policy",
+            "description": "Policy is the revenue-share policy now in force."
+          }
+        },
+        "type": "object"
+      },
+      "PolicyOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PolicyData"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Posting": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Amount"
+          }
+        },
+        "type": "object"
+      },
+      "Report": {
+        "properties": {
+          "accruedCents": {
+            "type": "integer"
+          },
+          "byProgramCents": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "paidCents": {
+            "type": "integer"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/Policy"
+          },
+          "reserveCents": {
+            "type": "integer"
+          },
+          "solventForPayout": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "SeedData": {
+        "properties": {
+          "created": {
+            "description": "Created is false when this ref was already seeded (idempotent no-op).",
+            "type": "boolean"
+          },
+          "entry": {
+            "$ref": "#/components/schemas/Entry",
+            "description": "Entry is the journal entry the injection posted."
+          },
+          "reserveCents": {
+            "description": "ReserveCents is the fund balance after the injection.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SeedOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SeedData"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SweepData": {
+        "properties": {
+          "accruedCents": {
+            "description": "AccruedCents is the amount posted into the reserve fund.",
+            "type": "integer"
+          },
+          "created": {
+            "description": "Created is false when this period was already swept (idempotent no-op).",
+            "type": "boolean"
+          },
+          "period": {
+            "description": "Period is the period that was accrued.",
+            "type": "string"
+          },
+          "reserveCents": {
+            "description": "ReserveCents is the fund balance after the accrual.",
+            "type": "integer"
+          },
+          "revenueCents": {
+            "description": "RevenueCents echoes the revenue the accrual was computed from.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SweepOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SweepData"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TreasuryReport": {
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/AnchorStatus",
+            "description": "Anchor is the Hanzo L1 anchor status for the current ledger root."
+          },
+          "journal": {
+            "description": "Journal is the most recent double-entry postings, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            },
+            "type": "array"
+          },
+          "report": {
+            "$ref": "#/components/schemas/Report",
+            "description": "Report is the reserve-fund health snapshot."
+          }
+        },
+        "type": "object"
+      },
+      "TreasuryReportOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TreasuryReport"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "accountView": {
+        "properties": {
+          "address": {
+            "description": "Address is the ledger account address, e.g. \"fund:reserve\" or \"org:acme:wallet\".",
+            "type": "string"
+          },
+          "balanceCents": {
+            "description": "BalanceCents is that account's balance in minor units.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "policyRequest": {
+        "properties": {
+          "revenueShareBps": {
+            "description": "RevenueShareBps is the share of net platform revenue a sweep accrues into\nthe reserve fund, in basis points (0–10000).",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "seedRequest": {
+        "properties": {
+          "amountCents": {
+            "description": "AmountCents is the capital to inject, in minor units. Must be \u003e 0.",
+            "type": "integer"
+          },
+          "memo": {
+            "description": "Memo describes the injection; empty defaults to \"reserve capital injection\".",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Ref is an idempotency key. Without one each seed is a distinct injection.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sweepRequest": {
+        "properties": {
+          "period": {
+            "description": "Period is the accounting period, \"YYYY-MM\"; empty means the current UTC month.",
+            "type": "string"
+          },
+          "revenueCents": {
+            "description": "RevenueCents is the net platform revenue measured for that period, in minor\nunits. Must be \u003e= 0.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

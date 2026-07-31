@@ -37,13 +37,11 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state]) {
 	mounted = s
 	t.Cleanup(func() { mounted = nil })
 	app := zip.New(zip.Config{Logger: log})
-	app.Get("/v1/finance/treasury", cloud.Handle(s, myTreasury))
-	app.Get("/v1/finance/accounts", cloud.Handle(s, myAccounts))
-	app.Get("/v1/admin/treasury", cloud.Handle(s, adminReport))
-	app.Post("/v1/admin/treasury/policy", cloud.Handle(s, adminSetPolicy))
-	app.Post("/v1/admin/treasury/sweep", cloud.Handle(s, adminSweep))
-	app.Post("/v1/admin/treasury/seed", cloud.Handle(s, adminSeed))
-	app.Post("/v1/admin/treasury/anchor", cloud.Handle(s, adminAnchor))
+	// The SAME registration Mount runs, so the tests drive the real typed ops (and
+	// the request bridge they read their identity from), never a parallel table.
+	if err := routes(app, s); err != nil {
+		t.Fatalf("routes: %v", err)
+	}
 	return app, s
 }
 

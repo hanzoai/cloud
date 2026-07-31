@@ -283,29 +283,29 @@ func TestOverrideRejectsUndeclaredFieldRef(t *testing.T) {
 // TestValidateOverrideFieldRefs unit-tests the pure LOW-3 engine check across direct
 // fields, control nodes, and an unparseable body.
 func TestValidateOverrideFieldRefs(t *testing.T) {
-	if err := ValidateOverride(Template{ID: "x", Body: "{{.a}} and {{.b}}", Fields: []Field{{Key: "a"}, {Key: "b"}}}); err != nil {
+	if err := ValidateOverride(DocumentTemplate{ID: "x", Body: "{{.a}} and {{.b}}", Fields: []MergeField{{Key: "a"}, {Key: "b"}}}); err != nil {
 		t.Fatalf("all-declared refs should validate: %v", err)
 	}
-	if err := ValidateOverride(Template{ID: "x", Body: "{{.a}} and {{.b}}", Fields: []Field{{Key: "a"}}}); err == nil || !strings.Contains(err.Error(), "b") {
+	if err := ValidateOverride(DocumentTemplate{ID: "x", Body: "{{.a}} and {{.b}}", Fields: []MergeField{{Key: "a"}}}); err == nil || !strings.Contains(err.Error(), "b") {
 		t.Fatalf("undeclared field must be rejected naming it, got %v", err)
 	}
-	if err := ValidateOverride(Template{ID: "x", Body: "{{if .flag}}{{.hidden}}{{end}}", Fields: []Field{{Key: "flag"}}}); err == nil || !strings.Contains(err.Error(), "hidden") {
+	if err := ValidateOverride(DocumentTemplate{ID: "x", Body: "{{if .flag}}{{.hidden}}{{end}}", Fields: []MergeField{{Key: "flag"}}}); err == nil || !strings.Contains(err.Error(), "hidden") {
 		t.Fatalf("undeclared field inside a control node must be rejected, got %v", err)
 	}
 	// The two indirect shapes that reach a field WITHOUT a FieldNode — an undeclared key
 	// here renders BLANK with no error (the index builtin ignores missingkey=error), so
 	// ValidateOverride must see and reject them.
-	if err := ValidateOverride(Template{ID: "x", Body: `{{index . "secret_term"}}`, Fields: []Field{{Key: "a"}}}); err == nil || !strings.Contains(err.Error(), "secret_term") {
+	if err := ValidateOverride(DocumentTemplate{ID: "x", Body: `{{index . "secret_term"}}`, Fields: []MergeField{{Key: "a"}}}); err == nil || !strings.Contains(err.Error(), "secret_term") {
 		t.Fatalf(`undeclared {{index . "k"}} must be rejected naming it, got %v`, err)
 	}
-	if err := ValidateOverride(Template{ID: "x", Body: "{{$.hidden}}", Fields: []Field{{Key: "a"}}}); err == nil || !strings.Contains(err.Error(), "hidden") {
+	if err := ValidateOverride(DocumentTemplate{ID: "x", Body: "{{$.hidden}}", Fields: []MergeField{{Key: "a"}}}); err == nil || !strings.Contains(err.Error(), "hidden") {
 		t.Fatalf("undeclared {{$.k}} must be rejected naming it, got %v", err)
 	}
 	// ...and the SAME shapes with a declared key must still validate (no false reject).
-	if err := ValidateOverride(Template{ID: "x", Body: `{{index . "a"}} {{$.a}}`, Fields: []Field{{Key: "a"}}}); err != nil {
+	if err := ValidateOverride(DocumentTemplate{ID: "x", Body: `{{index . "a"}} {{$.a}}`, Fields: []MergeField{{Key: "a"}}}); err != nil {
 		t.Fatalf("declared index/variable refs should validate: %v", err)
 	}
-	if err := ValidateOverride(Template{ID: "x", Body: "{{.a", Fields: nil}); err == nil {
+	if err := ValidateOverride(DocumentTemplate{ID: "x", Body: "{{.a", Fields: nil}); err == nil {
 		t.Fatalf("an unparseable body must error")
 	}
 }

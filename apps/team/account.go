@@ -97,6 +97,10 @@ type api struct {
 	// planEnt resolves a plan id to its entitlement block (plan.Entitlements) —
 	// the source of the team.guests cap.
 	planEnt func(context.Context, string) (map[string]any, error)
+	// degraded is the fail-closed posture Mount resolved (no HS256 secret). The
+	// untyped routes get it through Mount's guard wrapper; a typed op is not a
+	// zip.Handler and cannot be wrapped, so it reads this instead (typed.go).
+	degraded bool
 }
 
 // ── types (ported from team-go/pkg/account/types.go) ──────────────────────────
@@ -226,26 +230,61 @@ func statusAmbiguous(url string) Status {
 
 // ── route registration ────────────────────────────────────────────────────────
 
-func (g *api) register(r zip.Router, guard guardFn) {
+func (g *api) register(app cloud.Router, zapp *zip.App, guard guardFn) {
+	r := app.Group(teamPrefix)
+	// TYPED ops spell the ABSOLUTE path (teamPrefix + leaf, a constant
+	// expression): cmd/zipdoc reads the path argument literally, so a
+	// group-relative registration would file the prose under an address that
+	// does not exist.
+	// UNTYPED, and it cannot be otherwise: this is a JSON-RPC envelope. The verb
+	// is a body field, the `result` is a different shape per verb, a refusal is
+	// HTTP 200 carrying {error: Status} — including for an unparseable body — and
+	// the entitlement arm answers 402 with a second key. A typed In turns that 200
+	// into a 400 and a typed Out can only say `any`, so typing it would move the
+	// wire and describe nothing.
 	r.Post("/account", guard(g.rpc))
-	r.Get("/account/providers", guard(g.providers))
+	// TYPED: /providers takes nothing and answers a fixed list, so it is the one
+	// account route that is a whole op rather than one verb of the RPC or a
+	// browser redirect. A typed op is not a zip.Handler and cannot be wrapped by
+	// guard, so it carries the degraded refusal itself (g.degraded, typed.go).
+	zip.Get(zapp, teamPrefix+"/account/providers", g.listProviders)
+	// UNTYPED: both are browser REDIRECTS — 302 + Location + Set-Cookie, no body
+	// at all. A typed op answers a JSON value under a 2xx, which is a different
+	// response.
 	r.Get("/account/auth/:provider", guard(g.authStart))
 	r.Get("/account/auth/:provider/callback", guard(g.authCallback))
+	// UNTYPED: an unparseable body is IGNORED here — the token falls back to the
+	// Authorization bearer, and the request succeeds. zip decodes a typed In
+	// before the handler runs and answers 400, so typing this one would refuse a
+	// request it has always served.
 	r.Put("/account/cookie", guard(g.setCookie))
-	r.Delete("/account/cookie", guard(g.clearCookie))
+	// TYPED: a DELETE addresses what it deletes with its URL and reads no body,
+	// which is exactly what this one already did.
+	zip.Delete(zapp, teamPrefix+"/account/cookie", g.clearCookie)
 }
 
 // ── REST: providers ───────────────────────────────────────────────────────────
 
-func (g *api) providers(c *zip.Ctx) error {
-	// ONE door: hanzo.id. Which identities that door accepts — Google, GitHub,
-	// passkey, password — is IAM's question, answered on IAM's own page, next to
-	// the identity check and the training-data consent that must precede a first
-	// session. Listing providers here would be a second place holding that answer,
-	// and the two drift the moment IAM gains or drops one.
-	return c.JSON(http.StatusOK, []ProviderInfo{
-		{Name: g.cfg.provider, DisplayName: "Hanzo"},
-	})
+// providerList is the GET /providers body: a bare JSON array of the identity
+// providers the SPA may start a login with. Named (not a plain []ProviderInfo)
+// so the document can describe the response at all — zip declares a response
+// schema only for an Out type that HAS a name.
+type providerList []ProviderInfo
+
+// ListProviders returns the identity providers a login may start with.
+// It is always exactly one — hanzo.id.
+// Which identities that door accepts (Google, GitHub, passkey, password) is
+// IAM's question, answered on IAM's own page next to the identity check and the
+// training-data consent that must precede a first session; listing them here
+// would be a second place holding that answer, and the two drift the moment IAM
+// gains or drops one.
+//
+// Response: [{"name": "openid", "displayName": "Hanzo"}]
+func (g *api) listProviders(ctx context.Context, _ *none) (*providerList, error) {
+	if g.degraded {
+		return nil, unavailable()
+	}
+	return &providerList{{Name: g.cfg.provider, DisplayName: "Hanzo"}}, nil
 }
 
 // ── REST: IAM OAuth bridge (external hop, net/http) ────────────────────────────
@@ -518,9 +557,35 @@ func (g *api) setCookie(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"result": true})
 }
 
-func (g *api) clearCookie(c *zip.Ctx) error {
-	g.setSessionCookie(c, authCookie, "", -1)
-	return c.JSON(http.StatusOK, map[string]any{"result": true})
+// cookieAck is the account-cookie plane's acknowledgement — the {"result": true}
+// the SPA's Auth reads back from a cookie write or clear.
+type cookieAck struct {
+	// Result is true when the cookie was written or cleared.
+	Result bool `json:"result"`
+}
+
+// ClearCookie signs this browser out of team.
+// It expires the HttpOnly account-token cookie the OAuth callback set, is the
+// counterpart of the cookie PUT, and takes nothing — the cookie it clears is
+// named by this service, never by the caller.
+// It is unconditional: a caller with no cookie, an expired one or a forged one
+// all get the same acknowledgement, because clearing something that is not there
+// is the same outcome as clearing something that is.
+//
+// It clears ONLY the team session cookie.
+// The IAM access-token cookie the same callback set is a different credential
+// with a different lifetime and is left alone, so this is a team sign-out, not a
+// platform one.
+func (g *api) clearCookie(ctx context.Context, _ *none) (*cookieAck, error) {
+	if g.degraded {
+		return nil, unavailable()
+	}
+	if !g.cookie(ctx, authCookie, "", -1) {
+		// No request means no response to clear a cookie on, and no browser that
+		// could have been signed in — so there is nothing to honestly acknowledge.
+		return nil, zip.ErrBadRequest("no HTTP response to clear the cookie on")
+	}
+	return &cookieAck{Result: true}, nil
 }
 
 // ── JSON-RPC ──────────────────────────────────────────────────────────────────

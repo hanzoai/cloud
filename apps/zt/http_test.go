@@ -148,7 +148,7 @@ func TestMeshServicesTenantScopedAndShape(t *testing.T) {
 		t.Fatalf("cloud must authenticate with the ZT service credential, got user %q", f.lastAuthUser)
 	}
 	var listed struct {
-		Services []meshView `json:"services"`
+		Services []MeshService `json:"services"`
 	}
 	if err := json.Unmarshal(body, &listed); err != nil {
 		t.Fatalf("shape: %v (%s)", err, body)
@@ -191,7 +191,7 @@ func TestEdgeNodesTenantScopedShapeAndHealth(t *testing.T) {
 		t.Fatalf("edge nodes want 200, got %d (%s)", code, body)
 	}
 	var out struct {
-		Nodes []edgeNodeView `json:"nodes"`
+		Nodes []EdgeNode `json:"nodes"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatalf("shape: %v", err)
@@ -200,7 +200,7 @@ func TestEdgeNodesTenantScopedShapeAndHealth(t *testing.T) {
 	if len(out.Nodes) != 3 {
 		t.Fatalf("acme want 3 edge nodes, got %d (%+v)", len(out.Nodes), out.Nodes)
 	}
-	byID := map[string]edgeNodeView{}
+	byID := map[string]EdgeNode{}
 	for _, n := range out.Nodes {
 		byID[n.ID] = n
 	}
@@ -232,7 +232,7 @@ func TestNetworksDerivedFromRouters(t *testing.T) {
 		t.Fatalf("networks want 200, got %d (%s)", code, body)
 	}
 	var listed struct {
-		Networks []networkView `json:"networks"`
+		Networks []Network `json:"networks"`
 	}
 	if err := json.Unmarshal(body, &listed); err != nil {
 		t.Fatalf("shape: %v", err)
@@ -264,7 +264,7 @@ func TestNetworksDerivedFromRouters(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("get own network want 200, got %d (%s)", code, body)
 	}
-	var one networkView
+	var one Network
 	if err := json.Unmarshal(body, &one); err != nil || one.ID != "org-acme" || one.Nodes != 2 {
 		t.Fatalf("get network mismatch: %+v (err %v)", one, err)
 	}

@@ -18,35 +18,163 @@
   "paths": {
     "/v1/evals/dataset-items": {
       "get": {
-        "operationId": "get_v1_evals_dataset-items",
+        "operationId": "listDatasetItems",
+        "summary": "listItems returns one dataset's rows, active and archived alike.",
+        "description": "listItems returns one dataset's rows, active and archived alike. The dataset is\nresolved within the caller's org, so another org's dataset reads as empty.",
         "tags": [
           "evals"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "datasetName",
+            "in": "query",
+            "required": true,
+            "description": "Dataset is the dataset name to read. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "support-golden"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_evals_dataset-items",
+        "operationId": "createDatasetItem",
+        "summary": "createItem adds one row to a dataset and answers 201.",
+        "description": "createItem adds one row to a dataset and answers 201. The dataset must already exist\nin the caller's org — an item can never be attached to a dataset the caller does not\nown. An id already used by a different dataset is a conflict.",
         "tags": [
           "evals"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "datasetName": "support-golden",
+                "expectedOutput": {
+                  "answer": "rotate it in the console"
+                },
+                "input": {
+                  "question": "how do I reset my key?"
+                },
+                "status": "ACTIVE"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ItemInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/evals/datasets": {
       "get": {
-        "operationId": "get_v1_evals_datasets",
+        "operationId": "listDatasets",
+        "summary": "listDatasets returns the caller org's datasets.",
+        "description": "listDatasets returns the caller org's datasets. Item counts are not computed here —\nread one dataset for its count.",
         "tags": [
           "evals"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 or below means the default and anything\nabove the maximum is clamped to it.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_evals_datasets",
+        "operationId": "createDataset",
+        "summary": "createDataset registers a dataset in the caller's org and answers 201.",
+        "description": "createDataset registers a dataset in the caller's org and answers 201. The name must\nbe a slug and unique within the org; a repeat upserts the description and metadata\nrather than duplicating the row.",
         "tags": [
           "evals"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "Golden answers for support triage",
+                "metadata": {
+                  "owner": "support"
+                },
+                "name": "support-golden"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/DatasetInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/evals/datasets/{name}": {
       "delete": {
-        "operationId": "delete_v1_evals_datasets_by_name",
+        "operationId": "deleteDataset",
+        "summary": "deleteDataset removes one of the caller org's datasets and answers 204.",
+        "description": "deleteDataset removes one of the caller org's datasets and answers 204. A dataset\nbelonging to another org reads as not found and is left untouched.",
         "tags": [
           "evals"
         ],
@@ -55,14 +183,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the dataset name from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "support-golden"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_evals_datasets_by_name",
+        "operationId": "getDataset",
+        "summary": "getDataset returns one of the caller org's datasets with its live item count.",
+        "description": "getDataset returns one of the caller org's datasets with its live item count. A\ndataset belonging to another org reads as not found.",
         "tags": [
           "evals"
         ],
@@ -71,41 +208,182 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the dataset name from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "support-golden"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/evals/evaluators": {
       "get": {
-        "operationId": "get_v1_evals_evaluators",
+        "operationId": "listEvaluators",
+        "summary": "listEvaluators returns the caller org's LLM-as-judge definitions.",
+        "description": "listEvaluators returns the caller org's LLM-as-judge definitions.",
         "tags": [
           "evals"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 or below means the default and anything\nabove the maximum is clamped to it.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluatorList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_evals_evaluators",
+        "operationId": "createEvaluator",
+        "summary": "createEvaluator registers an LLM-as-judge in the caller's org, answering 201.",
+        "description": "createEvaluator registers an LLM-as-judge in the caller's org, answering 201.\nAn evaluator is a judge model plus the rubric it scores against; a repeat with\nthe same name upserts.",
         "tags": [
           "evals"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "criteria": "Score 1 if the answer resolves the question, else 0.",
+                "model": "zen5-pro",
+                "name": "helpfulness",
+                "scoreName": "helpfulness"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/EvaluatorInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluatorView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/evals/metrics": {
       "get": {
-        "operationId": "get_v1_evals_metrics",
+        "operationId": "evalMetrics",
+        "summary": "metricsBoard serves the AI observability dashboard for the caller's org.",
+        "description": "metricsBoard serves the AI observability dashboard for the caller's org. It\nreports request counts, cost, tokens, error and success rate, and latency\npercentiles over a window, bucketed and broken down by model. A validated\nSuperAdmin sees every org. Tenant\nisolation is the principal gate: no validated principal is a 403. When telemetry is\ndisabled, or the caller's project is a named sub-scope the ledger does not yet\nattribute, the board is honest-empty — a valid all-zero board, never a fabricated\nnumber and never a 503.",
         "tags": [
           "evals"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is a fixed window preset: 24h, 7d or 30d. Anything else means 24h.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7d"
+          },
+          {
+            "name": "interval",
+            "in": "query",
+            "required": false,
+            "description": "Interval overrides the bucket: hour or day. Anything else keeps the\npreset's own bucket.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "day"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Board"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/evals/runs": {
       "get": {
-        "operationId": "get_v1_evals_runs",
+        "operationId": "listRuns",
+        "summary": "listRuns returns the caller org's eval-run history.",
+        "description": "listRuns returns the caller org's eval-run history. Each row carries what was\nscored, by which judge, and the mean over the items that actually scored. Read\nfrom the metastore, so it is available whether or not telemetry is wired.",
         "tags": [
           "evals"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "datasetName",
+            "in": "query",
+            "required": false,
+            "description": "Dataset narrows to one dataset's runs.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "support-golden"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_evals_runs",
@@ -116,38 +394,887 @@
     },
     "/v1/evals/score-configs": {
       "get": {
-        "operationId": "get_v1_evals_score-configs",
+        "operationId": "listScoreConfigs",
+        "summary": "listScoreConfigs returns the caller org's score configs — the rules every recorded",
+        "description": "listScoreConfigs returns the caller org's score configs — the rules every recorded\nscore of that name is validated against.",
         "tags": [
           "evals"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned; 0 or below means the default and anything\nabove the maximum is clamped to it.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreConfigList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_evals_score-configs",
+        "operationId": "createScoreConfig",
+        "summary": "createScoreConfig declares what a score of this name may carry.",
+        "description": "createScoreConfig declares what a score of this name may carry. That is its type\nplus its numeric bounds or its allowed labels, and it answers 201. Once a config\nexists it is AUTHORITATIVE: a later score of that name is validated against it and\ncannot claim a different type.",
         "tags": [
           "evals"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "dataType": "NUMERIC",
+                "maxValue": 1,
+                "minValue": 0,
+                "name": "helpfulness"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ScoreConfigInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreConfigView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/evals/scores": {
       "get": {
-        "operationId": "get_v1_evals_scores",
+        "operationId": "listScores",
+        "summary": "listScores returns the caller org's recorded scores, newest first.",
+        "description": "listScores returns the caller org's recorded scores, newest first. The org is read\nfrom the validated principal, never a client header, so the filters narrow within\none tenant and can never widen past it. Requires telemetry.",
         "tags": [
           "evals"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "description": "Name narrows to one score name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "runName",
+            "in": "query",
+            "required": false,
+            "description": "RunName narrows to one eval run.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "run-20260729T101500Z"
+          },
+          {
+            "name": "traceId",
+            "in": "query",
+            "required": false,
+            "description": "TraceID narrows to one trace.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_evals_scores",
+        "operationId": "createScore",
+        "summary": "createScore records one score event against a trace, run or dataset item.",
+        "description": "createScore records one score event against a trace, run or dataset item. It\nanswers 201. Score integrity is enforced here: the value must be finite, and when a\nscore config of this name exists it is authoritative — the value must sit inside its\nbounds, the label inside its category set, and a caller cannot claim a different\ntype than the org configured. Requires telemetry; without a datastore the score has\nnowhere durable to land, so the call fails closed rather than reporting a score it\ndid not store.",
         "tags": [
           "evals"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "comment": "resolved the question",
+                "name": "helpfulness",
+                "runName": "run-20260729T101500Z",
+                "traceId": "tr_9f2a1c7d4e8b0a6f",
+                "value": 1
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ScoreInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/evals/traces": {
       "get": {
-        "operationId": "get_v1_evals_traces",
+        "operationId": "listTraces",
+        "summary": "listTraces returns the caller org's traces, newest first.",
+        "description": "listTraces returns the caller org's traces, newest first. Both tenant keys are\nserver-side: the org from the validated principal and the project from its minted\nscope, so a caller cannot read another tenant's or another project's traces.\nRequires telemetry.",
         "tags": [
           "evals"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": false,
+            "description": "SessionID narrows to one session.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "runName",
+            "in": "query",
+            "required": false,
+            "description": "RunName narrows to one eval run.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "run-20260729T101500Z"
+          },
+          {
+            "name": "datasetName",
+            "in": "query",
+            "required": false,
+            "description": "Dataset narrows to the traces of one dataset's items.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Board": {
+        "properties": {
+          "byModel": {
+            "items": {
+              "$ref": "#/components/schemas/ModelStat"
+            },
+            "type": "array"
+          },
+          "latency": {
+            "$ref": "#/components/schemas/LatencyStat"
+          },
+          "other": {
+            "$ref": "#/components/schemas/ModelStat"
+          },
+          "range": {
+            "$ref": "#/components/schemas/BoardRange"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/BoardScope"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/BoardPoint"
+            },
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/BoardTotals"
+          }
+        },
+        "type": "object"
+      },
+      "BoardPoint": {
+        "properties": {
+          "costCents": {
+            "type": "integer"
+          },
+          "errors": {
+            "type": "integer"
+          },
+          "generations": {
+            "type": "integer"
+          },
+          "t": {
+            "description": "RFC3339 (UTC) bucket start",
+            "type": "string"
+          },
+          "totalTokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "BoardRange": {
+        "properties": {
+          "end": {
+            "description": "RFC3339 (UTC)",
+            "type": "string"
+          },
+          "interval": {
+            "description": "hour | day",
+            "type": "string"
+          },
+          "range": {
+            "description": "echoed label (24h | 7d | 30d | custom)",
+            "type": "string"
+          },
+          "start": {
+            "description": "RFC3339 (UTC)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BoardScope": {
+        "properties": {
+          "allOrgs": {
+            "type": "boolean"
+          },
+          "org": {
+            "description": "\"\" when AllOrgs",
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BoardTotals": {
+        "properties": {
+          "completionTokens": {
+            "type": "integer"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "errors": {
+            "type": "integer"
+          },
+          "generations": {
+            "type": "integer"
+          },
+          "models": {
+            "type": "integer"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "successRate": {
+            "description": "0..1",
+            "type": "number"
+          },
+          "totalTokens": {
+            "type": "integer"
+          },
+          "users": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "DatasetInput": {
+        "properties": {
+          "description": {
+            "description": "Description is free text describing what the dataset holds.",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Metadata is an arbitrary JSON object stored alongside the dataset.",
+            "type": "object"
+          },
+          "name": {
+            "description": "Name is the dataset name, unique within the org.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DatasetList": {
+        "properties": {
+          "data": {
+            "description": "Data is the datasets, newest first. Item counts are omitted here — read one\ndataset to get its count.",
+            "items": {
+              "$ref": "#/components/schemas/DatasetView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "DatasetView": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "items": {
+            "type": "integer"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "EvaluatorInput": {
+        "properties": {
+          "criteria": {
+            "description": "Criteria is the judging rubric handed to the judge model.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the judge model id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the evaluator name, unique within the org.",
+            "type": "string"
+          },
+          "scoreName": {
+            "description": "ScoreName is the score this evaluator writes; empty means the evaluator name.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "EvaluatorList": {
+        "properties": {
+          "data": {
+            "description": "Data is the evaluators, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/EvaluatorView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "EvaluatorView": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "criteria": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scoreName": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ItemInput": {
+        "properties": {
+          "datasetName": {
+            "description": "Dataset is the name of the dataset the item belongs to. Required, and it\nmust already exist in the caller's org.",
+            "type": "string"
+          },
+          "expectedOutput": {
+            "description": "Expected is the arbitrary JSON golden answer.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the item id; empty mints one. Must be a slug when given.",
+            "type": "string"
+          },
+          "input": {
+            "description": "Input is the arbitrary JSON the model under test is given.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Metadata is an arbitrary JSON object stored alongside the item.",
+            "type": "object"
+          },
+          "status": {
+            "description": "Status is ACTIVE or ARCHIVED; empty means ACTIVE. Only ACTIVE items are run.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ItemList": {
+        "properties": {
+          "data": {
+            "description": "Data is the items, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/ItemView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ItemView": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "datasetName": {
+            "type": "string"
+          },
+          "expectedOutput": {
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "type": "object"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "LatencyStat": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "p50Ms": {
+            "type": "number"
+          },
+          "p95Ms": {
+            "type": "number"
+          },
+          "p99Ms": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "ModelStat": {
+        "properties": {
+          "completionTokens": {
+            "type": "integer"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "costPct": {
+            "description": "share of total spend, 0..100",
+            "type": "number"
+          },
+          "errorRate": {
+            "description": "0..1",
+            "type": "number"
+          },
+          "errors": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "modelCount": {
+            "description": "\u003e0 only on the \"other\" fold",
+            "type": "integer"
+          },
+          "p50Ms": {
+            "type": "number"
+          },
+          "p95Ms": {
+            "type": "number"
+          },
+          "p99Ms": {
+            "type": "number"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "totalTokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RunList": {
+        "properties": {
+          "data": {
+            "description": "Data is the runs, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/RunView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "RunView": {
+        "properties": {
+          "avgScore": {
+            "description": "AvgScore is the mean over the scored items only.",
+            "type": "number"
+          },
+          "createdAt": {
+            "description": "CreatedAt and UpdatedAt are RFC3339 timestamps.",
+            "type": "string"
+          },
+          "dataset": {
+            "description": "Dataset is the dataset the run scored.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items is how many dataset rows the run attempted, Scored how many produced a\nreal score — the two differ whenever items errored.",
+            "type": "integer"
+          },
+          "judgeModel": {
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the model under test; JudgeModel is the LLM-as-judge that scored it.",
+            "type": "string"
+          },
+          "runName": {
+            "description": "RunName is the run's name — the key scores and traces are tagged with.",
+            "type": "string"
+          },
+          "scored": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ScoreConfigInput": {
+        "properties": {
+          "categories": {
+            "description": "Categories is the allowed label set; required for CATEGORICAL.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "dataType": {
+            "description": "DataType is NUMERIC, CATEGORICAL or BOOLEAN; empty means NUMERIC.",
+            "type": "string"
+          },
+          "maxValue": {
+            "type": "number"
+          },
+          "minValue": {
+            "description": "MinValue and MaxValue bound a NUMERIC score. Null leaves that end unbounded.",
+            "type": "number"
+          },
+          "name": {
+            "description": "Name is the score name this config governs, unique within the org.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ScoreConfigList": {
+        "properties": {
+          "data": {
+            "description": "Data is the configs, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/ScoreConfigView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ScoreConfigView": {
+        "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "dataType": {
+            "type": "string"
+          },
+          "maxValue": {
+            "type": "number"
+          },
+          "minValue": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ScoreInput": {
+        "properties": {
+          "comment": {
+            "description": "Comment is free text stored with the score.",
+            "type": "string"
+          },
+          "dataType": {
+            "description": "DataType is NUMERIC, CATEGORICAL or BOOLEAN; a configured score overrides it.",
+            "type": "string"
+          },
+          "datasetItemId": {
+            "type": "string"
+          },
+          "datasetName": {
+            "description": "Dataset and ItemID tie the score to one dataset row.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the score name; a score config of this name, if any, governs it.",
+            "type": "string"
+          },
+          "runName": {
+            "description": "RunName ties the score to one eval run.",
+            "type": "string"
+          },
+          "stringValue": {
+            "description": "StringValue is the label. Required for CATEGORICAL, and it must be in the\nconfigured category set.",
+            "type": "string"
+          },
+          "traceId": {
+            "description": "TraceID ties the score to one trace.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the numeric score. Required for NUMERIC (finite) and BOOLEAN (0 or 1).",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "ScoreList": {
+        "properties": {
+          "data": {
+            "description": "Data is the score events, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/ScoreView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ScoreView": {
+        "properties": {
+          "comment": {
+            "type": "string"
+          },
+          "dataType": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "runName": {
+            "type": "string"
+          },
+          "stringValue": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "TraceList": {
+        "properties": {
+          "data": {
+            "description": "Data is the traces, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/TraceView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "TraceView": {
+        "properties": {
+          "apiKeyHash": {
+            "description": "APIKeyHash is the non-reversible credential ref (never a plaintext key).",
+            "type": "string"
+          },
+          "datasetItemId": {
+            "type": "string"
+          },
+          "datasetName": {
+            "type": "string"
+          },
+          "endTime": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object"
+          },
+          "latencyMs": {
+            "description": "LatencyMs is EndTime-StartTime in milliseconds, nil when the trace carries\nno timing (so the console renders \"—\", never a fabricated 0).",
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "runName": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

@@ -5,7 +5,7 @@ package analytics
 // This file is a WIRE ADAPTER, not a second pipeline: PostHog-shaped payloads
 // (what @hanzo/insights and every PostHog-compatible SDK emit) are mapped onto
 // the native CaptureEvent and flow through the ONE capture path (normalize →
-// scrub → hanzo.events), and the console reads recent events back through the
+// scrub → event.event), and the console reads recent events back through the
 // ONE datastore client. Flags stay at /v1/flags (the native flags engine) —
 // this namespace deliberately does not duplicate them.
 //
@@ -13,7 +13,7 @@ package analytics
 // emit this shape and insights.hanzo.ai rewrites every PostHog ingest path onto it,
 // so no canonical-wire door can serve them. decodeInsights below is the whole of
 // that difference — the door is declared in doors (event.go) and shares admission,
-// the write core and the receipt with /v1/event.
+// the ingest core and the receipt with /v1/event.
 //
 // Routes (org resolved SERVER-SIDE — same tenant gates as the rest):
 //
@@ -28,14 +28,8 @@ package analytics
 
 import (
 	"encoding/json"
-	"net/http"
-	"strconv"
 	"strings"
 	"time"
-
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/datastore"
-	"github.com/zap-proto/zip"
 )
 
 // insightsEvent is the PostHog wire shape (subset that matters for ingest).
@@ -90,7 +84,7 @@ func (e insightsEvent) toCapture() CaptureEvent {
 		Referrer:   str("$referrer"),
 		// UTM attribution: PostHog SDKs put campaign params in BARE `utm_*`
 		// properties (not $-prefixed — confirmed against the SDK/ingest source).
-		// hanzo.events has first-class utm_* columns and the native capture path
+		// event.event has first-class utm_* columns and the native capture path
 		// maps CaptureEvent.UTM into them (capture.go), so surfacing them here is
 		// what lets the web/commerce lens attribute traffic to a campaign. They were
 		// previously dropped on the PostHog-wire front door.
@@ -112,7 +106,7 @@ func (e insightsEvent) toCapture() CaptureEvent {
 // package (decodeIngest is the other). Pure over the raw bytes, exactly like its twin,
 // so the ONE pipeline can be handed a wire instead of forking per door: it accepts the
 // single-event and {batch:[…]} PostHog shapes and yields the SAME []CaptureEvent the
-// write core consumes. An empty/whitespace-only body ⇒ no events (an honest empty
+// ingest core consumes. An empty/whitespace-only body ⇒ no events (an honest empty
 // receipt, not an error), matching decodeIngest.
 func decodeInsights(body []byte) ([]CaptureEvent, error) {
 	if firstNonWS(body) >= len(body) {
@@ -131,62 +125,6 @@ func decodeInsights(body []byte) ([]CaptureEvent, error) {
 		caps[i] = e.toCapture()
 	}
 	return caps, nil
-}
-
-// insightsEvents answers GET /v1/insights/events — the console's recent-events
-// read (newest first). Tenant-scoped server-side; limit defaults 50, caps 200.
-func insightsEvents(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	limit, _ := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	rows, err := datastore.Query(c.Context(), `
-		SELECT id, timestamp, event, event_type, distinct_id, session_id,
-		       product, url, path, properties
-		FROM hanzo.events
-		WHERE tenant_id = ?
-		ORDER BY timestamp DESC
-		LIMIT ?`, org, limit)
-	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
-	}
-	type ev struct {
-		ID         string          `json:"id"`
-		Timestamp  string          `json:"timestamp"`
-		Event      string          `json:"event"`
-		Type       string          `json:"type"`
-		DistinctID string          `json:"distinctId"`
-		SessionID  string          `json:"sessionId,omitempty"`
-		Product    string          `json:"product,omitempty"`
-		URL        string          `json:"url,omitempty"`
-		Path       string          `json:"path,omitempty"`
-		Properties json.RawMessage `json:"properties,omitempty"`
-	}
-	out := make([]ev, 0, len(rows))
-	for _, r := range rows {
-		e := ev{
-			ID: asStr(r["id"]), Timestamp: asStr(r["timestamp"]), Event: asStr(r["event"]),
-			Type: asStr(r["event_type"]), DistinctID: asStr(r["distinct_id"]),
-			SessionID: asStr(r["session_id"]), Product: asStr(r["product"]),
-			URL: asStr(r["url"]), Path: asStr(r["path"]),
-		}
-		if p := asStr(r["properties"]); p != "" && json.Valid([]byte(p)) {
-			e.Properties = json.RawMessage(p)
-		}
-		out = append(out, e)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
-}
-
-func insightsHealth(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]any{"ok": true, "engine": "hanzo-analytics", "surface": "/v1/insights"})
 }
 
 func asStr(v any) string {

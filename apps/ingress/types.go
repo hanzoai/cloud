@@ -34,35 +34,64 @@ const (
 // that dispatches to Service through the ordered Middlewares chain, optionally
 // terminating TLS (an ACME-managed certificate) for Host.
 type Route struct {
-	ID          string   `json:"id"`
-	Host        string   `json:"host"`
-	PathPrefix  string   `json:"pathPrefix,omitempty"`
-	Service     string   `json:"service"`
+	// ID identifies the route within the org: [A-Za-z0-9-_.], at most 128 chars.
+	// A create that omits it gets a generated one.
+	ID string `json:"id"`
+	// Host is the exact hostname this route matches, lowercased with any trailing
+	// dot stripped. It is a GLOBALLY unique claim — one route across the whole
+	// edge may hold a host, so no tenant can hijack another's.
+	Host string `json:"host"`
+	// PathPrefix narrows the match to requests under this path; it must start
+	// with "/". Empty matches every path on the host.
+	PathPrefix string `json:"pathPrefix,omitempty"`
+	// Service is the id of the backend pool this route dispatches to. A route
+	// naming a service that does not exist is skipped at compile, not served.
+	Service string `json:"service"`
+	// Middlewares are the ids of the edge transforms to apply, in this order,
+	// before the request reaches the service. At most 16.
 	Middlewares []string `json:"middlewares,omitempty"`
-	TLS         bool     `json:"tls,omitempty"`
-	Priority    int      `json:"priority,omitempty"`
+	// TLS asks the edge to terminate TLS for Host with an ACME-managed certificate.
+	TLS bool `json:"tls,omitempty"`
+	// Priority orders routes that share a host: higher wins, and equal priorities
+	// fall back to the longer PathPrefix.
+	Priority int `json:"priority,omitempty"`
 }
 
 // Service is a Traefik-style load-balanced backend pool. Backends are weighted
 // round-robin members (github.com/vulcand/oxy/v2 roundrobin).
 type Service struct {
-	ID             string    `json:"id"`
-	Backends       []Backend `json:"backends"`
-	PassHostHeader bool      `json:"passHostHeader,omitempty"`
+	// ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.
+	// A create that omits it gets a generated one. Routes reference it by this id.
+	ID string `json:"id"`
+	// Backends are the upstream servers to balance across: 1..32 of them.
+	Backends []Backend `json:"backends"`
+	// PassHostHeader forwards the client's original Host header upstream instead
+	// of rewriting it to the backend's.
+	PassHostHeader bool `json:"passHostHeader,omitempty"`
 }
 
 // Backend is one upstream server URL with a round-robin weight (default 1). The
 // URL can point at another cloud instance, an in-cluster service, or the local
 // app's own listen address (loopback) — the edge just proxies to a URL.
 type Backend struct {
-	URL    string `json:"url"`
-	Weight int    `json:"weight,omitempty"`
+	// URL is the upstream server, http(s)://host[:port].
+	URL string `json:"url"`
+	// Weight is this member's share of the round-robin; must be >= 0.
+	Weight int `json:"weight,omitempty"`
 }
 
 // Middleware is one edge transform applied before a route reaches its service.
 type Middleware struct {
-	ID     string            `json:"id"`
-	Type   string            `json:"type"`
+	// ID identifies the transform within the org: [A-Za-z0-9-_.], at most 128
+	// chars. A create that omits it gets a generated one. Routes reference it by
+	// this id.
+	ID string `json:"id"`
+	// Type is the transform: redirectScheme, stripPrefix, addPrefix or headers.
+	Type string `json:"type"`
+	// Config is the transform's parameters: redirectScheme takes scheme (default
+	// https) and permanent ("true" ⇒ 301, else 302); stripPrefix REQUIRES
+	// prefixes (comma-separated, first match wins); addPrefix REQUIRES prefix;
+	// headers is a header→value map set on the response.
 	Config map[string]string `json:"config,omitempty"`
 }
 
@@ -80,8 +109,14 @@ const (
 // reload alongside the per-route TLS flags. This split is honest: an ACME account
 // is not a per-request knob, but WHICH hosts get certs is.
 type TLSConfig struct {
-	ACMEEmail  string   `json:"acmeEmail,omitempty"`
-	Staging    bool     `json:"staging,omitempty"`
+	// ACMEEmail is the ACME account email. It binds an account for the lifetime
+	// of an edge process, so it applies only when the edge (re)starts.
+	ACMEEmail string `json:"acmeEmail,omitempty"`
+	// Staging issues from Let's Encrypt's staging directory (untrusted certs, high
+	// rate limits). Like ACMEEmail it applies only when the edge (re)starts.
+	Staging bool `json:"staging,omitempty"`
+	// ExtraHosts get certificates without owning a route — at most 256. They feed
+	// the ACME HostPolicy and hot-apply on the next reload.
 	ExtraHosts []string `json:"extraHosts,omitempty"`
 }
 

@@ -169,16 +169,15 @@ func TestHealthOwnedByS3NotGenericLiveness(t *testing.T) {
 }
 
 // TestBucketsRouteReachesS3NotProvisioning: THE load-bearing routing proof.
-// provisioning owns GET /v1/s3/:name (order 120); the s3 subsystem owns the
-// static GET /v1/s3/buckets (order 118). A request to /v1/s3/buckets must reach
-// the s3 handler (which requires an org → 403 without one), NOT provisioning's
-// list-resource-by-name handler (which would treat "buckets" as a resource name).
-// The s3 403 body says "X-Org-Id required" from the s3 guard; provisioning's
-// :name GET with a valid org would 404 "resource not found" for name "buckets".
+// /v1/s3 is the S3 API and storage is its one owner, so GET /v1/s3/buckets must
+// reach the s3 handler (which requires an org → 403 without one) and never a
+// list-resource-by-name handler that would read "buckets" as a resource name.
+// provisioning used to be exactly that claimant — its s3-kind GET /v1/s3/:name
+// answered inside this subtree until the kind moved to /v1/object — and this
+// still guards the property against the NEXT claimant, from either app.
 // We assert the s3 path wins by checking the WITHOUT-org 403 (s3's guard fires
-// first) — provisioning's GET /v1/s3/:name also 403s without org, so to
-// disambiguate we ALSO assert that WITH an org the request does NOT return
-// provisioning's "resource not found" 404 shape.
+// first) — a :name GET would also 403 without an org, so to disambiguate we ALSO
+// assert that WITH an org the request does NOT return a "resource not found" 404.
 func TestBucketsRouteReachesS3NotProvisioning(t *testing.T) {
 	app := newApp(t, true)
 
@@ -202,15 +201,54 @@ func TestBucketsRouteReachesS3NotProvisioning(t *testing.T) {
 	}
 	if resp2.StatusCode == http.StatusNotFound {
 		body := decode(t, resp2.Body)
-		t.Fatalf("GET /v1/s3/buckets (org) = 404 %v — provisioning's :name shadowed the s3 route (ordering broken)", body)
+		t.Fatalf("GET /v1/s3/buckets (org) = 404 %v — a :name route shadowed the s3 route (ordering broken)", body)
+	}
+}
+
+// TestS3IsStorageAloneAndObjectIsProvisioning pins the ownership decision on the
+// REAL Mounts: /v1/s3 is the FULL S3 API and storage answers there alone, while
+// provisioning's s3-KIND control plane — create/list/get/drop an S3 instance,
+// which is a different concern from operating one — answers at /v1/object.
+//
+// Both apps mount on ONE router here, in fleet order, so this is the composition
+// the host builds. It is the third leg of one invariant: manifest/shadow_test.go
+// asserts it declaratively (a prefix has exactly one owner) and
+// openapi/weave_test.go asserts it against the published document (a route the
+// fleet routes nowhere is not published).
+func TestS3IsStorageAloneAndObjectIsProvisioning(t *testing.T) {
+	app := newApp(t, true)
+
+	// Bare /v1/s3 was provisioning's create+list address. It is storage's prefix and
+	// storage registers nothing AT it, so with a valid org it must 404: a 200 array
+	// here would mean the provisioning surface is back on the bare path.
+	if resp := do(t, app, "GET", "/v1/s3", "acme", "", false); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("GET /v1/s3 (org) = %d, want 404 — the bare path is storage's, and storage serves nothing at it", resp.StatusCode)
+	}
+
+	// The same list answers at /v1/object. list reads only the metadata store (it
+	// never dials S3), so a 200 is proof the route reached provisioning.
+	resp := do(t, app, "GET", "/v1/object", "acme", "", false)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/object (org) = %d, want 200 — provisioning's s3-kind list must answer here", resp.StatusCode)
+	}
+	var list []map[string]any
+	b, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(b, &list); err != nil {
+		t.Fatalf("GET /v1/object body %q: %v — want provisioning's resource list", string(b), err)
+	}
+
+	// And it is gated exactly like the other six kinds: no org, no answer.
+	if resp := do(t, app, "GET", "/v1/object", "", "", false); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("GET /v1/object (no org) = %d, want 403", resp.StatusCode)
 	}
 }
 
 // TestHealthRouteReachesS3NotProvisioning: /v1/s3/health must be the s3 subsystem's
-// real probe, not provisioning's GET /v1/s3/:name treating "health" as a resource
-// name. Proven by the 503 (no creds) carrying the s3 health body, which
-// provisioning's :name handler would never produce (it 403s without org or 404s
-// a missing resource — never a {service:"s3", ready:false} health doc).
+// real probe, never a GET /v1/s3/:name treating "health" as a resource name (the
+// shape provisioning's s3 kind had here before it moved to /v1/object). Proven by
+// the 503 (no creds) carrying the s3 health body, which a :name handler would never
+// produce (it 403s without org or 404s a missing resource — never a
+// {service:"s3", ready:false} health doc).
 func TestHealthRouteReachesS3NotProvisioning(t *testing.T) {
 	app := newApp(t, false)
 	resp := do(t, app, "GET", "/v1/s3/health", "", "", false)

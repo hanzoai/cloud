@@ -23,17 +23,50 @@
     },
     "/collaborator/rpc/{documentId}": {
       "post": {
-        "operationId": "post_collaborator_rpc_by_documentid",
+        "operationId": "post_collaborator_rpc_documentId",
+        "summary": "CollabRPC is the collaborative-markup snapshot plane the Team editor speaks.",
+        "description": "CollabRPC is the collaborative-markup snapshot plane the Team editor speaks.\ncreateContent stores a document field's markup at a fresh, immutable blob ref\nand returns it, updateContent stores a new snapshot and answers nothing, and\ngetContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it.\nAn unknown workspace, another tenant's workspace and a workspace the caller is\nnot in all answer the same 404, so a probe learns nothing about what exists.",
         "parameters": [
           {
             "name": "documentId",
             "in": "path",
             "required": true,
+            "description": "DocumentID addresses the document field, as\n\"\u003cworkspaceUuid\u003e|\u003cobjectClass\u003e|\u003cobjectId\u003e|\u003cobjectAttr\u003e\" — the\ncollaborator-client encodeDocumentId shape, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "6579…|tracker:class:Issue|issue-1|description"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "documentId": "6579…|tracker:class:Issue|issue-1|description",
+                "method": "getContent",
+                "payload": {
+                  "source": "issue-1-description-1730000000000"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/collabRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/collabResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/team/account": {
@@ -83,9 +116,23 @@
     "/v1/team/account/cookie": {
       "delete": {
         "operationId": "delete_v1_team_account_cookie",
+        "summary": "ClearCookie signs this browser out of team.",
+        "description": "ClearCookie signs this browser out of team.\nIt expires the HttpOnly account-token cookie the OAuth callback set, is the\ncounterpart of the cookie PUT, and takes nothing — the cookie it clears is\nnamed by this service, never by the caller.\nIt is unconditional: a caller with no cookie, an expired one or a forged one\nall get the same acknowledgement, because clearing something that is not there\nis the same outcome as clearing something that is.\n\nIt clears ONLY the team session cookie.\nThe IAM access-token cookie the same callback set is a different credential\nwith a different lifetime and is left alone, so this is a team sign-out, not a\nplatform one.",
         "tags": [
           "team"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cookieAck"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_team_account_cookie",
@@ -97,17 +144,62 @@
     "/v1/team/account/providers": {
       "get": {
         "operationId": "get_v1_team_account_providers",
+        "summary": "ListProviders returns the identity providers a login may start with.",
+        "description": "ListProviders returns the identity providers a login may start with.\nIt is always exactly one — hanzo.id.\nWhich identities that door accepts (Google, GitHub, passkey, password) is\nIAM's question, answered on IAM's own page next to the identity check and the\ntraining-data consent that must precede a first session; listing them here\nwould be a second place holding that answer, and the two drift the moment IAM\ngains or drops one.",
         "tags": [
           "team"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": [
+                  {
+                    "displayName": "Hanzo",
+                    "name": "openid"
+                  }
+                ],
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderInfo"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/team/billing/plan": {
       "get": {
         "operationId": "get_v1_team_billing_plan",
+        "summary": "ReadPlan returns the plan and seat counts for the caller's OWN org.",
+        "description": "ReadPlan returns the plan and seat counts for the caller's OWN org.\nThe org is resolved from the VERIFIED team session token, never a client\nheader, and seats and guests are its distinct active human members (a bot\nmember is not a seat).\nThe plan comes from the licensing entitlement and is empty when that read is\nunavailable, so the page shows an honest dash rather than a fabricated tier.\nA caller with no verified session gets 401, and a real seat-read failure is a\n502 rather than a false \"0 members\".",
         "tags": [
           "team"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "active": true,
+                  "guestLimit": 3,
+                  "guests": 1,
+                  "plan": "pro",
+                  "seats": 3,
+                  "upgradeUrl": "https://billing.hanzo.ai"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/planInfo"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/team/billing/ui": {
@@ -139,17 +231,45 @@
     "/v1/team/bots": {
       "get": {
         "operationId": "get_v1_team_bots",
+        "summary": "ListBots returns the caller org's bot members.",
+        "description": "ListBots returns the caller org's bot members.\nEach row is one of the org's agents projected as the workspace Employee it\nbecomes, carrying the member account uuid and Person reference the roster\naddresses it by.\nAn agents subsystem that is not mounted answers an empty list, never an\nerror.",
         "tags": [
           "team"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/botRoster"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/team/bots/sync": {
       "post": {
         "operationId": "post_v1_team_bots_sync",
+        "summary": "SyncBots re-projects the caller org's agents into every workspace it owns.",
+        "description": "SyncBots re-projects the caller org's agents into every workspace it owns.\nRoster entries whose agent is gone are removed, so the reconcile is\nidempotent, and it answers how many entries it touched.\nIt is admin only: mutating a workspace's roster requires the gateway-minted\nadmin flag, which a client can never forge.",
         "tags": [
           "team"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/botSync"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/team/files/{workspace}": {
@@ -172,7 +292,9 @@
     },
     "/v1/team/files/{workspace}/{filename}": {
       "delete": {
-        "operationId": "delete_v1_team_files_by_workspace_by_filename",
+        "operationId": "delete_v1_team_files_workspace_filename",
+        "summary": "DeleteBlob removes one blob from a workspace's file store.",
+        "description": "DeleteBlob removes one blob from a workspace's file store.\nThe caller must hold a verified session AND be a member of the workspace;\nanything else — an unknown workspace, another tenant's workspace, a workspace\nthe caller is not in — answers the same 404, so a probe learns nothing about\nwhat exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op.\nA storage backend that is unavailable fails closed with 502 rather than lying\nabout success.",
         "tags": [
           "team"
         ],
@@ -181,19 +303,37 @@
             "name": "workspace",
             "in": "path",
             "required": true,
+            "description": "Workspace is the workspace uuid the blob belongs to, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "6579…"
           },
           {
             "name": "filename",
             "in": "path",
             "required": true,
+            "description": "Filename is the last path segment, which the front sets to the blob id\nwhen it sends no explicit `file`.",
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "description": "File is the blob id, and wins over the path segment when both are present.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "0d4f…"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
         "operationId": "get_v1_team_files_by_workspace_by_filename",
@@ -223,17 +363,69 @@
     "/v1/team/transactor/api/v1/statistics": {
       "get": {
         "operationId": "get_v1_team_transactor_api_v1_statistics",
+        "summary": "Statistics returns the transactor's live sessions for the caller's workspace.",
+        "description": "Statistics returns the transactor's live sessions for the caller's workspace.\nIt is the endpoint the front's workspace switcher and server panel poll on the\ntransactor base, and the token is verified exactly like the WebSocket upgrade\nis.\nactiveSessions carries ONLY that token's own workspace, never another tenant's\nsessions, and an invalid or expired token is 401.",
         "tags": [
           "team"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "description": "Token is the workspace token minted by selectWorkspace.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "eyJhbGciOiJIUzI1NiJ9…"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/statsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/team/transactor/statistics": {
       "get": {
         "operationId": "get_v1_team_transactor_statistics",
+        "summary": "Statistics returns the transactor's live sessions for the caller's workspace.",
+        "description": "Statistics returns the transactor's live sessions for the caller's workspace.\nIt is the endpoint the front's workspace switcher and server panel poll on the\ntransactor base, and the token is verified exactly like the WebSocket upgrade\nis.\nactiveSessions carries ONLY that token's own workspace, never another tenant's\nsessions, and an invalid or expired token is 401.",
         "tags": [
           "team"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "description": "Token is the workspace token minted by selectWorkspace.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "eyJhbGciOiJIUzI1NiJ9…"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/statsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/team/transactor/{token}": {
@@ -252,6 +444,208 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ProviderInfo": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "botMember": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "id": {
+            "description": "the agent id",
+            "type": "string"
+          },
+          "name": {
+            "description": "display name",
+            "type": "string"
+          },
+          "personRef": {
+            "description": "the projected Person _id",
+            "type": "string"
+          },
+          "userId": {
+            "description": "derived member account uuid (personUuid)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "botRoster": {
+        "properties": {
+          "bots": {
+            "description": "Bots is every agent of the caller's org, projected as a workspace member.",
+            "items": {
+              "$ref": "#/components/schemas/botMember"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "botSync": {
+        "properties": {
+          "projected": {
+            "description": "Projected is how many roster entries the reconcile touched.",
+            "type": "integer"
+          },
+          "synced": {
+            "description": "Synced is true when the reconcile ran.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "collabPayload": {
+        "properties": {
+          "content": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Content maps a document field to its ProseMirror markup JSON.",
+            "type": "object"
+          },
+          "source": {
+            "description": "Source is the blob ref a getContent reads the snapshot from. Absent means\nthere is no snapshot to read, which answers empty content.",
+            "type": "string"
+          },
+          "updates": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Updates carries, per field, a base64 Y.js state update encoding the SAME\nmarkup — the front computes it (markupToYDoc → encodeStateAsUpdate) so a\ncreateContent seeds the live-editing lane's update log, not just the\nsnapshot blob. Without it a dialog-created description is invisible in the\ncollaborative editor, which replays the ydoc log, never the snapshot.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "collabRequest": {
+        "properties": {
+          "documentId": {
+            "description": "DocumentID addresses the document field, as\n\"\u003cworkspaceUuid\u003e|\u003cobjectClass\u003e|\u003cobjectId\u003e|\u003cobjectAttr\u003e\" — the\ncollaborator-client encodeDocumentId shape, from the path.",
+            "type": "string"
+          },
+          "method": {
+            "description": "Method is the verb: createContent, updateContent or getContent.",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/collabPayload",
+            "description": "Payload is the verb's argument."
+          }
+        },
+        "type": "object"
+      },
+      "collabResult": {
+        "properties": {
+          "content": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Content maps each document field to its value for the verb: the new blob\nref after a createContent, the stored markup after a getContent.",
+            "type": "object"
+          },
+          "error": {
+            "description": "Error carries a SEMANTIC refusal, which this RPC reports under 200 because\nthe client throws on result.error — auth and tenancy failures are HTTP\nstatuses instead.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "cookieAck": {
+        "properties": {
+          "result": {
+            "description": "Result is true when the cookie was written or cleared.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "planInfo": {
+        "properties": {
+          "active": {
+            "description": "Active is whether that plan's entitlement is live.",
+            "type": "boolean"
+          },
+          "guestLimit": {
+            "description": "GuestLimit is the plan's team.guests cap, when the plan carries one.",
+            "type": "integer"
+          },
+          "guests": {
+            "description": "Guests is how many of those seats are guests.",
+            "type": "integer"
+          },
+          "plan": {
+            "description": "Plan is the licensed plan id, empty when it cannot be resolved here — an\nhonest dash on the page, never a fabricated tier.",
+            "type": "string"
+          },
+          "seats": {
+            "description": "Seats is the org's distinct active human members.",
+            "type": "integer"
+          },
+          "upgradeUrl": {
+            "description": "UpgradeURL is where the page sends a caller who wants a bigger plan.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "statsOut": {
+        "properties": {
+          "admin": {
+            "description": "Admin is the upstream service's server-panel flag, always false here.",
+            "type": "boolean"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Metrics is the upstream service's metrics block, which this server does\nnot populate.",
+            "type": "object"
+          },
+          "statistics": {
+            "$ref": "#/components/schemas/statsSessions",
+            "description": "Statistics carries the live sessions."
+          }
+        },
+        "type": "object"
+      },
+      "statsSessions": {
+        "properties": {
+          "activeSessions": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/statsUser"
+              },
+              "type": "array"
+            },
+            "description": "ActiveSessions maps a workspace uuid to its connected sessions. It carries\nonly the token's OWN workspace, and is empty for a token that names none.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "statsUser": {
+        "properties": {
+          "userId": {
+            "description": "UserID is the account the session is authenticated as.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

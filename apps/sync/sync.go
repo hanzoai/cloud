@@ -13,13 +13,23 @@
 //
 // Triggers (GitHub App webhook, Hanzo Git push webhook) resolve to Syncs and call
 // cloud.Sync — they never sync directly, so the engine is the single seam.
+//
+// EVERY ROUTE IS A TYPED OP (zip.Get/Post/Patch/Delete with concrete In/Out
+// structs), so REST, the OpenAPI document, the MCP tool list and the CLI all derive
+// from the one registration. Handler prose is lifted into the spec at build time by
+// cmd/zipdoc.
 package sync
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"sync/atomic"
 
 	"github.com/hanzoai/cloud"
+	"github.com/zap-proto/zip"
 )
 
 // state is the subsystem's mounted state: the per-org syncs store cache.
@@ -92,20 +102,45 @@ func Shutdown() error {
 // one word "sync". Org-scoped like every tenant surface (the gateway-validated
 // principal selects the org).
 //
-// Every handler is wrapped in cloud.Terminal: sync mounts AFTER the commerce embed,
-// whose /v1 ErrorHandlerJSON filter flattens any PROPAGATED handler error to HTTP
-// 500. Terminal writes the reject status (401 no-principal, 400 bad body, 404
-// not-found) in-band, so the filter has nothing to flatten and the real 4xx stands.
+// Two middlewares go on FIRST — fiber runs them in registration order, so one
+// installed after these leaves would never run:
+//
+//   - terminal, because sync mounts AFTER the commerce embed, whose /v1
+//     ErrorHandlerJSON filter flattens any PROPAGATED handler error to HTTP 500. It
+//     writes the reject status (401 no-principal, 400 bad body, 404 not-found)
+//     in-band, so the filter has nothing to flatten and the real 4xx stands. A typed
+//     op is registered by zip, not wrapped by hand, so the guard is group-wide.
+//   - cloud.Bridge, because a typed op is handed only a context and reads its
+//     validated org off the value the bridge parks there.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Collection endpoints sit AT the group root (/v1/sync). Group(p).Method("")
-	// yields "p/", so these stay flat on app to preserve the exact path.
-	app.Post("/v1/sync", cloud.Terminal(cloud.Handle(s, createSync)))
-	app.Get("/v1/sync", cloud.Terminal(cloud.Handle(s, listSyncs)))
-	g := app.Group("/v1/sync")
-	g.Get("/:id", cloud.Terminal(cloud.Handle(s, getSync)))
-	g.Patch("/:id", cloud.Terminal(cloud.Handle(s, patchSync)))
-	g.Delete("/:id", cloud.Terminal(cloud.Handle(s, deleteSync)))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	app.Group("/v1/sync").Use(terminal, cloud.Bridge())
+
+	// Collection endpoints sit AT the group root (/v1/sync); a typed op takes the
+	// ABSOLUTE path, so every registration below spells it in full.
+	zip.Post(z, "/v1/sync", o.createSync)
+	zip.Get(z, "/v1/sync", o.listSyncs)
+	zip.Get(z, "/v1/sync/:id", o.getSync)
+	zip.Patch(z, "/v1/sync/:id", o.patchSync)
+	zip.Delete(z, "/v1/sync/:id", o.deleteSync)
 	// Manual run: reconcile one sync now (initial import, or a re-sync after an
 	// upstream you couldn't webhook). A distinct trailing segment, never shadows :id.
-	g.Post("/:id/run", cloud.Terminal(cloud.Handle(s, runSync)))
+	zip.Post(z, "/v1/sync/:id/run", o.runSync, zip.WithStatus(http.StatusAccepted))
+}
+
+// terminal writes a returned *zip.HTTPError in-band — the cloud.Terminal contract as
+// group middleware, which is the only form a typed op can carry (zip owns the route's
+// handler). Without it every 4xx below would reach the commerce /v1 ErrorHandlerJSON
+// as a propagated error and come back a 500.
+func terminal(c *zip.Ctx) error {
+	err := c.Continue()
+	var he *zip.HTTPError
+	if errors.As(err, &he) {
+		if he.Status == 0 {
+			he.Status = http.StatusInternalServerError
+		}
+		return c.JSON(he.Status, he)
+	}
+	return err
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	luxlog "github.com/luxfi/log"
-	"github.com/zap-proto/zip"
 )
 
 // The Hanzo L1 EVM anchor. The treasury's books live off-chain (Base/SQLite), so to
@@ -93,32 +92,43 @@ func (a *anchorer) signerKeyHex() string {
 	return strings.TrimSpace(os.Getenv("TREASURY_ANCHOR_SIGNER_KEY"))
 }
 
-// anchorStatus is the anchor view embedded in GET /v1/admin/treasury and returned by
+// AnchorStatus is the anchor view embedded in GET /v1/admin/treasury and returned by
 // POST /v1/admin/treasury/anchor.
-type anchorStatus struct {
-	ChainID          int64  `json:"chainId"`
-	RPCConfigured    bool   `json:"rpcConfigured"`
-	SignerConfigured bool   `json:"signerConfigured"`
-	Contract         string `json:"contract,omitempty"`
-	CurrentRoot      string `json:"currentRoot"` // 0x… root of the journal as it stands now
-	EntryCount       int    `json:"entryCount"`
-	Status           string `json:"status"` // pending | anchored | error
-	Note             string `json:"note"`
-	// The last committed on-chain anchor (nil-fields until the first successful submit).
-	LastRoot   string `json:"lastRoot,omitempty"`
+type AnchorStatus struct {
+	// ChainID is the Hanzo L1 chain the root is committed to.
+	ChainID int64 `json:"chainId"`
+	// RPCConfigured and SignerConfigured report which half of the chain path is wired.
+	RPCConfigured    bool `json:"rpcConfigured"`
+	SignerConfigured bool `json:"signerConfigured"`
+	// Contract is the deployed anchor contract address, empty until deployed.
+	Contract string `json:"contract,omitempty"`
+	// CurrentRoot is the 0x… root of the journal as it stands now.
+	CurrentRoot string `json:"currentRoot"`
+	// EntryCount is how many journal entries the current root covers.
+	EntryCount int `json:"entryCount"`
+	// Status is pending, anchored or error.
+	Status string `json:"status"`
+	// Note states the remaining step, in plain words.
+	Note string `json:"note"`
+	// LastRoot is the last root committed on-chain; empty before the first submit.
+	LastRoot string `json:"lastRoot,omitempty"`
+	// LastTxHash is that commit's transaction hash.
 	LastTxHash string `json:"lastTxHash,omitempty"`
-	LastBlock  uint64 `json:"lastBlock,omitempty"`
-	LastAt     int64  `json:"lastAt,omitempty"`
-	Synced     bool   `json:"synced"` // true when the last anchored root == the current root
+	// LastBlock is the block it landed in.
+	LastBlock uint64 `json:"lastBlock,omitempty"`
+	// LastAt is when it landed, unix seconds.
+	LastAt int64 `json:"lastAt,omitempty"`
+	// Synced is true when the last anchored root equals the current root.
+	Synced bool `json:"synced"`
 }
 
 // status computes the current ledger root and reports whether the chain path is
 // wired + the last committed anchor. It never fabricates an anchored state. The root
 // is computed over WHICHEVER backend is the ledger of record (native or Formance) via
 // the shared ledger.Backend port, so the anchor is backend-agnostic.
-func (a *anchorer) status(ctx context.Context, b ledger.Backend) anchorStatus {
+func (a *anchorer) status(ctx context.Context, b ledger.Backend) AnchorStatus {
 	root, count, err := b.Root(ctx)
-	st := anchorStatus{
+	st := AnchorStatus{
 		ChainID:          a.chainID,
 		RPCConfigured:    a.rpcURL != "",
 		SignerConfigured: a.signerKeyHex() != "",
@@ -153,15 +163,29 @@ func (a *anchorer) status(ctx context.Context, b ledger.Backend) anchorStatus {
 	return st
 }
 
-// adminAnchor answers POST /v1/admin/treasury/anchor — commit the current ledger
-// root to Hanzo L1. SuperAdmin only. When the chain path is wired it signs +
-// submits the anchor tx and records it; otherwise it returns the root that WOULD be
-// committed plus the exact remaining step (honest, records nothing false).
-func adminAnchor(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// AnchorData wraps the anchor status a commit answers with.
+type AnchorData struct {
+	// Anchor is the anchor status after the attempt.
+	Anchor AnchorStatus `json:"anchor"`
+}
+
+// AnchorOut is the admin envelope around an anchor commit.
+type AnchorOut struct {
+	Status string      `json:"status"`
+	Msg    string      `json:"msg"`
+	Data   *AnchorData `json:"data"`
+}
+
+// anchor commits the current ledger root to Hanzo L1. It answers with the anchor
+// status. SuperAdmin only. When the chain path is wired it signs and submits the
+// anchor transaction and records it; otherwise it reports the root that WOULD be
+// committed plus the exact remaining step, and records nothing false. A failed submit
+// answers status=error with the reason rather than a fabricated anchored state.
+func (o ops) anchor(ctx context.Context, _ *struct{}) (*AnchorOut, error) {
+	if _, err := admit(ctx); err != nil {
+		return nil, err
 	}
-	ctx := c.Context()
+	s := o.s
 	if s.State.anchor.configured() {
 		rec, err := s.State.anchor.submit(ctx, s.State.record)
 		if err != nil {
@@ -169,11 +193,11 @@ func adminAnchor(s *cloud.Service[state], c *zip.Ctx) error {
 			st := s.State.anchor.status(ctx, s.State.record)
 			st.Status = "error"
 			st.Note = "submit: " + err.Error()
-			return adminOK(c, map[string]any{"anchor": st})
+			return &AnchorOut{Status: "ok", Data: &AnchorData{Anchor: st}}, nil
 		}
 		emitAudit(s, ctx, "treasury.anchor", "", rec.TxHash, map[string]any{
 			"root": rec.Root, "txHash": rec.TxHash, "block": rec.Block, "chainId": s.State.anchor.chainID,
 		})
 	}
-	return adminOK(c, map[string]any{"anchor": s.State.anchor.status(ctx, s.State.record)})
+	return &AnchorOut{Status: "ok", Data: &AnchorData{Anchor: s.State.anchor.status(ctx, s.State.record)}}, nil
 }

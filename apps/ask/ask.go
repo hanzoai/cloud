@@ -30,8 +30,22 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/answer"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// POST /v1/ask declares its body and its advisor reply through the schema-only
+// bridge rather than as a typed op. Two of its behaviours need the live request,
+// which a typed handler — func(context.Context, *In) (*Out, error) — never
+// holds: a web-mode question STREAMS the SearchEvent envelope as SSE, and a
+// caller who is out of funds or over a spend cap is answered with the shared
+// `{error:{code,message}}` envelope written straight onto the response
+// (cloud.DenyResource). The body is exactly AskRequest on every path; the
+// declared reply is the figure advisor's AskResponse, which is what the route
+// answers whenever mode names no web domain.
+func init() {
+	openapi.Register("/v1/ask", "POST", AskRequest{}, AskResponse{})
+}
 
 // state is the advisor's own data: the contributor registry (the plug-in domains) and the
 // NARRATION-ONLY model seam. ai + model rephrase the grounded facts more naturally; they NEVER

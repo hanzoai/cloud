@@ -19,25 +19,116 @@
     "/v1/books/accounts": {
       "get": {
         "operationId": "get_v1_books_accounts",
+        "summary": "ListAccounts returns the org's chart of accounts.",
+        "description": "ListAccounts returns the org's chart of accounts.\nIt is the seeded fixed chart every posting key in the ledger refers to.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\"; anything else\nreads the live one.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "false"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Account"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/ask": {
       "post": {
         "operationId": "post_v1_books_ask",
+        "summary": "AskBooks answers a plain-language question about the caller's own books — \"what is my\nMRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed\nnumber.",
+        "description": "AskBooks answers a plain-language question about the caller's own books — \"what is my\nMRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed\nnumber. A deterministic keyword router picks the intent and reads the real metrics, and\nthose figures, followups and report sources are computed BEFORE any model call and are\nnever altered by one: the optional narration seam only rephrases the sentence, and it\ndegrades silently to the templated answer when no AI plane is wired. It is strictly\nread-only — it restates the books, it never posts to them.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "question": "how long is my runway?"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/balance-sheet": {
       "get": {
         "operationId": "get_v1_books_balance-sheet",
+        "summary": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time).",
+        "description": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time).\nIt carries the Assets == Liabilities + Equity equation proof.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the RFC3339 instant the statement is struck as of. Empty means all time.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-03-31T23:59:59Z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceSheet"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/bank/exchange": {
@@ -67,49 +158,265 @@
     "/v1/books/bank/sync": {
       "post": {
         "operationId": "post_v1_books_bank_sync",
+        "summary": "SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each\nfetched transaction to a posting and books it idempotently, then advances that\nconnector's cursor so the next sync resumes where this one stopped.",
+        "description": "SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each\nfetched transaction to a posting and books it idempotently, then advances that\nconnector's cursor so the next sync resumes where this one stopped. One connector's\noutage is skipped rather than failing the whole sync. It reports the batch: how many\ntransactions were seen, how many vouchers posted, how many inflows reconciled against\nthe processor clearing account, how many raised a question, how many were own-account\ntransfers, and how many were already-processed no-ops. It is READ-ONLY against the\nbank — it ingests, it never sends money.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/syncIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankTally"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/bank/transactions": {
       "get": {
         "operationId": "get_v1_books_bank_transactions",
+        "summary": "ListBankTransactions returns the org's normalized bank transactions, newest first.",
+        "description": "ListBankTransactions returns the org's normalized bank transactions, newest first.\nEvery row the import and connector paths have ingested is here, with its amount in\nexact cents, its direction, and whether it has been matched to a voucher yet.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many rows come back; 500 when absent or not positive.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BankTxnRow"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/bank/unreconciled": {
       "get": {
         "operationId": "get_v1_books_bank_unreconciled",
+        "summary": "ListUnreconciled returns the org's unmatched bank inflows and their open questions.",
+        "description": "ListUnreconciled returns the org's unmatched bank inflows and their open questions.\nIt is the queue a human answers so an unexplained deposit is never guessed into\nrevenue.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\"; anything else\nreads the live one.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "false"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/unreconciledOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/export": {
       "get": {
         "operationId": "get_v1_books_export",
+        "summary": "ExportPackage returns the complete financial package for the caller's org.",
+        "description": "ExportPackage returns the complete financial package for the caller's org.\nOver (from, to] it assembles the trial balance, the P\u0026L, the balance sheet and the\nGL detail behind them — the four statements a tax preparer or an investor asks\nfor, read out of the one ledger at once so they cannot disagree with each other.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "From is the RFC3339 start of the window, exclusive. Empty means all time.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-01-01T00:00:00Z"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the RFC3339 end of the window, inclusive. Empty means up to now.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-12-31T23:59:59Z"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "description": "Format is the export encoding. Only \"json\" is supported; empty means json.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "json"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the GL detail rows included as the audit trail; 5000 when absent\nor not positive.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialPackage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/gl": {
       "get": {
         "operationId": "get_v1_books_gl",
+        "summary": "ListGL returns the org's most recent GL Entry rows, newest first.",
+        "description": "ListGL returns the org's most recent GL Entry rows, newest first. This is the raw\ndouble-entry detail behind every statement: one row per leg, with its debit, credit,\nposting time and the source that booked it.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many rows come back; 500 when absent or not positive.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GLRow"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/inbox": {
       "get": {
         "operationId": "get_v1_books_inbox",
+        "summary": "ListInbox returns the org's open document queue — everything uploaded but not yet\nbooked, newest first, each with its extracted summary and the confidence the scanner\nresolved its category at.",
+        "description": "ListInbox returns the org's open document queue — everything uploaded but not yet\nbooked, newest first, each with its extracted summary and the confidence the scanner\nresolved its category at. A booked document drops out of the queue.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\"; anything else\nreads the live one.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "false"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/inboxOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_books_inbox",
@@ -129,31 +436,157 @@
     "/v1/books/pnl": {
       "get": {
         "operationId": "get_v1_books_pnl",
+        "summary": "ProfitAndLoss returns the org's accrual-basis Profit \u0026 Loss.",
+        "description": "ProfitAndLoss returns the org's accrual-basis Profit \u0026 Loss.\nThe optional (from, to] window is RFC3339 posting times; the answer is recognized\nrevenue, matched cost, and the net.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "From is the RFC3339 start of the window, exclusive. Empty means all time.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-01-01T00:00:00Z"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the RFC3339 end of the window, inclusive. Empty means up to now.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-03-31T23:59:59Z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PnL"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/questions": {
       "get": {
         "operationId": "get_v1_books_questions",
+        "summary": "ListQuestions returns the clarifying questions the caller's own recent GL raises — the\nunusual postings a founder should look at (outliers, reversals, round-offs, uncosted\nrevenue, an overdrawn wallet), sharpest first.",
+        "description": "ListQuestions returns the clarifying questions the caller's own recent GL raises — the\nunusual postings a founder should look at (outliers, reversals, round-offs, uncosted\nrevenue, an overdrawn wallet), sharpest first. An empty list means the books look clean;\nthe detector is deterministic over the ledger and invents nothing.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\"; anything else\nreads the live one.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "false"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionsResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/rules": {
       "get": {
         "operationId": "get_v1_books_rules",
+        "summary": "ListRules returns the org's auto-categorization rules, highest priority first.",
+        "description": "ListRules returns the org's auto-categorization rules, highest priority first. A rule\nis a standing instruction — \"anything whose merchant contains X books to category Y\" —\nand it overrides a vendor's default category, so this is the list that decides how a\nfuture bill classifies itself.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\"; anything else\nreads the live one.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "false"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/rulesOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_books_rules",
+        "summary": "UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —\nwriting a pattern that already exists REPLACES that row's category and priority.",
+        "description": "UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —\nwriting a pattern that already exists REPLACES that row's category and priority. The\ncategory is normalized to a real COA expense account, and anything unrecognized becomes\n5900 Uncategorized rather than a guessed real account. It answers the row exactly as\nstored, so the caller sees the normalization. A rule overrides a vendor's default\ncategory, so this is the standing instruction that decides how a future bill classifies.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "category": "cloud",
+                "pattern": "aws",
+                "priority": 5
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Rule"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/scan": {
@@ -167,47 +600,1026 @@
     "/v1/books/scan/book": {
       "post": {
         "operationId": "post_v1_books_scan_book",
+        "summary": "BookScan posts a reviewed scanned bill to the ledger.",
+        "description": "BookScan posts a reviewed scanned bill to the ledger. It is the scanner's ONLY write:\nthe voucher goes through the same post() choke point every other source uses, so it is\nchecked to balance (Σdebit == Σcredit) and is idempotent by (scan, scanId) — re-booking\nthe same scan answers posted=false and writes nothing. A bill whose economic identity\n(vendor, total, issue date) already posted under a DIFFERENT scan is refused 409 unless\noverride is set, which is what stops the same receipt re-scanned into a new file hash\nfrom double-booking. An unbalanced voucher is refused 400.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "scanId": "a5f3c1",
+                "voucher": {
+                  "description": "GitHub",
+                  "legs": [
+                    {
+                      "account": "5300",
+                      "debit": 1234
+                    },
+                    {
+                      "account": "2001",
+                      "credit": 1234
+                    }
+                  ]
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/BookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/sync": {
       "post": {
         "operationId": "post_v1_books_sync",
+        "summary": "Sync ingests the caller's OWN org from commerce into BOTH ledgers (live and sandbox)\nand reports how many new vouchers posted to each.",
+        "description": "Sync ingests the caller's OWN org from commerce into BOTH ledgers (live and sandbox)\nand reports how many new vouchers posted to each. It is idempotent — money that has\nalready been booked posts nothing on a repeat — and it is read-only against commerce:\nit never mints a deposit, a credit or a payout, only the accounting twin of money that\nalready moved.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/syncIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/syncTally"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/transactions": {
       "get": {
         "operationId": "get_v1_books_transactions",
+        "summary": "ListTransactions returns the org's booked ledger as a single-line register, newest\nfirst: one row per voucher, with its date, description, vendor, category, source and\namount in exact cents.",
+        "description": "ListTransactions returns the org's booked ledger as a single-line register, newest\nfirst: one row per voucher, with its date, description, vendor, category, source and\namount in exact cents. It is the double-entry ledger projected to the register a human\nreads, filterable by posting-time window, category and vendor. Strictly read-only — it\nrestates the books, it never moves them.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "From is the RFC3339 start of the posting-time window, inclusive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the RFC3339 end of the posting-time window, inclusive.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Category filters to one COA account, named by number (\"5300\") or by category\nslug (\"software\").",
+            "schema": {
+              "type": "string"
+            },
+            "example": "software"
+          },
+          {
+            "name": "vendor",
+            "in": "query",
+            "required": false,
+            "description": "Vendor filters to rows whose vendor or description contains this text,\ncase-insensitively.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many rows come back; 200 when absent or not positive.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/transactionsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/trial-balance": {
       "get": {
         "operationId": "get_v1_books_trial-balance",
+        "summary": "TrialBalance returns the org's trial balance over an optional [from, to] window.",
+        "description": "TrialBalance returns the org's trial balance over an optional [from, to] window.\nThe window is RFC3339 posting times, and the answer carries the opening/closing\ncolumns and the TotalDebit == TotalCredit proof that the books balance.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "From is the RFC3339 start of the window, exclusive. Empty means all time.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-01-01T00:00:00Z"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the RFC3339 end of the window, inclusive. Empty means up to now.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-03-31T23:59:59Z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialBalance"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/vendors": {
       "get": {
         "operationId": "get_v1_books_vendors",
+        "summary": "ListVendors returns the org's vendor book: each canonical vendor, the alias spellings a\nreceipt may print it under, and the expense account new bills from it default to.",
+        "description": "ListVendors returns the org's vendor book: each canonical vendor, the alias spellings a\nreceipt may print it under, and the expense account new bills from it default to. A\nvendor here is what makes a scanned bill self-classify instead of asking again.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\"; anything else\nreads the live one.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "false"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/vendorsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_books_vendors",
+        "summary": "UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category.",
+        "description": "UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category. A category given as a slug (\"software\") is normalized to\nits real COA expense account, and anything unrecognized becomes 5900 Uncategorized\nrather than a guessed real account. It answers the row exactly as stored, so the caller\nsees the normalization. Recording a vendor is what makes future bills from it\nself-classify instead of asking again.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "aliases": [
+                  "github.com"
+                ],
+                "canonical": "GitHub",
+                "defaultCategory": "software"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/VendorRow"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendorRow"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Account": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "party": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AskRequest": {
+        "properties": {
+          "from": {
+            "description": "From is the RFC3339 start of the metric window. Empty means all time, treated as a\nsingle reporting period (see monthsBetween).",
+            "type": "string"
+          },
+          "question": {
+            "description": "Question is the plain-language question about the org's books, e.g. \"what is my\nMRR?\". Longer than 2000 characters is truncated, never refused.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the RFC3339 end of the metric window. Empty means up to now.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AskResponse": {
+        "properties": {
+          "answer": {
+            "description": "Answer is one or two sentences answering the question, every number in it taken\nfrom Figures.",
+            "type": "string"
+          },
+          "figures": {
+            "description": "Figures are the grounded numbers the answer states, each already formatted.",
+            "items": {
+              "$ref": "#/components/schemas/Figure"
+            },
+            "type": "array"
+          },
+          "followups": {
+            "description": "Followups are sharper questions to ask next, chosen from the same intent.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "description": "Sources name the books reports the figures were computed from — \"pnl\",\n\"balance-sheet\", \"trial-balance\".",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "BalanceLine": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "amount": {
+            "description": "cents, display sign",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BalanceSheet": {
+        "properties": {
+          "asOf": {
+            "type": "string"
+          },
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceLine"
+            },
+            "type": "array"
+          },
+          "balanced": {
+            "description": "TotalAssets == TotalLiabilities + TotalEquity",
+            "type": "boolean"
+          },
+          "equity": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceLine"
+            },
+            "type": "array"
+          },
+          "liabilities": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceLine"
+            },
+            "type": "array"
+          },
+          "totalAssets": {
+            "type": "integer"
+          },
+          "totalEquity": {
+            "type": "integer"
+          },
+          "totalLiabilities": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "BankQuestion": {
+        "properties": {
+          "connector": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BankTally": {
+        "properties": {
+          "ingested": {
+            "description": "transactions seen",
+            "type": "integer"
+          },
+          "posted": {
+            "description": "vouchers newly posted (outflow + reconciled)",
+            "type": "integer"
+          },
+          "questions": {
+            "description": "unmatched inflows that raised a question",
+            "type": "integer"
+          },
+          "reconciled": {
+            "description": "inflows cleared against Square-clearing",
+            "type": "integer"
+          },
+          "skipped": {
+            "description": "already-processed idempotent no-ops",
+            "type": "integer"
+          },
+          "transfers": {
+            "description": "own-account moves recorded (no P\u0026L)",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "BankTxnRow": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "connector": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "matchedVoucher": {
+            "type": "string"
+          },
+          "merchant": {
+            "type": "string"
+          },
+          "postedAt": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BookRequest": {
+        "properties": {
+          "override": {
+            "description": "Override books this bill even when one of the SAME economic identity\n(vendor, total, issue date) already posted — the explicit human confirmation that a\nsame-looking bill is a genuine second spend, not the same receipt re-scanned.",
+            "type": "boolean"
+          },
+          "scanId": {
+            "description": "ScanID is the scanned document's file hash, as GET /v1/books/inbox and the scan\ndraft report it. It is the idempotency key: re-booking the same scan writes nothing.",
+            "type": "string"
+          },
+          "voucher": {
+            "$ref": "#/components/schemas/Voucher",
+            "description": "Voucher is the reviewed voucher to post. Its source is FORCED to (scan, scanId)\nserver-side, so it can never be booked under another source's key."
+          }
+        },
+        "type": "object"
+      },
+      "BookResponse": {
+        "properties": {
+          "posted": {
+            "description": "Posted is true when this call wrote the voucher, false when the same scan had\nalready booked and nothing was written.",
+            "type": "boolean"
+          },
+          "scanId": {
+            "description": "ScanID echoes the scan that was booked.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Extracted": {
+        "properties": {
+          "category": {
+            "description": "proposed slug (software|cloud|office|…)",
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "issuedAt": {
+            "description": "YYYY-MM-DD",
+            "type": "string"
+          },
+          "lineItems": {
+            "items": {
+              "$ref": "#/components/schemas/LineItem"
+            },
+            "type": "array"
+          },
+          "merchant": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "taxCents": {
+            "type": "integer"
+          },
+          "totalCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Figure": {
+        "properties": {
+          "label": {
+            "description": "Label names the metric, e.g. \"MRR\" or \"Runway\".",
+            "type": "string"
+          },
+          "period": {
+            "description": "Period is the window the figure covers, e.g. \"2026-07\" or \"all-time\".",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the figure already formatted through books' own money formatter, so a\nconsumer never re-derives it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "FinancialPackage": {
+        "properties": {
+          "balanceSheet": {
+            "$ref": "#/components/schemas/BalanceSheet"
+          },
+          "from": {
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "gl": {
+            "items": {
+              "$ref": "#/components/schemas/GLRow"
+            },
+            "type": "array"
+          },
+          "org": {
+            "type": "string"
+          },
+          "pnl": {
+            "$ref": "#/components/schemas/PnL"
+          },
+          "to": {
+            "type": "string"
+          },
+          "trialBalance": {
+            "$ref": "#/components/schemas/TrialBalance"
+          }
+        },
+        "type": "object"
+      },
+      "GLRow": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "against": {
+            "type": "string"
+          },
+          "credit": {
+            "type": "integer"
+          },
+          "debit": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "postingAt": {
+            "type": "string"
+          },
+          "remarks": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "sourceKind": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "InboxItem": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "extracted": {
+            "$ref": "#/components/schemas/Extracted"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "id": {
+            "description": "the file hash (== a scan's ScanID)",
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Leg": {
+        "properties": {
+          "account": {
+            "description": "Account is the chart-of-accounts number this side posts to, e.g. \"5300\".",
+            "type": "string"
+          },
+          "credit": {
+            "description": "Credit is the leg's credit in exact cents. Set this or Debit, not both.",
+            "type": "integer"
+          },
+          "debit": {
+            "description": "Debit is the leg's debit in exact cents. Set this or Credit, not both.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "LineItem": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PnL": {
+        "properties": {
+          "expense": {
+            "items": {
+              "$ref": "#/components/schemas/PnLLine"
+            },
+            "type": "array"
+          },
+          "from": {
+            "type": "string"
+          },
+          "income": {
+            "items": {
+              "$ref": "#/components/schemas/PnLLine"
+            },
+            "type": "array"
+          },
+          "netIncome": {
+            "description": "TotalIncome − TotalExpense",
+            "type": "integer"
+          },
+          "to": {
+            "type": "string"
+          },
+          "totalExpense": {
+            "type": "integer"
+          },
+          "totalIncome": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "PnLLine": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "amount": {
+            "description": "cents, display sign (income \u0026 expense both positive when normal)",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Question": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "amount": {
+            "description": "formatted figure ($…)",
+            "type": "string"
+          },
+          "id": {
+            "description": "the source transaction id it concerns",
+            "type": "string"
+          },
+          "kind": {
+            "description": "outlier|reversal|roundoff|uncosted|overdrawn",
+            "type": "string"
+          },
+          "postedAt": {
+            "type": "string"
+          },
+          "text": {
+            "description": "the specific question to ask the founder",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "QuestionsResponse": {
+        "properties": {
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Rule": {
+        "properties": {
+          "category": {
+            "description": "Category is the COA expense account a matching bill books to. An upsert normalizes\na slug (\"cloud\") to its account number.",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Pattern is the merchant substring the rule matches on, case-insensitively. It is\nalso the key an upsert writes by.",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority breaks ties: when several patterns match, the highest wins.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "TrialBalance": {
+        "properties": {
+          "balanced": {
+            "type": "boolean"
+          },
+          "from": {
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TrialBalanceRow"
+            },
+            "type": "array"
+          },
+          "to": {
+            "type": "string"
+          },
+          "totalCredit": {
+            "type": "integer"
+          },
+          "totalDebit": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "TrialBalanceRow": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "closingCredit": {
+            "type": "integer"
+          },
+          "closingDebit": {
+            "type": "integer"
+          },
+          "credit": {
+            "description": "period movement",
+            "type": "integer"
+          },
+          "debit": {
+            "description": "period movement",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "openingCredit": {
+            "type": "integer"
+          },
+          "openingDebit": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Txn": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "category": {
+            "description": "COA account number of the P\u0026L line",
+            "type": "string"
+          },
+          "categoryName": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "source": {
+            "description": "source_kind: bank_txn | scan | commerce_txn",
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          },
+          "voucherId": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "VendorRow": {
+        "properties": {
+          "aliases": {
+            "description": "Aliases are the other spellings a receipt may print the vendor under; a scan\nmatching any of them resolves to this vendor.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "canonical": {
+            "description": "Canonical is the vendor's one true name, and the key an upsert writes by.",
+            "type": "string"
+          },
+          "defaultCategory": {
+            "description": "DefaultCategory is the COA expense account new bills from this vendor book to.\nAn upsert normalizes a slug (\"software\") to its account number.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Voucher": {
+        "properties": {
+          "description": {
+            "description": "Description is the human line for the event, e.g. the vendor a bill came from.",
+            "type": "string"
+          },
+          "legs": {
+            "description": "Legs are the sides of the posting. They must balance: Σdebit == Σcredit, give or\ntake the 2¢ round-off allowance.",
+            "items": {
+              "$ref": "#/components/schemas/Leg"
+            },
+            "type": "array"
+          },
+          "postingAt": {
+            "description": "PostingAt is the RFC3339 instant the event posts at — the time every statement\nwindow filters on.",
+            "type": "string"
+          },
+          "sourceId": {
+            "description": "SourceID is the source event's own id within that namespace. Together with\nSourceKind it is the key that makes a repeat posting a no-op.",
+            "type": "string"
+          },
+          "sourceKind": {
+            "description": "SourceKind is the idempotency namespace naming what booked this, e.g. \"scan\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "inboxOut": {
+        "properties": {
+          "items": {
+            "description": "Items is every document still unsorted or in draft, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/InboxItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "rulesOut": {
+        "properties": {
+          "rules": {
+            "description": "Rules is every rule the org has set, highest priority first — the order they\nare matched in.",
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "syncIn": {
+        "properties": {},
+        "type": "object"
+      },
+      "syncTally": {
+        "properties": {
+          "live": {
+            "description": "Live is the number of vouchers newly posted to the live ledger.",
+            "type": "integer"
+          },
+          "sandbox": {
+            "description": "Sandbox is the number newly posted to the sandbox ledger.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "transactionsOut": {
+        "properties": {
+          "transactions": {
+            "description": "Transactions is the matching register rows, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/Txn"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "unreconciledOut": {
+        "properties": {
+          "questions": {
+            "description": "Questions is the open clarifying question per unmatched inflow.",
+            "items": {
+              "$ref": "#/components/schemas/BankQuestion"
+            },
+            "type": "array"
+          },
+          "transactions": {
+            "description": "Transactions is every bank row still unmatched against the ledger.",
+            "items": {
+              "$ref": "#/components/schemas/BankTxnRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "vendorsOut": {
+        "properties": {
+          "vendors": {
+            "description": "Vendors is every vendor the org has recorded, canonical name ascending.",
+            "items": {
+              "$ref": "#/components/schemas/VendorRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

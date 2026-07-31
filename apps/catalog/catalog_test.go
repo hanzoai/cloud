@@ -64,9 +64,9 @@ func do(t *testing.T, app *zip.App, method, url, body string, hdr map[string]str
 	return resp.StatusCode, string(out)
 }
 
-func decode(t *testing.T, body string) Response {
+func decode(t *testing.T, body string) CatalogView {
 	t.Helper()
-	var out Response
+	var out CatalogView
 	if err := json.Unmarshal([]byte(body), &out); err != nil {
 		t.Fatalf("decode %q: %v", body, err)
 	}
@@ -82,10 +82,10 @@ func as(org string) map[string]string {
 
 // seed publishes the cross-org corpus through the SAME reconcile the sync uses —
 // there is no publish endpoint to call, which is the point.
-func seed(t *testing.T, rows ...Entry) {
+func seed(t *testing.T, rows ...CatalogEntry) {
 	t.Helper()
 	if len(rows) == 0 {
-		rows = []Entry{
+		rows = []CatalogEntry{
 			{ID: "hanzo/console", Org: "hanzo", Name: "console", Kind: "repo", Archetype: "app", Language: "TypeScript", Description: "the operator console", Forkable: true, Updated: "2026-07-01"},
 			{ID: "lux/node", Org: "lux", Name: "node", Kind: "repo", Archetype: "infra", Language: "Go", Description: "lux blockchain node", Updated: "2026-07-02"},
 			{ID: "zoo/zips", Org: "zoo", Name: "zips", Kind: "site", Archetype: "site", Language: "TypeScript", Description: "zoo improvement proposals", URL: "https://zips.zoo.ngo", Updated: "2026-07-03"},
@@ -180,7 +180,7 @@ func TestForkableIsAskableBothWays(t *testing.T) {
 // not just built in sync.go, they round-trip the store and reach the caller.
 func TestSourceSurvivesTheIndex(t *testing.T) {
 	app := mount(t)
-	seed(t, Entry{
+	seed(t, CatalogEntry{
 		ID: "hanzo/kanban", Org: "hanzo", Name: "kanban", Kind: "site", Archetype: "site",
 		URL: "https://kanban.hanzo.app", Repo: "https://github.com/hanzo-apps/kanban-lane",
 		Template: "hanzo/example-kanban", Forkable: true, Updated: "2026-07-05",
@@ -263,7 +263,7 @@ func TestSyncPrunes(t *testing.T) {
 	app := mount(t)
 	seed(t)
 	kept, pruned, err := reconcile(context.Background(), PublicOrg,
-		[]Entry{{ID: "lux/node", Org: "lux", Name: "node", Kind: "repo", Language: "Go", Updated: "2026-07-09"}})
+		[]CatalogEntry{{ID: "lux/node", Org: "lux", Name: "node", Kind: "repo", Language: "Go", Updated: "2026-07-09"}})
 	if err != nil || kept != 1 || pruned != 2 {
 		t.Fatalf("re-sync: kept=%d pruned=%d err=%v; want 1/2", kept, pruned, err)
 	}
@@ -292,17 +292,17 @@ func mustGetH(t *testing.T, app *zip.App, url string, hdr map[string]string) str
 func TestProvenanceReachesTheAPI(t *testing.T) {
 	app := mount(t)
 	seed(t,
-		Entry{ID: "hanzo/ex-kanban", Org: "hanzo", Name: "ex-kanban", Kind: "site",
+		CatalogEntry{ID: "hanzo/ex-kanban", Org: "hanzo", Name: "ex-kanban", Kind: "site",
 			Forkable: true, Updated: "2026-07-01"},
-		Entry{ID: "acme/board", Org: "acme", Name: "board", Kind: "site",
+		CatalogEntry{ID: "acme/board", Org: "acme", Name: "board", Kind: "site",
 			Forkable: true, Updated: "2026-07-03"},
-		Entry{ID: "hanzo/kinetic", Org: "hanzo", Name: "kinetic", Kind: "site",
+		CatalogEntry{ID: "hanzo/kinetic", Org: "hanzo", Name: "kinetic", Kind: "site",
 			Upstream: "UI8 \u2014 Fitness Pro: Website UI Kit", License: "UI8 commercial licence",
 			Updated: "2026-07-02"},
 	)
 
 	all := decode(t, mustGet(t, app, "/v1/catalog"))
-	got := map[string]Entry{}
+	got := map[string]CatalogEntry{}
 	for _, e := range all.Data {
 		got[e.Name] = e
 	}
@@ -333,15 +333,15 @@ func TestProvenanceReachesTheAPI(t *testing.T) {
 func TestTwoLanesOneCorpus(t *testing.T) {
 	app := mount(t)
 	seed(t,
-		Entry{ID: "hanzo/folio", Org: "hanzo", Name: "folio", Kind: "site", Origin: OriginTemplate,
+		CatalogEntry{ID: "hanzo/folio", Org: "hanzo", Name: "folio", Kind: "site", Origin: OriginTemplate,
 			URL: "https://folio.hanzo.app", Forkable: true, Updated: "2026-07-01"},
-		Entry{ID: "hanzo/ex-kanban", Org: "hanzo", Name: "ex-kanban", Kind: "site", Origin: OriginCommunity,
+		CatalogEntry{ID: "hanzo/ex-kanban", Org: "hanzo", Name: "ex-kanban", Kind: "site", Origin: OriginCommunity,
 			URL: "https://ex-kanban.hanzo.app", Template: "folio", Updated: "2026-07-02"},
-		Entry{ID: "acme/board", Org: "acme", Name: "board", Kind: "site", Origin: OriginCommunity,
+		CatalogEntry{ID: "acme/board", Org: "acme", Name: "board", Kind: "site", Origin: OriginCommunity,
 			URL: "https://board.hanzo.app", Template: "folio", Updated: "2026-07-03"},
-		Entry{ID: "hanzo/ui", Org: "hanzo", Name: "ui", Kind: "repo", Origin: OriginThirdParty,
+		CatalogEntry{ID: "hanzo/ui", Org: "hanzo", Name: "ui", Kind: "repo", Origin: OriginThirdParty,
 			Upstream: "frappe/ui", License: "MIT", Updated: "2026-07-04"},
-		Entry{ID: "lux/node", Org: "lux", Name: "node", Kind: "repo", Origin: OriginProduct,
+		CatalogEntry{ID: "lux/node", Org: "lux", Name: "node", Kind: "repo", Origin: OriginProduct,
 			Updated: "2026-07-05"},
 	)
 

@@ -62,13 +62,13 @@ func TestSubmitScanFindsAndRedacts(t *testing.T) {
 	app := mountApp(t)
 	secret := "AKIAIOSFODNN7EXAMPLE"
 
-	code, body := do(t, app, http.MethodPost, "/v1/security/scans", "acme", submitReq{
-		Files: []fileInput{{Path: "config.py", Content: "aws_key = \"" + secret + "\"\nok = 1"}},
+	code, body := do(t, app, http.MethodPost, "/v1/security/scans", "acme", ScanRequest{
+		Files: []SourceFile{{Path: "config.py", Content: "aws_key = \"" + secret + "\"\nok = 1"}},
 	})
 	if code != http.StatusCreated {
 		t.Fatalf("submit want 201, got %d (%s)", code, body)
 	}
-	var sv scanView
+	var sv ScanSummary
 	if err := json.Unmarshal(body, &sv); err != nil {
 		t.Fatalf("scan json: %v (%s)", err, body)
 	}
@@ -85,7 +85,7 @@ func TestSubmitScanFindsAndRedacts(t *testing.T) {
 		t.Fatalf("scan detail leaked the raw secret: %s", body)
 	}
 	var detail struct {
-		Findings []findingView `json:"findings"`
+		Findings []Finding `json:"findings"`
 	}
 	if err := json.Unmarshal(body, &detail); err != nil {
 		t.Fatalf("detail json: %v", err)
@@ -106,13 +106,13 @@ func TestSubmitScanFindsAndRedacts(t *testing.T) {
 func TestTenantIsolation(t *testing.T) {
 	app := mountApp(t)
 
-	code, body := do(t, app, http.MethodPost, "/v1/security/scans", "acme", submitReq{
-		Files: []fileInput{{Path: "a.py", Content: `k = "AKIAIOSFODNN7EXAMPLE"`}},
+	code, body := do(t, app, http.MethodPost, "/v1/security/scans", "acme", ScanRequest{
+		Files: []SourceFile{{Path: "a.py", Content: `k = "AKIAIOSFODNN7EXAMPLE"`}},
 	})
 	if code != http.StatusCreated {
 		t.Fatalf("acme submit want 201, got %d (%s)", code, body)
 	}
-	var sv scanView
+	var sv ScanSummary
 	_ = json.Unmarshal(body, &sv)
 
 	// evil cannot GET acme's scan by id.
@@ -125,7 +125,7 @@ func TestTenantIsolation(t *testing.T) {
 		t.Fatalf("evil list want 200, got %d", code)
 	}
 	var listed struct {
-		Data []scanView `json:"data"`
+		Data []ScanSummary `json:"data"`
 	}
 	_ = json.Unmarshal(body, &listed)
 	if len(listed.Data) != 0 {
@@ -134,7 +134,7 @@ func TestTenantIsolation(t *testing.T) {
 	// evil's findings are empty too.
 	code, body = do(t, app, http.MethodGet, "/v1/security/findings", "evil", nil)
 	var fl struct {
-		Data []findingView `json:"data"`
+		Data []Finding `json:"data"`
 	}
 	_ = json.Unmarshal(body, &fl)
 	if code != http.StatusOK || len(fl.Data) != 0 {
@@ -152,7 +152,7 @@ func TestNoPrincipalIsForbidden(t *testing.T) {
 		}
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/security/scans", "",
-		submitReq{Files: []fileInput{{Path: "x", Content: "y"}}}); code != http.StatusForbidden {
+		ScanRequest{Files: []SourceFile{{Path: "x", Content: "y"}}}); code != http.StatusForbidden {
 		t.Fatalf("submit no-principal want 403, got %d", code)
 	}
 }
@@ -163,7 +163,7 @@ func TestFindingsSeverityFilter(t *testing.T) {
 	// A critical (aws key) and a medium (jwt) in one scan.
 	content := "k = \"AKIAIOSFODNN7EXAMPLE\"\nt = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhYmMifQ.SGVsbG9TaWduYXR1cmU"
 	if code, body := do(t, app, http.MethodPost, "/v1/security/scans", "acme",
-		submitReq{Files: []fileInput{{Path: "m.txt", Content: content}}}); code != http.StatusCreated {
+		ScanRequest{Files: []SourceFile{{Path: "m.txt", Content: content}}}); code != http.StatusCreated {
 		t.Fatalf("submit want 201, got %d (%s)", code, body)
 	}
 
@@ -172,7 +172,7 @@ func TestFindingsSeverityFilter(t *testing.T) {
 		t.Fatalf("filtered list want 200, got %d", code)
 	}
 	var fl struct {
-		Data []findingView `json:"data"`
+		Data []Finding `json:"data"`
 	}
 	_ = json.Unmarshal(body, &fl)
 	if len(fl.Data) == 0 {
@@ -196,7 +196,7 @@ func TestValidationAndOpenRoutes(t *testing.T) {
 	app := mountApp(t)
 
 	if code, _ := do(t, app, http.MethodPost, "/v1/security/scans", "acme",
-		submitReq{Files: nil}); code != http.StatusBadRequest {
+		ScanRequest{Files: nil}); code != http.StatusBadRequest {
 		t.Fatalf("empty files want 400, got %d", code)
 	}
 	// health + rules need no principal.
@@ -221,11 +221,11 @@ func TestValidationAndOpenRoutes(t *testing.T) {
 func TestCleanScanZeroFindings(t *testing.T) {
 	app := mountApp(t)
 	code, body := do(t, app, http.MethodPost, "/v1/security/scans", "acme",
-		submitReq{Files: []fileInput{{Path: "clean.go", Content: "package main\nfunc main(){}"}}})
+		ScanRequest{Files: []SourceFile{{Path: "clean.go", Content: "package main\nfunc main(){}"}}})
 	if code != http.StatusCreated {
 		t.Fatalf("clean submit want 201, got %d (%s)", code, body)
 	}
-	var sv scanView
+	var sv ScanSummary
 	_ = json.Unmarshal(body, &sv)
 	if sv.Findings != 0 {
 		t.Fatalf("clean scan should have 0 findings, got %d", sv.Findings)

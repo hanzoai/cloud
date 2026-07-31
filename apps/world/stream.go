@@ -117,7 +117,7 @@ func (b *bus) close() {
 // request Ctx after the handler returns — client-gone is a flush error, bounded
 // by a 25s heartbeat.
 func (s *service) stream(c *zip.Ctx) error {
-	org, project, err := scope(c)
+	org, project, err := scope(c, c.Query("project"))
 	if err != nil {
 		return err
 	}

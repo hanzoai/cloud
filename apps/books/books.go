@@ -82,7 +82,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		log:     b.Log,
 	}
 	svc := &cloud.Service[*state]{Base: b, State: mounted}
-	routes(app, svc)
+	if err := routes(app, svc); err != nil {
+		return err
+	}
 	b.Log.Info("books mounted", "prefix", "/v1/books", "commerce", src.configured())
 	return nil
 }
@@ -106,29 +108,68 @@ func Shutdown() error {
 	return first
 }
 
-func routes(app cloud.Router, s *cloud.Service[*state]) {
-	app.Get("/v1/books/accounts", cloud.Handle(s, accountsHandler))
-	app.Get("/v1/books/gl", cloud.Handle(s, glHandler))
-	app.Get("/v1/books/trial-balance", cloud.Handle(s, trialBalanceHandler))
-	app.Get("/v1/books/metrics", cloud.Handle(s, metricsHandler))
-	app.Get("/v1/books/pnl", cloud.Handle(s, pnlHandler))
-	app.Get("/v1/books/balance-sheet", cloud.Handle(s, balanceSheetHandler))
-	app.Get("/v1/books/export", cloud.Handle(s, exportHandler))
-	// The AI Ask brain: a plain-language question answered with REAL figures computed from
-	// the books (ask.go), and the clarifying-questions detector over unusual transactions
-	// (anomalies.go). Both are strictly read-only over the ledger.
-	app.Post("/v1/books/ask", cloud.Handle(s, askHandler))
-	app.Get("/v1/books/questions", cloud.Handle(s, questionsHandler))
+func routes(app cloud.Router, s *cloud.Service[*state]) error {
+	g := app.Group("/v1/books")
+	// Bridge FIRST, then noStore: fiber runs middleware in registration order, so
+	// one installed after its leaves never runs. Bridge parks the VALIDATED org on
+	// the context, which is the only way a typed op — which receives a context and
+	// its decoded In and nothing else — can resolve its tenant; noStore carries the
+	// Cache-Control every books answer has always sent. Both are prefix-scoped, and
+	// nesting under Serve's own app-wide Bridge is harmless (the inner one is what
+	// the handler sees). See typed.go.
+	g.Use(cloud.Bridge(), noStore())
+
+	// TYPED ops, declared on the APP with each path spelled in full: the registry
+	// keys an op on the group-JOINED path while cmd/zipdoc keys its extraction on
+	// the path LITERAL at the call site, so a group-relative declaration lifts
+	// prose under a key no operation ever looks up — the comments would be
+	// written, generated, and silently never rendered in the document, the MCP
+	// tool, the CLI command or the SDK method.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("books.routes: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
+	o := booksOps{s: s}
+	zip.Get(zapp, "/v1/books/accounts", o.listAccounts)
+	zip.Get(zapp, "/v1/books/gl", o.listGL)
+	zip.Get(zapp, "/v1/books/trial-balance", o.trialBalance)
+	zip.Get(zapp, "/v1/books/pnl", o.profitAndLoss)
+	zip.Get(zapp, "/v1/books/balance-sheet", o.balanceSheet)
+	zip.Get(zapp, "/v1/books/export", o.exportPackage)
+	zip.Get(zapp, "/v1/books/questions", o.listQuestions)
 	// The customer-triggered ingestion of the caller's OWN org: reads commerce's
 	// transactions and posts the accounting twin. Idempotent, so a repeat is safe.
-	app.Post("/v1/books/sync", cloud.Handle(s, syncHandler))
+	zip.Post(zapp, "/v1/books/sync", o.sync)
+	// The AI Ask brain: a plain-language question answered from the org's real
+	// figures. Its body IS its In; the ?sandbox selector stays on the URL (query,
+	// typed.go), so typing described the route without moving it.
+	zip.Post(zapp, "/v1/books/ask", o.ask)
+
+	// UNTYPED, for a stated reason — see LLM.md's typed migration. The metrics read
+	// returns MetricsResponse, which EMBEDS Metrics: zip v1.18.3's schema walk emits
+	// an embedded struct as a NESTED property (openapi.go structSchema walks
+	// NumField and names each by its json tag, so the embedded field publishes as
+	// "Metrics": {…}) instead of flattening it the way encoding/json does. Typing it
+	// would publish a response schema no answer of this route matches, and every
+	// generated SDK would model it wrong — worse than none. Spelling the 15 Metrics
+	// fields out a second time on a flat Out would describe it correctly ONCE and
+	// then silently drop the next field added to Metrics off the wire, which is a
+	// worse bug than the one it fixes. The route is right; the generator has to
+	// learn embedding before the description can be true.
+	app.Get("/v1/books/metrics", cloud.Handle(s, metricsHandler))
+
 	// The shared BANK engine surface (bank_api.go): OFX/CSV import, connector sync,
 	// transaction + unreconciled reads, and the Plaid/Teller link plumbing stubs.
-	bankRoutes(app, s)
+	if err := bankRoutes(app, s); err != nil {
+		return err
+	}
 	// The SCANNER suite (scan.go): receipt/invoice extraction → a reviewed draft → the
 	// one Post(); the inbox queue, vendor + rule auto-categorization, and the unified
 	// filterable transactions read over the booked ledger.
-	scannerRoutes(app, s)
+	if err := scannerRoutes(app, s); err != nil {
+		return err
+	}
+	return nil
 }
 
 // storeFor resolves the caller's OWN book store for the requested ledger (live/sandbox).
@@ -227,7 +268,7 @@ func (r *commerceReader) transactions(ctx context.Context, org string, sandbox b
 	return rows, nil
 }
 
-// sandboxQuery reads the ?sandbox=true toggle a read handler uses to select the ledger.
-func sandboxQuery(c *zip.Ctx) bool {
-	return strings.EqualFold(strings.TrimSpace(c.Query("sandbox")), "true")
-}
+// sandboxQuery reads the ?sandbox=true toggle a handler still untyped uses to select the
+// ledger. It is sandboxOf (typed.go) read off a request — one rule, two readers, so the
+// typed ops and the raw handlers beside them can never disagree about which books answer.
+func sandboxQuery(c *zip.Ctx) bool { return sandboxOf(c.Query("sandbox")) }
