@@ -145,7 +145,7 @@ func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	zip.Post(z, "/v1/admin/sync", syncNow, op("adminSync"))
 
 	// Credit grants — the ONE admin mint surface (SuperAdmin only). Thin, audited
-	// relay to commerce's mint-gated POST /v1/billing/credit-grants; commerce is the
+	// relay to commerce's mint-gated POST /v1/billing/credits; commerce is the
 	// sole ledger. See creditgrant.go.
 	zip.Post(z, "/v1/admin/credit-grants", o.createCreditGrant, op("adminCreateCreditGrant"))
 

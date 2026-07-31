@@ -52,12 +52,12 @@ func TestDepositPostsGrant(t *testing.T) {
 	}
 }
 
-// TestSpendCentsReadsRollup proves SpendCents reads GET /v1/billing/usage-rollup
+// TestSpendCentsReadsRollup proves SpendCents reads GET /v1/billing/usage/rollup
 // (the accrual base) and returns consumedCents.
 func TestSpendCentsReadsRollup(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/v1/billing/usage-rollup" {
-			t.Errorf("request = %s %s, want GET /v1/billing/usage-rollup", r.Method, r.URL.Path)
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/billing/usage/rollup" {
+			t.Errorf("request = %s %s, want GET /v1/billing/usage/rollup", r.Method, r.URL.Path)
 		}
 		if r.URL.Query().Get("user") != "acme" {
 			t.Errorf("user query = %q, want acme", r.URL.Query().Get("user"))

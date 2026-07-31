@@ -27,7 +27,7 @@ type countingCommerce struct {
 func (f *countingCommerce) server(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/billing/gpu-charge", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/billing/gpu/charge", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.ReadAll(r.Body)
 		f.mu.Lock()
 		f.charges++
@@ -84,7 +84,7 @@ func walletCents(t *testing.T, fin finance.Client, org string) int64 {
 	return bal.Cents()
 }
 
-// TestGPUCharge_ReplayDebitsOnce is the money defect: POST /v1/billing/gpu-charge
+// TestGPUCharge_ReplayDebitsOnce is the money defect: POST /v1/billing/gpu/charge
 // carries a caller-supplied `requestId` that deduplicated NOTHING, so a client retry,
 // a proxy replay or a double-clicked launch button charged the customer twice.
 //
@@ -96,11 +96,11 @@ func TestGPUCharge_ReplayDebitsOnce(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
 	const body = `{"amountCents":24000,"currency":"usd","requestId":"launch-abc","tag":"gpu-h100"}`
-	code, first := callBody(t, app, http.MethodPost, "/v1/billing/gpu-charge", "maxpower/dave", "maxpower", body)
+	code, first := callBody(t, app, http.MethodPost, "/v1/billing/gpu/charge", "maxpower/dave", "maxpower", body)
 	if code != http.StatusCreated {
 		t.Fatalf("first charge: want 201, got %d (%s)", code, first)
 	}
-	code, second := callBody(t, app, http.MethodPost, "/v1/billing/gpu-charge", "maxpower/dave", "maxpower", body)
+	code, second := callBody(t, app, http.MethodPost, "/v1/billing/gpu/charge", "maxpower/dave", "maxpower", body)
 	if code != http.StatusCreated {
 		t.Fatalf("replay: want 201, got %d (%s)", code, second)
 	}
@@ -131,7 +131,7 @@ func TestGPUCharge_DistinctRequestsBothCharge(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
 	for _, id := range []string{"launch-1", "launch-2"} {
-		code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu-charge", "maxpower/dave", "maxpower",
+		code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu/charge", "maxpower/dave", "maxpower",
 			`{"amountCents":10000,"currency":"usd","requestId":"`+id+`","tag":"gpu-h100"}`)
 		if code != http.StatusCreated {
 			t.Fatalf("charge %s: want 201, got %d (%s)", id, code, body)
@@ -158,7 +158,7 @@ func TestGPUCharge_GatesFailClosed(t *testing.T) {
 			fin := publishLedger(t, "maxpower", tc.funded)
 			app := mountApp(t, f.server(t).URL, "svc-token")
 
-			code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu-charge", "maxpower/dave", "maxpower", tc.body)
+			code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu/charge", "maxpower/dave", "maxpower", tc.body)
 			if code != http.StatusPaymentRequired {
 				t.Fatalf("want 402, got %d (%s)", code, body)
 			}
@@ -191,7 +191,7 @@ func TestGPUCharge_CardGateUnreadableRefuses(t *testing.T) {
 	fin := publishLedger(t, "maxpower", 500_00)
 	app := mountApp(t, srv.URL, "svc-token")
 
-	code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu-charge", "maxpower/dave", "maxpower",
+	code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu/charge", "maxpower/dave", "maxpower",
 		`{"amountCents":100,"requestId":"r"}`)
 	if code != http.StatusBadGateway {
 		t.Fatalf("unreadable card gate: want 502, got %d (%s)", code, body)
@@ -217,12 +217,12 @@ func TestGPUCharge_SplitDeployProxiesWithTheKey(t *testing.T) {
 	// No finance.Publish: this process has no ledger, which is the split deploy.
 	app := mountApp(t, srv.URL, "svc-token")
 
-	code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu-charge", "maxpower/dave", "maxpower",
+	code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu/charge", "maxpower/dave", "maxpower",
 		`{"amountCents":24000,"requestId":"launch-abc"}`)
 	if code != http.StatusCreated || !strings.Contains(string(body), "txn_upstream") {
 		t.Fatalf("split deploy must forward verbatim: got %d (%s)", code, body)
 	}
-	if gotPath != "/v1/billing/gpu-charge" || charges != 1 {
+	if gotPath != "/v1/billing/gpu/charge" || charges != 1 {
 		t.Errorf("upstream call: path=%q charges=%d", gotPath, charges)
 	}
 	if gotKey != "launch-abc" {
@@ -237,7 +237,7 @@ func TestGPUCharge_ExactMoney(t *testing.T) {
 	fin := publishLedger(t, "maxpower", 100_00)
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
-	code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu-charge", "maxpower/dave", "maxpower",
+	code, body := callBody(t, app, http.MethodPost, "/v1/billing/gpu/charge", "maxpower/dave", "maxpower",
 		`{"amountCents":1,"currency":"usd","requestId":"penny"}`)
 	if code != http.StatusCreated {
 		t.Fatalf("charge: want 201, got %d (%s)", code, body)
