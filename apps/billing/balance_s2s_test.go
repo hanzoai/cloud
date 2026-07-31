@@ -20,8 +20,19 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/zap-proto/zip"
 )
+
+// noFinance is the PLUGIN-PROCESS shape: no co-resident ledger at all. It is not
+// publishFinance(t, nil) — that hands over a typed nil, which is a non-nil Client the
+// consumer then calls — but a cleared seam, which is what finance.Current() reports in
+// a `--enable billing` child where wireFinance never ran.
+func noFinance(t *testing.T) {
+	t.Helper()
+	finance.Publish(nil)
+	t.Cleanup(func() { finance.Publish(nil) })
+}
 
 // s2sCall issues a request bearing an Authorization token, which the plain `call`
 // helper cannot do.
@@ -107,6 +118,88 @@ func TestBalance_S2SDoesNotWidenScope(t *testing.T) {
 			}
 			if fin.calls != 0 {
 				t.Errorf("the ledger was read %d times without a trusted caller", fin.calls)
+			}
+		})
+	}
+}
+
+// TestBalance_TrustedS2SReadSurvivesTheProxyLeg is the SPLIT-DEPLOY half of the same
+// outage, and the one the co-resident test above structurally cannot see.
+//
+// Every test here published a finance ledger, so balance() always took the co-resident
+// return and the S2S rule it holds was the only one that ran. A PLUGIN PROCESS is the
+// opposite shape and it is the shape prod runs: `cloud.Serve(…, []string{"billing"})`
+// leaves cfg.Enabled("commerce") false, so build.go's wireFinance returns before
+// finance.Publish and finance.Current() is nil FOREVER in that process. availableCents
+// then falls to the plane, and when the plane cannot answer, balance() delegates to
+// proxy() — which asked principal.Org a SECOND time, without the S2S rule, and refused
+// the caller balance() had just admitted:
+//
+//	GET /v1/billing/balance  Bearer $COMMERCE_SERVICE_TOKEN  X-Org-Id: hanzo
+//	  → 401 {"status":401,"error":"sign in to view billing"}
+//
+// measured in prod on cloud v1.801.340 with the request log carrying org=hanzo AND the
+// refusal — the first resolution working, the second one denying. ai's gate is
+// fail-CLOSED, so that was every chat/copilot/document completion answering 503
+// balance_unavailable.
+//
+// No ledger is published here on purpose: that IS the plugin process.
+func TestBalance_TrustedS2SReadSurvivesTheProxyLeg(t *testing.T) {
+	const token = "test-commerce-service-token"
+	noFinance(t) // no co-resident ledger — the plugin-process shape
+
+	f := &fakeCommerce{status: 200, body: `{"balance":14953300,"holds":0,"available":14953300}`}
+	app := mountApp(t, f.server(t).URL, token)
+
+	code, body := s2sCall(t, app, "/v1/billing/balance", token, "hanzo")
+	if code == http.StatusUnauthorized {
+		t.Fatalf("the proxy leg refused the trusted S2S caller balance() admitted: %s", body)
+	}
+	if code != http.StatusOK {
+		t.Fatalf("split-deploy S2S read: want 200, got %d (%s)", code, body)
+	}
+	f.mu.Lock()
+	gotOrg, gotPath := f.gotOrg, f.gotPath
+	f.mu.Unlock()
+	if gotPath != "/v1/billing/balance" {
+		t.Errorf("commerce path: want /v1/billing/balance, got %q", gotPath)
+	}
+	// The org rides the gateway-pinned header, never a caller-supplied field.
+	if gotOrg != "hanzo" {
+		t.Errorf("commerce X-Org-Id: want hanzo, got %q", gotOrg)
+	}
+}
+
+// TestProxyLeg_S2SDoesNotWidenScope guards the second resolution the same way the
+// first is guarded: a wrong, absent or org-less token must still be refused on the
+// proxy leg, and commerce must never be called for it.
+func TestProxyLeg_S2SDoesNotWidenScope(t *testing.T) {
+	const token = "test-commerce-service-token"
+
+	for _, tc := range []struct {
+		name  string
+		token string
+		org   string
+	}{
+		{"wrong token with an org", "not-the-token", "hanzo"},
+		{"empty token with an org", "", "hanzo"},
+		{"valid token but no org to scope to", token, ""},
+		{"near-miss token (prefix)", "test-commerce-service-toke", "hanzo"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			noFinance(t)
+			f := &fakeCommerce{status: 200, body: `{"balance":1,"holds":0,"available":1}`}
+			app := mountApp(t, f.server(t).URL, token)
+
+			code, _ := s2sCall(t, app, "/v1/billing/balance", tc.token, tc.org)
+			if code != http.StatusUnauthorized {
+				t.Errorf("want 401, got %d", code)
+			}
+			f.mu.Lock()
+			called := f.gotPath
+			f.mu.Unlock()
+			if called != "" {
+				t.Errorf("commerce was called (%s) without a trusted caller", called)
 			}
 		})
 	}
