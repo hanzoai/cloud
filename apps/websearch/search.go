@@ -18,6 +18,7 @@
 // datacenter-tolerant from the cluster egress); adding one is a registry entry,
 // not new plumbing. Any engine that fails or gets bot-challenged contributes zero
 // and never fails the request — search degrades to fewer results, never to a 5xx.
+
 package websearch
 
 import (
