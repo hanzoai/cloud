@@ -57,17 +57,28 @@ concurrency:
 jobs:
   # The test gate, driven by hanzo.yml.
   gate:
-    # `.github/workflows/`, not `.hanzo/workflows/`: at tag v1 the hanzoai/ci
-    # repo's `.hanzo/workflows/` is EMPTY and build.yml lives under
-    # `.github/workflows/` — which is also the import its own header documents.
+    # `.hanzo/workflows/`, and the reason it is safe to say that NOW is that the
+    # v1 channel tag moved: hanzoai/ci 66d4f21 publishes build.yml at BOTH paths
+    # from every tag, byte-identical apart from its header, because GitHub
+    # resolves only `.github/workflows` and git.hanzo.ai only `.hanzo/workflows`.
+    # Verified against the live remote — v1 and v2 both serve
+    # .hanzo/workflows/build.yml (blob 1100f49a672b).
     #
-    # Pinned at the wrong path, the forge cannot even construct a run:
+    # It could not be said before, and the old failure is worth keeping in view
+    # because of HOW it failed. Pinned at a path the ref does not carry, the
+    # forge cannot even construct a run:
     #   PrepareRun: InsertRun: read hanzoai/ci@v1:.hanzo/workflows/build.yml:
     #   object does not exist
     # InsertRun fails before any run row is written, so there is no failed run to
-    # look at — pushes and workflow_dispatch alike just silently do nothing. That
-    # is what dead CI looks like here: not red, absent.
-    uses: hanzoai/ci/.github/workflows/build.yml@v1
+    # look at — pushes and workflow_dispatch alike silently do nothing. Dead CI
+    # here is not red, it is absent.
+    #
+    # The path has to move regardless. Reusables resolve through
+    # services/actions.ResolveUses, which enforces the WORKFLOW_DIRS allowlist on
+    # the referenced path, so once that list narrows to `.hanzo/workflows` alone
+    # a `uses:` naming `.github/workflows` is refused outright. Leaving it would
+    # trade one silent no-run for another.
+    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     with:
       # Not on a tag: release.go mints v* only after that SHA passed this gate
       # on main and built and smoked, so a tag build re-tests a proven commit —
