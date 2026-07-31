@@ -663,17 +663,48 @@ func sanitize(s string) string {
 // The document is built once, lazily, on first request: the route table is fixed
 // after boot, and building lazily (rather than at Mount) means it includes every
 // route — including this one, and any registered after Mount.
+//
+// The light HOST mounts no subsystem, so its live router is not the API — see
+// [MountFleet], the other document source at this same one address.
 func Mount(app *zip.App, info Info, servers ...Server) {
-	var (
-		once sync.Once
-		doc  *Document
-		err  error
-	)
+	serve(app, func() (*Document, error) { return Spec(app, info, servers...) })
+}
+
+// serve registers Path and answers it with whatever doc produces, rendered ONCE
+// on the first request.
+//
+// One registrar for both document sources, so the address, the status, the
+// encoding and the failure mode are stated once and cannot drift between them.
+//
+// LAZY is load-bearing in both: it is what lets Mount's document contain the
+// route this very call registers, and what keeps MountFleet's weave off the
+// host's boot path.
+//
+// ONCE covers the bytes, not just the value, and that is not an optimization —
+// it is the shape of what this is. The route table is fixed after boot, so the
+// document is immutable and re-encoding it per request is work whose answer
+// cannot change. It matters because the door is public and unauthenticated on
+// the front-door router: the fleet document is megabytes, and re-marshalling it
+// per request is an amplifier anyone can pull. Rendered, a repeat request is a
+// memcpy and the Document itself is collectable.
+//
+// encoding/json rather than the app's own encoder, because these are the bytes
+// openapi.yaml is rendered from (openapi/weave_test.go): the served document and
+// the committed artifact are then the same bytes, not two encodings that agree.
+func serve(app *zip.App, doc func() (*Document, error)) {
+	render := sync.OnceValues(func() ([]byte, error) {
+		d, err := doc()
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(d)
+	})
 	app.Get(Path, func(c *zip.Ctx) error {
-		once.Do(func() { doc, err = Spec(app, info, servers...) })
+		body, err := render()
 		if err != nil {
 			return zip.ErrInternal(err.Error())
 		}
-		return c.JSON(200, doc)
+		c.SetHeader("Content-Type", "application/json")
+		return c.Bytes(200, body)
 	})
 }
