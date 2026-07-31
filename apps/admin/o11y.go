@@ -26,7 +26,7 @@ package admin
 //   - Traces     → o11y_traces.distributed_o11y_index_v3 : request count, latency p50/p95/p99,
 //                                                              error rate, top services
 //   - Logs       → o11y_logs.distributed_logs_v2 : fleet log volume + volume-over-time
-//   - LLM gens   → o11y_ai.observations      : generations + cost (fleet-wide; honest-empty today)
+//   - LLM gens   → console.observations     : generations + cost (fleet-wide; rows exist, see o11yAIObs)
 //
 // SUPERADMIN ONLY (core.Admit, the op's first line): the gateway strips a client
 // X-Org-Id and re-mints from the JWT owner, and this handler applies NO org filter,
@@ -52,11 +52,25 @@ import (
 
 // Fully-qualified datastore tables. admin only READS these — the ZAP collector
 // (o11y_*), the ai ledger (hanzo.cloud_usage), and O11yAI own their writes.
+//
+// o11yAIObs pointed at `o11y_ai.observations` and that DATABASE DOES NOT EXIST —
+// verified against system.tables on 2026-07-31, which is why the fleet AI panel
+// has always read zero. It was not honest-empty: 8,867 real observations (plus
+// 8,819 traces) sit in `console`, which nothing reads. Columns match this file's
+// queries exactly (project_id, type, start_time, Nullable end_time,
+// provided_model_name, internal_model_id, total_cost), so the fix is the name.
+// The rows span 2026-02-11..2026-03-14, so a recent window still totals zero —
+// correctly, because no gen_ai observation has landed since. That is the honest
+// answer; the previous one was a missing table pretending to be an empty one.
+// `console` is a SURFACE name on a store and is itself wrong: HIP-0132 folds
+// this signal into o11y.spans (gen_ai span == the observation of record). This
+// const moves there with #102 — pointing at the rows that exist is the step that
+// does not require the o11y database to exist first.
 const (
 	o11yUsageTable   = "hanzo.cloud_usage"
 	o11yTraceTable   = "o11y_traces.distributed_o11y_index_v3"
 	o11yLogTable     = "o11y_logs.distributed_logs_v2"
-	o11yAIObs        = "o11y_ai.observations"
+	o11yAIObs        = "console.observations"
 	o11yTopN         = 10
 	o11yServiceLimit = 12
 
