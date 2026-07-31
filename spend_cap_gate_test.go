@@ -16,11 +16,11 @@ import (
 )
 
 // capCommerce answers the metering client's balance, spend-cap authorize, and
-// spend-alerts (rate-rules) calls. Each verdict is fully controlled per test.
+// alerts (rate-rules) calls. Each verdict is fully controlled per test.
 type capCommerce struct {
 	balanceBody string            // GET /v1/billing/balance (default funded).
-	authorize   string            // GET /v1/billing/spend-alerts/authorize (the cap verdict).
-	rulesFor    map[string]string // X-Org-Id -> GET /v1/billing/spend-alerts body.
+	authorize   string            // GET /v1/billing/alerts/authorize (the cap verdict).
+	rulesFor    map[string]string // X-Org-Id -> GET /v1/billing/alerts body.
 }
 
 func (f *capCommerce) server(t *testing.T) *httptest.Server {
@@ -33,10 +33,10 @@ func (f *capCommerce) server(t *testing.T) *httptest.Server {
 		}
 		_, _ = io.WriteString(w, body)
 	})
-	mux.HandleFunc("/v1/billing/spend-alerts/authorize", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/billing/alerts/authorize", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, f.authorize)
 	})
-	mux.HandleFunc("/v1/billing/spend-alerts", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/billing/alerts", func(w http.ResponseWriter, r *http.Request) {
 		body := f.rulesFor[r.Header.Get("X-Org-Id")]
 		if body == "" {
 			body = `[]`

@@ -233,7 +233,7 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 // usageHook, when set, is called (async, best-effort) after a successful usage debit.
 // It is the dependency-inverted seam the usage-cap ALERT fires through WITHOUT finance
 // importing commerce: the host (apps/commerce.go) registers a hook that reads the org's
-// finance period spend and fires/debounces the spend-alerts. Set once at boot.
+// finance period spend and fires/debounces the alerts. Set once at boot.
 var usageHook atomic.Pointer[func(org string, test bool, project, service string)]
 
 // SetUsageHook installs the post-debit hook (the cap alert-fire). Pass nil to clear.

@@ -10,13 +10,13 @@ import (
 )
 
 // routingCommerce is a fake commerce that answers the balance, spend-cap
-// authorize, and spend-alerts endpoints independently — so AuthorizeVerdict's two
+// authorize, and alerts endpoints independently — so AuthorizeVerdict's two
 // checks (funds, then cap) can be driven separately.
 type routingCommerce struct {
 	balance   string // GET /v1/billing/balance
-	authorize string // GET /v1/billing/spend-alerts/authorize
+	authorize string // GET /v1/billing/alerts/authorize
 	authCode  int    // status for the authorize endpoint (0 => 200)
-	alerts    string // GET /v1/billing/spend-alerts
+	alerts    string // GET /v1/billing/alerts
 }
 
 func (rc *routingCommerce) server(t *testing.T) *httptest.Server {
@@ -25,13 +25,13 @@ func (rc *routingCommerce) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(rc.balance))
 	})
-	mux.HandleFunc("/v1/billing/spend-alerts/authorize", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/billing/alerts/authorize", func(w http.ResponseWriter, r *http.Request) {
 		if rc.authCode != 0 {
 			w.WriteHeader(rc.authCode)
 		}
 		_, _ = w.Write([]byte(rc.authorize))
 	})
-	mux.HandleFunc("/v1/billing/spend-alerts", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/billing/alerts", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(rc.alerts))
 	})
 	srv := httptest.NewServer(mux)
@@ -130,7 +130,7 @@ func TestAuthorizeVerdict_ProjectValidatedForwarded(t *testing.T) {
 	var gotPV string
 	seen := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/billing/spend-alerts/authorize" {
+		if r.URL.Path == "/v1/billing/alerts/authorize" {
 			seen = true
 			gotPV = r.URL.Query().Get("pv")
 		}
@@ -158,7 +158,7 @@ func TestAuthorizeVerdict_ProjectValidatedForwarded(t *testing.T) {
 	}
 }
 
-// ScopeRules returns only the rate-limited rows, decoded from the spend-alerts list.
+// ScopeRules returns only the rate-limited rows, decoded from the alerts list.
 func TestScopeRules(t *testing.T) {
 	rc := &routingCommerce{
 		alerts: `[{"project":"","service":"","rateLimitRpm":0},{"project":"P","service":"ai","rateLimitRpm":5}]`,

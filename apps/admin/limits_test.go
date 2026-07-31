@@ -33,7 +33,7 @@ func newRecCommerce() *recCommerce {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/platform/promo"):
 			io.WriteString(w, `{"percentOff":50,"plans":["pro"],"active":true}`)
-		case strings.HasSuffix(r.URL.Path, "/spend-alerts"):
+		case strings.HasSuffix(r.URL.Path, "/alerts"):
 			io.WriteString(w, `[{"id":"a1","threshold":10000,"enforce":true,"period":"2026-07","resetsAt":"2026-08-01T00:00:00Z"}]`)
 		default:
 			io.WriteString(w, `{}`)
@@ -103,8 +103,8 @@ func TestLimits_SpendCaps_OrgScoped(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || envStatus(t, body) != "ok" {
 		t.Fatalf("super spend-caps = %d %s", resp.StatusCode, body)
 	}
-	if _, p, org := com.seen(); org != "maxpower" || !strings.HasSuffix(p, "/spend-alerts") {
-		t.Fatalf("forwarded org=%q path=%q, want maxpower .../spend-alerts", org, p)
+	if _, p, org := com.seen(); org != "maxpower" || !strings.HasSuffix(p, "/alerts") {
+		t.Fatalf("forwarded org=%q path=%q, want maxpower .../alerts", org, p)
 	}
 
 	// SuperAdmin WITHOUT ?org → org required (honest error, no guessed tenant).

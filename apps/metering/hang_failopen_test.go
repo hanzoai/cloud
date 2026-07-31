@@ -18,7 +18,7 @@ import (
 // never a wait. This is the safety the missing timeout lacked.
 func TestAuthorizeVerdict_CapHang_FailsOpenFast(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/spend-alerts/authorize") {
+		if strings.Contains(r.URL.Path, "/alerts/authorize") {
 			time.Sleep(10 * time.Second) // simulate the legacy-org hot-loop / stuck handler
 			return
 		}
