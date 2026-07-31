@@ -14,8 +14,10 @@ package marketplace
 // decides what a listed tool costs.
 //
 // CO-RESIDENCY. All three seams are process-globals (x402.reg, tools.std,
-// wallets.mounted), so this wiring binds within ONE process. See the package doc in
-// marketplace.go for what that means for the split fleet.
+// wallets.mounted), so this wiring binds within ONE process — and the shipped fleet
+// runs one process per app, so in production it binds nothing and a priced tool is
+// refused rather than sold. The package doc in marketplace.go names the evidence and
+// the four internal-plane ops that would close it.
 
 import (
 	"context"
