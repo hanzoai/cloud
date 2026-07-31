@@ -1,6 +1,11 @@
 package openapi
 
-import "github.com/zap-proto/zip"
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/zap-proto/zip"
+)
 
 // The IDENTITY of the Hanzo Cloud API document, in one place.
 //
@@ -42,4 +47,95 @@ var (
 // its own title.
 func FleetSpec(app *zip.App) (*Document, error) {
 	return Spec(app, fleetInfo, fleetServer)
+}
+
+// Subsets decodes the apps' own documents, in the order given — which callers
+// take from manifest.Names(), the fleet's mount order, so a conflict is reported
+// as the router would meet it.
+//
+// read answers with one app's subset bytes. WHERE those bytes come from is the
+// caller's, because there are two callers and ONE set of files: the drift gate
+// reads the working tree it is about to compare against (openapi/weave_test.go),
+// and the light host reads what it embedded from that same tree at build time
+// (plugin.Spec). Neither is a second source — surface-check regenerates the files
+// both read, from source, and fails on any diff.
+//
+// A missing subset is refused rather than skipped. Skipping it would publish a
+// fleet document with one app's whole surface quietly absent, which is precisely
+// the failure mode plugin/ingress cost eight paths to.
+func Subsets(apps []string, read func(app string) []byte) ([]Part, error) {
+	out := make([]Part, 0, len(apps))
+	for _, name := range apps {
+		raw := read(name)
+		if len(raw) == 0 {
+			return nil, fmt.Errorf("%s publishes no subset — every app describes itself; run `make -f mk/fleet.mk describe-apps`", name)
+		}
+		var doc Document
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return nil, fmt.Errorf("%s subset: %w", name, err)
+		}
+		out = append(out, Part{App: name, Doc: &doc})
+	}
+	return out, nil
+}
+
+// core is the one operation no app owns: the endpoint that serves the document.
+// It is MOUNTED and projected rather than written down — a hand-kept literal
+// would be a second definition of a route zip already knows, free to disagree
+// with the address the fleet actually answers on.
+func core() (Part, error) {
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	Mount(app, Info{})
+	doc, err := FleetSpec(app)
+	if err != nil {
+		return Part{}, fmt.Errorf("core: %w", err)
+	}
+	return Part{App: "openapi", Doc: doc}, nil
+}
+
+// Fleet is THE published Hanzo Cloud API document: the weave of every app's own
+// subset plus core.
+//
+// ONE definition, called by both things that must agree about it — the gate that
+// WRITES openapi.yaml (openapi/weave_test.go) and the host that SERVES it
+// (MountFleet). That is what makes "the served document is the committed
+// artifact" true by construction rather than by two pieces of code happening to
+// agree; a drift between them is not expressible.
+func Fleet(subsets []Part) (*Document, error) {
+	c, err := core()
+	if err != nil {
+		return nil, err
+	}
+	parts := make([]Part, 0, len(subsets)+1)
+	parts = append(parts, subsets...)
+	parts = append(parts, c)
+	return Weave(parts)
+}
+
+// MountFleet serves the FLEET's document at Path: the composition of what this
+// deployment's plugins serve, woven from the subsets their binaries projected
+// when they were built.
+//
+// It exists because [Mount]'s answer is WRONG on the light host, and wrong in the
+// way that is hardest to see. The host mounts no subsystem — that laziness is
+// what makes 113 of them affordable — so its live router is 113 proxy prefixes
+// and a console catch-all, and reading it describes the ROUTER, not the API. Nor
+// can the host mount them to find out: waking the fleet to answer a public GET
+// is exactly the cost lazy mounting exists to avoid.
+//
+// So the host answers from the build-time projection instead. It is the same
+// question every other projection answers ("what does the fleet serve") sourced
+// from the only place the host can honestly read it. The weave runs ONCE, on the
+// first request, off bytes already in the binary: no subsystem starts, no socket
+// opens, and a deployment that never gets asked never pays.
+//
+// Unauthenticated for the reasons stated on [Mount]: same document, same door.
+func MountFleet(app *zip.App, subsets func() ([]Part, error)) {
+	serve(app, func() (*Document, error) {
+		parts, err := subsets()
+		if err != nil {
+			return nil, err
+		}
+		return Fleet(parts)
+	})
 }

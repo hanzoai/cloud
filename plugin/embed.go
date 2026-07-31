@@ -1,12 +1,14 @@
-// Package plugin carries the fleet's build-time MCP catalogues into the host.
+// Package plugin carries the fleet's build-time PROJECTIONS into the host: what
+// each subsystem serves, known without running it.
 //
-// A plugin's tool list is a function of its typed-op registry, so it is known
-// when the plugin is BUILT: `<app> describe plugin/<app>` writes mcp.json beside
-// openapi.json from one mount of one router (describe.go). This package embeds
-// those files and hands each one to zip as Plugin.Tools, which is what lets the
-// host answer tools/list for all 112 subsystems without starting a single one —
-// the invariant the whole lazy fleet rests on, since MCPTools() is in-process and
-// a host cannot ask a plugin that is not running.
+// Both are a function of the plugin's own router and typed-op registry, so both
+// are known when the plugin is BUILT: `<app> describe plugin/<app>` writes
+// mcp.json and openapi.json from one mount of one router (describe.go). This
+// package embeds those files. The tool lists go to zip as Plugin.Tools, which is
+// what lets the host answer tools/list for all 113 subsystems without starting a
+// single one; the specs are what the host weaves into the fleet document it
+// serves at /v1/openapi.json. Same invariant, two consumers: MCPTools() and the
+// router are in-process, and a host cannot ask a plugin that is not running.
 //
 // It exists as its own leaf package for one reason: go:embed cannot reach outside
 // its own directory, so the bytes must be embedded from HERE, and cmd/cloud must
@@ -33,6 +35,30 @@ var catalogues embed.FS
 // none, which is exactly how a plugin opts out of the composed door.
 func Tools(app string) []byte {
 	b, err := catalogues.ReadFile(app + "/mcp.json")
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// specs holds every app's openapi.json — the same committed files the drift gate
+// regenerates from source and the weave composes into openapi.yaml
+// (mk/fleet.mk surface-check). Embedding them is what lets the host describe the
+// whole fleet without starting any of it: the alternative is reading the live
+// router, and the light host's live router is 113 proxy prefixes.
+//
+// A glob, for the same reason the catalogues are: an app that has not been
+// described yet is absent rather than a build failure in the host. Absence is
+// then refused where it can be reported — openapi.Subsets, at the request that
+// needs it — instead of by a compiler error nobody can act on.
+//
+//go:embed */openapi.json
+var specs embed.FS
+
+// Spec is app's own OpenAPI subset: the document its binary projected from its
+// own router at build time. Nil for an app that ships none.
+func Spec(app string) []byte {
+	b, err := specs.ReadFile(app + "/openapi.json")
 	if err != nil {
 		return nil
 	}
