@@ -974,7 +974,13 @@ func (o ops) connect(ctx context.Context, in *connectIn) (*connectOut, error) {
 	if !p.Configured() {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s integration is not configured on this deployment", p.ID)
 	}
-	if !kmsReady(s) {
+	// The credential store is required only by a provider that CUSTODIES something.
+	// A provider declaring no secrets seals nothing (sealTokens over an empty map
+	// is a no-op) and reads nothing back, so gating it on the store refused a
+	// connection that never needed one — GitHub declares `Secrets: nil` because
+	// installation tokens are minted on demand, and its connect was blocked for
+	// months by a store it does not touch.
+	if len(p.Secrets) > 0 && !kmsReady(s) {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s", errCredentialStore)
 	}
 	// Pick the credential-acquisition path by REQUEST. A provider may offer an
