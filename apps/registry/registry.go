@@ -457,19 +457,27 @@ func (o ops) token(ctx context.Context, in *registryMint) (*registryToken, error
 // ── tenancy ─────────────────────────────────────────────────────────────────
 
 // caller resolves the validated caller's org — the ONE tenancy input for every
-// op on this plane. FAIL CLOSED off the HTTP path: a CLI LocalInvoke has no
-// request, so there is no validated principal and no org to scope by.
+// op on this plane. FAIL CLOSED off the HTTP path: a CLI LocalInvoke parks no
+// principal, so there is no org to scope by and every op refuses.
+//
+// It reads the org Bridge PARKED, not the request. The org is all this plane
+// needs — nothing here turns on admin-ness, a project or a forwarded credential
+// — so cloud.Request, the pinned escape hatch, is not one of its inputs. The
+// three refusals it replaced were ONE decision written three times, because
+// principal.Org already composes the validated-principal check (OrgOf returns
+// false on an empty X-User-Id, which is exactly principal.Validated): a forged
+// X-Org-Id with no credential parks nothing and is refused here, before an
+// upstream byte (TestNoPrincipalIs403AndNoUpstreamByte). The refusal that
+// survives is the product-facing one, since all three were 403 and only the
+// status is contract — and the one state the other two named, a signed-in caller
+// whose token resolves no org, is already diagnosed where it is KNOWN: the
+// identity boundary logs it with the subject and the audience (SanitizeIdentity,
+// "token names no home org"), which is a better answer than a 403 string and
+// does not cost this plane its typing.
 func caller(ctx context.Context) (string, error) {
-	c, ok := cloud.Request(ctx)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return "", zip.ErrForbidden("no validated principal")
-	}
-	if !principal.Validated(c) {
 		return "", zip.ErrForbidden("sign in to use Registry")
-	}
-	org, ok := principal.Org(c)
-	if !ok {
-		return "", zip.ErrForbidden("no validated org")
 	}
 	return org, nil
 }
