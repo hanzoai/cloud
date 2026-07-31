@@ -16,7 +16,7 @@
 // response carries Disclaimer to keep that honest on the wire.
 //
 // WHAT IT COMPOSES (DRY — it forks none of these):
-//   - clients/idv        the ONE identity/business verification seam (Persona /
+//   - apps/idv           the ONE identity/business verification seam (Persona /
 //     Onfido / Stripe Identity behind a fail-closed interface;
 //     the honest Manual provider by default).
 //   - audit.Recorder     the ONE tamper-evident audit plane (deps.Audit). Every
