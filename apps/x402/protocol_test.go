@@ -2,7 +2,6 @@ package x402
 
 import (
 	"crypto/ecdsa"
-	"encoding/hex"
 	"testing"
 
 	"github.com/luxfi/crypto"
@@ -22,19 +21,10 @@ func sampleReq(payee string) PaymentRequirements {
 // window + nonce — exactly what a compliant client does.
 func signProof(t *testing.T, key *ecdsa.PrivateKey, req PaymentRequirements, nonce string, validAfter, validBefore int64) Proof {
 	t.Helper()
-	p := Proof{
-		From: crypto.PubkeyToAddress(key.PublicKey).Hex(), To: req.Payee, Value: req.Amount,
-		ValidAfter: validAfter, ValidBefore: validBefore, Nonce: nonce,
-	}
-	digest, err := eip712Digest(req, p, DefaultTokenName, DefaultTokenVersion)
-	if err != nil {
-		t.Fatalf("digest: %v", err)
-	}
-	sig, err := crypto.Sign(digest[:], key)
+	p, err := Sign(req, key, nonce, validAfter, validBefore, "", "")
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
-	p.Signature = "0x" + hex.EncodeToString(sig)
 	return p
 }
 
