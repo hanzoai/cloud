@@ -2,13 +2,19 @@ package cloud
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	luxlog "github.com/luxfi/log"
+
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -121,12 +127,27 @@ func ResetPlane() {
 // resolvable socket always means "the app is up, with its ops live". An app
 // that is up and answers 404 for an op is version skew — a different fact, and
 // separately diagnosable.
+//
+// It does not return until the socket ACCEPTS. Listening happens in a goroutine,
+// so returning early made "the socket is bound" a race the caller could not see:
+// Serve binds the plane before the app's own listener, and the host waits on that
+// listener to call a child up — so a peer woken through the router could dial a
+// socket that existed as a promise and not yet as a listener. Waiting here is
+// what makes the ordering a guarantee instead of a coincidence.
 func ServePlane(name string, log luxlog.Logger) (func() error, error) {
 	bindRuntimeDir()
 	path := zip.SocketPath(name)
 	app := Plane()
 	errs := make(chan error, 1)
 	go func() { errs <- app.Listen(path) }()
+	if err := awaitSocket(path, planeBindWait); err != nil {
+		select {
+		case lerr := <-errs:
+			return nil, fmt.Errorf("plane %s: %w", name, lerr)
+		default:
+		}
+		return nil, fmt.Errorf("plane %s: %w", name, err)
+	}
 	if log != nil {
 		log.Info("plane listening", "app", name, "sock", path)
 	}
@@ -143,13 +164,37 @@ func ServePlane(name string, log luxlog.Logger) (func() error, error) {
 	}, nil
 }
 
+// ErrNoPeer reports that an app is NOT PART OF THIS DEPLOYMENT: its socket is
+// unbound and the router either is not here or does not know the name.
+//
+// It is the answer Peer always claimed to give and never could. zip dials lazily,
+// so a missing socket produced no error at all until the first Call, and then
+// arrived as a 502 indistinguishable from a peer that answered badly — so every
+// caller had to choose one meaning for both, and the fleet has shipped that
+// mistake in both directions (a 403 read as "split deploy", an outage read as
+// "nothing is priced"). Now the two facts are two errors:
+//
+//	ErrNoPeer          the app is not here — fall back, or stay inert
+//	anything else      the app is here and this call failed — that is an outage
+//
+// The distinction is DECIDED, not guessed: an unbound socket is asked of the
+// router, which owns the manifest, and only its answer settles which fact it is.
+var ErrNoPeer = errors.New("cloud: app is not deployed here")
+
+const (
+	// planeBindWait bounds how long ServePlane waits for its own socket.
+	planeBindWait = 5 * time.Second
+	// wakeTimeout bounds one start request to the router. A cold child pays its
+	// whole startup inside this, so it is the host's own plugin-start budget.
+	wakeTimeout = 90 * time.Second
+)
+
 // Peer opens a call to another app. The socket is resolved per call, so an app
 // that starts later is reached without a restart here.
 //
-// A dial failure is the answer "that app is not running here" — the legitimate
-// split-deploy or no-such-plane shape — and callers distinguish it from a bad
-// ANSWER, which is a real failure. Peer absent means fall back or stay inert;
-// peer answered badly means error.
+// It DIALS and nothing more. Bringing a lazy app up is Ask's job, because waking
+// one costs a child's whole startup and only a caller holding a context can say
+// how long it is willing to wait for that.
 func Peer(app string) (*zip.Conn, error) {
 	bindRuntimeDir()
 	c, err := zip.DialApp(app)
@@ -159,19 +204,152 @@ func Peer(app string) (*zip.Conn, error) {
 	return c, nil
 }
 
+// reach makes app's socket resolvable, or says why it cannot be.
+//
+// Bound already ⇒ nothing to do, which is the steady state and costs one stat.
+// Unbound ⇒ ask the router to start it, and let the router's answer decide which
+// fact it is: it owns the manifest, so "no plugin named x" is "not deployed here"
+// and a failed start is an outage.
+//
+// The CALLER's deadline governs. wakeTimeout is a ceiling — the host's own
+// plugin-start budget — never a floor: a gate that gave itself ten seconds must
+// not block for ninety inside a call it thought it had bounded. A caller whose
+// budget expires mid-start still fails closed, and the child it asked for keeps
+// coming up (the host single-flights the start), so the next call finds it.
+func reach(ctx context.Context, app string) error {
+	if exists(zip.SocketPath(app)) {
+		return nil
+	}
+	if !exists(zip.SocketPath(plane.HostApp)) {
+		// No router in this process tree: nothing can start an app, and nothing
+		// is going to. A single-app process and a developer's test are exactly
+		// this shape, and for them "not deployed here" is simply true.
+		return fmt.Errorf("%w: %s (no socket, no router)", ErrNoPeer, app)
+	}
+	ctx, cancel := context.WithTimeout(ctx, wakeTimeout)
+	defer cancel()
+	c, err := zip.DialApp(plane.HostApp)
+	if err != nil {
+		return fmt.Errorf("wake %s: %w", app, err)
+	}
+	defer func() { _ = c.Close() }()
+	if _, err := zip.Call[plane.StartIn, plane.Started](ctx, c, plane.HostStart,
+		&plane.StartIn{App: app}); err != nil {
+		var he *zip.HTTPError
+		if errors.As(err, &he) && he.Status == 404 {
+			// The router looked and there is no such app in this fleet.
+			return fmt.Errorf("%w: %s (%s)", ErrNoPeer, app, he.Msg)
+		}
+		// It is deployed and would not start. An outage, never an absence.
+		return fmt.Errorf("wake %s: %w", app, err)
+	}
+	if !exists(zip.SocketPath(app)) {
+		// The router started it and its plane socket is still not there. ServePlane
+		// binds before the app's own listener and the router waits on that listener,
+		// so this cannot be a race — it is an app that serves no plane.
+		return fmt.Errorf("wake %s: started, but it binds no plane socket", app)
+	}
+	return nil
+}
+
+// exists is the HOT-PATH question — "is there a socket to dial" — and it is a
+// stat, because it runs before every plane call and a connect does not. A stale
+// file left by a crash passes it; that is correct, because "the app is here and
+// broken" is an outage, and the caller must learn it from the failed CALL rather
+// than from an absence it would be entitled to fall back on.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// awaitSocket blocks until path ACCEPTS, or the deadline passes. This one really
+// does connect: it runs once, at bind, and the whole point is to know a listener
+// is there before anyone is told the app is up.
+func awaitSocket(path string, within time.Duration) error {
+	deadline := time.Now().Add(within)
+	for {
+		c, err := net.DialTimeout("unix", path, time.Second)
+		if err == nil {
+			_ = c.Close()
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("socket %s did not accept within %s: %v", path, within, err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // Ask is the whole client half: dial the app, invoke the op, close.
 //
 // The org a call acts for rides the CALLER — forwarded from the gateway's
 // assertion when ctx carries a request, or stated by a background job with
 // zip.WithCaller. It is never an argument, because a caller that can name the
 // org can bill or read another tenant.
+//
+// It also WAKES the app when the fleet runs it lazily. A plane call never touches
+// the router, so nothing else would: 106 of 112 apps start on a request reaching
+// their prefix, and an app reached only over its socket was never started and never
+// bound one. Ask asks the router to start it (see reach); a router that does not
+// know the name — or a fleet with no router at all — answers ErrNoPeer, which is the
+// ONLY error a caller may read as "fall back". Every other failure is an outage.
 func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error) {
+	bindRuntimeDir()
+	if err := reach(ctx, app); err != nil {
+		return nil, err
+	}
 	c, err := Peer(app)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = c.Close() }()
-	return zip.Call[In, Out](ctx, c, op, in)
+	out, err := zip.Call[In, Out](ctx, c, op, in)
+	if out != nil {
+		detach(reflect.ValueOf(out).Elem())
+	}
+	return out, err
+}
+
+// detach copies every string in a reply OUT of the transport's read buffer.
+//
+// ZAP decodes a string zero-copy — unsafe.String over the frame (zap-proto/go
+// Object.Text) — so a decoded string is a VIEW of a buffer the next call on that
+// connection reuses. A reply that outlives the call therefore mutates under its
+// owner, silently and much later, which is the worst shape a bug can have.
+//
+// It is not hypothetical: an x402 settlement recorded a payee address that had
+// already become the bytes of a later message's amount ("0.0025USD" written over the
+// middle of an 0x… address), so the row could never match itself and every retry of
+// a paid authorization read as a replayed nonce. The decoder already copies byte
+// slices; strings are the hole.
+//
+// It runs HERE because Ask is the one client half. A rule every caller must remember
+// is a rule some caller forgets — and this one costs money three hops away from the
+// line that forgot it.
+//
+// The kinds it walks are exactly the kinds ZAP carries: scalars, strings, byte
+// slices, structs, slices of those, and pointers to them. A map cannot cross the
+// plane at all (zapenc layoutOf refuses it), so there is no map case to write and no
+// silent hole where one should be.
+func detach(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.String:
+		if v.CanSet() && v.Len() > 0 {
+			v.SetString(strings.Clone(v.String()))
+		}
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			detach(v.Field(i))
+		}
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			detach(v.Index(i))
+		}
+	case reflect.Pointer, reflect.Interface:
+		if !v.IsNil() {
+			detach(v.Elem())
+		}
+	}
 }
 
 // For states the tenant a BACKGROUND call acts for — a reconcile loop, a grant
