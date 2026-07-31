@@ -1,4 +1,6 @@
-// Package framework mounts the Hanzo DocType engine into the cloud binary.
+// Package framework is the DocType surface (/v1/framework): define a metadata
+// schema, then list, create, submit and cancel documents against it — per org,
+// with the engine's own permission calculus deciding every access.
 //
 // The engine itself is github.com/hanzoai/framework, built on the metadata
 // model github.com/hanzoai/doctype. Neither knows what HTTP is. This package is
