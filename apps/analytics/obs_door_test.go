@@ -58,10 +58,12 @@ func TestObsPlaneGetsFirstRefusalOnTheCanonicalDoor(t *testing.T) {
 		t.Fatalf("product wire wrote $source %v, want [%s]", got, sourceEvent)
 	}
 
-	// Other doors never offer: the same obs body on /v1/analytics walks that
-	// door's product wire without consulting the claim.
+	// Other doors never offer: the same obs body on /v1/insights/e walks that
+	// door's own wire without consulting the claim. The offer is gated on the
+	// door's SOURCE, not on the body, which is why the PostHog door is the honest
+	// negative — it is the only other door there is.
 	calls = nil
-	if code, _ := doBody(t, app, http.MethodPost, "/v1/analytics", "user-dave", "acme", obsBody); code != http.StatusOK {
+	if code, _ := doBody(t, app, http.MethodPost, "/v1/insights/e", "user-dave", "acme", obsBody); code != http.StatusOK {
 		t.Fatal("obs-shaped body on a non-canonical door must still answer via its own wire")
 	}
 	if len(calls) != 0 {
