@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/plane"
 	"github.com/luxfi/crypto"
 )
 
@@ -40,12 +41,20 @@ const (
 	// client signs off-chain (EIP-712), settled on the ledger or on-chain.
 	Scheme = "erc3009"
 
+	// The three wire headers. They are DEFINED in plane, because the settlement now
+	// crosses a process boundary and the process that holds the request — where the
+	// proof arrives and the challenge has to be written — is not the process that
+	// holds this package. Naming them there lets the tool plane lift a proof and set
+	// a challenge without linking a payment subsystem it deliberately knows nothing
+	// about; naming them HERE too would be two spellings of one wire, which is the
+	// bug where a client pays and the server never sees it.
+
 	// HeaderRequirements carries the PaymentRequirements on a 402 response.
-	HeaderRequirements = "X-Payment-Required"
+	HeaderRequirements = plane.HeaderRequirements
 	// HeaderProof carries the client's signed Proof on the retry.
-	HeaderProof = "X-Payment"
+	HeaderProof = plane.HeaderProof
 	// HeaderReceipt carries the settlement Receipt on a served (2xx) response.
-	HeaderReceipt = "X-Payment-Receipt"
+	HeaderReceipt = plane.HeaderReceipt
 
 	// DefaultValidFor is the default authorization validity window, in seconds.
 	DefaultValidFor = 300

@@ -13,8 +13,8 @@
 // payments.go). Marketplace never dispatches a tool itself and never moves money
 // itself.
 //
-// CO-RESIDENCY — and the shipped topology does not have it. Say it plainly: the
-// three seams this package binds are process-globals (x402.reg, tools.std, and
+// TWO TRANSPORTS, ONE POLICY — because the shipped topology has no co-residency.
+// The three seams this package binds are process-globals (x402.reg, tools.std, and
 // wallets' mounted singleton), so they bind within ONE process, and the fleet runs
 // ONE PROCESS PER APP. That is not a possible future deployment, it is the only one:
 // manifest/apps.go declares marketplace, tools, x402 and wallets as four ordinary
@@ -23,24 +23,24 @@
 // (cmd/cloud/main.go:257, zip.Load on a binary path); and the fused monolith that
 // linked every subsystem was deleted (cmd/cloud/main.go:1-9).
 //
-// So today, in production:
+// So the wiring above bound nothing in production, and a listed tool was not merely
+// unbuyable — it was FREE. The tools process refuses a dispatch whose registry ROW
+// declares a price, but a marketplace price lives in the listing store, so a listing
+// on a tool that declares none was dispatched for nothing.
 //
-//   - the tools process has no charger → every priced dispatch is
-//     tools.ErrChargerUnset → 402 (apps/tools/registry.go:25, http.go:130);
-//   - this process publishes a price table into ITS OWN copy of x402.reg, where
-//     x402 was never mounted, so x402.Settle here finds mounted==nil;
-//   - the x402 process has no price table, no wallets and no finance ledger.
+// The fix is the internal plane (resource_billing_peer.go is the precedent: the same
+// split turned every priced create free, and the answer was to ASK the owning
+// process). Four ops, each served by the process that owns the answer:
 //
-// Every one of those fails CLOSED — a paid tool is never served free — so the
-// property that matters holds. What does NOT hold is that a priced tool can be
-// bought at all. That is the remaining half of this defect, and it is a fleet
-// topology change, not a wiring one: the fix is the internal plane
-// (resource_billing_peer.go is the precedent — the same split turned every priced
-// create free, and the answer was to ASK the owning process). It needs four ops:
-// tools→x402 settle, x402→marketplace price, x402→wallets resolve-payee, and
-// x402→commerce credit-payee. Until those exist, a priced listing is payable
-// exactly where these four are co-resident, which is what
-// apps/marketplace/payments_test.go composes and proves end to end.
+//	tools → x402         x402_settle     settle this tool call   (apps/x402/rpc.go)
+//	x402  → marketplace  market_price    what it costs, who is paid (rpc.go here)
+//	x402  → wallets      wallets_payee   resolve the payee wallet (apps/wallets/rpc.go)
+//	x402  → commerce     finance_credit  credit the payee (apps/commerce/credit_rpc.go)
+//
+// The in-process seam stays the FAST PATH where the owner is co-resident; the plane
+// answers where it is not. Both are the same policy and both fail closed, which is
+// what payments_test.go (one process) and split_test.go (five real processes) assert
+// against each other.
 //
 // Surface (all org-gated, /v1 only):
 //
@@ -110,6 +110,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// the table already there rather than a moment of "nothing is priced".
 	x402.Publish(&registry{store: store})
 	tools.SetCharger(charger{})
+
+	// The same table, published for the processes that do NOT have it: the rail
+	// runs in its own binary and asks (rpc.go). Both doors read the one store, so
+	// what a tool costs cannot differ by who is asking or over which transport.
+	exposePrice(store)
 
 	// cloud.Bridge FIRST, ahead of every leaf: a typed op receives a context.Context
 	// and its decoded In and nothing else, so the validated org — and the request the

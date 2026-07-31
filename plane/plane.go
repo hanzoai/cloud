@@ -35,6 +35,8 @@
 // one value is how books reconcile to a rounding difference nobody can find.
 package plane
 
+import "strings"
+
 // The op names. A caller and a callee that spell a name differently fail at the
 // call rather than at compile time, so both ends read them from here.
 //
@@ -60,6 +62,15 @@ const (
 	PlatformFleet   = "platform_fleet"
 	TreasuryReserve = "treasury_reserve"
 
+	// The x402 rail, across the process boundary. Four ops, because the four
+	// things a settlement needs live in four binaries: the RAIL is x402's, the
+	// PRICE is the marketplace's, the PAYEE is wallets', and the LEDGER is
+	// commerce's.
+	X402Settle    = "x402_settle"    // settle one priced resource, or report it free
+	MarketPrice   = "market_price"   // what a resource costs, and who is paid
+	WalletsPayee  = "wallets_payee"  // resolve a payout wallet to an address + subject
+	FinanceCredit = "finance_credit" // credit a subject's ledger (the payee side)
+
 	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
 	HostStart = "host_start"
 )
@@ -74,6 +85,43 @@ const (
 // a bug in laziness; it is a second door the loader has to open, and this names
 // it.
 const HostApp = "host"
+
+// The three x402 wire headers, in the leaf because the settlement now crosses a
+// process boundary: the process holding the REQUEST — where the proof arrives
+// and the challenge must be written — is not the process holding the RAIL. Both
+// ends read the names from here rather than one importing the other's subsystem.
+const (
+	// HeaderRequirements carries the PaymentRequirements on a 402 response.
+	HeaderRequirements = "X-Payment-Required"
+	// HeaderProof carries the client's signed authorization on the retry.
+	HeaderProof = "X-Payment"
+	// HeaderReceipt carries the settlement receipt on a served (2xx) response.
+	HeaderReceipt = "X-Payment-Receipt"
+)
+
+// toolResourcePrefix namespaces a TOOL as an x402 resource. x402 resources are
+// opaque ids and the Enforce middleware keys on request PATHS, so the prefix is
+// what keeps the two key spaces from colliding: no path begins "tool:", so a
+// price table can never accidentally price a route and a tool price can never be
+// bought by hitting a URL.
+//
+// A tool needs an id at all because every tool call arrives on the SAME route,
+// POST /v1/tools/call, with the tool named in the body — the path cannot say
+// which capability is being bought.
+const toolResourcePrefix = "tool:"
+
+// ToolResource names one tool as an x402 resource. The tool plane builds it to
+// ask what a dispatch costs; the marketplace keys its price table on it. One
+// spelling, in the package both import, because a caller and a callee that spell
+// a resource differently do not fail — they quietly agree the tool is free.
+func ToolResource(tool string) string { return toolResourcePrefix + tool }
+
+// ToolOf reads one back. ok=false means the resource is not a tool at all, which
+// is every request path the payment middleware asks about.
+func ToolOf(resource string) (string, bool) {
+	name, ok := strings.CutPrefix(resource, toolResourcePrefix)
+	return name, ok && name != ""
+}
 
 // Money is one amount, exactly. Decimal is the amount's own text and Currency
 // its ISO-style code; the two travel together so they cannot be separated in
@@ -309,6 +357,101 @@ type ReserveIn struct {
 
 // Reserved reports what was held.
 type Reserved struct {
+	Amount Money `json:"amount"`
+}
+
+// ---- x402.settle — the payment rail ----------------------------------------
+
+// SettleIn enforces payment for one resource on behalf of the CALLING tenant.
+//
+// Proof is the client's signed authorization, verbatim off the request's
+// X-Payment header. It travels as a field because the process that holds the
+// request is not the one that holds the rail, and there is no second place a
+// payer's proof could come from: the caller does not mint it and cannot alter it
+// without invalidating the signature it is checked against.
+//
+// There is no amount and no payee here, deliberately. What a resource costs and
+// who is paid are the price table's, resolved by the rail; a caller that could
+// state them could buy a $1 tool for a cent or redirect the credit.
+type SettleIn struct {
+	Resource string `json:"resource" validate:"required"`
+	Proof    string `json:"proof,omitempty"`
+}
+
+// Settled is ONE enforcement outcome, carried as data rather than as a transport
+// error for the same reason [Verdict] is: a 402 carries the terms the client must
+// read to pay, and an error body has no room for them.
+//
+// OK is the only field that means "serve it". Free says why it was OK — nothing
+// was owed — so a caller can tell a settled call from an unpriced one without
+// inferring it from an empty receipt. A transport error is NEITHER: it is
+// unknown, and a caller must fail closed on it rather than read it as free.
+type Settled struct {
+	OK        bool   `json:"ok"`
+	Free      bool   `json:"free,omitempty"`
+	Receipt   string `json:"receipt,omitempty"`   // the X-Payment-Receipt header value
+	Challenge string `json:"challenge,omitempty"` // the X-Payment-Required header value
+	Status    int    `json:"status,omitempty"`    // the refusal's status: 402, 403 or 503
+	Code      string `json:"code,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// ---- market.price — the price table ----------------------------------------
+
+// PriceIn asks what one resource costs.
+type PriceIn struct {
+	Resource string `json:"resource" validate:"required"`
+}
+
+// Priced is a resource's payment terms, or the answer that it is free.
+//
+// RecipientOrg is on the REPLY and not on the request: it is a property of the
+// listing — its publisher — never a claim by whoever is buying. That is the whole
+// reason a buyer cannot redirect a credit.
+type Priced struct {
+	Priced            bool   `json:"priced"`
+	Amount            Money  `json:"amount"`
+	RecipientOrg      string `json:"recipientOrg,omitempty"`
+	RecipientWalletID string `json:"recipientWalletId,omitempty"`
+	Token             string `json:"token,omitempty"`
+	Network           string `json:"network,omitempty"`
+	ChainID           int64  `json:"chainId,omitempty"`
+}
+
+// ---- wallets.payee — who is paid -------------------------------------------
+
+// PayeeIn resolves one payout wallet. The wallet's ORG rides the caller, stated
+// with cloud.For from the listing row — so the lookup is scoped to the publishing
+// org exactly as the in-process one is, and a wallet outside it cannot resolve.
+type PayeeIn struct {
+	WalletID string `json:"walletId" validate:"required"`
+}
+
+// Payee is a payout wallet resolved to the two things a settlement needs: the
+// address the challenge names, and the ledger subject the credit is written to.
+type Payee struct {
+	Found   bool   `json:"found"`
+	Address string `json:"address,omitempty"`
+	Subject string `json:"subject,omitempty"`
+}
+
+// ---- finance.credit — the payee side of a settlement -----------------------
+
+// CreditIn credits one subject's ledger.
+//
+// Ref is the idempotency key and is REQUIRED: this op exists to move the seller's
+// half of a settlement, and a settlement that can be applied twice is not a
+// settlement. Two credits carrying the same Ref move money at most once.
+type CreditIn struct {
+	Subject string `json:"subject" validate:"required"`
+	Amount  Money  `json:"amount"`
+	Ref     string `json:"ref" validate:"required"`
+	Notes   string `json:"notes,omitempty"`
+	Tags    string `json:"tags,omitempty"`
+}
+
+// Credited reports what the credit wrote.
+type Credited struct {
 	Amount Money `json:"amount"`
 }
 

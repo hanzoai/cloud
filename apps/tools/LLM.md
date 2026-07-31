@@ -115,11 +115,11 @@ never the right type. `CheapestPublicForTool` also compares in Go rather than SQ
 `$10` is `10^19` atto, past int64, so `ORDER BY CAST(price AS INTEGER)` would
 mis-order the expensive half of the shop.
 
-### What is NOT closed — the process boundary. THE SEAM IS INERT IN PRODUCTION.
+### The process boundary — CLOSED, over the internal plane
 
-All three seams are process-globals (`x402.reg`, `tools.std`, wallets' mounted
-singleton), so the wiring binds **within one process**. The shipped fleet runs **one
-process per app**, and that is the only topology there is:
+The three seams are process-globals (`x402.reg`, `tools.std`, wallets' mounted
+singleton), so the wiring above binds **within one process**. The shipped fleet runs
+**one process per app**, and that is the only topology there is:
 
 - `manifest/apps.go` declares `tools`, `marketplace`, `x402`, `wallets` as ordinary
   prefix-routed rows. `Coresident` — the one flag that puts an app in another's
@@ -129,33 +129,58 @@ process per app**, and that is the only topology there is:
 - The fused monolith that linked all subsystems is **deleted**
   (`cmd/cloud/main.go:1-9`).
 
-So the honest state of this defect, per process:
+So the fleet bound nothing, and the failure was worse than the earlier reading of it.
+The `tools` process refused a dispatch whose *registry row* declared a price — but a
+marketplace price is a row in the LISTING store, not on the tool, so a listed tool
+with no declared price was dispatched **free**. Proven, not asserted: remove the first
+hop below and `TestSplitFleetSettlesAPricedTool` answers `200 {"ran":true}` to an
+unpaid call for a $0.0025 tool.
 
-| process | what it has | what happens |
-|---|---|---|
-| `tools` | no charger | every priced dispatch → `ErrChargerUnset` → 402 |
-| `marketplace` | a price table in its own `x402.reg`, no mounted x402 | `x402.Settle` finds `mounted == nil` |
-| `x402` | no price table, no wallets, no finance | nothing to enforce against |
+The fix is the one this fleet already had a pattern for. `resource_billing_peer.go`
+documents the identical bug — *"Splitting apps into their own binaries turned every
+priced create free without changing a line of billing code"* — and the answer was to
+ASK the owning process. Four ops, each in the process that owns the answer:
 
-Every one of those fails **closed** — a paid tool is never served free, and
-`x402.Enforce` now refuses rather than passing through when no table is published
-(`apps/x402/x402.go`, `unenforceable`), which is the one place this used to fail
-OPEN. What does not hold is that a priced tool can be **bought**.
+| # | op | who serves it | where |
+|---|---|---|---|
+| 1 | `x402_settle` | x402 | `apps/x402/rpc.go`, called from `apps/tools/charge_peer.go` |
+| 2 | `market_price` | marketplace | `apps/marketplace/rpc.go`, called from `apps/x402/peer.go` |
+| 3 | `wallets_payee` | wallets | `apps/wallets/rpc.go`, called from `apps/x402/peer.go` |
+| 4 | `finance_credit` | commerce | `apps/commerce/credit_rpc.go`, called from `apps/x402/peer.go` |
 
-Closing it is a fleet-topology change, and the fleet already has the pattern: the
-internal plane. `resource_billing_peer.go` documents the identical bug — *"Splitting
-apps into their own binaries turned every priced create free without changing a line
-of billing code"* — and the answer was to ASK the owning process (`cloud.Ask` /
-`zip.Post` on `cloud.Plane()`; see `apps/commerce/meter_rpc.go`). Four ops close it:
+The payer debit reuses `finance_record`, which already existed. **One policy, two
+transports**: the in-process global stays the fast path where the owner is
+co-resident, the plane answers where it is not, and `apps/marketplace/payments_test.go`
+(co-resident) and `apps/marketplace/split_test.go` (five real processes) assert the
+same properties over each.
 
-1. `tools` → `x402`: settle this tool call
-2. `x402` → `marketplace`: what does this resource cost, and who is paid
-3. `x402` → `wallets`: resolve the payee wallet in the publisher's org
-4. `x402` → `commerce`: credit the payee (the payer debit already peers)
+Fail-closed at every hop, and the one exception is a decided fact rather than a
+guess. `cloud.ErrNoPeer` means the router does not know the app — it is not part of
+this deployment — and only that restores the old "nothing is priced" answer. An
+unreachable peer that IS deployed is an outage: the call is refused, never served
+free. `TestSplitFleetPriceOutageIsNotFree` kills the marketplace process and asserts
+the priced tool is refused rather than given away.
 
-Until those exist, a priced listing is payable exactly where the four are
-co-resident, which is what `apps/marketplace/payments_test.go` composes — through
-the real `tools.Mount` door — and proves end to end.
+**Waking a peer.** A lazy app starts on a request reaching its prefix, and a plane
+call never touches the router — so before this, an app reached only over its socket
+was never started. `cmd/cloud/wake.go` publishes `zip.App.Start` as `host_start` on
+the router's own socket, and `cloud.Peer` asks it when a socket is unbound
+(`cmd/cloud/wake_test.go`).
+
+### Still NOT closed — the tool REGISTRY across the boundary
+
+Same bug class, different seam, and it is why a seller cannot list and a buyer cannot
+install in the shipped fleet:
+
+- `marketplace.publish` calls `tools.Default().Exists`, and the marketplace binary
+  registers no providers — so every publish answers `422 unknown tool`.
+- `marketplace.install` calls `tools.Default().Activate` against a registry with no
+  activation store — so every install answers `500 activation store not configured`.
+
+Both need their own ops on `tools` (an existence check and an activation write), and
+they belong to whoever owns the activation seam, not smuggled in behind a payment
+fix. `split_test.go` seeds the listing ROW and activates in the tools process, and
+says so at the line rather than faking a provider to hide it.
 
 ## Running a stdio package in our cloud — NOT BUILT, and why
 

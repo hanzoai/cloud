@@ -163,9 +163,10 @@ func commerceMasterKey(master []byte, lg log.Logger) []byte {
 // own gate chains (see Prefixes).
 func Mount(app *zip.App, deps cloud.Deps) error {
 	// The ledger lives here, so the methods that read and move it are published
-	// here: balance, the prepaid gate, and the debit.
+	// here: balance, the prepaid gate, the debit and the credit.
 	exposeBalance()
 	exposeMeter(deps.Metering)
+	exposeCredit()
 	exposeStarter()
 	exposeUsage()
 	exposeTxns()
