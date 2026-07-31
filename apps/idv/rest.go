@@ -12,7 +12,7 @@ import (
 )
 
 // rest.go is the real, config-driven verification provider: a hosted-inquiry REST
-// adapter that fits Persona and Onfido. Both expose the same
+// adapter that fits Persona, Onfido, and Stripe Identity. All three expose the same
 // shape this adapter drives — create an inquiry/session for a subject (returns an id
 // + a hosted URL the subject completes) and fetch it to read the current decision.
 // Their JSON field names and status vocabularies differ; the differences are
@@ -30,7 +30,7 @@ import (
 const httpTimeout = 15 * time.Second
 
 // REST is a hosted-inquiry verification provider. name is the provider label
-// (persona|onfido); base is its API root; key resolves the KMS-sealed bearer
+// (persona|onfido|stripe); base is its API root; key resolves the KMS-sealed bearer
 // token; classify maps the provider's status vocabulary to our honest Status
 // (fail-closed — an unrecognized token is pending, never verified).
 type REST struct {
