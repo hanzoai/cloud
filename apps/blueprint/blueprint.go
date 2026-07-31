@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package blueprint mounts the Hanzo Cloud /v1/blueprint/* surface: the
-// compute-cost basis for the OSS-template economy. Each deployable blueprint is a
-// docker-compose stack (templates.hanzo.ai/blueprints/<id>/docker-compose.yml);
-// this subsystem turns one into two things a deploying org and the console need:
+// Package blueprint is what a template costs to run, worked out before you deploy.
+//
+// It is the compute-cost basis for the OSS-template economy. Each deployable
+// blueprint is a docker-compose stack
+// (templates.hanzo.ai/blueprints/<id>/docker-compose.yml); this subsystem turns
+// one into two things a deploying org and the console need:
 //
 //  1. its SBOM — the bill of container images/services the stack runs, and
 //  2. a COMPUTE COST estimate — a per-hour rate derived from the services' summed

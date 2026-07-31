@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package social is social publishing: an org's connected channels (X, Facebook, Instagram, LinkedIn, TikTok, YouTube, Threads) and the posts it publishes now or schedules to them.",
+    "description": "Package social is posting to every social account you own, now or on a schedule.",
     "version": "v1"
   },
   "servers": [

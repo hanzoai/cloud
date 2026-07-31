@@ -1,6 +1,7 @@
-// Package automations is /v1/automations: an org authors flows — a trigger and a
-// tree of connector actions — and this runs them durably, on a schedule or a
-// webhook, and keeps their run history.
+// Package automations is workflows that run themselves, on a schedule or a webhook.
+//
+// An org authors flows — a trigger and a tree of connector actions — and this
+// runs them durably at /v1/automations and keeps their run history.
 //
 // It composes THREE existing seams rather than reinventing them:
 //

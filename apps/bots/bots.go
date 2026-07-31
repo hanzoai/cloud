@@ -1,6 +1,8 @@
-// Package bots is the CONTROL PLANE for a bot run: a task the bot runtime
-// executes on a surface — a desktop or terminal sandbox it drives — with a LIVE
-// session (the URL the hanzo.app /vnc panel embeds to watch/attach).
+// Package bots is a bot doing your work on a real desktop, live, while you watch.
+//
+// It is the CONTROL PLANE for a bot run: a task the bot runtime executes on a
+// surface — a desktop or terminal sandbox it drives — with a LIVE session (the
+// URL the hanzo.app /vnc panel embeds to watch/attach).
 //
 // A bot run is ONE value with ONE home. It is not the bot MACHINE that hosts a
 // runtime (visor's /v1/compute/bots — a machine you rent), and it is not the

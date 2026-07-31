@@ -1,6 +1,8 @@
-// Package websearch exposes Hanzo-native Web Search + Scrape on the unified
-// cloud-api /v1 plane, so hanzo.chat's web_search agent tool runs entirely on
-// Hanzo infrastructure with NO external SaaS provider, per HIP-0106.
+// Package websearch is a web search and a page fetch your agents can call.
+//
+// It exposes Hanzo-native Web Search + Scrape on the unified cloud-api /v1
+// plane, so hanzo.chat's web_search agent tool runs entirely on Hanzo
+// infrastructure with NO external SaaS provider, per HIP-0106.
 //
 // hanzo.chat (LibreChat fork) implements web_search as a fixed 3-stage pipeline
 // whose provider contracts are frozen by the upstream client
@@ -17,7 +19,7 @@
 //   - GET  /v1/websearch/search        SearXNG-shaped. Served NATIVELY in-process
 //     by a keyless Go meta-search (search.go) — no SearXNG pod, no search SaaS.
 //   - POST /v1/scrape                  Firecrawl-shaped. Served NATIVELY in-process
-//                                      by clients/crawl — fetch, extract, render —
+//     by clients/crawl — fetch, extract, render —
 //     returning {success,data:{markdown,metadata}}.
 //
 // Both halves are now in-process Go, for the same reason and by the same shape: a

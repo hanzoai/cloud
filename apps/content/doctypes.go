@@ -1,8 +1,9 @@
-// Package content is the Hanzo agentic-marketing lane: the marketing content loop
-// (generate → CMS → review → approve → publish → distribute) built natively on the
-// framework DocType engine, the ONE Go-native replacement for the bespoke karma
-// Python scripts, multi-tenant for ANY brand (org = tenant, project = brand/site
-// sub-scope).
+// Package content is marketing content from draft to published, on every channel.
+//
+// The Hanzo agentic-marketing lane: the content loop (generate → CMS → review →
+// approve → publish → distribute) built natively on the framework DocType
+// engine, the ONE Go-native replacement for the bespoke karma Python scripts,
+// multi-tenant for ANY brand (org = tenant, project = brand/site sub-scope).
 //
 // It follows the knowledge lane's proven shape — a framework MODULE (DocType
 // fixtures + lifecycle hook) PLUS a thin control-plane subsystem — NOT a second
@@ -113,7 +114,7 @@ func socialPost() framework.DocType {
 			{Fieldname: "caption", Fieldtype: framework.FieldText, Label: "Caption"},
 			{Fieldname: "excerpt", Fieldtype: framework.FieldSmall, Label: "Excerpt"},
 			{Fieldname: "channels", Fieldtype: framework.FieldData, Label: "Channels"}, // "x,instagram,tiktok"
-			{Fieldname: "media", Fieldtype: framework.FieldJSON, Label: "Media"},        // [{url,alt,mime}]
+			{Fieldname: "media", Fieldtype: framework.FieldJSON, Label: "Media"},       // [{url,alt,mime}]
 			{Fieldname: "campaign", Fieldtype: framework.FieldLink, Label: "Campaign", Options: DocTypeCampaign},
 			{Fieldname: "asset", Fieldtype: framework.FieldLink, Label: "Asset", Options: DocTypeAsset},
 			{Fieldname: "design", Fieldtype: framework.FieldData, Label: "Design"},

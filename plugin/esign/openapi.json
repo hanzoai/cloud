@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package esign folds hanzoai/esign (the Documenso fork — \"open-source DocuSign\") into the unified hanzoai/cloud binary as an in-process subsystem (HIP-0106, task #100, epic #96).",
+    "description": "Package esign is a document out for signature, signed and filed with an audit trail.",
     "version": "v1"
   },
   "servers": [

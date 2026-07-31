@@ -1,7 +1,8 @@
-// Package authors is the OSS royalty program: an author links GitHub, proves they
-// own a repo, and earns a royalty on the metered spend of every org that deploys a
-// project built from it — accrued per period and auto-paid, with a full audit
-// trail behind the number.
+// Package authors is a royalty for open-source work: your repo runs, you get paid.
+//
+// An author links GitHub, proves they own a repo, and earns a royalty on the
+// metered spend of every org that deploys a project built from it — accrued per
+// period and auto-paid, with a full audit trail behind the number.
 //
 // It is the CREATOR member of the three programs built on the same shape;
 // apps/referrals is the one-time bonus and apps/affiliates the partner commission.

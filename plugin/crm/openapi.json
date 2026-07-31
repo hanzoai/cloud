@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package crm is the sales pipeline: companies, the contacts who work at them, and the opportunities being worked — plus the Startup Program intake that lands as a scored application.",
+    "description": "Package crm is your sales pipeline: the companies, the people, the deals in play.",
     "version": "v1"
   },
   "servers": [

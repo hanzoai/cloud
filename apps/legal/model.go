@@ -1,8 +1,11 @@
-// Package legal mounts the ORG-SCOPED legal-document surface (/v1/legal): a versioned,
-// org-overridable library of standardized templates, a PURE merge-field generation
-// engine that renders those templates from the org's own company/cap-table data, a
-// KMS-sealed store for the generated documents, and the e-signature + filing seams
-// that carry a document to execution — all on the shared audit plane.
+// Package legal is the paperwork your company needs, drafted, signed and filed.
+//
+// The ORG-SCOPED legal-document surface (/v1/legal): a versioned,
+// org-overridable library of standardized templates, a PURE merge-field
+// generation engine that renders those templates from the org's own
+// company/cap-table data, a KMS-sealed store for the generated documents, and
+// the e-signature + filing seams that carry a document to execution — all on
+// the shared audit plane.
 //
 // THE BOUNDARY (a design invariant, enforced in the engine and the data model). Hanzo
 // Legal MANAGES documents; it does NOT give legal advice, and it does NOT determine

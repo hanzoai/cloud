@@ -1,6 +1,7 @@
-// Package social is social publishing: an org's connected channels (X, Facebook,
-// Instagram, LinkedIn, TikTok, YouTube, Threads) and the posts it publishes now or
-// schedules to them.
+// Package social is posting to every social account you own, now or on a schedule.
+//
+// An org's connected channels (X, Facebook, Instagram, LinkedIn, TikTok,
+// YouTube, Threads) and the posts it publishes or schedules to them.
 //
 // Two entities. An Account is a connected channel (the hanzoai/social stack's
 // "integration": GET /public/v1/integrations), and a Post is content published or

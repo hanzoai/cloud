@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package automations is /v1/automations: an org authors flows — a trigger and a tree of connector actions — and this runs them durably, on a schedule or a webhook, and keeps their run history.",
+    "description": "Package automations is workflows that run themselves, on a schedule or a webhook.",
     "version": "v1"
   },
   "servers": [
