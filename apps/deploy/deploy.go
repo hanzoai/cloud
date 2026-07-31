@@ -1,7 +1,9 @@
-// Package deploy is Hanzo CD: the GitOps plane at /v1/deploy — observe the
-// operator-managed fleet (applications, resource tree, per-object health, live
-// diff, logs), and reconcile it (sync, rollback, git → cluster with prune-safe
-// self-heal).
+// Package deploy is Hanzo CD: see what each app is running, sync it, and roll
+// back a bad release.
+//
+// It is the GitOps plane at /v1/deploy — observe the operator-managed fleet
+// (applications, resource tree, per-object health, live diff, logs), and
+// reconcile it (sync, rollback, git → cluster with prune-safe self-heal).
 //
 // Each operator hanzo.ai/v1 App CR IS a GitOps Application: the desired state
 // declared for one workload, which the Hanzo operator reconciles into a

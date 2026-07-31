@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package venue is the org-scoped \"connect a cloud account\" plane: an org links its native cloud-provider accounts (DigitalOcean / AWS / GCP), and Hanzo DISCOVERS the Kubernetes clusters in each account and FOLDS them into the ONE fleet (apps/fleet) — the same registry apps/visor surfaces at /v1/clusters and apps/ml federates workloads onto.",
+    "description": "Package venue is bring your own cloud: link a DigitalOcean, AWS or GCP account and its clusters show up ready to run work.",
     "version": "v1"
   },
   "servers": [

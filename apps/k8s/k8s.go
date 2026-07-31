@@ -1,5 +1,5 @@
-// Package k8s holds the Kubernetes coordinates the cloud binary addresses — the
-// GroupVersionResources that identify our own CRs and the upstream objects we read.
+// Package k8s is the Kubernetes coordinates, declared once: the
+// GroupVersionResources for our own CRs and the upstream objects we read.
 //
 // These are VALUES, not per-subsystem opinions: "the operator App CR" is one fact,
 // and it was previously declared three times (apps/platform appsGVR, apps/deploy

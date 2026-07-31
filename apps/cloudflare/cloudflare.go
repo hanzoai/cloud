@@ -1,7 +1,10 @@
-// Package cloudflare is the per-org Cloudflare asset plane for the unified Hanzo
-// Cloud binary — the first-class /v1/cloudflare/* surface (sibling of /v1/dns and
-// /v1/domain) that manages an org's Cloudflare Zones/Analytics, Pages, Workers,
-// Workers AI, R2, KV, and D1 through the SAME per-org, KMS-sealed API token the org
+// Package cloudflare is your Cloudflare account, managed from Hanzo: zones,
+// Pages, Workers, Workers AI, R2, KV and D1.
+//
+// It is the per-org Cloudflare asset plane for the unified Hanzo Cloud binary —
+// the first-class /v1/cloudflare/* surface (sibling of /v1/dns and /v1/domain)
+// that drives an org's Zones/Analytics, Pages, Workers, Workers AI, R2, KV, and
+// D1 through the SAME per-org, KMS-sealed API token the org
 // connected via apps/integrations. Connecting the provider stays on the
 // integrations plane (/v1/integrations/cloudflare/{connect,callback}); MANAGING the
 // resources is this first-class plane — "how you connected" and "what you manage"

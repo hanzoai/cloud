@@ -1,5 +1,8 @@
-// Package functions mounts the Hanzo Cloud /v1/functions surface: a per-org
-// serverless function registry. Every function belongs to exactly one org (the
+// Package functions is your serverless code: publish it, call it over HTTP,
+// watch every run and what it cost.
+//
+// The /v1/functions registry is per-org — one function, one owner. Every
+// function belongs to exactly one org (the
 // gateway-minted X-Org-Id, HIP-0026); org isolation is the org column,
 // enforced on every query. The registry stores a function's runtime, source,
 // resource limits, and the NAMES of the secrets it mounts — never a secret

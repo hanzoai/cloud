@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package domain is Hanzo Domains — the DOMAIN-REGISTRATION product: search a name, see its price (with Hanzo's markup), buy it billed through the customer's prepaid wallet, and have it born pointing at Hanzo's own authoritative nameservers.",
+    "description": "Package domain is Hanzo Domains: search a name, see the price, buy it from your prepaid wallet.",
     "version": "v1"
   },
   "servers": [
