@@ -37,8 +37,12 @@
 //	GET  /v1/research/projects      every project + real totals (canonical + retained)
 //	GET  /v1/research/totals        headline aggregate + per-kind (?project=)
 //	POST /v1/research/grants        set visibility/consent for a stable id (separate auth)
+//	POST /v1/research/artifacts     record a diary artifact, content-addressed
+//	GET  /v1/research/artifacts     the diary feed, newest first (metadata only)
+//	GET  /v1/research/artifacts/:sha256  the artifact's bytes, by content hash
 //
-// Mounted into the unified cloud binary via apps.go ({Name:"research", Mount}).
+// Its own binary (plugin/research) states Name/Price/Mount; the host learns the
+// prefix from its manifest row.
 package research
 
 import (

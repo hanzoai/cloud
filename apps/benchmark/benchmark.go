@@ -2,7 +2,7 @@
 // benchmark ARENA — run the top-N canonical public benchmarks against any model or
 // endpoint, under ONE standardized harness, measure Hanzo's own models (enso, zen),
 // and reconcile any external provider-reported claim against that measurement.
-// Sibling to /v1/eval (eval = YOUR data + YOUR judge; benchmark =
+// Sibling to /v1/evals (evals = YOUR data + YOUR judge; benchmark =
 // the canonical public tests, comparable + provenance-first + leaderboard).
 //
 // Provenance-first, never blended: a `published_claim` (what a vendor reports) and a
@@ -11,8 +11,9 @@
 // harness). The store is append-only; a re-scored label
 // is a new score_event, never an overwrite.
 //
-// Mounted into the unified cloud binary via apps.go ({Name:"benchmark", Mount}); the
-// Python enso-bench harness is the research prototype, THIS is the product surface.
+// Its own binary (plugin/benchmark) states Name/Price/Mount; the host learns the
+// prefix from its manifest row. The Python enso-bench harness is the research
+// prototype, THIS is the product surface.
 package benchmark
 
 import (

@@ -10,6 +10,7 @@
 //	GET    /v1/prompts            list current prompts for the org   -> {data:[PromptMeta]}
 //	POST   /v1/prompts            create or add-a-version            -> PromptDetail
 //	GET    /v1/prompts/metrics    real per-prompt stats              -> {data:[...]}
+//	GET    /v1/prompts/catalog    the embedded read-only starter set -> {data:[...]}
 //	GET    /v1/prompts/:name      prompt detail + version history    -> PromptDetail
 //	DELETE /v1/prompts/:name      delete a prompt (+ its versions)
 //

@@ -8,7 +8,7 @@
 // connector executes as ordinary in-process work — a goroutine, not a service.
 //
 // This is the substrate that retires the standalone ActivePieces Node engine
-// (the `auto` pod). It sits ALONGSIDE clients/automations' Tier-A native Go
+// (the `auto` pod). It sits ALONGSIDE apps/automations' Tier-A native Go
 // connectors: those are hand-written Go; this runs the long tail of JS
 // connectors unchanged. Both are org-scoped by the caller — the runtime never
 // resolves a credential itself; it receives the already-resolved `auth`.
