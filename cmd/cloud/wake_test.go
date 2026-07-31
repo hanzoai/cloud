@@ -84,8 +84,10 @@ func router(t *testing.T, name string) {
 	}
 	t.Cleanup(func() { _ = app.Shutdown() })
 
-	stop := serveWake(app)
-	t.Cleanup(func() { _ = stop() })
+	// Called exactly as run() calls it: no handle, torn down by the app's own
+	// shutdown hooks. If this ever grows a return value again, the caller in
+	// main.go is one `defer f()()` away from never opening the door at all.
+	serveWake(app)
 	waitFor(t, zip.SocketPath(plane.HostApp))
 }
 

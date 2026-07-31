@@ -503,10 +503,18 @@ func settle(s *cloud.Service[state], ctx context.Context, req PaymentRequirement
 //
 // The prepaid ledger has ONE writer and it is commerce's process, so in the shipped
 // fleet neither backend is here: both halves cross the plane, to the same peer, and
-// a debit that lands means the peer is up for the credit that follows. A credit that
-// fails anyway is REVERSED — same ledger, same idempotency discipline — because
-// "both sides or neither" is the property, and a compensating entry is how it stays
-// true once the first write has already landed.
+// a debit that lands means that peer is up for the credit that follows.
+//
+// A credit that fails ANYWAY is not compensated, and that is the deliberate answer.
+// Both writes are idempotent on the settlement id, and no row is recorded and no
+// receipt issued unless both landed — so the resource is refused and the client's
+// retry, carrying the same authorization, re-runs both and completes the settlement
+// exactly once. A reversing entry would look safer and be worse: the failure that
+// makes it necessary is usually a TIMEOUT, and a timeout does not mean the credit
+// did not commit — so the compensation would refund a payer who was correctly
+// charged while the seller kept the money, minting the difference out of a slow
+// socket. An unretried debit is a number the log names with the id both sides are
+// keyed on. Minted money is a number nobody can find.
 func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, payeeSubject string, amount money.Amount) error {
 	if st.PayeeOrg == "" {
 		return errors.New("x402: no payee org to credit")
@@ -515,15 +523,13 @@ func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, 
 		return err
 	}
 	if err := creditPayee(ctx, st, payeeSubject, amount); err != nil {
-		if rerr := reversePayer(ctx, st, amount); rerr != nil {
-			// The buyer is down the money and the seller was never paid. Nothing
-			// is served (the caller answers 503 and no receipt is issued), so this
-			// is a number somebody has to find — it says so, with the id both
-			// entries are keyed on.
-			s.Log.Error("x402: settlement half-landed and would not reverse",
-				"id", st.ID, "payer", st.PayerOrg, "amount", amount.String(),
-				"credit", err, "reversal", rerr)
-		}
+		// The payer's side landed and the payee's did not. Nothing is served and no
+		// receipt is issued, so the settlement has not happened — but the debit has,
+		// and it stays until the same authorization is retried. Say so, with the id
+		// both sides are keyed on, so it is reconcilable rather than merely lost.
+		s.Log.Error("x402: payer debited, payee credit failed — settlement incomplete until retried",
+			"id", st.ID, "payer", st.PayerOrg, "payeeOrg", st.PayeeOrg,
+			"amount", amount.String(), "err", err)
 		return err
 	}
 	return nil
@@ -555,20 +561,6 @@ func creditPayee(ctx context.Context, st *Settlement, payeeSubject string, amoun
 		return err
 	}
 	return creditPeer(st.PayeeOrg, payeeSubject, amount, st.ID, "x402:"+st.Resource)
-}
-
-// reversePayer undoes a debit whose credit did not land. Keyed on the settlement id
-// too, so the reversal is as exactly-once as the thing it reverses.
-func reversePayer(ctx context.Context, st *Settlement, amount money.Amount) error {
-	ref := st.ID + ":reversal"
-	if fin := finance.Current(); fin != nil {
-		_, err := fin.Deposit(ctx, types.DepositInput{
-			Org: st.PayerOrg, Subject: st.PayerOrg, Amount: amount, Currency: "usd",
-			Ref: ref, Notes: "x402:reversal:" + st.Resource, Tags: "x402",
-		})
-		return err
-	}
-	return creditPeer(st.PayerOrg, st.PayerOrg, amount, ref, "x402:reversal:"+st.Resource)
 }
 
 // settlementRef addresses one settlement by the id its receipt carries.
@@ -664,8 +656,19 @@ func tokenUnits(amount money.Amount, decimals int) string {
 	return new(big.Int).Quo(i, div).String()
 }
 
+// sameTerms decides whether a re-submitted authorization is the SAME settlement —
+// an idempotent retry, answered with the original receipt — or a nonce reused for
+// something else, which is a replay and is refused.
+//
+// PayerOrg is part of the identity and not an afterthought. Without it a captured
+// X-Payment header is a bearer token across tenants: org B replays org A's proof,
+// the id matches, every other field matches because they describe the same purchase,
+// and B is served the priced tool having paid nothing while A's receipt is handed
+// back. The payer is who the settlement was FOR, so a different payer is a different
+// settlement — and it can only ever be a replay, because the signature commits to
+// A's address and B cannot produce one of its own for A's nonce.
 func sameTerms(a, b *Settlement) bool {
-	return a.Resource == b.Resource && a.Amount == b.Amount &&
+	return a.Resource == b.Resource && a.Amount == b.Amount && a.PayerOrg == b.PayerOrg &&
 		addressEqual(a.Payee, b.Payee) && addressEqual(a.From, b.From)
 }
 

@@ -618,3 +618,44 @@ func TestSplitFleetPriceOutageIsNotFree(t *testing.T) {
 		t.Fatalf("a refused call moved money: %s → %s", before, got)
 	}
 }
+
+// TestSplitFleetProofIsNotABearerToken is the attack a settlement id invites. The
+// id is keccak(payer address | nonce) and the proof rides a request HEADER, so a
+// second tenant that captures one — a log, a proxy, a shared client — can replay it
+// verbatim. Everything about it matches the recorded settlement except WHO it was
+// for, and matching is what returns the original receipt and serves the tool.
+//
+// So the payer is part of the settlement's identity, and a different one is a replay
+// rather than a retry: org B is refused, and A's ledger is untouched by B's attempt.
+func TestSplitFleetProofIsNotABearerToken(t *testing.T) {
+	const thief = "thieforg"
+	f := splitFleet(t)
+	f.fund(buyerOrg, money.FromCents(100))
+	f.fund(thief, money.FromCents(100))
+	if err := tools.Default().Activate(context.Background(), thief, "default", pricedTool, "u_"+thief); err != nil {
+		t.Fatalf("activate for %s: %v", thief, err)
+	}
+
+	// The buyer pays for its own call, honestly.
+	_, _, hdr := f.call(buyerOrg, pricedTool, "")
+	proof := f.pay(f.challengeOf(hdr), newNonce(t))
+	if code, body, _ := f.call(buyerOrg, pricedTool, proof); code != http.StatusOK {
+		t.Fatalf("the honest paid call = %d (%s), want 200", code, body)
+	}
+	buyerAfter, sellerAfter := f.balance(buyerOrg, buyerOrg), f.balance(sellerOrg, f.wallet)
+
+	// THE ATTACK: another org submits the SAME authorization, byte for byte.
+	code, body, _ := f.call(thief, pricedTool, proof)
+	if code == http.StatusOK {
+		t.Fatalf("a captured X-Payment served another tenant's call: %s", body)
+	}
+	if got := f.balance(thief, thief); got.Cmp(money.FromCents(100)) != 0 {
+		t.Fatalf("the replaying org was charged %s for a refused call", money.FromCents(100).Sub(got))
+	}
+	if got := f.balance(buyerOrg, buyerOrg); got.Cmp(buyerAfter) != 0 {
+		t.Fatalf("the replay moved the REAL payer's money: %s → %s", buyerAfter, got)
+	}
+	if got := f.balance(sellerOrg, f.wallet); got.Cmp(sellerAfter) != 0 {
+		t.Fatalf("the replay credited the seller a second time: %s → %s", sellerAfter, got)
+	}
+}
