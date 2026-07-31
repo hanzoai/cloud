@@ -1,11 +1,14 @@
 // Copyright (C) 2020-2026, Hanzo AI Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-// Package base embeds the Hanzo Base app engine in-process in the unified cloud
-// binary (the HIP-0106 base fold) — the in-binary replacement for the standalone
-// `ghcr.io/hanzoai/superbase` pod, whose whole job was `base.New()` + serve.
-// cloud already links github.com/hanzoai/base, so it runs the SAME engine
-// in-process across TWO orthogonal lanes:
+// Package base is managed Hanzo Base (/v1/base, /v1/collections): a hosted app
+// engine per org — collections, records, rules, IAM-validated auth — plus the
+// platform's public waitlist at /v1/waitlist.
+//
+// It is the in-binary replacement for the standalone `ghcr.io/hanzoai/superbase`
+// pod, whose whole job was `base.New()` + serve. cloud already links
+// github.com/hanzoai/base, so it runs the SAME engine in-process across TWO
+// orthogonal lanes:
 //
 //	LANE 1 — the viral waitlist (GTM launch surface). ONE platform Base app
 //	carries the waitlist plugin; its /v1/waitlist/* routes are PUBLIC (a signup
@@ -22,6 +25,13 @@
 //
 // The two lanes are deliberately NOT one app: the waitlist is a public, single,
 // brand-level instance; hosted Bases are private, per-org, and many.
+//
+// A THIRD prefix, /v1/collections, is served by neither engine above: it is a
+// principal-gated forward to the SEPARATE managed Base deployment that owns the
+// cross-instance `tenants` registry (collections.go). It answers the same
+// question the embed lane does — an org's collections and their records — from a
+// different store, so the two are not interchangeable and one of them is
+// eventually redundant.
 //
 // MOUNT PREFIX. Base's REST router honours BASE_API_PREFIX (default /v1); this
 // package pins it to /v1/base so the per-org engine serves its collections API

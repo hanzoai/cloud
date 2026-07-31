@@ -1,7 +1,7 @@
-// Package sync is the universal sync service (/v1/sync): cloud↔cloud data
-// sync between connected platforms, expressed as Syncs the engine runs. Git
-// (GitHub/GitLab ⇆ native Hanzo Git) is the FIRST provider; storage, db, and other
-// kinds are new providers at their own kind with nothing in the engine to change.
+// Package sync is data sync (/v1/sync): a Sync links two endpoints and the engine
+// reconciles them — on a webhook, on a schedule, or on an explicit run. Git
+// (GitHub/GitLab ⇆ native Hanzo Git) is the one provider registered today; another
+// kind is another Provider, with nothing in the engine to change.
 //
 // Shape (decomplected):
 //   - store.go        ONE table, syncs — the sync intent + engine cursor state.
