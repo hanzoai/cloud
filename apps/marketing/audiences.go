@@ -18,11 +18,11 @@ import (
 
 // audiences.go is the cohort engine. An Audience is a saved filter over the
 // org's product analytics — "distinct users who did EVENT within the last N
-// days" — evaluated live against the shared hanzo.events warehouse through the
-// ai/object datastore seam (the SAME lens clients/analytics reads).
+// days" — evaluated live against the event plane (event.event) through the
+// shared datastore seam (the SAME lens clients/analytics reads).
 //
-// TENANCY & SAFETY. Every query leads with `tenant_id = ?` (the IAM org slug,
-// the events table's canonical org column) as a BOUND arg, and the event name +
+// TENANCY & SAFETY. Every query leads with `org = ?` (the IAM org slug, the
+// plane's canonical org column) as a BOUND arg, and the event name +
 // time bound are bound too — never string-interpolated — so a cohort can neither
 // read another org's events nor inject SQL. When the warehouse is not wired
 // (DatastoreEnabled == false) the preview is honest-empty (Available=false),
@@ -49,9 +49,10 @@ const (
 	audResolveLimit = 100000
 )
 
-// eventsTable is the shared web/commerce/UI wide event table (org column
-// tenant_id), honest-empty until the collector emits.
-const eventsTable = "hanzo.events"
+// eventsTable is the event plane's product-event table (org column `org`),
+// honest-empty until the collector emits. DDL owner: hanzoai/o11y — marketing
+// only reads it.
+const eventsTable = "event.event"
 
 // Audience is a saved cohort filter. It is also the INPUT of create — the wire
 // shape is the same record either way — with ID/CreatedAt/UpdatedAt assigned by
@@ -169,15 +170,15 @@ func (s *Store) DeleteAudience(ctx context.Context, org, id string) (bool, error
 }
 
 // cohortIDs is the ONE cohort query: the distinct_ids the audience's event
-// selected inside its window, bounded by limit. tenant_id, event and the time
-// bound are ALL bound args — one tenancy invariant, no injection.
+// selected inside its window, bounded by limit. org, name and the time bound
+// are ALL bound args — one tenancy invariant, no injection.
 func cohortIDs(ctx context.Context, org string, a Audience, limit int) ([]string, error) {
 	if !datastore.Ready() {
 		return nil, errWarehouse
 	}
 	sinceLit := time.Now().UTC().AddDate(0, 0, -a.WindowDays).Format("2006-01-02 15:04:05")
 	rows, err := datastore.Query(ctx,
-		"SELECT DISTINCT distinct_id FROM "+eventsTable+" WHERE tenant_id = ? AND event = ? AND timestamp >= ? LIMIT ?",
+		"SELECT DISTINCT distinct_id FROM "+eventsTable+" WHERE org = ? AND name = ? AND time >= ? LIMIT ?",
 		org, a.Event, sinceLit, limit)
 	if err != nil {
 		return nil, fmt.Errorf("warehouse query: %w", err)
@@ -365,7 +366,7 @@ func (o ops) deleteAudience(ctx context.Context, in *AudienceRef) (*struct{}, er
 // mails 3 says so, in deliverable and unmatched. Nothing is sent.
 //
 // Example: {"id": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
-// Response: {"available": true, "count": 500, "deliverable": 3, "unmatched": 497, "sample": ["u_1", "u_2"], "source": "hanzo.events"}
+// Response: {"available": true, "count": 500, "deliverable": 3, "unmatched": 497, "sample": ["u_1", "u_2"], "source": "event.event"}
 func (o ops) previewAudience(ctx context.Context, in *AudienceRef) (*AudiencePreview, error) {
 	org, err := tenant(ctx)
 	if err != nil {
