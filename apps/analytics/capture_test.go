@@ -478,8 +478,8 @@ func TestCapture_HostIsNotATenant(t *testing.T) {
 		{canonDoor, "hanzo.ai", canonPageview},
 		{canonDoor, "app.lux.cloud", canonPageview},
 		{canonDoor, "evil.example.com", canonPageview}, // an unknown Host is treated the same
-		{"/v1/insights/e", "hanzo.ai", posthogPage},
-		{"/v1/insights/e", "evil.example.com", posthogPage},
+		{"/v1/event", "hanzo.ai", posthogPage},
+		{"/v1/event", "evil.example.com", posthogPage},
 	} {
 		if code, body := doHost(t, app, tc.path, "", "", tc.host, tc.body); code != http.StatusServiceUnavailable {
 			t.Fatalf("anonymous pageview %s on host %q want 503 (admitted), got %d (%s)", tc.path, tc.host, code, body)
