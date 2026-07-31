@@ -1013,11 +1013,18 @@ is mechanical; skip it and you will rediscover eight failure modes the hard way.
    typed op receives only a context, so the validated org has to be parked there.
    fiber runs middleware in registration order — one installed after its leaves
    never runs. Untyped handlers read identity off the request and hide this.
-4. **Identity is NEVER an In field.** `principal.OrgFrom(ctx)` for the tenant. An
-   In field is caller-supplied, so a tenant key read from one is a cross-tenant
-   read the caller asserted for itself. If you need more than the org (admin-ness
-   lives in a header), that is `cloud.Request(ctx)` — and it is PINNED, so add
-   your file to `allowedRequestUses` with a justification or the gate fails.
+4. **Identity is NEVER an In field.** `principal.OrgFrom(ctx)` for the tenant, and
+   `principal.ValidatedFrom(ctx)` when the plane has no tenant at all and the gate
+   is only "is this caller signed in" (a deployment-global read — `apps/engine`'s
+   shared runtime, o11y's infra-health probe). `cloud.Bridge` parks BOTH in one
+   expression, so they are always set together. An In field is caller-supplied, so
+   a tenant key read from one is a cross-tenant read the caller asserted for
+   itself. If you need more than those two (admin-ness lives in a header), that is
+   `cloud.Request(ctx)` — and it is PINNED, so add your file to
+   `allowedRequestUses` with a justification or the gate fails. Note which way
+   they differ before choosing: `OrgFrom` composes validated-ness AND an org, so
+   it refuses a signed-in caller whose token names no home org (a machine token) —
+   right for a plane with rows to scope, wrong for one without.
 5. **Preserve the wire, exactly.** Same JSON shapes, same statuses. `//go:generate
    go run github.com/zap-proto/zip/cmd/zipdoc` in the package, then
    `make -C apps/<app> openapi`.
