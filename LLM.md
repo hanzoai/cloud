@@ -690,6 +690,20 @@ embedded underneath.
 subsets. They are four renderings of one value, not four projections; see "The
 document pipeline" below.)
 
+- **The public `/v1/openapi.json` is the HOST's, and it is the WEAVE — not a live
+  router** (`cmd/cloud` `spec()` → `openapi.MountFleet`). `openapi.Mount` above is
+  right for a process that IS the API; the deployed front door is not one. The
+  light host mounts no subsystem, so reading its live router describes 113 proxy
+  prefixes and a console catch-all — and mounting the fleet to answer a public GET
+  is exactly the cost laziness exists to avoid. Left unclaimed the path was not
+  unrouted but MISrouted: it fell to ai's bare `/v1`, and api.hanzo.ai published
+  the ai child's own 8-path document as the whole API, 200 OK, to every SDK
+  generator that read it. The host answers from `plugin.Spec` — the same committed
+  subsets `surface-check` regenerates — through `openapi.Fleet`, the same
+  composition that WRITES `openapi.yaml`. So the served bytes and the artifact are
+  one document by construction; `cmd/cloud/openapi_test.go` asserts exactly that
+  (byte equality) and that a plugin never answers the door.
+
 - **The spec IS the router.** `openapi.Live(app)` reads
   `app.Fiber().GetRoutes(true)` — fiber's own filter drops `Use()` middleware —
   and every other function in `openapi/` is a pure function of that `[]Route`.
