@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -227,10 +228,39 @@ type Query struct {
 	// the org-visible view is the same query with it false, so "what an org sees"
 	// and "what an admin sees" are ONE query and cannot drift apart.
 	Hidden bool
+	// Limit bounds the page. Zero or less means catalogPage; more than catalogMax
+	// is clamped to it.
+	Limit int
+	// Offset skips that many rows.
+	Offset int
 }
 
-// List returns the matching listings: featured first, then name.
-func (s *CatalogStore) List(ctx context.Context, q Query) ([]MCPListing, error) {
+const (
+	// catalogPage is a page of listings, and catalogMax is the most one request
+	// may ask for. They are not decoration: the public registry held 19,321
+	// servers the first time this synced, so an unbounded list is a twenty-megabyte
+	// response nobody asked for and a storefront that renders in a minute.
+	catalogPage = 50
+	catalogMax  = 200
+)
+
+// page is the bounded (limit, offset) a query resolves to. A limit that is not a
+// positive integer reads as the default, which is what an absent one is.
+func (q Query) page() (int, int) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = catalogPage
+	}
+	if limit > catalogMax {
+		limit = catalogMax
+	}
+	return limit, max(q.Offset, 0)
+}
+
+// List returns one page of the matching listings, featured first then name, with
+// the total the filter matched — which is what lets a storefront say "showing 50
+// of 9,216" rather than implying the shelf ends where the page does.
+func (s *CatalogStore) List(ctx context.Context, q Query) ([]MCPListing, int, error) {
 	where := []string{}
 	args := []any{}
 	if !q.Hidden {
@@ -243,29 +273,43 @@ func (s *CatalogStore) List(ctx context.Context, q Query) ([]MCPListing, error) 
 		where = append(where, "official=1")
 	}
 	if t := strings.TrimSpace(q.Text); t != "" {
-		where = append(where, "(name LIKE ? OR title LIKE ? OR description LIKE ?)")
-		like := "%" + t + "%"
+		// ESCAPE, because % and _ are wildcards and a caller searching for the
+		// literal "create_payment" means the underscore.
+		where = append(where, `(name LIKE ? ESCAPE '\' OR title LIKE ? ESCAPE '\' OR description LIKE ? ESCAPE '\')`)
+		like := "%" + likeEscape(t) + "%"
 		args = append(args, like, like, like)
 	}
-	stmt := `SELECT ` + listingCols + ` FROM catalog`
+	clause := ""
 	if len(where) > 0 {
-		stmt += " WHERE " + strings.Join(where, " AND ")
+		clause = " WHERE " + strings.Join(where, " AND ")
 	}
-	stmt += " ORDER BY featured DESC, name"
-	rows, err := s.db.QueryContext(ctx, stmt, args...)
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM catalog`+clause, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("tools: count catalog: %w", err)
+	}
+	limit, offset := q.page()
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+listingCols+` FROM catalog`+clause+` ORDER BY featured DESC, name LIMIT ? OFFSET ?`,
+		append(args, limit, offset)...)
 	if err != nil {
-		return nil, fmt.Errorf("tools: list catalog: %w", err)
+		return nil, 0, fmt.Errorf("tools: list catalog: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	out := []MCPListing{}
 	for rows.Next() {
 		l, err := scanListing(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, l)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
+}
+
+// likeEscape makes a search term literal: the LIKE wildcards, and the escape
+// character itself, stop being operators.
+func likeEscape(s string) string {
+	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(s)
 }
 
 // Get returns one listing by id. A hidden listing is returned — the caller
@@ -351,9 +395,20 @@ func (s *CatalogStore) Sync(ctx context.Context) (added, updated int, err error)
 		if err != nil {
 			return added, updated, err
 		}
+		// One transaction per PAGE. The store is one connection, so a row per
+		// commit is a page's worth of fsyncs for a page's worth of rows — nineteen
+		// thousand of them on a first sync, inside a request someone is waiting on.
+		// Per page rather than per sync, because a walk over a third party's cursor
+		// can end in an error at any point and the pages that DID read are worth
+		// keeping.
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return added, updated, fmt.Errorf("tools: begin catalog write: %w", err)
+		}
 		for _, l := range batch {
 			was, held := have[l.ID]
-			if err := s.put(ctx, l); err != nil {
+			if err := s.put(ctx, tx, l); err != nil {
+				_ = tx.Rollback()
 				return added, updated, err
 			}
 			switch {
@@ -363,6 +418,9 @@ func (s *CatalogStore) Sync(ctx context.Context) (added, updated int, err error)
 				updated++
 			}
 			have[l.ID] = l.digest()
+		}
+		if err := tx.Commit(); err != nil {
+			return added, updated, fmt.Errorf("tools: commit catalog page: %w", err)
 		}
 		if next == "" || len(batch) == 0 {
 			return added, updated, nil
@@ -412,11 +470,11 @@ func (s *CatalogStore) digests(ctx context.Context) (map[string]string, error) {
 // put writes one upstream listing. The curation columns are absent from the
 // update list, so they survive; official is written only while the row is
 // UNCURATED, so the derivation is a default and an admin's answer is final.
-func (s *CatalogStore) put(ctx context.Context, l MCPListing) error {
+func (s *CatalogStore) put(ctx context.Context, tx *sql.Tx, l MCPListing) error {
 	transports, _ := json.Marshal(l.Transports)
 	packages, _ := json.Marshal(l.Packages)
 	remotes, _ := json.Marshal(l.Remotes)
-	_, err := s.db.ExecContext(ctx, `
+	_, err := tx.ExecContext(ctx, `
 INSERT INTO catalog (id, name, vendor, title, description, repo, site, version,
                      transports, packages, remotes, registry, digest, synced, official, logo)
 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -498,20 +556,25 @@ func (s *CatalogStore) fetch(ctx context.Context, base, cursor string) ([]MCPLis
 	if err := json.Unmarshal(body, &page); err != nil {
 		return nil, "", fmt.Errorf("tools: registry shape not recognised: %w", err)
 	}
+	// The cursor is echoed back on the next request and held for the loop check,
+	// so an upstream could otherwise hand us a megabyte of it, 5000 times.
+	if len(page.Metadata.NextCursor) > 512 {
+		return nil, "", fmt.Errorf("tools: registry cursor is %d bytes", len(page.Metadata.NextCursor))
+	}
 	out := make([]MCPListing, 0, len(page.Servers))
 	for _, e := range page.Servers {
 		v := e.Server
 		vendor, _, ok := strings.Cut(v.Name, "/")
-		if !ok || vendor == "" {
-			continue // not a reverse-DNS name; not something we can address
+		if !ok || !upstreamName.MatchString(v.Name) {
+			continue // not a name we can address, and not one we will invent an id for
 		}
 		l := MCPListing{
 			ID: listingID(v.Name), Name: v.Name, Vendor: vendor, Title: v.Title,
-			Description: v.Description, Repo: v.Repository.URL, Site: v.WebsiteURL,
+			Description: v.Description, Repo: webURL(v.Repository.URL), Site: webURL(v.WebsiteURL),
 			Version: v.Version, Registry: base,
 		}
 		if len(v.Icons) > 0 {
-			l.Logo = v.Icons[0].Src
+			l.Logo = webURL(v.Icons[0].Src)
 		}
 		kinds := map[string]bool{}
 		for _, p := range v.Packages {
@@ -545,6 +608,30 @@ func (l MCPListing) digest() string {
 		l.Transports, l.Packages, l.Remotes})
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+// upstreamName is the registry's OWN name grammar: exactly one slash, a namespace
+// of [a-zA-Z0-9.-] and a remainder of [a-zA-Z0-9._-].
+//
+// It is enforced here rather than assumed, because listingID's reversibility rests
+// on it and the id is the catalog's PRIMARY KEY. A namespace containing an
+// underscore would make "com.foo_bar/mcp" and "com.foo/bar_mcp" the same row —
+// and put's conflict resolution PRESERVES curation, so the second would inherit
+// the first's featured, admin-vouched standing and replace its endpoint. An
+// upstream that publishes a name outside its own grammar is skipped.
+var upstreamName = regexp.MustCompile(`^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$`)
+
+// webURL keeps a third party's URL only when it is one a browser may follow.
+// Every one of these is RENDERED — the logo on a branding page, the repository and
+// site as links — and "src" from an untrusted registry is exactly where a
+// javascript: or data: URI would arrive. An unusable value is dropped rather than
+// stored, so no reader has to remember to re-check it.
+func webURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return ""
+	}
+	return u.String()
 }
 
 // listingID is the URL form of a reverse-DNS name: the one slash written as an
@@ -597,7 +684,9 @@ func isOfficial(l MCPListing) bool {
 	for _, r := range l.Remotes {
 		serves = append(serves, r.URL)
 	}
-	serves = append(serves, l.Site, l.Repo)
+	if len(serves) == 0 {
+		serves = append(serves, l.Site, l.Repo)
+	}
 	for _, raw := range serves {
 		if raw == "" {
 			continue

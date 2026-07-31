@@ -60,6 +60,14 @@ type door struct{}
 func (door) Tools(ctx context.Context) []map[string]any {
 	scope, err := scopeOf(ctx)
 	if err != nil {
+		// An empty list and a broken identity hop look identical from outside, and
+		// the second is the one that would be silent forever: in the split-process
+		// deployment the host forwards this to the tools plugin, which re-runs its
+		// own identity boundary, and a credential that does not survive that hop
+		// makes every org's per-caller list empty with nothing logged anywhere.
+		if mounted != nil {
+			mounted.Log.Warn("mcp door: no validated caller, serving no per-caller tools", "err", err)
+		}
 		return nil
 	}
 	all := Default().List(ctx, scope)

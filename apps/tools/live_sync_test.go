@@ -29,21 +29,31 @@ func TestLiveRegistry(t *testing.T) {
 	if total < 100 {
 		t.Fatalf("the public registry has thousands of servers; got %d", total)
 	}
-	official, err := c.List(ctx, Query{Official: true})
+	_, officials, err := c.List(ctx, Query{Official: true})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	hosted, err := c.List(ctx, Query{})
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	n := 0
-	for _, l := range hosted {
-		if l.Endpoint() != "" {
-			n++
+	n, page := 0, 0
+	for {
+		batch, _, err := c.List(ctx, Query{Limit: catalogMax, Offset: page})
+		if err != nil {
+			t.Fatalf("List: %v", err)
 		}
+		if len(batch) == 0 {
+			break
+		}
+		for _, l := range batch {
+			if l.Endpoint() != "" {
+				n++
+			}
+		}
+		page += len(batch)
 	}
-	t.Logf("catalog: %d listings, %d official, %d enable-able today", total, len(official), n)
+	t.Logf("catalog: %d listings, %d official, %d enable-able today", total, officials, n)
+	official, _, err := c.List(ctx, Query{Official: true, Limit: 5})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
 	for i, l := range official {
 		if i == 5 {
 			break

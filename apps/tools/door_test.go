@@ -110,10 +110,10 @@ func enable(t *testing.T, org, id, listing, url string) {
 	if mounted == nil {
 		t.Fatal("the tool plane is not mounted")
 	}
-	if _, _, err := mounted.State.servers.Create(context.Background(), MCPServer{
+	if _, err := mounted.State.servers.Write(context.Background(), MCPServer{
 		ID: id, Org: org, Name: "vendor", URL: url, AuthHeader: "Authorization",
 		HasSecret: true, Listing: listing,
-	}); err != nil {
+	}, true); err != nil {
 		t.Fatalf("create server: %v", err)
 	}
 }
