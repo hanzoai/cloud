@@ -25,7 +25,7 @@
 // for a platform SuperAdmin. Preferences are personal, and no operational task
 // requires reading someone else's.
 //
-// NOT SETTINGS. clients/settings is per-ORG, per-product configuration with KMS
+// NOT SETTINGS. apps/settings is per-ORG, per-product configuration with KMS
 // custody for secret fields. This is per-USER UI state with no secrets. They are
 // different tenancy keys answering different questions, so they are different
 // planes — collapsing them would put one user's theme under an org key and make

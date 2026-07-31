@@ -1,17 +1,10 @@
-// Package team mounts the Hanzo Cloud /v1/team/* surface: the native-Go port of
-// hanzo team-go (HIP-0106, task #45) into the unified cloud binary. Phase 1 is
-// the SPA READ PLANE + bots-as-members:
+// Package team is Hanzo Team, the org's shared workspace: IAM sign-in and
+// workspace selection, the transactor WebSocket a workspace's documents ride,
+// collaborative editing on /collaborator, per-workspace files, the wallet page
+// with its plan + seats, and the org's agents projected in as bot members.
 //
-//	GET  /v1/team/health                       liveness (HIP-0106 uniform contract)
-//	POST /v1/team/account                       JSON-RPC login + workspace selection
-//	GET  /v1/team/account/providers             login providers (IAM only)
-//	GET  /v1/team/account/auth/:provider        IAM OAuth start (redirect)
-//	GET  /v1/team/account/auth/:provider/callback IAM OAuth callback (mint token)
-//	PUT  /v1/team/account/cookie                set the HttpOnly session cookie
-//	DEL  /v1/team/account/cookie                clear it
-//	GET  /v1/team/transactor/:token             the workspace data-plane WebSocket
-//	GET  /v1/team/bots                          list the org's bot members (read)
-//	POST /v1/team/bots/sync                      re-project the org's agents (admin)
+// The published surface is the typed ops themselves (plugin/team/openapi.json) —
+// there is no second route table here to drift out of date.
 //
 // TENANT ISOLATION. The org (tenant key) is NEVER a client-supplied header on any
 // data path:

@@ -25,10 +25,9 @@
 // masked). A plaintext secret can never reach SQLite — a secret write routes to KMS
 // or fails closed (503).
 //
-// This surface was previously mounted by clients/observe alongside the o11y read
-// paths; those reads now live in clients/o11y (the embedded runtime). Settings is
-// NOT observability — it is console product-detail config — so it is its own plane
-// here, its behavior preserved verbatim from the observe original.
+// NOT OBSERVABILITY. This surface once shared a package with the o11y read paths;
+// those reads live in apps/o11y now. A product's config and a product's telemetry
+// are different questions with different stores, so they are different planes.
 package settings
 
 import (
