@@ -335,7 +335,7 @@ func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPSer
 	if hasSecret && o.s.State.kms == nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "KMS not configured; refusing to store an MCP server secret")
 	}
-	created, err := o.s.State.servers.Create(ctx, MCPServer{
+	created, fresh, err := o.s.State.servers.Create(ctx, MCPServer{
 		ID: id, Org: org, Name: name, URL: url, AuthHeader: strings.TrimSpace(in.AuthHeader),
 		HasSecret: hasSecret, Listing: listing,
 	})
@@ -344,7 +344,13 @@ func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPSer
 	}
 	if hasSecret {
 		if err := o.s.State.kms.PutSecret(ctx, authRef(org, created.ID), []byte(in.Secret)); err != nil {
-			_, _ = o.s.State.servers.Delete(ctx, org, created.ID)
+			// Undo only what this request brought into being. Re-enabling an
+			// existing server with a new credential must not COST the org that
+			// server when KMS hiccups: the row it already had stands, still
+			// pointing at the credential it was already using.
+			if fresh {
+				_, _ = o.s.State.servers.Delete(ctx, org, created.ID)
+			}
 			return nil, zip.Errorf(http.StatusInternalServerError, "seal server secret: %v", err)
 		}
 	}
