@@ -8730,31 +8730,6 @@ components:
           description: ID is the machine to bind, from the URL path.
           type: string
       type: object
-    bindData:
-      properties:
-        boundAnchorSigner:
-          description: BoundAnchorSigner is the EVM address now signing anchors. Fund
-            it for gas.
-          type: string
-        chainId:
-          description: ChainID is the EVM chain the signer is bound for.
-          type: integer
-        org:
-          description: Org is the org whose treasury wallet was resolved.
-          type: string
-      type: object
-    bindOut:
-      properties:
-        data:
-          $ref: '#/components/schemas/bindData'
-          description: Data is the bound signer.
-        msg:
-          description: Msg carries an operator-facing note; empty on success.
-          type: string
-        status:
-          description: Status is "ok" on success.
-          type: string
-      type: object
     bindingList:
       properties:
         agentBindings:
@@ -18964,6 +18939,31 @@ components:
           description: WalletID is the wallet that signed.
           type: string
       type: object
+    signerData:
+      properties:
+        boundAnchorSigner:
+          description: BoundAnchorSigner is the EVM address now signing anchors. Fund
+            it for gas.
+          type: string
+        chainId:
+          description: ChainID is the EVM chain the signer is bound for.
+          type: integer
+        org:
+          description: Org is the org whose treasury wallet was resolved.
+          type: string
+      type: object
+    signerOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/signerData'
+          description: Data is the bound signer.
+        msg:
+          description: Msg carries an operator-facing note; empty on success.
+          type: string
+        status:
+          description: Status is "ok" on success.
+          type: string
+      type: object
     skillDeleted:
       properties:
         deleted:
@@ -25073,26 +25073,26 @@ paths:
         the books tamper-evident on chain, and returns the anchoring status.
       tags:
       - admin
-  /v1/admin/treasury/bind-anchor:
-    post:
+  /v1/admin/treasury/anchor/signer:
+    put:
       description: |-
-        BindTreasuryAnchorSigner makes the reserve's threshold MPC wallet the signer
+        Installs the reserve's threshold MPC wallet as the signer
         for on-chain anchors, and returns its EVM address so an operator can fund it
         for gas. It provisions-or-resolves the caller org's treasury wallet on the
         deployed MPC ring and installs it, so every later anchor commits the ledger
-        root SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent: a
-        repeat resolves the same wallet. SuperAdmin only.
-      operationId: post_v1_admin_treasury_bind-anchor
+        root SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent — a
+        repeat resolves the same wallet, which is why the address is a PUT. SuperAdmin
+        only.
+      operationId: put_v1_admin_treasury_anchor_signer
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/bindOut'
+                $ref: '#/components/schemas/signerOut'
           description: ok
-      summary: BindTreasuryAnchorSigner makes the reserve's threshold MPC wallet the
-        signer for on-chain anchors, and returns its EVM address so an operator can
-        fund it for gas.
+      summary: Installs the reserve's threshold MPC wallet as the signer for on-chain
+        anchors, and returns its EVM address so an operator can fund it for gas.
       tags:
       - admin
   /v1/admin/treasury/policy:
