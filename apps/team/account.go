@@ -30,6 +30,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/agents"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 	model "github.com/hanzoai/iam/pkg/model"
 )
@@ -234,6 +235,93 @@ func statusAmbiguous(url string) Status {
 }
 
 // ── route registration ────────────────────────────────────────────────────────
+
+// The prose for this file's four UNTYPED routes — the RPC envelope and the
+// three browser-shaped ones (two redirects and a Set-Cookie). None of them is a
+// value a typed In/Out can carry, so zipdoc has nothing to lift and without
+// this they publish an operationId and nothing else. The typed siblings
+// (/account/providers, DELETE /account/cookie) document themselves from their
+// own doc comments.
+//
+// The path keys are the FIBER patterns exactly as registered below.
+func init() {
+	openapi.Describe("/v1/team/account", http.MethodPost,
+		"Read the caller's account and switch workspace",
+		"The account control plane the Team client speaks: one POST carries a `method` verb "+
+			"and its `params`, and answers {\"result\": …}. The verbs are the session's own reads "+
+			"and the workspace switch — getLoginInfoByToken, getUserWorkspaces, selectWorkspace, "+
+			"getWorkspaceInfo, getMemberships, getPerson, getSocialIds, getRegionInfo, "+
+			"isReadOnlyGuest — plus sendInvite, which adds a member to a workspace and is "+
+			"refused for a caller who is not its owner or admin.\n\n"+
+			"A REFUSAL IS HTTP 200 carrying {\"error\": {severity, code, params}} — the platform "+
+			"Status the client translates — not a 4xx. An unreadable body, an unauthorized "+
+			"session and an unknown verb all arrive that way, so a caller that reads only the "+
+			"status code reads every failure here as a success.\n\n"+
+			"NO CREDENTIAL IS EVER HANDLED HERE. login, signUp, the OTP verbs, password change "+
+			"and reset, join and the guest-token exchange each answer Unauthorized with \"sign "+
+			"in at hanzo.id\" — a stated policy, not an unknown method, so the door being shut "+
+			"is a fact a test can pin. Sessions come from the OAuth pair under /account/auth.\n\n"+
+			"Auth is the team session token: Authorization: Bearer, else the HttpOnly "+
+			"account-token cookie. The tenant is that token's SIGNED org claim, never a header, "+
+			"and selectWorkspace resolves only among the orgs the token proves membership of. "+
+			"It also demands an explicit workspaceUrl — it never falls back to a first "+
+			"workspace, and a slug that resolves in two of the caller's orgs answers Ambiguous "+
+			"rather than picking one.")
+	openapi.Describe("/v1/team/account/auth/:provider", http.MethodGet,
+		"Start a sign-in at hanzo.id",
+		"STARTS the OAuth hop: answers 302 to hanzo.id's authorize endpoint and sets the "+
+			"short-lived HttpOnly state cookie that binds the flow to this browser. NO TOKEN "+
+			"COMES BACK FROM THIS CALL — the session is minted by the callback below, and a "+
+			"client that expects JSON here gets a redirect with no body.\n\n"+
+			"A browser is the intended caller. Anything else must follow the Location AND keep "+
+			"the Set-Cookie, because the callback refuses a flow whose state it cannot match. "+
+			"That cookie carries the random nonce plus the client's navigateUrl, so the round "+
+			"trip needs no second channel, and it lives ten minutes — the whole budget for the "+
+			"hop.\n\n"+
+			"The provider segment only picks a hint: the redirect_uri is ALWAYS the canonical "+
+			"openid callback, the one IAM has registered. Measured end to end, hanzo.id strips "+
+			"that hint today, so /auth/google and /auth/openid land on the same Hanzo sign-in "+
+			"page — the federation shortcut is an upstream fix, not a second door here.")
+	openapi.Describe("/v1/team/account/auth/:provider/callback", http.MethodGet,
+		"Complete a sign-in and hand the browser its session",
+		"COMPLETES the OAuth hop: hanzo.id redirects the browser here with ?code and ?state, "+
+			"and the answer is another 302 — back to the client's login route carrying the "+
+			"freshly minted team session token in the query. Never JSON, and never a token in "+
+			"this response's own body.\n\n"+
+			"THE STATE IS CHECKED FIRST, before the code is even looked at: the flow cookie is "+
+			"read and cleared one-shot, and a callback whose ?state does not equal the nonce it "+
+			"held is bounced with error=state_mismatch and NEVER exchanged. That is what makes "+
+			"a forged or replayed callback inert. Only then is the code exchanged server-side — "+
+			"team is a confidential client with a client_secret, so there is no PKCE and the "+
+			"code never passes through the browser's JS.\n\n"+
+			"The tenant is derived from the IAM access token VERIFIED RS256 against the JWKS, "+
+			"the same trust anchor the identity boundary uses; a token whose owner claim is "+
+			"empty fails closed with no login at all. Every org that token proves gets a "+
+			"workspace ensured, so a member of two orgs is a counted seat in both. The IAM "+
+			"access token is also parked in an HttpOnly cookie for the same-origin agents "+
+			"proxy — page JS never reads it.\n\n"+
+			"EVERY failure is a redirect, not a status: a denied consent, a missing code, a "+
+			"failed exchange, an unreadable userinfo, an unverifiable org and a token-mint "+
+			"failure each bounce to the login page with an ?error code naming the step.")
+	openapi.Describe("/v1/team/account/cookie", http.MethodPut,
+		"Store the session token as this browser's cookie",
+		"Writes the team session token into the HttpOnly `account-token` cookie — Secure, "+
+			"SameSite=Lax, whole-origin scope, thirty days — and answers {\"result\": true}. This "+
+			"is how the client turns the token it caught off the OAuth bounce into a credential "+
+			"page JS can no longer read, which IS the security property: script that cannot see "+
+			"the cookie cannot exfiltrate it, and every later call on the files, billing and "+
+			"collaborator planes authenticates from it when no bearer is sent.\n\n"+
+			"The token is VERIFIED — signature and expiry, against this service's own signing "+
+			"secret — BEFORE it is stored. Anything this service did not sign is 401 and "+
+			"nothing is written; persisting a caller-supplied value unchecked would be a "+
+			"session-fixation door, where an attacker pins a cookie the victim's browser then "+
+			"presents as its own.\n\n"+
+			"The token may arrive as `token` in the JSON body or, when the body is absent or "+
+			"unparseable, from the Authorization bearer — an unreadable body is NOT an error "+
+			"here. The sibling DELETE clears this same cookie and signs the browser out of team "+
+			"only: the IAM cookie set alongside it is a different credential with its own "+
+			"lifetime and is left alone.")
+}
 
 func (g *api) register(app cloud.Router, guard guardFn) {
 	// The group is built HERE so cmd/zipdoc can resolve the typed op's prefix from

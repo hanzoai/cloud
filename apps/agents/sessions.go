@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -236,6 +237,108 @@ func mountSessions(s *cloud.Service[state], app cloud.Router) {
 	zip.Get(g, "/builds", o.builds)
 	zip.Get(g, "/builds/:org/:project", o.build)
 }
+
+// The control plane's prose, declared beside the wire facts that keep it untyped.
+//
+// A typed op's prose is lifted from its handler's doc comment by zipdoc, and these
+// six are exactly the handlers mountSessions refuses to type: the SSE feed, whose
+// loop outlives the handler and has no In/Out that describes a feed, and the five
+// guarded writes, whose 422 carries a findings array zip's error type cannot
+// express. There is no typed op here to lift from, so openapi.Describe is the seam
+// — and without it each publishes an operationId and nothing else: an SDK method
+// that cannot explain itself, an MCP tool with no description, a CLI command with
+// no help.
+//
+// The four control commands share one handler (control) and therefore one set of
+// rules; each statement leads with what its OWN command asks for and then states
+// the rules once, because a reader meets exactly one of these at a time.
+func init() {
+	openapi.Describe("/v1/agents/sessions/stream", http.MethodGet,
+		"Live session and event updates for the caller's org, as Server-Sent Events.",
+		"Holds the connection open as text/event-stream and pushes a frame each time the org's "+
+			"registry moves: an `event: session` frame carrying the same session shape the list and "+
+			"detail reads answer with (a registration, an update, or a login-manager revoke tearing "+
+			"a session down), and an `event: event` frame carrying one appended turn. Optional "+
+			"?root=<session id> narrows the feed to a single subagent tree.\n\n"+
+			"Requires a validated principal carrying an org; 403 without one. Org-scoped "+
+			"fail-closed: the bus filters on tenant before it fans out, so a subscriber only ever "+
+			"receives its own org's updates, and ?root= narrows that further but can never widen "+
+			"it.\n\n"+
+			"Delivery is best-effort and the GET reads remain the source of truth. A subscriber "+
+			"that falls more than 256 frames behind is DROPPED — its channel is closed and the "+
+			"stream ends — so one stuck dashboard can never back-pressure a session write; the "+
+			"client reconnects and re-reads the session endpoints to resynchronise. A `: ping` "+
+			"comment every 25 seconds holds the connection open through proxies and is how a "+
+			"departed client is noticed.")
+
+	openapi.Describe("/v1/agents/sessions/:id/events", http.MethodPost,
+		"Append one turn to a session's ordered log.",
+		"Records a message, tool-call, spawn, log, status or control turn against the session and "+
+			"answers 201 with the stored event, including the monotonic `seq` the store assigned — "+
+			"the cursor every reader pages from. The same turn is fanned out live to every stream "+
+			"subscriber watching that session's tree.\n\n"+
+			"Requires a validated principal carrying an org, and the session must already exist IN "+
+			"THAT ORG: an id belonging to another tenant is a 404 exactly like one that does not "+
+			"exist, so the log can never be written across a tenant boundary. `actor` defaults to "+
+			"the calling principal when the body names none. `kind` must be one of the six above, "+
+			"and `payload` must be valid JSON of at most 64 KiB.\n\n"+
+			"The payload is scanned for credentials BEFORE it is stored, and a hit REFUSES the "+
+			"write with 422 rather than redacting it: {status, code: \"secret_in_transcript\", "+
+			"error, findings:[…]}, each finding naming the rule, severity, line, a masked preview "+
+			"and a SHA-256 fingerprint the author can match against the value they rotate. The "+
+			"detected value itself appears nowhere in that body, because it was never stored. That "+
+			"in-band findings array is the reason this operation cannot be typed.")
+
+	openapi.Describe("/v1/agents/sessions/:id/pause", http.MethodPost,
+		"Ask a running session to pause.",
+		"Records `pause` as a durable control event on the session and answers 200 with "+
+			"{command, event, forwarded} — the stored event carries the `seq` that orders it "+
+			"against every other turn. "+controlRules)
+
+	openapi.Describe("/v1/agents/sessions/:id/resume", http.MethodPost,
+		"Ask a paused session to carry on.",
+		"Records `resume` as a durable control event on the session and answers 200 with "+
+			"{command, event, forwarded}. The session is NOT required to be paused first: the "+
+			"only status this refuses is a finished one, because the live status is the running "+
+			"surface's to report rather than this endpoint's to enforce. "+controlRules)
+
+	openapi.Describe("/v1/agents/sessions/:id/stop", http.MethodPost,
+		"Ask a session to stop for good.",
+		"Records `stop` as a durable control event on the session and answers 200 with "+
+			"{command, event, forwarded}. Stop is the one command that CANCELS a task-backed "+
+			"session's durable workflow instead of signalling it — pause, resume and message are "+
+			"cooperative signals the workflow decides how to act on, while this tears it down, "+
+			"with the request's `message` recorded as the cancellation reason (a default stands in "+
+			"when none is given). "+controlRules)
+
+	openapi.Describe("/v1/agents/sessions/:id/message", http.MethodPost,
+		"Send text into a running session.",
+		"Records `message` as a durable control event carrying the caller's text and answers 200 "+
+			"with {command, event, forwarded} — this is how a dashboard steers an agent mid-run. "+
+			"It is the one command with a required body: a `message` (up to 16 KiB) or a "+
+			"`payload`, and 400 with neither. The credential scan that guards an appended turn "+
+			"covers `payload` here; `message` is bounded but not scanned. "+controlRules)
+}
+
+// controlRules is the half every steering command shares, said once. The four
+// commands are one handler (control) and differ only in the word recorded and how
+// it is forwarded, so a rule written per command would be the same paragraph four
+// times and rot in three of them.
+const controlRules = "\n\n" +
+	"Requires a validated principal carrying an org, and the session must exist IN THAT ORG — a " +
+	"foreign id is a 404, so no tenant can steer another's agents. A FINISHED session (done or " +
+	"error) refuses every command with 409: a run that has ended cannot be steered.\n\n" +
+	"THE COMMAND IS AN INTENT, NOT A STATE CHANGE. Nothing here writes the session's status. " +
+	"A 200 means the command was durably recorded and delivered, never that the agent has " +
+	"actually paused, resumed or stopped; the status becomes paused, done or error only when the " +
+	"surface running the agent reports it back through a session update. That surface learns of " +
+	"the command in one of two ways: a task-backed session (one carrying a workflow id, with a " +
+	"tasks backend wired) has it forwarded to the durable-execution engine, and `forwarded` says " +
+	"so; everything else is record-only, and the running surface — a locally started `hanzo code` " +
+	"session, for one — drains it by polling the session's control endpoint. Today that is every " +
+	"session: the only controller wired forwards nothing, so `forwarded` is false and polling is " +
+	"how a command arrives. If a forward is attempted and fails, the answer is 502 stating that " +
+	"the command was recorded but not forwarded: the intent is never lost."
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 
@@ -745,9 +848,17 @@ func (o sessionOps) patch(ctx context.Context, in *patchSessionIn) (*sessionView
 
 // ---- append event ----
 
+// eventReq is one appended turn. The session is addressed by the path, so the body
+// carries only what the turn IS.
 type eventReq struct {
-	Kind    string          `json:"kind"`
-	Actor   string          `json:"actor"`
+	// Kind is the turn's kind — message, tool-call, spawn, log, status or control.
+	// Outside that closed vocabulary is a 400.
+	Kind string `json:"kind"`
+	// Actor is who produced the turn. Empty defaults to the calling principal.
+	Actor string `json:"actor"`
+	// Payload is the turn's body: any valid JSON up to 64 KiB. Scanned for
+	// credentials before it is stored — a hit refuses the whole write with 422 and
+	// nothing is persisted.
 	Payload json.RawMessage `json:"payload"`
 }
 
@@ -809,8 +920,16 @@ func appendSessionEvent(s *cloud.Service[state], c *zip.Ctx) error {
 
 // ---- control (record intent + forward to the tasks engine when task-backed) ----
 
+// controlReq is a steering command's optional body. pause, resume and stop usually
+// carry none; message requires one of the two fields.
 type controlReq struct {
-	Message string          `json:"message"`
+	// Message is free text for the running agent, up to 16 KiB. On a stop it is
+	// recorded as the cancellation reason.
+	Message string `json:"message"`
+	// Payload is a structured argument for the command: any valid JSON up to 64 KiB,
+	// scanned for credentials before it is stored (a hit refuses the command with
+	// 422). It is what a task-backed session receives as the forwarded signal's
+	// argument.
 	Payload json.RawMessage `json:"payload"`
 }
 

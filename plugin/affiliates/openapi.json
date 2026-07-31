@@ -22,6 +22,8 @@
     "/v1/admin/affiliates": {
       "get": {
         "operationId": "get_v1_admin_affiliates",
+        "summary": "Every affiliate in the fleet, with a summary",
+        "description": "Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents.\n\nPLATFORM SUDO ONLY, and a non-admin is refused outright. This is the cross-tenant view and it names orgs — exactly what the partner-facing leaderboard refuses to do. There is deliberately no org-scoped variant of this read; a partner sees its own standing through its own dashboard. Bounded per request.",
         "tags": [
           "admin"
         ]
@@ -30,6 +32,8 @@
     "/v1/admin/affiliates/sweep": {
       "post": {
         "operationId": "post_v1_admin_affiliates_sweep",
+        "summary": "Accrue this period's commission for every referred org",
+        "description": "Runs the accrual: for each referred org it reads that org's metered spend for the current period and accrues commission to every affiliate up its referral chain, then answers how many sources were swept and how many NEW accruals landed.\n\nThis is the cron path, and it is LATCHED at most once per affiliate, source org and period — so re-running it inside the same period accrues nothing further. Safe to retry, and safe to run by hand beside the schedule.\n\nCommission is a rate of Hanzo's MARGIN on that spend, never of the customer's gross bill, so every level's share summed over one source event stays within the margin actually earned and the customer's charge is untouched. Nothing accrues past the third upline level, and only an APPROVED affiliate accrues at all.\n\nThe same spend read drives the OSS author royalty — one read, both programs — so the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded per run; a source whose spend cannot be read is skipped and picked up next time, never half-accrued.",
         "tags": [
           "admin"
         ]
@@ -38,6 +42,8 @@
     "/v1/admin/affiliates/{id}/approve": {
       "post": {
         "operationId": "post_v1_admin_affiliates_by_id_approve",
+        "summary": "Approve an affiliate and mint its code",
+        "description": "Approves an affiliate and MINTS its referral code — the moment the partner has a working share link and starts accruing.\n\nThe code is taken from the body if one is given, else the vanity code the applicant requested, else a slug derived for them. Codes are ONE global namespace, so a taken code is a 409 and nothing is approved. The minted code is also mirrored as a link row so click tracking is uniform across every code the affiliate holds; that mirror is best-effort and its failure never fails the approval.\n\nApproval is what makes an affiliate eligible: before it, attribution against its code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY. Audited.",
         "tags": [
           "admin"
         ],
@@ -56,6 +62,8 @@
     "/v1/admin/affiliates/{id}/payout": {
       "post": {
         "operationId": "post_v1_admin_affiliates_by_id_payout",
+        "summary": "Pay out an affiliate's accrued commission",
+        "description": "Pays out accrued commission and answers the payout row with the affiliate's updated balances.\n\nTWO reservations guard it, both taken before any money moves. First the amount is reserved atomically against the affiliate's PENDING commission — accrued minus paid — so a payout can never exceed what is owed. Then it must be BACKED by the platform treasury reserve; if it is not, the pending reservation is voided and the call is refused with the available reserve quoted, so an unbacked payout leaves neither a row nor a phantom liability.\n\nThe METHOD decides whether money actually moves. `credits` issues a commerce grant into the affiliate ORG's own wallet, tagged so the ledger can tell an affiliate payout apart from an admin or referral grant. Every other method — wire, paypal and the rest — is RECORD-ONLY: the payout row and the balances move, the cash is disbursed out of band.\n\nThe amount is integer cents and must be positive. A grant that fails after both reservations is logged loudly and never silently retried; the payout row and the audit entry are what an operator reconciles from. PLATFORM SUDO ONLY.",
         "tags": [
           "admin"
         ],
@@ -74,6 +82,8 @@
     "/v1/admin/affiliates/{id}/rate": {
       "post": {
         "operationId": "post_v1_admin_affiliates_by_id_rate",
+        "summary": "Set an affiliate's direct commission rate",
+        "description": "Sets one affiliate's DIRECT commission rate, in basis points of Hanzo's margin.\n\nThe rate is CAPPED so that the direct rate plus the platform-wide second- and third-level rates can never exceed the whole margin — the structural guarantee that everything paid on one source event stays inside the margin actually earned. The cap is resolved from the rates in force at the moment of the call and quoted in the refusal, because those switches move; a hardcoded bound would start lying the moment somebody edits the schedule.\n\nOnly the direct level is per-affiliate. The second and third levels are platform switches and are not settable here. The change applies to FUTURE accruals — commission already latched for a period is not recomputed. PLATFORM SUDO ONLY. Audited.",
         "tags": [
           "admin"
         ],
@@ -92,6 +102,8 @@
     "/v1/admin/affiliates/{id}/suspend": {
       "post": {
         "operationId": "post_v1_admin_affiliates_by_id_suspend",
+        "summary": "Suspend an affiliate",
+        "description": "Suspends an affiliate: it stops accruing on the next sweep, and its code stops resolving for new attributions.\n\nIt CLAWS NOTHING BACK. Commission already accrued stays accrued and stays payable, and existing attribution edges are left standing — suspension ends earning, it does not unwind history. PLATFORM SUDO ONLY. Audited.",
         "tags": [
           "admin"
         ],
@@ -110,6 +122,8 @@
     "/v1/admin/referrals": {
       "get": {
         "operationId": "get_v1_admin_referrals",
+        "summary": "Referral analytics: top referrers, conversion, and liability",
+        "description": "The referral board: the top referrers by lifetime commission, the funnel conversion rate (referred orgs that have actually produced commission, over all referred orgs), and the accrual LIABILITY the platform owes, broken out by upline level.\n\nRead the liability figure carefully — it is commission accrued and NOT yet paid, so it is money owed, not money spent, and the per-level split says how much of it comes from direct referrals versus the second and third levels.\n\nPLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single attribution spine the accrual itself walks, so the board and the ledger cannot disagree. Amounts are integer cents.",
         "tags": [
           "admin"
         ]
@@ -118,6 +132,8 @@
     "/v1/affiliates": {
       "get": {
         "operationId": "get_v1_affiliates",
+        "summary": "Your org's affiliate standing and commission dashboard",
+        "description": "Answers the caller org's OWN affiliate standing: status, referral code and share link, commission rate, how many orgs it has referred, and its lifetime accrued, still-pending and already-paid commission in integer cents, with its payout history.\n\nAn org that never applied gets an honest `isAffiliate:false` and the default rate rather than a 404 — the console renders the apply form off that answer.\n\nThe affiliate is resolved from the VALIDATED org, never from a field, so this can only ever read the caller's own row; without a principal it is refused. For an approved affiliate the read first runs the accrual sweep over its own downline, so the dashboard is self-updating — bounded and best-effort, so a commerce hiccup shows slightly stale numbers instead of failing the page. Commission is earned on Hanzo's MARGIN, never on the referred customer's bill, so nothing here changes what that customer pays.",
         "tags": [
           "affiliates"
         ]
@@ -126,6 +142,8 @@
     "/v1/affiliates/apply": {
       "post": {
         "operationId": "post_v1_affiliates_apply",
+        "summary": "Enroll your org in the partner program",
+        "description": "Enrolls the caller's OWN org as an affiliate at status `applied`, optionally requesting a vanity code, and answers the record — 201 on the first apply, 200 with `created:false` afterwards.\n\nIDEMPOTENT, first apply wins: one affiliate per org, so re-applying never creates a second row and never resets an existing approval. Applying is not joining — no code is minted and nothing accrues until staff approve, which is where both the code and the commission rate come from.\n\nThe org is the validated caller's, never a field. A malformed vanity code is refused up front; the code is only REQUESTED here, and approval may mint a different one if the requested code is taken.",
         "tags": [
           "affiliates"
         ]
@@ -134,6 +152,8 @@
     "/v1/affiliates/attribute": {
       "post": {
         "operationId": "post_v1_affiliates_attribute",
+        "summary": "Record that your org arrived through an affiliate's code",
+        "description": "Records the first-touch edge every later commission is computed from: the caller's org was referred by the affiliate that owns this code.\n\nThe REFERRED org is the validated caller, never a field. A caller that could name the referred org could attach itself to somebody else's revenue. The affiliate is resolved from the code, and only an APPROVED affiliate's code resolves.\n\nFIRST TOUCH WINS, set once: one affiliate per referred org, so a re-post answers the existing edge with `created:false` rather than moving the attribution. Self-attribution is refused, and so is a code that would make a cycle in the upline chain. An unknown code is a 404, deliberately: an affiliate code IS a public shareable link, so whether one is real is public by design, and the caller legitimately needs to know its link resolved.\n\nA user-level mirror of the edge is written best-effort; a conflict there never fails the org attribution, which is the money-bearing one.",
         "tags": [
           "affiliates"
         ]
@@ -142,6 +162,8 @@
     "/v1/affiliates/click": {
       "post": {
         "operationId": "post_v1_affiliates_click",
+        "summary": "Count a click on a share link",
+        "description": "Counts a click on a share link. PUBLIC — it takes no principal, because a visitor clicking a shareable link has no session yet.\n\nThe ping folds into an in-memory buffer and NEVER writes the money database synchronously, so a click flood cannot contend with the accrual and payout write path; tallies are flushed in one batch on the next authenticated links read and at shutdown. Clicks are a vanity metric: no accrual and no payout ever reads them — those key on real metered spend — so click inflation cannot move money.\n\nAny well-formed code is accepted WITHOUT checking that it exists, deliberately: this is not a code-existence oracle. `counted` reports that the buffer took the ping, not that the code is real; an unknown code simply no-ops at flush time.",
         "tags": [
           "affiliates"
         ]
@@ -150,6 +172,8 @@
     "/v1/affiliates/leaderboard": {
       "get": {
         "operationId": "get_v1_affiliates_leaderboard",
+        "summary": "The partner leaderboard, plus your own rank",
+        "description": "The top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank.\n\nIt never discloses an org identity and never a referred org's usage. An affiliate that has set no handle still OCCUPIES its rank but is not listed — so opting out hides the name, not the position, and the visible board must not be read as a complete roster.\n\nThe caller's own row carries its exact GLOBAL rank, computed over the whole approved set rather than over the page, so it is right well outside the top of the board. Only an approved affiliate has a rank. Requires a validated principal; a signed-in non-affiliate may read the board but gets no personal row.",
         "tags": [
           "affiliates"
         ]
@@ -158,6 +182,8 @@
     "/v1/affiliates/me": {
       "get": {
         "operationId": "get_v1_affiliates_me",
+        "summary": "Your affiliate self-view, with the downline broken out by level",
+        "description": "The richer self-view: the same lifetime accrued, pending and paid commission and payout history, plus the caller's downline broken out by upline LEVEL — direct, second, third — each with the rate paid at that level and how many orgs sit there.\n\nCommission is MULTI-LEVEL: a referred org's spend pays up its referral chain, three levels deep and no further. The direct level is the affiliate's own negotiated rate; the second and third are platform-wide switches, read live, so the schedule shown is the one actually in force rather than one compiled in. A caller that has not applied still gets that schedule alongside `isAffiliate:false`, so the console can show what it would earn.\n\nScoped to the validated org and nothing else, and refused without a principal. An approved affiliate's figures are refreshed by a bounded, best-effort sweep before the read.",
         "tags": [
           "affiliates"
         ]
@@ -166,6 +192,8 @@
     "/v1/affiliates/me/earnings": {
       "get": {
         "operationId": "get_v1_affiliates_me_earnings",
+        "summary": "Your commission ledger, by period and by referred org",
+        "description": "The caller's own commission ledger: per period, the margin it earned against and the commission taken from that margin; and per referred org, that referral's aggregate contribution. Integer cents throughout.\n\nThe per-org view deliberately carries the affiliate's OWN earned share and NOT the referred org's spend or margin. An affiliate is entitled to what it earned, not to a restatement of its customer's usage — the period view is where the margin base appears, aggregated across every referral.\n\nScoped server-side to the validated caller's affiliate; a caller that is not one gets `isAffiliate:false`. An approved affiliate's ledger is refreshed by a bounded, best-effort sweep first, so the figures are current.",
         "tags": [
           "affiliates"
         ]
@@ -174,6 +202,8 @@
     "/v1/affiliates/me/handle": {
       "post": {
         "operationId": "post_v1_affiliates_me_handle",
+        "summary": "Set or clear your public leaderboard name",
+        "description": "Sets the caller's public leaderboard display name, or clears it.\n\nThe handle IS the opt-in. An empty handle opts out: the affiliate keeps its rank and can still see its own row, it simply stops being listed to anyone else. That is the whole privacy control — there is no separate visibility flag, and no way to be listed without choosing a name.\n\nRequires a validated principal and an existing affiliate record; apply first. The handle is bounded and restricted to letters, digits, space, hyphen, underscore and dot.",
         "tags": [
           "affiliates"
         ]
@@ -182,12 +212,16 @@
     "/v1/affiliates/me/links": {
       "get": {
         "operationId": "get_v1_affiliates_me_links",
+        "summary": "Your share links and their funnel",
+        "description": "The caller's share links, each with its URL and its funnel: clicks tracked, signups — orgs attributed with that code — and conversions, meaning how many of those signups have actually produced commission.\n\nSignups and conversions are DERIVED from the commission ledger and never stored, so they cannot drift from the money. Clicks are the one stored counter and the one that is pure vanity.\n\nAny pending public click pings are folded into the store before the read, in one batch — which is how the counters stay current without a database write per click. Scoped to the validated caller's own affiliate; a non-affiliate gets `isAffiliate:false` and the link cap.",
         "tags": [
           "affiliates"
         ]
       },
       "post": {
         "operationId": "post_v1_affiliates_me_links",
+        "summary": "Mint a new share link",
+        "description": "Mints a new share link for the caller's own affiliate and answers it with its full URL, 201.\n\nAPPROVAL IS REQUIRED: an org that has applied but is not approved is refused, because a link that cannot accrue is a link that quietly loses the referral. A requested vanity code must be valid and free across the WHOLE directory — codes are one global namespace, so a taken code is a 409 rather than a silent alias. Omit the code and a random one is minted.\n\nBounded per affiliate. The label is cosmetic: it is trimmed, stripped of control characters and capped, and it is never part of a code.",
         "tags": [
           "affiliates"
         ]

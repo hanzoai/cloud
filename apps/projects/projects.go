@@ -63,6 +63,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/hanzoai/cloud/internal/fqdn"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -283,6 +284,502 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	b.Log.Info("projects mounted", "bucket", s.State.blob.bucket, "s3", s.State.blob.configured(),
 		"ai", s.State.ai != nil, "apex", s.State.apex, "billing", s.State.bill.Enabled(), "brand", deps.Brand)
 	return nil
+}
+
+// The prose for this whole surface. NOTHING here is a typed op: every route is a
+// raw handler, because this plane's wire is polymorphic where an op has to be
+// singular — a deploy takes a tar, a zip, a multipart part or a git JSON body and
+// answers 200 or 202 depending which, and three path families share one set of
+// handlers. zipdoc lifts prose from a typed op's doc comment, so without these
+// declarations all thirty-nine operations would publish an operationId and nothing
+// else: every generated SDK method and every CLI command on the tenant's project
+// plane, unable to explain itself.
+//
+// The ONE rule stated on every operation below is the scope, because it is the rule
+// this plane lives or dies by: the org is the gateway-minted, IAM-validated owner
+// and is NEVER read from the request, and every project lookup is keyed by (org,
+// slug). So a slug is unique within an org and nowhere else, and another tenant's
+// slug misses exactly like a nonexistent one — there is no branch anywhere that can
+// answer "this exists, but not for you".
+//
+// Declared through the same registry Register uses, so a description renders only
+// while the router actually serves the route — which is also why the three path
+// families are declared separately rather than aliased: each is its own live route.
+func init() {
+	// ---- /v1/projects — the project plane ----
+
+	openapi.Describe("/v1/projects", http.MethodPost,
+		"Create a project — the handle a site is deployed and served under",
+		"Creates a project and answers 201 with it in `draft`. `name` is required; `slug` is "+
+			"derived from the name when omitted and is the identifier that matters — it becomes "+
+			"the S3 key segment, the public host `<slug>.hanzo.app`, and the handle every later "+
+			"call addresses, so it must match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$` and may not "+
+			"be a reserved label such as `api` or `admin`. `framework` is a build hint from a "+
+			"closed set, defaulting to `static`; it never gates a deploy, it only tells CI how to "+
+			"build a linked repo.\n\n"+
+			"Two defaults are worth knowing: the analytics beacon is ON unless `analytics` is "+
+			"explicitly false, and `visibility` is `public` unless asked otherwise. Publishing "+
+			"publicly is free; PRIVATE is the paid feature, and an unfunded org asking for it is "+
+			"refused with 402 rather than quietly published as public. Creation also provisions "+
+			"the project's data space and a canonical git repo, both best-effort — neither can "+
+			"fail the create.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the project is "+
+			"created in THAT principal's org. The slug is unique per org, so a slug already used "+
+			"in the caller's own org is a 409 while the same slug in another org is irrelevant.")
+	openapi.Describe("/v1/projects", http.MethodGet,
+		"Every project your org owns",
+		"Lists the caller org's projects with their slug, name, framework, visibility, status "+
+			"and live URL — the same rows console and the builder render, because there is only "+
+			"one store behind both. Requires a validated principal (403 without one) and is keyed "+
+			"by that principal's org, so it never contains another tenant's project.")
+	openapi.Describe("/v1/projects/fork", http.MethodPost,
+		"Fork a starter template or a published project into your own org",
+		"Creates a NEW project in the caller's org seeded from a parent named by `slug`, and "+
+			"answers 201 with the child. The parent is resolved templates FIRST — the caller "+
+			"org's own private templates ahead of the public gallery — and only then as the live "+
+			"project uniquely serving that slug, which is the same resolution the edge uses to "+
+			"serve `<slug>.hanzo.app`: what you can browse is what you can fork. A template's "+
+			"`variant` picks its format, page or theme.\n\n"+
+			"A fork copies the recipe, not the bytes. A live parent contributes its linked repo "+
+			"so the child builds from the same source, but the parent's deployed release is never "+
+			"copied — releases are per-tenant, and the fork publishes its own. `name` and `target` "+
+			"override the child's name and slug, defaulting to the parent's. Lineage is stamped "+
+			"server-side from the parent actually resolved and cannot be supplied by the caller, "+
+			"so an attribution edge always names a real ancestor.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the child lands in "+
+			"that principal's org. It goes through the same create path as a plain create, so the "+
+			"same slug rules, the same 409 on a slug already taken in the caller's org, and the "+
+			"same 402 when an unfunded org asks for private all apply. An unknown parent slug, or "+
+			"a template variant that does not exist, is a 404.")
+	openapi.Describe("/v1/projects/:slug", http.MethodGet,
+		"One project by its slug",
+		"Answers the project — its name, framework, visibility, status, linked repo, live URL "+
+			"and timestamps. Requires a validated principal (403 without one) and resolves the "+
+			"slug within THAT principal's org, so a slug that belongs to another tenant is a 404, "+
+			"indistinguishable from one that was never created.")
+	openapi.Describe("/v1/projects/:slug", http.MethodPatch,
+		"Change a project's settings, leaving the rest alone",
+		"Updates only the fields present in the body and answers the whole project after the "+
+			"change. `name`, `description`, `framework`, `cacheControl`, the linked `repo`, "+
+			"`visibility` and the `upstream`/`license` credits are all settable; an omitted field "+
+			"is untouched, and a credit sent as an empty string is cleared.\n\n"+
+			"The SLUG IS NOT SETTABLE. It is the public host and the storage prefix, so renaming "+
+			"it would move a live site out from under its own URL — create a new project instead. "+
+			"Flipping `visibility` to private runs the same paid gate as at create and answers "+
+			"402 for an unfunded org rather than leaving it public. `hidden` and `hiddenReason` "+
+			"are MODERATION and are honoured only for a global admin; a tenant sending them is "+
+			"silently ignored, which is deliberate — moderation must not edit the publisher's own "+
+			"visibility choice, so lifting it restores exactly what they asked for.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the project is "+
+			"resolved within that principal's org, so another tenant's slug is a 404.")
+	openapi.Describe("/v1/projects/:slug", http.MethodDelete,
+		"Delete a project and take its site down",
+		"Removes the project and answers 204. This is not just a row: the public subdomain "+
+			"binding is released so the slug can be reclaimed, every release row is dropped so a "+
+			"future owner of that slug never inherits the previous one's rollback menu, the "+
+			"stored site objects are purged from both the live prefix and the release space, and "+
+			"the edge cache tag is flushed so nothing keeps serving from cache.\n\n"+
+			"The metadata delete is the point of no return — the cleanup that follows is "+
+			"best-effort and a failure in it is logged rather than resurrecting the project, so a "+
+			"successful 204 means the project is gone even if some bytes are reclaimed late. "+
+			"Scope: a validated principal is required (403 without one) and the project is "+
+			"resolved within that principal's org, so another tenant's slug is a 404 and cannot "+
+			"be deleted.")
+	openapi.Describe("/v1/projects/:slug/deploy", http.MethodPost,
+		"Deploy a build — upload an archive, or trigger a build from the linked repo",
+		"Takes a built site live at `https://<slug>.hanzo.app`. It accepts BOTH shapes on one "+
+			"address and the content type decides which: a `zip` or `tar.gz` archive — raw in the "+
+			"body or as a multipart file part — is uploaded and served immediately, answering 200 "+
+			"with the finished deployment; a JSON body instead queues a build from the project's "+
+			"linked repo and answers 202 with a queued deployment and, where one could be minted, "+
+			"a scoped upload grant for CI to write with. The git path needs a linked repo (400 "+
+			"without one) and is finished later by the completion hook.\n\n"+
+			"Billing is fail-closed and fails FIRST: the hosting gate runs before anything is "+
+			"parsed or uploaded, so an unfunded org is 402 and an unreachable commerce is 503 "+
+			"with nothing written. The debit lands only on success — a failed upload is never "+
+			"billed and never flips the live site, and a queued build is billed at completion "+
+			"rather than at queue time. A redeploy returns the SAME URL, because slug and apex "+
+			"are stable.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the project is "+
+			"resolved within that principal's org, so another tenant's slug is a 404. Object "+
+			"storage must be configured, else 503; an archive that does not walk is a 400 and one "+
+			"over the size cap is a 413.")
+	openapi.Describe("/v1/projects/:slug/purge", http.MethodPost,
+		"Flush the edge cache for a site without redeploying it",
+		"Purges the project's edge cache tag so stale copies stop being served, stamps the "+
+			"purge time, and answers the updated project. It NEVER writes or deletes stored "+
+			"objects — the live build keeps serving from the origin, only cached copies drop — so "+
+			"it is safe to call at any time and is the right tool when the origin is already "+
+			"correct and the edge is not.\n\n"+
+			"A purge that cannot reach the edge is non-fatal: the timestamp is still stamped and "+
+			"the answer is still 200, so treat the response as 'the purge was requested', not "+
+			"'every edge node has dropped it'. Scope: a validated principal is required (403 "+
+			"without one) and the project is resolved within that principal's org, so another "+
+			"tenant's slug is a 404.")
+	openapi.Describe("/v1/projects/:slug/deployments", http.MethodGet,
+		"The project's deploy history",
+		"Lists the project's deployments — version, status, source, commit, file and byte "+
+			"counts, live URL and timestamps — which is where a deployment id for the detail and "+
+			"completion routes comes from. Requires a validated principal (403 without one); the "+
+			"project is resolved within that principal's org, so another tenant's slug is a 404 "+
+			"and its deployments are unreachable.")
+	openapi.Describe("/v1/projects/:slug/deployments/:id", http.MethodGet,
+		"One deployment",
+		"Answers a single deployment's status, version, source, commit, counts and live URL — "+
+			"how a queued git build is polled to completion. Requires a validated principal (403 "+
+			"without one); both the project and the deployment are read within that principal's "+
+			"org, so a deployment id belonging to another tenant, or to another project, is a "+
+			"404.")
+	openapi.Describe("/v1/projects/:slug/deployments/:id/complete", http.MethodPost,
+		"Finish a queued build — the CI completion hook",
+		"Closes out a deployment that the git path queued, flipping it to `live` or `error` and "+
+			"answering the deployment. `status` is required and must be exactly one of those two "+
+			"(400 otherwise); `commit`, `message`, `files` and `bytes` are recorded as reported.\n\n"+
+			"On a live completion the platform claims the public host itself and reports the URL "+
+			"it OWNS — a `liveUrl` in the body is a hint that can refine that, never a way to "+
+			"assert a subdomain another tenant holds. `keys`, the manifest CI just uploaded, is "+
+			"what replaces a delete-enabled sync: an upload grant authorizes writes only, so CI "+
+			"cannot remove anything, and the prefix is reconciled against this list instead. Omit "+
+			"`keys` and NOTHING is deleted — the prefix only grows, which is the safe default. "+
+			"Reconciliation runs only on a live completion, so a failed build can never prune the "+
+			"site the previous good one published.\n\n"+
+			"Scope: this is an ordinary org-scoped route, not an unauthenticated webhook — CI "+
+			"calls it with an org-scoped token, and the project and deployment are both resolved "+
+			"within that org, so another tenant's deployment is a 404.")
+	openapi.Describe("/v1/projects/:slug/domains", http.MethodGet,
+		"Every custom hostname this site holds, live or pending",
+		"Answers the site's verified hosts plus every pending claim, and for each pending one "+
+			"the EXACT DNS records still owed and the hostname to point them at. It is the "+
+			"domains panel in one call: a claim holds the name so nobody else can take it, but "+
+			"only a verified host actually routes. Requires a validated principal (403 without "+
+			"one); the project is resolved within that principal's org, so another tenant's slug "+
+			"is a 404.")
+	openapi.Describe("/v1/projects/:slug/domains", http.MethodPost,
+		"Point your own domain at this site",
+		"Attaches one or more custom hostnames and answers a row per host. WHICH OUTCOME YOU "+
+			"GET depends on whether ownership is already established: a global admin, or the "+
+			"platform-operator org that manages customer DNS, binds VERIFIED immediately, because "+
+			"that bind is itself the vouch; every other org gets a PENDING claim plus the DNS "+
+			"challenge to publish, and the host does not route until the verify call proves "+
+			"control.\n\n"+
+			"Claims are first-come and idempotent for the same site: repeating the call returns "+
+			"the SAME token rather than invalidating a record the customer has already published. "+
+			"A host already bound to another site is a 409, a reserved label is a 400, and a "+
+			"hostname we operate is refused with 403 for a non-vouched caller — those names are "+
+			"assigned by the platform, and no DNS proof is even possible in a zone we run.\n\n"+
+			"Scope: a validated principal is required (403 without one), the project is resolved "+
+			"within that principal's org, and the claim is recorded against that org — so proving "+
+			"a domain for one tenant never lets another bind it.")
+	openapi.Describe("/v1/projects/:slug/domains/:host/verify", http.MethodPost,
+		"Check the DNS proof for a claimed domain and go live if it passes",
+		"Resolves the ownership challenge for a pending claim. On success the host is promoted "+
+			"and starts routing at the edge immediately, and the edge cache is flushed so it "+
+			"serves the right site from the first request. An already-verified host answers its "+
+			"current state unchanged, so the call is safe to repeat.\n\n"+
+			"A proof that is NOT yet visible is not an error: the answer is 200 with the claim "+
+			"still pending and a detail saying what the lookup found, because the check genuinely "+
+			"ran and DNS simply has not propagated — retry rather than re-claiming. A host this "+
+			"site has not claimed is a 404.\n\n"+
+			"Scope: a validated principal is required (403 without one), and both the project and "+
+			"the claim are looked up within that principal's org, so a claim held by another "+
+			"tenant cannot be verified from here.")
+	openapi.Describe("/v1/projects/:slug/domains/:host", http.MethodDelete,
+		"Stop serving this site on a custom domain",
+		"Unbinds the hostname from the site and answers 204. The host stops routing here and "+
+			"the edge cache is flushed so nothing keeps answering from cache; the name is "+
+			"released, so it can then be claimed again — by this site or by any other. The site "+
+			"itself is untouched and keeps serving at its own `<slug>.hanzo.app` host.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the project is "+
+			"resolved within that principal's org, so another tenant's slug is a 404 and its "+
+			"domains cannot be released from here.")
+
+	// ---- /v1/sites — the surface-agnostic deploy_site capability ----
+
+	openapi.Describe("/v1/sites", http.MethodPost,
+		"Describe a site in words and get it generated and deployed live",
+		"Generates a responsive static site from a natural-language `brief`, deploys it, and "+
+			"answers the live URL with the resolved slug, the deployment id and the file list. "+
+			"The project is created if the slug does not exist yet and reused if it does, so this "+
+			"one call covers both the first publish and a regeneration. `slug` and `name` are "+
+			"optional — a slug is derived from the generated title, and a usable one is minted "+
+			"when nothing good can be derived, so a deploy never fails purely for lack of a "+
+			"name.\n\n"+
+			"Order matters and is fail-closed: the hosting gate runs BEFORE any inference, so a "+
+			"denied caller is 402 or 503 with nothing generated, nothing uploaded and no model "+
+			"tokens spent. Generation and hosting are billed to the same payer. A brief that is "+
+			"empty or over the cap is a 400, as is a generation that does not parse; a failed "+
+			"upload is never billed.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is created "+
+			"and stored under THAT principal's org — the same org rule as the project plane, "+
+			"which is why a site made here is an ordinary project visible at `/v1/projects`. "+
+			"Object storage must be configured (503), and so must inference (503).")
+	openapi.Describe("/v1/sites/deploy", http.MethodPost,
+		"Deploy a site from a file manifest you supply",
+		"Takes a map of path to file content, deploys it, and answers the live URL with the "+
+			"resolved slug, the deployment id and the file list — the raw half of the site "+
+			"capability, for a site that is already written rather than generated. The project is "+
+			"created if the slug is new and reused if not.\n\n"+
+			"Hand-built files run through the SAME validation, viewport injection and guards a "+
+			"generated site does, so they are exactly as safe and as responsive; and it funnels "+
+			"into the same publish core as every other deploy path, so versioning, host binding "+
+			"and metering happen once, in one place. The hosting gate is fail-closed and runs "+
+			"before the upload: 402 unfunded, 503 unreachable, nothing written. `files` is "+
+			"required (400), a manifest over the file-count cap is a 400, and a file set that "+
+			"does not validate is a 400 naming why.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is stored "+
+			"under THAT principal's org. Object storage must be configured, else 503.")
+	openapi.Describe("/v1/sites", http.MethodGet,
+		"Your org's live sites and their URLs",
+		"Lists only the projects that are actually LIVE, each with its pretty URL, name and "+
+			"last update — narrower than the project list, which includes drafts and failures, "+
+			"and the right read for 'what is my org currently serving'. Requires a validated "+
+			"principal (403 without one) and is keyed by that principal's org.")
+
+	// ---- releases: the server-side promote, on both site surfaces ----
+
+	openapi.Describe("/v1/sites/:slug/publish", http.MethodPost,
+		"Publish a build output and take it live in one call",
+		"Promotes a build output into a new immutable release and points the site at it, "+
+			"answering the release marked active with the live URL. This is create-plus-activate "+
+			"in sequence with no extra semantics — the two halves stay separately callable for a "+
+			"staged rollout, and they cannot drift because this path is literally both.\n\n"+
+			"No bytes traverse the API. `source` is a path RELATIVE to the caller org's own "+
+			"storage space, and the org segment is prepended server-side from the validated "+
+			"principal while the bucket never appears in the request at all — so the worst a "+
+			"hostile source can name is something the caller's own org already owns, and no "+
+			"client ever holds a storage credential. A release id is a digest of the manifest it "+
+			"was built from, which makes re-publishing identical bytes idempotent by "+
+			"construction: same content, same id, no copy.\n\n"+
+			"Promoting is the billable work and the hosting gate runs before any copy, so this "+
+			"can never become a way to deploy for free: 402 unfunded, 503 unreachable. Scope: a "+
+			"validated principal is required (403 without one) and the site is resolved within "+
+			"that principal's org, so another tenant's slug is a 404. Object storage must be "+
+			"configured (503); a source that breaks the object or byte guards is a 400 or 413 and "+
+			"a source that moved under the scan is a 409.")
+	openapi.Describe("/v1/sites/:slug/releases", http.MethodPost,
+		"Promote a build output into a release WITHOUT serving it",
+		"Creates a new immutable release from `source` and answers 201 with it — the staged "+
+			"half of publishing, for running whatever check you want against a release before "+
+			"anyone sees it. Nothing is served until the activate call; the live site is "+
+			"untouched.\n\n"+
+			"The source is a path relative to the caller org's OWN storage space, with the org "+
+			"segment prepended server-side from the validated principal and the bucket never in "+
+			"the request, so a release can only ever be built from bytes the caller's org already "+
+			"owns. The id is a digest of the manifest, so promoting unchanged content returns the "+
+			"existing release rather than copying again.\n\n"+
+			"This is where the copy happens, so this is where the hosting gate runs: 402 for an "+
+			"unfunded org, 503 for unreachable commerce, before any bytes move. Scope: a "+
+			"validated principal is required (403 without one) and the site is resolved within "+
+			"that principal's org, so another tenant's slug is a 404. Object storage must be "+
+			"configured (503).")
+	openapi.Describe("/v1/sites/:slug/releases", http.MethodGet,
+		"The site's releases, newest first — the rollback menu",
+		"Lists the site's retained releases with their id, object and byte counts, source and "+
+			"creation time, marking which one is currently active. This is what a rollback picks "+
+			"from, so the retention bound matters: each publish reclaims releases past the "+
+			"retention depth, and the live release is never a reclaim candidate. Requires a "+
+			"validated principal (403 without one); the site is resolved within that principal's "+
+			"org, so another tenant's slug is a 404.")
+	openapi.Describe("/v1/sites/:slug/releases/:release/activate", http.MethodPost,
+		"Point the site at a release — going live, and equally rolling back",
+		"Flips the site's pointer to an existing release and answers it marked active. Serving "+
+			"reads through that pointer, so the change is one atomic update with nothing rebuilt "+
+			"and nothing re-copied — which is exactly why rolling back is the SAME operation "+
+			"aimed at an older release, and is free.\n\n"+
+			"It verifies the bytes before it flips, so it can fail two distinguishable ways and "+
+			"the difference is the fix: a release nobody can name, or whose row is gone, is a "+
+			"404; a release still listed but whose bytes were reclaimed by retention is a 410, "+
+			"meaning that rollback target is not coming back and the content must be published "+
+			"again. Not billed — no new content is produced, only a pointer moved.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is resolved "+
+			"within that principal's org, so another tenant's slug is a 404.")
+
+	// ---- /v1/platform/sites — the PaaS static-site surface ----
+	//
+	// The same engine and the same handlers as /v1/projects, under the platform
+	// namespace, so a user's one flow is create a site, upload a zip, bind a
+	// domain, live. Each is its own live route and so needs its own declaration;
+	// where the behaviour is identical the prose says so rather than inventing a
+	// difference that is not in the code.
+
+	openapi.Describe("/v1/platform/sites", http.MethodPost,
+		"Create a static site on the platform",
+		"Creates a site and answers 201 with it in `draft`. It is the SAME operation as "+
+			"creating a project — one engine, one store — surfaced under the platform namespace "+
+			"where container apps live next door, so a site created here is the same row a "+
+			"project call sees. `name` is required and `slug` defaults from it; the slug becomes "+
+			"the storage prefix and the public host `<slug>.hanzo.app`, so it must match "+
+			"`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$` and may not be a reserved label. Analytics is "+
+			"on unless explicitly disabled, and `private` visibility is the paid option — an "+
+			"unfunded org asking for it is 402, never silently public.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is created "+
+			"in that principal's org, where its slug must be unique — a collision within the "+
+			"caller's own org is a 409.")
+	openapi.Describe("/v1/platform/sites", http.MethodGet,
+		"Every static site your org owns",
+		"Lists the caller org's sites with their slug, name, framework, visibility, status and "+
+			"live URL. The same rows the project list answers — one store, two namespaces — so "+
+			"nothing created through either surface is missing here. Requires a validated "+
+			"principal (403 without one) and is keyed by that principal's org.")
+	openapi.Describe("/v1/platform/sites/:slug", http.MethodGet,
+		"One static site by its slug",
+		"Answers the site's name, framework, visibility, status, linked repo, live URL and "+
+			"timestamps. Requires a validated principal (403 without one) and resolves the slug "+
+			"within THAT principal's org, so another tenant's slug is a 404 and cannot be "+
+			"distinguished from one that never existed.")
+	openapi.Describe("/v1/platform/sites/:slug", http.MethodPatch,
+		"Change a site's settings, leaving the rest alone",
+		"Updates only the fields present in the body — `name`, `description`, `framework`, "+
+			"`cacheControl`, the linked `repo`, `visibility` and the `upstream`/`license` "+
+			"credits — and answers the whole site afterwards. The SLUG IS NOT SETTABLE: it is the "+
+			"public host and the storage prefix, so a rename would move a live site out from "+
+			"under its own URL. Going private runs the paid gate and answers 402 for an unfunded "+
+			"org; `hidden` is moderation and is honoured only for a global admin, ignored from a "+
+			"tenant.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is resolved "+
+			"within that principal's org, so another tenant's slug is a 404.")
+	openapi.Describe("/v1/platform/sites/:slug", http.MethodDelete,
+		"Delete a static site and take it down",
+		"Removes the site and answers 204, releasing its subdomain binding so the slug can be "+
+			"reclaimed, dropping its release rows so a future owner inherits no rollback menu, "+
+			"purging the stored objects from both the live prefix and the release space, and "+
+			"flushing the edge cache. The metadata delete is the point of no return; the cleanup "+
+			"after it is best-effort, so a 204 means the site is gone even where some bytes are "+
+			"reclaimed late.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is resolved "+
+			"within that principal's org, so another tenant's slug is a 404.")
+	openapi.Describe("/v1/platform/sites/:slug/deploy", http.MethodPost,
+		"Upload a built site — this is where a zip goes live",
+		"Takes a built site live at `https://<slug>.hanzo.app`. The content type decides the "+
+			"shape: a `zip` or `tar.gz` — raw in the body or as a multipart file part, which is "+
+			"what the platform's upload UI posts — is stored and served immediately, answering "+
+			"200 with the finished deployment; a JSON body instead queues a build from the site's "+
+			"linked repo and answers 202 with a queued deployment plus, where one could be "+
+			"minted, a scoped upload grant for CI. The git path requires a linked repo (400 "+
+			"without one).\n\n"+
+			"The hosting gate is fail-closed and runs first, before anything is parsed or "+
+			"uploaded: 402 for an unfunded org, 503 for unreachable commerce, nothing written. "+
+			"The debit lands only on success — a failed upload is never billed and never flips "+
+			"the live site — and a redeploy answers the SAME URL, because slug and apex are "+
+			"stable.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is resolved "+
+			"within that principal's org, so another tenant's slug is a 404. Object storage must "+
+			"be configured (503); an archive that does not walk is a 400 and one over the size "+
+			"cap is a 413.")
+	openapi.Describe("/v1/platform/sites/:slug/purge", http.MethodPost,
+		"Flush the edge cache for a site without redeploying it",
+		"Purges the site's edge cache tag, stamps the purge time, and answers the updated site. "+
+			"Stored objects are never written or deleted — the live build keeps serving from the "+
+			"origin and only cached copies drop — so this is the right tool when the origin is "+
+			"already correct and the edge is stale. An edge that cannot be reached is non-fatal: "+
+			"the timestamp is stamped and the answer is still 200, so read it as 'requested', not "+
+			"'every node has dropped it'.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is resolved "+
+			"within that principal's org, so another tenant's slug is a 404.")
+	openapi.Describe("/v1/platform/sites/:slug/deployments", http.MethodGet,
+		"The site's deploy history",
+		"Lists the site's deployments — version, status, source, commit, file and byte counts, "+
+			"live URL and timestamps — and is where a deployment id for the detail route comes "+
+			"from. Requires a validated principal (403 without one); the site is resolved within "+
+			"that principal's org, so another tenant's slug is a 404.")
+	openapi.Describe("/v1/platform/sites/:slug/deployments/:id", http.MethodGet,
+		"One deployment",
+		"Answers a single deployment's status, version, source, commit, counts and live URL — "+
+			"how a queued build is polled to completion. Requires a validated principal (403 "+
+			"without one); both the site and the deployment are read within that principal's org, "+
+			"so a deployment belonging to another tenant, or to another site, is a 404. The "+
+			"completion hook that finishes a queued build lives on the project surface.")
+	openapi.Describe("/v1/platform/sites/:slug/domains", http.MethodGet,
+		"Every custom hostname this site holds, live or pending",
+		"Answers the site's verified hosts plus every pending claim, and for each pending one "+
+			"the exact DNS records still owed and the hostname to point them at. A claim holds "+
+			"the name against anyone else taking it, but only a verified host actually routes. "+
+			"Requires a validated principal (403 without one); the site is resolved within that "+
+			"principal's org, so another tenant's slug is a 404.")
+	openapi.Describe("/v1/platform/sites/:slug/domains", http.MethodPost,
+		"Point your own domain at this site",
+		"Attaches one or more custom hostnames and answers a row per host. A global admin, or "+
+			"the platform-operator org that manages customer DNS, binds VERIFIED immediately — "+
+			"that bind is itself the vouch; every other org gets a PENDING claim plus the DNS "+
+			"challenge to publish, and the host does not route until it is verified. Claims are "+
+			"first-come and idempotent for the same site, so repeating the call returns the SAME "+
+			"token rather than invalidating a record already published.\n\n"+
+			"A host already bound to another site is a 409, a reserved label is a 400, and a "+
+			"hostname we operate is 403 for a non-vouched caller — those are assigned by the "+
+			"platform, and no DNS proof is possible in a zone we run. Scope: a validated "+
+			"principal is required (403 without one), the site is resolved within that "+
+			"principal's org, and the claim is recorded against that org.")
+	openapi.Describe("/v1/platform/sites/:slug/domains/:host/verify", http.MethodPost,
+		"Check the DNS proof for a claimed domain and go live if it passes",
+		"Resolves the ownership challenge for a pending claim. On success the host is promoted, "+
+			"starts routing at the edge immediately, and the edge cache is flushed so it serves "+
+			"the right site from the first request; an already-verified host answers unchanged, "+
+			"so the call is safe to repeat. A proof not yet visible is NOT an error — the answer "+
+			"is 200 with the claim still pending and a detail saying what the lookup found, "+
+			"because the check ran and DNS has simply not propagated. A host this site has not "+
+			"claimed is a 404.\n\n"+
+			"Scope: a validated principal is required (403 without one), and both the site and "+
+			"the claim are looked up within that principal's org, so another tenant's claim "+
+			"cannot be verified from here.")
+	openapi.Describe("/v1/platform/sites/:slug/domains/:host", http.MethodDelete,
+		"Stop serving this site on a custom domain",
+		"Unbinds the hostname and answers 204. The host stops routing here and the edge cache "+
+			"is flushed so nothing keeps answering from cache; the name is released and can be "+
+			"claimed again by this or any other site. The site itself is untouched and keeps "+
+			"serving at its own `<slug>.hanzo.app` host.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is resolved "+
+			"within that principal's org, so another tenant's slug is a 404.")
+	openapi.Describe("/v1/platform/sites/:slug/publish", http.MethodPost,
+		"Publish a build output and take it live in one call",
+		"Promotes a build output into a new immutable release and points the site at it, "+
+			"answering the release marked active with the live URL — create-plus-activate in one "+
+			"call, the same operation the sites surface offers, over the same single store.\n\n"+
+			"No bytes traverse the API: `source` is a path RELATIVE to the caller org's own "+
+			"storage space, the org segment is prepended server-side from the validated "+
+			"principal, and the bucket never appears in the request — so a source can only ever "+
+			"name bytes the caller's org already owns, and no client holds a storage credential. "+
+			"A release id is a digest of its manifest, making re-publishing identical bytes "+
+			"idempotent by construction.\n\n"+
+			"Promoting is the billable work and the gate runs before any copy: 402 unfunded, 503 "+
+			"unreachable. Scope: a validated principal is required (403 without one) and the site "+
+			"is resolved within that principal's org, so another tenant's slug is a 404. Object "+
+			"storage must be configured (503); a source breaking the object or byte guards is a "+
+			"400 or 413, and one that moved under the scan is a 409.")
+	openapi.Describe("/v1/platform/sites/:slug/releases", http.MethodPost,
+		"Promote a build output into a release WITHOUT serving it",
+		"Creates a new immutable release from `source` and answers 201 with it — the staged "+
+			"half of publishing, for checking a release before anyone sees it. The live site is "+
+			"untouched until the activate call.\n\n"+
+			"The source is relative to the caller org's OWN storage space, with the org segment "+
+			"prepended server-side and the bucket never in the request, so a release can only be "+
+			"built from bytes that org already owns; the id is a digest of the manifest, so "+
+			"promoting unchanged content returns the existing release instead of copying again. "+
+			"The copy happens here, so the hosting gate runs here: 402 unfunded, 503 unreachable, "+
+			"before any bytes move.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is resolved "+
+			"within that principal's org, so another tenant's slug is a 404. Object storage must "+
+			"be configured (503).")
+	openapi.Describe("/v1/platform/sites/:slug/releases", http.MethodGet,
+		"The site's releases, newest first — the rollback menu",
+		"Lists the site's retained releases with their id, object and byte counts, source and "+
+			"creation time, marking which is active. Retention is bounded: each publish reclaims "+
+			"releases past the retention depth, and the live release is never a reclaim "+
+			"candidate — so this list is what a rollback can actually reach. Requires a validated "+
+			"principal (403 without one); the site is resolved within that principal's org, so "+
+			"another tenant's slug is a 404.")
+	openapi.Describe("/v1/platform/sites/:slug/releases/:release/activate", http.MethodPost,
+		"Point the site at a release — going live, and equally rolling back",
+		"Flips the site's pointer to an existing release and answers it marked active. Serving "+
+			"reads through that pointer, so this is one atomic update with nothing rebuilt and "+
+			"nothing re-copied, and rolling back is the SAME operation aimed at an older release, "+
+			"for free.\n\n"+
+			"The bytes are checked before the flip, so the two failures are distinguishable and "+
+			"the difference is the fix: an unknown release, or one whose row is gone, is a 404; a "+
+			"release still listed but whose bytes were reclaimed by retention is a 410 — that "+
+			"target is not coming back and the content must be published again. Not billed: no "+
+			"new content is produced, only a pointer moved.\n\n"+
+			"Scope: a validated principal is required (403 without one) and the site is resolved "+
+			"within that principal's org, so another tenant's slug is a 404.")
 }
 
 // routes registers the projects surface and the mirrored /v1/platform/sites surface.

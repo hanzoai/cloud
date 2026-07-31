@@ -22,6 +22,8 @@
     "/v1/o11y/alerts/last": {
       "get": {
         "operationId": "get_v1_o11y_alerts_last",
+        "summary": "Replay the page-delivery receipts this process took",
+        "description": "Answers the most recent Alertmanager deliveries THIS process received, as plain text — one greppable `PAGE-DELIVERED` line per alert, newest last, so piping to `tail` reads in arrival order. `(none)` when nothing has landed.\n\nIt answers the question Alertmanager cannot: Alertmanager can tell you it dispatched a notification, never that anything received it. This ring is the far side of that hop, and it is the only record that a page actually arrived.\n\nThe ring is PROCESS-LOCAL and bounded to the last 200 lines. Both are the point: a receipt that outlived the process that took the call would be a claim about something nobody observed, and an unbounded receipt log is a memory leak with a nice name. A restart empties it.",
         "tags": [
           "o11y"
         ]
@@ -30,6 +32,8 @@
     "/v1/o11y/alerts/{receiver}": {
       "post": {
         "operationId": "post_v1_o11y_alerts_by_receiver",
+        "summary": "Take an Alertmanager notification and page Slack",
+        "description": "Records one Alertmanager webhook delivery and pages the on-call. Each alert in the payload prints a `PAGE-DELIVERED` line to the process log and joins the ring the receipt replay serves, then the batch is posted to Slack with the org's KMS-custodied bot token — the ONE Slack egress the product already has, not a second webhook credential. Resolved notifications page too: \"it recovered\" is the half of an incident people are actually waiting for.\n\nIt ALWAYS answers 200 with the body `ok`, and a body that will not parse is recorded with empty fields rather than rejected. Alertmanager retries on any other status, so a receipt that pushes back changes the thing it is measuring, and a 400 on a malformed payload would make it retry forever — the delivery still happened, which is the fact being recorded.\n\nThe receiver segment is Alertmanager's own receiver name, a parameter rather than a hand-listed route because the receiver set is config, not code. Paging is detached and fail-soft: with no channel configured nothing is posted and the receipt still lands, and a Slack failure prints its own line instead of failing the request.",
         "tags": [
           "o11y"
         ],
@@ -411,6 +415,8 @@
     "/v1/o11y/api/v2/healthz": {
       "get": {
         "operationId": "get_v1_o11y_api_v2_healthz",
+        "summary": "Health of the observability runtime's services",
+        "description": "Reports whether every service in the runtime's registry is healthy, and names them grouped by state — so a failure says WHICH component is down, not merely that something is. An unhealthy registry answers 503, not a 200 with a false flag inside, so a plain status check cannot read a sick runtime as well.\n\nUNAUTHENTICATED by design, like the other two probes: it carries no tenant data and is reached by k8s and by external checks that hold no principal.",
         "tags": [
           "o11y"
         ]
@@ -419,6 +425,8 @@
     "/v1/o11y/api/v2/livez": {
       "get": {
         "operationId": "get_v1_o11y_api_v2_livez",
+        "summary": "Liveness of the observability process",
+        "description": "Answers 200 unconditionally while the process is running, and asserts NOTHING about the telemetry stores behind it. That is what makes it a liveness probe: a container that answers this is worth leaving alive, and restarting on a store outage would only remove the thing reporting the outage.\n\nUNAUTHENTICATED by design, and one of exactly three /v1/o11y paths that are. It carries no tenant data, and gating it would break the k8s probes and the external health checks without protecting anything. Use the health probe, not this one, to ask whether the runtime can actually serve.",
         "tags": [
           "o11y"
         ]
@@ -427,6 +435,8 @@
     "/v1/o11y/api/v2/readyz": {
       "get": {
         "operationId": "get_v1_o11y_api_v2_readyz",
+        "summary": "Readiness of the observability runtime to serve",
+        "description": "Reports whether the runtime's registered services are healthy enough to take traffic, and answers 503 when they are not — which is what takes a booting or degraded replica out of the load balancer instead of letting it serve errors.\n\nUNAUTHENTICATED by design, like the other two probes. It reads the same service registry the health probe reads, so the two agree by construction; readiness is the question a router asks and health is the question an operator asks.",
         "tags": [
           "o11y"
         ]
@@ -550,6 +560,8 @@
     "/v1/o11y/query": {
       "post": {
         "operationId": "post_v1_o11y_query",
+        "summary": "Run one builder query against the caller's telemetry",
+        "description": "Runs the console's composite builder query and answers the engine's own response untouched — body, status and headers ride through both ways, because the shape here is the query engine's, not this layer's.\n\nThis flat path is the ONE canonical public address for the builder query, and pinning it server-side is the point: the version-less alias resolves to the engine's highest version, which rejects the v3-shaped composite payload the console speaks. So the engine version is resolved INSIDE the handler and the client never names one — a caller that spells a version into the path is coupling itself to an internal detail that is free to move.\n\nRequires a validated principal, and the tenant is the principal's own org, pinned server-side from the validated claim; there is no org selector in the payload or the query string that could widen it. Before the runtime is initialized this answers 503 rather than an empty result.",
         "tags": [
           "o11y"
         ]
@@ -558,6 +570,8 @@
     "/v1/o11y/query_range": {
       "post": {
         "operationId": "post_v1_o11y_query_range",
+        "summary": "Run one ranged builder query against the caller's telemetry",
+        "description": "Runs the console's composite builder query over a time range — the list and series the trace, log and metric explorers render — and answers the engine's own response untouched, body, status and headers alike.\n\nSame pin as the instant form and for the same reason: the flat path resolves to a specific engine version INSIDE the handler, because the version-less alias resolves to one that rejects the composite payload the console sends. The client speaks only this path.\n\nRequires a validated principal, and the tenant is that principal's own org, pinned server-side; nothing in the request can widen it. Before the runtime is initialized this answers 503.",
         "tags": [
           "o11y"
         ]
@@ -566,6 +580,8 @@
     "/v1/o11y/sessions": {
       "get": {
         "operationId": "get_v1_o11y_sessions",
+        "summary": "List the caller org's LLM sessions",
+        "description": "Answers the caller org's LLM-observability sessions — traces grouped by session id on the gen_ai span plane — paged by limit and offset, in the runtime's own envelope, passed through unchanged.\n\nAn org-less caller is refused HERE, at the cloud boundary, before the request reaches the runtime, and the org the runtime then scopes on is that SAME validated tenant. The two cannot disagree: the tenant is minted from the principal's own claim at ingress and a client copy never survives it.\n\nThere is deliberately no session-detail route to pair with this. The runtime serves the list only; detail is composed client-side from this list plus the traces filtered by session, so a caller looking for one is looking for something that was never served rather than something that broke.",
         "tags": [
           "o11y"
         ]
@@ -608,6 +624,8 @@
     "/v1/o11y/vm/query": {
       "get": {
         "operationId": "get_v1_o11y_vm_query",
+        "summary": "Instant platform-infrastructure metric, for platform administrators",
+        "description": "Answers VictoriaMetrics' native Prometheus JSON for one instant query, byte-for-byte — its own status code and envelope, unwrapped and un-reshaped, so the console's infrastructure-health board parses the response it was written against.\n\nPLATFORM SUDO ONLY. This is not tenant data: it is the whole fleet's `up{}` inventory, so it takes the same platform-sudo predicate the infra-log god-view takes, and every customer is 403. VictoriaMetrics has no per-request auth of its own — it is an internal ClusterIP — so this handler IS the access boundary, and it fails closed at every step.\n\nThe query is ALLOWLISTED, not passed through. The `query` parameter must equal one of the exact PromQL strings the boards issue, or it is a 400; there is no way to phrase a new one. That is what keeps a read proxy from becoming a generic PromQL exfiltration and DoS endpoint.",
         "tags": [
           "o11y"
         ]
@@ -616,6 +634,8 @@
     "/v1/o11y/vm/query_range": {
       "get": {
         "operationId": "get_v1_o11y_vm_query_range",
+        "summary": "Ranged platform-infrastructure metric, for platform administrators",
+        "description": "Answers VictoriaMetrics' native Prometheus JSON for one ranged query over start/end/step, byte-for-byte — its own status code and envelope, so the console's infrastructure trends render off the response as-is.\n\nPLATFORM SUDO ONLY, on the same fleet-wide `up{}` inventory and the same fixed board queries as the instant read; a customer is 403. VictoriaMetrics carries no per-request auth, so this handler is the access boundary.\n\nThe query is ALLOWLISTED to the exact PromQL the boards issue — anything else is a 400 — and start, end and step must each be positive integers before the request is forwarded. Range arguments are the other half of the same boundary: an unbounded step over an unbounded window is a DoS whether or not the query is on the list.",
         "tags": [
           "o11y"
         ]
@@ -624,6 +644,8 @@
     "/v1/o11y/{wildcard1}": {
       "delete": {
         "operationId": "delete_v1_o11y_by_wildcard1",
+        "summary": "Remove a runtime object",
+        "description": "Removes one of the observability runtime's own objects — a dashboard, an alert rule, a saved view — passing the runtime's answer through unchanged. The fallthrough for the resources only the runtime knows.\n\nA validated, org-scoped principal is required, and the delete is confined to that principal's own tenant, pinned server-side from its claim, so one tenant can never reach another's object. Before the runtime is initialized, 503.",
         "tags": [
           "o11y"
         ],
@@ -640,6 +662,8 @@
       },
       "get": {
         "operationId": "get_v1_o11y_by_wildcard1",
+        "summary": "Read a resource from the observability runtime",
+        "description": "Serves the observability runtime's own read surface — dashboards, alert rules, saved views, the service and dependency inventory, and the trace, log and metric explorers — in the runtime's own shapes, passed through unchanged.\n\nIt is the FALLTHROUGH, not the front door. Every path this repo owns the shape of is registered ahead of it and wins the match; what reaches here is what only the runtime knows how to answer. The public contract is flat — one /v1/, no nested version — and the mapping onto the runtime's internal namespace happens at this one seam, so a caller never spells an engine version.\n\nA validated principal is required and the read is scoped to that principal's own org, pinned server-side from its claim; a client-supplied org header never survives ingress and there is no query parameter that widens the scope. Platform sudo passes without an org — the admin console reads before one is selected — and buys reach, not data: the runtime still scopes every read from the tenant it was given, so an org-less request answers org-less, never the fleet. Before the runtime is initialized, 503.",
         "tags": [
           "o11y"
         ],
@@ -656,6 +680,8 @@
       },
       "options": {
         "operationId": "options_v1_o11y_by_wildcard1",
+        "summary": "Not served by the observability runtime",
+        "description": "Published because this address accepts every method, but the runtime routes nothing here: the request reaches it as an unrouted path and no telemetry is read or written.",
         "tags": [
           "o11y"
         ],
@@ -672,6 +698,8 @@
       },
       "patch": {
         "operationId": "patch_v1_o11y_by_wildcard1",
+        "summary": "Update part of a runtime object",
+        "description": "Applies a partial update to one of the observability runtime's own objects, in the runtime's own shapes, passed through unchanged. The fallthrough for the resources only the runtime knows.\n\nA validated, org-scoped principal is required, and the write is confined to that principal's own tenant, pinned server-side from its claim. Before the runtime is initialized, 503.",
         "tags": [
           "o11y"
         ],
@@ -688,6 +716,8 @@
       },
       "post": {
         "operationId": "post_v1_o11y_by_wildcard1",
+        "summary": "Create a runtime object, or run a query against telemetry",
+        "description": "Carries the runtime's own writes and query posts — creating a dashboard, an alert rule or a saved view, and running the query bodies the explorers submit — in the runtime's own shapes, passed through unchanged.\n\nIt is the FALLTHROUGH: the builder query and the ingest routes this repo owns are registered ahead of it and win the match. A validated, org-scoped principal is required and the write lands in that principal's own tenant, pinned server-side.\n\nONE EXEMPTION, and it is deliberate: a Sentry error-ingest write presents a DSN public key, never a Hanzo session, so those two paths bypass the principal gate and are authenticated by the ingest verifier instead — which derives the org from the DSN itself and fails closed. The exemption is matched by method plus prefix plus suffix, never a broad prefix, so every read under the same subtree stays gated. Before the runtime is initialized, 503.",
         "tags": [
           "o11y"
         ],
@@ -704,6 +734,8 @@
       },
       "put": {
         "operationId": "put_v1_o11y_by_wildcard1",
+        "summary": "Replace a runtime object",
+        "description": "Replaces one of the observability runtime's own objects — a dashboard, an alert rule, a saved view — in the runtime's own shapes, passed through unchanged. The fallthrough for the resources only the runtime knows.\n\nA validated, org-scoped principal is required, and the write is confined to that principal's own tenant: the org is minted from its claim at ingress, a client copy never survives, and nothing in the request can widen the scope. Before the runtime is initialized, 503.",
         "tags": [
           "o11y"
         ],
@@ -720,6 +752,8 @@
       },
       "trace": {
         "operationId": "trace_v1_o11y_by_wildcard1",
+        "summary": "Not served by the observability runtime",
+        "description": "Published because this address accepts every method, but the runtime routes nothing here: the request reaches it as an unrouted path and no telemetry is read or written.",
         "tags": [
           "o11y"
         ],
@@ -738,6 +772,8 @@
     "/v1/sentry/{wildcard1}": {
       "delete": {
         "operationId": "delete_v1_sentry_by_wildcard1",
+        "summary": "Delete a Sentry project",
+        "description": "The one delete on the Sentry surface: removing a PROJECT, answering 204. Error issues, events and traces are not individually deletable — they are append-only telemetry, and their lifetime is retention's business, not an API call's.\n\nRequires a validated, org-scoped principal with edit rights; a viewer is refused. The delete is confined to the org minted from that principal's claim, so a project id belonging to another tenant is not found rather than removed. Deleting a project retires the DSN that fed it, so any SDK still pointed at that key stops being accepted. Before the runtime is initialized, 503.",
         "tags": [
           "sentry"
         ],
@@ -754,6 +790,8 @@
       },
       "get": {
         "operationId": "get_v1_sentry_by_wildcard1",
+        "summary": "Read the caller org's errors on the Sentry surface",
+        "description": "Serves the Sentry-compatible read surface — projects, error issues and one issue's occurrences, a single event, error logs, error-correlated traces and one trace's waterfall, and the event-rate stats — so a Sentry client or the error console reads its errors at the paths it already speaks.\n\nIt is the SAME runtime the observability surface serves, reached under a second path family, and there is NO rewrite: the runtime carries these routes literally. That is what makes this a product face rather than a translation layer. One runtime, two path families.\n\nA validated principal is required and the read is scoped to that principal's own org. Errors are a tenant's OWN data, so org membership is the whole admission test and there is deliberately no admin term on it — gating the product on platform sudo would make the only way to see your own errors a scope that shows you everyone's. Before the runtime is initialized, 503.",
         "tags": [
           "sentry"
         ],
@@ -770,6 +808,8 @@
       },
       "options": {
         "operationId": "options_v1_sentry_by_wildcard1",
+        "summary": "Not served by the Sentry face",
+        "description": "Published because this address accepts every method, but the Sentry face routes nothing here: the request reaches the runtime as an unrouted path and no issue, event or trace is touched.",
         "tags": [
           "sentry"
         ],
@@ -786,6 +826,8 @@
       },
       "patch": {
         "operationId": "patch_v1_sentry_by_wildcard1",
+        "summary": "Not served — the Sentry surface has no partial update",
+        "description": "The Sentry face carries NO route for a partial update. The wildcard admits every method, so this operation exists as an address, but nothing behind it answers and a request lands on the runtime as an unrouted path.\n\nIt is documented rather than silently omitted because the useful thing to say is where to go instead: an issue's lifecycle — resolve, ignore, assign — is a REPLACE on that issue, not a patch, and it is the only mutable state on this surface. A client that reaches for a partial update here is looking for that call.",
         "tags": [
           "sentry"
         ],
@@ -802,6 +844,8 @@
       },
       "post": {
         "operationId": "post_v1_sentry_by_wildcard1",
+        "summary": "Send events to the Sentry surface, or write on it",
+        "description": "Carries every write on the Sentry-compatible surface: the SDK's error ingest, and the authenticated writes the console makes — creating a project, rotating a project's DSN key, and running a discover query over the events plane.\n\nTHE TWO ARE AUTHENTICATED DIFFERENTLY, and that is the rule to get right. An envelope or store submission presents a DSN public key, never a Hanzo session, so it is exempt from the principal gate and verified by the ingest key check instead — which derives the org from the DSN and fails closed. A keyless submission is a 401 from that verifier, not a 403 from the gate, and telling those two apart is how you tell the hops apart. Every other write here needs a validated, org-scoped principal, and creating or rotating requires an editor rather than a viewer.\n\nThe ingest exemption is matched by method plus prefix plus suffix, never a bare prefix, and the project segment must be a UUID — so no read is reachable through it. Before the runtime is initialized, 503.",
         "tags": [
           "sentry"
         ],
@@ -818,6 +862,8 @@
       },
       "put": {
         "operationId": "put_v1_sentry_by_wildcard1",
+        "summary": "Move an error issue through its lifecycle",
+        "description": "The one replace on the Sentry surface: updating an error ISSUE — resolving it, ignoring it, or assigning it — and answering the updated issue.\n\nNothing else here takes a replace. A project is created and deleted but never replaced, and the event and trace planes are append-only telemetry, so an issue's lifecycle is the only mutable state this face exposes.\n\nRequires a validated, org-scoped principal with edit rights; a viewer is refused. The write is confined to the org minted from that principal's claim, so an issue id belonging to another tenant is simply not found. Before the runtime is initialized, 503.",
         "tags": [
           "sentry"
         ],
@@ -834,6 +880,8 @@
       },
       "trace": {
         "operationId": "trace_v1_sentry_by_wildcard1",
+        "summary": "Not served by the Sentry face",
+        "description": "Published because this address accepts every method, but the Sentry face routes nothing here: the request reaches the runtime as an unrouted path and no issue, event or trace is touched.",
         "tags": [
           "sentry"
         ],

@@ -17,8 +17,10 @@ import (
 // forever — and how a reason that has stopped being true keeps being believed.
 //
 // The consequence being pinned: /v1/bot publishes seven operations at one greedy
-// wildcard and NOT ONE carries a description, a summary, an MCP tool or a CLI
-// command. The tenant-actionable surface is native and typed elsewhere (/v1/bots,
+// wildcard and NOT ONE carries an MCP tool or a CLI command. (They do carry a
+// summary and a description — openapi.Describe declares those beside the wire
+// fact in ops.go, which is the seam for an operation the wire refuses to type.)
+// The tenant-actionable surface is native and typed elsewhere (/v1/bots,
 // clients/bots); what stays here is ops, and it stays a relay. This gate is where
 // that stops being deliberate the moment someone adds a route that need not be.
 

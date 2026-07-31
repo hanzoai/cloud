@@ -18,30 +18,46 @@
   "paths": {
     "/tasks": {
       "delete": {
-        "operationId": "delete_tasks"
+        "operationId": "delete_tasks",
+        "summary": "The tasks console",
+        "description": "Serves the console's application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request."
       },
       "get": {
-        "operationId": "get_tasks"
+        "operationId": "get_tasks",
+        "summary": "The tasks console",
+        "description": "Serves the console's application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request."
       },
       "options": {
-        "operationId": "options_tasks"
+        "operationId": "options_tasks",
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started."
       },
       "patch": {
-        "operationId": "patch_tasks"
+        "operationId": "patch_tasks",
+        "summary": "The tasks console",
+        "description": "Serves the console's application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request."
       },
       "post": {
-        "operationId": "post_tasks"
+        "operationId": "post_tasks",
+        "summary": "The tasks console",
+        "description": "Serves the console's application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request."
       },
       "put": {
-        "operationId": "put_tasks"
+        "operationId": "put_tasks",
+        "summary": "The tasks console",
+        "description": "Serves the console's application shell on GET, which is the entry point a browser loads before it calls anything under /v1/tasks/.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request."
       },
       "trace": {
-        "operationId": "trace_tasks"
+        "operationId": "trace_tasks",
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started."
       }
     },
     "/tasks/{wildcard1}": {
       "delete": {
         "operationId": "delete_tasks_by_wildcard1",
+        "summary": "The tasks console's assets and client-side routes",
+        "description": "Serves the console's static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link into the console is a shell load, not a 404.\n\nA path that looks like a missing asset therefore answers 200 with HTML rather than 404; look at the content type, not the status, when a resource seems to be missing.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -55,6 +71,8 @@
       },
       "get": {
         "operationId": "get_tasks_by_wildcard1",
+        "summary": "The tasks console's assets and client-side routes",
+        "description": "Serves the console's static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link into the console is a shell load, not a 404.\n\nA path that looks like a missing asset therefore answers 200 with HTML rather than 404; look at the content type, not the status, when a resource seems to be missing.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -68,6 +86,8 @@
       },
       "options": {
         "operationId": "options_tasks_by_wildcard1",
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -81,6 +101,8 @@
       },
       "patch": {
         "operationId": "patch_tasks_by_wildcard1",
+        "summary": "The tasks console's assets and client-side routes",
+        "description": "Serves the console's static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link into the console is a shell load, not a 404.\n\nA path that looks like a missing asset therefore answers 200 with HTML rather than 404; look at the content type, not the status, when a resource seems to be missing.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -94,6 +116,8 @@
       },
       "post": {
         "operationId": "post_tasks_by_wildcard1",
+        "summary": "The tasks console's assets and client-side routes",
+        "description": "Serves the console's static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link into the console is a shell load, not a 404.\n\nA path that looks like a missing asset therefore answers 200 with HTML rather than 404; look at the content type, not the status, when a resource seems to be missing.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -107,6 +131,8 @@
       },
       "put": {
         "operationId": "put_tasks_by_wildcard1",
+        "summary": "The tasks console's assets and client-side routes",
+        "description": "Serves the console's static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link into the console is a shell load, not a 404.\n\nA path that looks like a missing asset therefore answers 200 with HTML rather than 404; look at the content type, not the status, when a resource seems to be missing.\n\nThis is the task console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale console on the next request.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -120,6 +146,8 @@
       },
       "trace": {
         "operationId": "trace_tasks_by_wildcard1",
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started.",
         "parameters": [
           {
             "name": "wildcard1",
@@ -135,42 +163,56 @@
     "/v1/tasks": {
       "delete": {
         "operationId": "delete_v1_tasks",
+        "summary": "Redirect to the tasks API root",
+        "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
         "tags": [
           "tasks"
         ]
       },
       "get": {
         "operationId": "get_v1_tasks",
+        "summary": "Redirect to the tasks API root",
+        "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
         "tags": [
           "tasks"
         ]
       },
       "options": {
         "operationId": "options_v1_tasks",
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started.",
         "tags": [
           "tasks"
         ]
       },
       "patch": {
         "operationId": "patch_v1_tasks",
+        "summary": "Redirect to the tasks API root",
+        "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
         "tags": [
           "tasks"
         ]
       },
       "post": {
         "operationId": "post_v1_tasks",
+        "summary": "Redirect to the tasks API root",
+        "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
         "tags": [
           "tasks"
         ]
       },
       "put": {
         "operationId": "put_v1_tasks",
+        "summary": "Redirect to the tasks API root",
+        "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
         "tags": [
           "tasks"
         ]
       },
       "trace": {
         "operationId": "trace_v1_tasks",
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started.",
         "tags": [
           "tasks"
         ]
@@ -179,6 +221,8 @@
     "/v1/tasks/{wildcard1}": {
       "delete": {
         "operationId": "delete_v1_tasks_by_wildcard1",
+        "summary": "Delete an engine resource",
+        "description": "Removes a resource the engine owns — a namespace and the like — inside the caller's own tenant shard.\n\nIt is the narrowest of the three working methods: most of the engine's surface is read on GET and acted on with POST, so a delete that finds no route for its path answers the same plain-text 404 any unrouted path does.\n\nThis single address fronts the whole durable-workflow engine — namespaces, workflows, schedules, batches, deployments, nexus, task queues, workers, activities and the rest — matched by path segment inside the engine's own router, which is why the document publishes one wildcard rather than sixty-four operations.\n\nMost of it requires a validated principal and is refused 403 otherwise; the settings and cluster probes are open, because capability flags and cluster health carry no tenant data. A principal that is validated but carries NO org is refused too — that request would otherwise read the shared unscoped store instead of anyone's shard, so it fails closed. Admitted, the org, project and user are threaded into the engine, and every read and write lands in that tenant's own shard.\n\nTwo things about the answers differ from the rest of this API and will bite a generic client: errors here carry `code` as a NUMBER rather than the usual `status`, and the address serves several content types — JSON, plain-text refusals, and an event stream at the events path. Until the engine is wired the whole surface answers 503.",
         "tags": [
           "tasks"
         ],
@@ -195,6 +239,8 @@
       },
       "get": {
         "operationId": "get_v1_tasks_by_wildcard1",
+        "summary": "Read workflow state from the durable engine",
+        "description": "Reads from the durable engine: list namespaces, workflows, schedules, batches, deployments, task queues, workers and search attributes, fetch one workflow with its history, or subscribe to the realtime event stream. The cluster and settings probes are on this method too.\n\nThis single address fronts the whole durable-workflow engine — namespaces, workflows, schedules, batches, deployments, nexus, task queues, workers, activities and the rest — matched by path segment inside the engine's own router, which is why the document publishes one wildcard rather than sixty-four operations.\n\nMost of it requires a validated principal and is refused 403 otherwise; the settings and cluster probes are open, because capability flags and cluster health carry no tenant data. A principal that is validated but carries NO org is refused too — that request would otherwise read the shared unscoped store instead of anyone's shard, so it fails closed. Admitted, the org, project and user are threaded into the engine, and every read and write lands in that tenant's own shard.\n\nTwo things about the answers differ from the rest of this API and will bite a generic client: errors here carry `code` as a NUMBER rather than the usual `status`, and the address serves several content types — JSON, plain-text refusals, and an event stream at the events path. Until the engine is wired the whole surface answers 503.",
         "tags": [
           "tasks"
         ],
@@ -211,6 +257,8 @@
       },
       "options": {
         "operationId": "options_v1_tasks_by_wildcard1",
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started.",
         "tags": [
           "tasks"
         ],
@@ -227,6 +275,8 @@
       },
       "patch": {
         "operationId": "patch_v1_tasks_by_wildcard1",
+        "summary": "Not served by the engine",
+        "description": "Published because this address accepts every method, but the engine routes no PATCH: the answer is a plain-text 404, not a 405, and no state changes.\n\nThere is no partial update on this surface. State advances by appending events, so the operations that change a running workflow — signal, cancel, terminate, reset — are all POST.\n\nThis single address fronts the whole durable-workflow engine — namespaces, workflows, schedules, batches, deployments, nexus, task queues, workers, activities and the rest — matched by path segment inside the engine's own router, which is why the document publishes one wildcard rather than sixty-four operations.\n\nMost of it requires a validated principal and is refused 403 otherwise; the settings and cluster probes are open, because capability flags and cluster health carry no tenant data. A principal that is validated but carries NO org is refused too — that request would otherwise read the shared unscoped store instead of anyone's shard, so it fails closed. Admitted, the org, project and user are threaded into the engine, and every read and write lands in that tenant's own shard.\n\nTwo things about the answers differ from the rest of this API and will bite a generic client: errors here carry `code` as a NUMBER rather than the usual `status`, and the address serves several content types — JSON, plain-text refusals, and an event stream at the events path. Until the engine is wired the whole surface answers 503.",
         "tags": [
           "tasks"
         ],
@@ -243,6 +293,8 @@
       },
       "post": {
         "operationId": "post_v1_tasks_by_wildcard1",
+        "summary": "Start workflows and act on running ones",
+        "description": "Everything that changes the engine's state: register a namespace, start a workflow or signal-with-start one, and signal, query, cancel, terminate or reset a workflow that is already running. The MCP tool surface is on this method as well, and is the one part of it that refuses a non-POST with a plain-text 405.\n\nThe engine is event-sourced and exactly-once, so an action is durable once it is accepted and survives a process crash — a started workflow resumes rather than restarts.\n\nThis single address fronts the whole durable-workflow engine — namespaces, workflows, schedules, batches, deployments, nexus, task queues, workers, activities and the rest — matched by path segment inside the engine's own router, which is why the document publishes one wildcard rather than sixty-four operations.\n\nMost of it requires a validated principal and is refused 403 otherwise; the settings and cluster probes are open, because capability flags and cluster health carry no tenant data. A principal that is validated but carries NO org is refused too — that request would otherwise read the shared unscoped store instead of anyone's shard, so it fails closed. Admitted, the org, project and user are threaded into the engine, and every read and write lands in that tenant's own shard.\n\nTwo things about the answers differ from the rest of this API and will bite a generic client: errors here carry `code` as a NUMBER rather than the usual `status`, and the address serves several content types — JSON, plain-text refusals, and an event stream at the events path. Until the engine is wired the whole surface answers 503.",
         "tags": [
           "tasks"
         ],
@@ -259,6 +311,8 @@
       },
       "put": {
         "operationId": "put_v1_tasks_by_wildcard1",
+        "summary": "Not served by the engine",
+        "description": "Published because this address accepts every method, but the engine routes no PUT: the answer is a plain-text 404, not a 405, and no state changes.\n\nNothing here is updated by replacement. The engine is event-sourced — a workflow is changed by signalling, cancelling, terminating or resetting it, all of which are POST — so a client reaching for PUT wants POST.\n\nThis single address fronts the whole durable-workflow engine — namespaces, workflows, schedules, batches, deployments, nexus, task queues, workers, activities and the rest — matched by path segment inside the engine's own router, which is why the document publishes one wildcard rather than sixty-four operations.\n\nMost of it requires a validated principal and is refused 403 otherwise; the settings and cluster probes are open, because capability flags and cluster health carry no tenant data. A principal that is validated but carries NO org is refused too — that request would otherwise read the shared unscoped store instead of anyone's shard, so it fails closed. Admitted, the org, project and user are threaded into the engine, and every read and write lands in that tenant's own shard.\n\nTwo things about the answers differ from the rest of this API and will bite a generic client: errors here carry `code` as a NUMBER rather than the usual `status`, and the address serves several content types — JSON, plain-text refusals, and an event stream at the events path. Until the engine is wired the whole surface answers 503.",
         "tags": [
           "tasks"
         ],
@@ -275,6 +329,8 @@
       },
       "trace": {
         "operationId": "trace_v1_tasks_by_wildcard1",
+        "summary": "Not routed by the durable engine",
+        "description": "Published because this address accepts every method, but the engine routes nothing here: the request arrives as an unrouted path and no workflow is read or started.",
         "tags": [
           "tasks"
         ],

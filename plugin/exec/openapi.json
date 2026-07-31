@@ -28,42 +28,56 @@
     "/v1/download": {
       "delete": {
         "operationId": "delete_v1_download",
+        "summary": "The artifact download surface",
+        "description": "The root of the executor's download surface. The contract addresses an artifact by id one segment down (/v1/download/{id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ]
       },
       "get": {
         "operationId": "get_v1_download",
+        "summary": "The artifact download surface",
+        "description": "The root of the executor's download surface. The contract addresses an artifact by id one segment down (/v1/download/{id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ]
       },
       "options": {
         "operationId": "options_v1_download",
+        "summary": "The artifact download surface",
+        "description": "The root of the executor's download surface. The contract addresses an artifact by id one segment down (/v1/download/{id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ]
       },
       "patch": {
         "operationId": "patch_v1_download",
+        "summary": "The artifact download surface",
+        "description": "The root of the executor's download surface. The contract addresses an artifact by id one segment down (/v1/download/{id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ]
       },
       "post": {
         "operationId": "post_v1_download",
+        "summary": "The artifact download surface",
+        "description": "The root of the executor's download surface. The contract addresses an artifact by id one segment down (/v1/download/{id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ]
       },
       "put": {
         "operationId": "put_v1_download",
+        "summary": "The artifact download surface",
+        "description": "The root of the executor's download surface. The contract addresses an artifact by id one segment down (/v1/download/{id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ]
       },
       "trace": {
         "operationId": "trace_v1_download",
+        "summary": "The artifact download surface",
+        "description": "The root of the executor's download surface. The contract addresses an artifact by id one segment down (/v1/download/{id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ]
@@ -72,6 +86,8 @@
     "/v1/download/{wildcard1}": {
       "delete": {
         "operationId": "delete_v1_download_by_wildcard1",
+        "summary": "Download a file a run produced",
+        "description": "Fetches an artifact by id — a plot, a generated CSV, whatever a run wrote. This is the ONE address whose success body is not JSON: the artifact's BYTES come back under the executor's own Content-Type, so a client reads it as a stream and must not try to decode it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ],
@@ -88,6 +104,8 @@
       },
       "get": {
         "operationId": "get_v1_download_by_wildcard1",
+        "summary": "Download a file a run produced",
+        "description": "Fetches an artifact by id — a plot, a generated CSV, whatever a run wrote. This is the ONE address whose success body is not JSON: the artifact's BYTES come back under the executor's own Content-Type, so a client reads it as a stream and must not try to decode it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ],
@@ -104,6 +122,8 @@
       },
       "options": {
         "operationId": "options_v1_download_by_wildcard1",
+        "summary": "Download a file a run produced",
+        "description": "Fetches an artifact by id — a plot, a generated CSV, whatever a run wrote. This is the ONE address whose success body is not JSON: the artifact's BYTES come back under the executor's own Content-Type, so a client reads it as a stream and must not try to decode it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ],
@@ -120,6 +140,8 @@
       },
       "patch": {
         "operationId": "patch_v1_download_by_wildcard1",
+        "summary": "Download a file a run produced",
+        "description": "Fetches an artifact by id — a plot, a generated CSV, whatever a run wrote. This is the ONE address whose success body is not JSON: the artifact's BYTES come back under the executor's own Content-Type, so a client reads it as a stream and must not try to decode it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ],
@@ -136,6 +158,8 @@
       },
       "post": {
         "operationId": "post_v1_download_by_wildcard1",
+        "summary": "Download a file a run produced",
+        "description": "Fetches an artifact by id — a plot, a generated CSV, whatever a run wrote. This is the ONE address whose success body is not JSON: the artifact's BYTES come back under the executor's own Content-Type, so a client reads it as a stream and must not try to decode it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ],
@@ -152,6 +176,8 @@
       },
       "put": {
         "operationId": "put_v1_download_by_wildcard1",
+        "summary": "Download a file a run produced",
+        "description": "Fetches an artifact by id — a plot, a generated CSV, whatever a run wrote. This is the ONE address whose success body is not JSON: the artifact's BYTES come back under the executor's own Content-Type, so a client reads it as a stream and must not try to decode it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ],
@@ -168,6 +194,8 @@
       },
       "trace": {
         "operationId": "trace_v1_download_by_wildcard1",
+        "summary": "Download a file a run produced",
+        "description": "Fetches an artifact by id — a plot, a generated CSV, whatever a run wrote. This is the ONE address whose success body is not JSON: the artifact's BYTES come back under the executor's own Content-Type, so a client reads it as a stream and must not try to decode it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "download"
         ],
@@ -186,42 +214,56 @@
     "/v1/exec": {
       "delete": {
         "operationId": "delete_v1_exec",
+        "summary": "Run a code snippet in a sandboxed interpreter",
+        "description": "The code-interpreter entry point: a snippet with its language, plus any files already uploaded to the session, runs in an isolated executor and comes back as the session id, stdout, stderr and the files the run produced. This is what a chat agent's code tool calls.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ]
       },
       "get": {
         "operationId": "get_v1_exec",
+        "summary": "Run a code snippet in a sandboxed interpreter",
+        "description": "The code-interpreter entry point: a snippet with its language, plus any files already uploaded to the session, runs in an isolated executor and comes back as the session id, stdout, stderr and the files the run produced. This is what a chat agent's code tool calls.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ]
       },
       "options": {
         "operationId": "options_v1_exec",
+        "summary": "Run a code snippet in a sandboxed interpreter",
+        "description": "The code-interpreter entry point: a snippet with its language, plus any files already uploaded to the session, runs in an isolated executor and comes back as the session id, stdout, stderr and the files the run produced. This is what a chat agent's code tool calls.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ]
       },
       "patch": {
         "operationId": "patch_v1_exec",
+        "summary": "Run a code snippet in a sandboxed interpreter",
+        "description": "The code-interpreter entry point: a snippet with its language, plus any files already uploaded to the session, runs in an isolated executor and comes back as the session id, stdout, stderr and the files the run produced. This is what a chat agent's code tool calls.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ]
       },
       "post": {
         "operationId": "post_v1_exec",
+        "summary": "Run a code snippet in a sandboxed interpreter",
+        "description": "The code-interpreter entry point: a snippet with its language, plus any files already uploaded to the session, runs in an isolated executor and comes back as the session id, stdout, stderr and the files the run produced. This is what a chat agent's code tool calls.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ]
       },
       "put": {
         "operationId": "put_v1_exec",
+        "summary": "Run a code snippet in a sandboxed interpreter",
+        "description": "The code-interpreter entry point: a snippet with its language, plus any files already uploaded to the session, runs in an isolated executor and comes back as the session id, stdout, stderr and the files the run produced. This is what a chat agent's code tool calls.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ]
       },
       "trace": {
         "operationId": "trace_v1_exec",
+        "summary": "Run a code snippet in a sandboxed interpreter",
+        "description": "The code-interpreter entry point: a snippet with its language, plus any files already uploaded to the session, runs in an isolated executor and comes back as the session id, stdout, stderr and the files the run produced. This is what a chat agent's code tool calls.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ]
@@ -230,6 +272,8 @@
     "/v1/exec/{wildcard1}": {
       "delete": {
         "operationId": "delete_v1_exec_by_wildcard1",
+        "summary": "The interpreter's own execution subpaths",
+        "description": "Whatever the executor serves below /exec, addressed verbatim — /exec/programmatic is the one this repo names, and the rest of that tree is the executor's to define. It is deliberately ONE greedy route: enumerating the executor's subpaths here would 404 every one left out of the list, so cloud carries the whole tree rather than a guess at it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ],
@@ -246,6 +290,8 @@
       },
       "get": {
         "operationId": "get_v1_exec_by_wildcard1",
+        "summary": "The interpreter's own execution subpaths",
+        "description": "Whatever the executor serves below /exec, addressed verbatim — /exec/programmatic is the one this repo names, and the rest of that tree is the executor's to define. It is deliberately ONE greedy route: enumerating the executor's subpaths here would 404 every one left out of the list, so cloud carries the whole tree rather than a guess at it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ],
@@ -262,6 +308,8 @@
       },
       "options": {
         "operationId": "options_v1_exec_by_wildcard1",
+        "summary": "The interpreter's own execution subpaths",
+        "description": "Whatever the executor serves below /exec, addressed verbatim — /exec/programmatic is the one this repo names, and the rest of that tree is the executor's to define. It is deliberately ONE greedy route: enumerating the executor's subpaths here would 404 every one left out of the list, so cloud carries the whole tree rather than a guess at it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ],
@@ -278,6 +326,8 @@
       },
       "patch": {
         "operationId": "patch_v1_exec_by_wildcard1",
+        "summary": "The interpreter's own execution subpaths",
+        "description": "Whatever the executor serves below /exec, addressed verbatim — /exec/programmatic is the one this repo names, and the rest of that tree is the executor's to define. It is deliberately ONE greedy route: enumerating the executor's subpaths here would 404 every one left out of the list, so cloud carries the whole tree rather than a guess at it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ],
@@ -294,6 +344,8 @@
       },
       "post": {
         "operationId": "post_v1_exec_by_wildcard1",
+        "summary": "The interpreter's own execution subpaths",
+        "description": "Whatever the executor serves below /exec, addressed verbatim — /exec/programmatic is the one this repo names, and the rest of that tree is the executor's to define. It is deliberately ONE greedy route: enumerating the executor's subpaths here would 404 every one left out of the list, so cloud carries the whole tree rather than a guess at it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ],
@@ -310,6 +362,8 @@
       },
       "put": {
         "operationId": "put_v1_exec_by_wildcard1",
+        "summary": "The interpreter's own execution subpaths",
+        "description": "Whatever the executor serves below /exec, addressed verbatim — /exec/programmatic is the one this repo names, and the rest of that tree is the executor's to define. It is deliberately ONE greedy route: enumerating the executor's subpaths here would 404 every one left out of the list, so cloud carries the whole tree rather than a guess at it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ],
@@ -326,6 +380,8 @@
       },
       "trace": {
         "operationId": "trace_v1_exec_by_wildcard1",
+        "summary": "The interpreter's own execution subpaths",
+        "description": "Whatever the executor serves below /exec, addressed verbatim — /exec/programmatic is the one this repo names, and the rest of that tree is the executor's to define. It is deliberately ONE greedy route: enumerating the executor's subpaths here would 404 every one left out of the list, so cloud carries the whole tree rather than a guess at it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "exec"
         ],
@@ -344,42 +400,56 @@
     "/v1/files": {
       "delete": {
         "operationId": "delete_v1_files",
+        "summary": "The session file surface",
+        "description": "The root of the executor's session-file surface. The contract addresses a session's files one segment down (/v1/files/{session_id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ]
       },
       "get": {
         "operationId": "get_v1_files",
+        "summary": "The session file surface",
+        "description": "The root of the executor's session-file surface. The contract addresses a session's files one segment down (/v1/files/{session_id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ]
       },
       "options": {
         "operationId": "options_v1_files",
+        "summary": "The session file surface",
+        "description": "The root of the executor's session-file surface. The contract addresses a session's files one segment down (/v1/files/{session_id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ]
       },
       "patch": {
         "operationId": "patch_v1_files",
+        "summary": "The session file surface",
+        "description": "The root of the executor's session-file surface. The contract addresses a session's files one segment down (/v1/files/{session_id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ]
       },
       "post": {
         "operationId": "post_v1_files",
+        "summary": "The session file surface",
+        "description": "The root of the executor's session-file surface. The contract addresses a session's files one segment down (/v1/files/{session_id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ]
       },
       "put": {
         "operationId": "put_v1_files",
+        "summary": "The session file surface",
+        "description": "The root of the executor's session-file surface. The contract addresses a session's files one segment down (/v1/files/{session_id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ]
       },
       "trace": {
         "operationId": "trace_v1_files",
+        "summary": "The session file surface",
+        "description": "The root of the executor's session-file surface. The contract addresses a session's files one segment down (/v1/files/{session_id}); this bare address is served because one registration owns the whole prefix, and what it answers is the executor's to decide.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ]
@@ -388,6 +458,8 @@
     "/v1/files/{wildcard1}": {
       "delete": {
         "operationId": "delete_v1_files_by_wildcard1",
+        "summary": "List the files in an execution session",
+        "description": "Lists what a session holds, addressed by session id — the uploads a run can read and the artifacts it produced, each then fetched from /v1/download. The listing's shape is the executor's own; this module names only that the address is keyed by session id.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ],
@@ -404,6 +476,8 @@
       },
       "get": {
         "operationId": "get_v1_files_by_wildcard1",
+        "summary": "List the files in an execution session",
+        "description": "Lists what a session holds, addressed by session id — the uploads a run can read and the artifacts it produced, each then fetched from /v1/download. The listing's shape is the executor's own; this module names only that the address is keyed by session id.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ],
@@ -420,6 +494,8 @@
       },
       "options": {
         "operationId": "options_v1_files_by_wildcard1",
+        "summary": "List the files in an execution session",
+        "description": "Lists what a session holds, addressed by session id — the uploads a run can read and the artifacts it produced, each then fetched from /v1/download. The listing's shape is the executor's own; this module names only that the address is keyed by session id.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ],
@@ -436,6 +512,8 @@
       },
       "patch": {
         "operationId": "patch_v1_files_by_wildcard1",
+        "summary": "List the files in an execution session",
+        "description": "Lists what a session holds, addressed by session id — the uploads a run can read and the artifacts it produced, each then fetched from /v1/download. The listing's shape is the executor's own; this module names only that the address is keyed by session id.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ],
@@ -452,6 +530,8 @@
       },
       "post": {
         "operationId": "post_v1_files_by_wildcard1",
+        "summary": "List the files in an execution session",
+        "description": "Lists what a session holds, addressed by session id — the uploads a run can read and the artifacts it produced, each then fetched from /v1/download. The listing's shape is the executor's own; this module names only that the address is keyed by session id.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ],
@@ -468,6 +548,8 @@
       },
       "put": {
         "operationId": "put_v1_files_by_wildcard1",
+        "summary": "List the files in an execution session",
+        "description": "Lists what a session holds, addressed by session id — the uploads a run can read and the artifacts it produced, each then fetched from /v1/download. The listing's shape is the executor's own; this module names only that the address is keyed by session id.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ],
@@ -484,6 +566,8 @@
       },
       "trace": {
         "operationId": "trace_v1_files_by_wildcard1",
+        "summary": "List the files in an execution session",
+        "description": "Lists what a session holds, addressed by session id — the uploads a run can read and the artifacts it produced, each then fetched from /v1/download. The listing's shape is the executor's own; this module names only that the address is keyed by session id.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "files"
         ],
@@ -502,42 +586,56 @@
     "/v1/upload": {
       "delete": {
         "operationId": "delete_v1_upload",
+        "summary": "Upload a file into an execution session",
+        "description": "Takes a multipart upload and puts the file into the session the interpreter runs against, so a later run can read it. The multipart envelope and its content type reach the executor untouched — this address is not JSON and nothing here parses it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ]
       },
       "get": {
         "operationId": "get_v1_upload",
+        "summary": "Upload a file into an execution session",
+        "description": "Takes a multipart upload and puts the file into the session the interpreter runs against, so a later run can read it. The multipart envelope and its content type reach the executor untouched — this address is not JSON and nothing here parses it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ]
       },
       "options": {
         "operationId": "options_v1_upload",
+        "summary": "Upload a file into an execution session",
+        "description": "Takes a multipart upload and puts the file into the session the interpreter runs against, so a later run can read it. The multipart envelope and its content type reach the executor untouched — this address is not JSON and nothing here parses it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ]
       },
       "patch": {
         "operationId": "patch_v1_upload",
+        "summary": "Upload a file into an execution session",
+        "description": "Takes a multipart upload and puts the file into the session the interpreter runs against, so a later run can read it. The multipart envelope and its content type reach the executor untouched — this address is not JSON and nothing here parses it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ]
       },
       "post": {
         "operationId": "post_v1_upload",
+        "summary": "Upload a file into an execution session",
+        "description": "Takes a multipart upload and puts the file into the session the interpreter runs against, so a later run can read it. The multipart envelope and its content type reach the executor untouched — this address is not JSON and nothing here parses it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ]
       },
       "put": {
         "operationId": "put_v1_upload",
+        "summary": "Upload a file into an execution session",
+        "description": "Takes a multipart upload and puts the file into the session the interpreter runs against, so a later run can read it. The multipart envelope and its content type reach the executor untouched — this address is not JSON and nothing here parses it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ]
       },
       "trace": {
         "operationId": "trace_v1_upload",
+        "summary": "Upload a file into an execution session",
+        "description": "Takes a multipart upload and puts the file into the session the interpreter runs against, so a later run can read it. The multipart envelope and its content type reach the executor untouched — this address is not JSON and nothing here parses it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ]
@@ -546,6 +644,8 @@
     "/v1/upload/{wildcard1}": {
       "delete": {
         "operationId": "delete_v1_upload_by_wildcard1",
+        "summary": "The upload surface's own subpaths",
+        "description": "Whatever the executor serves below /upload, addressed verbatim. One greedy route rather than an enumeration this repo has never made: a listed subtree would 404 everything left out of it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ],
@@ -562,6 +662,8 @@
       },
       "get": {
         "operationId": "get_v1_upload_by_wildcard1",
+        "summary": "The upload surface's own subpaths",
+        "description": "Whatever the executor serves below /upload, addressed verbatim. One greedy route rather than an enumeration this repo has never made: a listed subtree would 404 everything left out of it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ],
@@ -578,6 +680,8 @@
       },
       "options": {
         "operationId": "options_v1_upload_by_wildcard1",
+        "summary": "The upload surface's own subpaths",
+        "description": "Whatever the executor serves below /upload, addressed verbatim. One greedy route rather than an enumeration this repo has never made: a listed subtree would 404 everything left out of it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ],
@@ -594,6 +698,8 @@
       },
       "patch": {
         "operationId": "patch_v1_upload_by_wildcard1",
+        "summary": "The upload surface's own subpaths",
+        "description": "Whatever the executor serves below /upload, addressed verbatim. One greedy route rather than an enumeration this repo has never made: a listed subtree would 404 everything left out of it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ],
@@ -610,6 +716,8 @@
       },
       "post": {
         "operationId": "post_v1_upload_by_wildcard1",
+        "summary": "The upload surface's own subpaths",
+        "description": "Whatever the executor serves below /upload, addressed verbatim. One greedy route rather than an enumeration this repo has never made: a listed subtree would 404 everything left out of it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ],
@@ -626,6 +734,8 @@
       },
       "put": {
         "operationId": "put_v1_upload_by_wildcard1",
+        "summary": "The upload surface's own subpaths",
+        "description": "Whatever the executor serves below /upload, addressed verbatim. One greedy route rather than an enumeration this repo has never made: a listed subtree would 404 everything left out of it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ],
@@ -642,6 +752,8 @@
       },
       "trace": {
         "operationId": "trace_v1_upload_by_wildcard1",
+        "summary": "The upload surface's own subpaths",
+        "description": "Whatever the executor serves below /upload, addressed verbatim. One greedy route rather than an enumeration this repo has never made: a listed subtree would 404 everything left out of it.\n\nNOTHING RUNS HERE. cloud forwards the request to the sandboxed executor byte for byte and forwards its answer back the same way — the status, the Content-Type and every field are the executor's, including fields this repo has never named and including its own 4xx. There is no os/exec anywhere in this process: the sandbox is the isolation boundary, and cloud adds only the credential check and the single public address.\n\nAUTH is a shared SERVICE key on X-API-Key, compared in constant time — not a user JWT. The chat server calls this server-side on a user's behalf, so this surface carries no org scope and no per-user identity; separation between callers is the executor's session, not this edge's. A wrong key is 401, and a deployment with no key configured is 503 rather than open.\n\nOne registration owns this address for every method, so which methods actually answer is the executor's decision, not this edge's.",
         "tags": [
           "upload"
         ],

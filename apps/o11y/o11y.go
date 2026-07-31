@@ -56,9 +56,187 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/o11y"
 	"github.com/zap-proto/zip"
 )
+
+// The prose for the operations this package serves but does not OWN the shape of:
+// the three probes the upstream module registers ahead of its wildcard, and the two
+// wildcards themselves. A wildcard has no operation to type — that is the whole
+// reason it is a wildcard — so zipdoc has nothing to lift, and without a Describe
+// these ten publish an operationId and nothing else. Declared here because this
+// file owns what a caller actually meets on the way through: the gate, its
+// exemptions, and the runtime the request is handed to.
+//
+// The path keys are the FIBER patterns (`*`), which the document renders as
+// {wildcard1}. A description whose route is not in the router never renders, so
+// this stays additive metadata on routes that exist.
+func init() {
+	// --- probes: registered by the upstream module ahead of its wildcard ---
+	openapi.Describe("/v1/o11y/api/v2/livez", http.MethodGet,
+		"Liveness of the observability process",
+		"Answers 200 unconditionally while the process is running, and asserts NOTHING about "+
+			"the telemetry stores behind it. That is what makes it a liveness probe: a "+
+			"container that answers this is worth leaving alive, and restarting on a store "+
+			"outage would only remove the thing reporting the outage.\n\n"+
+			"UNAUTHENTICATED by design, and one of exactly three /v1/o11y paths that are. It "+
+			"carries no tenant data, and gating it would break the k8s probes and the external "+
+			"health checks without protecting anything. Use the health probe, not this one, to "+
+			"ask whether the runtime can actually serve.")
+	openapi.Describe("/v1/o11y/api/v2/healthz", http.MethodGet,
+		"Health of the observability runtime's services",
+		"Reports whether every service in the runtime's registry is healthy, and names them "+
+			"grouped by state — so a failure says WHICH component is down, not merely that "+
+			"something is. An unhealthy registry answers 503, not a 200 with a false flag "+
+			"inside, so a plain status check cannot read a sick runtime as well.\n\n"+
+			"UNAUTHENTICATED by design, like the other two probes: it carries no tenant data "+
+			"and is reached by k8s and by external checks that hold no principal.")
+	openapi.Describe("/v1/o11y/api/v2/readyz", http.MethodGet,
+		"Readiness of the observability runtime to serve",
+		"Reports whether the runtime's registered services are healthy enough to take "+
+			"traffic, and answers 503 when they are not — which is what takes a booting or "+
+			"degraded replica out of the load balancer instead of letting it serve errors.\n\n"+
+			"UNAUTHENTICATED by design, like the other two probes. It reads the same service "+
+			"registry the health probe reads, so the two agree by construction; readiness is "+
+			"the question a router asks and health is the question an operator asks.")
+
+	// --- /v1/o11y/* — everything no specific route above claimed ---
+	openapi.Describe("/v1/o11y/*", http.MethodGet,
+		"Read a resource from the observability runtime",
+		"Serves the observability runtime's own read surface — dashboards, alert rules, "+
+			"saved views, the service and dependency inventory, and the trace, log and metric "+
+			"explorers — in the runtime's own shapes, passed through unchanged.\n\n"+
+			"It is the FALLTHROUGH, not the front door. Every path this repo owns the shape of "+
+			"is registered ahead of it and wins the match; what reaches here is what only the "+
+			"runtime knows how to answer. The public contract is flat — one /v1/, no nested "+
+			"version — and the mapping onto the runtime's internal namespace happens at this "+
+			"one seam, so a caller never spells an engine version.\n\n"+
+			"A validated principal is required and the read is scoped to that principal's own "+
+			"org, pinned server-side from its claim; a client-supplied org header never "+
+			"survives ingress and there is no query parameter that widens the scope. Platform "+
+			"sudo passes without an org — the admin console reads before one is selected — and "+
+			"buys reach, not data: the runtime still scopes every read from the tenant it was "+
+			"given, so an org-less request answers org-less, never the fleet. Before the "+
+			"runtime is initialized, 503.")
+	openapi.Describe("/v1/o11y/*", http.MethodPost,
+		"Create a runtime object, or run a query against telemetry",
+		"Carries the runtime's own writes and query posts — creating a dashboard, an alert "+
+			"rule or a saved view, and running the query bodies the explorers submit — in the "+
+			"runtime's own shapes, passed through unchanged.\n\n"+
+			"It is the FALLTHROUGH: the builder query and the ingest routes this repo owns are "+
+			"registered ahead of it and win the match. A validated, org-scoped principal is "+
+			"required and the write lands in that principal's own tenant, pinned server-side.\n\n"+
+			"ONE EXEMPTION, and it is deliberate: a Sentry error-ingest write presents a DSN "+
+			"public key, never a Hanzo session, so those two paths bypass the principal gate "+
+			"and are authenticated by the ingest verifier instead — which derives the org from "+
+			"the DSN itself and fails closed. The exemption is matched by method plus prefix "+
+			"plus suffix, never a broad prefix, so every read under the same subtree stays "+
+			"gated. Before the runtime is initialized, 503.")
+	openapi.Describe("/v1/o11y/*", http.MethodPut,
+		"Replace a runtime object",
+		"Replaces one of the observability runtime's own objects — a dashboard, an alert "+
+			"rule, a saved view — in the runtime's own shapes, passed through unchanged. The "+
+			"fallthrough for the resources only the runtime knows.\n\n"+
+			"A validated, org-scoped principal is required, and the write is confined to that "+
+			"principal's own tenant: the org is minted from its claim at ingress, a client copy "+
+			"never survives, and nothing in the request can widen the scope. Before the runtime "+
+			"is initialized, 503.")
+	openapi.Describe("/v1/o11y/*", http.MethodPatch,
+		"Update part of a runtime object",
+		"Applies a partial update to one of the observability runtime's own objects, in the "+
+			"runtime's own shapes, passed through unchanged. The fallthrough for the resources "+
+			"only the runtime knows.\n\n"+
+			"A validated, org-scoped principal is required, and the write is confined to that "+
+			"principal's own tenant, pinned server-side from its claim. Before the runtime is "+
+			"initialized, 503.")
+	openapi.Describe("/v1/o11y/*", http.MethodDelete,
+		"Remove a runtime object",
+		"Removes one of the observability runtime's own objects — a dashboard, an alert rule, "+
+			"a saved view — passing the runtime's answer through unchanged. The fallthrough "+
+			"for the resources only the runtime knows.\n\n"+
+			"A validated, org-scoped principal is required, and the delete is confined to that "+
+			"principal's own tenant, pinned server-side from its claim, so one tenant can never "+
+			"reach another's object. Before the runtime is initialized, 503.")
+
+	// --- /v1/sentry/* — the Sentry product face over the SAME runtime ---
+	openapi.Describe("/v1/sentry/*", http.MethodGet,
+		"Read the caller org's errors on the Sentry surface",
+		"Serves the Sentry-compatible read surface — projects, error issues and one issue's "+
+			"occurrences, a single event, error logs, error-correlated traces and one trace's "+
+			"waterfall, and the event-rate stats — so a Sentry client or the error console "+
+			"reads its errors at the paths it already speaks.\n\n"+
+			"It is the SAME runtime the observability surface serves, reached under a second "+
+			"path family, and there is NO rewrite: the runtime carries these routes literally. "+
+			"That is what makes this a product face rather than a translation layer. One "+
+			"runtime, two path families.\n\n"+
+			"A validated principal is required and the read is scoped to that principal's own "+
+			"org. Errors are a tenant's OWN data, so org membership is the whole admission test "+
+			"and there is deliberately no admin term on it — gating the product on platform "+
+			"sudo would make the only way to see your own errors a scope that shows you "+
+			"everyone's. Before the runtime is initialized, 503.")
+	openapi.Describe("/v1/sentry/*", http.MethodPost,
+		"Send events to the Sentry surface, or write on it",
+		"Carries every write on the Sentry-compatible surface: the SDK's error ingest, and "+
+			"the authenticated writes the console makes — creating a project, rotating a "+
+			"project's DSN key, and running a discover query over the events plane.\n\n"+
+			"THE TWO ARE AUTHENTICATED DIFFERENTLY, and that is the rule to get right. An "+
+			"envelope or store submission presents a DSN public key, never a Hanzo session, so "+
+			"it is exempt from the principal gate and verified by the ingest key check instead "+
+			"— which derives the org from the DSN and fails closed. A keyless submission is a "+
+			"401 from that verifier, not a 403 from the gate, and telling those two apart is "+
+			"how you tell the hops apart. Every other write here needs a validated, org-scoped "+
+			"principal, and creating or rotating requires an editor rather than a viewer.\n\n"+
+			"The ingest exemption is matched by method plus prefix plus suffix, never a bare "+
+			"prefix, and the project segment must be a UUID — so no read is reachable through "+
+			"it. Before the runtime is initialized, 503.")
+	openapi.Describe("/v1/sentry/*", http.MethodPut,
+		"Move an error issue through its lifecycle",
+		"The one replace on the Sentry surface: updating an error ISSUE — resolving it, "+
+			"ignoring it, or assigning it — and answering the updated issue.\n\n"+
+			"Nothing else here takes a replace. A project is created and deleted but never "+
+			"replaced, and the event and trace planes are append-only telemetry, so an issue's "+
+			"lifecycle is the only mutable state this face exposes.\n\n"+
+			"Requires a validated, org-scoped principal with edit rights; a viewer is refused. "+
+			"The write is confined to the org minted from that principal's claim, so an issue "+
+			"id belonging to another tenant is simply not found. Before the runtime is "+
+			"initialized, 503.")
+	openapi.Describe("/v1/sentry/*", http.MethodPatch,
+		"Not served — the Sentry surface has no partial update",
+		"The Sentry face carries NO route for a partial update. The wildcard admits every "+
+			"method, so this operation exists as an address, but nothing behind it answers and "+
+			"a request lands on the runtime as an unrouted path.\n\n"+
+			"It is documented rather than silently omitted because the useful thing to say is "+
+			"where to go instead: an issue's lifecycle — resolve, ignore, assign — is a "+
+			"REPLACE on that issue, not a patch, and it is the only mutable state on this "+
+			"surface. A client that reaches for a partial update here is looking for that "+
+			"call.")
+	openapi.Describe("/v1/sentry/*", http.MethodDelete,
+		"Delete a Sentry project",
+		"The one delete on the Sentry surface: removing a PROJECT, answering 204. Error "+
+			"issues, events and traces are not individually deletable — they are append-only "+
+			"telemetry, and their lifetime is retention's business, not an API call's.\n\n"+
+			"Requires a validated, org-scoped principal with edit rights; a viewer is refused. "+
+			"The delete is confined to the org minted from that principal's claim, so a project "+
+			"id belonging to another tenant is not found rather than removed. Deleting a "+
+			"project retires the DSN that fed it, so any SDK still pointed at that key stops "+
+			"being accepted. Before the runtime is initialized, 503.")
+	// The methods left over. This address is bound with All(), so it publishes every
+	// method this generator knows and the ones above are only the ones that DO
+	// something. DescribeRest covers the remainder from the generator's own set, so a
+	// method added there is covered the day it appears rather than published bare —
+	// which is what a hand-copied list here had already produced for OPTIONS and TRACE.
+	openapi.DescribeRest("/v1/o11y/*",
+		"Not served by the observability runtime",
+		"Published because this address accepts every method, but the runtime routes nothing "+
+			"here: the request reaches it as an unrouted path and no telemetry is read or written.")
+	openapi.DescribeRest("/v1/sentry/*",
+		"Not served by the Sentry face",
+		"Published because this address accepts every method, but the Sentry face routes "+
+			"nothing here: the request reaches the runtime as an unrouted path and no issue, "+
+			"event or trace is touched.")
+
+}
 
 // defaultUpstream is the in-cluster address of the o11y runtime Deployment's
 // Service (port 80 -> container 8080). Overridable via O11Y_UPSTREAM.

@@ -39,6 +39,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -47,6 +48,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/team/token"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -661,6 +663,42 @@ func (cc *collabConn) sync(ctx context.Context, ds *collabDocSession, r *lreader
 }
 
 // ── HTTP surface ─────────────────────────────────────────────────────────────
+
+// The prose for the live lane's socket. It is UNTYPED and cannot be otherwise —
+// the response is a protocol upgrade, not a value — so zipdoc has nothing to
+// lift and without this it publishes an operationId and nothing else. The
+// snapshot RPC beside it (collab.go) documents itself from its own doc comment.
+//
+// The path key is the FIBER pattern exactly as registered in collabService.register.
+func init() {
+	openapi.Describe(collabPrefix, http.MethodGet,
+		"Open the live collaborative-editing socket",
+		"Upgrades to the hocuspocus WebSocket the Team editor syncs its Y.js documents over: "+
+			"binary frames of document name, message type and payload, with ONE socket "+
+			"multiplexing every document a tab has open. The server is a relay and an ordered "+
+			"update log, not a CRDT engine — it replays the log to each joining peer and "+
+			"broadcasts every update to the rest, which converges because Y.js updates are "+
+			"commutative and idempotent. There is no body; the response is a protocol upgrade.\n\n"+
+			"IT SITS OUTSIDE /v1 ON PURPOSE. The client derives both collaborator lanes from one "+
+			"configured URL — this socket at its root, the markup-snapshot RPC one segment in — "+
+			"so the path is fixed by the editor library's contract rather than chosen by this "+
+			"service.\n\n"+
+			"AUTH IS IN-BAND, PER DOCUMENT, NOT ON THE UPGRADE. The handshake gates only on "+
+			"browser Origin (403 outside the team surfaces; no Origin at all is admitted, which "+
+			"is what a non-browser sends), and then the first frame for a document must be an "+
+			"Auth message carrying the same session or workspace token every other team route "+
+			"verifies — a browser WebSocket cannot set an Authorization header, which is why the "+
+			"token rides inside the protocol. Anything else on an unauthenticated document is "+
+			"answered with one permission denial and nothing further.\n\n"+
+			"Every document is authorized on its own: the document's workspace must be the "+
+			"token's workspace when the token pins one, and the caller must be a member of it. A "+
+			"mismatch, an unknown workspace and a non-member deny alike with \"document not "+
+			"found\". Rooms are keyed by org and workspace and the persisted log's key embeds "+
+			"both, so a foreign document id can neither join a room nor read a blob.\n\n"+
+			"The server pings every twenty seconds and drops a socket silent for sixty, so a "+
+			"backgrounded tab — whose JS timers are throttled but whose network stack still "+
+			"auto-pongs — stays connected instead of dying into a reconnect loop.")
+}
 
 // ws upgrades GET /collaborator and runs the frame loop. Auth is IN-BAND (per
 // document, inside the hocuspocus Auth message) — the upgrade itself only

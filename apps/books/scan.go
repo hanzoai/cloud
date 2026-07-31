@@ -85,7 +85,40 @@ func scannerRoutes(app cloud.Router, s *cloud.Service[*state]) {
 // scannerRoutes runs once per Mount.
 func init() {
 	openapi.Register("/v1/books/scan", "POST", openapi.Binary{}, ScanDraft{})
+	openapi.Describe("/v1/books/scan", http.MethodPost,
+		"Scan a receipt or invoice into a proposed voucher",
+		"Takes a receipt or invoice as RAW BYTES — a PDF, an image or plain text, uploaded "+
+			"under its own content type, not wrapped in JSON — extracts what the document "+
+			"says, resolves the vendor's expense category, and answers a DRAFT carrying a "+
+			"balanced voucher proposed for it.\n\n"+
+			"NOTHING IS POSTED. That split is the whole design: the model only ever produces a "+
+			"structured reading of the document, the voucher is assembled deterministically in "+
+			"Go from that reading, and the ledger is written only by the separate book call a "+
+			"human confirms. So a misread scan can propose a wrong draft; it cannot move "+
+			"money. Amounts are exact integer cents end to end — the extraction returns cents, "+
+			"never a decimal — so no rounding enters the ledger.\n\n"+
+			"The draft's id is the FILE HASH, and that is what makes booking idempotent: "+
+			"re-scanning the same bytes addresses the same draft rather than queuing a second "+
+			"one. A row is written to the org's document inbox as a side effect, moving it "+
+			"from unsorted to draft. Scoped to the caller's own org from the validated "+
+			"principal and refused without one; `sandbox=true` targets the sandbox ledger, and "+
+			"`filename` is recorded for the inbox. An empty or oversized upload is a 400, and "+
+			"a deployment with no scanner model answers 501.")
 	openapi.Register("/v1/books/inbox", "POST", openapi.Binary{}, InboxItem{})
+	openapi.Describe("/v1/books/inbox", http.MethodPost,
+		"Queue a document for later scanning",
+		"Takes a document as RAW BYTES and queues it in the caller org's inbox as "+
+			"`unsorted`, answering the queued item. It is the drop box: get the paperwork in "+
+			"now, read it later.\n\n"+
+			"It EXTRACTS NOTHING and calls no model — that is what separates it from the "+
+			"scan. Nothing is proposed and nothing is posted; the item simply waits to be "+
+			"scanned, and a booked document leaves the queue.\n\n"+
+			"IDEMPOTENT BY CONTENT: the item's id is the file hash, so re-uploading the same "+
+			"bytes answers the existing item rather than adding a duplicate row — and it is "+
+			"the same id a scan of those bytes uses, which is how the two routes address one "+
+			"document. Scoped to the caller's own org from the validated principal and refused "+
+			"without one; `sandbox=true` targets the sandbox ledger, and `filename` is "+
+			"recorded for display. An empty or oversized upload is a 400.")
 }
 
 // LineItem is one line of a scanned document — a description and its amount in exact cents.

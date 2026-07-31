@@ -47,6 +47,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -155,6 +156,28 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// can declare a body-tolerant op; until then this route publishes its address
 	// and nothing else. apps/ads/typed_wire_test.go holds it as a CLOSED list.
 	g.Post("/campaigns/:id/launch", cloud.Handle(s, launchCampaign))
+}
+
+// launch's prose, declared beside the wire fact that keeps it untyped. A typed
+// op's prose is lifted from its doc comment by zipdoc; this route has no typed op
+// to lift from, so without a Describe it publishes an operationId and nothing
+// else — an SDK method that cannot explain itself and a CLI command with no help
+// text. Declared through the same registry Register uses, so it renders only
+// while the router actually serves the route.
+func init() {
+	openapi.Describe("/v1/ads/campaigns/:id/launch", http.MethodPost,
+		"Run one of your stored campaigns on its ad network",
+		"Creates the campaign on its platform under the CALLER ORG'S own connected ad account, "+
+			"records the provider campaign id, flips the stored campaign to active and answers the "+
+			"updated record. No ad-network token is held here: it is resolved from KMS through the "+
+			"org's connector at launch time, BEFORE any provider call, so an org that has not "+
+			"connected that platform gets 424 and no spend can ever start on a connection the org "+
+			"did not make. Meta is executed for real; a campaign on a platform whose provider is not "+
+			"wired yet answers 501 even when the connector is connected, and an edge failure at the "+
+			"platform is 502. The optional {account} body overrides the target ad account for this "+
+			"launch and is TOLERANT — a malformed or non-JSON body is ignored and the campaign "+
+			"launches on its stored account rather than being refused. A campaign id another org "+
+			"owns reads as not found.")
 }
 
 // ops binds the store to the typed ads ops. A TypedHandler is
