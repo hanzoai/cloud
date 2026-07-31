@@ -36,7 +36,7 @@ func TestOrgKeyInjectiveNoFold(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("org %q list: %d %s", b, code, body)
 		}
-		var list []projectView
+		var list []projectsProject
 		if err := json.Unmarshal(body, &list); err != nil {
 			t.Fatalf("org %q list decode: %v (%s)", b, err, body)
 		}
@@ -85,7 +85,7 @@ func TestPlainProjectGitDeployStampsBucket(t *testing.T) {
 	if code != http.StatusAccepted {
 		t.Fatalf("git deploy must be 202, got %d %s", code, b)
 	}
-	var dep deploymentView
+	var dep projectsDeployment
 	if err := json.Unmarshal(b, &dep); err != nil || dep.ID == "" {
 		t.Fatalf("decode deployment: %v (%s)", err, b)
 	}
@@ -104,7 +104,7 @@ func TestPlainProjectGitDeployStampsBucket(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("get after deploy: %d %s", code, b)
 	}
-	var p projectView
+	var p projectsProject
 	if err := json.Unmarshal(b, &p); err != nil {
 		t.Fatalf("decode project: %v (%s)", err, b)
 	}
