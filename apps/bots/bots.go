@@ -4,7 +4,7 @@
 //
 // A bot run is ONE value with ONE home. It is not the bot MACHINE that hosts a
 // runtime (visor's /v1/compute/bots — a machine you rent), and it is not the
-// runtime service itself (clients/runtime — the transport to the executor).
+// runtime service itself (apps/runtime — the transport to the executor).
 //
 // CLOUD OWNS POLICY, THE RUNTIME OWNS THE RUN. The sandbox lives in the runtime,
 // keyed in the runtime's own store under the tenant that started it; that store is

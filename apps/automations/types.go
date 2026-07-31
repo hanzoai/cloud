@@ -1,10 +1,4 @@
-// Package automations mounts the Hanzo Cloud /v1/automations/* surface: a
-// native-Go Connectors+Automations engine (HIP-0106, task #51) that runs an
-// org's flows durably on the ONE shared in-process hanzoai/tasks engine and
-// invokes third-party connectors whose credentials are custodied by
-// clients/integrations (KMS-sealed, per-org).
-//
-// This file ports the ActivePieces shared contract
+// types.go ports the ActivePieces shared contract
 // (auto/packages/shared/src/lib/automation/) to plain Go structs + string-const
 // enums. The JSON tags match the TypeScript field names verbatim because the
 // reused web/ flow builder is the contract consumer — it authors the same
@@ -14,6 +8,9 @@
 // its indexes with `org`, and the durable engine's ONLY credential scope is
 // FlowRunInput.Owner — the VALIDATED org resolved from principal.Org at
 // flow-start, never a client-supplied field. See engine.go (ExecuteStepActivity).
+//
+// The package doc lives once, in automations.go.
+
 package automations
 
 import "encoding/json"

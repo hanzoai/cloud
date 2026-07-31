@@ -3,13 +3,16 @@
 // runtime's ops face, not a control plane: a liveness probe is not a
 // tenant-scoped resource, so it stays a relay rather than being reimplemented in
 // Go. Everything a tenant can ACT on is native and lives in its own domain —
-// /v1/bots is the run control plane (clients/bots).
+// /v1/bots is the run control plane (apps/bots).
 //
 // Path mapping: the runtime serves bare paths (/health, /v1/chat/completions),
 // NOT the /v1/bot/* prefix — the edge strips it. So this face strips /v1/bot too:
 // /v1/bot/<rest> → {runtime}/<rest> (e.g. /v1/bot/health → /health).
 //
 // Order 143 — binds /v1/bot/* before the AI subsystem's /v1/* catch-all (150).
+//
+// The package doc lives once, in runtime.go.
+
 package runtime
 
 import (
