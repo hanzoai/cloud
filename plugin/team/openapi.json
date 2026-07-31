@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package team is Hanzo Team, the org's shared workspace: IAM sign-in and workspace selection, the transactor WebSocket a workspace's documents ride, collaborative editing on /collaborator, per-workspace files, the wallet page with its plan + seats, and the org's agents projected in as bot members.",
     "version": "v1"
   },
   "servers": [

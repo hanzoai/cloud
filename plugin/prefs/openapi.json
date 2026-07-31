@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package prefs is the per-USER preference plane for the unified Hanzo Cloud binary: the /v1/prefs surface behind the user menu on every Hanzo surface (console, insights, and anything else that renders \"signed in as\").",
     "version": "v1"
   },
   "servers": [

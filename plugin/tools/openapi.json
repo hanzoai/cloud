@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package tools is the ONE tool plane for Hanzo Cloud's PER-TENANT capabilities: a single registry where every callable thing an ORG owns — a connector action, a user function, a zap service route, an agent, an authored skill, or a tool on the org's own external MCP server — is a Tool with a Source, a JSON-Schema, a per-(org,project) activation state, and an optional price.",
     "version": "v1"
   },
   "servers": [
@@ -58,7 +58,7 @@
             "application/json": {
               "example": {
                 "authHeader": "Authorization",
-                "listing": "com.stripe_mcp",
+                "listing": "com.acme_mcp",
                 "secret": "Bearer …"
               },
               "schema": {
@@ -591,7 +591,7 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "ID is the listing, from the path. It is the publisher's reverse-DNS name\nwith its one slash written as an underscore — \"com.stripe_mcp\".",
+            "description": "ID is the listing, from the path. It is the publisher's reverse-DNS name\nwith its one slash written as an underscore — \"com.acme_mcp\".",
             "schema": {
               "type": "string"
             }
@@ -711,7 +711,7 @@
             "type": "string"
           },
           "name": {
-            "description": "Name is the publisher's reverse-DNS name, e.g. \"com.stripe/mcp\".",
+            "description": "Name is the publisher's reverse-DNS name, e.g. \"com.acme/mcp\".",
             "type": "string"
           },
           "official": {

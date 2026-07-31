@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package tasks mounts the Hanzo Tasks HTTP + UI surface natively onto the unified cloud binary per HIP-0106 — the follow-up named in cloud's durable.go (\"consolidating that surface into cloud\").",
     "version": "v1"
   },
   "servers": [

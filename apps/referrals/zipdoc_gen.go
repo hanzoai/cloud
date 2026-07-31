@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/admin/referrals/bonuses", zip.Doc{
-		Description: "adminList returns every one-time referral bonus in the ledger with a fleet summary.\n\nSuperAdmin only, fail-closed. This is the ONE-TIME BONUS ledger — who referred\nwhom, what each side was granted and which ledger transactions carried it. The\ncross-tenant referral ANALYTICS board (top referrers, conversion, multi-level\naccrual liability) is a different surface, GET /v1/admin/referrals, owned by the\naffiliates subsystem over the shared attribution spine.",
+		Description: "Returns every one-time referral bonus in the ledger with a fleet summary.\n\nSuperAdmin only, fail-closed. This is the ONE-TIME BONUS ledger — who referred\nwhom, what each side was granted and which ledger transactions carried it. The\ncross-tenant referral ANALYTICS board (top referrers, conversion, multi-level\naccrual liability) is a different surface, GET /v1/admin/referrals, owned by the\naffiliates subsystem over the shared attribution spine.",
 		Fields: map[string]string{
 			"adminBonusDirectory.referrals":        "Referrals is every referral in the ledger, both orgs exposed.",
 			"adminBonusDirectory.summary":          "Summary is the fleet tally across those referrals.",
@@ -38,7 +38,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/referrals", zip.Doc{
-		Description: "mine returns the caller's referral code, share link and the referrals they have made.\n\nThe code is a stable, deterministic function of the org, so the link in this\nresponse is the same one every time. Each row carries the referee, its status and\nthe credit this org earned from it; creditsEarnedCents is their sum.\n\nThe read is self-updating: before listing, it runs the qualify check over this\norg's still-pending referees, so a referee who has since made metered spend is\ncredited by the act of the referrer loading their page. That check is\nbest-effort and bounded — a commerce hiccup leaves the referral pending for the\nnext check rather than failing the page — and the grant is latched at-most-once,\nso this path and the admin sweep can never double-pay.",
+		Description: "Returns the caller's referral code, share link and the referrals they have made.\n\nThe code is a stable, deterministic function of the org, so the link in this\nresponse is the same one every time. Each row carries the referee, its status and\nthe credit this org earned from it; creditsEarnedCents is their sum.\n\nThe read is self-updating: before listing, it runs the qualify check over this\norg's still-pending referees, so a referee who has since made metered spend is\ncredited by the act of the referrer loading their page. That check is\nbest-effort and bounded — a commerce hiccup leaves the referral pending for the\nnext check rather than failing the page — and the grant is latched at-most-once,\nso this path and the admin sweep can never double-pay.",
 		Fields: map[string]string{
 			"myReferralView.createdAt":       "CreatedAt is when the referral was recorded, as a Unix timestamp.",
 			"myReferralView.creditedAt":      "CreditedAt is when the bonuses were latched and granted, as a Unix\ntimestamp; 0 until they are. It is the at-most-once latch.",
@@ -61,7 +61,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/admin/referrals/sweep", zip.Doc{
-		Description: "adminSweep qualify-checks every pending referral and grants the ones that now qualify.\n\nSuperAdmin only, fail-closed. This is the cron path: a referee QUALIFIES once\nthey have made metered spend — the honest signal that they actually used the\nproduct rather than merely claiming a welcome grant — and qualifying grants the\nreferrer and the referee their bonuses in one latched step.\n\nThe grant is backed against the platform reserve fund before it is latched, so\nan empty fund leaves the referral honestly pending rather than minting unbacked\ncredit, and the latch makes it at-most-once: this sweep, a concurrent sweep and\nthe lazy check on GET /v1/referrals can never double-pay. One pass is bounded,\nso a large backlog drains over several runs instead of wedging one request.\n\nIt reads nothing from the caller — the counters it returns are the whole result.",
+		Description: "Qualify-checks every pending referral and grants the ones that now qualify.\n\nSuperAdmin only, fail-closed. This is the cron path: a referee QUALIFIES once\nthey have made metered spend — the honest signal that they actually used the\nproduct rather than merely claiming a welcome grant — and qualifying grants the\nreferrer and the referee their bonuses in one latched step.\n\nThe grant is backed against the platform reserve fund before it is latched, so\nan empty fund leaves the referral honestly pending rather than minting unbacked\ncredit, and the latch makes it at-most-once: this sweep, a concurrent sweep and\nthe lazy check on GET /v1/referrals can never double-pay. One pass is bounded,\nso a large backlog drains over several runs instead of wedging one request.\n\nIt reads nothing from the caller — the counters it returns are the whole result.",
 		Fields: map[string]string{
 			"sweepEnvelope.data":   "Data is the sweep's counters.",
 			"sweepEnvelope.msg":    "Msg is empty on success; the console surfaces it when status is not \"ok\".",
@@ -71,7 +71,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/referrals/claim", zip.Doc{
-		Description: "claim records that the caller's org signed up through a referral code.\n\nThe REFEREE is the validated caller, never a client field, and the referrer is\nresolved from the code — so a caller can only ever attach THEMSELVES to someone\nelse's code. Referring yourself is 400 and an unknown code is 404.\n\nIt is idempotent and first-touch: an org can be referred once, ever. A repeat\ncall returns the referral already on file with created=false and 200, where the\nfirst call answers 201.\n\nRecording a referral grants nothing. Both bonuses are granted later, when the\nreferee actually makes metered spend — see GET /v1/referrals and\nPOST /v1/admin/referrals/sweep.",
+		Description: "Records that the caller's org signed up through a referral code.\n\nThe REFEREE is the validated caller, never a client field, and the referrer is\nresolved from the code — so a caller can only ever attach THEMSELVES to someone\nelse's code. Referring yourself is 400 and an unknown code is 404.\n\nIt is idempotent and first-touch: an org can be referred once, ever. A repeat\ncall returns the referral already on file with created=false and 200, where the\nfirst call answers 201.\n\nRecording a referral grants nothing. Both bonuses are granted later, when the\nreferee actually makes metered spend — see GET /v1/referrals and\nPOST /v1/admin/referrals/sweep.",
 		Fields: map[string]string{
 			"claimRequest.code":   "Code is the referrer's referral code, as it appeared in their ?ref= link.\nCase and surrounding whitespace do not matter.",
 			"claimView.code":      "Code is the referral code the referral was recorded against.",

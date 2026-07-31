@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package flags is feature flags: define a flag, target it by property or percentage rollout, and evaluate it for an identity — plus the platform switches operators flip to change how the deployment behaves without a redeploy.",
     "version": "v1"
   },
   "servers": [

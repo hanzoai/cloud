@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package usage is the usage plane at /v1/usage: what an org ran, what it cost, and the per-account breakdown, over one window grammar.",
     "version": "v1"
   },
   "servers": [
@@ -19,8 +19,8 @@
     "/v1/usage": {
       "post": {
         "operationId": "post_v1_usage",
-        "summary": "record ingests a batch of account-usage samples — what a developer's OWN AI accounts have consumed of their OWN plans, metered from each provider's own login — and appends them to the warehouse series.",
-        "description": "record ingests a batch of account-usage samples — what a developer's OWN AI\naccounts have consumed of their OWN plans, metered from each provider's own\nlogin — and appends them to the warehouse series. Answers 202.\n\nSend either a `samples` array or one sample's fields at the top level. Every\nsample needs a provider, a machine and a known window class; an unknown window or\nkind is refused rather than silently rewritten, because a dash filled with a class\nnobody reported is worse than an error. There is no timestamp field: the server\nowns the observation clock, and a sample says which window it measured with\nwindowStart or resetsAt.\n\nIt is FAIL-SOFT on storage: a warehouse outage costs a poll of history\n(stored:false), never a failed request. It records usage ONLY — the link registry\nis refreshed separately via POST /v1/links, so there is one and only one way to\nupdate an account row.",
+        "summary": "Ingests a batch of account-usage samples — what a developer's OWN AI accounts have consumed of their OWN plans, metered from each provider's own login — and appends them to the warehouse series.",
+        "description": "Ingests a batch of account-usage samples — what a developer's OWN AI\naccounts have consumed of their OWN plans, metered from each provider's own\nlogin — and appends them to the warehouse series. Answers 202.\n\nSend either a `samples` array or one sample's fields at the top level. Every\nsample needs a provider, a machine and a known window class; an unknown window or\nkind is refused rather than silently rewritten, because a dash filled with a class\nnobody reported is worse than an error. There is no timestamp field: the server\nowns the observation clock, and a sample says which window it measured with\nwindowStart or resetsAt.\n\nIt is FAIL-SOFT on storage: a warehouse outage costs a poll of history\n(stored:false), never a failed request. It records usage ONLY — the link registry\nis refreshed separately via POST /v1/links, so there is one and only one way to\nupdate an account row.",
         "tags": [
           "usage"
         ],
@@ -51,8 +51,8 @@
     "/v1/usage/analytics": {
       "get": {
         "operationId": "get_v1_usage_analytics",
-        "summary": "analytics is the entitlement-GATED per-provider breakdown of the caller org's LLM usage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads its totals from.",
-        "description": "analytics is the entitlement-GATED per-provider breakdown of the caller org's LLM\nusage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads\nits totals from. Basic own-org usage stays ungated at /v1/usage/summary.\n\nA plan that does not grant the analytics datastore is refused with 402, and an\nunresolvable plan fails closed to the free floor, which does not grant it. The\nwindow is clamped forward to the plan's retention entitlement, so a tenant can\nnever read older than its plan allows even with a custom start. The response is\nmarked no-store.\n\nINTERIM (mirrors apps/world's limits echo): no org→plan resolver exists in cloud\nyet — the subscription lookup is owned by the billing plane and the gateway\nprincipal carries no plan claim — so the caller passes the plan and the gate\nresolves THAT plan's access.",
+        "summary": "Is the entitlement-GATED per-provider breakdown of the caller org's LLM usage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads its totals from.",
+        "description": "Is the entitlement-GATED per-provider breakdown of the caller org's LLM\nusage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads\nits totals from. Basic own-org usage stays ungated at /v1/usage/summary.\n\nA plan that does not grant the analytics datastore is refused with 402, and an\nunresolvable plan fails closed to the free floor, which does not grant it. The\nwindow is clamped forward to the plan's retention entitlement, so a tenant can\nnever read older than its plan allows even with a custom start. The response is\nmarked no-store.\n\nINTERIM (mirrors apps/world's limits echo): no org→plan resolver exists in cloud\nyet — the subscription lookup is owned by the billing plane and the gateway\nprincipal carries no plan claim — so the caller passes the plan and the gate\nresolves THAT plan's access.",
         "tags": [
           "usage"
         ],
@@ -111,8 +111,8 @@
     "/v1/usage/analytics/access": {
       "get": {
         "operationId": "get_v1_usage_analytics_access",
-        "summary": "analyticsAccess echoes a plan's resolved analytics entitlement so a dashboard can configure itself against the LIVE catalog instead of hardcoding tier numbers.",
-        "description": "analyticsAccess echoes a plan's resolved analytics entitlement so a dashboard can\nconfigure itself against the LIVE catalog instead of hardcoding tier numbers. An\nempty plan resolves the free floor, and a catalog resolution failure serves that\nsame floor rather than erroring — so this always answers 200. It is a read-only\ncontract echo and carries no tenant data.",
+        "summary": "Echoes a plan's resolved analytics entitlement so a dashboard can configure itself against the LIVE catalog instead of hardcoding tier numbers.",
+        "description": "Echoes a plan's resolved analytics entitlement so a dashboard can\nconfigure itself against the LIVE catalog instead of hardcoding tier numbers. An\nempty plan resolves the free floor, and a catalog resolution failure serves that\nsame floor rather than erroring — so this always answers 200. It is a read-only\ncontract echo and carries no tenant data.",
         "tags": [
           "usage"
         ],
@@ -144,8 +144,8 @@
     "/v1/usage/samples": {
       "get": {
         "operationId": "get_v1_usage_samples",
-        "summary": "samples is the PER-PROVIDER view: one connected account's own consumption of its own plan — \"my Claude Max plan is 47% through its 6h window, resets at 14:20\".",
-        "description": "samples is the PER-PROVIDER view: one connected account's own consumption of its\nown plan — \"my Claude Max plan is 47% through its 6h window, resets at 14:20\".\n\n`current` is the newest instance of each lane (the headline); `windows` is the\nhistory behind it. Both come from ONE deduped read, so they can never disagree.\nThe rows are the caller's OWN linked accounts, scoped to the validated principal\nand its subject — never another user's, and never another org's.",
+        "summary": "Is the PER-PROVIDER view: one connected account's own consumption of its own plan — \"my Claude Max plan is 47% through its 6h window, resets at 14:20\".",
+        "description": "Is the PER-PROVIDER view: one connected account's own consumption of its\nown plan — \"my Claude Max plan is 47% through its 6h window, resets at 14:20\".\n\n`current` is the newest instance of each lane (the headline); `windows` is the\nhistory behind it. Both come from ONE deduped read, so they can never disagree.\nThe rows are the caller's OWN linked accounts, scoped to the validated principal\nand its subject — never another user's, and never another org's.",
         "tags": [
           "usage"
         ],
@@ -204,8 +204,8 @@
     "/v1/usage/summary": {
       "get": {
         "operationId": "get_v1_usage_summary",
-        "summary": "summary answers GET /v1/usage/summary: the caller's own usage footprint over one window — the categorized spend roll-up from the commerce ledger, the org's LLM usage totals from the warehouse, and the caller's OWN linked provider accounts beside the org's Hanzo-routed usage.",
-        "description": "summary answers GET /v1/usage/summary: the caller's own usage footprint over one\nwindow — the categorized spend roll-up from the commerce ledger, the org's LLM\nusage totals from the warehouse, and the caller's OWN linked provider accounts\nbeside the org's Hanzo-routed usage.\n\nEvery source degrades INDEPENDENTLY to honest zeros and says so in `sources` and\nin its own `available` flag, so a partial deploy reports \"no data\" rather than\nfabricating spend. The account rows and the Hanzo rows are concatenated and never\nsummed: a plan's percent is not money.\n\nThe response is org-scoped from the validated principal and marked no-store — a\nsigned-out caller is refused.",
+        "summary": "Answers GET /v1/usage/summary: the caller's own usage footprint over one window — the categorized spend roll-up from the commerce ledger, the org's LLM usage totals from the warehouse, and the caller's OWN linked provider accounts beside the org's Hanzo-routed usage.",
+        "description": "Answers GET /v1/usage/summary: the caller's own usage footprint over one\nwindow — the categorized spend roll-up from the commerce ledger, the org's LLM\nusage totals from the warehouse, and the caller's OWN linked provider accounts\nbeside the org's Hanzo-routed usage.\n\nEvery source degrades INDEPENDENTLY to honest zeros and says so in `sources` and\nin its own `available` flag, so a partial deploy reports \"no data\" rather than\nfabricating spend. The account rows and the Hanzo rows are concatenated and never\nsummed: a plan's percent is not money.\n\nThe response is org-scoped from the validated principal and marked no-store — a\nsigned-out caller is refused.",
         "tags": [
           "usage"
         ],

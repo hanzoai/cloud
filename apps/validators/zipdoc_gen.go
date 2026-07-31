@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/validators", zip.Doc{
-		Description: "list returns the validator slots the caller's org has claimed.\n\nOne entry per claimed slot with its node identity, its live-ish node status and\nthe owner-gated registration queued for it, if any. Slots are org-scoped by the\nvalidated identity, so a caller can only ever see their own — a slot claimed by\nanother org is not merely hidden from this list, it is unreachable through the\nwhole surface.",
+		Description: "Returns the validator slots the caller's org has claimed.\n\nOne entry per claimed slot with its node identity, its live-ish node status and\nthe owner-gated registration queued for it, if any. Slots are org-scoped by the\nvalidated identity, so a caller can only ever see their own — a slot claimed by\nanother org is not merely hidden from this list, it is unreachable through the\nwhole surface.",
 		Fields: map[string]string{
 			"listIn.limit":            "Limit is how many slots to return, as a decimal string in the `?limit=`\nquery. Absent, unparseable or non-positive means 200; over 1000 is clamped\nto 1000. It is a string rather than a number because the parse that has\nalways served this route trims surrounding whitespace, and one parse rule is\nbetter than two.",
 			"registrationView.id":     "ID is the registration's handle.",
@@ -33,7 +33,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/validators/:tokenId", zip.Doc{
-		Description: "get returns one claimed validator slot, scoped to the caller's org.\n\nA slot another org holds, and a slot nobody holds, are both 404 — never a\ndifferent status, so this route cannot be used to probe which slots are taken.",
+		Description: "Returns one claimed validator slot, scoped to the caller's org.\n\nA slot another org holds, and a slot nobody holds, are both 404 — never a\ndifferent status, so this route cannot be used to probe which slots are taken.",
 		Fields: map[string]string{
 			"registrationView.id":     "ID is the registration's handle.",
 			"registrationView.nodeID": "NodeID is the luxd node the registration is for.",
@@ -54,7 +54,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/validators/challenge", zip.Doc{
-		Description: "challenge issues the single-use nonce and the exact message a wallet must sign\nto claim a validator slot.\n\nThe nonce is bound to (validated org, slot) and stored server-side, so a\nsignature obtained for one org or one slot can never be replayed for another,\nand the message POST /v1/validators verifies is rebuilt from those same server\nfacts rather than trusted from the caller. Redeem it with\nPOST /v1/validators before it expires; it can be redeemed once.\n\nA tokenId outside the Validator tier is refused here rather than after signing.",
+		Description: "Issues the single-use nonce and the exact message a wallet must sign\nto claim a validator slot.\n\nThe nonce is bound to (validated org, slot) and stored server-side, so a\nsignature obtained for one org or one slot can never be replayed for another,\nand the message POST /v1/validators verifies is rebuilt from those same server\nfacts rather than trusted from the caller. Redeem it with\nPOST /v1/validators before it expires; it can be redeemed once.\n\nA tokenId outside the Validator tier is refused here rather than after signing.",
 		Fields: map[string]string{
 			"challengeIn.tokenId":      "TokenID is the Validator-tier GenesisNFT token id, as a decimal string in\nthe `?tokenId=` query. A value that is not a positive integer is 400. It is\na string rather than a number because the parse that has always served this\nroute trims surrounding whitespace, and one parse rule is better than two.",
 			"challengeView.expiresAt":  "ExpiresAt is when the nonce stops being redeemable, as a Unix timestamp.",
@@ -65,7 +65,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/validators", zip.Doc{
-		Description: "provision claims a validator slot and provisions its node, after proving the\ncaller's wallet owns the slot's NFT.\n\nThe pipeline, all server-enforced: burn the single-use challenge (so a replayed\nor forged nonce dies before any chain read), recover the signer from the message\nthis server rebuilds, require that wallet to hold Validator-tier GenesisNFT\n#tokenId on Ethereum mainnet, generate a fresh luxd staking identity and seal it\ninto KMS, write a LuxNetwork CR for a NEW node, and ENQUEUE an owner-gated\nregistration. The registration is never auto-submitted to any P-Chain — the\nowner co-signs it out of band — and the stake weight is set at co-sign time,\nnever derived from the NFT.\n\nIt fails CLOSED at every gate: a bad signature, a non-owner, a non-tier slot or\nan unavailable KMS all leave no claim persisted and no key material exposed.\nRe-claiming a slot this org already holds re-applies the node CR and returns 200\nwith the existing identity (keys and NodeID are stable); a slot held by another\norg is 409. A cluster-less deployment still claims the slot, seals the keys and\nqueues the registration, reporting the node as \"node_pending\".",
+		Description: "Claims a validator slot and provisions its node, after proving the\ncaller's wallet owns the slot's NFT.\n\nThe pipeline, all server-enforced: burn the single-use challenge (so a replayed\nor forged nonce dies before any chain read), recover the signer from the message\nthis server rebuilds, require that wallet to hold Validator-tier GenesisNFT\n#tokenId on Ethereum mainnet, generate a fresh luxd staking identity and seal it\ninto KMS, write a LuxNetwork CR for a NEW node, and ENQUEUE an owner-gated\nregistration. The registration is never auto-submitted to any P-Chain — the\nowner co-signs it out of band — and the stake weight is set at co-sign time,\nnever derived from the NFT.\n\nIt fails CLOSED at every gate: a bad signature, a non-owner, a non-tier slot or\nan unavailable KMS all leave no claim persisted and no key material exposed.\nRe-claiming a slot this org already holds re-applies the node CR and returns 200\nwith the existing identity (keys and NodeID are stable); a slot held by another\norg is 409. A cluster-less deployment still claims the slot, seals the keys and\nqueues the registration, reporting the node as \"node_pending\".",
 		Fields: map[string]string{
 			"registrationView.id":      "ID is the registration's handle.",
 			"registrationView.nodeID":  "NodeID is the luxd node the registration is for.",

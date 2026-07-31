@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package auditlog mounts the ORG-SCOPED audit trail surface (GET /v1/audit): an org admin's read of THEIR OWN organization's security-relevant events off the same tamper-evident, hash-chained store the AuditTrail middleware writes and the admin god-view (/v1/admin/audit) reads.",
     "version": "v1"
   },
   "servers": [

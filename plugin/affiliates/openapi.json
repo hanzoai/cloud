@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package affiliates is the partner program: partners apply, get approved with a commission rate and a share link, and earn an ONGOING COMMISSION on the metered spend of every customer they refer, accrued per period and paid out in credits or cash.",
     "version": "v1"
   },
   "servers": [

@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/search-docs/indexes", zip.Doc{
-		Description: "searchIndexes lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
+		Description: "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
 		Fields: map[string]string{
 			"searchIndex.createdAt":     "CreatedAt is the index's creation time (RFC 3339); it falls back to now when\nthe index list could not be read.",
 			"searchIndex.docCount":      "DocCount is how many documents the index currently holds.",
@@ -18,7 +18,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/search-docs/stats", zip.Doc{
-		Description: "searchStats totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
+		Description: "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
 		Fields: map[string]string{
 			"dayCount.count":             "Count is that day's total.",
 			"dayCount.date":              "Date is the day, YYYY-MM-DD.",
@@ -29,7 +29,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/vector/collections", zip.Doc{
-		Description: "vectorCollections lists the vector collections with their size and geometry.\n\nIt reads the in-cluster Qdrant service: the collection list, then each\ncollection's detail for its point count, vector dimension and distance metric.\nPer-collection detail is best-effort — one collection that fails to describe\nitself keeps its name and defaults (dimension 0, cosine) rather than blanking\nthe whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.",
+		Description: "Lists the vector collections with their size and geometry.\n\nIt reads the in-cluster Qdrant service: the collection list, then each\ncollection's detail for its point count, vector dimension and distance metric.\nPer-collection detail is best-effort — one collection that fails to describe\nitself keeps its name and defaults (dimension 0, cosine) rather than blanking\nthe whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.",
 		Fields: map[string]string{
 			"vectorCollection.createdAt":       "CreatedAt is the collection's creation time (RFC 3339); Qdrant does not\nreport one, so it is empty today.",
 			"vectorCollection.dimension":       "Dimension is the size of one vector in the collection.",
@@ -41,7 +41,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/vector/stats", zip.Doc{
-		Description: "vectorStats totals the collections, vectors and storage across the vector store.\n\nEvery figure is summed from the same per-collection detail\nGET /v1/vector/collections returns, so the two panels can never disagree. An\nunreachable Qdrant answers 200 with all zeros rather than an error.",
+		Description: "Totals the collections, vectors and storage across the vector store.\n\nEvery figure is summed from the same per-collection detail\nGET /v1/vector/collections returns, so the two panels can never disagree. An\nunreachable Qdrant answers 200 with all zeros rather than an error.",
 		Fields: map[string]string{
 			"vectorStats.totalCollections":  "TotalCollections is how many collections the store holds.",
 			"vectorStats.totalStorageBytes": "TotalStorageBytes is the sum of every collection's on-disk size.",

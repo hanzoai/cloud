@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package entitlements answers \"what may this org run\": what its plan GRANTS, and which of those products it has actually TURNED ON.",
     "version": "v1"
   },
   "servers": [

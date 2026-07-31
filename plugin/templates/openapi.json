@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package templates mounts /v1/templates — the Hanzo starter-kit gallery, in TWO layers that never mix:",
     "version": "v1"
   },
   "servers": [
@@ -19,8 +19,8 @@
     "/v1/templates": {
       "get": {
         "operationId": "get_v1_templates",
-        "summary": "browse lists the public starter-kit catalog plus, for a validated caller, that org's own private kits.",
-        "description": "browse lists the public starter-kit catalog plus, for a validated caller, that\norg's own private kits. No request field can widen the scope: the org comes\nfrom the validated principal, so an anonymous or cross-org caller structurally\nsees the public catalog only.",
+        "summary": "Lists the public starter-kit catalog plus, for a validated caller, that org's own private kits.",
+        "description": "Lists the public starter-kit catalog plus, for a validated caller, that\norg's own private kits. No request field can widen the scope: the org comes\nfrom the validated principal, so an anonymous or cross-org caller structurally\nsees the public catalog only.",
         "tags": [
           "templates"
         ],
@@ -39,8 +39,8 @@
       },
       "post": {
         "operationId": "post_v1_templates",
-        "summary": "publish creates a starter kit PRIVATE to the caller's org and answers 201 with the stored kit.",
-        "description": "publish creates a starter kit PRIVATE to the caller's org and answers 201 with\nthe stored kit. The owner is stamped by the server, so a body \"org\" is never\ntrusted; publishing over a public-catalog slug is 409, so a slug still names\nexactly one kit.",
+        "summary": "Creates a starter kit PRIVATE to the caller's org and answers 201 with the stored kit.",
+        "description": "Creates a starter kit PRIVATE to the caller's org and answers 201 with\nthe stored kit. The owner is stamped by the server, so a body \"org\" is never\ntrusted; publishing over a public-catalog slug is 409, so a slug still names\nexactly one kit.",
         "tags": [
           "templates"
         ],
@@ -76,8 +76,8 @@
     "/v1/templates/{slug}": {
       "delete": {
         "operationId": "delete_v1_templates_slug",
-        "summary": "remove deletes the caller org's OWN starter kit.",
-        "description": "remove deletes the caller org's OWN starter kit. A slug they do not own is a\n404, never a delete: the DELETE binds org.",
+        "summary": "Deletes the caller org's OWN starter kit.",
+        "description": "Deletes the caller org's OWN starter kit. A slug they do not own is a\n404, never a delete: the DELETE binds org.",
         "tags": [
           "templates"
         ],
@@ -101,8 +101,8 @@
       },
       "get": {
         "operationId": "get_v1_templates_slug",
-        "summary": "get returns one starter kit: the caller org's own by that slug, else the public catalog's.",
-        "description": "get returns one starter kit: the caller org's own by that slug, else the public\ncatalog's. A slug another org owns reads as not found.",
+        "summary": "Returns one starter kit: the caller org's own by that slug, else the public catalog's.",
+        "description": "Returns one starter kit: the caller org's own by that slug, else the public\ncatalog's. A slug another org owns reads as not found.",
         "tags": [
           "templates"
         ],
@@ -133,8 +133,8 @@
       },
       "put": {
         "operationId": "put_v1_templates_slug",
-        "summary": "replace overwrites the caller org's OWN starter kit at the path slug, answering the stored kit.",
-        "description": "replace overwrites the caller org's OWN starter kit at the path slug, answering\nthe stored kit. A slug they do not own is 404, never a create: the UPDATE binds\norg, so a PUT can never reach another org's kit.",
+        "summary": "Overwrites the caller org's OWN starter kit at the path slug, answering the stored kit.",
+        "description": "Overwrites the caller org's OWN starter kit at the path slug, answering\nthe stored kit. A slug they do not own is 404, never a create: the UPDATE binds\norg, so a PUT can never reach another org's kit.",
         "tags": [
           "templates"
         ],

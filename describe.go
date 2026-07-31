@@ -110,6 +110,18 @@ func Describe(dir string, app *zip.App) error {
 	if err != nil {
 		return fmt.Errorf("openapi: %w", err)
 	}
+	// A subset describes ONE app, so it says what that app is — the synopsis of
+	// the package its binary mounts, read from the source the app is built from
+	// (openapi.Synopsis). The fleet identity FleetSpec carries is the fallback and
+	// stays exactly that: an app whose package has no doc comment publishes the
+	// fleet's sentence, unchanged, rather than a sentence invented for it here.
+	//
+	// This is the ONE place the synopsis is computed. The weave reads it back off
+	// the subsets to describe the product tags, so the mapping from app to prose
+	// exists once and travels with the artifact.
+	if s := openapi.Synopsis(dir); s != "" {
+		doc.Info.Description = s
+	}
 	spec, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return err

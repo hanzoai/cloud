@@ -10,19 +10,19 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/admin/finance", zip.Doc{
-		Description: "Finance answers GET /v1/admin/finance. It reads the multi-vendor COGS from commerce\n/v1/costs, the DO promo-credit/burn-down treasury view, and the fleet commerce revenue,\nthen hands them to ComputeFinance. SuperAdmin only.",
+		Description: "Answers GET /v1/admin/finance. It reads the multi-vendor COGS from commerce\n/v1/costs, the DO promo-credit/burn-down treasury view, and the fleet commerce revenue,\nthen hands them to ComputeFinance. SuperAdmin only.",
 		Fields: map[string]string{
 			"Vendor.source": "\"actual\" | \"estimated\"",
 		},
 	})
 	zip.Describe("GET /v1/admin/providers/credit", zip.Doc{
-		Description: "ProvidersCredit serves GET /v1/admin/providers/credit — the per-provider upstream\ncredit ledger. SuperAdmin-guarded (see Routes).",
+		Description: "Serves GET /v1/admin/providers/credit — the per-provider upstream\ncredit ledger. SuperAdmin-guarded (see Routes).",
 		Fields: map[string]string{
 			"ProviderCredit.runway_days": "nil when burn is 0 / unknown (never a fabricated infinity)",
 		},
 	})
 	zip.Describe("GET /v1/admin/usage/funding", zip.Doc{
-		Description: "UsageFunding splits our upstream AI usage by how it was FUNDED: one row per (provider,\nmodel) over the window, tagged credit (provider grant still remaining), paid (grant\nexhausted) or paid_only (no grant at all).\n\nThe class is resolved at the PROVIDER level from the credit ledger, not per call — the\nper-call split, and the `byo` class, arrive when the metering write stamps a funding\ncolumn on cloud_usage and this can GROUP BY it directly. Until then a provider with\nremaining grant reports all of its usage as credit, which is right in aggregate and\napproximate at the boundary where a grant runs out mid-window.\n\nAn unparseable window falls back to the last 30 days rather than refusing: this is a\ndashboard read, and a typo in a date must not blank the board.",
+		Description: "Splits our upstream AI usage by how it was FUNDED: one row per (provider,\nmodel) over the window, tagged credit (provider grant still remaining), paid (grant\nexhausted) or paid_only (no grant at all).\n\nThe class is resolved at the PROVIDER level from the credit ledger, not per call — the\nper-call split, and the `byo` class, arrive when the metering write stamps a funding\ncolumn on cloud_usage and this can GROUP BY it directly. Until then a provider with\nremaining grant reports all of its usage as credit, which is right in aggregate and\napproximate at the boundary where a grant runs out mid-window.\n\nAn unparseable window falls back to the last 30 days rather than refusing: this is a\ndashboard read, and a typo in a date must not blank the board.",
 		Fields: map[string]string{
 			"UsageFundingIn.from":     "From is the inclusive start of the window. Unparseable or absent, together with\nTo, falls back to the last 30 days.",
 			"UsageFundingIn.to":       "To is the exclusive end of the window.",
@@ -32,7 +32,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"provider":"digitalocean","model":"llama-3.3-70b","funding":"credit","tokens":1200000,"cost_cents":420,"requests":310}]}`),
 	})
 	zip.Describe("POST /v1/admin/finance/backfill", zip.Doc{
-		Description: "Backfill carries ONE org's current commerce prepaid balance into the native finance\nwallet — the one-time cutover between the two ledgers.\n\nIt is IDEMPOTENT: the deposit uses the fixed ref \"backfill:<org>\", so re-running it\ncredits the wallet at most once. Safe to retry.\n\nThe pre-migration balance is read from the CO-RESIDENT commerce ledger, not over HTTP:\nthe admin HTTP client dials an unroutable in-process address and would read $0, and a\nphantom zero would silently carry nothing while reporting success. When commerce is\nnot co-resident this fails rather than migrating nothing.",
+		Description: "Carries ONE org's current commerce prepaid balance into the native finance\nwallet — the one-time cutover between the two ledgers.\n\nIt is IDEMPOTENT: the deposit uses the fixed ref \"backfill:<org>\", so re-running it\ncredits the wallet at most once. Safe to retry.\n\nThe pre-migration balance is read from the CO-RESIDENT commerce ledger, not over HTTP:\nthe admin HTTP client dials an unroutable in-process address and would read $0, and a\nphantom zero would silently carry nothing while reporting success. When commerce is\nnot co-resident this fails rather than migrating nothing.",
 		Fields: map[string]string{
 			"BackfillIn.org":           "Org is the tenant to migrate. Required — there is no fleet-wide form of this\ncutover, because each org must be reconciled on its own.",
 			"Backfilled.entryId":       "EntryID is the finance ledger entry created, or \"\" when the balance was\nnon-positive and there was nothing to carry.",

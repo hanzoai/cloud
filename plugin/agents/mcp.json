@@ -269,6 +269,10 @@
           "description": "Target re-dispatches a session to a run-target (the #48 association). \"\" detaches.",
           "type": "string"
         },
+        "terminal": {
+          "description": "Terminal publishes (or, with \"\", withdraws) the URL this session's live\nterminal can be watched at. A pointer so \"absent\" and \"withdrawn\" are\ndifferent requests: a session that stops sharing must be able to say so.",
+          "type": "string"
+        },
         "title": {
           "type": "string"
         }
@@ -474,6 +478,10 @@
           "type": "string"
         },
         "taskWorkflowId": {
+          "type": "string"
+        },
+        "terminal": {
+          "description": "Terminal is the URL this session's live terminal is published at, so the\nconsole can watch it. Optional — a session that publishes nothing is still\na session.",
           "type": "string"
         },
         "title": {
