@@ -490,9 +490,57 @@ type door struct {
 // The prefixes stay in the app manifest, because /v1/analytics still carries the READ
 // lenses (overview, timeseries, top, health) and /v1/tracker belongs to the tracker
 // product. What ends here is this package's claim on them as WRITE paths.
+// decodeEvent is the ONE door's decoder. It picks the wire by SNIFFING THE KEYS,
+// never by "did the first decoder return anything".
+//
+// /v1/insights/e used to be a second door for the second wire. A wire is a SHAPE, and
+// a shape has never earned a path — decodeIngest already sniffs object-vs-array and
+// bare-vs-envelope on this route, so sniffing one more encoding is the mechanism that
+// is already here, not a new one. The wire did not go away: the ingress rewrite that
+// fed the old door (insights-cloud-ingest-rewrite: insights.hanzo.ai /e,/batch,
+// /capture) now replacePaths onto /v1/event.
+//
+// Trying canonical first and falling back on an empty result is WRONG, and
+// TestMount_HostCarve_IngestsForSiteOrg refutes it: decodeIngest ACCEPTS a PostHog
+// body as a bare canonical Event and returns ONE event, which is then dropped whole
+// downstream (canonicalType("") is "event", not in publicKinds). The caller gets 200
+// and the event vanishes. A count of 1 is not evidence the body was understood.
+//
+// The wires are distinguishable exactly, with no heuristic: canonical spells the field
+// `distinctId` (camel) and carries `type`; the PostHog wire spells it `distinct_id`
+// (snake) and carries `api_key`. Neither key exists in the other wire, so presence is
+// proof. Batches are probed on their elements because `batch` is shared by both.
+func isPostHogWire(body []byte) bool {
+	var probe struct {
+		DistinctID json.RawMessage `json:"distinct_id"`
+		APIKey     json.RawMessage `json:"api_key"`
+		Batch      []struct {
+			DistinctID json.RawMessage `json:"distinct_id"`
+		} `json:"batch"`
+	}
+	if json.Unmarshal(body, &probe) != nil {
+		return false
+	}
+	if probe.DistinctID != nil || probe.APIKey != nil {
+		return true
+	}
+	for _, e := range probe.Batch {
+		if e.DistinctID != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func decodeEvent(body []byte) ([]CaptureEvent, error) {
+	if isPostHogWire(body) {
+		return decodeInsights(body)
+	}
+	return decodeIngest(body)
+}
+
 var doors = []door{
-	{path: "/v1/event", decode: decodeIngest, wire: canonicalWire, source: sourceEvent},
-	{path: "/v1/insights/e", decode: decodeInsights, wire: insightsBody{}, source: sourcePostHog},
+	{path: "/v1/event", decode: decodeEvent, wire: canonicalWire, source: sourceEvent},
 }
 
 // canonicalWire is what decodeIngest accepts, said in the document's own vocabulary:
@@ -500,7 +548,9 @@ var doors = []door{
 // real client sends. Declaring only the bare object — the one shape a lone Go type
 // could state — would document an ingest API that cannot batch, which is most of
 // what @hanzo/event does.
-var canonicalWire = openapi.OneOf{Event{}, []Event{}, CaptureBatch{}}
+// insightsBody rides here because the door accepts it: one path, four shapes. Leaving
+// it out would publish an ingest API that silently accepts a wire it does not document.
+var canonicalWire = openapi.OneOf{Event{}, []Event{}, CaptureBatch{}, insightsBody{}}
 
 // declare publishes what every ingest door ACCEPTS and RETURNS. These doors cannot be
 // typed ops (typed_wire_test.go names each one's wire fact), and an untyped route with

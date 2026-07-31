@@ -58,17 +58,11 @@ func TestObsPlaneGetsFirstRefusalOnTheCanonicalDoor(t *testing.T) {
 		t.Fatalf("product wire wrote $source %v, want [%s]", got, sourceEvent)
 	}
 
-	// Other doors never offer: the same obs body on /v1/insights/e walks that
-	// door's own wire without consulting the claim. The offer is gated on the
-	// door's SOURCE, not on the body, which is why the PostHog door is the honest
-	// negative — it is the only other door there is.
-	calls = nil
-	if code, _ := doBody(t, app, http.MethodPost, "/v1/insights/e", "user-dave", "acme", obsBody); code != http.StatusOK {
-		t.Fatal("obs-shaped body on a non-canonical door must still answer via its own wire")
-	}
-	if len(calls) != 0 {
-		t.Fatalf("non-canonical door consulted the claim %d times, want 0", len(calls))
-	}
+	// There is no "other door" negative left to write: /v1/insights/e was folded into
+	// /v1/event (decodeEvent sniffs the wire), so the canonical door is the ONLY door.
+	// The offer is still gated on the door's SOURCE rather than on the body — the
+	// anonymous-lane case below is now what proves it, since it reaches the same door
+	// with the same obs body and must still never consult the claim.
 
 	// The anonymous lane never offers — obs events are tenant data.
 	calls = nil
