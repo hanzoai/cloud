@@ -19,9 +19,10 @@
 // and typed_wire_test.go pins that refusal ledger so reviving a family is a
 // deliberate edit, never an accident.
 //
-// TENANT ISOLATION. The org is the VALIDATED principal's org (principal.Org —
-// the X-Org-Id the identity boundary minted from a verified credential), NEVER
-// an In field. The flow service is a single shared deployment reached with ONE
+// TENANT ISOLATION. The org is the VALIDATED principal's org, and it is NEVER
+// an In field: principal.OrgFrom reads what cloud.Bridge parked from
+// principal.Org — the X-Org-Id the identity boundary minted from a verified
+// credential. The flow service is a single shared deployment reached with ONE
 // platform credential (FLOW_API_KEY, KMS-synced env), so the org boundary is
 // enforced HERE, on the product's own project primitive: each org's workflows
 // live in a flow project named by the org id, resolved server-side per request
@@ -418,17 +419,19 @@ func (o ops) runs(ctx context.Context, in *flowRuns) (*flowResult, error) {
 // caller resolves the validated caller's org — the ONE tenancy input for every
 // op on this plane. FAIL CLOSED off the HTTP path: a CLI LocalInvoke has no
 // request, so there is no validated principal and no org to scope by.
+//
+// It reads the org Bridge PARKED, not the request. The org is all this plane
+// needs — nothing here turns on admin-ness, a project or a forwarded credential
+// — so cloud.Request, the pinned escape hatch, is not one of its inputs. The
+// three refusals it replaced were ONE decision written three times, because
+// principal.Org already composes the validated-principal check (OrgOf returns
+// false on an empty X-User-Id, which is exactly principal.Validated): a forged
+// X-Org-Id with no credential parks nothing and is refused here, before an
+// upstream byte (TestNoPrincipalIs403AndNoUpstreamByte).
 func caller(ctx context.Context) (string, error) {
-	c, ok := cloud.Request(ctx)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return "", zip.ErrForbidden("no validated principal")
-	}
-	if !principal.Validated(c) {
 		return "", zip.ErrForbidden("sign in to use Flow")
-	}
-	org, ok := principal.Org(c)
-	if !ok {
-		return "", zip.ErrForbidden("no validated org")
 	}
 	return org, nil
 }
