@@ -106,6 +106,30 @@ type Exception struct {
 	Message string `json:"message"`
 	Stack   string `json:"stack,omitempty"`
 	Handled *bool  `json:"handled,omitempty"`
+
+	// Frames is the STRUCTURED stack, when the SDK sent one. Stack stays as the raw
+	// text a client without a parser sends, so neither is derived from the other and
+	// a client may send either or both.
+	//
+	// It is what lets a fault be grouped and rendered by function, file and line
+	// rather than by a string compare over a whole trace — the raw text cannot
+	// answer "is this frame ours" (framesOf marks own) and cannot be scrubbed field
+	// by field.
+	Frames []Frame `json:"frames,omitempty"`
+}
+
+// Frame is one call site in a structured stack. Line and Column are unsigned
+// because a position is never negative and the fact plane stores them that way.
+type Frame struct {
+	// Function is the called function's name.
+	Function string `json:"function,omitempty"`
+	// File is the source file. It is treated as a URL and scrubbed, because a
+	// bundler emits one with a query string that can carry a token.
+	File string `json:"file,omitempty"`
+	// Line is the 1-based line number.
+	Line uint32 `json:"line,omitempty"`
+	// Column is the 1-based column number.
+	Column uint32 `json:"column,omitempty"`
 }
 
 // foldException normalizes a type:'error' event so the write core stores it as a

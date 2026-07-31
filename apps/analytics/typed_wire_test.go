@@ -185,6 +185,11 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 var proseless = map[string]bool{
 	// The canonical ingest wire: Event | []Event | {batch:[…]}.
 	"Event": true, "CaptureBatch": true, "CaptureEvent": true, "UTM": true, "Exception": true,
+	// The signal BODIES and the structured stack, nested inside those same ingest
+	// shapes and reaching the document through the same Register seam. Their fields
+	// carry doc comments in Go — reflection simply cannot see them, which is the one
+	// reason they are listed here rather than described.
+	"LogBody": true, "SpanBody": true, "MetricBody": true, "Frame": true,
 	// Every door's receipt.
 	"CaptureResult": true,
 	// The PostHog wire (/v1/insights/e).
