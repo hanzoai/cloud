@@ -92,6 +92,13 @@ func init() {
 	openapi.Register("/v1/git/:org/:repo/git-receive-pack", "POST", openapi.Binary{}, nil)
 	openapi.Register("/:org/:repo/git-upload-pack", "POST", openapi.Binary{}, nil)
 	openapi.Register("/:org/:repo/git-receive-pack", "POST", openapi.Binary{}, nil)
+
+	// The same pack streams for a project-scoped repo, which names its project as
+	// a middle segment because a git client has no header to carry it.
+	openapi.Register("/v1/git/:org/:project/:repo/git-upload-pack", "POST", openapi.Binary{}, nil)
+	openapi.Register("/v1/git/:org/:project/:repo/git-receive-pack", "POST", openapi.Binary{}, nil)
+	openapi.Register("/:org/:project/:repo/git-upload-pack", "POST", openapi.Binary{}, nil)
+	openapi.Register("/:org/:project/:repo/git-receive-pack", "POST", openapi.Binary{}, nil)
 }
 
 // pushEvent is the subset of the forge's push payload we act on. Owner and pusher
