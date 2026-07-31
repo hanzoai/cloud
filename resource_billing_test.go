@@ -280,7 +280,7 @@ func TestResourceMeter_GateProjectValidatedHardens(t *testing.T) {
 		switch r.URL.Path {
 		case "/v1/billing/balance":
 			_, _ = io.WriteString(w, `{"available":100000}`) // funded — proceed to the scope cap.
-		case "/v1/billing/spend-alerts/authorize":
+		case "/v1/billing/alerts/authorize":
 			if r.URL.Query().Get("pv") == "1" { // validated project → cap HARD-enforces.
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"allow": false, "reason": "spend_cap", "capCents": 100, "spentCents": 100,

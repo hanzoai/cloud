@@ -5,7 +5,7 @@
 // reads plus the six /v1/finance/{balance,credits,usage,invoices,payment-methods,ledger}
 // projections the finance UI renders (finance.go). It owns NEITHER prefix whole —
 // commerce serves the merchant half of /v1/billing/* (invoices, subscriptions,
-// spend-alerts, webhooks) and treasury serves /v1/finance/{treasury,accounts}.
+// alerts, webhooks) and treasury serves /v1/finance/{treasury,accounts}.
 //
 // WHY THIS EXISTS. On the console host (console.hanzo.ai) the ingress routes
 // /v1/* straight to cloud-api:8000 — the console's Next BFF is reached only at

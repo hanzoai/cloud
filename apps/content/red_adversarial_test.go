@@ -31,7 +31,7 @@ import (
 // redMeter is an httptest commerce backend that answers the two wire calls the
 // ResourceMeter makes — GET /v1/billing/balance (the gate) and POST /v1/billing/usage
 // (the debit) — while counting each and capturing every debit body. Everything else
-// (tier, spend-alerts) 404s so the scope-cap overlay fails OPEN (funds-only gating),
+// (tier, alerts) 404s so the scope-cap overlay fails OPEN (funds-only gating),
 // exactly as in production.
 type redMeter struct {
 	srv       *httptest.Server
@@ -71,7 +71,7 @@ func newRedMeter(t *testing.T, availableCents int64) *redMeter {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
-	// Everything else (tier, spend-alerts/authorize) 404s → cap overlay fails open.
+	// Everything else (tier, alerts/authorize) 404s → cap overlay fails open.
 	srv := httptest.NewServer(mux)
 	m.srv = srv
 	t.Cleanup(func() { m.closeOnce.Do(srv.Close) })

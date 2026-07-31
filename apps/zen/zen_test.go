@@ -205,7 +205,7 @@ func TestCommerceGateRefusesAnOverCapRequest(t *testing.T) {
 		switch r.URL.Path {
 		case "/v1/billing/balance":
 			_, _ = io.WriteString(w, `{"available":`+strconv.Itoa(availableCents)+`}`)
-		case "/v1/billing/spend-alerts/authorize":
+		case "/v1/billing/alerts/authorize":
 			authorized.Store(true)
 			_, _ = io.WriteString(w, `{"allow":true}`)
 		default:
