@@ -46,9 +46,10 @@ type Conflict struct {
 	A, B string // the two apps that claim it, in weave order
 }
 
-// prose is what each app SAYS ABOUT ITSELF, keyed by app name: the synopsis of
-// the package its binary mounts, which describe.go stamped into that app's own
-// subset as info.description (openapi/synopsis.go computes it, once, there).
+// prose is what each PRODUCT's owner says about it, keyed by product: the
+// synopsis of the package that app's binary mounts, which describe.go stamped
+// into that app's own subset as info.description (openapi/synopsis.go computes
+// it, once, there).
 //
 // Reading it back off the parts is why Weave stays a pure function of its inputs.
 // The alternative — looking the package up again here — would be the same mapping
@@ -61,14 +62,59 @@ type Conflict struct {
 // give every undescribed product the same sentence, which reads as a description
 // and is not one.
 //
-// The key is the app's name because a product tag IS an app name — /v1/kms is
-// kms. Products no app is named for (finance, logs, keys) get no description
-// here, correctly: no single package implements them.
+// # A tag is a path prefix, an app is a mount, and they are only sometimes one word
+//
+// Keying by app name ALONE described /v1/kms — kms serves it and is named for it
+// — and left /v1/kb blank, though knowledge serves every kb route and carries a
+// perfectly good sentence about it. That is not a rare shape: 59 of 150 products
+// were empty, and ~50 of them were served by exactly one app that had already said
+// what they are. So a product inherits from the app that SERVES it, read off the
+// operations in that app's own subset — the same op tags the document's own tag
+// list is a function of, so this cannot name a product the document lacks.
+//
+// Two rules keep the inheritance honest, and both resolve to SILENCE:
+//
+//   - One app, or nothing. /v1/finance is billing AND treasury; /v1/s3 is
+//     provisioning AND storage. An ambiguous owner must produce no description,
+//     because picking one would publish a coin flip as a fact.
+//   - The owner's own sentence, or nothing. A sole owner with no package doc
+//     (metrics, authz, licensing) leaves its products blank. The cure is a doc
+//     comment in that app; synthesizing a line from the product name here would
+//     make an undescribed product indistinguishable from a described one.
+//
+// A tag NAMED for an app keeps that app's own sentence regardless. That is the
+// pre-existing answer and it stays the stronger evidence: /v1/admin is served by
+// seven apps and would go silent under ownership alone, while `admin` the app has
+// already said exactly what admin is.
 func prose(parts []Part) map[string]string {
-	out := make(map[string]string, len(parts))
+	said := make(map[string]string, len(parts)) // app → what it says about itself
+	owner := map[string]string{}                // product → its sole app, "" once two claim it
 	for _, p := range parts {
 		if d := p.Doc.Info.Description; d != "" && d != fleetInfo.Description {
-			out[p.App] = d
+			said[p.App] = d
+		}
+		for _, item := range p.Doc.Paths {
+			for _, op := range item {
+				for _, t := range op.Tags {
+					if prev, claimed := owner[t]; !claimed {
+						owner[t] = p.App
+					} else if prev != p.App {
+						owner[t] = "" // sticky: "" is never an app name, so a third claimant re-empties it
+					}
+				}
+			}
+		}
+	}
+
+	out := make(map[string]string, len(owner))
+	for product, app := range owner {
+		if d := said[app]; d != "" {
+			out[product] = d
+		}
+	}
+	for app, d := range said {
+		if _, isProduct := owner[app]; isProduct {
+			out[app] = d
 		}
 	}
 	return out
