@@ -76,7 +76,7 @@ type MCPListing struct {
 	// contains an underscore — so the id is readable and stable rather than a
 	// hash that means nothing to whoever reads a link.
 	ID string `json:"id"`
-	// Name is the publisher's reverse-DNS name, e.g. "com.stripe/mcp".
+	// Name is the publisher's reverse-DNS name, e.g. "com.acme/mcp".
 	Name string `json:"name"`
 	// Vendor is the namespace half of Name — the publisher, e.g. "com.stripe".
 	Vendor string `json:"vendor"`
