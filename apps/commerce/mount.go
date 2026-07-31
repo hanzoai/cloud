@@ -495,19 +495,20 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	//                          body AND fail-closes an unvalidated caller. It is the auth gate
 	//                          on every one, and the IDOR control on the subject-scoped one.
 	//
-	// payment-methods (save a card-on-file / vault a Square nonce) is SUBJECT-scoped: commerce's
-	// CreatePaymentMethod reads `customerId` from the BODY, so PinBillingSubject's body-pin is
-	// load-bearing here — a member can only vault a card for their OWN subject, exactly the
-	// boundary billingData's scopedBillingBody enforced. The Square nonce goes to Square; the
-	// PAN never touches this binary.
-	app.Post("/v1/billing/payment-methods",
-		accountclient.RequireCSRF(),
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.CreatePaymentMethod,
-	)
-
+	// payment-methods is NOT one of them, and must not be added back. That address belongs
+	// to the BILLING app: manifest.Apps names "/v1/billing/payment-methods" on the billing
+	// row and withholds it from this one, because billing serves the GET (a proxy to
+	// commerce's /v1/billing/portal/payment-methods) — and the host claims a prefix for ONE
+	// app across every method, so the POST has to sit on the same router as the read or it
+	// misses on METHOD (apps/billing/billing.go says exactly that, and the console's
+	// save-card call is what died proving it). A registration here is unreachable in the
+	// fleet: the request reaches the billing process and never this one.
+	//
+	// It was also a SECOND claim on one address, which openapi.Weave refuses rather than pick
+	// a winner between — the published operation is identical from either app (same id, same
+	// tag, no declared body), so nothing in the document changes by dropping it; what changes
+	// is that the document can be woven at all.
+	//
 	// subscriptions/:id/{cancel,reactivate} are org-NAMESPACE-scoped: commerce's handlers
 	// resolve the subscription by `:id` WITHIN the caller's org namespace (a foreign org's id
 	// is a 404 miss), so tenancy is the namespace IAMTokenRequired resolves and PinBillingSubject
