@@ -15,37 +15,26 @@ package marketplace
 //
 // CO-RESIDENCY. All three seams are process-globals (x402.reg, tools.std,
 // wallets.mounted), so this wiring binds within ONE process — and the shipped fleet
-// runs one process per app, so in production it binds nothing and a priced tool is
-// refused rather than sold. The package doc in marketplace.go names the evidence and
-// the four internal-plane ops that would close it.
+// runs one process per app, where it binds nothing. That is why the same table is
+// also published on the internal plane (rpc.go) and the same settlement is also
+// reachable over it (apps/x402/rpc.go): one policy, two transports. The package doc
+// in marketplace.go names the four ops and what each closes.
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/apps/x402"
+	"github.com/hanzoai/cloud/plane"
 )
 
-// resourcePrefix namespaces a TOOL as an x402 resource. x402 resources are opaque
-// ids and the Enforce middleware keys on request PATHS, so the prefix is what keeps
-// the two key spaces from ever colliding: no path begins "tool:", so publishing this
-// table can never accidentally put a price on a route, and a tool price can never be
-// bought by hitting a URL.
-//
-// A tool needs its own id at all because every tool call arrives on the SAME route,
-// POST /v1/tools/call, with the tool named in the body — the path cannot say which
-// capability is being bought.
-const resourcePrefix = "tool:"
-
-func resourceOf(tool string) string { return resourcePrefix + tool }
-
-func toolOf(resource string) (string, bool) {
-	name, ok := strings.CutPrefix(resource, resourcePrefix)
-	return name, ok && name != ""
-}
+// The tool→resource naming is plane.ToolResource / plane.ToolOf, not a rule of this
+// package's own. It was one, and it could be while the price table and the tool
+// plane shared a process; they no longer do, and a spelling each end owns half of is
+// how a caller asks for "tool:x" while the table is keyed on something else and
+// every listed tool quietly reads as free. One spelling, in the leaf both import.
 
 // registry is the x402 price table: resource → Terms, answered from the listing
 // store. It is the ONE authority on what a listed tool costs and who is paid for it.
@@ -63,7 +52,7 @@ type registry struct{ store *Store }
 // asks about) all land here. A store failure is an ERROR, so x402 fails closed
 // rather than serving a priced tool for nothing.
 func (g *registry) Price(ctx context.Context, resource string) (x402.Terms, bool, error) {
-	tool, ok := toolOf(resource)
+	tool, ok := plane.ToolOf(resource)
 	if !ok {
 		return x402.Terms{}, false, nil // not a tool resource — this table prices nothing else
 	}
@@ -103,7 +92,7 @@ type charger struct{}
 // a caller with no billable ledger — is returned as-is and fails the call CLOSED. A
 // tool that cannot be paid for is never served free.
 func (charger) Charge(ctx context.Context, tool string) error {
-	err := x402.Settle(ctx, resourceOf(tool))
+	err := x402.Settle(ctx, plane.ToolResource(tool))
 	if errors.Is(err, x402.ErrPaymentRequired) {
 		return fmt.Errorf("%w: %v", tools.ErrPaymentRequired, err)
 	}

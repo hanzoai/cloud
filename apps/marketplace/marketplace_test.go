@@ -12,6 +12,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -164,7 +165,7 @@ func TestMonetizedListingIsPriced(t *testing.T) {
 		t.Fatalf("publish monetized want 201, got %d (%s)", code, body)
 	}
 
-	terms, priced, err := (&registry{store: mounted.State.store}).Price(context.Background(), resourceOf("conn_premium"))
+	terms, priced, err := (&registry{store: mounted.State.store}).Price(context.Background(), plane.ToolResource("conn_premium"))
 	if err != nil || !priced {
 		t.Fatalf("published listing must be priced: priced=%v err=%v", priced, err)
 	}
@@ -177,7 +178,7 @@ func TestMonetizedListingIsPriced(t *testing.T) {
 	}
 
 	// A tool nobody listed, and any resource that is not a tool id, are free.
-	for _, resource := range []string{resourceOf("conn_unlisted"), "/v1/marketplace"} {
+	for _, resource := range []string{plane.ToolResource("conn_unlisted"), "/v1/marketplace"} {
 		if _, priced, err := (&registry{store: mounted.State.store}).Price(context.Background(), resource); priced || err != nil {
 			t.Fatalf("%s must be unpriced, got priced=%v err=%v", resource, priced, err)
 		}
