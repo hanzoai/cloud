@@ -43,7 +43,7 @@ import (
 
 // computeTable is the operator-owned compute-usage warehouse table (named to match
 // the existing hanzo.cloud_usage convention; the visor/commerce emitter writes it).
-// admin only READS it (never creates it — mirrors how analytics treats hanzo.events).
+// admin only READS it (never creates it — mirrors how analytics treats event.event).
 const computeTable = "hanzo.compute_usage"
 
 // terminalComputeEvents are the lifecycle events whose LATEST occurrence means a

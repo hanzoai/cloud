@@ -11,7 +11,7 @@ import (
 // metrics.go reads a campaign's RESULTS. Per the GTM architecture there is exactly
 // ONE metrics plane: a campaign's impressions/clicks/conversions/revenue are an
 // analytics query scoped to the campaign (analytics.CampaignMetrics over the
-// utm_campaign-tagged events in hanzo.events), and its spend is each channel
+// utm_campaign-tagged events in event.event), and its spend is each channel
 // connector's reported number (Channel.Spend, which the executor reads from the
 // provider via the org's connector token). Nothing is stored here and nothing is
 // fabricated — an unprovisioned events warehouse degrades to honest-empty, exactly

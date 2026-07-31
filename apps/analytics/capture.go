@@ -13,10 +13,10 @@
 // limitations under the License.
 
 // Capture (WRITE) side of the analytics plane. analytics.go serves the read
-// lenses over hanzo.events; this file is the symmetric ingest that FILLS that
-// table, so the web/commerce lenses stop being honest-empty. Products emit here
-// (the ONE native front door) instead of talking to the insights capture service
-// directly — cloud owns the tenant boundary and the warehouse schema.
+// lenses over the event plane (event.event and its sibling signal tables); this
+// file is the symmetric ingest that FILLS that plane. Products emit here (the ONE
+// native front door) instead of talking to the insights capture service directly —
+// cloud owns the tenant boundary; the PLANE's schema is owned by hanzoai/o11y.
 //
 // This file holds the WIRE TYPES and the ONE WRITE CORE (ingestEvents) every door
 // funnels into. It owns no route: which paths accept an event is doors (event.go),
@@ -30,7 +30,7 @@
 // client controls distinct_id/session_id/properties (its own visitors), never the
 // tenant.
 //
-// PRIVACY: normalizeEvent scrubs credential- and PII-shaped property keys and any
+// PRIVACY: normalize scrubs credential- and PII-shaped property keys and any
 // email-shaped value before the row is built (scrubProps). Only user/org
 // identifiers (distinct_id, person_id, group_id, org) are retained as identity.
 //
@@ -45,11 +45,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -72,13 +70,12 @@ const publicCaptureEnv = "CLOUD_ANALYTICS_PUBLIC_CAPTURE"
 // maxClockSkew (FUTURE) keeps a skewed or hostile clock from parking rows outside
 // the queryable window.
 //
-// maxBackdate (PAST) bounds the DOMAIN of `timestamp`, which is the leading column
-// of ORDER BY and half the partition key. A MergeTree part is skippable only when
-// its key range misses the query's, so ONE small batch spanning 2019..now yields a
-// part whose range intersects every window any tenant will ever ask for — O(1) to
-// write, O(table) to read, for everyone. Bounding the domain is what makes that
-// unbuildable; the partition key then keeps a wide batch inside its own tenant's
-// partitions rather than the shared "all".
+// maxBackdate (PAST) bounds the DOMAIN of `time`, which sits second in every plane
+// table's ORDER BY ((org, time, id) on event.event). A MergeTree part is skippable
+// only when its key range misses the query's, so ONE small batch spanning 2019..now
+// yields a part whose range intersects every window any tenant will ever ask for —
+// O(1) to write, O(table) to read, for everyone. Bounding the domain is what makes
+// that unbuildable.
 //
 // Seven days is a late-beacon flush (localStorage/service-worker queues survive a
 // weekend, not a quarter). Backfilling real history is a different job than a public
@@ -86,127 +83,24 @@ const publicCaptureEnv = "CLOUD_ANALYTICS_PUBLIC_CAPTURE"
 //
 // Both CLAMP rather than refuse, which is the pre-existing choice for the future
 // side: an out-of-window beacon is still a real event, and dropping analytics data
-// to protect a key range trades one loss for another. Retention no longer depends on
-// this value at all — TTL is measured from the server-stamped ingested_at.
+// to protect a key range trades one loss for another. Retention does not depend on
+// this value at all — the plane's TTL is measured from the server-stamped
+// ingested_at, a column DEFAULT nothing on the wire can reach (warehouse.go).
 const (
 	maxClockSkew = 5 * time.Minute
 	maxBackdate  = 7 * 24 * time.Hour
 )
 
-// eventsTableDDL is the ONE definition of the hanzo.events schema — owned here by
-// the WRITER. The read lenses (query.go) SELECT a subset of these columns; keep the
-// two in lockstep. MergeTree ordered for the read side's (window, tenant, event)
-// predicate; 2-year retention mirrors cloud_usage.
-//
-// TTL IS MEASURED FROM ingested_at, NOT timestamp. `timestamp` is the CALLER's, so a
-// TTL over it made retention a request parameter: a back-dated event inserted, fanned
-// out to every configured destination (forward.go), and was TTL-eligible the moment it
-// landed — a write that answers 200 and vanishes. `ingested_at DateTime DEFAULT now()`
-// is stamped by the server and is not in eventColumns, so nothing on the wire can
-// influence when a row expires. It is the only column that can carry a retention
-// clause honestly.
-//
-// PARTITION BY (tenant_id, toYYYYMM(timestamp)) — the shape every other tenant-scoped
-// table in this database uses (observations, persons, scores, sessions, traces,
-// usage_records, and this table's own rollups events_hourly/events_daily). It is not
-// decoration:
-//   - it is the TENANT BOUNDARY in the storage layer. Unpartitioned, all tenants share
-//     one "all" partition, so one part's key range is compared against every tenant's
-//     query. Partitioned by tenant, a part physically cannot appear in another
-//     tenant's scan — the isolation stops being a property of the key range and
-//     becomes a property of the layout.
-//   - it matches the read lens exactly. query.go filters
-//     `timestamp >= ? AND timestamp < ? AND tenant_id = ?`, which is both halves of
-//     this key, so pruning happens before the primary index is consulted.
-//   - it makes retention a partition DROP instead of a merge that rewrites parts.
-//   - it makes the part key range VISIBLE: system.parts.min_time/max_time are only
-//     populated for a time-based partition key, so unpartitioned an operator cannot
-//     even see a part that spans years (measured: every live part reports 1970/1970).
-//
-// Partition count is bounded because a batch carries ONE tenant (the server owns
-// tenant_id) and `timestamp` is clamped to [now-maxBackdate, now] — so an insert
-// touches at most two months of one tenant, far under max_partitions_per_insert_block.
-//
-// THIS IS THE DEFINITION, NOT A MIGRATION. `CREATE TABLE IF NOT EXISTS` is a NO-OP
-// against a table that already exists, and hanzo.events does exist on hanzo-k8s
-// (unpartitioned, `TTL timestamp + toIntervalYear(2)`). Existing deployments need the
-// one-time reconcile in LLM.md ("hanzo.events: retention and partitioning"); the TTL
-// half is a metadata ALTER, the partition half is not expressible as an ALTER at all
-// and needs a table swap. Fresh deployments get this schema and need nothing.
-const eventsTableDDL = `
-	CREATE TABLE IF NOT EXISTS hanzo.events (
-		id String,
-		timestamp DateTime,
-		tenant_id String,
-		event String,
-		event_type String,
-		distinct_id String,
-		anonymous_id String,
-		person_id String,
-		session_id String,
-		product String,
-		url String,
-		path String,
-		referrer String,
-		referrer_domain String,
-		utm_source String,
-		utm_medium String,
-		utm_campaign String,
-		utm_term String,
-		utm_content String,
-		ref_code String,
-		channel String,
-		group_id String,
-		signup_week String,
-		product_id String,
-		quantity UInt32,
-		revenue Float64,
-		currency String,
-		properties String,
-		library String,
-		library_version String,
-		ingested_at DateTime DEFAULT now()
-	) ENGINE = MergeTree()
-	PARTITION BY (tenant_id, toYYYYMM(timestamp))
-	ORDER BY (timestamp, tenant_id, event)
-	TTL ingested_at + INTERVAL 2 YEAR`
-
-// eventColumns is the INSERT column list — ingested_at is omitted (server DEFAULT
-// now()). eventRow.args returns values in EXACTLY this order.
-var eventColumns = []string{
-	"id", "timestamp", "tenant_id", "event", "event_type",
-	"distinct_id", "anonymous_id", "person_id", "session_id", "product",
-	"url", "path", "referrer", "referrer_domain",
-	"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-	"ref_code", "channel", "group_id", "signup_week",
-	"product_id", "quantity", "revenue", "currency",
-	"properties", "library", "library_version",
-}
-
-var eventsTableReady atomic.Bool
-
-// EnsureEventsTable creates hanzo.events if absent. Idempotent; only latches on
-// success so a transient datastore outage at first-write does not poison retries.
-// The writer owns this DDL (the read side deliberately never creates the table).
-//
-// CREATES — it does not RECONCILE. `IF NOT EXISTS` returns success without looking at
-// the existing table, so an schema change in eventsTableDDL reaches fresh deployments
-// only. That is deliberate: the partition key cannot be ALTERed in the datastore at all
-// (the ALTER grammar has no such command), so a self-migrating boot path could deliver
-// only half a reconcile and a human would still be needed for the other half — two
-// mechanisms for one migration. There is one: the reconcile in LLM.md, run once per
-// deployment. A boot latch on the ingest path is also the wrong place to start an
-// unbounded table rewrite.
-func EnsureEventsTable(ctx context.Context) error {
-	if eventsTableReady.Load() {
-		return nil
-	}
-	if err := warehouseExec(ctx, eventsTableDDL); err != nil {
-		return err
-	}
-	eventsTableReady.Store(true)
-	return nil
-}
+// THERE IS NO EVENTS-TABLE DDL HERE ANY MORE, AND THAT IS THE POINT. This package
+// used to own eventsTableDDL/EnsureEventsTable for the legacy wide table
+// (hanzo.events) — a second, per-tenant-partitioned copy of every product event.
+// The plane's schema (event.event and its sibling signal tables) has ONE owner,
+// hanzoai/o11y (schema.sql there), and cloud is a WRITER and READER of it, never a
+// creator: the write core commits facts onto the plane and the sink lands them
+// (warehouse.go); every read lens answers honest-empty when the plane is absent,
+// exactly the stance analytics.go has always taken for tables it does not own.
+// hanzo.events itself is retired AFTER this code is live fleet-wide — dropping it
+// first would 500 the still-deployed writer.
 
 // ── wire types ───────────────────────────────────────────────────────────────
 
@@ -352,83 +246,20 @@ type CaptureResult struct {
 }
 
 // ── pure core ──────────────────────────────────────────────────────────────
+//
+// The ONE normalizer is the plane's own: normalize (fact.go) turns a wire event
+// into the fact that lands in event.<signal>. The legacy wide-row normalizer
+// (normalizeEvent → eventRow → buildEventsInsert → hanzo.events) is gone with the
+// table it fed; resolveEventName below survives because it is the SUBSCRIBER
+// vocabulary — the $pageview/$error names the destinations fan-out and the
+// webhook envelope contract publish (forward.go, bus.go subjectFor), a published
+// grammar that cannot move when storage does.
 
-// eventRow is the normalized, tenant-stamped row in eventColumns order.
-type eventRow struct {
-	id, event, eventType                      string
-	timestamp                                 time.Time
-	tenant, distinctID, anonymousID, personID string
-	sessionID, product, url, path             string
-	referrer, referrerDomain                  string
-	utmSource, utmMedium, utmCampaign         string
-	utmTerm, utmContent                       string
-	refCode, channel, groupID, signupWeek     string
-	productID                                 string
-	quantity                                  uint32
-	revenue                                   float64
-	currency, properties, library, libraryVer string
-}
-
-// args returns the row values in eventColumns order (positional bind).
-func (r eventRow) args() []any {
-	return []any{
-		r.id, r.timestamp, r.tenant, r.event, r.eventType,
-		r.distinctID, r.anonymousID, r.personID, r.sessionID, r.product,
-		r.url, r.path, r.referrer, r.referrerDomain,
-		r.utmSource, r.utmMedium, r.utmCampaign, r.utmTerm, r.utmContent,
-		r.refCode, r.channel, r.groupID, r.signupWeek,
-		r.productID, r.quantity, r.revenue, r.currency,
-		r.properties, r.library, r.libraryVer,
-	}
-}
-
-// normalizeEvent turns one client event into a tenant-stamped row. org is the
-// SERVER-resolved tenant (never client input). now anchors clock-skew clamping.
-// ok=false ⇒ the event is unroutable (no resolvable event name) and is dropped.
-// Pure: no I/O, so tests drive it directly.
-func normalizeEvent(org string, now time.Time, e CaptureEvent) (eventRow, bool) {
-	name := resolveEventName(e)
-	if name == "" {
-		return eventRow{}, false
-	}
-	r := eventRow{
-		id:             firstNonEmptyStr(strings.TrimSpace(e.MessageID), randID()),
-		event:          name,
-		eventType:      canonicalType(e.Type),
-		timestamp:      clampTS(e.Timestamp, now),
-		tenant:         org,
-		distinctID:     trim(e.DistinctID),
-		anonymousID:    trim(e.AnonymousID),
-		personID:       trim(e.PersonID),
-		sessionID:      trim(e.SessionID),
-		product:        trim(e.Product),
-		url:            trim(e.URL),
-		path:           trim(e.Path),
-		referrer:       trim(e.Referrer),
-		referrerDomain: hostOf(e.Referrer),
-		utmSource:      trim(e.UTM.Source),
-		utmMedium:      trim(e.UTM.Medium),
-		utmCampaign:    trim(e.UTM.Campaign),
-		utmTerm:        trim(e.UTM.Term),
-		utmContent:     trim(e.UTM.Content),
-		refCode:        trim(e.RefCode),
-		channel:        trim(e.Channel),
-		groupID:        trim(e.GroupID),
-		signupWeek:     trim(e.SignupWeek),
-		productID:      trim(e.ProductID),
-		quantity:       e.Quantity,
-		revenue:        e.Revenue,
-		currency:       trim(e.Currency),
-		properties:     scrubProps(e.Properties),
-		library:        trim(e.Library),
-		libraryVer:     trim(e.LibraryVer),
-	}
-	return r, true
-}
-
-// resolveEventName maps the client (type,event) to the stored event name. The
-// implicit types get PostHog-style reserved names so the read lens ($pageview)
-// and downstream goals share ONE vocabulary. A type=event with no name is dropped.
+// resolveEventName maps the client (type,event) to the PUBLISHED event name the
+// fan-out contracts carry ($pageview et al — PostHog-style reserved names orgs
+// already subscribe to). The STORED name is resolveName (fact.go), which uses the
+// plane vocabulary (kind=page + name=page_viewed). A type=event with no name is
+// dropped on both.
 func resolveEventName(e CaptureEvent) string {
 	name := strings.TrimSpace(e.Event)
 	switch canonicalType(e.Type) {
@@ -492,25 +323,6 @@ func clampTS(s string, now time.Time) time.Time {
 		return now
 	}
 	return ts
-}
-
-// buildEventsInsert renders ONE multi-row INSERT for the batch, flattening every
-// row's args. Column names are the fixed package list (never user input); values
-// bind positionally through `?`. Returns ("",nil) for an empty batch.
-func buildEventsInsert(rows []eventRow) (string, []any) {
-	if len(rows) == 0 {
-		return "", nil
-	}
-	ph := "(" + strings.TrimSuffix(strings.Repeat("?, ", len(eventColumns)), ", ") + ")"
-	tuples := make([]string, len(rows))
-	args := make([]any, 0, len(rows)*len(eventColumns))
-	for i, r := range rows {
-		tuples[i] = ph
-		args = append(args, r.args()...)
-	}
-	stmt := "INSERT INTO " + eventsTable + " (" + strings.Join(eventColumns, ", ") + ") VALUES " +
-		strings.Join(tuples, ", ")
-	return stmt, args
 }
 
 // ── privacy scrub ────────────────────────────────────────────────────────────
@@ -770,10 +582,10 @@ func projectKey(c *zip.Ctx) string {
 // ── ONE write core ───────────────────────────────────────────────────────────
 
 // event source tags — the WIRE each row arrived on. Stamped into properties.$source
-// by ingestEvents so the ONE hanzo.events table stays honest about origin WITHOUT a
-// second table or a schema migration: the read lenses are unchanged and $source is
-// queryable in the properties JSON. One tag per door, and doors (event.go) is the
-// only list that binds them.
+// by ingestEvents, which the plane normalizer carries into attributes['$source'], so
+// the ONE event.event table stays honest about origin WITHOUT a second table or a
+// schema migration: $source is queryable in the attributes map. One tag per door,
+// and doors (event.go) is the only list that binds them.
 //
 // There is no 'capture' tag: rows carrying it were written by the retired
 // /v1/analytics{,/batch} and /v1/tracker name-aliases of the canonical wire. Those
@@ -786,7 +598,7 @@ const (
 )
 
 // withSource returns a copy of p carrying $source=source (the ingest adapter), so
-// normalizeEvent's scrub+store path records origin as a property. nil-safe; never
+// normalize's scrub+store path records origin as a property. nil-safe; never
 // mutates the caller's map (the adapters share their event structs).
 func withSource(p map[string]any, source string) map[string]any {
 	if source == "" {
@@ -801,26 +613,35 @@ func withSource(p map[string]any, source string) map[string]any {
 }
 
 // ingestEvents is the ONE write core: normalize → scrub → PUBLISH the fact onto the
-// event plane → batch INSERT the legacy wide row. org is the SERVER-resolved tenant
-// (never client input); source tags the ingest adapter. Every front door — the
-// canonical /v1/event and the deprecated PostHog / Segment / beacon adapters — funnels
-// here, so there is exactly one write path. Returns the honest accepted/dropped
-// receipt; the errors it returns are already HTTP-shaped (zip) for the handler to pass
-// straight up.
+// event plane. org is the SERVER-resolved tenant (never client input); source tags
+// the ingest adapter. Every front door — the canonical /v1/event and the deprecated
+// PostHog / Segment / beacon adapters — funnels here, so there is exactly one write
+// path. Returns the honest accepted/dropped receipt; the errors it returns are
+// already HTTP-shaped (zip) for the handler to pass straight up.
 //
-// TWO TABLES, ONE ADMISSION. The publish is what makes an event QUERYABLE BY SIGNAL:
-// it is the only thing that puts a fact on event.error, event.log and event.span, none
-// of which the wide table has a shape for — an error reported here used to reach
-// hanzo.events and stop there, so the one signal with a table of its own was the one
-// signal that never reached it. The insert is what keeps the wide read lenses
-// answering. They are two PROJECTIONS of one admitted event and not two doors: nothing
-// decides twice whether to take an event, which is the property that let the two drift
-// apart in the first place.
+// ONE ADMISSION, ONE STORAGE PROJECTION. The fact is the ONLY durable copy: the sink
+// (warehouse.go) lands it in its signal's own table — event.event for product events,
+// event.error / event.log / event.span for the others — so "stored" and "queryable by
+// signal" are the same claim. The legacy second projection (a wide hanzo.events row
+// per event, inserted here beside the publish) is GONE: it was the measured
+// 59.7-byte/row double-write the o11y MV then copied BACK onto the plane minus its
+// errors. What remains beside the commit is fanOut — consumer hand-offs (the
+// destinations sink and the webhook envelope), copies for subscribers and never a
+// second write to storage.
 //
 // The bus is a COMMIT and not a best-effort fan-out (contrast fanOut below, which is
-// detached and fail-soft because its facts are already durable here). A fact that could
-// not be published is a fact that will never be queryable, so it is a 503 — the one
-// answer this whole design exists to give instead of a 200.
+// detached and fail-soft because its facts are already committed here). A fact that
+// could not be published is a fact that will never be queryable, so it is a 503 — the
+// one answer this whole design exists to give instead of a 200. Retrying the whole
+// batch is safe BECAUSE the ids survive the retry: id is the client messageId when
+// one was sent (minted once server-side otherwise), every event.* table is a
+// ReplacingMergeTree keyed (org, time, id), and a re-published fact collapses on
+// merge instead of duplicating.
+//
+// requireDatastore still gates the door even though the commit is the publish: this
+// binary is also the plane's sink, so accepting into the stream while the one
+// warehouse client is down would answer 200 for facts that only ever age on the bus.
+// A caller gets the honest 503 while nothing can land.
 func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (CaptureResult, error) {
 	if len(evs) == 0 {
 		return CaptureResult{}, nil
@@ -831,12 +652,8 @@ func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (
 	if err := requireDatastore(); err != nil {
 		return CaptureResult{}, err
 	}
-	if err := EnsureEventsTable(ctx); err != nil {
-		return CaptureResult{}, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
-	}
 	now := time.Now().UTC()
 	facts := make([]fact, 0, len(evs))
-	rows := make([]eventRow, 0, len(evs))
 	dropped := 0
 	for _, e := range evs {
 		e.Properties = withSource(e.Properties, source)
@@ -850,35 +667,16 @@ func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (
 			continue
 		}
 		facts = append(facts, f)
-		// The legacy wide row is the SECOND projection of the same admitted event, not
-		// a second gate. It is kept because the read lenses (query.go, campaign.go,
-		// outcomes.go, insights.go, apps/guide) still select from hanzo.events; a
-		// signal it cannot represent simply produces no row.
-		if row, ok := normalizeEvent(org, now, e); ok {
-			rows = append(rows, row)
-		}
 	}
 	if len(facts) == 0 {
 		return CaptureResult{Dropped: dropped}, nil
 	}
-	// PUBLISH FIRST, and the ORDER IS THE POINT. Both writes below can fail and both
-	// answer 503, so the caller retries the whole batch either way — the question is
-	// what a retry costs. Every event.* table is a ReplacingMergeTree keyed on the fact
-	// id, so a re-published fact collapses on merge; hanzo.events is a plain MergeTree,
-	// so a re-inserted row is a duplicate that nothing ever removes. Putting the
-	// idempotent commit first means the failure that forces the retry happens before
-	// the write that cannot absorb one.
 	if err := publish(ctx, facts); err != nil {
 		return CaptureResult{}, err
 	}
-	if len(rows) > 0 {
-		stmt, args := buildEventsInsert(rows)
-		if err := warehouseExec(ctx, stmt, args...); err != nil {
-			return CaptureResult{}, warehouseErr("capture", err)
-		}
-	}
-	// Fan the accepted batch out to the downstream sink (destinations), detached and
-	// fail-soft — never blocks or fails an ingest (forward.go). No-op when unset.
+	// Fan the accepted batch out to the downstream consumers (destinations sink +
+	// webhook envelopes), detached and fail-soft — never blocks or fails an ingest
+	// (forward.go). No-op when unset.
 	fanOut(org, evs)
 	return CaptureResult{Accepted: len(facts), Dropped: dropped}, nil
 }

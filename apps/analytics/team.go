@@ -247,7 +247,7 @@ func teamTenant(c *zip.Ctx) (admission, bool) {
 	org := t.Org()
 	if org == "" {
 		// A verified token with no tenant names nothing to write into. Refused rather
-		// than admitted with org="", which normalizeEvent would happily store as the
+		// than admitted with org="", which normalize would happily stamp as the
 		// tenant column and fanOut would forward under an empty org.
 		return admission{}, false
 	}

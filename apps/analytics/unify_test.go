@@ -22,10 +22,10 @@ import (
 // it. The proof is decomposed to fit the harness (datastore is DOWN, so the HTTP
 // path stops at requireDatastore's 503 before a row is written):
 //
-//   - WIRE dimension (deterministic, row layer): the SAME logical event in every
+//   - WIRE dimension (deterministic, fact layer): the SAME logical event in every
 //     wire shape decodes through the ONE tolerant decoder (decodeIngest) and the ONE
-//     normalizer (normalizeEvent) into a byte-identical warehouse row, tenant = the
-//     server-resolved org. This is exactly the row buildEventsInsert binds.
+//     normalizer (normalize, fact.go) into an identical fact, org = the
+//     server-resolved tenant. This is exactly what the sink binds into event.event.
 //   - AUTH dimension (HTTP layer): each auth context is ADMITTED (503, never 403),
 //     proving the canonical door resolved a tenant for it. Each pure resolver
 //     (resolveKeyOrg→org, the host-forced Site.Org) is
@@ -96,15 +96,17 @@ func TestDecodeIngest_EmptyAndMalformed(t *testing.T) {
 	}
 }
 
-// ── net invariant: SAME warehouse row + SAME tenant across every wire ──────────
+// ── net invariant: SAME fact + SAME tenant across every wire ───────────────────
 
-// TestUnifiedIngest_SameRowSameTenant is THE unification proof at the row layer: one
-// logical event, expressed as every wire shape the canonical door and its aliases
-// accept, decoded through the ONE decoder and normalized with the SAME server org,
-// yields a byte-identical warehouse row (modulo the randomly-minted id) whose tenant
-// is that org. Since buildEventsInsert binds eventRow.args() positionally, identical
-// args() == identical warehouse row.
-func TestUnifiedIngest_SameRowSameTenant(t *testing.T) {
+// TestUnifiedIngest_SameFactSameTenant is THE unification proof at the storage
+// layer: one logical event, expressed as every wire shape the canonical door
+// accepts, decoded through the ONE decoder and normalized with the SAME server org,
+// yields an identical FACT (modulo the randomly-minted id) whose org is that org.
+// The fact IS the row now — the sink binds wire(f) positionally into event.event
+// (warehouse.go envelopeArgs) — so identical facts == identical warehouse rows.
+// (This replaced the wide-row proof over normalizeEvent/eventRow.args, which retired
+// with hanzo.events.)
+func TestUnifiedIngest_SameFactSameTenant(t *testing.T) {
 	const org = "acme"
 	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
 
@@ -118,45 +120,34 @@ func TestUnifiedIngest_SameRowSameTenant(t *testing.T) {
 		"eventsEnv":  `{"events":[{"event":"signup_completed","distinctId":"u1","properties":{"plan":"pro"}}]}`,
 	}
 
-	rows := map[string][]any{}
+	msgs := map[string]message{}
 	for name, body := range bodies {
 		evs, err := decodeIngest([]byte(body))
 		if err != nil || len(evs) != 1 {
 			t.Fatalf("%s: decodeIngest evs=%v err=%v", name, evs, err)
 		}
 		// foldException is a no-op for non-error events — part of the ONE core path.
-		row, ok := normalizeEvent(org, now, foldException(evs[0]))
+		f, ok := normalize(org, now, foldException(evs[0]))
 		if !ok {
 			t.Fatalf("%s: normalize dropped a routable event", name)
 		}
-		rows[name] = row.args()
+		msgs[name] = wire(f)
 	}
 
-	// The tenant column (index 2) is the server org for EVERY wire — never the body.
-	for name, a := range rows {
-		if a[2] != org {
-			t.Fatalf("%s: tenant arg = %v, want %q (server-stamped)", name, a[2], org)
+	// The org is the server's for EVERY wire — never the body.
+	for name, m := range msgs {
+		if m.Org != org {
+			t.Fatalf("%s: org = %v, want %q (server-stamped)", name, m.Org, org)
 		}
 	}
-	// Every wire yields the identical warehouse row, comparing all columns except the
-	// minted id (index 0) — the only non-deterministic column when messageId is absent.
-	ref := rows["bareObject"]
-	for name, a := range rows {
-		assertRowArgsEqualExceptID(t, name, ref, a)
-	}
-}
-
-// assertRowArgsEqualExceptID compares two positional row-arg slices column-by-column,
-// skipping index 0 (the randomly-minted id). A mismatch names the differing column.
-func assertRowArgsEqualExceptID(t *testing.T, name string, want, got []any) {
-	t.Helper()
-	if len(want) != len(got) || len(got) != len(eventColumns) {
-		t.Fatalf("%s: arg width = %d, want %d", name, len(got), len(eventColumns))
-	}
-	for i := 1; i < len(got); i++ {
-		if !reflect.DeepEqual(want[i], got[i]) {
-			t.Fatalf("%s: column %q differs: %v (%T) != %v (%T)",
-				name, eventColumns[i], got[i], got[i], want[i], want[i])
+	// Every wire yields the identical published message (and therefore the identical
+	// event.event row), comparing everything except the minted id — the only
+	// non-deterministic field when messageId is absent.
+	ref := msgs["bareObject"]
+	for name, m := range msgs {
+		ref.ID, m.ID = "", ""
+		if !reflect.DeepEqual(ref, m) {
+			t.Fatalf("%s: fact differs from the canonical wire's:\n got %+v\nwant %+v", name, m, ref)
 		}
 	}
 }
