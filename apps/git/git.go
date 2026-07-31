@@ -23,6 +23,12 @@
 //	POST /v1/git/:org/:repo/git-upload-pack     (clone/fetch)
 //	POST /v1/git/:org/:repo/git-receive-pack    (push)
 //
+// A project-scoped repo names its project as a middle segment
+// (/v1/git/:org/:project/:repo/…, git@host:org/project/repo.git). The scope
+// otherwise rides X-Project-Id, and a git client sends no headers, so the path
+// is the only channel that reaches a remote. Two names are only unique within
+// one project — hanzo/hanzo-apps/ai and hanzo/hanzo-docs/ai are distinct repos.
+//
 // Storage is bare git repos on a real filesystem (osfs) rooted under
 // {DataDir}/git; go-git initializes + reads them, while the heavy clone/push/
 // mirror paths stream through the `git` CLI (gitexec.go) so multi-GB packs stay
@@ -139,31 +145,41 @@ func rfc3339(unix int64) string {
 	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }
 
-func cloneURL(s *cloud.Service[state], org, name string) string {
+// cloneURL is the HTTPS remote for a repo. An org-level repo keeps the
+// two-segment path it has always had; a project-scoped one names its project as
+// the middle segment, because `git clone` sends no headers and the URL is the
+// only place the scope can travel.
+func cloneURL(s *cloud.Service[state], org, project, name string) string {
 	host := s.Domain
 	if host == "" {
 		host = "api.hanzo.ai"
 	}
-	return fmt.Sprintf("https://%s/v1/git/%s/%s.git", host, org, name)
+	if project == "" {
+		return fmt.Sprintf("https://%s/v1/git/%s/%s.git", host, org, name)
+	}
+	return fmt.Sprintf("https://%s/v1/git/%s/%s/%s.git", host, org, project, name)
 }
 
 // sshURL is the scp-style Git SSH remote: git@<sshHost>:<org>/<repo>.git. The
 // colon (not slash) after the host is the canonical scp-like syntax `git clone`
 // accepts; the org/repo tail is the same path the SSH exec handler parses.
-func sshURL(s *cloud.Service[state], org, name string) string {
+func sshURL(s *cloud.Service[state], org, project, name string) string {
 	host := s.State.sshHost
 	if host == "" {
 		host = defaultSSHHost(s.Domain)
 	}
-	return fmt.Sprintf("git@%s:%s/%s.git", host, org, name)
+	if project == "" {
+		return fmt.Sprintf("git@%s:%s/%s.git", host, org, name)
+	}
+	return fmt.Sprintf("git@%s:%s/%s/%s.git", host, org, project, name)
 }
 
 func toView(s *cloud.Service[state], r Repo, branches []string, head string) repoView {
 	return repoView{
 		ID: r.ID, Org: r.Org, Project: r.Project, Name: r.Name, Description: r.Description,
 		DefaultBranch: r.DefaultBranch, Public: r.Public, Branches: branches, Head: head,
-		CloneURL:  cloneURL(s, r.Org, r.Name),
-		SSHURL:    sshURL(s, r.Org, r.Name),
+		CloneURL:  cloneURL(s, r.Org, r.Project, r.Name),
+		SSHURL:    sshURL(s, r.Org, r.Project, r.Name),
 		SizeBytes: r.SizeBytes, CreatedAt: rfc3339(r.CreatedAt), UpdatedAt: rfc3339(r.UpdatedAt),
 	}
 }
@@ -335,15 +351,26 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/:org/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
 	g.Post("/:org/:repo/git-receive-pack", cloud.Handle(s, receivePack))
 
+	// The same protocol one segment deeper, for a project-scoped repo. The scope
+	// otherwise rides X-Project-Id, which `git clone` cannot send, so without a
+	// path form a project-scoped repo has no usable remote. Distinct segment
+	// count from the routes above, so the org-level form is untouched.
+	g.Get("/:org/:project/:repo/info/refs", cloud.Handle(s, infoRefs))
+	g.Post("/:org/:project/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
+	g.Post("/:org/:project/:repo/git-receive-pack", cloud.Handle(s, receivePack))
+
 	// Root-level smart-HTTP on the git host so `git clone
 	// https://git.hanzo.ai/<org>/<repo>.git` works with the canonical git URL
 	// (no /v1/git prefix). Guarded to s.State.gitHost via onGitHost: on the
 	// api/console hosts these fall through (c.Next()), so a root :org/:repo can
-	// never shadow another surface. Same handlers, same :org/:repo params.
+	// never shadow another surface. Same handlers, same params.
 	onGit := onGitHost(s.State.gitHost)
 	app.Get("/:org/:repo/info/refs", onGit(cloud.Handle(s, infoRefs)))
 	app.Post("/:org/:repo/git-upload-pack", onGit(cloud.Handle(s, uploadPack)))
 	app.Post("/:org/:repo/git-receive-pack", onGit(cloud.Handle(s, receivePack)))
+	app.Get("/:org/:project/:repo/info/refs", onGit(cloud.Handle(s, infoRefs)))
+	app.Post("/:org/:project/:repo/git-upload-pack", onGit(cloud.Handle(s, uploadPack)))
+	app.Post("/:org/:project/:repo/git-receive-pack", onGit(cloud.Handle(s, receivePack)))
 
 	// Browser UI — Hanzo Git's web surface (repo list/browse/blob/commits) at
 	// /git/*, Hanzo Git's native web surface (ui.go).
