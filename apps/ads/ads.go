@@ -1,9 +1,10 @@
-// Package ads mounts the Hanzo Cloud /v1/ads/* surface: a native-Go, per-org
-// ad-campaign store on Base/SQLite. It is the NET-NEW ads domain built directly
-// on the ONE cloud framework (zip/Fiber + cloud.Deps + per-org SQLite) — the same
-// shape every other in-repo subsystem uses (clients/crm and clients/marketing are
-// the twins), NOT a proxy to a standalone ads pod (there is none — ads.hanzo.ai is
-// net-new).
+// Package ads is paid advertising: ad campaigns with an objective, a budget and
+// reported spend, launched and paused on Meta, Google, TikTok, Reddit, LinkedIn or
+// Microsoft with the org's own connector token.
+//
+// It is also the PAID executor of the go-to-market plane: apps/campaign fans its
+// paid channel out to LaunchPaid/PaidSpend/PausePaid (provider.go), and this
+// surface runs the same campaigns standalone.
 //
 // The AdCampaign entity is the root of the ad hierarchy (campaign → ad sets → ads):
 // a named campaign on an ad Platform (meta/google/tiktok/x), a lifecycle Status
@@ -24,6 +25,7 @@
 //	GET    /v1/ads/campaigns/:id      campaign detail                -> AdCampaign
 //	PUT    /v1/ads/campaigns/:id      update a campaign              -> AdCampaign
 //	DELETE /v1/ads/campaigns/:id      delete a campaign
+//	POST   /v1/ads/campaigns/:id/launch  run it on the provider      -> AdCampaign
 //
 // serve.go auto-registers GET /v1/ads/health (this subsystem does not set
 // OwnsHealth, so the generic always-ok liveness route serves it).

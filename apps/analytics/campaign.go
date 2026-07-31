@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // campaign.go is the in-process CAMPAIGN-METRICS seam over the ONE analytics
-// warehouse: the /v1/campaign plane (clients/campaign) reads a campaign's funnel
+// warehouse: the /v1/campaign plane (apps/campaign) reads a campaign's funnel
 // from HERE rather than opening a second store. A campaign's results ARE an
 // analytics query scoped to the campaign — the utm_campaign-tagged events in
 // hanzo.events — so there is one metrics plane, not a parallel one.
