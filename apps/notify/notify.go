@@ -1,6 +1,8 @@
-// Package notify is the platform's transactional sender: POST /v1/notify/send
-// delivers one message by email or SMS through the caller org's OWN KMS-held
-// provider credential, and notify.Send (send.go) is that same rail for
+// Package notify is transactional email and SMS, sent through your org's own
+// provider credential.
+//
+// POST /v1/notify/send delivers one message by email or SMS through the caller
+// org's OWN KMS-held credential, and notify.Send (send.go) is that same rail for
 // in-process callers — one sender, never a second provider path.
 //
 // It is the native replacement for the standalone notifyd

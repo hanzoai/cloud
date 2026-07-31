@@ -1,7 +1,9 @@
-// Package channels is the /v1/channels transport plane: the portable chat
-// envelope, per-org access policy (pairing / allowlist / open), a durable
-// inbox, and outbound send across the connected chat transports (Discord,
-// Slack, Teams, Telegram). Identity and token custody stay in
+// Package channels is one inbox for the chat apps you connect — Discord, Slack,
+// Teams, Telegram.
+//
+// The /v1/channels routes carry a portable chat envelope, per-org access policy
+// (pairing / allowlist / open), a durable inbox, and outbound send across every
+// connected transport. Identity and token custody stay in
 // apps/integrations — channels consumes its ingress seam
 // (integrations.RegisterIngress) and its send doors, so the dependency points
 // one way: channels → integrations, never back.

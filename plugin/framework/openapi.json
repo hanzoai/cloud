@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package framework is the DocType surface (/v1/framework): define a metadata schema, then list, create, submit and cancel documents against it — per org, with the engine's own permission calculus deciding every access.",
+    "description": "Package framework is document types you define: describe a record once, then create, list, submit and cancel documents against it.",
     "version": "v1"
   },
   "servers": [

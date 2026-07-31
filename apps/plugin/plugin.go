@@ -1,6 +1,8 @@
-// Package plugin is the control plane for the host's zip-native plugins: what
-// each host is running, and the operations that change it — enable, disable,
-// reload, and pin to (or roll back to) a named version.
+// Package plugin is what each host is running, and how to change it: enable,
+// disable, reload, or pin a service to a version.
+//
+// It is the control plane for the host's zip-native plugins, and a pin rolls
+// back as readily as it rolls forward.
 //
 // A plugin here is a service that ships as its OWN binary and is composed in at
 // run time by zip.Load, one child process per app on a private unix socket. The

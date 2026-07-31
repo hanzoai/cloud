@@ -1,6 +1,8 @@
-// Package graph is chain data (/v1/indexers, /v1/oracles): the deployment's block
-// indexers with the height each has reached, and the on-chain price feeds — read
-// from the Lux chain-data plane, principal-gated, and never fabricated.
+// Package graph is chain data: your block indexers and how far each has caught
+// up, plus the on-chain price feeds.
+//
+// It serves them at /v1/indexers and /v1/oracles — read from the Lux chain-data
+// plane, principal-gated, and never fabricated.
 //
 // The two upstreams are luxfi/indexer (the per-network block/event indexer,
 // explorer REST at /v1/explorer/*) and luxfi/graph (the GraphQL query layer that

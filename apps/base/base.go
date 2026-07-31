@@ -1,8 +1,10 @@
 // Copyright (C) 2020-2026, Hanzo AI Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-// Package base is managed Hanzo Base (/v1/base, /v1/collections): a hosted app
-// engine per org — collections, records, rules, IAM-validated auth — plus the
+// Package base is managed Hanzo Base: a hosted backend for your app —
+// collections, records, access rules and sign-in.
+//
+// It serves that engine per org at /v1/base and /v1/collections, plus the
 // platform's public waitlist at /v1/waitlist.
 //
 // It is the in-binary replacement for the standalone `ghcr.io/hanzoai/superbase`

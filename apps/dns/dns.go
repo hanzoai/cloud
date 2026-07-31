@@ -1,5 +1,8 @@
-// Package dns forwards the console's DNS dashboard traffic (/v1/dns/*) to the
-// Hanzo DNS control plane (dns/plugin/hanzodns), which owns the authoritative
+// Package dns is your DNS records: the zones and records behind every name you
+// point at Hanzo.
+//
+// It forwards the console's DNS dashboard traffic (/v1/dns/*) to the Hanzo DNS
+// control plane (dns/plugin/hanzodns), which owns the authoritative
 // zone/record store. cloud serves console.hanzo.ai (the DnsModule) but holds no
 // DNS state of its own, so without this thin head console.hanzo.ai/v1/dns/* 404s
 // and the dashboard shows empty zones.

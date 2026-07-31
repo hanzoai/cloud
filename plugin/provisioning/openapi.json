@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package provisioning is the Hanzo Cloud provisioning control plane.",
+    "description": "Package provisioning is one-click data add-ons: a SQL, key-value, document, vector, search or object store, wired straight into your app.",
     "version": "v1"
   },
   "servers": [

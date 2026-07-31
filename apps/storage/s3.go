@@ -1,6 +1,8 @@
-// Package storage is object storage (/v1/s3): an org's buckets and the objects
-// inside them — list, create, delete, and presigned upload/download URLs — over
-// the shared SeaweedFS S3 gateway.
+// Package storage is object storage: your buckets and the files in them, with
+// signed URLs for upload and download.
+//
+// It serves an org's buckets and objects at /v1/s3 — list, create, delete, and
+// presigned upload/download URLs — over the shared SeaweedFS S3 gateway.
 //
 // It is the DATA plane over that store — the companion to apps/provisioning,
 // which is the CONTROL plane (allocate/list/drop the s3 RESOURCE at /v1/s3 and

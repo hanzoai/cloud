@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package webhooks is the platform-global webhook layer (HIP-0106): ONE registry plus ONE dispatcher that delivers ANY event on the platform bus to org-registered HTTP subscribers.",
+    "description": "Package webhooks is how your app hears about events: register an endpoint, pick the events, get each one delivered and signed.",
     "version": "v1"
   },
   "servers": [

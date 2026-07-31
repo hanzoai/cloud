@@ -1,7 +1,9 @@
-// Package kafka is the Kafka wire onto the platform bus: the Hanzo Kafka adaptor
-// (github.com/hanzoai/kafka) speaks the Kafka binary protocol on :9092 and
-// translates it to and from the JetStream apps/pubsub serves, so a standard
-// Kafka producer or consumer works unchanged against ONE bus. It connects to
+// Package kafka is Kafka on the platform bus: point a standard producer or
+// consumer at :9092 and it works unchanged.
+//
+// The Hanzo Kafka adaptor (github.com/hanzoai/kafka) speaks the Kafka binary
+// protocol on :9092 and translates it to and from the JetStream apps/pubsub
+// serves, so every client shares ONE bus. It connects to
 // that PubSub as a NATS client on loopback :4222 — replacing the standalone
 // `insights-kafka` Deployment. No ZooKeeper: the adaptor is stateless over
 // JetStream (Lux consensus only).

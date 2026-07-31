@@ -1,6 +1,9 @@
-// Package ml mounts the Hanzo Cloud /v1/ml/* and /v1/train/* surfaces: a
-// thin, tenant-scoped bridge that turns three Kubeflow-family CustomResources
-// into a small REST API. No ML logic is reimplemented here — the operators
+// Package ml is model serving and training: deploy a model behind an endpoint,
+// run a training job, tune it with experiments.
+//
+// The /v1/ml/* and /v1/train/* routes are a thin, tenant-scoped bridge that
+// turns three Kubeflow-family CustomResources into a small REST API. No ML
+// logic is reimplemented here — the operators
 // (kserve, trainer, katib) own reconciliation; this subsystem only translates
 // REST <-> the Kubernetes API and enforces tenant isolation.
 //

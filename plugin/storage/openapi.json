@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package storage is object storage (/v1/s3): an org's buckets and the objects inside them — list, create, delete, and presigned upload/download URLs — over the shared SeaweedFS S3 gateway.",
+    "description": "Package storage is object storage: your buckets and the files in them, with signed URLs for upload and download.",
     "version": "v1"
   },
   "servers": [

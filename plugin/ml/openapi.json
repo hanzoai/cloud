@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package ml mounts the Hanzo Cloud /v1/ml/* and /v1/train/* surfaces: a thin, tenant-scoped bridge that turns three Kubeflow-family CustomResources into a small REST API.",
+    "description": "Package ml is model serving and training: deploy a model behind an endpoint, run a training job, tune it with experiments.",
     "version": "v1"
   },
   "servers": [

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package exec is the Code Interpreter: run a snippet in a sandbox, and move the session's files in and out.",
+    "description": "Package exec is the code interpreter: run a snippet in a sandbox and move files in and out.",
     "version": "v1"
   },
   "servers": [

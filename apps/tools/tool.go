@@ -1,8 +1,9 @@
-// Package tools is the ONE tool plane for Hanzo Cloud's PER-TENANT capabilities:
-// a single registry where every callable thing an ORG owns — a connector action, a
-// user function, a zap service route, an agent, an authored skill, or a tool on
-// the org's own external MCP server — is a Tool with a Source, a JSON-Schema, a
-// per-(org,project) activation state, and an optional price.
+// Package tools is everything your org can call, in one list: connector
+// actions, functions, agents, skills and your own MCP servers.
+//
+// It is the ONE tool plane for Hanzo Cloud's PER-TENANT capabilities — a single
+// registry where every callable thing an ORG owns is a Tool with a Source, a
+// JSON-Schema, a per-(org,project) activation state, and an optional price.
 //
 // Per-tenant is the whole boundary. Cloud's OWN typed ops are not here and never
 // were a Source: they are code, known at build time, and the fleet publishes them

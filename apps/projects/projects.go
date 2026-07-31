@@ -1,6 +1,8 @@
-// Package projects is the Hanzo Cloud projects control plane: the ONE
-// org-scoped store of buildable/deployable sites, shared by every surface that
-// shows a user's projects.
+// Package projects is where your sites live: create one, deploy a build, roll
+// back to any release.
+//
+// It is the ONE org-scoped store of buildable/deployable sites, shared by every
+// surface that shows a user's projects.
 //
 // Why it exists: hanzo.app (the builder) and console.hanzo.ai (the Projects
 // module) must show the SAME projects for the same org. They do, because both

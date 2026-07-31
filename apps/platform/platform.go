@@ -1,7 +1,10 @@
-// Package platform is Hanzo PaaS: the per-org container platform at
-// /v1/platform — projects, applications, builds, deploys, environments,
-// releases, logs and verified custom domains, each app reconciled into the
-// caller's own tenant-<org> Kubernetes namespace.
+// Package platform is Hanzo PaaS: deploy containers to your own tenant
+// namespace — builds, releases, environments, logs, custom domains.
+//
+// It is the per-org container platform at /v1/platform — projects,
+// applications, builds, deploys, environments, releases, logs and verified
+// custom domains, each app reconciled into the caller's own tenant-<org>
+// Kubernetes namespace.
 //
 // Relationship to the sibling subsystems:
 //
