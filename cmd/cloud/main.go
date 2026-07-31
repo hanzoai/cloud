@@ -117,6 +117,22 @@ func run(addr, zapAddr, enable string) error {
 	// them, so it is frozen before anything serves and needs no lock.
 	absent := map[string]string{}
 
+	// composed is what THIS deployment put together, in manifest order — the app
+	// set spec() describes. Taken here rather than from the loops below because
+	// they consume `on` as they go (delete, so a leftover name is a typo), and
+	// because the broker-first split would put the fleet's document in an order
+	// that is not the fleet's.
+	//
+	// It is the enable list applied, coresident apps included: an app that mounts
+	// as middleware on a sibling's router still SERVES its routes, so it belongs in
+	// the document even though the host claims no prefix for it.
+	composed := make([]string, 0, len(manifest.Apps))
+	for _, a := range manifest.Apps {
+		if on == nil || on[a.Name] {
+			composed = append(composed, a.Name)
+		}
+	}
+
 	// The broker is a precondition, not a selection. Every child this host spawns
 	// carries a CREDZ_TOKEN, and credz refuses to fall back to a dev key once a
 	// token is present — so a child that cannot reach the broker resolves Unkeyed
@@ -178,7 +194,7 @@ func run(addr, zapAddr, enable string) error {
 	// The fleet's own description, at /v1/openapi.json. Same reasoning as
 	// /healthz, and the same layer: it is the HOST's, because it is about the
 	// whole fleet and no plugin can see past itself.
-	spec(app)
+	spec(app, composed)
 
 	// The console at "/" is the HOST's, because the host is the front door: every
 	// SPA route (/, /signin, /dashboard, …) is under no app prefix, so it reaches
@@ -347,9 +363,14 @@ func health(app *zip.App, absent map[string]string) {
 // BYTE-IDENTICALLY — fiber merges identical patterns into one chained route and
 // the host's handler would sit behind the proxy. manifest/openapi_test.go refuses
 // that; cmd/cloud/openapi_test.go pins the resolution end to end.
-func spec(app *zip.App) {
+//
+// composed, not the whole manifest, so ENABLEMENT still scopes the document the
+// way it did when one binary held everything: a deployment that does not run a
+// subsystem must not publish its routes. Production sets no allowlist, so there
+// the two are the same list — which is why the artifact comparison holds.
+func spec(app *zip.App, composed []string) {
 	openapi.MountFleet(app, func() ([]openapi.Part, error) {
-		return openapi.Subsets(manifest.Names(), plugin.Spec)
+		return openapi.Subsets(composed, plugin.Spec)
 	})
 }
 
