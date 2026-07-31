@@ -1,0 +1,65 @@
+[
+  {
+    "description": "Images lists the org's container repositories, read live from the OCI\ncatalog and filtered server-side to the org's namespace — the page can only\never hold the caller's own images.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_registry_images"
+  },
+  {
+    "description": "Packages lists the org's npm packages — `\u003corg\u003e` and `@\u003corg\u003e/…` — from the\nnpm registry's search index, optionally narrowed by a query within that\nscope. The org boundary is applied server-side after the search, so a query\ncan never widen it.",
+    "inputSchema": {
+      "properties": {
+        "query": {
+          "description": "Query narrows the listing within the org's scope when present; the org\nboundary itself is never widened by it. It rides the query string.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_registry_packages"
+  },
+  {
+    "description": "Projects lists the namespaces the caller can see with what each holds: the\norg's slug, its repository count on the OCI catalog, and its package count\non the npm registry. Today that is exactly one row — the caller's org.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_registry_projects"
+  },
+  {
+    "description": "Status reports whether the OCI and npm registries are reachable and, when\nthe OCI half is auth-gated, which token realm its challenge advertises — an\nhonest lens for \"is the registry plane up\", never a fabricated ok.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_registry_status"
+  },
+  {
+    "description": "Tags lists one org-owned repository's tags, read live from the OCI registry.\nThe repository is addressed inside the org's namespace — a name outside it\ncannot be expressed, and an unknown one answers 404.",
+    "inputSchema": {
+      "properties": {
+        "image": {
+          "description": "Image is the repository name inside the org's namespace, as returned by\nthe images op. It rides the query string.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_registry_tags"
+  },
+  {
+    "description": "Token mints a short-lived, pull-only registry token for exactly one of the\norg's images, through the same IAM realm the docker CLI authenticates\nagainst. The scope is pinned server-side to `\u003corg\u003e/\u003cimage\u003e` with the `pull`\naction — no field exists to name another org's image or ask for push. Use it\nas `Authorization: Bearer …` on the OCI wire; it expires in minutes.",
+    "inputSchema": {
+      "properties": {
+        "image": {
+          "description": "Image is the repository name inside the org's namespace (e.g. \"cloud\").",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_registry_token"
+  }
+]
