@@ -249,6 +249,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// token-gated + image-ref allowlisted (runner.go). `hanzo build`, the
 	// git-push-to-deploy hook, and cloud's own self-release all POST here.
 	app.Post("/v1/runner", cloud.Handle(s, runnerBuild))
+	// A release answers 202 with an id, so the id has to be answerable. Without
+	// these a release that dies in the detached pipeline is indistinguishable from
+	// one still running — which is exactly how a release that launched nothing
+	// looked like one in flight.
+	app.Get("/v1/runner/releases", cloud.Handle(s, listSelfReleases))
+	app.Get("/v1/runner/releases/:id", cloud.Handle(s, getSelfRelease))
 }
 
 // The platform surface's declared bodies, adjacent to the route table above so

@@ -31,10 +31,12 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -194,14 +196,96 @@ func (p releasePlan) run(ctx context.Context) (releaseStep, error) {
 // build or smoke leaves NO tag and universe is never told of a phantom version.
 func startRelease(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq) error {
 	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
-	bldID, image, err := launchRelease(s, c.Context(), ref,
-		strings.TrimSpace(req.Repo), strings.TrimSpace(req.Dockerfile))
+	// A repo is a CLONE URL, and an unparseable one is refused here rather than
+	// deep in the detached pipeline. Otherwise a bare name ("cloud" for
+	// "https://github.com/hanzoai/cloud") answers 202 with an image tag, launches
+	// nothing, and only says so in a log line nobody is reading — the caller is
+	// told a release is in flight that never started.
+	repo := strings.TrimSpace(req.Repo)
+	if repo != "" {
+		if u, err := url.Parse(repo); err != nil || u.Scheme == "" || u.Host == "" {
+			return zip.ErrBadRequest("repo must be a clone URL such as https://github.com/hanzoai/cloud; omit it to release " + releaseRepoURL)
+		}
+	}
+	bldID, image, err := launchRelease(s, c.Context(), ref, repo, strings.TrimSpace(req.Dockerfile))
 	if err != nil {
 		return err
 	}
 	return c.JSON(http.StatusAccepted, runnerBuildResp{
 		BuildJobID: bldID, Status: "releasing", RunnerPool: "32g", Image: image,
 	})
+}
+
+// ReleaseState is what a release id can be asked about. A 202 hands back an id,
+// so the id has to mean something after the request returns — otherwise a release
+// that dies in the detached pipeline is indistinguishable from one still running.
+type ReleaseState struct {
+	// ID is the build id returned by the 202.
+	ID string `json:"id"`
+	// Image is the tag the release publishes on success.
+	Image string `json:"image"`
+	// Version is that tag without the leading "v".
+	Version string `json:"version"`
+	// SHA is the commit the release pinned.
+	SHA string `json:"sha"`
+	// Status is "releasing", "released" or "failed".
+	Status string `json:"status"`
+	// Reached is the last pipeline step completed: built, smoked, tagged, notified.
+	Reached string `json:"reached,omitempty"`
+	// Error is why it stopped, when it failed.
+	Error string `json:"error,omitempty"`
+	// StartedAt / EndedAt are unix seconds.
+	StartedAt int64 `json:"startedAt"`
+	EndedAt   int64 `json:"endedAt,omitempty"`
+}
+
+// releases keeps the last few outcomes in memory. A release is a minutes-long
+// operation on a single-writer path, so a bounded map is the whole requirement —
+// and an in-memory record honestly disappears on restart rather than pretending
+// to be a durable history the pipeline does not keep.
+var releases = struct {
+	sync.Mutex
+	byID  map[string]*ReleaseState
+	order []string
+}{byID: map[string]*ReleaseState{}}
+
+const releasesKept = 20
+
+func recordRelease(st *ReleaseState) {
+	releases.Lock()
+	defer releases.Unlock()
+	if _, ok := releases.byID[st.ID]; !ok {
+		releases.order = append(releases.order, st.ID)
+		for len(releases.order) > releasesKept {
+			delete(releases.byID, releases.order[0])
+			releases.order = releases.order[1:]
+		}
+	}
+	releases.byID[st.ID] = st
+}
+
+// ReleaseByID returns a recorded release. found=false once it has aged out.
+func ReleaseByID(id string) (ReleaseState, bool) {
+	releases.Lock()
+	defer releases.Unlock()
+	st, ok := releases.byID[strings.TrimSpace(id)]
+	if !ok {
+		return ReleaseState{}, false
+	}
+	return *st, true
+}
+
+// Releases returns the recorded releases, newest first.
+func Releases() []ReleaseState {
+	releases.Lock()
+	defer releases.Unlock()
+	out := make([]ReleaseState, 0, len(releases.order))
+	for i := len(releases.order) - 1; i >= 0; i-- {
+		if st, ok := releases.byID[releases.order[i]]; ok {
+			out = append(out, *st)
+		}
+	}
+	return out
 }
 
 // releasing is the in-flight guard. A release is a fabric-wide operation that
@@ -246,14 +330,28 @@ func launchRelease(s *cloud.Service[state], ctx context.Context, ref, repo, dock
 	repoURL := firstNonEmpty(repo, releaseRepoURL)
 	plan := releaseFor(s, repoURL, sha, image, tag, firstNonEmpty(dockerfile, "Dockerfile"), bldID)
 
+	state := &ReleaseState{
+		ID: bldID, Image: image, Version: version, SHA: sha,
+		Status: "releasing", StartedAt: time.Now().Unix(),
+	}
+	recordRelease(state)
+
 	detached := context.WithoutCancel(ctx)
 	go func() {
 		defer releasing.Store(false)
 		reached, rerr := plan.run(detached)
+		done := &ReleaseState{
+			ID: bldID, Image: image, Version: version, SHA: sha,
+			Reached: reached.String(), StartedAt: state.StartedAt, EndedAt: time.Now().Unix(),
+		}
 		if rerr != nil {
+			done.Status, done.Error = "failed", rerr.Error()
+			recordRelease(done)
 			s.Log.Error("release failed", "version", version, "image", image, "reached", reached.String(), "err", rerr)
 			return
 		}
+		done.Status = "released"
+		recordRelease(done)
 		s.Log.Info("release published", "version", version, "image", image, "sha", sha)
 	}()
 	ok = true
@@ -619,4 +717,29 @@ func githubJSON(s *cloud.Service[state], ctx context.Context, method, path, toke
 		_, _ = io.Copy(io.Discard, resp.Body)
 	}
 	return resp.StatusCode, nil
+}
+
+// listSelfReleases answers the platform SELF-PUBLISH releases this process has
+// recorded. Distinct from /v1/releases, which lists a tenant's deployments, newest first.
+// SuperAdmin-only, like cutting one: a release names the commits and versions of
+// the platform itself.
+func listSelfReleases(s *cloud.Service[state], c *zip.Ctx) error {
+	if !principal.IsSuperAdmin(c) {
+		return zip.ErrForbidden("reading releases requires a SuperAdmin identity")
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": Releases()})
+}
+
+// getSelfRelease answers one self-publish release by the id its 202 returned. A 404 means the id
+// is unknown OR has aged out of the in-memory record — the honest answer either
+// way, since this process cannot distinguish them.
+func getSelfRelease(s *cloud.Service[state], c *zip.Ctx) error {
+	if !principal.IsSuperAdmin(c) {
+		return zip.ErrForbidden("reading a release requires a SuperAdmin identity")
+	}
+	st, ok := ReleaseByID(c.Param("id"))
+	if !ok {
+		return zip.ErrNotFound("no such release in this process's record")
+	}
+	return c.JSON(http.StatusOK, st)
 }
