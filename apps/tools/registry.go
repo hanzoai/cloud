@@ -25,37 +25,25 @@ var (
 	ErrChargerUnset = errors.New("tools: payment seam not configured")
 )
 
-// Charge is one settlement request for a monetized tool call. It is the whole
-// contract the registry hands the x402 seam: who pays, who is paid, how much.
-type Charge struct {
-	Payer     string // paying org's billing ledger (principal Owner/Org).
-	Project   string
-	Tool      string
-	Recipient string // seller payout wallet (Tool.Price.Recipient).
-	Currency  string
-	Cents     int64
-	RequestID string
-}
-
-// Pricer resolves the marketplace price of a tool at dispatch time. It is the seam
-// the marketplace fills so a monetized listing's price + recipient wallet reach the
-// per-call enforcement path WITHOUT the tool plane importing the marketplace. A tool
-// whose provider already set an intrinsic Price does not consult the Pricer.
-type Pricer interface {
-	PriceFor(ctx context.Context, scope Scope, tool string) *Price
-}
-
-// Charger settles a monetized tool call over the x402 payment rail (LP-3028,
-// clients/commerce/payment/x402). A SEPARATE team owns the concrete implementation
-// backed by x402.Facilitator.Settle (Payee = the recipient wallet address); the
-// registry codes to THIS narrow interface and keeps the seam explicit so it never
-// pulls the processor/MPC/chain graph into the tool plane. A nil Charger makes
-// every priced tool fail closed (ErrChargerUnset) — a paid tool is never free.
+// Charger settles one tool call over the x402 payment rail. The tool plane hands it
+// the TOOL NAME and the request context and NOTHING else, because nothing else is
+// the tool plane's to know: who pays is the attested principal already on the
+// context, and what a call costs and who is paid live in the payment layer's own
+// price table — the marketplace listing the x402 Registry is published from. A
+// Charge value carrying cents and a payout wallet would be the commerce graph
+// smuggled into the tool plane, and a payer passed down would be a second answer to
+// a question principal.Ledger already answers.
 //
-// Charge returns nil on a settled payment, ErrPaymentRequired when the payer cannot
-// pay, or another error (fail-closed) on an unavailable rail.
+// Every dispatch is offered to the Charger, including free ones: "is this priced"
+// is one lookup in that same table, and asking twice is how a gate and a settlement
+// come to disagree. A FREE tool settles for nothing and returns nil.
+//
+// Charge returns nil once the call is paid for, ErrPaymentRequired when it is not
+// (the x402 challenge is on the response headers), or another error on an
+// unavailable rail. A nil Charger makes a tool with a DECLARED price fail closed
+// (ErrChargerUnset) — a paid tool is never served free.
 type Charger interface {
-	Charge(ctx context.Context, ch Charge) error
+	Charge(ctx context.Context, tool string) error
 }
 
 // Registry is THE tool plane: the set of registered source Providers, the shared
@@ -67,7 +55,6 @@ type Registry struct {
 	providers  []Provider
 	activation *ActivationStore
 	charger    Charger
-	pricer     Pricer
 }
 
 // NewRegistry builds an empty registry. The process-wide one is std (see Default);
@@ -87,12 +74,10 @@ func Register(p Provider) { std.Register(p) }
 // Default returns the process-wide registry (for marketplace + the HTTP surface).
 func Default() *Registry { return std }
 
-// SetCharger installs the x402 payment seam on the process-wide registry. The x402
-// wiring team calls this once; until it does, priced tools fail closed.
+// SetCharger installs the x402 payment seam on the process-wide registry. The
+// subsystem that owns the price table calls this once from its Mount
+// (apps/marketplace); until it does, a tool with a declared price fails closed.
 func SetCharger(c Charger) { std.SetCharger(c) }
-
-// SetPricer installs the marketplace price seam on the process-wide registry.
-func SetPricer(p Pricer) { std.SetPricer(p) }
 
 // Register adds a provider. Duplicate sources are allowed (each lists its own
 // tools); precedence resolves any name collision across sources.
@@ -120,18 +105,11 @@ func (r *Registry) SetCharger(c Charger) {
 	r.charger = c
 }
 
-// SetPricer installs the marketplace price seam.
-func (r *Registry) SetPricer(p Pricer) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.pricer = p
-}
-
 // Activate turns a tool on for (org, project), recording its resolved source. This
 // is the ONE activation write the marketplace "install" and the /v1/tools/activation
 // API both drive, so activation is one store reached one way.
 func (r *Registry) Activate(ctx context.Context, org, project, tool, byUser string) error {
-	_, act, _, _ := r.snapshot()
+	_, act, _ := r.snapshot()
 	if act == nil {
 		return errors.New("tools: activation store not configured")
 	}
@@ -144,7 +122,7 @@ func (r *Registry) Activate(ctx context.Context, org, project, tool, byUser stri
 
 // Deactivate turns a tool off for (org, project).
 func (r *Registry) Deactivate(ctx context.Context, org, project, tool string) error {
-	_, act, _, _ := r.snapshot()
+	_, act, _ := r.snapshot()
 	if act == nil {
 		return errors.New("tools: activation store not configured")
 	}
@@ -153,7 +131,7 @@ func (r *Registry) Deactivate(ctx context.Context, org, project, tool string) er
 
 // Activated returns the activated tool names for (org, project).
 func (r *Registry) Activated(ctx context.Context, org, project string) ([]string, error) {
-	_, act, _, _ := r.snapshot()
+	_, act, _ := r.snapshot()
 	return act.List(ctx, org, project)
 }
 
@@ -164,14 +142,14 @@ func (r *Registry) Exists(ctx context.Context, scope Scope, name string) bool {
 	return ok
 }
 
-// snapshot returns the current providers + activation + charger + pricer under one
-// lock, so a List/Dispatch never races a concurrent Register/Set*.
-func (r *Registry) snapshot() ([]Provider, *ActivationStore, Charger, Pricer) {
+// snapshot returns the current providers + activation + charger under one lock, so
+// a List/Dispatch never races a concurrent Register/Set*.
+func (r *Registry) snapshot() ([]Provider, *ActivationStore, Charger) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ps := make([]Provider, len(r.providers))
 	copy(ps, r.providers)
-	return ps, r.activation, r.charger, r.pricer
+	return ps, r.activation, r.charger
 }
 
 // List returns every tool offered to scope, deduped by name under source
@@ -180,7 +158,7 @@ func (r *Registry) snapshot() ([]Provider, *ActivationStore, Charger, Pricer) {
 // is skipped (its tools are simply absent) — one failing source never blanks the
 // whole plane.
 func (r *Registry) List(ctx context.Context, scope Scope) []Tool {
-	providers, act, _, _ := r.snapshot()
+	providers, act, _ := r.snapshot()
 	winners := map[string]Tool{} // name -> winning tool
 	for _, p := range providers {
 		tools, err := p.List(ctx, scope)
@@ -209,7 +187,7 @@ func (r *Registry) List(ctx context.Context, scope Scope) []Tool {
 // resolve returns the winning tool + its owning provider for a name in scope,
 // honoring precedence. ok=false ⇒ ErrUnknownTool.
 func (r *Registry) resolve(ctx context.Context, scope Scope, name string) (Tool, Provider, bool) {
-	providers, _, _, _ := r.snapshot()
+	providers, _, _ := r.snapshot()
 	var best Tool
 	var bestP Provider
 	found := false
@@ -237,8 +215,10 @@ func (r *Registry) resolve(ctx context.Context, scope Scope, name string) (Tool,
 //
 //  1. resolve the winning tool (precedence) — ErrUnknownTool if none.
 //  2. ACTIVATION gate — the tool MUST be activated for (org,project) or ErrNotActivated (403).
-//  3. PRICE gate — a priced tool settles through the x402 Charger seam or fails
-//     closed (ErrChargerUnset / ErrPaymentRequired). A paid tool is never free.
+//  3. PAYMENT gate — every call is offered to the x402 Charger seam, which owns the
+//     price table: a free tool settles for nothing, a priced one settles or the call
+//     fails closed (ErrPaymentRequired). With NO Charger wired, a tool that DECLARES
+//     a price fails closed (ErrChargerUnset) — a paid tool is never served free.
 //  4. dispatch to the winning source's provider, bound to the principal.
 //
 // The scope is the principal's own (org, project) — a caller can only ever dispatch
@@ -249,37 +229,21 @@ func (r *Registry) Dispatch(ctx context.Context, p Principal, name string, args 
 	if !ok {
 		return nil, ErrUnknownTool
 	}
-	_, act, charger, pricer := r.snapshot()
+	_, act, charger := r.snapshot()
 	if !act.IsActivated(ctx, p.Org, p.Project, name) {
 		return nil, ErrNotActivated
 	}
-	// Price: a provider-set intrinsic price wins; otherwise the marketplace Pricer
-	// seam supplies a published listing's price + recipient wallet.
-	price := tool.Price
-	if price == nil && pricer != nil {
-		price = pricer.PriceFor(ctx, scope, name)
-	}
-	if price != nil && price.AmountCents > 0 {
-		if charger == nil {
+	if charger == nil {
+		// No payment rail in this process. A tool that declares a price is refused;
+		// one that declares none is free by its own statement, not by our silence.
+		if tool.Price != nil && tool.Price.Amount.Sign() > 0 {
 			return nil, ErrChargerUnset
 		}
-		payer := p.Owner
-		if payer == "" {
-			payer = p.Org
+	} else if err := charger.Charge(ctx, name); err != nil {
+		if errors.Is(err, ErrPaymentRequired) {
+			return nil, ErrPaymentRequired
 		}
-		cur := price.Currency
-		if cur == "" {
-			cur = "USD"
-		}
-		if err := charger.Charge(ctx, Charge{
-			Payer: payer, Project: p.Project, Tool: name,
-			Recipient: price.Recipient, Currency: cur, Cents: price.AmountCents,
-		}); err != nil {
-			if errors.Is(err, ErrPaymentRequired) {
-				return nil, ErrPaymentRequired
-			}
-			return nil, err
-		}
+		return nil, err
 	}
 	return provider.Dispatch(ctx, p, name, args)
 }

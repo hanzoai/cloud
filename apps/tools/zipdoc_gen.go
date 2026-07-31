@@ -69,7 +69,11 @@ func init() {
 	zip.Describe("GET /v1/skills", zip.Doc{
 		Description: "ListSkills lists the skills the caller's org can reach — the brand's embedded\ncatalogue plus the org's own authored ones — with each one's activation flag.\nA skill is discovery and activation metadata attached to an agent, never called\ndirectly, so every entry here is non-dispatchable. It is GET /v1/tools narrowed\nto one source, not a second store: a name a caller sees here is the same entry,\nwith the same activation state, that discovery reports.",
 		Fields: map[string]string{
-			"Price.amountCents":     "AmountCents is what ONE call costs, in minor units of Currency.",
+			"Currency.Code":         "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
+			"Currency.Decimals":     "fractional digits of the smallest unit",
+			"Currency.Numeric":      "ISO-4217 numeric code (\"840\"); \"\" for custom",
+			"Currency.Symbol":       "display grapheme (\"$\", \"€\", \"₿\")",
+			"Price.amount":          "Amount is what ONE call costs, EXACTLY: an 18-decimal USD value, so a\nper-call price of $0.0025 is $0.0025 and not a cent-floored zero. Cents\ncannot hold a per-token price, and a tool plane is where per-token prices\nlive.",
 			"Price.currency":        "Currency is the ISO 4217 code, e.g. \"USD\". Empty means USD.",
 			"Price.recipient":       "Recipient is the payout wallet ref the marketplace seller is paid at.",
 			"Tool.activated":        "Activated is filled by the registry from the activation store for the\nrequesting (org,project); providers leave it zero. An unactivated tool is\ndiscoverable but refused 403 at dispatch.",
@@ -99,7 +103,11 @@ func init() {
 	zip.Describe("GET /v1/tools", zip.Doc{
 		Description: "ListTools lists every tool the caller's org and project can reach, from every\nsource, each flagged with whether it is activated. This is the discovery\nsurface: one flat set of names spanning connector actions, user functions,\nzap-service routes, agents, skills and the org's own external MCP servers,\ndeduplicated by name so the highest-precedence source wins a collision. It\nlists; it does not call — dispatch is POST /v1/tools/call.",
 		Fields: map[string]string{
-			"Price.amountCents":   "AmountCents is what ONE call costs, in minor units of Currency.",
+			"Currency.Code":       "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
+			"Currency.Decimals":   "fractional digits of the smallest unit",
+			"Currency.Numeric":    "ISO-4217 numeric code (\"840\"); \"\" for custom",
+			"Currency.Symbol":     "display grapheme (\"$\", \"€\", \"₿\")",
+			"Price.amount":        "Amount is what ONE call costs, EXACTLY: an 18-decimal USD value, so a\nper-call price of $0.0025 is $0.0025 and not a cent-floored zero. Cents\ncannot hold a per-token price, and a tool plane is where per-token prices\nlive.",
 			"Price.currency":      "Currency is the ISO 4217 code, e.g. \"USD\". Empty means USD.",
 			"Price.recipient":     "Recipient is the payout wallet ref the marketplace seller is paid at.",
 			"Tool.activated":      "Activated is filled by the registry from the activation store for the\nrequesting (org,project); providers leave it zero. An unactivated tool is\ndiscoverable but refused 403 at dispatch.",
