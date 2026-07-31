@@ -1,5 +1,7 @@
-// Package sync is data sync (/v1/sync): a Sync links two endpoints and the engine
-// reconciles them — on a webhook, on a schedule, or on an explicit run. Git
+// Package sync is data sync: link two endpoints and keep them in step, on a
+// webhook, on a schedule, or on demand.
+//
+// A Sync (/v1/sync) names the two endpoints and the engine reconciles them. Git
 // (GitHub/GitLab ⇆ native Hanzo Git) is the one provider registered today; another
 // kind is another Provider, with nothing in the engine to change.
 //

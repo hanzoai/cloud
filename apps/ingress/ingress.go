@@ -1,5 +1,8 @@
-// Package ingress is cloud's embedded, runtime-configurable edge — the
-// /v1/ingress subsystem. It makes the ONE hanzoai/cloud binary able to BE the
+// Package ingress is your front door: automatic TLS certificates and hostname
+// routing to any backend, changed live.
+//
+// It is cloud's embedded, runtime-configurable edge, controlled at /v1/ingress.
+// It makes the ONE hanzoai/cloud binary able to BE the
 // fleet edge: terminate TLS, run ACME (Let's Encrypt), and reverse-proxy by Host
 // to upstreams — all configured LIVE over an API, with NO static config file
 // (routes.yaml) and NO restart to change a route.

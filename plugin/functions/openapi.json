@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package functions mounts the Hanzo Cloud /v1/functions surface: a per-org serverless function registry.",
+    "description": "Package functions is your serverless code: publish it, call it over HTTP, watch every run and what it cost.",
     "version": "v1"
   },
   "servers": [

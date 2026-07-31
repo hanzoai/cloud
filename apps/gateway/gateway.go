@@ -1,5 +1,8 @@
-// Package gateway is the /v1/gateway subsystem: the RUNTIME config plane for
-// the cloud edge ("gateway role"). It serves GET/PUT over the SAME
+// Package gateway is live control of your API edge: CORS, rate limits, cache
+// TTL and allowed methods, changed without a redeploy.
+//
+// It is the runtime config plane for the cloud edge ("gateway role"), served at
+// /v1/gateway. It serves GET/PUT over the SAME
 // edge.Store the EdgeCORS/EdgeRateLimit middleware and ScopeRateLimit
 // read live, so an operator retunes the CORS allowlist, the pre-auth per-IP flood
 // cap, or a tenant's authenticated rate ceiling with NO redeploy — replacing the

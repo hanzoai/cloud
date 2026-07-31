@@ -1,6 +1,9 @@
-// Package visor mounts the Hanzo Cloud COMPUTE surface: the tenant's machines,
-// GPUs and DOKS clusters, served as clean REST off the unified cloud binary and
-// fronting Visor (the cloud OS at visor.hanzo.svc that OWNS compute). It exists so
+// Package visor is the compute you rent from Hanzo: machines, GPUs and clusters
+// — launch one, resize it, tear it down.
+//
+// It serves the tenant's machines, GPUs and DOKS clusters as clean REST off the
+// unified cloud binary, fronting Visor (the cloud OS at visor.hanzo.svc that
+// OWNS compute). It exists so
 // the console's Machines / GPUs / Clusters pages read real per-org compute from
 // ONE place (api.hanzo.ai/v1/*) instead of the god-mode /paas admin proxy that
 // 501s until a service token is wired.

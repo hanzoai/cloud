@@ -1,7 +1,8 @@
-// Package datastore holds cloud's one connection to the PLATFORM's analytics
-// warehouse — the shared columnar store behind the usage, observability and
-// billing ledgers, which every read and write of a warehouse table in this
-// binary goes through. It is NOT the tenant-facing Hanzo Datastore product
+// Package datastore is cloud's one connection to the analytics warehouse — the
+// columnar store behind usage, observability and billing.
+//
+// Every read and write of a warehouse table in this
+// binary goes through it. It is NOT the tenant-facing Hanzo Datastore product
 // (apps/provisioning's `datastore` kind at /v1/datastore, a dedicated instance
 // per org); one word, two things, and this is the platform's own handle.
 //

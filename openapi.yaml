@@ -50118,9 +50118,8 @@ tags:
     and a tree of connector actions — and this runs them durably, on a schedule or
     a webhook, and keeps their run history.'
   name: automations
-- description: 'Package base is managed Hanzo Base (/v1/base, /v1/collections): a
-    hosted app engine per org — collections, records, rules, IAM-validated auth —
-    plus the platform''s public waitlist at /v1/waitlist.'
+- description: 'Package base is managed Hanzo Base: a hosted backend for your app
+    — collections, records, access rules and sign-in.'
   name: base
 - description: 'Package benchmark mounts the Hanzo Cloud /v1/benchmark/* surface:
     the native benchmark ARENA — run the top-N canonical public benchmarks against
@@ -50155,17 +50154,12 @@ tags:
 - description: 'Package catalog is the CROSS-ORG discovery lens: one place to find
     every project, app and site the fleet has built, whichever org built it.'
   name: catalog
-- description: 'Package channels is the /v1/channels transport plane: the portable
-    chat envelope, per-org access policy (pairing / allowlist / open), a durable inbox,
-    and outbound send across the connected chat transports (Discord, Slack, Teams,
-    Telegram).'
+- description: Package channels is one inbox for the chat apps you connect — Discord,
+    Slack, Teams, Telegram.
   name: channels
 - name: cloud
-- description: Package cloudflare is the per-org Cloudflare asset plane for the unified
-    Hanzo Cloud binary — the first-class /v1/cloudflare/* surface (sibling of /v1/dns
-    and /v1/domain) that manages an org's Cloudflare Zones/Analytics, Pages, Workers,
-    Workers AI, R2, KV, and D1 through the SAME per-org, KMS-sealed API token the
-    org connected via apps/integrations.
+- description: 'Package cloudflare is your Cloudflare account, managed from Hanzo:
+    zones, Pages, Workers, Workers AI, R2, KV and D1.'
   name: cloudflare
 - name: clusters
 - description: 'Package code mounts the Hanzo Cloud /v1/code/* surface: a native,
@@ -50203,24 +50197,20 @@ tags:
     binary as an in-process subsystem (HIP-0106, task #101 / epic #96).'
   name: dataroom
 - name: datastore
-- description: 'Package deploy is Hanzo CD: the GitOps plane at /v1/deploy — observe
-    the operator-managed fleet (applications, resource tree, per-object health, live
-    diff, logs), and reconcile it (sync, rollback, git → cluster with prune-safe self-heal).'
+- description: 'Package deploy is Hanzo CD: see what each app is running, sync it,
+    and roll back a bad release.'
   name: deploy
 - description: 'Package destinations is server-side conversion forwarding: connect
     Google Analytics 4, Meta, X, LinkedIn, TikTok, Reddit, PostHog or Umami, and every
     event the org captures is translated into that platform''s own conversion schema
     and sent from the server, with PII hashed on the way out.'
   name: destinations
-- description: Package dns forwards the console's DNS dashboard traffic (/v1/dns/*)
-    to the Hanzo DNS control plane (dns/plugin/hanzodns), which owns the authoritative
-    zone/record store.
+- description: 'Package dns is your DNS records: the zones and records behind every
+    name you point at Hanzo.'
   name: dns
 - name: docdb
-- description: 'Package domain is Hanzo Domains — the DOMAIN-REGISTRATION product:
-    search a name, see its price (with Hanzo''s markup), buy it billed through the
-    customer''s prepaid wallet, and have it born pointing at Hanzo''s own authoritative
-    nameservers.'
+- description: 'Package domain is Hanzo Domains: search a name, see the price, buy
+    it from your prepaid wallet.'
   name: domain
 - name: download
 - name: edge
@@ -50243,8 +50233,8 @@ tags:
     per org.'
   name: evals
 - name: event
-- description: 'Package exec is the Code Interpreter: run a snippet in a sandbox,
-    and move the session''s files in and out.'
+- description: 'Package exec is the code interpreter: run a snippet in a sandbox and
+    move files in and out.'
   name: exec
 - description: 'Package experiments is cloud''s unified EXPERIMENT primitive: A/B
     testing as ONE value whatever the variant KIND is — a feature flag, an ad creative,
@@ -50260,15 +50250,14 @@ tags:
 - description: 'Package flow is Hanzo Flow: visual AI workflow orchestration — build,
     manage, and run agent workflows on the unified /v1 plane.'
   name: flow
-- description: 'Package framework is the DocType surface (/v1/framework): define a
-    metadata schema, then list, create, submit and cancel documents against it — per
-    org, with the engine''s own permission calculus deciding every access.'
+- description: 'Package framework is document types you define: describe a record
+    once, then create, list, submit and cancel documents against it.'
   name: framework
-- description: 'Package functions mounts the Hanzo Cloud /v1/functions surface: a
-    per-org serverless function registry.'
+- description: 'Package functions is your serverless code: publish it, call it over
+    HTTP, watch every run and what it cost.'
   name: functions
-- description: 'Package gateway is the /v1/gateway subsystem: the RUNTIME config plane
-    for the cloud edge ("gateway role").'
+- description: 'Package gateway is live control of your API edge: CORS, rate limits,
+    cache TTL and allowed methods, changed without a redeploy.'
   name: gateway
 - description: 'Package git is Git hosting for your org: create repos, clone, push,
     and see what they cost.'
@@ -50289,8 +50278,8 @@ tags:
     multi-tenant full-text index on Base/SQLite that speaks the Meilisearch REST dialect.'
   name: index
 - name: indexers
-- description: Package ingress is cloud's embedded, runtime-configurable edge — the
-    /v1/ingress subsystem.
+- description: 'Package ingress is your front door: automatic TLS certificates and
+    hostname routing to any backend, changed live.'
   name: ingress
 - name: insights
 - description: Package integrations is how your org connects third-party accounts
@@ -50318,19 +50307,17 @@ tags:
     from the IAM roster, promo codes redeemed as wallet credit, and the per-org suppression
     list every send passes through.'
   name: marketing
-- description: 'Package marketplace is the /v1/marketplace surface: listing, discovery,
-    and install of tools + agents per org/project, plus monetized listings that declare
-    a price + recipient wallet and enforce through the x402 seam.'
+- description: 'Package marketplace is the shop for tools and agents: browse, install
+    into your project, publish your own free or priced.'
   name: marketplace
 - name: mcp
-- description: 'Package meet is the CONTROL plane for the virtual office: it decides
-    who may join which room, and says so by minting a short-lived LiveKit access token.'
+- description: 'Package meet is the virtual office: it decides who may join a room
+    and mints the short-lived token that lets them in.'
   name: meet
 - name: mesh
 - name: metrics
-- description: 'Package ml mounts the Hanzo Cloud /v1/ml/* and /v1/train/* surfaces:
-    a thin, tenant-scoped bridge that turns three Kubeflow-family CustomResources
-    into a small REST API.'
+- description: 'Package ml is model serving and training: deploy a model behind an
+    endpoint, run a training job, tune it with experiments.'
   name: ml
 - description: 'Package mq is Hanzo MQ, the managed message-queue product: org-scoped
     administration of durable JetStream queues on the platform message plane — streams,
@@ -50338,10 +50325,8 @@ tags:
     apps/pubsub embeds.'
   name: mq
 - name: networks
-- description: 'Package notify is the platform''s transactional sender: POST /v1/notify/send
-    delivers one message by email or SMS through the caller org''s OWN KMS-held provider
-    credential, and notify.Send (send.go) is that same rail for in-process callers
-    — one sender, never a second provider path.'
+- description: Package notify is transactional email and SMS, sent through your org's
+    own provider credential.
   name: notify
 - description: 'Package o11y is your logs, metrics and traces: ship them in, query
     them, chart them.'
@@ -50350,14 +50335,11 @@ tags:
 - name: orgs
 - name: pipelines
 - name: plans
-- description: 'Package platform is Hanzo PaaS: the per-org container platform at
-    /v1/platform — projects, applications, builds, deploys, environments, releases,
-    logs and verified custom domains, each app reconciled into the caller''s own tenant-<org>
-    Kubernetes namespace.'
+- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
+    namespace — builds, releases, environments, logs, custom domains.'
   name: platform
-- description: 'Package plugin is the control plane for the host''s zip-native plugins:
-    what each host is running, and the operations that change it — enable, disable,
-    reload, and pin to (or roll back to) a named version.'
+- description: 'Package plugin is what each host is running, and how to change it:
+    enable, disable, reload, or pin a service to a version.'
   name: plugins
 - description: Package prefs is your own settings — theme, density, pinned nav — following
     you across every Hanzo app.
@@ -50366,9 +50348,8 @@ tags:
     tier, tool and hosting plan costs.'
   name: pricing
 - name: pricing-policy
-- description: 'Package projects is the Hanzo Cloud projects control plane: the ONE
-    org-scoped store of buildable/deployable sites, shared by every surface that shows
-    a user''s projects.'
+- description: 'Package projects is where your sites live: create one, deploy a build,
+    roll back to any release.'
   name: projects
 - description: 'Package prompts mounts the Hanzo Cloud /v1/prompts surface: a per-org,
     versioned prompt library.'
@@ -50415,12 +50396,11 @@ tags:
   name: social
 - name: sql
 - name: store
-- description: 'Package sync is data sync (/v1/sync): a Sync links two endpoints and
-    the engine reconciles them — on a webhook, on a schedule, or on an explicit run.'
+- description: 'Package sync is data sync: link two endpoints and keep them in step,
+    on a webhook, on a schedule, or on demand.'
   name: sync
-- description: Package tasks mounts the Hanzo Tasks HTTP + UI surface natively onto
-    the unified cloud binary per HIP-0106 — the follow-up named in cloud's durable.go
-    ("consolidating that surface into cloud").
+- description: 'Package tasks is Hanzo Tasks: durable workflows that survive a crash,
+    with every run visible and replayable.'
   name: tasks
 - description: 'Package team is your org''s shared workspace: documents edited together,
     files, seats, and agents as teammates.'
@@ -50428,11 +50408,8 @@ tags:
 - description: 'Package templates mounts /v1/templates — the Hanzo starter-kit gallery,
     in TWO layers that never mix:'
   name: templates
-- description: 'Package tools is the ONE tool plane for Hanzo Cloud''s PER-TENANT
-    capabilities: a single registry where every callable thing an ORG owns — a connector
-    action, a user function, a zap service route, an agent, an authored skill, or
-    a tool on the org''s own external MCP server — is a Tool with a Source, a JSON-Schema,
-    a per-(org,project) activation state, and an optional price.'
+- description: 'Package tools is everything your org can call, in one list: connector
+    actions, functions, agents, skills and your own MCP servers.'
   name: tools
 - name: traces
 - description: 'Package tracker is your org''s issue tracker: projects, issues, and
@@ -50446,18 +50423,16 @@ tags:
 - description: Package usage is what your org ran and what it cost, broken down per
     account.
   name: usage
-- description: 'Package validators mounts the Hanzo Cloud /v1/validators/* surface:
-    the "click → provision node + queue registration" pipeline behind GDA/SDM validator
-    onboarding on lux.cloud.'
+- description: 'Package validators is one-click validator onboarding: prove your Genesis
+    NFT, get a node provisioned, queue its registration.'
   name: validators
 - name: vector
 - name: vpcs
 - description: 'Package wallets is blockchain key custody: create wallets, rotate
     their keys, and sign with them.'
   name: wallets
-- description: 'Package webhooks is the platform-global webhook layer (HIP-0106):
-    ONE registry plus ONE dispatcher that delivers ANY event on the platform bus to
-    org-registered HTTP subscribers.'
+- description: 'Package webhooks is how your app hears about events: register an endpoint,
+    pick the events, get each one delivered and signed.'
   name: webhooks
 - description: Package websearch exposes Hanzo-native Web Search + Scrape on the unified
     cloud-api /v1 plane, so hanzo.chat's web_search agent tool runs entirely on Hanzo

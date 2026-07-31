@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package visor mounts the Hanzo Cloud COMPUTE surface: the tenant's machines, GPUs and DOKS clusters, served as clean REST off the unified cloud binary and fronting Visor (the cloud OS at visor.hanzo.svc that OWNS compute).",
+    "description": "Package visor is the compute you rent from Hanzo: machines, GPUs and clusters — launch one, resize it, tear it down.",
     "version": "v1"
   },
   "servers": [

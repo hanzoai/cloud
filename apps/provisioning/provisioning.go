@@ -1,5 +1,7 @@
-// Package provisioning is the Hanzo Cloud provisioning control plane. It
-// turns "create a database" into a real logical resource inside an
+// Package provisioning is one-click data add-ons: a SQL, key-value, document,
+// vector, search or object store, wired straight into your app.
+//
+// It turns "create a database" into a real logical resource inside an
 // already-live, shared product backend, per the unified /v1 binary (HIP-0106).
 //
 // One HTTP surface, seven kinds, two strategies:
