@@ -259,6 +259,14 @@ func (c *Client) PutSecret(ctx context.Context, ref string, value []byte) error 
 	return c.Put(path, name, env, value)
 }
 
+// DeleteSecret is the KMSClient shape of Delete: it forgets one secret addressed
+// by a flat ref, which is how a peer on the internal plane names the same record
+// this process holds by (path, name, env).
+func (c *Client) DeleteSecret(ctx context.Context, ref string) error {
+	path, name, env := parseRef(ref)
+	return c.Delete(path, name, env)
+}
+
 // Sign is threshold-MPC-backed in luxfi/kms and cloud does not co-host the MPC
 // cluster, so it fails closed with ErrSignUnavailable unless an MPC backend is
 // explicitly configured. It NEVER returns a fabricated signature.
