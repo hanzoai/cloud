@@ -23,7 +23,7 @@ package admin
 // (datastore.Query), no second connection.
 //
 // Signals, each from its canonical table in the one datastore:
-//   - LLM generations → o11y_ai.observations : generations, cost (USD), latency
+//   - LLM generations → console.observations : generations, cost (USD), latency
 //                                                (fleet-wide; honest-empty until the
 //                                                O11yAI ingest lands rows)
 //   - Per-model usage → hanzo.cloud_usage      : requests, tokens, cost per model
@@ -66,11 +66,17 @@ import (
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ai gateway owns
-// hanzo.cloud_usage, O11yAI owns o11y_ai.observations, and the eval telemetry
+// hanzo.cloud_usage, O11yAI owns the AI observations, and the eval telemetry
 // store (clients/eval) owns hanzo.eval_traces / hanzo.eval_scores.
+//
+// Same correction as apps/admin/o11y.go's o11yAIObs, which see for the full
+// reasoning: `o11y_ai` is not a database that exists, so every AI number on this
+// board read zero while 8,867 observations sat unread in `console`. Both consts
+// name the SAME table and must move together — they are one fact stated twice,
+// which is why they drifted into pointing at nothing without either being noticed.
 const (
 	aimUsageTable = "hanzo.cloud_usage"
-	aimO11yAIObs  = "o11y_ai.observations"
+	aimO11yAIObs  = "console.observations"
 	aimEvalTraces = "hanzo.eval_traces"
 	aimEvalScores = "hanzo.eval_scores"
 	aimTopN       = 12
@@ -200,7 +206,7 @@ func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
 		return &aimetricsOut{Status: core.OK, Data: &payload}, nil
 	}
 
-	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, o11y_ai.start_time, eval_*.ts
+	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, observations.start_time, eval_*.ts
 	interval := o11yBucket(rangeLabel)
 
 	// ── O11yAI generations (fleet) — honest-empty until ingest lands rows ──
