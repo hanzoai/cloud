@@ -100,7 +100,7 @@ func TestForkCreatesProjectFromTemplate(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("fork synapse want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p projectsProject
 	if err := json.Unmarshal(body, &p); err != nil {
 		t.Fatalf("fork json: %v (%s)", err, body)
 	}
@@ -149,7 +149,7 @@ func TestForkVariantSelection(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("fork prism/react want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p projectsProject
 	_ = json.Unmarshal(body, &p)
 	if p.Framework != "vite" {
 		t.Fatalf("prism/react framework want vite (Vite over React), got %q", p.Framework)
@@ -205,7 +205,7 @@ func TestForkFrameworkMappingAndOverrides(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("fork saas-landing want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p projectsProject
 	_ = json.Unmarshal(body, &p)
 	if p.Framework != "next" {
 		t.Fatalf("saas-landing framework want next, got %q", p.Framework)
@@ -290,7 +290,7 @@ func TestForkPublishedProjectRecordsLineage(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("fork published example want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p projectsProject
 	if err := json.Unmarshal(body, &p); err != nil {
 		t.Fatalf("fork json: %v (%s)", err, body)
 	}
@@ -329,7 +329,7 @@ func TestForkTemplateRecordsLineage(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("fork want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p projectsProject
 	_ = json.Unmarshal(body, &p)
 	if p.ForkedFrom != "synapse" {
 		t.Fatalf("template lineage = %q, want synapse", p.ForkedFrom)
@@ -359,7 +359,7 @@ func TestForkPrivateTemplateIsOwnerOnly(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("owner fork of own template want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p projectsProject
 	_ = json.Unmarshal(body, &p)
 	if p.Org != "acme" || p.Framework != "vite" || p.Repo.URL != "https://git.acme.example/portal" {
 		t.Fatalf("fork did not seed from the private template: org=%s framework=%s repo=%s", p.Org, p.Framework, p.Repo.URL)
@@ -387,7 +387,7 @@ func TestPublishingIsUngated(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p projectsProject
 	_ = json.Unmarshal(body, &p)
 	if p.Visibility != Public {
 		t.Fatalf("a project must default to public, got %q (%s)", p.Visibility, body)
@@ -431,13 +431,13 @@ func TestModerationIsAdminOnlyAndSubtractive(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("tenant patch want 200, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p projectsProject
 	_ = json.Unmarshal(body, &p)
 	if p.Hidden {
 		t.Fatalf("a tenant must not be able to set moderation state: %s", body)
 	}
 
-	adminPatch := func(t *testing.T, in map[string]any) projectView {
+	adminPatch := func(t *testing.T, in map[string]any) projectsProject {
 		t.Helper()
 		b, _ := json.Marshal(in)
 		req := httptest.NewRequest(http.MethodPatch, "/v1/projects/spam", bytes.NewReader(b))
@@ -454,7 +454,7 @@ func TestModerationIsAdminOnlyAndSubtractive(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("admin patch want 200, got %d (%s)", resp.StatusCode, rb)
 		}
-		var out projectView
+		var out projectsProject
 		_ = json.Unmarshal(rb, &out)
 		return out
 	}
@@ -529,7 +529,7 @@ func TestCreditIsUngated(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
-	var p projectView
+	var p projectsProject
 	_ = json.Unmarshal(body, &p)
 	if p.Upstream != "UI8 — Fitness Pro: Website UI Kit" || p.License != "UI8 commercial licence" {
 		t.Fatalf("a publisher must be able to credit its upstream: %s", body)

@@ -60,7 +60,7 @@ func TestGrantIsScopedToOnePrefixAndExpires(t *testing.T) {
 	b := openBlobStore()
 
 	now := time.Unix(1_700_000_000, 0).UTC()
-	g, err := mintUploadGrant(context.Background(), b, "acme/site", now)
+	g, err := mintGrant(context.Background(), b, "acme/site", now)
 	if err != nil {
 		t.Fatalf("mint: %v", err)
 	}
@@ -102,11 +102,11 @@ func TestGrantsDifferPerPrefix(t *testing.T) {
 	b := openBlobStore()
 	now := time.Unix(1_700_000_000, 0).UTC()
 
-	a, err := mintUploadGrant(context.Background(), b, "acme/site", now)
+	a, err := mintGrant(context.Background(), b, "acme/site", now)
 	if err != nil || a == nil {
 		t.Fatalf("mint a: %v", err)
 	}
-	c, err := mintUploadGrant(context.Background(), b, "other/site", now)
+	c, err := mintGrant(context.Background(), b, "other/site", now)
 	if err != nil || c == nil {
 		t.Fatalf("mint c: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestGrantAbsentWhenPresignUnconfigured(t *testing.T) {
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "")
 	b := openBlobStore()
-	g, err := mintUploadGrant(context.Background(), b, "acme/site", time.Now())
+	g, err := mintGrant(context.Background(), b, "acme/site", time.Now())
 	if err != nil {
 		t.Fatalf("unconfigured presign returned an error: %v", err)
 	}
