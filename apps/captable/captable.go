@@ -1,9 +1,10 @@
-// Package captable is the org's cap table: stakeholders, share classes, share
-// certificates and transfers, option grants and equity plans, SAFEs and
-// convertible notes, priced rounds and their investments, and the summary that
-// totals outstanding and fully-diluted ownership from them.
+// Package captable is your cap table: stakeholders, share classes, grants, SAFEs,
+// rounds, and who owns what.
 //
-// It runs per tenant on Base/SQLite in the unified cloud binary (HIP-0106).
+// In full: stakeholders, share classes, share certificates and transfers, option
+// grants and equity plans, SAFEs and convertible notes, priced rounds and their
+// investments, and the summary that totals outstanding and fully-diluted ownership
+// from them. It runs per tenant on Base/SQLite in the unified cloud binary (HIP-0106).
 //
 // WRAP, DON'T REWRITE — the read-WRITE variant. Where apps/plan + apps/pricing
 // host a read-only @hanzo catalog in goja, captable hosts the tRPC

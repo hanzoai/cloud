@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package books is double-entry accounting at /v1/books: a fixed chart of accounts, an append-only general ledger, bank feeds with reconciliation, receipt scanning, and the trial-balance / P\u0026L / balance-sheet reports that prove the books balance.",
+    "description": "Package books is double-entry accounting: chart of accounts, ledger, bank reconciliation, and the reports that prove the books balance.",
     "version": "v1"
   },
   "servers": [

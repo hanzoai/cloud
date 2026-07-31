@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package wallets is blockchain key custody at /v1/wallets/*: create an account and its wallets, rotate their key material, and sign with them — over one custody seam with FOUR interchangeable signing backends, selected PER WALLET by its Kind.",
+    "description": "Package wallets is blockchain key custody: create wallets, rotate their keys, and sign with them.",
     "version": "v1"
   },
   "servers": [

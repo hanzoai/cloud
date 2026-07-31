@@ -1,6 +1,9 @@
-// Package metering is the ONE way every Hanzo product meters usage to
-// commerce — the single billing source of truth — so that every product
-// (not only the LLM/cloud path) can be paid for.
+// Package metering is how any product charges for usage: check the balance before,
+// record the cost after.
+//
+// It is the ONE way every Hanzo product meters usage to commerce — the single
+// billing source of truth — so that every product (not only the LLM/cloud path)
+// can be paid for.
 //
 // It provides two operations, matching the proven cloud/gateway path:
 //
@@ -34,9 +37,8 @@
 // co-resident finance ledger is published, Authorize's balance read and Record's usage
 // debit resolve it DIRECTLY (a typed in-proc call, no HTTP); otherwise both fall back to
 // the commerce billing HTTP contract above. It pulls in NO commerce server internals, so
-// any product — Go service, CLI, or job — can meter through it. It lives in the commerce
-// repo because commerce is the billing source of truth; the package is the canonical
-// client for its billing API.
+// any product — Go service, CLI, or job — can meter through it: it is the canonical
+// client for commerce's billing API.
 package metering
 
 import (

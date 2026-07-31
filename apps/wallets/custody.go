@@ -1,6 +1,8 @@
-// Package wallets is blockchain key custody at /v1/wallets/*: create an account and
-// its wallets, rotate their key material, and sign with them — over one custody seam
-// with FOUR interchangeable signing backends, selected PER WALLET by its Kind.
+// Package wallets is blockchain key custody: create wallets, rotate their keys, and
+// sign with them.
+//
+// It serves /v1/wallets/* over one custody seam with FOUR interchangeable signing
+// backends, selected PER WALLET by its Kind.
 //
 // TOPOLOGY (HIP-0106). Custody composes the canonical Hanzo key services without
 // fusing either into the hot binary:

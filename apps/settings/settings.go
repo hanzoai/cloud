@@ -1,8 +1,10 @@
-// Package settings is the per-org, per-product configuration plane for the unified
-// Hanzo Cloud binary: the /v1/settings/:product surface behind every product's
-// detail view in console.hanzo.ai (#59). It lets an org read and edit a product's
-// configuration, backed by a durable per-tenant SQLite store with KMS custody for
-// any secret-typed field.
+// Package settings is how an org configures each product it uses, secret fields
+// included.
+//
+// It is the per-org, per-product configuration plane for the unified Hanzo Cloud
+// binary: the /v1/settings/:product surface behind every product's detail view in
+// console.hanzo.ai (#59). Reads and writes are backed by a durable per-tenant SQLite
+// store with KMS custody for any secret-typed field.
 //
 // ONE settings engine, EVERY product. The console drives all products' Settings tab
 // through this single surface (product id → :product). There is no per-product

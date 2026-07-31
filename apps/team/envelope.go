@@ -1,7 +1,10 @@
-// Package team is Hanzo Team, the org's shared workspace: IAM sign-in and
-// workspace selection, the transactor WebSocket a workspace's documents ride,
-// collaborative editing on /collaborator, per-workspace files, the wallet page
-// with its plan + seats, and the org's agents projected in as bot members.
+// Package team is your org's shared workspace: documents edited together, files,
+// seats, and agents as teammates.
+//
+// It is Hanzo Team: IAM sign-in and workspace selection, the transactor WebSocket a
+// workspace's documents ride, collaborative editing on /collaborator, per-workspace
+// files, the wallet page with its plan + seats, and the org's agents projected in as
+// bot members.
 //
 // The published surface is the typed ops themselves (plugin/team/openapi.json) —
 // there is no second route table here to drift out of date.

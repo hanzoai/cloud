@@ -1,6 +1,7 @@
-// Package usage is the usage plane at /v1/usage: what an org ran, what it cost, and
-// the per-account breakdown, over one window grammar. It absorbed the account-usage
-// board from apps/link, which owns links and nothing usage. It is NOT the only usage
+// Package usage is what your org ran and what it cost, broken down per account.
+//
+// It serves /v1/usage over one window grammar, and absorbed the account-usage board
+// from apps/link, which owns links and nothing usage. It is NOT the only usage
 // address — billing serves the wallet's own /v1/billing/usage{,/accounts} and
 // /v1/finance/usage off the ledger — and the two answer different questions: this one
 // composes the categorized roll-up, billing reports the raw drain on the wallet.

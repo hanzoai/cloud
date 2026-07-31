@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package entitlements answers \"what may this org run\": what its plan GRANTS, and which of those products it has actually TURNED ON.",
+    "description": "Package entitlements is what your org may run: what the plan grants, and which of those products are switched on.",
     "version": "v1"
   },
   "servers": [

@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package sbom is the software bill of materials for container images: CI posts a
-// CycloneDX SBOM keyed by image digest, and /v1/sbom resolves an image's component
-// set back by digest or image ref.
+// Package sbom is what is inside a container image: every component, resolvable by
+// digest or image ref.
+//
+// CI posts a CycloneDX software bill of materials keyed by image digest, and
+// /v1/sbom resolves that component set back.
 //
 // GLOBAL BY DESIGN. Unlike the analytics lens (which is strictly per-org), an SBOM
 // belongs to an image DIGEST, not a tenant — the digest is content-addressed, so

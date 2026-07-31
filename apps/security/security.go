@@ -1,6 +1,8 @@
-// Package security is the code-security scan surface (/v1/security): submit
-// source files, the pure detect engine finds hardcoded secrets, and findings
-// persist masked and fingerprinted — never the raw secret.
+// Package security is secret scanning for your code: submit sources, get findings,
+// masked never raw.
+//
+// It serves /v1/security: the pure detect engine finds hardcoded secrets, and
+// findings persist masked and fingerprinted — never the raw secret.
 package security
 
 import (
