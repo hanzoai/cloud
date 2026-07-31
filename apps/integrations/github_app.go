@@ -118,22 +118,63 @@ func (g *ghAppState) installationToken(ctx context.Context, id int64) (string, e
 }
 
 // InstallationToken mints a fresh short-lived GitHub App installation token for
-// org's connected installation. Fails closed (error, never a value) when GitHub is
-// not connected for org or the App creds are absent. Called by the git object plane
-// (outbound mirror) and the sync handlers below.
-func InstallationToken(ctx context.Context, org string) (string, error) {
+// one of org's connected GitHub accounts. Fails closed (error, never a value)
+// when that account is not connected or the App creds are absent. Called by the
+// git object plane (outbound mirror) and the sync handlers below.
+//
+// The owner is required because a GitHub App is installed PER ACCOUNT: an org
+// that owns hanzoai, hanzo-apps and hanzo-docs holds three installations, and a
+// token minted for one grants nothing on the others. An empty owner selects the
+// org's single connection when it has exactly one, which is what a caller with
+// no account in hand can correctly mean; with several it is ambiguous and fails
+// rather than guessing.
+func InstallationToken(ctx context.Context, org, owner string) (string, error) {
 	if mounted == nil {
 		return "", fmt.Errorf("integrations: not mounted")
 	}
-	conn, ok := ConnectionFor(org, "github")
-	if !ok {
-		return "", fmt.Errorf("integrations: github not connected for org")
-	}
-	id, err := strconv.ParseInt(strings.TrimSpace(conn.ExternalID), 10, 64)
+	conn, err := githubConnection(org, owner)
 	if err != nil {
+		return "", err
+	}
+	id, perr := strconv.ParseInt(strings.TrimSpace(conn.ExternalID), 10, 64)
+	if perr != nil {
 		return "", fmt.Errorf("integrations: invalid github installation id")
 	}
 	return ghApp.installationToken(ctx, id)
+}
+
+// githubConnection resolves which of an org's GitHub accounts a call means.
+//
+// A named owner selects its own connection. When no connection carries that name
+// the org's SINGLE connection answers if it has exactly one: a row predating the
+// owner key, or one whose account was renamed on GitHub, still holds the right
+// installation, and refusing it would break a working mirror over a label. With
+// several accounts there is no such fallback — the name is then the only thing
+// distinguishing them, and guessing would mint a token for the wrong account.
+func githubConnection(org, owner string) (Connection, error) {
+	if owner != "" {
+		if conn, ok := ConnectionFor(org, "github", owner); ok {
+			return conn, nil
+		}
+		if conns := Connections(org, "github"); len(conns) == 1 {
+			return conns[0], nil
+		}
+		return Connection{}, fmt.Errorf("integrations: github account %q is not connected for this org", owner)
+	}
+	conns := Connections(org, "github")
+	switch len(conns) {
+	case 0:
+		return Connection{}, fmt.Errorf("integrations: github not connected for org")
+	case 1:
+		return conns[0], nil
+	default:
+		names := make([]string, 0, len(conns))
+		for _, c := range conns {
+			names = append(names, c.Owner)
+		}
+		return Connection{}, fmt.Errorf("integrations: this org has %d connected github accounts (%s); name the one to use",
+			len(conns), strings.Join(names, ", "))
+	}
 }
 
 // githubInstallationAccount fetches an installation's account login via the App JWT,
@@ -262,13 +303,9 @@ func (o ops) githubRepos(ctx context.Context, _ *noArgs) (*githubReposOut, error
 	if err != nil {
 		return nil, err
 	}
-	tok, herr := githubTokenForOrg(ctx, org)
-	if herr != nil {
-		return nil, herr
-	}
-	repos, err := installationRepos(ctx, tok)
+	repos, err := reachableRepos(ctx, org)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
+		return nil, err
 	}
 	names := make([]string, 0, len(repos))
 	for _, r := range repos {
@@ -325,7 +362,10 @@ type githubImportOut struct {
 }
 
 type githubImportItem struct {
-	Name     string
+	Name string
+	// Owner is the GitHub account the repo belongs to. Carried because the import
+	// mints a token per account, and a token from the wrong one cannot clone.
+	Owner    string
 	CloneURL string
 }
 
@@ -358,7 +398,8 @@ func selectImports(granted []githubRepo, repos []string, all bool) ([]githubImpo
 		default:
 			continue
 		}
-		items = append(items, githubImportItem{Name: r.Name, CloneURL: r.CloneURL})
+		owner, _, _ := splitFullName(r.FullName)
+		items = append(items, githubImportItem{Name: r.Name, Owner: owner, CloneURL: r.CloneURL})
 	}
 	for sel, full := range hits {
 		if len(full) > 1 {
@@ -389,13 +430,9 @@ func (o ops) githubImport(ctx context.Context, in *githubImportIn) (*githubImpor
 	if !in.All && len(in.Repos) == 0 {
 		return nil, zip.ErrBadRequest("provide repos[] or all:true")
 	}
-	tok, herr := githubTokenForOrg(ctx, org)
-	if herr != nil {
-		return nil, herr
-	}
-	granted, err := installationRepos(ctx, tok)
+	granted, err := reachableRepos(ctx, org)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
+		return nil, err
 	}
 	items, err := selectImports(granted, in.Repos, in.All)
 	if err != nil {
@@ -412,18 +449,64 @@ func (o ops) githubImport(ctx context.Context, in *githubImportIn) (*githubImpor
 // githubTokenForOrg resolves the org's installation token with honest HTTP errors:
 // 503 when the App is not configured, 409 when this org has not connected GitHub,
 // 502 when the mint itself fails.
-func githubTokenForOrg(ctx context.Context, org string) (string, error) {
+func githubTokenFor(ctx context.Context, org, owner string) (string, error) {
 	if !githubConfigured() {
 		return "", zip.Errorf(http.StatusServiceUnavailable, "github integration is not configured on this deployment")
 	}
-	if _, ok := ConnectionFor(org, "github"); !ok {
+	if len(Connections(org, "github")) == 0 {
 		return "", zip.Errorf(http.StatusConflict, "github is not connected for this organization")
 	}
-	tok, err := InstallationToken(ctx, org)
+	tok, err := InstallationToken(ctx, org, owner)
 	if err != nil {
 		return "", zip.Errorf(http.StatusBadGateway, "mint github installation token: %v", err)
 	}
 	return tok, nil
+}
+
+// grantedRepos lists every repository an org can reach, across ALL of its
+// connected GitHub accounts. Each account is a separate installation with its own
+// token, so this mints one per account and unions the results.
+//
+// A single account failing does not empty the list: its error is carried back so
+// a caller can report a partial view honestly, while the accounts that answered
+// still return their repositories. Losing every repo because one installation was
+// revoked would be worse than reporting the gap.
+func reachableRepos(ctx context.Context, org string) ([]githubRepo, error) {
+	conns := Connections(org, "github")
+	if len(conns) == 0 {
+		return nil, zip.Errorf(http.StatusConflict, "github is not connected for this organization")
+	}
+	if !githubConfigured() {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "github integration is not configured on this deployment")
+	}
+	var (
+		all      []githubRepo
+		failures []string
+	)
+	seen := map[string]bool{}
+	for _, c := range conns {
+		tok, err := InstallationToken(ctx, org, c.Owner)
+		if err != nil {
+			failures = append(failures, c.Owner)
+			continue
+		}
+		repos, err := installationRepos(ctx, tok)
+		if err != nil {
+			failures = append(failures, c.Owner)
+			continue
+		}
+		for _, r := range repos {
+			if seen[r.FullName] {
+				continue
+			}
+			seen[r.FullName] = true
+			all = append(all, r)
+		}
+	}
+	if len(all) == 0 && len(failures) > 0 {
+		return nil, zip.Errorf(http.StatusBadGateway, "list github repositories: every connected account failed (%s)", strings.Join(failures, ", "))
+	}
+	return all, nil
 }
 
 // ── bounded background import ─────────────────────────────────────────────────
@@ -472,7 +555,7 @@ func spawnImport(org string, items []githubImportItem) {
 				}()
 				rctx, rcancel := context.WithTimeout(ctx, importRepoTimeout)
 				defer rcancel()
-				tok, err := InstallationToken(rctx, org)
+				tok, err := InstallationToken(rctx, org, it.Owner)
 				if err != nil {
 					log.Warn("github import: token", "org", org, "repo", it.Name, "err", err)
 					return

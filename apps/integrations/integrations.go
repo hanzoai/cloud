@@ -894,7 +894,8 @@ func (o ops) verifyConn(ctx context.Context, in *providerRef) (*verifyOut, error
 	if p.Kind != apiKeyKind || p.Verify == nil || len(p.Secrets) == 0 {
 		return nil, zip.ErrBadRequest("verify is only supported for credential connectors")
 	}
-	_, found, err := s.State.store.Get(ctx, org, p.ID)
+	conns, err := s.State.store.ListFor(ctx, org, p.ID)
+	found := len(conns) > 0
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	}
@@ -1026,7 +1027,8 @@ func (o ops) disconnect(ctx context.Context, in *providerRef) (*disconnectOut, e
 		return nil, zip.ErrForbidden("disconnecting the " + p.ID + " connector requires org admin")
 	}
 
-	_, found, err := s.State.store.Get(ctx, org, p.ID)
+	conns, err := s.State.store.ListFor(ctx, org, p.ID)
+	found := len(conns) > 0
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	}
@@ -1064,9 +1066,16 @@ func providerViewFor(s *cloud.Service[state], ctx context.Context, org string, p
 		ID: p.ID, Name: p.Name, Description: p.Description, Category: p.Category,
 		Available: p.Configured(),
 	}
-	conn, found, err := s.State.store.Get(ctx, org, p.ID)
+	// A provider is connected when ANY of its accounts is. The first is the
+	// representative the card renders; ListFor is ordered by owner so it is stable.
+	conns, err := s.State.store.ListFor(ctx, org, p.ID)
 	if err != nil {
 		return providerView{}, err
+	}
+	found := len(conns) > 0
+	var conn Connection
+	if found {
+		conn = conns[0]
 	}
 	if found {
 		v.Connected = true
@@ -1263,8 +1272,8 @@ func Connected(ctx context.Context, org, provider string) bool {
 	if _, ok := s.State.providers[provider]; !ok {
 		return false
 	}
-	_, found, err := s.State.store.Get(ctx, org, provider)
-	return err == nil && found
+	conns, err := s.State.store.ListFor(ctx, org, provider)
+	return err == nil && len(conns) > 0
 }
 
 func tokenFor(s *cloud.Service[state], ctx context.Context, org, provider, name string) ([]byte, error) {
@@ -1274,11 +1283,11 @@ func tokenFor(s *cloud.Service[state], ctx context.Context, org, provider, name 
 	if _, ok := s.State.providers[provider]; !ok {
 		return nil, fmt.Errorf("integrations: unknown provider %q", provider)
 	}
-	_, found, err := s.State.store.Get(ctx, org, provider)
+	conns, err := s.State.store.ListFor(ctx, org, provider)
 	if err != nil {
 		return nil, err
 	}
-	if !found {
+	if len(conns) == 0 {
 		return nil, fmt.Errorf("integrations: %s not connected for org", provider)
 	}
 	if !kmsReady(s) {
@@ -1319,15 +1328,30 @@ func OrgForExternalID(provider, externalID string) (string, bool) {
 // domain-noun TYPE (used by SyncHook/WritebackHook, the store, and this return
 // value). The accessor is therefore `ConnectionFor` — the idiomatic Go name for
 // "the Connection for (org,provider)". The bridge calls integrations.ConnectionFor.
-func ConnectionFor(org, provider string) (Connection, bool) {
+func ConnectionFor(org, provider, owner string) (Connection, bool) {
 	if mounted == nil {
 		return Connection{}, false
 	}
-	conn, ok, err := mounted.State.store.Get(context.Background(), org, provider)
+	conn, ok, err := mounted.State.store.Get(context.Background(), org, provider, owner)
 	if err != nil || !ok {
 		return Connection{}, false
 	}
 	return conn, true
+}
+
+// Connections returns every account an org has connected for a provider, one per
+// owner. A caller that must reach ALL of an org's accounts iterates this rather
+// than naming one; a caller that already knows which account it means uses
+// ConnectionFor.
+func Connections(org, provider string) []Connection {
+	if mounted == nil {
+		return nil
+	}
+	conns, err := mounted.State.store.ListFor(context.Background(), org, provider)
+	if err != nil {
+		return nil
+	}
+	return conns
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────

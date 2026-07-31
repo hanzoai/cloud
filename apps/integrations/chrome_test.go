@@ -62,7 +62,7 @@ func TestChromeConnectSealsAndIsolates(t *testing.T) {
 		t.Fatalf("token must seal in acme's namespace, got %q ok=%v", got, ok)
 	}
 	// The connection row carries a non-secret device id, never the token.
-	conn, ok := ConnectionFor("acme", "chrome")
+	conn, ok := ConnectionFor("acme", "chrome", "")
 	if !ok || conn.AccountLabel != "Hanzo Browser Extension" {
 		t.Fatalf("connection metadata missing/wrong: %+v ok=%v", conn, ok)
 	}
@@ -90,7 +90,7 @@ func TestChromeRejectsMalformedTokenAndStoresNothing(t *testing.T) {
 	if _, ok := kmsSecret(t, kc, "acme", "chrome", apiKeySecret); ok {
 		t.Fatal("verify-before-store violated: a malformed token was sealed")
 	}
-	if _, ok := ConnectionFor("acme", "chrome"); ok {
+	if _, ok := ConnectionFor("acme", "chrome", ""); ok {
 		t.Fatal("verify-before-store violated: a malformed token created a row")
 	}
 }

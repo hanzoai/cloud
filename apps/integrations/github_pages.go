@@ -253,11 +253,10 @@ func grantedRepos(ctx context.Context, instID int64, token string) ([]githubRepo
 	return repos, nil
 }
 
-// installationID resolves the org's connected GitHub installation id — the grant-cache
-// key. githubTokenForOrg has already proven the connection exists (409 otherwise), so
-// this only re-reads the custodied id; a malformed id is an honest 502.
-func installationID(org string) (int64, error) {
-	conn, ok := ConnectionFor(org, "github")
+// installationID resolves one connected GitHub account's installation id — the
+// grant-cache key. A malformed id is an honest 502.
+func installationID(org, owner string) (int64, error) {
+	conn, ok := ConnectionFor(org, "github", owner)
 	if !ok {
 		return 0, zip.Errorf(http.StatusConflict, "github is not connected for this organization")
 	}
@@ -274,22 +273,39 @@ func installationID(org string) (int64, error) {
 // never the client). Fail-closed: an unknown or ungranted repo yields a 404 — an org
 // can never address a repo its installation was not granted, and the owner in the
 // GitHub API path is never taken from the request.
+// An org may have several GitHub accounts connected, each its own installation
+// with its own token, so this searches them in order and answers with the token
+// of the account that actually grants the repo — a token from one account is
+// useless against another. A name matching in no account is the same 404 as a
+// name that does not exist.
 func resolveGrantedRepo(ctx context.Context, org, repoName string) (pagesRepo, error) {
-	tok, herr := githubTokenForOrg(ctx, org)
-	if herr != nil {
-		return pagesRepo{}, herr
+	// Checked before the search: a deployment with no App credentials cannot reach
+	// ANY account, and answering "no such repo" would blame the caller for the
+	// deployment's missing configuration.
+	if !githubConfigured() {
+		return pagesRepo{}, zip.Errorf(http.StatusServiceUnavailable, "github integration is not configured on this deployment")
 	}
-	instID, herr := installationID(org)
-	if herr != nil {
-		return pagesRepo{}, herr
+	conns := Connections(org, "github")
+	if len(conns) == 0 {
+		return pagesRepo{}, zip.Errorf(http.StatusConflict, "github is not connected for this organization")
 	}
-	repos, err := grantedRepos(ctx, instID, tok)
-	if err != nil {
-		return pagesRepo{}, zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
-	}
-	for _, r := range repos {
-		if r.Name == repoName {
-			return pagesRepo{token: tok, fullName: r.FullName, defaultBranch: r.DefaultBranch}, nil
+	for _, c := range conns {
+		tok, herr := githubTokenFor(ctx, org, c.Owner)
+		if herr != nil {
+			continue // this account is unreachable; another may grant the repo
+		}
+		instID, herr := installationID(org, c.Owner)
+		if herr != nil {
+			continue
+		}
+		repos, err := grantedRepos(ctx, instID, tok)
+		if err != nil {
+			continue
+		}
+		for _, r := range repos {
+			if r.Name == repoName {
+				return pagesRepo{token: tok, fullName: r.FullName, defaultBranch: r.DefaultBranch}, nil
+			}
 		}
 	}
 	return pagesRepo{}, zip.Errorf(http.StatusNotFound, "repository is not granted to this organization's installation")

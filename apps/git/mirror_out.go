@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -136,7 +137,7 @@ func pushBranchToMirror(ctx context.Context, org, bareDir string, t MirrorTarget
 		"-c", "protocol.version=2", "-c", "credential.helper=",
 		"--git-dir="+bareDir, "push", t.URL, refspec)
 	return withMirrorSlot(ctx, func() error {
-		cmd, err := gitCmd(ctx, mirrorPushEnv(ctx, org, t.Host), args...)
+		cmd, err := gitCmd(ctx, mirrorPushEnv(ctx, org, t.Host, t.URL), args...)
 		if err != nil {
 			return err
 		}
@@ -162,14 +163,14 @@ func pushBranchToMirror(ctx context.Context, org, bareDir string, t MirrorTarget
 // instead of holding a slot; and — only for an allowlisted host with a configured
 // token — the credential via env-only http.extraHeader (presented with the host's
 // basic-auth username, mirrorBasicUser).
-func mirrorPushEnv(ctx context.Context, org, host string) []string {
+func mirrorPushEnv(ctx context.Context, org, host, target string) []string {
 	env := []string{"GIT_ALLOW_PROTOCOL=http:https"}
 	cfg := []string{
 		"http.followRedirects=false",
 		"http.lowSpeedLimit=1000", // if throughput stays under 1 KB/s ...
 		"http.lowSpeedTime=30",    // ... for 30s, git aborts the transfer
 	}
-	if hdr := outboundAuthHeader(ctx, org, host); hdr != "" {
+	if hdr := outboundAuthHeader(ctx, org, host, target); hdr != "" {
 		cfg = append(cfg, "http.extraHeader=Authorization: Basic "+hdr)
 	}
 	return append(env, gitConfigEnv(cfg...)...)
@@ -184,12 +185,15 @@ func mirrorPushEnv(ctx context.Context, org, host string) []string {
 // org that has NOT connected the GitHub App keeps the exact prior behavior. Returns
 // "" (anonymous) for a non-allowed host — a private remote then fails closed, never
 // leaking a credential to an untrusted host.
-func outboundAuthHeader(ctx context.Context, org, host string) string {
+func outboundAuthHeader(ctx context.Context, org, host, target string) string {
 	if !mirrorOutHostAllowed(host) {
 		return ""
 	}
 	if strings.ToLower(host) == "github.com" {
-		if tok, err := integrations.InstallationToken(ctx, org); err == nil && tok != "" {
+		// The credential is per GitHub ACCOUNT, so it is resolved from the target's
+		// own owner rather than from the org alone: an org may mirror into several
+		// accounts, and each has its own installation.
+		if tok, err := integrations.InstallationToken(ctx, org, githubOwnerOf(target)); err == nil && tok != "" {
 			return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
 		}
 	}
@@ -210,4 +214,19 @@ func mirrorPushAuthHeader(host string) string {
 		return ""
 	}
 	return base64.StdEncoding.EncodeToString([]byte(mirrorBasicUser(host) + ":" + tok))
+}
+
+// githubOwnerOf reads the account from a GitHub remote — the first path segment of
+// https://github.com/<owner>/<repo>.git. Empty when the URL names none, which lets
+// the single-connection case resolve as before.
+func githubOwnerOf(remote string) string {
+	u, err := url.Parse(strings.TrimSpace(remote))
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[0]
 }
