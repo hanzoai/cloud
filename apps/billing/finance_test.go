@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/apps/finance"
 )
 
 // financeFake is a per-ORG, per-PATH commerce stand-in for the /v1/finance/* projection
@@ -392,5 +394,41 @@ func TestFinance_CommerceUnconfigured_501(t *testing.T) {
 	}
 	if code, _ := call(t, app, http.MethodGet, "/v1/finance/invoices", "acme/dave", "acme"); code != http.StatusOK {
 		t.Fatalf("invoices unconfigured: want 200 honest-empty, got %d", code)
+	}
+}
+
+// TestOneVocabulary_BothBoundariesAgree is the guard on the defect this file did not
+// catch. Two wires deliver the same two concepts — commerce's HTTP words and the
+// ledger's own kinds — and each is translated at its own boundary. If they ever stop
+// landing on the SAME finance.Kind, the projections silently disagree with one of the
+// two paths: credits render empty, usage totals 0, a grant signs negative. Every
+// assertion in this file above runs against the S2S mock only, so nothing here would
+// have said a word. This does.
+//
+// The peer boundary's own end-to-end proof — a real ledger, a real socket, this same
+// reader — is apps/commerce/ledger_wire_test.go, which is where a mock cannot hide.
+func TestOneVocabulary_BothBoundariesAgree(t *testing.T) {
+	for _, tc := range []struct {
+		concept    string
+		commerce   string // commerce's HTTP wire word
+		ledgerKind string // the ledger's own kind, as it crosses the internal plane
+		want       finance.Kind
+	}{
+		{"money in", "deposit", string(finance.KindDeposit), finance.KindDeposit},
+		{"money out", "withdraw", string(finance.KindUsage), finance.KindUsage},
+	} {
+		t.Run(tc.concept, func(t *testing.T) {
+			if got := commerceKind(tc.commerce); got != tc.want {
+				t.Errorf("commerce boundary: %q → %q, want %q", tc.commerce, got, tc.want)
+			}
+			if got := finance.ParseKind(tc.ledgerKind); got != tc.want {
+				t.Errorf("peer boundary: %q → %q, want %q", tc.ledgerKind, got, tc.want)
+			}
+		})
+	}
+	// A word neither wire speaks is classified as neither direction, so an unreadable
+	// posting is never counted as somebody's spend or somebody's credit.
+	if commerceKind("transfer") != finance.KindUnknown || finance.ParseKind("finance.transfer") != finance.KindUnknown {
+		t.Error("an unrecognized posting must classify as neither direction")
 	}
 }

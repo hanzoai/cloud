@@ -48,7 +48,7 @@ func (f *ledgerFinance) ListUsage(ctx context.Context, org string, limit int) ([
 	}
 	rows := make([]UsageRow, 0, len(entries))
 	for _, e := range entries {
-		if e.Kind != kindUsage {
+		if ParseKind(e.Kind) != KindUsage {
 			continue // deposits/grants are credits, not usage
 		}
 		rows = append(rows, UsageRow{
@@ -71,9 +71,14 @@ func (f *ledgerFinance) ListUsage(ctx context.Context, org string, limit int) ([
 // an on-chain balance holds — because this is where that value lives. Flattening to
 // cents here would round away everything below a cent, which is most of what a
 // per-token AI price IS.
+//
+// Kind is the ledger's OWN [Kind], not a string: a customer-facing page decides
+// whether a row is money in or money out by comparing it, and a reader holding its
+// own string literals is how the credits page came to render empty against a ledger
+// full of grants.
 type TxnRow struct {
 	ID        string
-	Kind      string
+	Kind      Kind
 	Ref       string
 	Memo      string
 	Amount    money.Amount
@@ -96,7 +101,7 @@ func (f *ledgerFinance) ListEntries(ctx context.Context, org string, limit int) 
 	for _, e := range entries {
 		rows = append(rows, TxnRow{
 			ID:        e.ID,
-			Kind:      e.Kind,
+			Kind:      ParseKind(e.Kind),
 			Ref:       e.Ref,
 			Memo:      e.Memo,
 			Amount:    e.Amount,
