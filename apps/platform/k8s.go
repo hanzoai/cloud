@@ -945,6 +945,12 @@ const buildkitRootlessImage = "moby/buildkit:v0.16.0-rootless"
 // image not on an owned namespace yields an error and NO Job is launched
 // (imageAllowed has already passed on every live path, so this only fires on a
 // logic error, and it fails closed rather than falling back to a broad cred).
+// buildPullSecret is the registry READ credential in the build namespace, used by
+// the smoke Job to pull the image it just built. It named `kaniko-ghcr`, a Secret
+// that does not exist there — so every smoke pulled anonymously and a private
+// image could only fail on a pull nobody attributed to a credential.
+const buildPullSecret = "ghcr-pull"
+
 const buildPushSecretPrefix = "push-"
 
 func buildPushSecret(image string) (string, error) {
@@ -1141,7 +1147,7 @@ func (k *k8sClient) waitForJob(ctx context.Context, jobName string, deadline tim
 }
 
 // smokeScript boots the built image's /cloud entrypoint in the background and
-// asserts it reaches "listening" with no startup-crash signature — the in-container
+// asserts it reaches "zip listening" with no startup-crash signature — the in-container
 // mirror of release.yml's docker-run smoke. It exits 0 (Job succeeds) only on a
 // clean boot; 1 (Job fails) on any crash signature, a missing "listening" line, or a
 // process that died after logging it. backoffLimit 0 + restartPolicy Never make the
@@ -1150,8 +1156,8 @@ const smokeScript = `set -u
 /cloud >/tmp/boot.log 2>&1 &
 pid=$!
 listening=0
-for _ in $(seq 1 60); do
-  if grep -q '"message":"listening"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
+for _ in $(seq 1 180); do
+  if grep -q '"message":"zip listening"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
   kill -0 "$pid" 2>/dev/null || break
   sleep 1
 done
@@ -1184,7 +1190,7 @@ func (k *k8sClient) launchSmokeJob(ctx context.Context, image, kmsKey, buildID s
 
 // smokeJobSpec is the boot-test Job: the built image under a sh wrapper (smokeScript)
 // with a production-representative boot env — a writable /data emptyDir, CLOUD_ENV=smoke,
-// and the throwaway KMS master key. It pulls from GHCR with the same kaniko-ghcr secret
+// and the throwaway KMS master key. It pulls from GHCR with the build namespace's secret
 // the build Job uses and runs on the same CI pool, so a green smoke proves the exact
 // pushed image boots on the exact cluster it will deploy to.
 func (k *k8sClient) smokeJobSpec(jobName, image, kmsKey string) *unstructured.Unstructured {
@@ -1209,7 +1215,7 @@ func (k *k8sClient) smokeJobSpec(jobName, image, kmsKey string) *unstructured.Un
 					"restartPolicy":                "Never",
 					"nodeSelector":                 map[string]any{"runner-pool": "32g"},
 					"tolerations":                  []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
-					"imagePullSecrets":             []any{map[string]any{"name": "kaniko-ghcr"}},
+					"imagePullSecrets":             []any{map[string]any{"name": buildPullSecret}},
 					"automountServiceAccountToken": false,
 					"containers": []any{map[string]any{
 						"name":    "smoke",
