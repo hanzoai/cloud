@@ -1,8 +1,10 @@
-// Package integrations is the generic, provider-agnostic OAuth connector plane
-// for the unified Hanzo Cloud binary — the /v1/integrations surface that lets an
-// org connect a third-party account (Slack today; GitHub scaffolded; Google /
-// Salesforce plug into the SAME registry later) and hands the resulting per-org
-// tokens to KMS custody.
+// Package integrations is how your org connects third-party accounts like Slack, and
+// revokes them.
+//
+// It is the generic, provider-agnostic OAuth connector plane for the unified Hanzo
+// Cloud binary — the /v1/integrations surface (Slack today; GitHub scaffolded;
+// Google / Salesforce plug into the SAME registry later) — and it hands the
+// resulting per-org tokens to KMS custody.
 //
 // ONE framework, N providers. A provider self-registers (its file's init calls
 // register) into a package registry declaring how to build its authorize URL,

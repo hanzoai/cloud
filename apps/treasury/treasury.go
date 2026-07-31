@@ -1,7 +1,10 @@
-// Package treasury is the platform's OWN reserve fund: a real, backed pool of capital
-// that stands behind the growth-loop payouts (referrals, affiliates, OSS authors), so a
-// payout is a debit against funded capital and never unbounded minting. Where finance
-// tracks what each CUSTOMER holds and spends, treasury tracks what the PLATFORM holds.
+// Package treasury is the reserve fund behind every payout: real capital, held and
+// accounted for.
+//
+// It is the platform's OWN fund — a backed pool that stands behind the growth-loop
+// payouts (referrals, affiliates, OSS authors), so a payout is a debit against funded
+// capital and never unbounded minting. Where finance tracks what each CUSTOMER holds
+// and spends, treasury tracks what the PLATFORM holds.
 //
 // It answers on TWO prefixes and owns neither whole: GET /v1/finance/{treasury,accounts}
 // beside billing's six commerce-projected /v1/finance/* customer reads, and the

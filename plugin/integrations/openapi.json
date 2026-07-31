@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package integrations is the generic, provider-agnostic OAuth connector plane for the unified Hanzo Cloud binary — the /v1/integrations surface that lets an org connect a third-party account (Slack today; GitHub scaffolded; Google / Salesforce plug into the SAME registry later) and hands the resulting per-org tokens to KMS custody.",
+    "description": "Package integrations is how your org connects third-party accounts like Slack, and revokes them.",
     "version": "v1"
   },
   "servers": [

@@ -1,9 +1,12 @@
-// Package account mounts the signed-in caller's OWN account self-service surface
-// natively in the unified cloud binary — the Go port of the console's two NON-proxy
-// Next server routes (app/keys + app/onboard) plus the server-side money work the
-// statically-exported console needs (task #41, "True 1-binary FE"). It replaces the
-// retired /v1/console/* namespace: "console" is just the cloud FE name, so there is NO
-// /v1/console API domain — every route lives on its REAL domain.
+// Package account is your own account: API keys you mint and revoke, org onboarding,
+// and wallet top-up.
+//
+// It mounts the signed-in caller's OWN self-service surface natively in the unified
+// cloud binary — the Go port of the console's two NON-proxy Next server routes
+// (app/keys + app/onboard) plus the server-side money work the statically-exported
+// console needs (task #41, "True 1-binary FE"). It replaces the retired /v1/console/*
+// namespace: "console" is just the cloud FE name, so there is NO /v1/console API
+// domain — every route lives on its REAL domain.
 //
 // WHY THESE ROUTES (and not the pure passthrough proxies). The console's PURE BFF
 // reverse-proxies — app/cloud, app/ai — vanish in the one-binary model: the SPA calls

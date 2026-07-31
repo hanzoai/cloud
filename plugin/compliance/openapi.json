@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package compliance mounts the ORG-SCOPED compliance operations surface (/v1/compliance): the company's own KYC/KYB onboarding verification, accreditation STATE TRACKING, and a compliance-scoped read of the tamper-evident audit trail (the SOC 2 posture surface).",
+    "description": "Package compliance is your KYC/KYB onboarding, accreditation records, and the evidence trail behind them.",
     "version": "v1"
   },
   "servers": [

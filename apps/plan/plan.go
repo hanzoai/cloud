@@ -1,8 +1,10 @@
-// Package plan is the plan catalog at /v1/plans/*: every purchasable tier — cloud,
-// subscription, blockchain, DNS, GPU, storage — with what it costs, what it grants
-// (the entitlement vocabulary and its JSON Schema), and a resolver from a plan id to
-// both. It is the catalog of RECORD; apps/pricing reads the same @hanzo/plans source
-// and answers eight of these sections again under /v1/pricing/*.
+// Package plan is the plan catalog: every tier you can buy, what it costs, and
+// what it grants.
+//
+// It serves /v1/plans/* — cloud, subscription, blockchain, DNS, GPU and storage
+// tiers, the entitlement vocabulary each grants and its JSON Schema, and a resolver
+// from a plan id to both. It is the catalog of RECORD; apps/pricing reads the same
+// @hanzo/plans source and answers eight of these sections again under /v1/pricing/*.
 //
 // STRATEGY: wrap, don't rewrite. @hanzo/plans is a Node data package (JSON
 // catalog + entitlements.mjs transforms). We do NOT reimplement the entitlement

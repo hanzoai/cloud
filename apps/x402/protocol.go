@@ -1,5 +1,8 @@
-// Package x402 is the Hanzo Cloud native x402 pay-per-use subsystem (HTTP 402):
-// challenge → the client pays → proof submitted → verify → serve → settle.
+// Package x402 is pay-per-request over HTTP 402: quote a price, take the payment,
+// serve the resource.
+//
+// The full cycle is challenge → the client pays → proof submitted → verify → serve
+// → settle, native to the Hanzo cloud binary.
 //
 // FLOW. A priced resource answers 402 with PaymentRequirements (what to pay + the
 // recipient wallet). The client signs an ERC-3009 transferWithAuthorization over
