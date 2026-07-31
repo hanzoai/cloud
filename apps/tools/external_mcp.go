@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hanzoai/cloud/cek"
@@ -330,7 +331,8 @@ type mcpProvider struct {
 	store *MCPServerStore
 	kms   types.KMSClient
 	http  *http.Client
-	seen  sync.Map // (org, server, url) -> *listed
+	seen  sync.Map     // (org, server, url) -> *listed
+	swept atomic.Int64 // Unix seconds of the last eviction pass
 }
 
 func newMCPProvider(store *MCPServerStore, kms types.KMSClient) *mcpProvider {
@@ -349,12 +351,40 @@ func newMCPProvider(store *MCPServerStore, kms types.KMSClient) *mcpProvider {
 // client calls constantly.
 const listedFor = time.Minute
 
+// staleAfter is when a remembered list stops being worth the memory it sits in.
+// A server that has not been asked about in an hour is one whose org deregistered
+// it, or renamed it, or never comes back — and each entry holds a whole tool set,
+// so a fleet that churns servers would otherwise accumulate them forever.
+const staleAfter = time.Hour
+
 // listed is one server's remembered tool list.
 type listed struct {
 	mu    sync.Mutex
 	at    time.Time
 	tools []remoteTool
 	err   error
+}
+
+// sweep drops what has gone stale, at most once per staleAfter. It runs off the
+// listing path rather than a goroutine: a provider with no traffic has nothing to
+// forget, and a timer that outlives the process's interest in the data is one more
+// thing to shut down.
+func (p *mcpProvider) sweep() {
+	last := p.swept.Load()
+	now := time.Now()
+	if now.Sub(time.Unix(last, 0)) < staleAfter || !p.swept.CompareAndSwap(last, now.Unix()) {
+		return
+	}
+	p.seen.Range(func(k, v any) bool {
+		e := v.(*listed)
+		e.mu.Lock()
+		stale := !e.at.IsZero() && now.Sub(e.at) > staleAfter
+		e.mu.Unlock()
+		if stale {
+			p.seen.Delete(k)
+		}
+		return true
+	})
 }
 
 func (p *mcpProvider) Source() Source { return SourceMCP }
@@ -370,6 +400,7 @@ func (p *mcpProvider) List(ctx context.Context, scope Scope) ([]Tool, error) {
 	if err != nil {
 		return nil, err
 	}
+	p.sweep()
 	var out []Tool
 	for _, srv := range servers {
 		remote, err := p.tools(ctx, srv)
