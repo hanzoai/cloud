@@ -44,6 +44,7 @@ import (
 
 	"github.com/hanzoai/cloud/credz/launch"
 	"github.com/hanzoai/cloud/manifest"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plugin"
 	"github.com/hanzoai/cloud/webui"
 	"github.com/zap-proto/zip"
@@ -173,6 +174,11 @@ func run(addr, zapAddr, enable string) error {
 	// listening until app.Listen either way, so registration order costs no
 	// availability, only route specificity, and /healthz collides with no prefix.
 	health(app, absent)
+
+	// The fleet's own description, at /v1/openapi.json. Same reasoning as
+	// /healthz, and the same layer: it is the HOST's, because it is about the
+	// whole fleet and no plugin can see past itself.
+	spec(app)
 
 	// The console at "/" is the HOST's, because the host is the front door: every
 	// SPA route (/, /signin, /dashboard, …) is under no app prefix, so it reaches
@@ -307,6 +313,43 @@ func health(app *zip.App, absent map[string]string) {
 			out["absent"] = a
 		}
 		return c.JSON(200, out)
+	})
+}
+
+// spec is the fleet's published document, and the HOST is the only process that
+// can answer for it.
+//
+// WITHOUT this registration the path is not unclaimed — it is claimed by the
+// wrong thing, silently. /v1/openapi.json matches no host route, falls to the
+// only prefix that covers it (ai's "/v1", manifest/apps.go), and is proxied to
+// the ai child, which answers with openapi.Mount reading ITS OWN router. That
+// router's entire AI surface is one greedy All("/v1/*") (apps/ai/ai.go), so
+// api.hanzo.ai/v1/openapi.json served a 3.7 KB document of EIGHT paths — the
+// child's own health, iam edge, zap, console catch-all and wildcard — while the
+// fleet serves 1039. Every SDK generator, every spec-derived CLI and every third
+// party reading the published spec read that instead. 200 OK the whole time.
+//
+// Two properties make the fix the honest one rather than merely a fix:
+//
+//   - It costs no subsystem. The document is woven from the subsets the plugins
+//     projected when they were BUILT (plugin.Spec — bytes in this binary), so
+//     answering it starts nothing. A host that had to mount 113 subsystems to
+//     describe them would have given back exactly what laziness buys.
+//   - It is not a second source of truth. openapi.Fleet is the same composition
+//     that WRITES openapi.yaml, over the same committed files, so the served
+//     bytes and the committed artifact are one document by construction — and
+//     mk/fleet.mk surface-check regenerates those files from source and fails on
+//     any diff, so a drifted spec goes red in CI instead of shipping.
+//
+// Precedence is by SPECIFICITY, not registration order: a static path beats the
+// wildcard that contains it whatever order they arrive in (zip's fiber fork,
+// ServeMux-1.22 semantics). What would defeat it is an app row claiming this path
+// BYTE-IDENTICALLY — fiber merges identical patterns into one chained route and
+// the host's handler would sit behind the proxy. manifest/openapi_test.go refuses
+// that; cmd/cloud/openapi_test.go pins the resolution end to end.
+func spec(app *zip.App) {
+	openapi.MountFleet(app, func() ([]openapi.Part, error) {
+		return openapi.Subsets(manifest.Names(), plugin.Spec)
 	})
 }
 
