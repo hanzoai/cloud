@@ -19,6 +19,7 @@
 // sourced from KMS by the deployment), never a NEXT_PUBLIC value and never the
 // browser. When they are unset the subsystem is honestly "not configured" (501),
 // exactly as identity.ts's mintConfigured() gate behaved — no fabricated key/org.
+
 package account
 
 import (

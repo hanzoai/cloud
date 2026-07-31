@@ -23,6 +23,7 @@
 // "… = ?" with the org bound POSITIONALLY (never interpolated), so no query this
 // package builds can read a tenant other than the caller's, and a hostile org
 // slug can never escape into SQL. The isolation test asserts this directly.
+
 package analytics
 
 import (

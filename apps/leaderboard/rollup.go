@@ -17,6 +17,7 @@
 // target columns), so it cannot fail on a valid ledger row — it never endangers the
 // (fire-and-forget) metering write. It captures rows inserted AFTER its creation;
 // pre-existing history is seeded ONCE by the deploy-gated backfill.
+
 package leaderboard
 
 import (

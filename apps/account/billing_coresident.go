@@ -20,6 +20,7 @@
 // byte-for-byte the shipped behavior. It is the ONE subject rule (account.Payer, the same
 // function the ai spend-gate and the top-up resolve), fed the account the credential NAMES
 // — so a read scopes to exactly the account the gate debits, never wider.
+
 package account
 
 import (

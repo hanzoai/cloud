@@ -27,6 +27,7 @@
 // priced by a card at all), so stamping one card onto a row would be a fabrication by
 // construction. The card is therefore served separately and labelled current by asOf.
 // Consequence: no schema change, no migration, and no new risk to the money path.
+
 package authors
 
 import (

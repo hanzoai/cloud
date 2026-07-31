@@ -51,6 +51,7 @@
 // so the tenant invariant the rest of the plane enforces holds here too. Every
 // door funnels through the SAME write core (ingestEvents) into the SAME
 // hanzo.events table: one write path, many front doors.
+
 package analytics
 
 import (

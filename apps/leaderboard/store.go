@@ -13,6 +13,7 @@
 // read is org-scoped (`WHERE org=? AND listed=1`). An org row is written only by an
 // admin of that org; the global-listing read is `WHERE listed=1` (org-level display
 // only — no user data). No secret ever lands here.
+
 package leaderboard
 
 import (

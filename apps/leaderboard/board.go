@@ -10,6 +10,7 @@
 //
 // Tenant isolation: org is principal.Org (validated), bound positionally in every
 // query. Cross-org cost is SuperAdmin-only. Datastore down → honest-empty.
+
 package leaderboard
 
 import (

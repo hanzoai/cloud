@@ -4,6 +4,7 @@
 // SQLite store. That mapping is pure routing/infra (Go's job), kept out of the
 // per-tenant domain bundle. It lives in a single small SQLite file under the data
 // root and is written when a link is created, read on every viewer request.
+
 package dataroom
 
 import (

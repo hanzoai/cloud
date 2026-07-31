@@ -1,7 +1,13 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-// mount.go mounts the hanzoai/commerce MODULE into a cloud binary
-// (HIP-0106) via the NATIVE co-residence contract: commerce registers its routes
+// Package commerce is the merchant plane: checkout, subscriptions, invoices,
+// spend alerts, payment webhooks and the store/catalog CMS, embedded from
+// hanzoai/commerce and mounted on cloud's own router. It is not the wallet —
+// EmbedConfig.Ledger injects apps/finance, so a credit minted here lands in the
+// one ledger of record.
+//
+// This file mounts that MODULE into a cloud binary (HIP-0106) via the NATIVE
+// co-residence contract: commerce registers its routes
 // directly on the HOST's zip app (EmbedConfig.App) — one router, one specificity
 // space, zero handler adaptation. This adapter narrows cloud.Deps, boots the
 // embed, and wires the in-process seams. Direction is one-way: cloud → commerce.
