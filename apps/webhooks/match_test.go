@@ -11,12 +11,12 @@ func TestSubjectMatches(t *testing.T) {
 		// exact literals
 		{"commerce.order.created", "commerce.order.created", true},
 		{"commerce.order.created", "commerce.order.completed", false},
-		{"commerce.order.created", "commerce.order", false},          // pattern longer
-		{"commerce.order", "commerce.order.created", false},          // subject longer, no wildcard
+		{"commerce.order.created", "commerce.order", false}, // pattern longer
+		{"commerce.order", "commerce.order.created", false}, // subject longer, no wildcard
 		// single-token wildcard
 		{"commerce.order.*", "commerce.order.created", true},
 		{"commerce.order.*", "commerce.order.completed", true},
-		{"commerce.order.*", "commerce.order.line.created", false},   // * is exactly one token
+		{"commerce.order.*", "commerce.order.line.created", false}, // * is exactly one token
 		{"commerce.*.created", "commerce.order.created", true},
 		{"commerce.*.created", "commerce.order.updated", false},
 		{"*.order.created", "commerce.order.created", true},
@@ -24,7 +24,7 @@ func TestSubjectMatches(t *testing.T) {
 		{"commerce.>", "commerce.order", true},
 		{"commerce.>", "commerce.order.created", true},
 		{"commerce.>", "commerce.order.line.created", true},
-		{"commerce.>", "commerce", false},                            // > needs at least one tail token
+		{"commerce.>", "commerce", false}, // > needs at least one tail token
 		{"commerce.>", "iam.user.created", false},
 		{">", "anything", true},
 		{">", "a.b.c", true},

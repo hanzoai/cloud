@@ -19,6 +19,7 @@
 // disagree about what "drift" means (one way to compute drift, period). The
 // cluster reader (fleet.go) owns observing the tags; this file only interprets
 // them.
+
 package platform
 
 import "regexp"

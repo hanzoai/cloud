@@ -156,7 +156,7 @@ func TestGetBotsServesRunsNotMachines(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("GET /v1/bots want 200, got %d (%s)", code, body)
 	}
-	var v botsView
+	var v BotRuns
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}

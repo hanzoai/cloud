@@ -28,7 +28,7 @@ func (f *fakeDest) ID() string       { return "fake" }
 func (f *fakeDest) Name() string     { return "Fake" }
 func (f *fakeDest) Category() string { return categoryAdvertising }
 func (f *fakeDest) Spec() Spec {
-	return Spec{Fields: []Field{{Key: "pixelId", Required: true}}, Secrets: []string{"access_token"}, Fallback: f.fallbck}
+	return Spec{Fields: []DestinationField{{Key: "pixelId", Required: true}}, Secrets: []string{"access_token"}, Fallback: f.fallbck}
 }
 func (f *fakeDest) Send(_ context.Context, _ Config, secret string, batch []Conversion) (Result, error) {
 	f.mu.Lock()

@@ -310,7 +310,11 @@ func (srv *sshServer) runGitCommand(keyOrg, keyUser, command, gitProtocol string
 	}
 	service, path := m[1], m[2]
 
-	pathOrg, name, err := parseRepoPath(path)
+	// The optional middle segment is the project sub-scope: SSH carries no headers
+	// at all, so the path is the only channel it has, exactly as for HTTPS. It
+	// addresses a repo within the key's own org; the org check below is unchanged
+	// and is still what confines the key.
+	pathOrg, project, name, err := parseRepoPath(path)
 	if err != nil {
 		_, _ = io.WriteString(ch.Stderr(), "invalid repo path: "+err.Error()+"\n")
 		return 1
@@ -321,8 +325,6 @@ func (srv *sshServer) runGitCommand(keyOrg, keyUser, command, gitProtocol string
 		_, _ = io.WriteString(ch.Stderr(), "access denied: repository is outside your organization\n")
 		return 1
 	}
-	// SSH has no project sub-scope (no X-Project-Id) — org-level repos only.
-	const project = ""
 
 	store, err := storeFor(srv.svc, keyOrg)
 	if err != nil {
@@ -356,22 +358,25 @@ func (srv *sshServer) exit(ch ssh.Channel, code int) {
 	_, _ = ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{uint32(code)}))
 }
 
-// repoPathRE validates the "<org>/<repo>" tail of a git SSH path. Both segments
-// are safe identifiers (mirrors nameRE); a leading slash is tolerated (git may
-// send an absolute-looking path).
-var repoPathRE = regexp.MustCompile(`^/?([A-Za-z0-9][A-Za-z0-9._-]{0,63})/([A-Za-z0-9][A-Za-z0-9._-]{0,63})$`)
+// repoPathRE validates the "<org>/<repo>" or "<org>/<project>/<repo>" tail of a
+// git SSH path. Every segment is a safe identifier (mirrors nameRE); a leading
+// slash is tolerated (git may send an absolute-looking path). The middle segment
+// is optional so an org-level path keeps its exact meaning.
+var repoPathRE = regexp.MustCompile(`^/?([A-Za-z0-9][A-Za-z0-9._-]{0,63})/(?:([A-Za-z0-9][A-Za-z0-9._-]{0,63})/)?([A-Za-z0-9][A-Za-z0-9._-]{0,63})$`)
 
-// parseRepoPath extracts (org, repo) from a git SSH path like "acme/code.git"
-// or "/acme/code.git". The trailing ".git" is stripped, and both segments are
-// validated as safe identifiers so the path can never traverse storage.
-func parseRepoPath(path string) (org, repo string, err error) {
+// parseRepoPath extracts (org, project, repo) from a git SSH path like
+// "acme/code.git", "/acme/code.git" or "acme/site/code.git". The trailing ".git"
+// is stripped, and every segment is validated as a safe identifier so the path
+// can never traverse storage. project is empty for an org-level repo, which is
+// the same value the header path yields.
+func parseRepoPath(path string) (org, project, repo string, err error) {
 	path = strings.TrimSpace(path)
 	path = strings.TrimSuffix(path, ".git")
 	m := repoPathRE.FindStringSubmatch(path)
 	if m == nil {
-		return "", "", errors.New("path must be <org>/<repo>.git")
+		return "", "", "", errors.New("path must be <org>/<repo>.git or <org>/<project>/<repo>.git")
 	}
-	return m[1], m[2], nil
+	return m[1], m[2], m[3], nil
 }
 
 // loadOrCreateHostKey resolves the SSH host key signer: an operator-provided PEM

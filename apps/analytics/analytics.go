@@ -12,17 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package analytics mounts the Hanzo Cloud /v1/analytics/* surface: a native-Go,
-// per-org analytics read API over the `hanzo` datastore warehouse (the
-// `datastore` cluster). It is the backend for the console Native Analytics module
-// (unified-analytics.md §5) — two read lenses over one warehouse:
+// Package analytics is the product-event plane: it owns the ingest door every
+// Hanzo client posts to, lands each event in the `hanzo` warehouse, and serves the
+// per-org read lenses — KPIs, time series, rankings, captured errors — over what it
+// wrote.
+//
+// It is BOTH halves, and that is deliberate: one write core (ingestEvents) behind
+// N doors (event.go), and the read lenses over the same warehouse, so a fact is
+// admitted, stamped with the SERVER-resolved tenant, and read back through one
+// vocabulary. Two lenses share one warehouse:
 //
 //   - LLM lens (REAL today): hanzo.cloud_usage, the live per-org usage ledger the
 //     cloud o11y path already writes (requests, tokens, spend, models, errors).
-//   - Web/commerce lens (honest-empty until the collector emits): hanzo.events.
+//   - Web/commerce lens: hanzo.events, what this package's own doors ingest.
+//
+// The accepted batch is also handed to registered SINKS (forward.go) — apps/
+// destinations forwards it to the org's connected ad platforms. analytics never
+// imports a consumer; the seam is one-way and fail-soft.
 //
 // ONE datastore client. This package does NOT open its own connection: it reads
-// through clients/datastore, the leaf that holds the warehouse connection for the
+// through apps/datastore, the leaf that holds the warehouse connection for the
 // whole binary and opens it from the environment on first use. DRY: one transport,
 // one pool, one set of KMS-injected DATASTORE_* creds — never hard-coded, never a
 // second design. (It used to reach the connection through ai/object's Bootstrap;
@@ -34,17 +43,31 @@
 // VALIDATED bearer owner claim (HIP-0026), never a client header — AND every
 // request must carry a validated principal (c.User() set, which SanitizeIdentity
 // sets ONLY for a verified bearer). This closes the Phase-1 "no-bearer + forged
-// X-Org-Id direct-to-pod" cross-tenant read exactly as clients/s3 does. Every
+// X-Org-Id direct-to-pod" cross-tenant read exactly as apps/s3 does. Every
 // datastore query binds the org POSITIONALLY (query.go llmWhere/eventsWhere), so
 // a maxpower token can NEVER read another org's analytics.
 //
-// Surface (all org-scoped; /v1 only; read-only):
+// Surface (all org-scoped; /v1 only):
 //
-//	GET /v1/analytics/overview     per-org KPIs (llm real; web/commerce honest-empty)
-//	GET /v1/analytics/timeseries   requests/tokens/spend over time (hour|day buckets)
-//	GET /v1/analytics/top          top models (real) + products + behavior lenses
-//	                               (topPages/topReferrers/topSources over the events lens)
-//	GET /v1/analytics/health       subsystem health (datastore connectivity + lens tables)
+//	READ
+//	GET  /v1/analytics/overview     per-org KPIs (llm real; web/commerce honest-empty)
+//	GET  /v1/analytics/timeseries   requests/tokens/spend over time (hour|day buckets)
+//	GET  /v1/analytics/top          top models (real) + products + behavior lenses
+//	                                (topPages/topReferrers/topSources over the events lens)
+//	GET  /v1/errors                 the caller org's most recently captured errors
+//	GET  /v1/insights/events        the caller org's most recent product events
+//	GET  /v1/insights/health        the insights surface is serving
+//	GET  /v1/analytics/health       subsystem health (datastore connectivity + lens tables)
+//
+//	WRITE (the ingest doors — see doors, event.go)
+//	POST /v1/event                  the canonical wire (object | array | {batch:[…]})
+//	POST /v1/insights/e             the PostHog wire — a second WIRE, not a second name
+//	POST /v1/event/:project/envelope|store   the Sentry error wire, same door
+//
+// The six reads above /v1/analytics/health are TYPED ops, so each publishes its
+// prose, its In/Out schema, an MCP tool and a CLI command. /v1/analytics/health and
+// the ingest doors are untyped and cannot be typed without moving their wire;
+// routes (below) names each one's blocker where it is registered.
 //
 // Registered as id "analytics" with cloud.HealthOwner + order 132: it serves its
 // OWN /v1/analytics/health (below), and cloud.HealthOwner makes serve.go skip the
@@ -59,7 +82,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -75,6 +97,11 @@ const (
 	// defaultTop / maxTop bound the /top result cardinality.
 	defaultTop = 10
 	maxTop     = 100
+	// defaultRecent / maxRecent bound the two recent-event reads (/v1/errors and
+	// /v1/insights/events). ONE pair, because both read the same table the same way
+	// and a second pair is a second place for them to disagree.
+	defaultRecent = 50
+	maxRecent     = 200
 	// probeTimeout bounds the health-endpoint table-existence probes so an
 	// unauthenticated liveness hit can never hang on a slow warehouse.
 	probeTimeout = 3 * time.Second
@@ -142,14 +169,52 @@ func installHostCarve(b cloud.Base) {
 	b.Log.Info("analytics public-host ingest carve enabled", "flag", publicCaptureEnv, "doors", len(carve))
 }
 
-// routes registers the analytics surface. Health owns /v1/analytics/health
-// explicitly (not JWT-gated: liveness must be probe-able); the data endpoints are
-// all org-gated in-handler.
+// zipdoc lifts the doc comment off each typed op and off each field of its In and
+// Out into zipdoc_gen.go, which is the ONLY way that prose reaches the published
+// document and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/analytics openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// routes registers the analytics surface: six TYPED read ops, and the writes plus
+// the health probe as untyped handlers because their wire cannot be declared.
+//
+// Health owns /v1/analytics/health explicitly (not JWT-gated: liveness must be
+// probe-able); every read lens is org-gated on the validated principal.
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	// A typed op receives ONLY a context, so the validated org has to be PARKED
+	// there — never carried as an In field, which is caller-supplied and would make
+	// a cross-tenant read something the caller asserts for itself. cloud.Bridge
+	// parks it, and it is installed FIRST because fiber runs middleware in
+	// registration order: one installed below a leaf never runs for that leaf.
+	//
+	// On a scoped mount Use installs it once per prefix the subsystem DECLARES
+	// (scope.go), which is why plugin/analytics/main.go now declares all six of
+	// this app's prefixes: with only the /v1/<name> default, the typed reads at
+	// /v1/errors and /v1/insights/* would sit outside every prefix this subsystem
+	// could gate. Serve installs one app-wide too; nesting is harmless, and the
+	// tests mount this subsystem on a bare app with no Serve, so the subsystem's
+	// own install is what makes them pass.
+	app.Use(cloud.Bridge())
+
+	o := readOps{s: s}
+	// The read lenses, declared on the GROUP: each op's path is the prefix composed
+	// with its leaf — the same composition the router does, and the identity every
+	// projection (document, MCP tool, CLI command, call plane) keys on. cmd/zipdoc
+	// resolves the prefix the same way, so the prose below reaches both surfaces.
+	g := app.Group("/v1/analytics")
+	zip.Get(g, "/overview", o.overview)
+	zip.Get(g, "/timeseries", o.timeseries)
+	zip.Get(g, "/top", o.top)
+
+	// UNTYPED, and it has to be: this probe answers 503 CARRYING the degraded
+	// REPORT as its body, and no typed op can say that. zip stamps a non-nil Out
+	// with cmp.Or(op.Status, 200) (zip typed.go), WithStatus refuses a non-2xx, and
+	// an error is rendered as the flat {status,code,error} HTTPError — so typing it
+	// would either turn the 503 into a 200 or drop the report. Writing the body
+	// from inside the op and returning nil does not escape it either: a nil Out is
+	// stamped cmp.Or(op.Status, 204).
 	app.Get("/v1/analytics/health", cloud.Handle(s, health))
-	app.Get("/v1/analytics/overview", cloud.Handle(s, overview))
-	app.Get("/v1/analytics/timeseries", cloud.Handle(s, timeseries))
-	app.Get("/v1/analytics/top", cloud.Handle(s, top))
 
 	// Capture (WRITE) side — the ingest that fills hanzo.events. Every ingest door
 	// is registered HERE and only here, from doors (event.go): one Post per declared
@@ -157,21 +222,160 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// else — admission (handle) and the write core (ingestEvents) are shared — so
 	// this is one pipeline behind N paths, and a path that is not in doors is not an
 	// ingest door anywhere: not routed, and not carved on a site host either.
+	//
+	// EVERY door is untyped, and none of them is a candidate. A typed op receives a
+	// context and a DECODED In, and admission (handle, event.go) is decided from
+	// facts that live only on the request: the presented credential (Authorization /
+	// x-hanzo-ingest-key / ?ingest_key=, publishable.go ingestKey), the client IP
+	// and the socket peer the anonymous rate caps key on, the DNT/Sec-GPC headers,
+	// and the RAW body — whose LENGTH is the anonymous lane's 64 KiB → 413 bound
+	// (public.go maxPublicBytes) and whose first non-space BYTE selects the wire.
+	// The canonical door also accepts a bare JSON ARRAY body, which cannot decode
+	// into any struct In: zip's op.invoke answers 400 on a body it cannot unmarshal,
+	// and it answers 200 with a receipt. See LLM.md; each door names its own blocker.
 	for _, d := range doors {
 		app.Post(d.path, cloud.Handle(s, d.ingest))
 	}
+
+	// The Sentry error wire, on the SAME door: POST /v1/event/{project}/envelope|store.
+	// The project segment is variable, so the door's owner carries the route and
+	// forwards to the obs plane's installed consumer (cloud.ObsErrorIngest — the
+	// o11y runtime, which authenticates the DSN key itself; no principal here by
+	// design). Resolved per-request: the o11y subsystem installs it during its own
+	// mount, order-independent of this one.
+	obsError := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := cloud.ObsErrorIngest()
+		if h == nil {
+			http.Error(w, "error ingest not initialized", http.StatusServiceUnavailable)
+			return
+		}
+		h.ServeHTTP(w, r)
+	}))
+	app.Post("/v1/event/:project/envelope", obsError)
+	app.Post("/v1/event/:project/store", obsError)
 
 	// /v1/errors is the type:'error' read lens over the same rows — a validated
 	// principal, since a read never accepts the write-only publishable key. MINTING is
 	// a different concern and lives on the key resource, not here: POST /v1/keys with
 	// {"type":"publishable"}.
-	app.Get("/v1/errors", cloud.Handle(s, errorsLens))
+	//
+	// Declared on the APP with its WHOLE path, not on a group with an empty leaf:
+	// joining a "/v1/errors" prefix with "" yields "/v1/errors/", a path this API
+	// has never served, and op.Path is the identity every projection reads.
+	zip.Get(cloud.ZipApp(app), "/v1/errors", o.errors)
 
 	// /v1/insights — console reads over the SAME engine. The PostHog-wire INGEST at
 	// /v1/insights/e is a door and is registered in the loop above. Flags live at
 	// /v1/flags.
-	app.Get("/v1/insights/health", cloud.Handle(s, insightsHealth))
-	app.Get("/v1/insights/events", cloud.Handle(s, insightsEvents))
+	ig := app.Group("/v1/insights")
+	zip.Get(ig, "/health", o.insightsHealth)
+	zip.Get(ig, "/events", o.insightsEvents)
+}
+
+// readOps binds the service to the typed read ops of the WHOLE package — the three
+// warehouse lenses here, the error lens (publishable.go) and the two insights reads
+// (insights.go). A TypedHandler is func(context.Context, *In) (*Out, error) with no
+// parameter for the service, so it arrives as a RECEIVER and every op is a method
+// value, which is also the only bound form cmd/zipdoc can lift prose from.
+//
+// ONE receiver for the package, because there is one service: a second would be a
+// second place for the same binding to be got wrong.
+type readOps struct{ s *cloud.Service[state] }
+
+// tenantOf is tenant() for a typed op: the VALIDATED org cloud.Bridge parked on the
+// context, never a field of In. An In field is caller-supplied, so a tenant key read
+// from one is a cross-tenant read the caller asserted for itself. The 403 it returns
+// is byte-identical to the one tenant() produces on the untyped path — both are
+// zip.ErrForbidden through the same error handler.
+func tenantOf(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("valid bearer required")
+	}
+	return org, nil
+}
+
+// noArgs is the In of an op that takes nothing off the wire at all. ONE of these for
+// the package: an op with no input has no input to describe twice.
+type noArgs struct{}
+
+// windowQuery is the [start,end) window the warehouse lenses read from the URL. It
+// is the SAME grammar hanzoai/types.ParseWindow gives the console, so analytics and
+// the Overview module cannot disagree about what "7d" means.
+type windowQuery struct {
+	// Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
+	// start and end are given. An unknown value is a 400.
+	Range string `json:"range"`
+	// Start is the inclusive lower bound of a custom window, RFC3339. Requires end.
+	Start string `json:"start"`
+	// End is the exclusive upper bound of a custom window, RFC3339. Requires start.
+	End string `json:"end"`
+}
+
+// topQuery is windowQuery plus the result cardinality the ranked lenses take. The
+// window fields are spelled out rather than embedded: zip's schema walk publishes
+// an embedded type as a nested object property the flat wire does not carry.
+type topQuery struct {
+	// Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
+	// start and end are given. An unknown value is a 400.
+	Range string `json:"range"`
+	// Start is the inclusive lower bound of a custom window, RFC3339. Requires end.
+	Start string `json:"start"`
+	// End is the exclusive upper bound of a custom window, RFC3339. Requires start.
+	End string `json:"end"`
+	// Limit bounds every ranked lens in the response. Default 10, maximum 100; a
+	// value at or below zero, or one that is not a number, takes the default.
+	Limit int `json:"limit"`
+}
+
+// window resolves the window from the URL-bound query, reusing the SAME
+// types.ParseWindow the untyped path uses so the two cannot drift. A bad range is
+// the same 400 it has always been.
+func (q windowQuery) window() (time.Time, time.Time, types.Interval, string, error) {
+	w, err := types.ParseWindow(q.Range, q.Start, q.End, time.Now())
+	if err != nil {
+		return time.Time{}, time.Time{}, "", "", zip.ErrBadRequest(err.Error())
+	}
+	return w.Start, w.End, w.Interval, w.Label, nil
+}
+
+// window is topQuery's identical resolution — one grammar, read through the one
+// parser, whichever In carried the three fields.
+func (q topQuery) window() (time.Time, time.Time, types.Interval, string, error) {
+	return windowQuery{Range: q.Range, Start: q.Start, End: q.End}.window()
+}
+
+// limit clamps the requested cardinality exactly as the untyped topLimit did: a
+// value at or below zero (which is also what an unparseable one binds to) takes the
+// default, and anything above maxTop is capped there.
+func (q topQuery) limit() int {
+	if q.Limit <= 0 {
+		return defaultTop
+	}
+	if q.Limit > maxTop {
+		return maxTop
+	}
+	return q.Limit
+}
+
+// limitQuery is the row cap the two recent-event reads take from the URL. ONE type,
+// because /v1/errors and /v1/insights/events bound the same thing the same way.
+type limitQuery struct {
+	// Limit is how many rows to return, newest first. Default 50, maximum 200; a
+	// value at or below zero, or one that is not a number, takes the default.
+	Limit int `json:"limit"`
+}
+
+// rows clamps the requested row count to [1, maxRecent], defaulting an absent,
+// zero, negative or unparseable value — the same clamp both untyped readers held.
+func (q limitQuery) rows() int {
+	if q.Limit <= 0 {
+		return defaultRecent
+	}
+	if q.Limit > maxRecent {
+		return maxRecent
+	}
+	return q.Limit
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────
@@ -185,17 +389,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // stable owned copy — the retained-buffer fix.
 func tenant(c *zip.Ctx) (string, bool) {
 	return principal.Org(c)
-}
-
-// window resolves the [start,end) window + bucket interval from ?range/?start/?end,
-// reusing hanzoai/types.ParseWindow so analytics and the console Overview share ONE
-// window grammar (24h|7d|30d|custom). A bad range is a 400.
-func window(c *zip.Ctx) (time.Time, time.Time, types.Interval, string, error) {
-	w, err := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), time.Now())
-	if err != nil {
-		return time.Time{}, time.Time{}, "", "", zip.ErrBadRequest(err.Error())
-	}
-	return w.Start, w.End, w.Interval, w.Label, nil
 }
 
 // requireDatastore returns the honest 503 when the datastore ledger is not
@@ -249,37 +442,37 @@ func isWarehouseUnreachable(err error) bool {
 	return false
 }
 
-func topLimit(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
-		return defaultTop
-	}
-	if n > maxTop {
-		return maxTop
-	}
-	return n
-}
-
 // ── /v1/analytics/overview ──────────────────────────────────────────────────
 
-func overview(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	start, end, interval, rangeLabel, err := window(c)
+// Overview returns the caller org's analytics KPIs for one time window. Three lenses
+// over one warehouse: llm is the live per-org LLM usage ledger (requests, tokens,
+// spend, models, providers, errors) and is always real; web (pageviews, visitors,
+// sessions) and commerce (orders, revenue, AOV) read the product-event table and
+// report available=false rather than fabricating zeros when it holds nothing yet.
+//
+// The org is the validated principal's — never a parameter — so a caller can only
+// ever read its own tenant. 403 without a validated bearer, 400 on an unknown range,
+// 503 when the warehouse is unreachable.
+//
+// Example: {"range": "7d"}
+func (o readOps) overview(ctx context.Context, in *windowQuery) (*Overview, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	start, end, interval, rangeLabel, err := in.window()
+	if err != nil {
+		return nil, err
 	}
 	if err := requireDatastore(); err != nil {
-		return err
+		return nil, err
 	}
-	ctx := c.Context()
+	s := o.s
 	// Ensure the ai-owned ledger table exists (idempotent, latched) so a fresh
 	// warehouse yields honest zeros, not an error. We NEVER create hanzo.events —
 	// that table is operator-owned (unified-analytics.md §3.1).
 	if err := datastore.EnsureCloudUsage(ctx); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 
 	// LLM lens — REAL per-org KPIs.
@@ -290,7 +483,7 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 		"countIf(status = 'error') AS errors FROM " + llmTable + " WHERE " + where
 	llmRows, err := datastore.Query(ctx, llmSQL, args...)
 	if err != nil {
-		return warehouseErr("llm", err)
+		return nil, warehouseErr("llm", err)
 	}
 	llm := buildLLMOverview(firstRow(llmRows))
 
@@ -307,7 +500,7 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	erow := firstRow(eventsRows)
 
-	return c.JSON(http.StatusOK, Overview{
+	return &Overview{
 		Range:    rangeLabel,
 		Start:    start.UTC().Format(time.RFC3339),
 		End:      end.UTC().Format(time.RFC3339),
@@ -316,26 +509,34 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 		LLM:      llm,
 		Web:      buildWebOverview(erow, eventsOK),
 		Commerce: buildCommerceOverview(erow, eventsOK),
-	})
+	}, nil
 }
 
 // ── /v1/analytics/timeseries ────────────────────────────────────────────────
 
-func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	start, end, interval, rangeLabel, err := window(c)
+// Timeseries returns the caller org's LLM usage over time as an evenly-spaced series.
+// One point per hour or per day — the bucket the window implies, 24h giving hours and
+// 7d/30d giving days — carrying requests, total tokens and spend in cents. Empty
+// buckets are filled with zeros so a client charts a continuous line.
+//
+// The org is the validated principal's — never a parameter. 403 without a validated
+// bearer, 400 on an unknown range, 503 when the warehouse is unreachable.
+//
+// Example: {"range": "30d"}
+func (o readOps) timeseries(ctx context.Context, in *windowQuery) (*Timeseries, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	start, end, interval, rangeLabel, err := in.window()
+	if err != nil {
+		return nil, err
 	}
 	if err := requireDatastore(); err != nil {
-		return err
+		return nil, err
 	}
-	ctx := c.Context()
 	if err := datastore.EnsureCloudUsage(ctx); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 
 	// bucketFn is a CLOSED server-chosen enum, so interpolating it is injection-safe;
@@ -351,10 +552,10 @@ func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
 		bucketFn, llmTable, where)
 	rows, err := datastore.Query(ctx, seriesSQL, args...)
 	if err != nil {
-		return warehouseErr("timeseries", err)
+		return nil, warehouseErr("timeseries", err)
 	}
 
-	return c.JSON(http.StatusOK, Timeseries{
+	return &Timeseries{
 		Range:    rangeLabel,
 		Start:    start.UTC().Format(time.RFC3339),
 		End:      end.UTC().Format(time.RFC3339),
@@ -362,28 +563,41 @@ func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
 		Scope:    Scope{Org: org},
 		Series:   buildSeries(start, end, interval, rows),
 		Source:   llmTable,
-	})
+	}, nil
 }
 
 // ── /v1/analytics/top ───────────────────────────────────────────────────────
 
-func top(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	start, end, _, rangeLabel, err := window(c)
+// Top returns the caller org's ranked lenses for one window, five of them at once.
+// models ranks LLM models by spend and is always real; products ranks commerce orders
+// by revenue; topPages ranks requested paths, topReferrers the external referrer
+// domains ("(direct)" for a missing or same-origin one) and topSources the utm_source
+// campaigns ("(none)" when absent), each by pageviews. Every lens carries each row's
+// share of the in-window total, so a top-N honestly shows the long tail.
+//
+// The four event lenses report available=false rather than fabricating zeros when the
+// product-event table holds nothing yet. The org is the validated principal's — never
+// a parameter. 403 without a validated bearer, 400 on an unknown range, 503 when the
+// warehouse is unreachable.
+//
+// Example: {"range": "7d", "limit": 25}
+func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	start, end, _, rangeLabel, err := in.window()
+	if err != nil {
+		return nil, err
 	}
 	if err := requireDatastore(); err != nil {
-		return err
+		return nil, err
 	}
-	ctx := c.Context()
+	s := o.s
 	if err := datastore.EnsureCloudUsage(ctx); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
-	limit := topLimit(c)
+	limit := in.limit()
 
 	// Top models — REAL. limit is a validated int (never user text) so %d is safe;
 	// org + time stay bound parameters.
@@ -393,7 +607,7 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 		"GROUP BY model ORDER BY cost_cents DESC, requests DESC LIMIT %d", llmTable, where, limit)
 	modelRows, err := datastore.Query(ctx, modelSQL, args...)
 	if err != nil {
-		return warehouseErr("top-models", err)
+		return nil, warehouseErr("top-models", err)
 	}
 
 	// Top products — honest-empty until commerce emits order events.
@@ -424,7 +638,7 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 		s.Log.Debug("topSources lens unavailable (honest-empty)", "err", srcErr)
 	}
 
-	return c.JSON(http.StatusOK, Top{
+	return &Top{
 		Range:     rangeLabel,
 		Start:     start.UTC().Format(time.RFC3339),
 		End:       end.UTC().Format(time.RFC3339),
@@ -434,10 +648,57 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 		Pages:     buildBreakdown(pageRows, pageErr == nil),
 		Referrers: buildBreakdown(refRows, refErr == nil),
 		Sources:   buildBreakdown(srcRows, srcErr == nil),
-	})
+	}, nil
 }
 
 // ── /v1/analytics/health ────────────────────────────────────────────────────
+
+// healthReport is the probe's answer, and it is the SAME object at 200 and at 503 —
+// which is precisely why this route cannot be a typed op: the STATUS is the signal
+// and the report is the detail, and zip can declare only one of the two. Stating it
+// as a struct rather than building a map is what lets openapi.Register (event.go)
+// derive the shape from the code that produces it, instead of a hand-written schema
+// beside it that drifts.
+type healthReport struct {
+	// Service names the subsystem answering, so a probe aggregating several health
+	// endpoints can attribute a degraded one.
+	Service string `json:"service"`
+	// Status is ok or degraded. Degraded is the 503 and means the warehouse is
+	// unreachable — not that a lens table is missing, which is honest-empty.
+	Status string `json:"status"`
+	// Datastore reports whether the shared warehouse client has a live connection.
+	// It is the load-bearing signal: false is what makes this answer 503.
+	Datastore bool `json:"datastore"`
+	// Warehouse names the datastore database every lens reads.
+	Warehouse string `json:"warehouse"`
+	// Reason is the human-readable cause, present only on a degraded report.
+	Reason string `json:"reason,omitempty"`
+	// Lenses is per-lens table availability, probed only when connected — so it is
+	// absent from a degraded report, which has nothing to say about tables it could
+	// not reach.
+	Lenses *healthLenses `json:"lenses,omitempty"`
+}
+
+// healthLenses is the two read lenses this subsystem serves, named rather than
+// keyed: the pair is closed (llm and events are the whole surface), so a struct
+// says more than a map and says it in the document too.
+type healthLenses struct {
+	// LLM is the live per-org usage ledger lens (hanzo.cloud_usage).
+	LLM healthLens `json:"llm"`
+	// Events is the web/commerce lens (hanzo.events), honest-empty until the
+	// collector emits.
+	Events healthLens `json:"events"`
+}
+
+// healthLens is one lens's provisioning state: the table it reads and whether that
+// table exists yet. An unavailable lens is not a failure — the read endpoints answer
+// honest-empty — so it never moves the status.
+type healthLens struct {
+	// Table is the fully-qualified warehouse table the lens reads.
+	Table string `json:"table"`
+	// Available reports whether that table exists in the warehouse right now.
+	Available bool `json:"available"`
+}
 
 // health is a REAL probe: it reports datastore connectivity (the load-bearing
 // signal) and, when connected, the availability of each lens table. Not
@@ -447,22 +708,17 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 // honest-empty, not a failure).
 func health(s *cloud.Service[state], c *zip.Ctx) error {
 	connected := datastore.Ready()
-	res := map[string]any{
-		"service":   "analytics",
-		"status":    "ok",
-		"datastore": connected,
-		"warehouse": "hanzo",
-	}
+	res := healthReport{Service: "analytics", Status: "ok", Datastore: connected, Warehouse: "hanzo"}
 	if !connected {
-		res["status"] = "degraded"
-		res["reason"] = "datastore (datastore) not connected"
+		res.Status = "degraded"
+		res.Reason = "datastore (datastore) not connected"
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
 	ctx, cancel := context.WithTimeout(c.Context(), probeTimeout)
 	defer cancel()
-	res["lenses"] = map[string]any{
-		"llm":    map[string]any{"table": llmTable, "available": tableExists(ctx, llmTable)},
-		"events": map[string]any{"table": eventsTable, "available": tableExists(ctx, eventsTable)},
+	res.Lenses = &healthLenses{
+		LLM:    healthLens{Table: llmTable, Available: tableExists(ctx, llmTable)},
+		Events: healthLens{Table: eventsTable, Available: tableExists(ctx, eventsTable)},
 	}
 	return c.JSON(http.StatusOK, res)
 }

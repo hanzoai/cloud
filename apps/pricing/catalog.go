@@ -1,3 +1,5 @@
+package pricing
+
 // Catalog enablement overlay: the ONE mutable state Hanzo Cloud lays over the
 // static @hanzo/pricing catalog, plus the ONE gate that applies it on read.
 //
@@ -11,7 +13,6 @@
 // visible to every org, unchanged. An empty store therefore leaves the catalog
 // exactly as the bundle ships it — no fabricated state, no regression for live
 // customers until an admin acts.
-package pricing
 
 import (
 	"context"

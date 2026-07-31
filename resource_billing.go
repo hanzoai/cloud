@@ -180,7 +180,14 @@ func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 	if rm == nil || rm.m == nil {
 		return
 	}
-	if u.AmountCents <= 0 && u.AmountMicros <= 0 {
+	// Ask the VALUE what it is worth, never the wire fields. Usage carries three
+	// amount sources with a documented precedence (typed Amount, then micro-USD,
+	// then cents) and Usage.Money resolves them; reading two of the three here
+	// dropped every usage priced ONLY as a typed Amount — the shape a per-token
+	// 18-dp caller sends — before Record could bill it. Silently: no error, no log,
+	// no row. Record itself has always guarded on the resolved value, so this line
+	// was the one place the fleet disagreed with itself about what money is.
+	if amt := u.Money(); amt.IsZero() || amt.IsNeg() {
 		return
 	}
 	if !rm.Enabled() {

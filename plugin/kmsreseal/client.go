@@ -6,10 +6,13 @@ package main
 //
 // The tool authenticates with a per-CR org-bound bearer (owner==projectSlug),
 // brokered at /v1/kms/auth/login. The SAME token is reused for the standalone GET
-// and the cloud POST: after G1, cloud accepts the fleet's audiences, and both
-// faces gate reads/writes on owner==:org — so the tool never holds a cross-tenant
-// super-credential. A bug cannot cross tenants because the token itself is
-// org-bound.
+// and the cloud POST: after G1, cloud accepts the fleet's audiences, and each face
+// scopes the read/write to that token's owner — so the tool never holds a
+// cross-tenant super-credential. A bug cannot cross tenants because the token
+// itself is org-bound.
+//
+// The two faces spell that scope DIFFERENTLY, which is the one thing a client
+// must know about its own face — see `route`.
 //
 // Secret plaintext returned by getSecret lives in a []byte in memory only; it is
 // never logged and never written to disk.
@@ -43,18 +46,41 @@ const (
 	httpTimeout  = 30 * time.Second
 )
 
-// kmsClient talks to one KMS face at base via the injected doer.
+// route is a face's secrets-collection path for an org — the ONE thing that
+// differs between the two KMS surfaces this tool bridges, so it is the one thing
+// a client carries besides its base and its transport.
+//
+// The legacy standalone (github.com/luxfi/kms cmd/kms) NAMES the tenant in the
+// path and matches it against the token's orgs. Cloud's embedded KMS reads the
+// tenant from the validated principal and names nothing (HIP-0519 — identity is
+// asserted once at the edge; a request that can name its own tenant is two
+// sources for one fact). The tool must speak both: the standalone is the thing
+// being retired, so its grammar is a fact, not a choice.
+type route func(org string) string
+
+// standalone: /v1/kms/orgs/{org}/secrets — luxfi/kms cmd/kms registerSecretRoutes.
+func standalone(org string) string { return "/v1/kms/orgs/" + url.PathEscape(org) + "/secrets" }
+
+// embedded: /v1/kms/secrets — cloud's apps/kms mount.go, org from the principal.
+func embedded(string) string { return "/v1/kms/secrets" }
+
+// kmsClient talks to one KMS face at base, in that face's route grammar, via the
+// injected doer.
 type kmsClient struct {
-	base string
-	do   doer
+	base  string
+	route route
+	do    doer
 }
 
-func newKMSClient(base string, d doer) *kmsClient {
+func newKMSClient(base string, r route, d doer) *kmsClient {
 	if d == nil {
 		d = &http.Client{Timeout: httpTimeout}
 	}
-	return &kmsClient{base: strings.TrimRight(strings.TrimSpace(base), "/"), do: d}
+	return &kmsClient{base: strings.TrimRight(strings.TrimSpace(base), "/"), route: r, do: d}
 }
+
+// secrets is org's secrets-collection URL on this client's face.
+func (c *kmsClient) secrets(org string) string { return c.base + c.route(org) }
 
 // login brokers clientId/clientSecret at {base}/v1/kms/auth/login and returns the
 // owner-scoped IAM bearer. The credential transits this one request; it is never
@@ -90,7 +116,7 @@ func (c *kmsClient) login(ctx context.Context, clientID, clientSecret string) (s
 // response shapes — the standalone's {"secret":{"value":...}} and cloud's
 // {"value":...} — so the same method reads either face. 404 → errSecretNotFound.
 func (c *kmsClient) getSecret(ctx context.Context, token string, org, path, env, key string) ([]byte, error) {
-	u := c.base + "/v1/kms/secrets/" + escapeRest(restOf(path, key)) +
+	u := c.secrets(org) + "/" + escapeRest(restOf(path, key)) +
 		"?env=" + url.QueryEscape(env)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -114,7 +140,7 @@ func (c *kmsClient) getSecret(ctx context.Context, token string, org, path, env,
 // folder-sync CRs (empty keys[]) into concrete keys at RUN time. Never returns a
 // value (the list surface is keys-only by construction on both faces).
 func (c *kmsClient) listFolder(ctx context.Context, token, org, path, env string) ([]string, error) {
-	u := c.base + "/v1/kms/secrets?env=" + url.QueryEscape(env)
+	u := c.secrets(org) + "?env=" + url.QueryEscape(env)
 	if path != "" {
 		u += "&path=" + url.QueryEscape(path)
 	}
@@ -130,18 +156,19 @@ func (c *kmsClient) listFolder(ctx context.Context, token, org, path, env string
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("list %s: status %d", path, status)
 	}
+	// `names` is the shape BOTH faces emit — the standalone's list is exactly
+	// {"names":[…]}, cloud's is a superset ({"secrets":[…],"total":n,"names":[…]}) —
+	// so one decode reads either face.
 	var resp struct {
-		Secrets []struct {
-			Name string `json:"name"`
-		} `json:"secrets"`
+		Names []string `json:"names"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return nil, fmt.Errorf("list %s: decode: %w", path, err)
 	}
-	out := make([]string, 0, len(resp.Secrets))
-	for _, s := range resp.Secrets {
-		if s.Name != "" {
-			out = append(out, s.Name)
+	out := make([]string, 0, len(resp.Names))
+	for _, n := range resp.Names {
+		if n != "" {
+			out = append(out, n)
 		}
 	}
 	return out, nil
@@ -157,7 +184,7 @@ func (c *kmsClient) putSecret(ctx context.Context, token string, org, path, env,
 		"env":   env,
 		"value": string(value),
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/v1/kms/secrets", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.secrets(org), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -188,7 +215,7 @@ func (c *kmsClient) health(ctx context.Context) (int, error) {
 // path and returns the status — used by preflight/verify's auth matrix. token=""
 // sends no Authorization header.
 func (c *kmsClient) probeStatus(ctx context.Context, method, token, org, path, env, key string) (int, error) {
-	u := c.base + "/v1/kms/secrets/" + escapeRest(restOf(path, key)) +
+	u := c.secrets(org) + "/" + escapeRest(restOf(path, key)) +
 		"?env=" + url.QueryEscape(env)
 	req, err := http.NewRequestWithContext(ctx, method, u, nil)
 	if err != nil {

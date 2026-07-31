@@ -1,0 +1,87 @@
+[
+  {
+    "description": "Delete removes one of the caller org's prompts and every version of it, answering\n204. It is scoped to the caller's org, so a name another tenant owns is the same\n404 an unknown name gives. There is no undo: the version history goes with it.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the prompt to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_prompts_name"
+  },
+  {
+    "description": "List returns the caller org's prompt library as one row per prompt: its name,\ntype, every version number it has, its taxonomy and when it last changed. The\ntemplate bodies are deliberately absent — fetch one prompt to read its text.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_prompts"
+  },
+  {
+    "description": "Catalog returns the read-only starter prompt library shipped with the binary —\nreference content every tenant sees the same, NOT the caller's own prompts and\nnever mixed into them. An org's library stays honestly empty until someone\nexplicitly imports a starter, which is an ordinary POST /v1/prompts. Entries that\nwould fail the create guards are dropped, so everything offered here can actually\nbe imported.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_prompts_catalog"
+  },
+  {
+    "description": "Metrics returns real per-prompt statistics for the caller's org: how many versions\neach prompt has, which one is current, and when it was created and last changed.\nEvery number is counted from the store — nothing here is estimated or fabricated.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_prompts_metrics"
+  },
+  {
+    "description": "Get returns one of the caller org's prompts: its CURRENT template text plus the\nmetadata of every version it has had. The history carries version numbers, types\nand timestamps only — not each version's body — so a long history cannot inflate\nthis response. A name the caller's org does not own is 404, whoever owns it.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the prompt to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_prompts_name"
+  },
+  {
+    "description": "Create records a prompt for the caller's org and answers 201 with it. A name the\norg already uses is NOT an error and NOT an overwrite: it appends a new version,\nso the library keeps real, inspectable history and the response carries the whole\nversion list. The name is also the URL segment the prompt is fetched by, which is\nwhy its shape is constrained and a handful of names are reserved.",
+    "inputSchema": {
+      "properties": {
+        "labels": {
+          "description": "Labels is free-form taxonomy, each up to 64 characters, capped at 32 entries.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Name is the org-unique handle AND the URL segment the prompt is addressed by:\n1-64 characters matching ^[A-Za-z0-9][A-Za-z0-9._-]*$. \"metrics\", \"new\" and\n\"catalog\" are reserved. A name that already exists appends a new version.",
+          "type": "string"
+        },
+        "prompt": {
+          "description": "Prompt is the template body, capped at 64 KiB. It holds template text only —\nnever a secret.",
+          "type": "string"
+        },
+        "tags": {
+          "description": "Tags is free-form taxonomy under the same bounds as Labels.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "description": "Type labels the template's kind; defaults to \"text\".",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_prompts"
+  }
+]

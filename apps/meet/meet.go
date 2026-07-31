@@ -26,7 +26,7 @@
 //
 // TWO KEYS, TWO ROLES, and they never mix:
 //
-//   - SERVER_SECRET verifies the CALLER. It is the HS256 key clients/team signs
+//   - SERVER_SECRET verifies the CALLER. It is the HS256 key apps/team signs
 //     session tokens with, so "is this a real member of this workspace" is answered
 //     against the same signature the rest of /v1/team trusts. It arrives as env from
 //     the KMS-synced `team-secrets`.
@@ -104,7 +104,7 @@ func load() state {
 	secret := os.Getenv("SERVER_SECRET")
 	if secret == "" || secret == "secret" {
 		// The upstream public default is treated as absent for the reason
-		// clients/team's resolveSecret does: a known key lets anyone mint a session
+		// apps/team's resolveSecret does: a known key lets anyone mint a session
 		// naming any workspace — here, a join token for a room they were never in.
 		return state{reason: "SERVER_SECRET is unset or the public default literal (K8s Secret team-secrets, key SERVER_SECRET)"}
 	}
@@ -206,6 +206,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// concatLink(LOVE_ENDPOINT, '/getToken') from a published bundle, so with
 	// LOVE_ENDPOINT=/v1/meet the wire lands here. Renaming it means shipping a new
 	// front image, not editing a manifest.
+	//
+	// UNTYPED BY DESIGN — the response body is the raw token as text/plain
+	// (c.String, see mint), which is the office client's contract: it reads the
+	// answer with res.text(). A typed op always marshals its Out to JSON, so typing
+	// this route turns `<token>` into `"<token>"` under application/json and breaks
+	// every published bundle in the field. It stays the escape hatch until zip can
+	// declare a non-JSON response.
 	app.Post("/v1/meet/getToken", cloud.Handle(s, mint))
 
 	// /v1/meet/health makes "the office is unconfigured" a SIGNAL rather than a grep.
@@ -219,6 +226,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// public. ready:false is the whole dashboard fact; the reason, which names the key
 	// file and the Secret, stays in the boot log where the operator already is. Same
 	// posture as the getToken 503 (see health, below) — one file, one answer.
+	//
+	// UNTYPED BY DESIGN — this route answers 200 with a body when meet can mint and
+	// 503 WITH THE SAME BODY when it cannot, and that pair is exactly what zip cannot
+	// declare. WithStatus takes ONE unconditional 2xx; the only way a typed op sends
+	// 503 is by returning an error, and an error is rendered as zip's flat
+	// {status,code,error} — so ready:false, the whole dashboard fact, would vanish
+	// from the degraded answer. This is the multi-status gap (#78); the route
+	// converts when that lands.
 	app.Get("/v1/meet/health", cloud.Handle(s, health))
 
 	if !s.State.ready() {
@@ -310,7 +325,7 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	//
 	// The body's `_id` (the SPA's person ref) is deliberately ignored rather than
 	// checked: verifying it belongs to the caller would need the person<->account
-	// mapping from clients/team, whereas the token already carries an identity that IS
+	// mapping from apps/team, whereas the token already carries an identity that IS
 	// the caller. One fewer seam, and no lookup to get wrong.
 	identity := strings.TrimSpace(t.Account)
 	if identity == "" {
@@ -411,7 +426,7 @@ var header = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"
 // grant mints the join token: a compact HS256 JWT over the claims above.
 //
 // This composes stdlib crypto/hmac + crypto/sha256 rather than taking a JWT library,
-// for two reasons. First, clients/team/token already establishes this exact idiom for
+// for two reasons. First, apps/team/token already establishes this exact idiom for
 // the platform's own HS256 tokens, and a second way to make a JWT in one binary is a
 // second way to get it wrong. Second, this side only ever SIGNS: the verifier is the
 // LiveKit server, so the whole class of bugs a JWT library earns its keep against —

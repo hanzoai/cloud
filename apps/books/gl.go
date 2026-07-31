@@ -24,19 +24,30 @@ const RoundOffAllowance int64 = 2
 // sets exactly one of the two; the pipeline normalizes anything else (a merge can leave
 // both set, which toggle collapses to a single side).
 type Leg struct {
+	// Account is the chart-of-accounts number this side posts to, e.g. "5300".
 	Account string `json:"account"`
-	Debit   int64  `json:"debit"`
-	Credit  int64  `json:"credit"`
+	// Debit is the leg's debit in exact cents. Set this or Credit, not both.
+	Debit int64 `json:"debit"`
+	// Credit is the leg's credit in exact cents. Set this or Debit, not both.
+	Credit int64 `json:"credit"`
 }
 
 // Voucher is one accounting EVENT: a set of legs that must balance, tagged with its
 // idempotency key (SourceKind, SourceID) so the same source event posts exactly once.
 type Voucher struct {
-	SourceKind  string `json:"sourceKind"`
-	SourceID    string `json:"sourceId"`
-	PostingAt   string `json:"postingAt"`
+	// SourceKind is the idempotency namespace naming what booked this, e.g. "scan".
+	SourceKind string `json:"sourceKind"`
+	// SourceID is the source event's own id within that namespace. Together with
+	// SourceKind it is the key that makes a repeat posting a no-op.
+	SourceID string `json:"sourceId"`
+	// PostingAt is the RFC3339 instant the event posts at — the time every statement
+	// window filters on.
+	PostingAt string `json:"postingAt"`
+	// Description is the human line for the event, e.g. the vendor a bill came from.
 	Description string `json:"description"`
-	Legs        []Leg  `json:"legs"`
+	// Legs are the sides of the posting. They must balance: Σdebit == Σcredit, give or
+	// take the 2¢ round-off allowance.
+	Legs []Leg `json:"legs"`
 }
 
 // processGLMap replicates general_ledger.py's process_gl_map in order:

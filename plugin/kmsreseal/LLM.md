@@ -29,8 +29,21 @@ of this tool and **CTO-gated**.
 Per CR, the tool authenticates with that CR's OWN `credentialsRef` machine
 credential (owner==`projectSlug`), brokered at `/v1/kms/auth/login`, and reuses the
 one org-bound token for both the standalone read and the cloud write. A bug cannot
-cross tenants — the token itself is org-bound, and both faces gate `owner == :org`.
-Tokens are cached per credential.
+cross tenants — the token itself is org-bound, and each face scopes the record to
+that token's owner. Tokens are cached per credential.
+
+## Two grammars (`route`)
+
+The faces spell the tenant differently, so a client carries the `route` of the face
+it talks to — the only per-face difference there is:
+
+    standalone  GET /v1/kms/orgs/{org}/secrets/{path}/{key}   org named in the path
+    cloud       GET /v1/kms/secrets/{path}/{key}              org from the principal
+
+Cloud's is the HIP-0519 shape: identity is asserted once at the edge, so a request
+that names its own tenant is two sources for one fact. The standalone is the thing
+being retired, so its grammar is a fact to speak, not a choice. Both faces answer a
+LIST with `{"names":[…]}` (cloud's is a superset), so one decode reads either.
 
 ## Dry-run findings (2026-07, live cluster, read-only)
 

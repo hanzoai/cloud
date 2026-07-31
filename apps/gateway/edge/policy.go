@@ -48,21 +48,39 @@ import (
 // (from the static default, then the platform policy) — so a PUT that sets only
 // OrgRPM leaves the platform CORS/per-IP untouched. Every field is ENFORCED by a
 // consumer; there is no stored-but-ignored knob.
+// Every field carries its OWN doc comment rather than sharing a section header,
+// because zipdoc lifts a field's comment into the published schema property and a
+// header lifted onto three fields would document the GROUP where the FIELD goes.
 type Policy struct {
-	// Platform-scope (admin-org row) — consumed by the pre-auth edge middleware.
-	CORSOrigins []string `json:"cors_origins,omitempty"` // EdgeCORS allowlist (exact origin | bare host | "*.host").
-	PerIPRPM    int      `json:"per_ip_rpm,omitempty"`   // EdgeRateLimit: requests per WindowSec per client IP.
-	WindowSec   int      `json:"window_sec,omitempty"`   // EdgeRateLimit window, seconds.
+	// CORSOrigins is the PLATFORM-scope CORS allowlist EdgeCORS admits: an exact
+	// origin, a bare host, or a "*.host" wildcard. Writable only by a SuperAdmin —
+	// CORS is evaluated before identity, so it has no tenant to scope to.
+	CORSOrigins []string `json:"cors_origins,omitempty"`
+	// PerIPRPM is the PLATFORM-scope pre-auth flood cap: requests EdgeRateLimit
+	// admits per WindowSec from one client IP. SuperAdmin-only, same reason.
+	PerIPRPM int `json:"per_ip_rpm,omitempty"`
+	// WindowSec is the window PerIPRPM is counted over, in seconds. SuperAdmin-only.
+	WindowSec int `json:"window_sec,omitempty"`
 
-	// Per-org scope — a tenant's OWN edge config (self-service). An org's own row
-	// wins; an unset field inherits the platform default, then the static default.
-	OrgRPM      int            `json:"org_rpm,omitempty"`       // authenticated per-org ceiling, requests/min (ScopeRateLimit).
-	CacheTTLSec int            `json:"cache_ttl_sec,omitempty"` // default edge-cache TTL for this org's responses, seconds (0 = no cache).
-	CachePaths  map[string]int `json:"cache_paths,omitempty"`   // per-path-prefix TTL overrides; the longest matching prefix wins over CacheTTLSec.
-	Methods     []string       `json:"methods,omitempty"`       // allowlist of HTTP methods the edge accepts (empty = all).
+	// OrgRPM is the org's OWN authenticated rate ceiling, requests per minute, as
+	// ScopeRateLimit enforces it. Unset inherits the platform default, then the
+	// static boot default.
+	OrgRPM int `json:"org_rpm,omitempty"`
+	// CacheTTLSec is the org's default edge-cache TTL for its responses, in seconds;
+	// 0 means no caching. Unset inherits the platform default.
+	CacheTTLSec int `json:"cache_ttl_sec,omitempty"`
+	// CachePaths overrides CacheTTLSec per path PREFIX (key "/v1/models" → seconds).
+	// The longest matching prefix wins.
+	CachePaths map[string]int `json:"cache_paths,omitempty"`
+	// Methods is the allowlist of HTTP methods the edge accepts for this org. Empty
+	// means all are accepted.
+	Methods []string `json:"methods,omitempty"`
 
-	// Metadata (server-stamped; ignored on input).
-	UpdatedAt int64  `json:"updated_at,omitempty"`
+	// UpdatedAt is the unix second this policy row was last written. Server-stamped;
+	// a client-supplied value is ignored.
+	UpdatedAt int64 `json:"updated_at,omitempty"`
+	// UpdatedBy is the validated user id that wrote this policy row. Server-stamped;
+	// a client-supplied value is ignored.
 	UpdatedBy string `json:"updated_by,omitempty"`
 }
 

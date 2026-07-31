@@ -157,20 +157,36 @@ func (s *Store) exists(ctx context.Context, table, org, id string) (bool, error)
 // standard object (composites flattened to scalar columns for SQLite): ARR is
 // minor units (cents) of Currency; ICP is the ideal-customer-profile flag.
 type Company struct {
-	ID         string `json:"id"`
-	Org        string `json:"-"`
-	Name       string `json:"name"`
+	// ID is the server-minted company id ("comp_" + 128 random bits).
+	ID string `json:"id"`
+	// Org is the owning tenant. Never on the wire: it is the isolation key the
+	// server reads from the validated principal, not a field a caller sends or reads.
+	Org string `json:"-"`
+	// Name is the company name.
+	Name string `json:"name"`
+	// DomainName is the company's primary domain, e.g. "acme.com".
 	DomainName string `json:"domainName"`
-	Employees  int64  `json:"employees"`
-	City       string `json:"city"`
-	Country    string `json:"country"`
-	ARR        int64  `json:"arr"`
-	Currency   string `json:"currency"`
-	ICP        bool   `json:"idealCustomerProfile"`
-	Linkedin   string `json:"linkedinLink"`
-	XLink      string `json:"xLink"`
-	CreatedAt  int64  `json:"createdAt"`
-	UpdatedAt  int64  `json:"updatedAt"`
+	// Employees is the headcount.
+	Employees int64 `json:"employees"`
+	// City is the head-office city.
+	City string `json:"city"`
+	// Country is the head-office country.
+	Country string `json:"country"`
+	// ARR is annual recurring revenue in minor units (cents) of Currency.
+	ARR int64 `json:"arr"`
+	// Currency is the ISO code ARR is denominated in; a write that names none
+	// stores USD.
+	Currency string `json:"currency"`
+	// ICP marks the company as an ideal-customer-profile fit.
+	ICP bool `json:"idealCustomerProfile"`
+	// Linkedin is the company's LinkedIn URL.
+	Linkedin string `json:"linkedinLink"`
+	// XLink is the company's X (Twitter) URL.
+	XLink string `json:"xLink"`
+	// CreatedAt is the unix second the company was created. Server-owned.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is the unix second of the last write. Server-owned.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 const companyCols = `id,org,name,domain_name,employees,city,country,arr,currency,icp,linkedin,x_link,created_at,updated_at`
@@ -276,19 +292,35 @@ func (s *Store) DeleteCompany(ctx context.Context, org, id string) (bool, error)
 // standard object (FULL_NAME/EMAILS/PHONES composites flattened). CompanyID is
 // an optional in-org relation to a Company.
 type Contact struct {
-	ID        string `json:"id"`
-	Org       string `json:"-"`
+	// ID is the server-minted contact id ("cont_" + 128 random bits).
+	ID string `json:"id"`
+	// Org is the owning tenant. Never on the wire: it is the isolation key the
+	// server reads from the validated principal, not a field a caller sends or reads.
+	Org string `json:"-"`
+	// FirstName is the person's given name.
 	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
-	Email     string `json:"email"`
-	Phone     string `json:"phone"`
-	JobTitle  string `json:"jobTitle"`
-	City      string `json:"city"`
+	// LastName is the person's family name.
+	LastName string `json:"lastName"`
+	// Email is the person's email address.
+	Email string `json:"email"`
+	// Phone is the person's phone number.
+	Phone string `json:"phone"`
+	// JobTitle is the person's role at their company.
+	JobTitle string `json:"jobTitle"`
+	// City is where the person is based.
+	City string `json:"city"`
+	// CompanyID links the contact to one of the org's companies; empty when the
+	// contact stands alone, and cleared when its company is deleted. A write
+	// naming a company the org does not own is refused with 422.
 	CompanyID string `json:"companyId"`
-	Linkedin  string `json:"linkedinLink"`
-	XLink     string `json:"xLink"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	// Linkedin is the person's LinkedIn URL.
+	Linkedin string `json:"linkedinLink"`
+	// XLink is the person's X (Twitter) URL.
+	XLink string `json:"xLink"`
+	// CreatedAt is the unix second the contact was created. Server-owned.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is the unix second of the last write. Server-owned.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 const contactCols = `id,org,first_name,last_name,email,phone,job_title,city,company_id,linkedin,x_link,created_at,updated_at`
@@ -414,17 +446,35 @@ func (s *Store) DeleteContact(ctx context.Context, org, id string) (bool, error)
 // standard object. Amount is minor units (cents) of Currency; CloseDate is a
 // unix second (0 == unset). Stage is validated against the default pipeline.
 type Opportunity struct {
-	ID             string `json:"id"`
-	Org            string `json:"-"`
-	Name           string `json:"name"`
-	Amount         int64  `json:"amount"`
-	Currency       string `json:"currency"`
-	Stage          string `json:"stage"`
-	CloseDate      int64  `json:"closeDate"`
-	CompanyID      string `json:"companyId"`
+	// ID is the server-minted opportunity id ("oppo_" + 128 random bits).
+	ID string `json:"id"`
+	// Org is the owning tenant. Never on the wire: it is the isolation key the
+	// server reads from the validated principal, not a field a caller sends or reads.
+	Org string `json:"-"`
+	// Name is the deal name.
+	Name string `json:"name"`
+	// Amount is the deal value in minor units (cents) of Currency.
+	Amount int64 `json:"amount"`
+	// Currency is the ISO code Amount is denominated in; a write that names none
+	// stores USD.
+	Currency string `json:"currency"`
+	// Stage is the pipeline stage, always one of NEW, SCREENING, MEETING,
+	// PROPOSAL or CUSTOMER — stored upper-case whatever case the write used.
+	Stage string `json:"stage"`
+	// CloseDate is the expected close as a unix second (0 = unset).
+	CloseDate int64 `json:"closeDate"`
+	// CompanyID links the deal to one of the org's companies; empty when
+	// unlinked, and cleared when that company is deleted. A write naming a
+	// company the org does not own is refused with 422.
+	CompanyID string `json:"companyId"`
+	// PointOfContact links the deal to one of the org's contacts; empty when
+	// unlinked, and cleared when that contact is deleted. A write naming a
+	// contact the org does not own is refused with 422.
 	PointOfContact string `json:"pointOfContactId"`
-	CreatedAt      int64  `json:"createdAt"`
-	UpdatedAt      int64  `json:"updatedAt"`
+	// CreatedAt is the unix second the opportunity was created. Server-owned.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is the unix second of the last write. Server-owned.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 const oppCols = `id,org,name,amount,currency,stage,close_date,company_id,point_of_contact,created_at,updated_at`

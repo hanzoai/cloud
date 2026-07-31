@@ -95,11 +95,26 @@ func Request(ctx context.Context) (*zip.Ctx, bool) {
 }
 
 // Created marks the response 201 Created and Accepted marks it 202 Accepted.
-// Together they are the whole vocabulary a typed op is missing — 200 is the
-// default, 204 is a nil Out, and every other code is a returned zip error — so
-// they are two named facts rather than a general status setter that could put a
-// 4xx here and diverge from the error path. Both are a no-op off the HTTP path,
-// where there is no status to set.
+//
+// Deprecated: declare the status on the op instead — `zip.WithStatus(201)` —
+// which is the same fact in the one place every projection reads.
+//
+// These exist because zip once had no vocabulary for a success status other than
+// 200 and 204, so the only way to answer 201 was to set it per request from
+// inside the handler. That works on the wire and nowhere else: the status is a
+// CONTRACT detail, and setting it here writes it into a side channel no
+// projection can read. The document keeps saying 200, so does every SDK
+// generated from it, and the route has always sent 201. It is the same failure
+// as a query parameter's required-ness being invisible — a contract detail that
+// exists only at run time is not a contract.
+//
+// zip v1.18.2 closed the gap: `zip.Post(app, path, fn, zip.WithStatus(201))`
+// keys the document's response object on 201, so a generated client expects what
+// the service sends. New ops declare it; these two stay so the call sites that
+// predate it keep working while they are converted, and they still set the
+// status they always did.
+//
+// Both are a no-op off the HTTP path, where there is no status to set.
 func Created(ctx context.Context)  { setStatus(ctx, http.StatusCreated) }
 func Accepted(ctx context.Context) { setStatus(ctx, http.StatusAccepted) }
 

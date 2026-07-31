@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
@@ -25,13 +25,18 @@ import (
 // legal-template discipline). Edits take effect immediately: the next resolve reads the
 // DB's latest version.
 
-// superAdmin wraps a handler so it runs ONLY for a platform SuperAdmin. The gate is
-// structural — every blueprint route is registered through it — so it can never be
-// forgotten on a new route.
+// errNotSuperAdmin is the ONE refusal the whole blueprint plane answers with, so
+// the untyped wrapper and the typed ops cannot drift into two different 403s.
+var errNotSuperAdmin = zip.ErrForbidden("SuperAdmin required: the brand blueprint is platform content")
+
+// superAdmin wraps an UNTYPED handler so it runs ONLY for a platform SuperAdmin.
+// The typed ops on this plane apply the same predicate at the top of the op
+// (superAdminOK), because a typed op receives only a context; both read the same
+// validated header, so the gate is one fact in one predicate either way.
 func superAdmin(s *cloud.Service[state], fn func(*cloud.Service[state], *zip.Ctx) error) zip.Handler {
 	return cloud.Handle(s, func(s *cloud.Service[state], c *zip.Ctx) error {
 		if !principal.IsSuperAdmin(c) {
-			return zip.ErrForbidden("SuperAdmin required: the brand blueprint is platform content")
+			return errNotSuperAdmin
 		}
 		return fn(s, c)
 	})
@@ -88,15 +93,22 @@ func (st state) saveBlueprint(ctx context.Context, key string, bp Blueprint) (in
 	return st.blueprints.SaveVersion(ctx, key, doc, time.Now().Unix())
 }
 
-// getBlueprint returns the FULL authored brand blueprint — every section/step/strategy/
-// template WITH its enabled flag (including disabled items, which the org-facing reads
-// never see) — plus the active version and the brand key. SuperAdmin only.
-func getBlueprint(s *cloud.Service[state], c *zip.Ctx) error {
-	bp, key, version, err := s.State.authoringBlueprint(c.Context())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+// GetBlueprint returns the FULL authored brand blueprint — every principle,
+// section, step, strategy and template WITH its enabled flag made explicit,
+// including the disabled items the org-facing reads never see — plus the active
+// version number, the brand key it is stored under and the item counts. It is the
+// SuperAdmin authoring view of the platform blueprint, so it is refused 403 for
+// anyone else, including a per-org admin: the brand blueprint is shared platform
+// content, not a per-customer surface.
+func (o ops) getBlueprint(ctx context.Context, _ *noInput) (*blueprintView, error) {
+	if !superAdminOK(ctx) {
+		return nil, errNotSuperAdmin
 	}
-	return c.JSON(http.StatusOK, blueprintResponse(bp, key, version))
+	bp, key, version, err := o.s.State.authoringBlueprint(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+	}
+	return blueprintResponse(bp, key, version), nil
 }
 
 // putBlueprint replaces the whole brand blueprint (a new version). The body must parse
@@ -134,22 +146,39 @@ func putBlueprint(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, blueprintResponse(bp, key, version))
 }
 
-// listBlueprintVersions returns the brand blueprint's version history (metadata only) —
-// the point-in-time-recovery / audit trail. SuperAdmin only.
-func listBlueprintVersions(s *cloud.Service[state], c *zip.Ctx) error {
-	if s.State.blueprints == nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: blueprint store unavailable")
+// blueprintVersionsView is the brand blueprint's version history.
+type blueprintVersionsView struct {
+	// Brand is the blueprint key the history belongs to — this deployment's brand,
+	// or "" (the base blueprint) when the brand has no row of its own.
+	Brand string `json:"brand"`
+	// Versions are the stored versions, newest first: metadata only, never the
+	// documents.
+	Versions []VersionMeta `json:"versions"`
+}
+
+// ListBlueprintVersions returns the brand blueprint's version history — every
+// stored version's number and edit time, newest first — which is the
+// point-in-time-recovery and audit trail behind the authoring plane. Metadata
+// only: the documents are not returned. SuperAdmin only, like the rest of this
+// plane. The history is listable even when the current stored document no longer
+// parses, so a schema-drifted row can still be diagnosed.
+func (o ops) listBlueprintVersions(ctx context.Context, _ *noInput) (*blueprintVersionsView, error) {
+	if !superAdminOK(ctx) {
+		return nil, errNotSuperAdmin
+	}
+	if o.s.State.blueprints == nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: blueprint store unavailable")
 	}
 	// Key without parsing: a corrupt stored doc must not block listing the version history.
-	key, err := s.State.writeKey(c.Context())
+	key, err := o.s.State.writeKey(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
-	versions, err := s.State.blueprints.ListVersions(c.Context(), key)
+	versions, err := o.s.State.blueprints.ListVersions(ctx, key)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"brand": key, "versions": versions})
+	return &blueprintVersionsView{Brand: key, Versions: versions}, nil
 }
 
 // patchBlueprintItem edits ONE item in a collection (sections|steps|strategies|
@@ -179,7 +208,7 @@ func patchBlueprintItem(s *cloud.Service[state], c *zip.Ctx) error {
 	case "sections":
 		found, err = patchIn(bp.Sections, id, func(x Section) string { return x.ID }, patch)
 	case "steps":
-		found, err = patchIn(bp.Steps, id, func(x Step) string { return x.ID }, patch)
+		found, err = patchIn(bp.Steps, id, func(x JourneyStep) string { return x.ID }, patch)
 	case "strategies":
 		found, err = patchIn(bp.Strategies, id, func(x Strategy) string { return x.ID }, patch)
 	case "templates":
@@ -256,20 +285,47 @@ func mergeItemPatch[T any](item T, patch []byte) (T, error) {
 	return out, nil
 }
 
-// blueprintResponse is the admin plane's envelope: the full blueprint (with every
-// enabled flag made explicit so the FE has no ambiguity), the active version, the brand
-// key, and item counts.
-func blueprintResponse(bp Blueprint, key string, version int) map[string]any {
-	return map[string]any{
-		"brand":     key,
-		"version":   version,
-		"blueprint": explicitEnabled(bp),
-		"counts": map[string]int{
-			"principles": len(bp.Principles),
-			"sections":   len(bp.Sections),
-			"steps":      len(bp.Steps),
-			"strategies": len(bp.Strategies),
-			"templates":  len(bp.Templates),
+// blueprintCounts is how many items the blueprint carries in each collection —
+// the summary the authoring cockpit shows without walking the document.
+type blueprintCounts struct {
+	Principles int `json:"principles"`
+	Sections   int `json:"sections"`
+	Steps      int `json:"steps"`
+	Strategies int `json:"strategies"`
+	Templates  int `json:"templates"`
+}
+
+// blueprintView is the admin plane's envelope: the full blueprint (with every
+// enabled flag made explicit so the FE has no ambiguity), the active version, the
+// brand key, and item counts.
+type blueprintView struct {
+	// Brand is the key this blueprint is stored under — the deployment's brand, or
+	// "" for the shared base blueprint it falls back to.
+	Brand string `json:"brand"`
+	// Version is the active stored version number (1 is the seed). Each edit
+	// appends a new one; nothing is ever overwritten.
+	Version int `json:"version"`
+	// Blueprint is the whole authored document, including items disabled for the
+	// org-facing reads, with every enabled flag written out explicitly.
+	Blueprint Blueprint `json:"blueprint"`
+	// Counts summarises how many items each collection holds.
+	Counts blueprintCounts `json:"counts"`
+}
+
+// blueprintResponse renders the envelope. It is the ONE shape the whole authoring
+// plane answers with — the typed GET and the untyped PUT/PATCH alike — so an edit
+// hands back exactly what a re-read would.
+func blueprintResponse(bp Blueprint, key string, version int) *blueprintView {
+	return &blueprintView{
+		Brand:     key,
+		Version:   version,
+		Blueprint: explicitEnabled(bp),
+		Counts: blueprintCounts{
+			Principles: len(bp.Principles),
+			Sections:   len(bp.Sections),
+			Steps:      len(bp.Steps),
+			Strategies: len(bp.Strategies),
+			Templates:  len(bp.Templates),
 		},
 	}
 }
@@ -286,7 +342,7 @@ func explicitEnabled(bp Blueprint) Blueprint {
 	for i := range bp.Sections {
 		bp.Sections[i].Enabled = boolPtr(on(bp.Sections[i].Enabled))
 	}
-	bp.Steps = append([]Step(nil), bp.Steps...)
+	bp.Steps = append([]JourneyStep(nil), bp.Steps...)
 	for i := range bp.Steps {
 		bp.Steps[i].Enabled = boolPtr(on(bp.Steps[i].Enabled))
 	}

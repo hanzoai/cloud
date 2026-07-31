@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/idv"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/cek"
-	"github.com/hanzoai/cloud/apps/idv"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -174,8 +174,8 @@ func (k fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
 	}
 	return nil, fmt.Errorf("no such secret %q", ref)
 }
-func (k fakeKMS) PutSecret(context.Context, string, []byte) error         { return nil }
-func (k fakeKMS) Sign(context.Context, string, []byte) ([]byte, error)    { return nil, nil }
+func (k fakeKMS) PutSecret(context.Context, string, []byte) error      { return nil }
+func (k fakeKMS) Sign(context.Context, string, []byte) ([]byte, error) { return nil, nil }
 
 // mountWithWebhook mounts compliance with a signature-authenticated webhook configured:
 // CLOUD_IDV_WEBHOOK_KEY_REF names a KMS secret the fakeKMS resolves to `secret`.

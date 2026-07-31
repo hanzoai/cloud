@@ -73,13 +73,13 @@ func newTestApp(t *testing.T) (*zip.App, *service) {
 	t.Helper()
 	s := newTestService(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Get("/v1/code/search", s.handleSearch)
-	app.Post("/v1/code/context", s.handleContext)
-	app.Get("/v1/code/ask", s.handleAsk)
-	app.Post("/v1/code/ask", s.handleAsk)
-	app.Post("/v1/code/index", s.handleIndex)
-	app.Get("/v1/code/tree", s.handleTree)
-	app.Get("/v1/code/file", s.handleFile)
+	// The REAL registration, not a reconstruction of it: routes() is what Mount
+	// calls, so the Bridge that carries the validated org to every typed op is
+	// exercised here exactly as the binary installs it. A hand-listed copy drifts
+	// silently the first time a route moves.
+	if err := routes(app, s); err != nil {
+		t.Fatalf("routes: %v", err)
+	}
 	return app, s
 }
 
@@ -165,7 +165,7 @@ def make_sound():
 
 func indexFixtures(t *testing.T, app *zip.App, org, repo string) indexResult {
 	t.Helper()
-	body := indexReq{Repo: repo, Files: []fileInput{
+	body := indexIn{Repo: repo, Files: []fileInput{
 		{Path: "greeter.go", Content: goFixture},
 		{Path: "user.ts", Content: tsFixture},
 		{Path: "animal.py", Content: pyFixture},

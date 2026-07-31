@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/tools"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the tools app.
@@ -17,10 +18,21 @@ import (
 // `tools openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Serve([]cloud.Plugin{{
-		Name:     "tools",
-		Price:    cloud.Metered,
+		Name:  "tools",
+		Price: cloud.Metered,
+		// The registry views (/v1/skills, /v1/mcp/servers, /v1/plugins) are this
+		// subsystem's surface too, so they must be declared or a request to one
+		// resolves to no subsystem and its price is Undeclared. Kept in sync
+		// with manifest/apps.go, which states the same thing for the fused host.
+		Prefixes: manifest.PrefixesFor("tools"),
 		Mount:    tools.Mount,
 		Shutdown: tools.Shutdown,
+		// The per-caller half of the fleet's ONE MCP door. This app's typed ops are
+		// projected into mcp.json at build time like every other app's; what cannot
+		// be projected is the caller's OWN tools — its connectors, skills, agents,
+		// and the external servers it enabled — because those are rows. The host
+		// declares this app Open (manifest/apps.go) and asks it per caller.
+		Door: tools.Door(),
 	}}, []string{"tools"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -1,9 +1,10 @@
 // Package runtime is the transport to the bot runtime service — the TS bot that
-// executes channels and skills.
+// executes channels and skills — and it relays that service's own ops paths at
+// /v1/bot/* (ops.go), the only routes it serves.
 //
 // It knows how to MOVE BYTES to that service and nothing about what they mean.
 // There is no run here, no coding task, no tenant policy: the domains own their
-// own wire contracts (clients/bots' stop, clients/coding's task) and express them
+// own wire contracts (apps/bots' stop, apps/coding's task) and express them
 // as a Call. So exactly ONE place resolves the base address, mints the
 // server-originated identity, frames the stream, bounds a call, and decides
 // whether a cleartext hop is allowed.

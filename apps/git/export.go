@@ -21,7 +21,7 @@ func CloneURL(org, name string) string {
 	if s == nil {
 		return ""
 	}
-	return cloneURL(s, org, name)
+	return cloneURL(s, org, "", name)
 }
 
 // VerifyRef reports the tip commit of branch in an org's repo, reading the on-disk

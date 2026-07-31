@@ -37,13 +37,19 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state]) {
 	mounted = s
 	t.Cleanup(func() { mounted = nil })
 	app := zip.New(zip.Config{Logger: log})
-	app.Get("/v1/finance/treasury", cloud.Handle(s, myTreasury))
-	app.Get("/v1/finance/accounts", cloud.Handle(s, myAccounts))
-	app.Get("/v1/admin/treasury", cloud.Handle(s, adminReport))
-	app.Post("/v1/admin/treasury/policy", cloud.Handle(s, adminSetPolicy))
-	app.Post("/v1/admin/treasury/sweep", cloud.Handle(s, adminSweep))
-	app.Post("/v1/admin/treasury/seed", cloud.Handle(s, adminSeed))
-	app.Post("/v1/admin/treasury/anchor", cloud.Handle(s, adminAnchor))
+	// cloud.Bridge FIRST, exactly as Mount installs it: a typed op receives only a
+	// context, so the request its handlers read the SuperAdmin bit and the org off
+	// crosses on that. Registered before the leaves — fiber runs middleware in
+	// registration order.
+	app.Use(cloud.Bridge())
+	o := ops{s: s}
+	zip.Get(app, "/v1/finance/treasury", o.myTreasury)
+	zip.Get(app, "/v1/finance/accounts", o.myAccounts)
+	zip.Get(app, "/v1/admin/treasury", o.adminReport)
+	zip.Post(app, "/v1/admin/treasury/policy", o.adminSetPolicy)
+	zip.Post(app, "/v1/admin/treasury/sweep", o.adminSweep)
+	zip.Post(app, "/v1/admin/treasury/seed", o.adminSeed)
+	zip.Post(app, "/v1/admin/treasury/anchor", o.adminAnchor)
 	return app, s
 }
 
@@ -132,7 +138,7 @@ func TestPolicy_SetAndRead(t *testing.T) {
 	}
 	// customer read reflects the policy
 	_, cb := req(t, app, http.MethodGet, "/v1/finance/treasury", "acme", true, nil)
-	var rep ledger.Report
+	var rep ledger.TreasuryReport
 	if err := json.Unmarshal(cb, &rep); err != nil {
 		t.Fatalf("decode report: %v", err)
 	}

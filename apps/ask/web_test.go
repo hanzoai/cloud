@@ -56,7 +56,7 @@ func TestAskWebModeDispatch(t *testing.T) {
 	}
 
 	// web mode → the answer engine
-	body, _ := json.Marshal(AskRequest{Q: "who created clojure and why", Mode: "search"})
+	body, _ := json.Marshal(askRequest{Q: "who created clojure and why", Mode: "search"})
 	req := httptest.NewRequest(http.MethodPost, "/v1/ask", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-Id", "acme")

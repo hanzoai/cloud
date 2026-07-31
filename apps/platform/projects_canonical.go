@@ -16,6 +16,7 @@
 // When IAM_URL is absent the process IS the IAM (single-binary: the embedded
 // subsystem serves /v1/iam), so the in-process store remains the canonical one
 // and iamProjects is used unchanged. The selector is newProjectStore.
+
 package platform
 
 import (

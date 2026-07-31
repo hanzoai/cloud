@@ -30,12 +30,12 @@ package account
 // key (tokens then reset on restart — the SPA re-fetches on a 403).
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -153,23 +153,29 @@ func ambientCookieAuth(c *zip.Ctx) bool {
 	return len(c.Fiber().Request().Header.Peek("Cookie")) > 0
 }
 
-// requireCSRF wraps a state-changing handler, enforcing a valid X-CSRF-Token on the
+// requireCSRF gates a state-changing handler, enforcing a valid X-CSRF-Token on the
 // ambient-cookie path only (see package note). A validated principal is required for
-// the ambient path to mean anything; the wrapped handler still does its own
+// the ambient path to mean anything; the gated handler still does its own
 // resolveCaller, so this only ADDS the anti-CSRF gate.
-func requireCSRF(s *cloud.Service[state], next zip.Handler) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if !ambientCookieAuth(c) {
-			return next(c) // Bearer/Basic/gateway/API — not CSRF-able
+//
+// It is a zip.Middleware so ONE definition serves both the typed ops (through With,
+// which carries it into the registration — a decorator that dropped it there would
+// register the op UNGATED) and the raw handlers the untyped routes still use.
+func requireCSRF(s *cloud.Service[state]) zip.Middleware {
+	return func(next zip.Handler) zip.Handler {
+		return func(c *zip.Ctx) error {
+			if !ambientCookieAuth(c) {
+				return next(c) // Bearer/Basic/gateway/API — not CSRF-able
+			}
+			tok := strings.TrimSpace(c.Header("X-CSRF-Token"))
+			if tok == "" {
+				return zip.ErrForbidden("missing CSRF token (GET /v1/csrf and echo it in X-CSRF-Token)")
+			}
+			if !verifyCSRF(s, tok, strings.TrimSpace(c.User()), strings.TrimSpace(c.Org())) {
+				return zip.ErrForbidden("invalid or expired CSRF token")
+			}
+			return next(c)
 		}
-		tok := strings.TrimSpace(c.Header("X-CSRF-Token"))
-		if tok == "" {
-			return zip.ErrForbidden("missing CSRF token (GET /v1/csrf and echo it in X-CSRF-Token)")
-		}
-		if !verifyCSRF(s, tok, strings.TrimSpace(c.User()), strings.TrimSpace(c.Org())) {
-			return zip.ErrForbidden("invalid or expired CSRF token")
-		}
-		return next(c)
 	}
 }
 
@@ -187,19 +193,33 @@ func requireCSRF(s *cloud.Service[state], next zip.Handler) zip.Handler {
 // read nothing else off it.
 func RequireCSRF() zip.Handler {
 	s := &cloud.Service[state]{State: state{csrfKey: sharedCSRFKey(nil)}}
-	return requireCSRF(s, func(c *zip.Ctx) error { return c.Next() })
+	return requireCSRF(s)(func(c *zip.Ctx) error { return c.Next() })
 }
 
-// issueCSRFToken serves GET /v1/csrf: for a VALIDATED caller, a fresh token
-// bound to their identity. no-store so it is never cached by a shared proxy. This is
-// the same-origin endpoint the embedded SPA reads (its response body is unreadable to
-// a cross-site page), then echoes on every money write.
-func issueCSRFToken(s *cloud.Service[state], c *zip.Ctx) error {
-	cr, ok := resolveCaller(c, false) // a zero-org (first-run) user may still need a token
+// csrfResp is the anti-CSRF token a browser echoes on every money write.
+type csrfResp struct {
+	// Token is the value to send back in the X-CSRF-Token header. It is bound to the
+	// caller's identity, so it authorizes writes as them and as nobody else.
+	Token string `json:"csrfToken"`
+	// ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;
+	// a write with an expired token is refused.
+	ExpiresIn int64 `json:"expiresIn"`
+}
+
+// IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on
+// every money write (mint/revoke a key, top up, onboard, and the billing/commerce
+// write verbs). The token is bound to the caller's validated identity and expires,
+// so one minted for one identity cannot authorize a write as another.
+//
+// It is answered no-store, so it is never cached by a shared proxy. This is the
+// same-origin endpoint the embedded console reads — the Same-Origin Policy is what
+// stops a cross-site page from reading the response and forging a write.
+func (o ops) issueCSRFToken(ctx context.Context, _ *noInput) (*csrfResp, error) {
+	cr, c, ok := requestCaller(ctx, false) // a zero-org (first-run) user may still need a token
 	if !ok {
-		return zip.ErrForbidden("sign in to obtain a CSRF token")
+		return nil, zip.ErrForbidden("sign in to obtain a CSRF token")
 	}
-	token, ttl := issueCSRF(s, cr.name, cr.owner)
+	token, ttl := issueCSRF(o.s, cr.name, cr.owner)
 	c.Fiber().Set("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, map[string]any{"csrfToken": token, "expiresIn": ttl})
+	return &csrfResp{Token: token, ExpiresIn: ttl}, nil
 }

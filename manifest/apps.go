@@ -26,18 +26,40 @@ var Apps = []App{
 	{Name: "agentskills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
 	{Name: "flags", Prefixes: []string{"/v1/flags"}},
 	{Name: "kms", Prefixes: []string{"/v1/kms"}},
-	{Name: "metrics", Prefixes: []string{"/v1/metrics"}},
+	// /v1/logs and /v1/traces are metrics' own ingestion + query doors (see
+	// plugin/metrics/openapi.json); unnamed here they fell to whichever row held
+	// the bare "/v1" remainder, which serves none of them.
+	{Name: "metrics", Prefixes: []string{"/v1/logs", "/v1/metrics", "/v1/traces"}},
 	{Name: "ingress", Prefixes: []string{"/v1/ingress"}},
 	{Name: "account", Prefixes: []string{"/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed-status", "/v1/iam/keys", "/v1/iam/onboard", "/v1/keys"}},
 	{Name: "iam", Prefixes: []string{"/login/oauth", "/v1/iam"}},
 	{Name: "base", Prefixes: []string{"/v1/base", "/v1/collections", "/v1/waitlist"}},
 	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
-	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1"}},
+	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
+	// the fleet's route of last resort: every path no app named deeper — the whole
+	// OpenAI-compatible surface among them — landed on commerce and answered its
+	// 404. The "/v1" remainder is ai's row now, at the tail. Each subtree here is
+	// DEEPER than the sibling that shares its stem, because a static prefix outranks
+	// a sibling wildcard regardless of mount order: catalog keeps its bare
+	// /v1/catalog, plan keeps the rest of /v1/plans/*, and account-bridge keeps the
+	// /v1/commerce/* and /v1/billing/* per-tenant data bridges the console calls.
+	// This is NOT commerce.Prefixes imported (that would re-fatten the host): the
+	// app states its fail-closed set once (apps/commerce/mount.go); this row states
+	// what the ROUTER may hand it, and router_test.go's oracle keeps the two honest.
+	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/auto-recharge", "/v1/billing/invoices", "/v1/billing/payment-config", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/spend-alerts", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/test-mode", "/v1/billing/topup/token", "/v1/billing/webhooks", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/currencies", "/v1/commerce/deposits", "/v1/commerce/tenant", "/v1/commerce/webhooks", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing", "/v1/pricing-policy"}},
-	{Name: "storage", Prefixes: []string{"/v1/s3"}},
+	// storage is the S3 DATA plane (buckets, objects, health); provisioning below
+	// PROVISIONS an s3 resource and answers /v1/s3 + /v1/s3/{name}. Both rows once
+	// read "/v1/s3" — one prefix, two owners — so whichever mounted first took the
+	// other's routes with it, and provisioning's /v1/s3/{name} matched
+	// /v1/s3/buckets and /v1/s3/health besides. Naming the deeper prefixes storage
+	// actually serves lets longest-prefix match separate them, which is exactly how
+	// the same pair already works for /v1/vector (provisioning) against
+	// /v1/vector/collections (product). No route moves.
+	{Name: "storage", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
 	{Name: "provisioning", Prefixes: []string{"/v1/datastore", "/v1/docdb", "/v1/kv", "/v1/s3", "/v1/search", "/v1/sql", "/v1/vector"}},
 	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/gpu-charge", "/v1/billing/gpu-eligibility", "/v1/billing/payment-methods", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
@@ -72,7 +94,23 @@ var Apps = []App{
 	{Name: "campaign", Prefixes: []string{"/v1/campaign"}},
 	{Name: "validators", Prefixes: []string{"/v1/validators"}},
 	{Name: "social", Prefixes: []string{"/v1/social"}},
-	{Name: "analytics", Prefixes: []string{"/v1/analytics/health", "/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top", "/v1/errors", "/v1/insights/events", "/v1/insights/health"}},
+	// The INGESTION doors are load-bearing, not decorative: apps/analytics/event.go's
+	// `doors` table serves /v1/event and /v1/insights/e, and every beacon the products
+	// emit lands on one of the two. Listing only the read endpoints (as this row did)
+	// sent every write to commerce's bare "/v1" catch-all, which does not serve them —
+	// 405, silently, for every event in the fleet. The row was harmless while each app
+	// called its own routes(); it became the router when the mega-build died, so a
+	// missing prefix is now an outage.
+	//
+	// "/v1/event" is the ONE canonical ingest door — the product, team, LLM-obs and
+	// Sentry-envelope wires all arrive on it. "/v1/insights/e" is the PostHog wire,
+	// held open by an ingress rewrite on insights.hanzo.ai rather than by a caller
+	// that names it. The other four prefixes are READ ONLY: bare "/v1/analytics" now
+	// carries only the four lenses (overview, timeseries, top, health) — the ingest
+	// aliases under it are retired — and /v1/errors, /v1/insights/events and
+	// /v1/insights/health are GET lenses. /v1/tracker is NOT here and never was:
+	// the tracker product owns that name (its row is above, and it wins the prefix).
+	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/insights/e", "/v1/insights/events", "/v1/insights/health"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/agent-bindings", "/v1/clusters", "/v1/compute/bots", "/v1/compute/regions", "/v1/compute/sizes", "/v1/fleet", "/v1/gpus", "/v1/k8s/clusters", "/v1/k8s/nodes", "/v1/machines"}},
@@ -88,7 +126,14 @@ var Apps = []App{
 	{Name: "destinations", Prefixes: []string{"/v1/destinations"}},
 	{Name: "cloudflare", Prefixes: []string{"/v1/cloudflare"}},
 	{Name: "sbom", Prefixes: []string{"/v1/sbom"}},
-	{Name: "team", Prefixes: []string{"/v1/team"}},
+	// /collaborator is team's SECOND plane and it is app-level on purpose: the Team
+	// front derives both the Y.js WebSocket (GET /collaborator) and the markup
+	// snapshot RPC (POST /collaborator/rpc/{documentId}) from COLLABORATOR_URL, not
+	// from the /v1/team base. Unnamed here they fell past every prefix to the
+	// console the host serves at "/", so the collaborative editor got the HTML shell
+	// and the typed RPC — published in openapi.yaml and therefore in every generated
+	// SDK and the MCP tool list — reached no app at all.
+	{Name: "team", Prefixes: []string{"/collaborator", "/v1/team"}},
 	{Name: "meet", Prefixes: []string{"/v1/meet/getToken", "/v1/meet/health"}},
 	{Name: "settings", Prefixes: []string{"/v1/settings"}},
 	{Name: "prefs", Prefixes: []string{"/v1/prefs"}},
@@ -97,7 +142,7 @@ var Apps = []App{
 	{Name: "gateway", Prefixes: []string{"/v1/gateway"}},
 	{Name: "entitlements", Prefixes: []string{"/v1/entitlements", "/v1/orgs/:org/entitlements"}},
 	{Name: "exec", Prefixes: []string{"/v1/download", "/v1/exec", "/v1/files", "/v1/upload"}},
-	{Name: "websearch", Prefixes: []string{"/v1/websearch"}},
+	{Name: "websearch", Prefixes: []string{"/v1/websearch", "/v1/scrape"}},
 	{Name: "crawl", Prefixes: []string{"/v1/crawl"}},
 	{Name: "index", Prefixes: []string{"/v1/index"}},
 	{Name: "catalog", Prefixes: []string{"/v1/catalog"}},
@@ -120,7 +165,12 @@ var Apps = []App{
 	{Name: "admission", Prefixes: []string{"/v1/flags/waitlist"}},
 	{Name: "tasks", Prefixes: []string{"/tasks", "/v1/tasks"}},
 	{Name: "automations", Prefixes: []string{"/v1/automations"}},
-	{Name: "tools", Prefixes: []string{"/v1/tools"}},
+	// Open: the tool plane also serves the CALLER's own tools — its connectors,
+	// skills, agents, and the external MCP servers it enabled — which are rows and
+	// cannot be in a build-time catalogue. The host asks it per caller on a
+	// tools/list that names one. It is the only open app in the fleet, and zip
+	// refuses a second.
+	{Name: "tools", Open: true, Prefixes: []string{"/v1/mcp/servers", "/v1/plugins", "/v1/skills", "/v1/tools"}},
 	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}},
 	{Name: "referrals", Prefixes: []string{"/v1/admin/referrals/bonuses", "/v1/admin/referrals/sweep", "/v1/referrals"}},
 	{Name: "guide", Prefixes: []string{"/v1/guide"}},
@@ -130,7 +180,17 @@ var Apps = []App{
 	{Name: "agent", Prefixes: []string{"/v1/agent"}},
 	{Name: "ask", Prefixes: []string{"/v1/ask"}},
 	{Name: "translate", Prefixes: []string{"/v1/translate"}},
-	{Name: "zen", Prefixes: []string{"/v1"}},
-	{Name: "ai", Prefixes: []string{"/v1/ai"}},
+	// ai owns the /v1 REMAINDER: the OpenAI-compatible surface
+	// (/v1/chat/completions, /v1/models, /v1/embeddings, /v1/responses,
+	// /v1/audio/*, /v1/messages, …) is served by ai's own /v1/* catch-all
+	// (hanzoai/ai mount), so whichever row holds "/v1" decides whether that
+	// surface exists at all. Every deeper prefix above still wins; ai takes only
+	// what nobody named.
+	{Name: "ai", Prefixes: []string{"/v1"}},
+	// zen serves only CO-RESIDENT: its mount is a Claim middleware on ai's router
+	// (apps/zen), routing zen-SKU requests and Next()ing the rest. It therefore
+	// routes NO prefix of its own — see App.Coresident. The row exists because
+	// every plugin/<name> binary must have one (gen-app-cmds bijection).
+	{Name: "zen", Coresident: true},
 	{Name: "plugins", Prefixes: []string{"/v1/admin/plugins"}},
 }

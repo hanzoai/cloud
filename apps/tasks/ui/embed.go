@@ -12,7 +12,7 @@
 // is produced in a separate frontend workspace and synced in at release time —
 // a step the tasks module's own releases do not run, so cloud's tasks UI was a
 // placeholder. cloud is the ONE process that serves tasks.hanzo.ai (durable.go's
-// EmbeddedTasks engine + clients/tasks's /v1/tasks surface), so cloud owns the
+// EmbeddedTasks engine + apps/tasks's /v1/tasks surface), so cloud owns the
 // UI embed too: one binary, one origin, the real UI. This retires the standalone
 // tasks-ui pod (a Temporal-Web-UI fork).
 //
@@ -20,7 +20,7 @@
 // base '/tasks/' and API prefix '/v1/tasks' (see the admin-tasks vite.config),
 // so every asset + XHR is same-origin under the paths cloud already serves. To
 // refresh it, rebuild the admin-tasks app and sync its dist/ here — see
-// clients/tasks/ui/README.md.
+// apps/tasks/ui/README.md.
 package ui
 
 import (

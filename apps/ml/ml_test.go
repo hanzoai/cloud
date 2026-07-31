@@ -1,6 +1,7 @@
 package ml
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -157,27 +158,62 @@ func TestView(t *testing.T) {
 		"status":     map[string]any{"url": "http://m1.ml-acme.svc.cluster.local"},
 	}}
 
-	noSpec := view(obj, false)
-	if noSpec["name"] != "m1" {
-		t.Fatalf("name = %v", noSpec["name"])
+	// Asserted on the BYTES, not on Go field access: view returns the mlResource
+	// the typed ops publish where it used to return a map[string]any, and the whole
+	// requirement of that change is that the wire did not move. encoding/json sorts
+	// a map's keys and marshals a struct's fields in declaration order, so this is
+	// also the gate on mlResource's alphabetical field order.
+	noSpec, err := json.Marshal(view(obj, false))
+	if err != nil {
+		t.Fatalf("marshal list view: %v", err)
 	}
-	if _, ok := noSpec["status"]; !ok {
-		t.Fatal("status must be present in list view")
-	}
-	if _, ok := noSpec["spec"]; ok {
-		t.Fatal("spec must NOT be present in list view")
-	}
-	if _, ok := noSpec["createdAt"]; !ok {
-		t.Fatal("createdAt must be present")
-	}
-	// Namespace is an internal tenant detail and must never be echoed.
-	if _, ok := noSpec["namespace"]; ok {
-		t.Fatal("namespace must not be echoed")
+	const wantList = `{"createdAt":"0001-01-01T00:00:00Z","name":"m1",` +
+		`"status":{"url":"http://m1.ml-acme.svc.cluster.local"}}`
+	if string(noSpec) != wantList {
+		t.Fatalf("list view = %s\nwant       %s", noSpec, wantList)
 	}
 
-	withSpec := view(obj, true)
-	if _, ok := withSpec["spec"]; !ok {
-		t.Fatal("spec must be present in single-object view")
+	withSpec, err := json.Marshal(view(obj, true))
+	if err != nil {
+		t.Fatalf("marshal object view: %v", err)
+	}
+	const wantObject = `{"createdAt":"0001-01-01T00:00:00Z","name":"m1",` +
+		`"spec":{"predictor":{"model":{"runtime":"x"}}},` +
+		`"status":{"url":"http://m1.ml-acme.svc.cluster.local"}}`
+	if string(withSpec) != wantObject {
+		t.Fatalf("object view = %s\nwant         %s", withSpec, wantObject)
+	}
+}
+
+// A CR that carries an EMPTY spec or status object still says so on the wire:
+// `{}` is present, and only an ABSENT key is omitted. That distinction is why
+// mlResource holds *map[string]any rather than a map with `omitempty` — the map
+// form would drop a `{}` this route has always sent.
+func TestViewKeepsAnEmptyObjectAndOmitsAnAbsentOne(t *testing.T) {
+	empty := &unstructured.Unstructured{Object: map[string]any{
+		"metadata": map[string]any{"name": "m1"},
+		"spec":     map[string]any{},
+		"status":   map[string]any{},
+	}}
+	got, err := json.Marshal(view(empty, true))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	const want = `{"createdAt":"0001-01-01T00:00:00Z","name":"m1","spec":{},"status":{}}`
+	if string(got) != want {
+		t.Fatalf("empty spec/status = %s\nwant                 %s", got, want)
+	}
+
+	absent := &unstructured.Unstructured{Object: map[string]any{
+		"metadata": map[string]any{"name": "m1"},
+	}}
+	got, err = json.Marshal(view(absent, true))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	const wantAbsent = `{"createdAt":"0001-01-01T00:00:00Z","name":"m1"}`
+	if string(got) != wantAbsent {
+		t.Fatalf("absent spec/status = %s\nwant                  %s", got, wantAbsent)
 	}
 }
 

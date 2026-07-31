@@ -12,6 +12,10 @@ func init() {
 	zip.Describe("GET /v1/admin/audit", zip.Doc{
 		Description: "Records reads cloud's tamper-evident audit trail, newest first, with the chain's live\nintegrity attached so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list. Those rows carry no integrity of ours, so the field is\nnull there.",
 		Fields: map[string]string{
+			"Integrity.brokenAt":   "BrokenAt is the seq of the FIRST record that failed verification, or -1 when\nOK. Reason describes the break (recomputed-hash mismatch, prev-hash\ndiscontinuity, or a seq gap).",
+			"Integrity.count":      "Count is the number of records walked.",
+			"Integrity.headHash":   "HeadHash is the hash of the last record (or the genesis anchor for an empty\nchain). Pin this externally over time to detect tail-truncation.",
+			"Integrity.ok":         "OK is true iff every record's stored hash equals the recomputed hash AND the\nchain links are continuous (each PrevHash == the prior record's Hash, seqs\ngapless from 0).",
 			"RecordsIn.action":     "Action restricts it to one action name, e.g. \"admin.waitlist.grant\".",
 			"RecordsIn.org":        "Org restricts the trail to one tenant.",
 			"RecordsIn.p":          "Page is the 1-based page number, driving the offset.",
@@ -24,10 +28,16 @@ func init() {
 			"RecordsIn.until":      "Until is the upper time bound, RFC3339, with the same tolerance.",
 		},
 		Example:  json.RawMessage(`{"org":"acme","action":"admin.waitlist.grant","since":"2026-07-01T00:00:00Z","pageSize":"50"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"seq":41,"ts":"2026-07-26T18:00:00Z","org":"acme","sub":"z@hanzo.ai","action":"admin.waitlist.grant","resource":"waitlist","result":"success"}],"data2":1,"integrity":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"seq":41,"ts":"2026-07-26T18:00:00Z","org":"acme","sub":"z@hanzo.ai","action":"admin.waitlist.grant","resource":"waitlist","result":"success"}],"total":1,"integrity":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}`),
 	})
 	zip.Describe("GET /v1/admin/audit/verify", zip.Doc{
 		Description: "Verify walks the WHOLE hash chain and reports whether it is intact: how many records\nwere checked, the head hash to pin externally against tail-truncation, and — when the\nchain is broken — the seq of the first bad record and why.\n\nbrokenAt is -1 exactly when ok is true. An unconfigured store is an honest failure\nhere rather than a fabricated pass.",
-		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}`),
+		Fields: map[string]string{
+			"Integrity.brokenAt": "BrokenAt is the seq of the FIRST record that failed verification, or -1 when\nOK. Reason describes the break (recomputed-hash mismatch, prev-hash\ndiscontinuity, or a seq gap).",
+			"Integrity.count":    "Count is the number of records walked.",
+			"Integrity.headHash": "HeadHash is the hash of the last record (or the genesis anchor for an empty\nchain). Pin this externally over time to detect tail-truncation.",
+			"Integrity.ok":       "OK is true iff every record's stored hash equals the recomputed hash AND the\nchain links are continuous (each PrevHash == the prior record's Hash, seqs\ngapless from 0).",
+		},
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}`),
 	})
 }

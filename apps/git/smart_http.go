@@ -172,12 +172,45 @@ func packRequestBody(c *zip.Ctx) io.Reader {
 // the authenticated org (path-vs-identity guard), and confirm the repo exists.
 // Returns the (org, project, name) the pack driver operates on.
 //
+// The project sub-scope comes from the :project path segment when the request
+// used the three-segment form, and from X-Project-Id otherwise. The path wins
+// because it is what `git clone` can express: a URL is the only channel a git
+// client has, and a header cannot reach a remote.
+//
 // allowPublic is the READ concession: with no authenticated org, a fetch-side
 // caller (upload-pack) may still resolve a repo that is (a) addressed by an
-// explicit, orgRE-safe :org path segment, (b) org-level (no project sub-scope —
-// anonymous callers have no validated project identity), and (c) marked Public.
-// A private or missing repo answers the SAME 404, so anonymous probing cannot
-// distinguish existence. Push (receive-pack) never passes allowPublic.
+// explicit, orgRE-safe :org path segment and (b) marked Public. A private or
+// missing repo answers the SAME 404, so anonymous probing cannot distinguish
+// existence. Push (receive-pack) never passes allowPublic.
+//
+// An anonymous caller may name a project in the PATH but never in the header.
+// The two are not equivalent: the header asserts the caller's own scope and is
+// unvalidated without a principal, whereas the path segment only addresses a
+// different repo — one that still has to be Public to be served. Refusing the
+// path form instead would leave every public project-scoped repo unclonable.
+// packProject resolves the sub-scope a pack request operates in.
+//
+// The :project path segment wins when present, for both authenticated and
+// anonymous callers: it addresses a repo rather than asserting a scope, and the
+// repo's own Public flag still decides whether an anonymous caller may read it.
+// It is validated against projectRE because it becomes a storage path segment.
+//
+// With no path segment the header applies, and only with a principal behind it —
+// an unauthenticated X-Project-Id is unvalidated input, so it degrades to the
+// org level exactly as before.
+func packProject(c *zip.Ctx, authed bool) (string, error) {
+	if p := c.Param("project"); p != "" {
+		if len(p) > 128 || !projectRE.MatchString(p) {
+			return "", zip.ErrBadRequest("project path segment is not a valid identifier")
+		}
+		return p, nil
+	}
+	if !authed {
+		return "", nil
+	}
+	return projectScope(c), nil
+}
+
 func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx, allowPublic bool) (string, string, string, error) {
 	orgID, authed := org(c)
 	if !authed {
@@ -193,9 +226,9 @@ func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx, allowPublic bool) (str
 	if err != nil {
 		return "", "", "", err
 	}
-	project := projectScope(c)
-	if !authed {
-		project = "" // anonymous has no validated sub-scope; public repos are org-level
+	project, err := packProject(c, authed)
+	if err != nil {
+		return "", "", "", err
 	}
 	if p := c.Param("org"); p != "" && p != orgID {
 		return "", "", "", zip.ErrForbidden("org path does not match authenticated org")
@@ -239,7 +272,7 @@ func fireBranchBuild(s *cloud.Service[state], ctx context.Context, org, project,
 	branch, before, pusher = strings.Clone(branch), strings.Clone(before), strings.Clone(pusher)
 	if err := cloud.OnGitPush(ctx, cloud.GitPushEvent{
 		Org: org, Project: project, Repo: name,
-		Ref: "refs/heads/" + branch, Commit: after, CloneURL: cloneURL(s, org, name),
+		Ref: "refs/heads/" + branch, Commit: after, CloneURL: cloneURL(s, org, project, name),
 	}); err != nil {
 		s.Log.Warn("git push-to-deploy trigger failed", "org", org, "repo", name, "branch", branch, "err", err)
 	}

@@ -13,6 +13,7 @@
 // Every cluster write targets tenant-<org> derived from the VALIDATED org
 // (s.tenant → provisioning.SanitizeOrg), never a request value — the same
 // cross-tenant isolation boundary as the rest of platform.
+
 package platform
 
 import (

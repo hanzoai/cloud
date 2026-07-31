@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/zap-proto/zip"
 )
 
 // community.go — git's half of the visibility seam.
@@ -33,14 +35,14 @@ import (
 // moderation without tracking transitions. A missed transition would leave a
 // private project world-readable, which is the one failure here that cannot be
 // taken back — so the cheap redundant write is the right trade.
-func publish(ctx context.Context, ev cloud.Visibility) error {
+func publish(ctx context.Context, org string, ev plane.Visibility) error {
 	s := mounted.Load()
 	if s == nil {
 		return nil // git plane not mounted (or shutting down): nothing to apply
 	}
-	store, err := storeFor(s, ev.Org)
+	store, err := storeFor(s, org)
 	if err != nil {
-		return fmt.Errorf("community: open %s store: %w", ev.Org, err)
+		return fmt.Errorf("community: open %s store: %w", org, err)
 	}
 
 	// Name/Description seed the repo only at creation. Re-imposing them on every
@@ -52,7 +54,7 @@ func publish(ctx context.Context, ev cloud.Visibility) error {
 	}
 	now := time.Now().Unix()
 	err = provision(s, ctx, store, Repo{
-		ID: id, Org: ev.Org, Name: ev.Slug,
+		ID: id, Org: org, Name: ev.Slug,
 		Description: ev.Description, DefaultBranch: defaultBranchName,
 		Public:    ev.Listed,
 		CreatedAt: now, UpdatedAt: now,
@@ -61,16 +63,16 @@ func publish(ctx context.Context, ev cloud.Visibility) error {
 	case err == nil:
 		// Created with the right visibility already on it; still attach (or skip)
 		// the replica, so a brand-new public project is mirrored like any other.
-		return mirror(ctx, ev)
+		return mirror(ctx, org, ev)
 	case !errors.Is(err, errConflict):
-		return fmt.Errorf("community: provision %s/%s: %w", ev.Org, ev.Slug, err)
+		return fmt.Errorf("community: provision %s/%s: %w", org, ev.Slug, err)
 	}
 
 	// Already there: reconcile the one field this seam owns.
-	if err := store.SetPublic(ctx, ev.Org, "", ev.Slug, ev.Listed, now); err != nil {
-		return fmt.Errorf("community: set visibility %s/%s: %w", ev.Org, ev.Slug, err)
+	if err := store.SetPublic(ctx, org, "", ev.Slug, ev.Listed, now); err != nil {
+		return fmt.Errorf("community: set visibility %s/%s: %w", org, ev.Slug, err)
 	}
-	return mirror(ctx, ev)
+	return mirror(ctx, org, ev)
 }
 
 // mirror gives the project a REAL GitHub repo under the community org
@@ -88,16 +90,16 @@ func publish(ctx context.Context, ev cloud.Visibility) error {
 // endpoint use — so there is one outbound target list and no second way to add
 // to it. No credential ⇒ ensure returns "" and the whole replica is
 // skipped, rather than registering a push that could never land.
-func mirror(ctx context.Context, ev cloud.Visibility) error {
-	url, err := ensure(ctx, ev.Org, ev.Slug, ev.Description, ev.Listed)
+func mirror(ctx context.Context, org string, ev plane.Visibility) error {
+	url, err := ensure(ctx, org, ev.Slug, ev.Description, ev.Listed)
 	if err != nil {
 		return err
 	}
 	if url == "" {
 		return nil
 	}
-	if err := (gitMirrorController{}).EnsureMirror(ctx, ev.Org, "", ev.Slug, url, true); err != nil {
-		return fmt.Errorf("community: mirror %s/%s: %w", ev.Org, ev.Slug, err)
+	if err := (gitMirrorController{}).EnsureMirror(ctx, org, "", ev.Slug, url, true); err != nil {
+		return fmt.Errorf("community: mirror %s/%s: %w", org, ev.Slug, err)
 	}
 	return nil
 }
@@ -111,11 +113,23 @@ func mirror(ctx context.Context, ev cloud.Visibility) error {
 // to see. A socket call cannot fail that way: git either answers or the caller
 // gets an error naming the app it could not reach.
 func exposePublish() {
-	cloud.Expose("git.publish", func(ctx context.Context, _ cloud.Ident, req []byte) ([]byte, error) {
-		ev, err := cloud.ReadVisibility(req)
-		if err != nil {
-			return nil, cloud.Fault(400, err.Error())
-		}
-		return nil, publish(ctx, ev)
-	})
+	zip.Post[plane.Visibility, struct{}](cloud.Plane(), "/git/publish", planePublish,
+		zip.WithOperationID(plane.GitPublish),
+		zip.WithSummary("Reconcile a project's repo visibility"))
+}
+
+// planePublish reconciles a project's canonical repo to the project's published
+// visibility: it provisions the repo on first publish and thereafter flips only
+// the public bit, then keeps the GitHub replica's visibility in step.
+// Idempotent, so projects can fire it on every create, visibility change and
+// moderation event. The org is the CALLER's plane identity, never the argument —
+// a caller that could name the org would be publishing into another tenant's
+// repos — and an anonymous caller is refused. A named handler, not a closure, so
+// zipdoc can lift this prose into the registry.
+func planePublish(ctx context.Context, ev *plane.Visibility) (*struct{}, error) {
+	org := cloud.Who(ctx).Org
+	if org == "" {
+		return nil, zip.ErrForbidden("git publish: org required")
+	}
+	return nil, publish(ctx, org, *ev)
 }

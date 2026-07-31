@@ -14,8 +14,11 @@
 //	mounts `app.All("/v1/o11y/*")` as a WILDCARD proxy at subsystem order 70. It has
 //	NO LLM-observability ingestion surface (no traces/observations/scores writer) —
 //	that data is a DIFFERENT product (the console-worker's Datastore tables). So this
-//	file adds the MISSING write path as a cloud-native specific route,
-//	POST /v1/o11y/ingestion.
+//	file adds the MISSING write path — not as its own route: POST /v1/event is
+//	the ONE event door (apps/analytics owns it), and this plane installs a
+//	cloud.SetObsEventIngest claim that takes the bodies which ARE LLM-obs
+//	ingestion batches and declines the rest. The Sentry wire is
+//	/v1/event/error — see o11y.go mountEventFamily.
 //
 //	Fiber matches routes in REGISTRATION ORDER, so a specific /v1/o11y/* route only
 //	binds ahead of the order-70 wildcard when it registers BEFORE it — exactly the
@@ -23,7 +26,7 @@
 //	This subsystem therefore mounts at order 68 (before the wildcard). A route at the
 //	OTLP-ingest order (72) would be SWALLOWED by the proxy and never reached.
 //
-// PIPELINE — POST /v1/o11y/ingestion (validated tenant) → parse the event batch →
+// PIPELINE — POST /v1/event (validated tenant, claimed batches) → parse the event batch →
 // group by target Datastore table → batch-insert via the branded
 // github.com/hanzo-ds/go client → oversized event bodies overflow to
 // object storage, only the blob ref is stored inline. The store is the Datastore;
@@ -34,7 +37,7 @@
 //   - Always mounted as a normal o11y subsystem — NO on/off feature flag. The write
 //     path is live wherever O11Y_DATASTORE_DSN is set (the SAME knob embed.go reads);
 //     the Datastore is a required DEPENDENCY, not a gate. Inert in prod until the
-//     console producer repoints to /v1/o11y/ingestion (nothing calls it yet).
+//     console producer repoints to /v1/event (nothing calls it yet).
 //   - Fail-soft: a missing DSN or a construction error logs and returns nil — never
 //     blocks cloud boot (mirrors ingest.go / tracesink.go).
 //   - Durable hand-off: the flush runs INLINE today (always works, mirroring ai's
@@ -49,7 +52,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path"
 	"sort"
@@ -58,18 +60,11 @@ import (
 
 	ds "github.com/hanzo-ds/go"
 	luxlog "github.com/luxfi/log"
-	zip "github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 )
 
 const (
-	// o11yIngestRoute is the cloud-native LLM-obs ingestion endpoint — /v1/ only
-	// (never an api-prefixed path); the retired console-worker producer repoints
-	// here at cutover.
-	o11yIngestRoute = "/v1/o11y/ingestion"
-
 	// o11yBlobThresholdEnv overrides the inline-body size cap (bytes). A body larger
 	// than this overflows to object storage; the row keeps only the blob ref.
 	o11yBlobThresholdEnv = "CLOUD_O11Y_INGEST_BLOB_BYTES"
@@ -92,22 +87,24 @@ var ingestColumns = []string{"id", "org", "type", "timestamp", "body", "blob_ref
 // o11yEvent is one LLM-observability ingestion event: a typed envelope whose Body
 // is the type-specific payload. Batches arrive as {"batch":[...]}.
 type o11yEvent struct {
-	ID        string          `json:"id"`
-	Type      string          `json:"type"`
-	Timestamp string          `json:"timestamp"`
-	Body      json.RawMessage `json:"body"`
+	// ID is the producer's id for this event; it becomes the row's primary key
+	// and the blob key when an oversized body overflows.
+	ID string `json:"id"`
+	// Type routes the event to its table: trace-create, score-create, or one of
+	// the observation kinds (observation-*, span-*, generation-*, event-create).
+	// An unrecognised type is dropped, never mis-routed.
+	Type string `json:"type"`
+	// Timestamp is the producer's event time, stored verbatim.
+	Timestamp string `json:"timestamp"`
+	// Body is the type-specific payload. A body over the inline cap is written
+	// to object storage and the row keeps only the reference.
+	Body json.RawMessage `json:"body"`
 }
 
 // o11yBatch is the ingestion request envelope ({"batch":[...]}).
 type o11yBatch struct {
+	// Batch is the events to persist, in one request.
 	Batch []o11yEvent `json:"batch"`
-}
-
-// ingestResult is the endpoint's honest receipt: how many events were persisted vs
-// dropped (unknown type). Never leaks another tenant's data.
-type ingestResult struct {
-	Accepted int `json:"accepted"`
-	Dropped  int `json:"dropped"`
 }
 
 // eventSink writes coalesced rows to a Datastore table. The real impl is a
@@ -204,10 +201,9 @@ func blobThreshold() int {
 // flush/close it, mirroring embed.go's embeddedRuntime and ingest.go's embeddedIngest.
 var eventIngestSink eventSink
 
-// mountEventIngest registers POST /v1/o11y/ingestion. Called by mountO11y (o11y.go)
-// inside the one order-69 `o11y` mount, so this specific POST binds BEFORE the
-// hanzoai/o11y wildcard (app.All("/v1/o11y/*"), order 70) — the SAME constraint the
-// scoped reads use. No feature flag: it mounts whenever its Datastore dependency is
+// mountEventIngest installs the LLM-obs claim on the ONE event door
+// (cloud.SetObsEventIngest; the door itself is analytics' POST /v1/event).
+// Called by mountO11y (o11y.go) inside the one order-69 `o11y` mount. No feature flag: it mounts whenever its Datastore dependency is
 // available. Fail-soft at every branch — a missing DSN or a Datastore construction
 // error logs and returns nil, leaving the write path unmounted (the retired
 // console-worker is already gone, so "unmounted" is inert — no double-write).
@@ -227,38 +223,65 @@ func mountEventIngest(a cloud.Router, deps cloud.Deps) error {
 	}
 	eventIngestSink = sink
 
-	a.Post(o11yIngestRoute, makeIngestHandler(sink, nil, blobThreshold(), log))
+	o := ingestOps{sink: sink, threshold: blobThreshold(), log: log}
+	cloud.SetObsEventIngest(o.claim)
 
 	if cloud.EmbeddedTasks() != nil {
 		log.Info("o11y event ingest: durable engine present; flush runs inline, durable Activity hand-off is the next reviewed step")
 	}
-	log.Info("o11y event ingest live", "route", o11yIngestRoute, "sink", "datastore:traces/observations/scores", "blobBytes", blobThreshold())
+	log.Info("o11y event ingest live", "door", "POST /v1/event (claimed batches)", "sink", "datastore:traces/observations/scores", "blobBytes", blobThreshold())
 	return nil
 }
 
-// makeIngestHandler builds the POST handler over a sink (+ optional blob overflow).
-// The org is the gateway-validated tenant (principal.Org), never a raw header —
-// a batch can only ever be attributed to the caller's own org.
-func makeIngestHandler(sink eventSink, blobs blobStore, threshold int, log luxlog.Logger) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org, ok := principal.Org(c)
-		if !ok {
-			return zip.ErrForbidden("a validated principal is required")
-		}
-		var batch o11yBatch
-		if err := c.Bind(&batch); err != nil {
-			return zip.ErrBadRequest("malformed ingestion batch")
-		}
-		if len(batch.Batch) == 0 {
-			return c.JSON(http.StatusOK, ingestResult{})
-		}
-		accepted, dropped, err := processBatch(c.Context(), org, batch.Batch, sink, blobs, threshold)
-		if err != nil {
-			log.Warn("o11y event ingest flush failed", "org", org, "err", err)
-			return zip.ErrInternal("ingest flush failed")
-		}
-		return c.JSON(http.StatusOK, ingestResult{Accepted: accepted, Dropped: dropped})
+// obsBatchOf reports whether body is an LLM-obs ingestion batch and parses it.
+// The claim is deliberately strict: a JSON object whose "batch" is a non-empty
+// array where EVERY element carries a type tableForType recognises. A product
+// CaptureBatch ({"batch":[{"event":…}]}) has no such types and is declined; a
+// mixed batch is declined whole (mis-claiming one product event would file it
+// in the wrong plane, so ambiguity always loses to the door's own wire).
+func obsBatchOf(body []byte) ([]o11yEvent, bool) {
+	var probe struct {
+		Batch []struct {
+			Type string `json:"type"`
+		} `json:"batch"`
 	}
+	if err := json.Unmarshal(body, &probe); err != nil || len(probe.Batch) == 0 {
+		return nil, false
+	}
+	for _, e := range probe.Batch {
+		if _, ok := tableForType(e.Type); !ok {
+			return nil, false
+		}
+	}
+	var b o11yBatch
+	if err := json.Unmarshal(body, &b); err != nil {
+		return nil, false
+	}
+	return b.Batch, true
+}
+
+// claim is the installed cloud.ObsEventIngestFunc: first refusal on every
+// authenticated POST /v1/event body. org is the door's server-resolved tenant.
+func (o ingestOps) claim(ctx context.Context, org string, body []byte) (accepted, dropped int, claimed bool, err error) {
+	events, ok := obsBatchOf(body)
+	if !ok {
+		return 0, 0, false, nil
+	}
+	accepted, dropped, err = processBatch(ctx, org, events, o.sink, o.blobs, o.threshold)
+	if err != nil {
+		o.log.Warn("o11y event ingest flush failed", "org", org, "err", err)
+		return 0, 0, true, err
+	}
+	return accepted, dropped, true, nil
+}
+
+// ingestOps binds the sink (+ optional blob overflow) to the typed ingest op. A
+// ingestOps binds the sink (+ optional blob overflow) to the claim.
+type ingestOps struct {
+	sink      eventSink
+	blobs     blobStore
+	threshold int
+	log       luxlog.Logger
 }
 
 // shutdownEventIngest closes the Datastore connection so buffered inserts flush

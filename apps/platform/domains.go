@@ -16,6 +16,7 @@
 //     org per host) is the `platform_domains.host` PRIMARY KEY.
 //
 // Every handler is org-scoped through s.tenant and mutates only tenant-<org>.
+
 package platform
 
 import (

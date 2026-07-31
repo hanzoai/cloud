@@ -174,11 +174,17 @@ func scanKey(sc interface{ Scan(...any) error }) (sshKey, error) {
 // keyView is the API shape for a registered key. The full public key is echoed
 // (it is public); the fingerprint is the stable handle a UI shows.
 type keyView struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	PublicKey   string `json:"publicKey"`
+	// ID is the key's identifier ("gitkey_…"), the handle to delete it by.
+	ID string `json:"id"`
+	// Title is the key's label — the caller's, or the comment on the key line.
+	Title string `json:"title"`
+	// PublicKey is the canonical OpenSSH authorized-key line as stored.
+	PublicKey string `json:"publicKey"`
+	// Fingerprint is the key's SHA256 fingerprint ("SHA256:…"), globally unique
+	// and the handle SSH auth resolves a presented key by.
 	Fingerprint string `json:"fingerprint"`
-	CreatedAt   string `json:"createdAt"`
+	// CreatedAt is RFC 3339 UTC.
+	CreatedAt string `json:"createdAt"`
 }
 
 func (key sshKey) view() keyView {

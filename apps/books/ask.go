@@ -16,6 +16,7 @@ package books
 // calls Post(), so an Ask can restate the books but never move them.
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -26,69 +27,85 @@ import (
 
 // AskRequest is the POST /v1/books/ask body.
 type AskRequest struct {
+	// Question is the plain-language question about the org's books, e.g. "what is my
+	// MRR?". Longer than 2000 characters is truncated, never refused.
 	Question string `json:"question"`
-	// From/To optionally scope the metric window (RFC3339). Empty = all-time, treated as a
+	// From is the RFC3339 start of the metric window. Empty means all time, treated as a
 	// single reporting period (see monthsBetween).
 	From string `json:"from,omitempty"`
-	To   string `json:"to,omitempty"`
+	// To is the RFC3339 end of the metric window. Empty means up to now.
+	To string `json:"to,omitempty"`
 }
 
 // Figure is one grounded number in the answer: a label, its formatted value, and the period
 // it covers. This is the exact shape the Ask contract fixes.
 type Figure struct {
-	Label  string `json:"label"`
-	Value  string `json:"value"`
+	// Label names the metric, e.g. "MRR" or "Runway".
+	Label string `json:"label"`
+	// Value is the figure already formatted through books' own money formatter, so a
+	// consumer never re-derives it.
+	Value string `json:"value"`
+	// Period is the window the figure covers, e.g. "2026-07" or "all-time".
 	Period string `json:"period,omitempty"`
 }
 
 // AskResponse is the Ask contract: a natural-language answer grounded in Figures, with
 // followup questions and the report Sources the figures were computed from.
 type AskResponse struct {
-	Answer    string   `json:"answer"`
-	Figures   []Figure `json:"figures"`
+	// Answer is one or two sentences answering the question, every number in it taken
+	// from Figures.
+	Answer string `json:"answer"`
+	// Figures are the grounded numbers the answer states, each already formatted.
+	Figures []Figure `json:"figures"`
+	// Followups are sharper questions to ask next, chosen from the same intent.
 	Followups []string `json:"followups"`
-	Sources   []string `json:"sources"`
+	// Sources name the books reports the figures were computed from — "pnl",
+	// "balance-sheet", "trial-balance".
+	Sources []string `json:"sources"`
 }
 
 const maxQuestion = 2000
 
-// askHandler answers POST /v1/books/ask for the caller's OWN org. It computes the real
-// metrics, routes the question to the relevant figures deterministically, then (best-effort)
-// narrates. The figures and sources are computed BEFORE any model call and are never
-// altered by it.
-func askHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to ask the books")
-	}
-	var in AskRequest
-	if err := c.Bind(&in); err != nil {
-		return err
+// AskBooks answers a plain-language question about the caller's own books — "what is my
+// MRR?", "how long is my runway?" — with figures taken from their ledger, never a guessed
+// number. A deterministic keyword router picks the intent and reads the real metrics, and
+// those figures, followups and report sources are computed BEFORE any model call and are
+// never altered by one: the optional narration seam only rephrases the sentence, and it
+// degrades silently to the templated answer when no AI plane is wired. It is strictly
+// read-only — it restates the books, it never posts to them.
+//
+// Example: {"question": "how long is my runway?"}
+func (o booksOps) ask(ctx context.Context, in *AskRequest) (*AskResponse, error) {
+	// Tenant first, the order this route has always refused in: an anonymous caller is
+	// 401 whatever it asks, and never learns from a 400 which fields exist.
+	org, err := tenant(ctx, "ask the books")
+	if err != nil {
+		return nil, err
 	}
 	q := strings.TrimSpace(in.Question)
 	if q == "" {
-		return zip.Errorf(http.StatusBadRequest, "question is required")
+		return nil, zip.Errorf(http.StatusBadRequest, "question is required")
 	}
 	if len(q) > maxQuestion {
 		q = q[:maxQuestion]
 	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
+	st, err := o.s.State.storeFor(org, sandboxFrom(ctx))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "books open failed")
 	}
-	m, err := computeMetrics(c.Context(), st, in.From, in.To)
+	m, err := computeMetrics(ctx, st, in.From, in.To)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books metrics failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "books metrics failed")
 	}
 
 	resp := buildAnswer(q, m) // deterministic: REAL figures + templated answer
 
 	// LLM narration seam: rephrase the templated answer more naturally, grounded on the
 	// exact figures, WITHOUT changing a number. Degrades silently to the template.
-	if narrated := narrateAsk(s, c, org, q, resp); narrated != "" {
+	if narrated := narrateAsk(ctx, o.s, org, q, resp); narrated != "" {
 		resp.Answer = narrated
 	}
-	return booksJSON(c, resp)
+	return &resp, nil
 }
 
 // intent is the coarse class of a books question — the ONE thing the keyword router
@@ -298,9 +315,19 @@ func itoa(n int64) string {
 // forbids changing any number — the model rewrites prose only. Returns "" when no AI plane
 // is wired or the call errors, so the caller keeps the templated (already-correct) answer.
 // The figures are the ledger's; this seam only affects wording.
-func narrateAsk(s *cloud.Service[*state], c *zip.Ctx, org, question string, resp AskResponse) string {
+//
+// The BILLING ledger is principal.Ledger read off the request, which the typed op reaches
+// through cloud.Request — the org that pays is a header fact, not an input a caller may
+// assert. Its caller has already resolved and gated the effective org, which is the
+// precondition principal.Ledger states; off the HTTP path there is no request, and the
+// meter no-ops on the empty org rather than billing the wrong one.
+func narrateAsk(ctx context.Context, s *cloud.Service[*state], org, question string, resp AskResponse) string {
 	if s.State.ai == nil {
 		return ""
+	}
+	var billing string
+	if c, ok := cloud.Request(ctx); ok {
+		billing = principal.Ledger(c)
 	}
 	var fb strings.Builder
 	for _, f := range resp.Figures {
@@ -312,11 +339,11 @@ func narrateAsk(s *cloud.Service[*state], c *zip.Ctx, org, question string, resp
 		"\nQuestion: " + question +
 		"\nGrounded draft (rephrase naturally, keep every figure identical): " + resp.Answer +
 		"\nReturn only the answer."
-	res, err := s.State.ai.ChatCompletion(c.Context(), &cloud.ChatRequest{
+	res, err := s.State.ai.ChatCompletion(ctx, &cloud.ChatRequest{
 		Model:      s.State.model,
 		Prompt:     prompt,
 		Org:        org,
-		BillingOrg: principal.Ledger(c),
+		BillingOrg: billing,
 	})
 	if err != nil || res == nil {
 		return ""

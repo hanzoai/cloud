@@ -1,19 +1,21 @@
-// Package captable folds hanzoai/captable into the unified hanzoai/cloud binary
-// as an in-process subsystem (HIP-0106) — the PILOT of epic #96 (fold the
-// Captable,Inc app into cloud, drop Next.js/Prisma/Postgres). Cloud serves the
-// cap-table surface (/v1/captable/*) ITSELF, per tenant, on Base/SQLite.
+// Package captable is the org's cap table: stakeholders, share classes, share
+// certificates and transfers, option grants and equity plans, SAFEs and
+// convertible notes, priced rounds and their investments, and the summary that
+// totals outstanding and fully-diluted ownership from them.
 //
-// WRAP, DON'T REWRITE — the read-WRITE variant. Where clients/plan + clients/
-// pricing host a read-only @hanzo catalog in goja, captable hosts the tRPC
+// It runs per tenant on Base/SQLite in the unified cloud binary (HIP-0106).
+//
+// WRAP, DON'T REWRITE — the read-WRITE variant. Where apps/plan + apps/pricing
+// host a read-only @hanzo catalog in goja, captable hosts the tRPC
 // business LOGIC (ported to a self-contained goja bundle in github.com/hanzoai/
 // captable) and gives it PERSISTENCE over per-tenant Base/SQLite. The bundle
 // carries logic; the Go host carries storage. The seam between them is the
-// REUSABLE clients/goja binding (the RW-Base goja host), which esign (#100)
+// REUSABLE apps/goja binding (the RW-Base goja host), which esign (#100)
 // and dataroom (#101) reuse unchanged — this leaf is just:
 //
 //	captable bundle (github.com/hanzoai/captable.Bundle)  +  the per-tenant Schema
 //	                         │
-//	                  clients/goja.NewBase(...)   ← injects __db/__newId/__now,
+//	                  apps/goja.NewBase(...)   ← injects __db/__newId/__now,
 //	                         │                       one SQLite file per tenant,
 //	                  /v1/captable/* zip routes     one transaction per request
 //
@@ -95,52 +97,123 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes wires the /v1/captable/* route table → bundle route names. GET reads
-// carry no body; mutations do.
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// routes wires the /v1/captable/* route table → bundle route names, in TWO
+// planes over one dispatch.
+//
+// TWENTY routes are TYPED ops, so they carry In/Out types and reach the document,
+// the MCP tool list, the CLI and the generated SDKs: the eleven collection reads,
+// the round detail read and the five deletes (typed.go, whose whole input is one
+// path segment), plus the three writes whose bodies are made only of fields the
+// bundle reads as strings (writes.go). Every one relays the bundle's own refusal
+// bytes through bundleErr.
+//
+// ELEVEN body-carrying writes stay untyped relays, and the reason is the REQUEST,
+// not the response. The bundle validates with COERCING helpers
+// (goja/src/validate.ts): `num` accepts a number OR a numeric string, and
+// stakeholders.add accepts an object OR an array. A Go float64 field refuses the
+// numeric string those routes accept today — so typing one would make it accept
+// LESS — and it cannot carry the refused token onward either, so the bundle's
+// {success,message,errors} would become zip's envelope. Each line below says
+// which of its fields does that.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/captable")
-	// company
-	g.Get("/company", route(s, "company.get", nil, false))
-	g.Put("/company", route(s, "company.update", nil, true))
-	// stakeholders
-	g.Get("/stakeholders", route(s, "stakeholders.list", nil, false))
+	// Bridge FIRST: a typed op receives only a context, so the validated org
+	// reaches it by being parked there — never as an In field, which is
+	// caller-supplied and would be a cross-tenant read the caller asserted for
+	// itself. fiber runs middleware in registration order, so this must precede
+	// the leaves below; it is prefix-scoped, and nesting under Serve's own Bridge
+	// is harmless (the inner one is what the handler sees).
+	g.Use(cloud.Bridge())
+	// Then the bundle's own envelope: a typed op that must answer the bundle's
+	// 400/404/409/500 returns a bundleErr, and this writes those bytes back
+	// verbatim. Also before the leaves, for the same registration-order reason.
+	g.Use(bundleEnvelope())
+
+	// ---- the typed ops (typed.go carries the models and the prose) ----
+	//
+	// Declared on the GROUP, so each op's path is the prefix composed with its
+	// leaf — the same composition the router does, and the identity every
+	// projection keys on. cmd/zipdoc resolves the prefix the same way, so the doc
+	// comments reach the document and the MCP tool list.
+	//
+	// Order is free here: no two /v1/captable routes overlap on method + pattern
+	// (every DELETE has its own collection prefix, and the only two parameterised
+	// POSTs differ in their third segment), so nothing below can shadow anything
+	// else. TestEveryRouteIsTypedOrNamed counts the table either way.
+	o := ops{s: s}
+	zip.Get(g, "/company", o.getCompany)
+	zip.Get(g, "/stakeholders", o.listStakeholders)
+	zip.Get(g, "/share-classes", o.listShareClasses)
+	zip.Get(g, "/equity-plans", o.listEquityPlans)
+	zip.Get(g, "/shares", o.listShares)
+	zip.Get(g, "/options", o.listOptions)
+	zip.Get(g, "/safes", o.listSafes)
+	zip.Get(g, "/convertibles", o.listConvertibles)
+	zip.Get(g, "/rounds", o.listRounds)
+	zip.Get(g, "/investments", o.listInvestments)
+	zip.Get(g, "/summary", o.getSummary)
+	zip.Get(g, "/rounds/:id", o.getRound)
+	zip.Delete(g, "/stakeholders/:id", o.deleteStakeholder)
+	zip.Delete(g, "/shares/:id", o.deleteShare)
+	zip.Delete(g, "/options/:id", o.deleteOption)
+	zip.Delete(g, "/safes/:id", o.deleteSafe)
+	zip.Delete(g, "/convertibles/:id", o.deleteConvertible)
+	// The three body-carrying ops (writes.go). Their bodies are made only of
+	// fields the bundle reads as STRINGS, and the scalar carrier hands each token
+	// to the bundle unchanged — so the bundle stays the only validator and the
+	// wire is the wire it always was.
+	zip.Put(g, "/company", o.updateCompany)
+	zip.Patch(g, "/stakeholders/:id", o.updateStakeholder)
+	zip.Post(g, "/rounds/:id/close", o.closeRound)
+
+	// ---- the untyped relays, and which field keeps each one untyped ----
+	//
+	// Every one of these carries a COERCED NUMBER — `num`/`intNum`/`optNum` take a
+	// number or a numeric string — except stakeholders.add, whose whole body is a
+	// union. A Go float64 field refuses the numeric string this route accepts, and
+	// cannot carry the refused token onward to keep the bundle's own 400 envelope
+	// either, so typing one would change both what the route accepts and how it
+	// says no. See writes.go for the full argument.
+
+	// stakeholders.add: the body is a single object OR an array (the tRPC
+	// contract). A Go struct decodes one or the other, never both.
 	g.Post("/stakeholders", route(s, "stakeholders.add", nil, true))
-	g.Patch("/stakeholders/:id", routeID(s, "stakeholders.update", true))
-	g.Delete("/stakeholders/:id", routeID(s, "stakeholders.delete", false))
-	// share classes
-	g.Get("/share-classes", route(s, "shareClasses.list", nil, false))
+	// shareClasses.create: `initialSharesAuthorized`, `votesPerShare`, `parValue`,
+	// `pricePerShare`, `seniority` and both multiples go through num/intNum, which
+	// accept a numeric STRING.
 	g.Post("/share-classes", route(s, "shareClasses.create", nil, true))
+	// shareClasses.update: same coercing validator as create.
 	g.Patch("/share-classes/:id", routeID(s, "shareClasses.update", true))
-	// equity plans
-	g.Get("/equity-plans", route(s, "equityPlans.list", nil, false))
+	// equityPlans.create: `initialSharesReserved` goes through intNum (numeric
+	// string accepted), `comments` through optString.
 	g.Post("/equity-plans", route(s, "equityPlans.create", nil, true))
-	// shares (issuance + transfer). /shares/transfer registers before /shares/:id
-	// (different methods anyway) so it can never be shadowed.
-	g.Get("/shares", route(s, "shares.list", nil, false))
+	// shares.add: `quantity`, `pricePerShare` and `capitalContribution` are coerced
+	// numbers; `companyLegends` is validated per element, not per array type.
 	g.Post("/shares", route(s, "shares.add", nil, true))
+	// shares.transfer: `quantity` OMITTED means "transfer the whole certificate",
+	// which a typed In cannot say (its zero value means 0), and it is coerced too.
 	g.Post("/shares/transfer", route(s, "shares.transfer", nil, true))
-	g.Delete("/shares/:id", routeID(s, "shares.delete", false))
-	// options
-	g.Get("/options", route(s, "options.list", nil, false))
+	// options.add: `quantity`, `exercisePrice`, `cliffYears` and `vestingYears` are
+	// coerced numbers.
 	g.Post("/options", route(s, "options.add", nil, true))
-	g.Delete("/options/:id", routeID(s, "options.delete", false))
-	// SAFEs
-	g.Get("/safes", route(s, "safes.list", nil, false))
+	// safes.create: `capital`, `valuationCap` and `discountRate` are coerced
+	// numbers.
 	g.Post("/safes", route(s, "safes.create", nil, true))
-	g.Delete("/safes/:id", routeID(s, "safes.delete", false))
-	// convertible notes
-	g.Get("/convertibles", route(s, "convertibles.list", nil, false))
+	// convertibles.create: `capital`, `conversionCap`, `discountRate` and
+	// `interestRate` are coerced numbers.
 	g.Post("/convertibles", route(s, "convertibles.create", nil, true))
-	g.Delete("/convertibles/:id", routeID(s, "convertibles.delete", false))
-	// rounds + investments
-	g.Get("/rounds", route(s, "rounds.list", nil, false))
+	// rounds.create: `targetAmount`, `pricePerShare` and `preMoneyValuation` are
+	// coerced numbers.
 	g.Post("/rounds", route(s, "rounds.create", nil, true))
-	g.Get("/rounds/:id", routeID(s, "rounds.get", false))
-	g.Post("/rounds/:id/close", routeID(s, "rounds.close", true))
+	// rounds.investments.add: `amount` is a coerced number and `date`/`comments`
+	// go through optDateString/optString.
 	g.Post("/rounds/:id/investments", routeID(s, "rounds.investments.add", true))
-	g.Get("/investments", route(s, "rounds.investments.list", nil, false))
-	// computed cap table
-	g.Get("/summary", route(s, "captable", nil, false))
 }
 
 // route builds a zip handler that dispatches a fixed bundle route. readBody

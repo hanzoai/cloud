@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -297,9 +297,31 @@ func (o ops) githubRepos(ctx context.Context, _ *noArgs) (*githubReposOut, error
 	return &githubReposOut{Repos: out}, nil
 }
 
-type githubImportReqBody struct {
+// githubImportIn selects which of the installation's granted repositories to
+// import. Give repos[] or all:true — neither is a 400, because "import nothing"
+// is not a request worth queueing.
+type githubImportIn struct {
+	// Repos names the repositories to import, either owner-qualified
+	// ("hanzo-apps/ai") or as a bare name ("ai"); a trailing ".git" is stripped.
+	// A bare name that matches more than one granted repository is an error
+	// rather than a guess, because one Hanzo org may hold several GitHub
+	// installations and a name is only unique within an owner.
+	// Ignored when all is true.
 	Repos []string `json:"repos"`
-	All   bool     `json:"all"`
+	// All imports every repository the installation grants, instead of naming
+	// them. Archived and disabled repositories are skipped either way — they
+	// cannot be fetched.
+	All bool `json:"all"`
+}
+
+// githubImportOut acknowledges the queued import. It reports what was ACCEPTED,
+// not what has landed: the import itself runs in the background, so poll GET
+// /v1/integrations/github/repos for each repository's status to flip to imported.
+type githubImportOut struct {
+	// Queued is how many repositories were handed to the background importer.
+	Queued int `json:"queued"`
+	// Repos names those repositories, in the installation's listing order.
+	Repos []string `json:"repos"`
 }
 
 type githubImportItem struct {
@@ -307,56 +329,84 @@ type githubImportItem struct {
 	CloneURL string
 }
 
-// githubImport imports the selected (or all) granted repos into git.hanzo.ai. The
+// GithubImport imports the selected (or all) granted repos into git.hanzo.ai. The
 // selection is intersected with the installation's GRANTED set, so a client can
 // never import a repo the App was not granted (org isolation + a grant check). The
-// import runs in a bounded background worker (don't block the request); the console
-// polls githubRepos for the per-repo status to flip to imported.
-func githubImport(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	var body githubImportReqBody
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if !body.All && len(body.Repos) == 0 {
-		return zip.ErrBadRequest("provide repos[] or all:true")
-	}
-	tok, herr := githubTokenForOrg(c.Context(), org)
-	if herr != nil {
-		return herr
-	}
-	granted, err := installationRepos(c.Context(), tok)
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
-	}
+// import runs in a bounded background worker (don't block the request), so the
+// answer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo
+// status to flip to imported.
+//
+// Example: {"repos":["widgets"]}
+// Response: {"queued":1,"repos":["widgets"]}
+// selectImports resolves the caller's selectors against the installation's granted
+// set. A selector is either owner-qualified ("hanzo-apps/ai") or a bare name
+// ("ai"); the qualified form matches FullName and the bare form matches Name.
+//
+// A bare name is only unique within one owner, and a Hanzo org may hold several
+// GitHub installations — hanzoai/ai, hanzo-apps/ai and hanzo-docs/ai are three
+// repositories. A bare name reaching more than one of them is an error, so the
+// caller names the one it meant instead of receiving whichever the listing
+// reached first.
+func selectImports(granted []githubRepo, repos []string, all bool) ([]githubImportItem, error) {
 	want := map[string]bool{}
-	for _, n := range body.Repos {
+	for _, n := range repos {
 		want[strings.TrimSuffix(strings.TrimSpace(n), ".git")] = true
 	}
+	hits := map[string][]string{} // selector -> the full names it reached
 	var items []githubImportItem
 	for _, r := range granted {
 		if r.Archived || r.Disabled { // un-fetchable — skip, never fabricate an import
 			continue
 		}
-		if body.All || want[r.Name] {
-			items = append(items, githubImportItem{Name: r.Name, CloneURL: r.CloneURL})
+		switch {
+		case all:
+		case want[r.FullName]:
+			hits[r.FullName] = append(hits[r.FullName], r.FullName)
+		case want[r.Name]:
+			hits[r.Name] = append(hits[r.Name], r.FullName)
+		default:
+			continue
+		}
+		items = append(items, githubImportItem{Name: r.Name, CloneURL: r.CloneURL})
+	}
+	for sel, full := range hits {
+		if len(full) > 1 {
+			sort.Strings(full)
+			return nil, zip.ErrBadRequest(fmt.Sprintf("%q matches %s; name one of them", sel, strings.Join(full, ", ")))
 		}
 	}
 	if len(items) == 0 {
-		return zip.ErrBadRequest("no matching repositories are granted to the installation")
+		return nil, zip.ErrBadRequest("no matching repositories are granted to the installation")
+	}
+	return items, nil
+}
+
+func (o ops) githubImport(ctx context.Context, in *githubImportIn) (*githubImportOut, error) {
+	org, err := authed(ctx, principalRequired)
+	if err != nil {
+		return nil, err
+	}
+	if !in.All && len(in.Repos) == 0 {
+		return nil, zip.ErrBadRequest("provide repos[] or all:true")
+	}
+	tok, herr := githubTokenForOrg(ctx, org)
+	if herr != nil {
+		return nil, herr
+	}
+	granted, err := installationRepos(ctx, tok)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
+	}
+	items, err := selectImports(granted, in.Repos, in.All)
+	if err != nil {
+		return nil, err
 	}
 	spawnImport(org, items)
 	names := make([]string, 0, len(items))
 	for _, it := range items {
 		names = append(names, it.Name)
 	}
-	return c.JSON(http.StatusAccepted, map[string]any{"queued": len(items), "repos": names})
+	return &githubImportOut{Queued: len(items), Repos: names}, nil
 }
 
 // githubTokenForOrg resolves the org's installation token with honest HTTP errors:

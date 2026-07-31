@@ -1,8 +1,8 @@
-// Package pubsub embeds the Hanzo PubSub core data plane (NATS + JetStream) as
-// an in-process cloud subsystem (HIP-0106) — the same fold pattern as
-// iam/kms/tasks. It binds the NATS client port (default :4222) and
-// serves JetStream over the cloud data dir; the embedded Kafka adaptor
-// (clients/kafka) and any in-cluster NATS/Kafka client talk to it. It is a
+// Package pubsub is the platform message bus: an embedded Hanzo PubSub node
+// (NATS + JetStream) that binds the NATS client port (default :4222) and serves
+// JetStream over the cloud data dir — the ONE durable log every other app
+// publishes facts onto and consumes them from. The Kafka-wire adaptor
+// (apps/kafka) and any in-cluster NATS/Kafka client talk to it. It is a
 // single embedded node running JetStream over the local file store — there is
 // NO ZooKeeper, raft, or etcd in the path (Lux consensus only; the optional
 // Quasar PQ control plane is a follow-up, see github.com/hanzoai/pubsub/embed).
@@ -35,8 +35,8 @@ import (
 	psembed "github.com/hanzoai/pubsub/embed"
 )
 
-// Mount order is the slice position in apps.Wire(): this infrastructure data
-// plane must bind BEFORE clients/kafka dials it. It registers no HTTP routes, so
+// Mount order is the row position in manifest/apps.go: this infrastructure data
+// plane must bind BEFORE apps/kafka dials it. It registers no HTTP routes, so
 // the position only fixes the pubsub-before-kafka mount sequence.
 
 // srv holds the running embedded server so shutdown can stop it. Set once by Mount.
@@ -66,6 +66,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		port = p
 	}
 
+	// The bus's message-body ceiling. Zero means the embed default (8 MiB), which
+	// is deliberately well above NATS's own 1 MiB: the Kafka-wire adaptor rides
+	// this server, and its clients size themselves in MiB, so a 1 MiB bus caps
+	// every one of them and the failure surfaces on the PRODUCER as
+	// "Message size too large" — unfixable from the consumer side.
+	var maxPayload int32
+	if v := strings.TrimSpace(os.Getenv("CLOUD_PUBSUB_MAX_PAYLOAD")); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil || n <= 0 {
+			return fmt.Errorf("pubsub.Mount: bad CLOUD_PUBSUB_MAX_PAYLOAD %q (want a positive byte count)", v)
+		}
+		maxPayload = int32(n)
+	}
+
 	host := firstNonEmpty(os.Getenv("CLOUD_PUBSUB_HOST"), "0.0.0.0")
 
 	// Claim the address BEFORE handing it to the embedded server, because the
@@ -90,6 +104,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		Port:       port,
 		ServerName: firstNonEmpty(os.Getenv("CLOUD_PUBSUB_SERVER_NAME"), "cloud-pubsub-"+firstNonEmpty(deps.Brand, "hanzo")),
 		StoreDir:   dataDir,
+		MaxPayload: maxPayload,
 	})
 	if err != nil {
 		// Fail closed: a broken messaging plane must abort boot.
