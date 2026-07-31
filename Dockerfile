@@ -101,6 +101,11 @@ RUN set -eux; \
     ln -sf "$SC" /usr/lib/libsqlite3.so; \
     ln -sf "$SC" /usr/lib/libsqlite3.so.0
 WORKDIR /src
+# The published tag, handed in by buildFrontendCmd (--opt build-arg:VERSION=<tag>)
+# and linked into cloud.Version below, which is what the X-Api-Version response
+# header serves. Without it the header reports the "dev" default forever — as
+# cloud.hanzo.ai and console.hanzo.ai both did in production.
+ARG VERSION=dev
 # zap-proto/* (all 55 repos) and luxfi/* (all 37 deps here) are PUBLIC and resolve
 # via the IMMUTABLE public proxy + sumdb — go.sum pins those canonical hashes, so a
 # force-re-pointed tag can never break the build. GOSUMDB stays ON (a money image
@@ -189,7 +194,8 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 # together, so no build in this image is the mega link that once dominated it.
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /cloud ./cmd/cloud && \
+    CGO_ENABLED=0 go build \
+      -ldflags="-s -w -X github.com/hanzoai/cloud.Version=${VERSION}" -o /cloud ./cmd/cloud && \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /cek-rewrap ./cmd/cek-rewrap
 # The functional smoke prober (plugin/smoke) — a stdlib-only static binary shipped
 # alongside the host so the release gate can `docker exec` it against the freshly-
