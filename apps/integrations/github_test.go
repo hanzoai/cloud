@@ -163,7 +163,7 @@ func TestInstallationTokenMint(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
-	tok, err := InstallationToken(context.Background(), "acme")
+	tok, err := InstallationToken(context.Background(), "acme", "")
 	if err != nil {
 		t.Fatalf("mint: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestInstallationTokenMint(t *testing.T) {
 	}
 
 	// A never-connected org fails closed — never a value.
-	if _, err := InstallationToken(context.Background(), "stranger"); err == nil {
+	if _, err := InstallationToken(context.Background(), "stranger", ""); err == nil {
 		t.Fatal("un-connected org must fail closed, got a token")
 	}
 }

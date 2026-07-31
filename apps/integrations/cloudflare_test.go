@@ -174,7 +174,7 @@ func TestCloudflareConnectVerifyActiveStoresTokenInKMS(t *testing.T) {
 		t.Fatalf("KMS token mismatch: got %q", got)
 	}
 	// The connection row holds only non-secret metadata — never the token.
-	conn, ok := ConnectionFor("acme", "cloudflare")
+	conn, ok := ConnectionFor("acme", "cloudflare", "")
 	if !ok {
 		t.Fatal("expected a connection row")
 	}
@@ -202,7 +202,7 @@ func TestCloudflareConnectRejectsInactiveTokenAndStoresNothing(t *testing.T) {
 	if _, ok := kmsHas(t, kc, "acme"); ok {
 		t.Fatal("verify-before-store violated: an inactive token was sealed to KMS")
 	}
-	if _, ok := ConnectionFor("acme", "cloudflare"); ok {
+	if _, ok := ConnectionFor("acme", "cloudflare", ""); ok {
 		t.Fatal("verify-before-store violated: an inactive token created a connection row")
 	}
 }
@@ -219,7 +219,7 @@ func TestCloudflareConnectRejectsUnauthorizedTokenAndStoresNothing(t *testing.T)
 	if _, ok := kmsHas(t, kc, "acme"); ok {
 		t.Fatal("a Cloudflare-rejected token must not be sealed")
 	}
-	if _, ok := ConnectionFor("acme", "cloudflare"); ok {
+	if _, ok := ConnectionFor("acme", "cloudflare", ""); ok {
 		t.Fatal("a Cloudflare-rejected token must not create a row")
 	}
 }
@@ -297,7 +297,7 @@ func TestCloudflareTenantIsolation(t *testing.T) {
 	if _, ok := kmsHas(t, kc, "orga"); !ok {
 		t.Fatal("orgb disconnect deleted orga's credential — tenant isolation broken")
 	}
-	if _, ok := ConnectionFor("orga", "cloudflare"); !ok {
+	if _, ok := ConnectionFor("orga", "cloudflare", ""); !ok {
 		t.Fatal("orgb disconnect deleted orga's row — tenant isolation broken")
 	}
 	// The in-process token seam also refuses to hand B a credential.
@@ -338,7 +338,7 @@ func TestCloudflareDisconnectRemovesTokenAndRow(t *testing.T) {
 	if _, ok := kmsHas(t, kc, "acme"); ok {
 		t.Fatal("disconnect must delete the KMS credential")
 	}
-	if _, ok := ConnectionFor("acme", "cloudflare"); ok {
+	if _, ok := ConnectionFor("acme", "cloudflare", ""); ok {
 		t.Fatal("disconnect must delete the connection row")
 	}
 	// Idempotent: a second disconnect still 200s.
@@ -526,7 +526,7 @@ func TestCloudflareOAuthCallbackSealsSameKMSCoordinate(t *testing.T) {
 	if string(got) != cfOAuthAccessToken {
 		t.Fatalf("sealed token mismatch: got %q, want the OAuth access token", got)
 	}
-	conn, ok := ConnectionFor("acme", "cloudflare")
+	conn, ok := ConnectionFor("acme", "cloudflare", "")
 	if !ok {
 		t.Fatal("expected a connection row after the OAuth callback")
 	}
@@ -565,7 +565,7 @@ func TestCloudflareOAuthCallbackFailClosedOnExchangeError(t *testing.T) {
 	if _, ok := kmsHas(t, kc, "acme"); ok {
 		t.Fatal("a failed OAuth exchange must seal nothing")
 	}
-	if _, ok := ConnectionFor("acme", "cloudflare"); ok {
+	if _, ok := ConnectionFor("acme", "cloudflare", ""); ok {
 		t.Fatal("a failed OAuth exchange must create no connection row")
 	}
 }

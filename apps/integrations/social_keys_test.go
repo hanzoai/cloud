@@ -117,7 +117,7 @@ func TestWhatsappConnectSealsWithPhoneID(t *testing.T) {
 		t.Fatalf("token must seal, got %q ok=%v", got, ok)
 	}
 	// The phone number id is echoed as the connection ExternalID (never the token).
-	conn, ok := ConnectionFor("acme", "whatsapp")
+	conn, ok := ConnectionFor("acme", "whatsapp", "")
 	if !ok || conn.ExternalID != whatsappPhon {
 		t.Fatalf("connection ExternalID must be the phone id, got %+v ok=%v", conn, ok)
 	}

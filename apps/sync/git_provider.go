@@ -86,7 +86,7 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 	owner := sy.Org
 	native := normalizeGitName(sy.Target.Locator)
 	source := sy.Source.Locator
-	tok, err := gitToken(ctx, sy.Source.Provider, sy.Org, ev.Token)
+	tok, err := gitToken(ctx, sy.Source.Provider, sy.Org, source, ev.Token)
 	if err != nil {
 		return false, err
 	}
@@ -144,12 +144,12 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 // (logged by the engine) — the honest signal to connect the App or set the mirror
 // token, never a leak. GitLab (and any other) has no minted token here, so it fetches
 // with whatever the event carried.
-func gitToken(ctx context.Context, provider, org, eventToken string) (string, error) {
+func gitToken(ctx context.Context, provider, org, source, eventToken string) (string, error) {
 	if strings.TrimSpace(eventToken) != "" {
 		return eventToken, nil
 	}
 	if strings.EqualFold(provider, provGitHub) {
-		if tok, err := integrations.InstallationToken(ctx, org); err == nil && strings.TrimSpace(tok) != "" {
+		if tok, err := integrations.InstallationToken(ctx, org, githubOwnerOf(source)); err == nil && strings.TrimSpace(tok) != "" {
 			return tok, nil
 		}
 		return strings.TrimSpace(os.Getenv(gitMirrorTokenEnv)), nil
@@ -201,4 +201,19 @@ func hostOf(raw string) string {
 		return ""
 	}
 	return strings.ToLower(u.Hostname())
+}
+
+// githubOwnerOf reads the account from a GitHub source URL — the first path segment
+// of https://github.com/<owner>/<repo>.git. Empty when the URL names none, which
+// lets the single-connection case resolve as before.
+func githubOwnerOf(source string) string {
+	u, err := url.Parse(strings.TrimSpace(source))
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[0]
 }

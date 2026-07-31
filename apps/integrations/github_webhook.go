@@ -153,7 +153,10 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 
 	// Mint the installation token HERE (the App plane owns token custody) and pass
 	// it THROUGH the event, so the engine's git provider fetches without re-minting.
-	tok, err := InstallationToken(c.Context(), org)
+	// Mint from the installation id the HMAC-verified body carries, not from the
+	// repo's owner: the id IS the account, it already resolved this org above, and
+	// it cannot disagree with itself the way a second lookup by name could.
+	tok, err := ghApp.installationToken(c.Context(), ev.Installation.ID)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "mint github installation token: %v", err)
 	}
