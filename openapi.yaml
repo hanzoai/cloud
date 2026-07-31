@@ -24123,50 +24123,6 @@ paths:
         result to the run''s durable owner, which is what lets that workflow finish.'
       tags:
       - agents
-  /v1/analytics:
-    post:
-      operationId: post_v1_analytics
-      requestBody:
-        content:
-          application/json:
-            schema:
-              oneOf:
-              - $ref: '#/components/schemas/Event'
-              - items:
-                  $ref: '#/components/schemas/Event'
-                type: array
-              - $ref: '#/components/schemas/CaptureBatch'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CaptureResult'
-          description: Success
-      tags:
-      - analytics
-  /v1/analytics/batch:
-    post:
-      operationId: post_v1_analytics_batch
-      requestBody:
-        content:
-          application/json:
-            schema:
-              oneOf:
-              - $ref: '#/components/schemas/Event'
-              - items:
-                  $ref: '#/components/schemas/Event'
-                type: array
-              - $ref: '#/components/schemas/CaptureBatch'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CaptureResult'
-          description: Success
-      tags:
-      - analytics
   /v1/analytics/health:
     get:
       operationId: get_v1_analytics_health
@@ -45575,28 +45531,6 @@ paths:
       operationId: post_v1_traces_write
       tags:
       - traces
-  /v1/tracker:
-    post:
-      operationId: post_v1_tracker
-      requestBody:
-        content:
-          application/json:
-            schema:
-              oneOf:
-              - $ref: '#/components/schemas/Event'
-              - items:
-                  $ref: '#/components/schemas/Event'
-                type: array
-              - $ref: '#/components/schemas/CaptureBatch'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CaptureResult'
-          description: Success
-      tags:
-      - tracker
   /v1/tracker/projects:
     get:
       description: |-

@@ -77,11 +77,13 @@ var unreachable = []string{
 	// events at 2026-07-29 04:15:29 — eighteen seconds after the ReplicaSet running
 	// the first image where manifest.Apps is the actual router. Routed now.
 	//
-	// /v1/tracker stays, and stays UNREACHABLE ON PURPOSE. apps/analytics wants it
-	// as the @hanzo/capture unload beacon; apps/tracker owns the name for the issue
-	// tracker and got there first. Routing it to analytics would break the issue
-	// tracker, so the alias is retired at the caller instead — one name, one owner.
-	"analytics /v1/tracker -> tracker",
+	// /v1/tracker is no longer here. apps/analytics published it as the
+	// @hanzo/capture unload beacon while apps/tracker owned the name for the issue
+	// tracker and got there first, so the beacon 405'd in the fleet and passed in
+	// analytics' own single-app tests — a name with two claimants, recorded rather
+	// than resolved. It is resolved now: analytics dropped the claim (its wire is
+	// /v1/event), the tracker product keeps the name, and this ledger records only
+	// paths that are still owned twice.
 	"commerce /v1/billing/invoices -> account-bridge",
 	"commerce /v1/billing/invoices/{id}/pdf -> account-bridge",
 	"commerce /v1/billing/payment-config -> account-bridge",
