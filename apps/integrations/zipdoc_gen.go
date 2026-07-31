@@ -138,6 +138,9 @@ func init() {
 		Example:  json.RawMessage(`{"repo":"widgets"}`),
 		Response: json.RawMessage(`{"repo":"widgets","status":"built","url":"https://acme.github.io/widgets/","cname":"docs.acme.com","custom404":false,"buildType":"legacy","httpsEnforced":true,"source":{"branch":"main","path":"/docs"}}`),
 	})
+	zip.Describe("POST /integrations/slack/send", zip.Doc{
+		Description: "Posts one message through the org's own bot token. The ORG is\nthe CALLER's (cloud.Who(ctx).Org, set on the peer context by the caller), never\nan argument — a caller able to name it could post as another tenant. A named\nhandler, not a closure, so zipdoc lifts this prose into the registry.",
+	})
 	zip.Describe("POST /v1/connectors/:id/refresh", zip.Doc{
 		Description: "Forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",
 		Fields: map[string]string{

@@ -54,6 +54,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // recentMax bounds the replay ring. Matches the receiver this replaced, and the
@@ -178,6 +179,7 @@ const (
 	alertsSlackChannelEnv = "CLOUD_ALERTS_SLACK_CHANNEL"
 	alertsSlackOrgEnv     = "CLOUD_ALERTS_SLACK_ORG"
 	defaultAlertsOrg      = "hanzo"
+	peerIntegrations      = "integrations" // the plugin that holds the bot token
 	slackPageTimeout      = 10 * time.Second
 )
 
@@ -199,9 +201,17 @@ func page(p *webhook, as []alert) {
 	text := slackText(p, as)
 	go func() {
 		defer func() { _ = recover() }()
-		ctx, cancel := context.WithTimeout(context.Background(), slackPageTimeout)
+		// ZAP over the unix socket to the integrations PROCESS, which owns the
+		// org's bot token (a plugin is a process; a package global here reads a
+		// nil peer copy — the "integrations: not mounted" failure). cloud.Ask
+		// dials the socket and wakes integrations if it is asleep, exactly as
+		// x402 asks commerce to move money. cloud.For stamps the org so
+		// integrations' handler reads it as the caller's, never an argument.
+		ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), slackPageTimeout)
 		defer cancel()
-		if err := cloud.SlackSend(ctx, org, channel, "", text); err != nil {
+		_, err := cloud.Ask[plane.SlackSendIn, struct{}](ctx, peerIntegrations, plane.IntegrationsSlackSend,
+			&plane.SlackSendIn{Channel: channel, Text: text})
+		if err != nil {
 			// One line, in the same log as the receipts: a page that could not
 			// be sent is itself an operational fact, and the receipt above
 			// already proved the alert arrived.
