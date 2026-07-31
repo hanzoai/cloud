@@ -155,7 +155,7 @@ func init() {
 			"exists in this shape at all, so an over-returning upstream still cannot leak one "+
 			"through this lane.\n\n"+
 			"Read the sibling difference before trusting a mismatch. This keys the store on the "+
-			"resolved wallet; /v1/billing/payment-methods keys it on the org SLUG, which is also "+
+			"resolved wallet; /v1/billing/methods keys it on the org SLUG, which is also "+
 			"the key a card is SAVED under — identical for an org paying from its shared pool, "+
 			"different wherever the payer is a person. When the two lists disagree, the billing "+
 			"one is what was saved.\n\n"+

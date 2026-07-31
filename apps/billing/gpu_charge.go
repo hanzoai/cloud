@@ -1,7 +1,7 @@
 package billing
 
 // gpu_charge.go is the ONE money WRITE on the customer billing surface: POST
-// /v1/billing/gpu-charge, the prepay-only, card-required GPU debit.
+// /v1/billing/gpu/charge, the prepay-only, card-required GPU debit.
 //
 // WHY IT IS NOT A PLAIN PROXY ANY MORE. It was, and it was not idempotent: the caller's
 // `requestId` rode the body into commerce's transaction metadata, where it deduplicated
@@ -235,7 +235,7 @@ func proxyGPUCharge(s *cloud.Service[state], c *zip.Ctx, org string) error {
 	body := pinSubjectBody(c.Body(), org)
 	var req gpuChargeRequest
 	_ = json.Unmarshal(c.Body(), &req)
-	respBody, status, err := s.State.commerce.post(c.Context(), "/v1/billing/gpu-charge", org, body, req.RequestID)
+	respBody, status, err := s.State.commerce.post(c.Context(), "/v1/billing/gpu/charge", org, body, req.RequestID)
 	if err != nil {
 		s.Log.Warn("commerce gpu-charge failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
