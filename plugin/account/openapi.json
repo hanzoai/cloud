@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package account mounts the signed-in caller's OWN account self-service surface natively in the unified cloud binary — the Go port of the console's two NON-proxy Next server routes (app/keys + app/onboard) plus the server-side money work the statically-exported console needs (task #41, \"True 1-binary FE\").",
+    "description": "Package account is your own account: API keys you mint and revoke, org onboarding, and wallet top-up.",
     "version": "v1"
   },
   "servers": [

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package tracker mounts the Hanzo Cloud /v1/tracker/* surface: a native-Go, per-org issue tracker (projects + issues) on SQLite.",
+    "description": "Package tracker is your org's issue tracker: projects, issues, and the filters to find them.",
     "version": "v1"
   },
   "servers": [

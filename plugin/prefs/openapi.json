@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package prefs is the per-USER preference plane for the unified Hanzo Cloud binary: the /v1/prefs surface behind the user menu on every Hanzo surface (console, insights, and anything else that renders \"signed in as\").",
+    "description": "Package prefs is your own settings — theme, density, pinned nav — following you across every Hanzo app.",
     "version": "v1"
   },
   "servers": [

@@ -1,6 +1,8 @@
 // Package pricing is the price list: what every model, provider, GPU tier, tool and
-// hosting plan costs, at /v1/pricing/* and /v1/pricing-policy — plus the enablement
-// registry that decides which catalog entries a caller may even see
+// hosting plan costs.
+//
+// It serves /v1/pricing/* and /v1/pricing-policy — plus the enablement registry that
+// decides which catalog entries a caller may even see
 // (/v1/enablement{,/optin,/optout} and the SuperAdmin /v1/admin/{catalog,enablement}).
 //
 // It shares the @hanzo/plans catalog with apps/plan, so eight of its sections

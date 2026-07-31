@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package x402 is the Hanzo Cloud native x402 pay-per-use subsystem (HTTP 402): challenge → the client pays → proof submitted → verify → serve → settle.",
+    "description": "Package x402 is pay-per-request over HTTP 402: quote a price, take the payment, serve the resource.",
     "version": "v1"
   },
   "servers": [

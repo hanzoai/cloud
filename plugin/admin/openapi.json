@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package admin mounts the god-mode admin surface (/v1/admin/*) the Hanzo Admin Console (admin.hanzo.ai, apps/operator) calls, per the api.ts contract.",
+    "description": "Package admin is the operator's view of the fleet: orgs, users, roles, spend and system health.",
     "version": "v1"
   },
   "servers": [

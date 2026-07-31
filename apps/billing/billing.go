@@ -1,5 +1,6 @@
-// Package billing is the customer's own money door: what my org holds, what it has
-// spent, and the cards it pays with. It serves the org-scoped
+// Package billing is your org's balance, what it has spent, and the cards it pays with.
+//
+// It is the customer's own money door, serving the org-scoped
 // /v1/billing/{usage,usage/accounts,balance,gpu-eligibility,gpu-charge,payment-methods}
 // reads plus the six /v1/finance/{balance,credits,usage,invoices,payment-methods,ledger}
 // projections the finance UI renders (finance.go). It owns NEITHER prefix whole —

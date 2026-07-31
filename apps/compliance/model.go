@@ -1,9 +1,12 @@
-// Package compliance mounts the ORG-SCOPED compliance operations surface
-// (/v1/compliance): the company's own KYC/KYB onboarding verification, accreditation
-// STATE TRACKING, and a compliance-scoped read of the tamper-evident audit trail
-// (the SOC 2 posture surface). It is the platform TOOLING a company's compliance
-// team uses to orchestrate licensed verification providers and keep an evidence
-// trail — with professionals in the loop.
+// Package compliance is your KYC/KYB onboarding, accreditation records, and the
+// evidence trail behind them.
+//
+// It mounts the ORG-SCOPED operations surface (/v1/compliance): the company's own
+// KYC/KYB onboarding verification, accreditation STATE TRACKING, and a
+// compliance-scoped read of the tamper-evident audit trail (the SOC 2 posture
+// surface). It is the platform TOOLING a company's compliance team uses to
+// orchestrate licensed verification providers and keep an evidence trail — with
+// professionals in the loop.
 //
 // THE BOUNDARY (a design invariant baked into the data model and every response).
 // This subsystem ORCHESTRATES providers and TRACKS what they report. It never

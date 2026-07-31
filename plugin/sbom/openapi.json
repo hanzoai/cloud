@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package sbom is the software bill of materials for container images: CI posts a CycloneDX SBOM keyed by image digest, and /v1/sbom resolves an image's component set back by digest or image ref.",
+    "description": "Package sbom is what is inside a container image: every component, resolvable by digest or image ref.",
     "version": "v1"
   },
   "servers": [
