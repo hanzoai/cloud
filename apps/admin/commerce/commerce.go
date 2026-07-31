@@ -353,7 +353,7 @@ func (c *Client) post(ctx context.Context, path, subject string, body []byte, id
 // Forward proxies an admin-authenticated request to commerce VERBATIM and returns
 // the raw body + status. It is the ONE seam a SuperAdmin surface drives commerce's
 // own endpoints through — the platform plan-promo config (/v1/platform/promo) and a
-// per-org spend-alert override (/v1/billing/spend-alerts) — without a typed method
+// per-org spend-alert override (/v1/billing/alerts) — without a typed method
 // per shape. subject is the X-Org-Id namespace selector (the target org for a cap
 // override, or the admin org for platform config); body is nil for GET/DELETE. The
 // status is returned so the caller surfaces commerce's OWN verdict (400 validation,

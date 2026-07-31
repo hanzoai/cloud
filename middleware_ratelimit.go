@@ -84,7 +84,7 @@ type scopeRateLimiter struct {
 func (rl *scopeRateLimiter) handler(c *zip.Ctx) error {
 	// Never gate the co-resident commerce surface — it is this limiter's OWN
 	// config source, not metered user traffic. rulesFor reads the scope rules via
-	// GET /v1/billing/spend-alerts, dispatched in-process over the co-resident
+	// GET /v1/billing/alerts, dispatched in-process over the co-resident
 	// commerce handler (the commerce transport), which re-runs the WHOLE app. If this
 	// handler gated that path, the rules fetch would re-enter here, re-fetch (the
 	// cache is only filled AFTER the fetch returns, so it is still cold), and

@@ -17,7 +17,7 @@ import (
 // service-token seam —
 //
 //	promos      → commerce /v1/platform/promo   (the admin-configured plan promo)
-//	spend-caps  → commerce /v1/billing/spend-alerts (a per-org usage cap override)
+//	spend-caps  → commerce /v1/billing/alerts (a per-org usage cap override)
 //
 // so admin.hanzo.ai configures the 50%-off promo and oversees/overrides any org's
 // caps without a parallel model. Promo ops are platform-only (core.Admit); cap
@@ -121,7 +121,7 @@ func (o ops) listSpendCaps(ctx context.Context, in *capIn) (*rawOut, error) {
 	if !ok {
 		return &rawOut{Status: core.Err, Msg: "org required"}, nil
 	}
-	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodGet, "/v1/billing/spend-alerts", org, nil)
+	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodGet, "/v1/billing/alerts", org, nil)
 	return relay(raw, status, err)
 }
 
@@ -142,7 +142,7 @@ func (o ops) createSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	if !ok {
 		return &rawOut{Status: core.Err, Msg: "org required"}, nil
 	}
-	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodPost, "/v1/billing/spend-alerts", org, c.Body())
+	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodPost, "/v1/billing/alerts", org, c.Body())
 	return relay(raw, status, err)
 }
 
@@ -166,7 +166,7 @@ func (o ops) updateSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	if id == "" {
 		return &rawOut{Status: core.Err, Msg: "cap id required"}, nil
 	}
-	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodPatch, "/v1/billing/spend-alerts/"+url.PathEscape(id), org, c.Body())
+	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodPatch, "/v1/billing/alerts/"+url.PathEscape(id), org, c.Body())
 	return relay(raw, status, err)
 }
 
@@ -188,7 +188,7 @@ func (o ops) deleteSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	if id == "" {
 		return &rawOut{Status: core.Err, Msg: "cap id required"}, nil
 	}
-	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodDelete, "/v1/billing/spend-alerts/"+url.PathEscape(id), org, nil)
+	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodDelete, "/v1/billing/alerts/"+url.PathEscape(id), org, nil)
 	return relay(raw, status, err)
 }
 
