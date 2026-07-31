@@ -43,8 +43,8 @@
 //	GET /v1/blueprint/sbom            batch: every blueprint's SBOM + cost   -> {data:[Estimate]}
 //	GET /v1/blueprint/health          liveness + the active rate card       (not JWT-gated)
 //
-// Registered as id "blueprint" with cloud.HealthOwner: it serves its own
-// /v1/blueprint/health, so serve.go skips the generic liveness route.
+// Its plugin declares OwnsHealth, so it serves its own /v1/blueprint/health and the
+// host skips the generic liveness route.
 package blueprint
 
 import (
