@@ -497,3 +497,34 @@ func TestTypedRegistrationStillWorks(t *testing.T) {
 		t.Fatalf("a hand-registered server keeps its random handle and no underscore, got %q", srv.ID)
 	}
 }
+
+// TestSyncRefusesALoopingCursor: the cursor belongs to a third party, so a walk
+// that trusted it to end could be made not to. A repeated cursor is the loop, and
+// it is refused rather than followed — with what was already read kept, because a
+// partial catalog is not a reason to throw away the part that was fine.
+func TestSyncRefusesALoopingCursor(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := r.URL.Query().Get("cursor")
+		name := "com.one/mcp"
+		if n != "" {
+			name = "com.two/mcp"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"servers":  []map[string]any{entry(name, "x", remote("https://mcp.example.com"), nil)},
+			"metadata": map[string]any{"nextCursor": "always-the-same"},
+		})
+	}))
+	defer ts.Close()
+	c := catalogOf(t, ts)
+
+	added, _, err := c.Sync(context.Background())
+	if err == nil {
+		t.Fatal("a cursor that repeats must be refused, not followed forever")
+	}
+	if !strings.Contains(err.Error(), "repeated") {
+		t.Fatalf("the refusal must name the loop, got %v", err)
+	}
+	if added == 0 {
+		t.Fatal("the pages that were read before the loop must be kept")
+	}
+}
