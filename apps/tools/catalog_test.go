@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/zap-proto/zip"
@@ -757,4 +758,31 @@ func (k recordingKMS) PutSecret(_ context.Context, ref string, v []byte) error {
 }
 func (recordingKMS) Sign(context.Context, string, []byte) ([]byte, error) {
 	return nil, errors.New("not signing")
+}
+
+// TestConcurrentEnablesAreOneServer: Resolve reads and Write writes, so two
+// requests can pass through the gap between them — a double-clicked Enable is the
+// ordinary way that happens. The second becomes the revise it would have been had
+// it arrived a moment later, rather than a 500 nobody can act on.
+func TestConcurrentEnablesAreOneServer(t *testing.T) {
+	app := shelf(t, entry("com.stripe/mcp", "payments", remote("https://mcp.stripe.com"), nil))
+	var wg sync.WaitGroup
+	codes := make([]int, 8)
+	for i := range codes {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			codes[i] = do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+				map[string]any{"listing": "com.stripe_mcp"}).Code
+		}(i)
+	}
+	wg.Wait()
+	for i, c := range codes {
+		if c != 201 {
+			t.Fatalf("concurrent enable %d answered %d", i, c)
+		}
+	}
+	if n := serverCount(t, app, "acme"); n != 1 {
+		t.Fatalf("eight concurrent enables of one listing must leave one server, got %d", n)
+	}
 }
