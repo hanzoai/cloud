@@ -271,6 +271,26 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		commercebilling.RunAutoRechargeAllOrgs,
 	)
 
+	// POST /v1/billing/test-mode — the org's live/sandbox switch, and the ONLY way to
+	// move a tenant onto real card rails. organization.TestMode() is `!o.Live` and it is
+	// the SINGLE authority for both the Square environment and the ledger bucket, so an
+	// org that has never been flipped transacts in SANDBOX — fail-closed by design, and
+	// the reason a production-credentialled deployment can still hand a buyer a sandbox
+	// card form. Unrouted, that flip could not be performed at all in this binary: the
+	// switch lives on commerce's mint group, which the co-resident embed never compiles.
+	//
+	// Chain is auto-recharge/run-all's, because this is the same class of route — a
+	// money-MINT control, not a customer action. commerce gates it on `mint`
+	// (middleware.Mint: internal service token OR platform global admin, NEVER the
+	// org-level Admin bit), and TokenRequired + PlatformOnly is that gate here. An org
+	// admin must not be able to move their own org between sandbox and production.
+	app.Post("/v1/billing/test-mode",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		commercemid.PlatformOnly(),
+		commercebilling.SetOrgTestMode,
+	)
+
 	// GET /v1/billing/plans — the public tier catalog the console renders. commerce's
 	// legacy api.Route() billing bundle (ListPlans, invoices, subscriptions, …) is NOT
 	// registered by the co-resident embed: setupRoutes wires only /v1/commerce/*, so
