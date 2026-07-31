@@ -89,10 +89,13 @@ func tenantOf(ctx context.Context) (tenant, error) {
 // takes nothing off the wire.
 type noInput struct{}
 
-// noContent is the Out of an op that answers 204 with an empty body. The
-// registrar needs an Out type and a nil *Out is what makes zip write 204; naming
-// it says "nothing comes back" in the spec too.
-type noContent struct{}
+// noContent is the Out of an op that answers 204 with an empty body. It is an
+// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
+// 204 only when the Out type has NO NAME (openapi.go: a named OutType publishes
+// "200 with a body"), so a defined type here would document a status git's four
+// void ops have never sent — every one of them returns a nil *Out, which zip
+// writes as 204 (git_test.go, ssh_test.go, lifecycle_test.go all assert it).
+type noContent = struct{}
 
 // repoRef addresses one repo by the name in the URL.
 type repoRef struct {
