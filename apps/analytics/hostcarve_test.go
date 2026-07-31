@@ -97,7 +97,7 @@ func carveOn(t *testing.T, cfg sites.Config, r sites.Resolver) *zip.App {
 // where the bare-key lookup is the correct one, so both of the resolver's answers are
 // the site's own org. A POST to the site host is intercepted by the middleware and
 // forced to Site.Org; a POST to any other host falls through to the normal
-// /v1/analytics route.
+// /v1/event route.
 func carveApp(t *testing.T, org string) *zip.App {
 	t.Helper()
 	return carveOn(t, siteHosts(), liveResolver{pinned: org, unpinned: org})
@@ -154,14 +154,11 @@ func TestMount_HostCarve_IngestsForSiteOrg(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := carveApp(t, "hanzo")
 
-	// Segment/beacon wire on /v1/analytics + its /batch alias.
-	for _, p := range []string{"/v1/analytics", "/v1/analytics/batch"} {
-		code := postHost(t, app, "yadota.hanzo.app", p,
-			`{"batch":[{"type":"pageview","path":"/pricing"}],"org":"attacker","properties":{"space":"attacker"}}`,
-			map[string]string{"X-Org-Id": "attacker"})
-		if code != http.StatusServiceUnavailable {
-			t.Fatalf("beacon POST %s want 503 (ingested for the site org, datastore down), got %d", p, code)
-		}
+	// Canonical wire on /v1/event.
+	if code := postHost(t, app, "yadota.hanzo.app", canonDoor,
+		`{"batch":[{"type":"pageview","path":"/pricing"}],"org":"attacker","properties":{"space":"attacker"}}`,
+		map[string]string{"X-Org-Id": "attacker"}); code != http.StatusServiceUnavailable {
+		t.Fatalf("beacon POST %s want 503 (ingested for the site org, datastore down), got %d", canonDoor, code)
 	}
 
 	// PostHog wire on /v1/insights/e.
@@ -216,13 +213,11 @@ func TestMount_HostCarve_FirstPartyHostResolvesPinned(t *testing.T) {
 func TestMount_HostCarve_AnonymousCapabilityOnly(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := carveApp(t, "hanzo")
-	for _, p := range []string{"/v1/analytics", "/v1/analytics/batch", "/v1/event"} {
-		code := postHost(t, app, "yadota.hanzo.app", p,
-			`{"batch":[{"type":"event","event":"signup_completed","revenue":999,"groupId":"victim"}]}`,
-			map[string]string{"X-Org-Id": "attacker"})
-		if code != http.StatusOK {
-			t.Fatalf("site-host custom event on %s want 200 (all-dropped, never stored), got %d", p, code)
-		}
+	code := postHost(t, app, "yadota.hanzo.app", canonDoor,
+		`{"batch":[{"type":"event","event":"signup_completed","revenue":999,"groupId":"victim"}]}`,
+		map[string]string{"X-Org-Id": "attacker"})
+	if code != http.StatusOK {
+		t.Fatalf("site-host custom event on %s want 200 (all-dropped, never stored), got %d", canonDoor, code)
 	}
 }
 
@@ -231,7 +226,7 @@ func TestMount_HostCarve_AnonymousCapabilityOnly(t *testing.T) {
 // decodes and funnels through the ONE write core without any principal.
 func TestMount_HostCarve_EmptyBatchOK(t *testing.T) {
 	app := carveApp(t, "hanzo")
-	if code := postHost(t, app, "yadota.hanzo.app", "/v1/analytics", `{"batch":[]}`, nil); code != http.StatusOK {
+	if code := postHost(t, app, "yadota.hanzo.app", canonDoor, `{"batch":[]}`, nil); code != http.StatusOK {
 		t.Fatalf("empty beacon batch want 200, got %d", code)
 	}
 }
@@ -249,7 +244,7 @@ func TestMount_HostCarve_EmptyBatchOK(t *testing.T) {
 // second place answering one question.
 func TestMount_HostCarve_CustomDomainCarves(t *testing.T) {
 	app := carveApp(t, "yadota")
-	code := postHost(t, app, "yadota.tech", "/v1/analytics",
+	code := postHost(t, app, "yadota.tech", canonDoor,
 		`{"batch":[{"type":"pageview"}]}`, map[string]string{"X-Org-Id": "attacker"})
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("custom-domain beacon want 503 (ingested as site org), got %d", code)
@@ -275,18 +270,18 @@ func TestMount_HostCarve_GetNotHijacked(t *testing.T) {
 }
 
 // TestMount_HostCarve_NonSiteHostUsesNormalGate: on a NON-site host the middleware
-// Continues and the normal /v1/analytics route runs — the carve did not fire, so the
+// Continues and the normal /v1/event route runs — the carve did not fire, so the
 // beacon gets the normal door's anonymous lane (the reserved public tenant) rather than
 // any site's org. A pageview is admitted there (503) and a custom event is dropped, so
 // the host-scoped carve neither leaks a site org off-host nor weakens the normal gate.
 func TestMount_HostCarve_NonSiteHostUsesNormalGate(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := carveApp(t, "hanzo")
-	if code := postHost(t, app, "evil.example.com", "/v1/analytics",
+	if code := postHost(t, app, "evil.example.com", canonDoor,
 		`{"batch":[{"type":"pageview"}]}`, map[string]string{"X-Org-Id": "attacker"}); code != http.StatusServiceUnavailable {
 		t.Fatalf("anonymous unknown-host beacon want 503 (normal door's anonymous lane), got %d", code)
 	}
-	if code := postHost(t, app, "evil.example.com", "/v1/analytics",
+	if code := postHost(t, app, "evil.example.com", canonDoor,
 		`{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`,
 		map[string]string{"X-Org-Id": "attacker"}); code != http.StatusOK {
 		t.Fatalf("anonymous unknown-host commerce want 200 all-dropped, got %d", code)
@@ -299,7 +294,7 @@ func TestMount_HostCarve_NonSiteHostUsesNormalGate(t *testing.T) {
 func TestMount_HostCarve_DisabledWhenPublicCaptureOff(t *testing.T) {
 	t.Setenv(publicCaptureEnv, "off")
 	app := carveApp(t, "hanzo")
-	code := postHost(t, app, "yadota.hanzo.app", "/v1/analytics",
+	code := postHost(t, app, "yadota.hanzo.app", canonDoor,
 		`{"batch":[{"type":"pageview"}]}`, nil)
 	if code != http.StatusMethodNotAllowed {
 		t.Fatalf("public-capture-off site beacon want 405 (carve not installed), got %d", code)

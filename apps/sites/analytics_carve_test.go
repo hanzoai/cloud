@@ -58,7 +58,7 @@ func postReq(host, path, body string) *http.Request {
 // it is "carve EXACTLY the paths you were handed, on POST, and nothing else". The
 // values are the real doors only so the table reads familiarly; every assertion below
 // is about set-exactness against whatever was installed.
-var carvePaths = []string{"/v1/event", "/v1/analytics", "/v1/analytics/batch", "/v1/tracker", "/v1/insights/e"}
+var carvePaths = []string{"/v1/event", "/v1/insights/e"}
 
 // carveSet binds one handler to carvePaths, the shape SetAnalyticsHost takes: the
 // path set and the dispatch are ONE map, so a path is carved iff it has a handler.
@@ -110,6 +110,9 @@ func TestMiddlewareCarvesExactlyTheInstalledSet(t *testing.T) {
 		// no prefix match: a /v1/analytics/* route that is not a door is out by default
 		"/v1/analytics/anything", "/v1/analytics/batch/extra", "/v1/eventx", "/v1/insights/e/extra",
 		"/v1/tracker/projects", "/v1/ingest", "/v1/base", "/v1/base/collections",
+		// retired doors: name-aliases of the canonical wire, and the bare path the
+		// tracker product owns. Handed no handler, they are carved by nothing.
+		"/v1/analytics", "/v1/analytics/batch", "/v1/tracker",
 		// byte-exact on the RAW target: a near-miss spelling of a real door fails
 		// to the static serve, never into ingest (analyticsIngest).
 		"/v1/%65vent", "/v1/event/", "//v1/event", "/v1/./event",
@@ -198,7 +201,7 @@ func TestMiddlewareAnalyticsCarveCustomDomain(t *testing.T) {
 	defer SetAnalyticsHost(nil)
 	app := newTestApp(selfServer())
 
-	resp, err := app.Fiber().Test(postReq("yadota.tech", "/v1/analytics", beaconBody))
+	resp, err := app.Fiber().Test(postReq("yadota.tech", "/v1/event", beaconBody))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -293,7 +296,7 @@ func TestMiddlewareAnalyticsCarveNonSiteHostUnaffected(t *testing.T) {
 	defer SetAnalyticsHost(nil)
 	app := newTestApp(selfServer())
 
-	resp, err := app.Fiber().Test(postReq("api.hanzo.ai", "/v1/analytics", beaconBody))
+	resp, err := app.Fiber().Test(postReq("api.hanzo.ai", "/v1/event", beaconBody))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -320,7 +323,7 @@ func TestMiddlewareAnalyticsCarveNonLive405(t *testing.T) {
 	defer SetAnalyticsHost(nil)
 	app := newTestApp(testServer())
 
-	resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", "/v1/analytics", beaconBody))
+	resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", "/v1/event", beaconBody))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -370,7 +373,7 @@ func TestMiddlewareNoAnalyticsHandlerIs405(t *testing.T) {
 	SetAnalyticsHost(nil)
 	app := newTestApp(testServer())
 
-	resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", "/v1/analytics", beaconBody))
+	resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", "/v1/event", beaconBody))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}

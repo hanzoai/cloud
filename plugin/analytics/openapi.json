@@ -22,96 +22,9 @@
     },
     {
       "name": "insights"
-    },
-    {
-      "name": "tracker"
     }
   ],
   "paths": {
-    "/v1/analytics": {
-      "post": {
-        "operationId": "post_v1_analytics",
-        "tags": [
-          "analytics"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/Event"
-                  },
-                  {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Event"
-                    }
-                  },
-                  {
-                    "$ref": "#/components/schemas/CaptureBatch"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "2XX": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CaptureResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/analytics/batch": {
-      "post": {
-        "operationId": "post_v1_analytics_batch",
-        "tags": [
-          "analytics"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/Event"
-                  },
-                  {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Event"
-                    }
-                  },
-                  {
-                    "$ref": "#/components/schemas/CaptureBatch"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "2XX": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CaptureResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/analytics/health": {
       "get": {
         "operationId": "get_v1_analytics_health",
@@ -511,48 +424,6 @@
               }
             },
             "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/tracker": {
-      "post": {
-        "operationId": "post_v1_tracker",
-        "tags": [
-          "tracker"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/Event"
-                  },
-                  {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Event"
-                    }
-                  },
-                  {
-                    "$ref": "#/components/schemas/CaptureBatch"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "2XX": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CaptureResult"
-                }
-              }
-            }
           }
         }
       }

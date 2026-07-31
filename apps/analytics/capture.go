@@ -768,15 +768,20 @@ func projectKey(c *zip.Ctx) string {
 
 // ── ONE write core ───────────────────────────────────────────────────────────
 
-// event source tags — the ingest adapter each row arrived through. Stamped into
-// properties.$source by ingestEvents so the ONE hanzo.events table stays honest
-// about origin (canonical vs. deprecated wire) WITHOUT a second table or a schema
-// migration: the read lenses are unchanged and $source is queryable in the
-// properties JSON, which is exactly the migration signal for the alias sunset.
+// event source tags — the WIRE each row arrived on. Stamped into properties.$source
+// by ingestEvents so the ONE hanzo.events table stays honest about origin WITHOUT a
+// second table or a schema migration: the read lenses are unchanged and $source is
+// queryable in the properties JSON. One tag per door, and doors (event.go) is the
+// only list that binds them.
+//
+// There is no 'capture' tag: rows carrying it were written by the retired
+// /v1/analytics{,/batch} and /v1/tracker name-aliases of the canonical wire. Those
+// rows keep their value in the warehouse — history is not rewritten — but no code
+// path can mint another, which is what makes the retirement a fact rather than a
+// convention.
 const (
 	sourceEvent   = "event"   // canonical POST /v1/event (canonical wire)
 	sourcePostHog = "posthog" // POST /v1/insights/e (PostHog wire)
-	sourceCapture = "capture" // POST /v1/analytics{,/batch}, /v1/tracker (@hanzo/capture, sunsetting)
 )
 
 // withSource returns a copy of p carrying $source=source (the ingest adapter), so
