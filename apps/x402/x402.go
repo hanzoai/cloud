@@ -210,20 +210,42 @@ var (
 )
 
 // Enforce is the pay-per-use middleware a priced route group applies, keyed on the
-// request PATH. It is a passthrough until Mount runs AND a Registry is Published —
-// so linking x402 never gates traffic on its own.
+// request PATH.
+//
+// Applying it is a DECLARATION that the group is for sale, so anything that leaves
+// x402 unable to answer what the group costs is a refusal, never a passthrough. It
+// refuses when x402 is not mounted in this process and when no price table has been
+// published — the two ways "I cannot enforce payment here" arises — because the
+// alternative renders both as "free", permanently and silently.
+//
+// That is not hypothetical. The published Registry is a process-global installed by
+// marketplace.Mount, and the shipped topology is one binary per app (manifest/apps.go;
+// Dockerfile builds a plugin per row; cmd/cloud loads each as a child process), so a
+// process that mounts x402 does NOT have marketplace in it and the table is nil. The
+// fleet has been bitten by exactly this once already — see resource_billing_peer.go:
+// "Splitting apps into their own binaries turned every priced create free without
+// changing a line of billing code."
+//
+// The TOOL path answers the opposite way on purpose (see Settle): it offers EVERY
+// dispatch to the seam, so an absent table there means "nothing is priced" and free
+// tools keep working. A middleware is applied only to what is FOR SALE; the tool seam
+// is applied to everything. Different questions, so the safe answers differ, and both
+// are stated rather than inherited from one shared default.
 func Enforce() zip.Handler {
 	return func(c *zip.Ctx) error {
 		s := mounted
 		if s == nil {
-			return c.Next()
+			return refuse(c, unenforceable("x402 is not mounted in this process"))
+		}
+		if currentRegistry() == nil {
+			return refuse(c, unenforceable("no price table is published in this process"))
 		}
 		terms, priced, err := priceOf(c.Context(), c.Path())
 		if err != nil {
 			return refuse(c, unavailable()) // price lookup blip → never serve a priced route free
 		}
 		if !priced {
-			return c.Next()
+			return c.Next() // the TABLE says this route is free — an answer, not a silence
 		}
 		g := run(s, c.Context(), c, c.Path(), terms)
 		if g.receipt != nil {
@@ -376,6 +398,16 @@ func challenge(req PaymentRequirements, code, msg string) gate {
 func unavailable() gate {
 	return gate{status: http.StatusServiceUnavailable, code: "x402_unavailable",
 		msg: "payment settlement temporarily unavailable"}
+}
+
+// unenforceable is the refusal for a priced route x402 cannot price at all — a
+// missing dependency in THIS process, not a transient fault. It carries no
+// challenge, because there are no terms to offer: a client cannot pay its way past
+// a payment rail that is not here. The reason is named so the failure reads as a
+// deployment fact in the log rather than a mystery 503.
+func unenforceable(why string) gate {
+	return gate{status: http.StatusServiceUnavailable, code: "x402_unenforceable",
+		msg: "payment cannot be enforced for this resource: " + why}
 }
 
 // served records a settled payment: the audit row and the receipt header the
