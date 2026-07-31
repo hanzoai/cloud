@@ -28,34 +28,65 @@ import (
 
 // ── harness ───────────────────────────────────────────────────────────────────
 
-// countingDoer answers every commerce call 200 and counts usage POSTs, so a test
-// can prove the metering spine is hit EXACTLY once per settled payment (settle-once)
-// without standing up commerce.
-type countingDoer struct {
-	mu    sync.Mutex
-	usage int
+// commerceDoer answers every commerce call 200. It exists only so metering.New has
+// a transport and reports Enabled; with a co-resident finance ledger published, the
+// metering spine posts the payer debit NATIVELY and this transport is never used —
+// which is itself worth asserting (calls() stays 0).
+type commerceDoer struct {
+	mu sync.Mutex
+	n  int
 }
 
-func (d *countingDoer) count() int { d.mu.Lock(); defer d.mu.Unlock(); return d.usage }
+func (d *commerceDoer) calls() int { d.mu.Lock(); defer d.mu.Unlock(); return d.n }
 
-func (d *countingDoer) Do(req *http.Request) (*http.Response, error) {
-	if req.Method == http.MethodPost && req.URL.Path == "/v1/billing/usage" {
-		d.mu.Lock()
-		d.usage++
-		d.mu.Unlock()
-	}
+func (d *commerceDoer) Do(*http.Request) (*http.Response, error) {
+	d.mu.Lock()
+	d.n++
+	d.mu.Unlock()
 	body := `{"transactionId":"t_1","user":"payer","amount":0,"currency":"usd","type":"withdraw"}`
 	return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader([]byte(body))), Header: make(http.Header)}, nil
 }
 
+// funded is what the payer org starts with, so every debit has balance to draw down.
+var funded = money.FromCents(1000)
+
 type harness struct {
 	t         *testing.T
 	app       *zip.App
-	doer      *countingDoer
+	doer      *commerceDoer
+	fin       types.FinanceClient
 	payerKey  *ecdsa.PrivateKey
 	payerOrg  string
 	payeeOrg  string
 	recipient string // recipient wallet id
+}
+
+// debited is what has left the payer's ledger — the only question that matters
+// about a payment, asked of the ledger rather than of HTTP traffic.
+func (h *harness) debited() money.Amount { return funded.Sub(h.balance(h.payerOrg, h.payerOrg)) }
+
+// credited is what has reached the recipient wallet's ledger.
+func (h *harness) credited() money.Amount { return h.balance(h.payeeOrg, h.recipient) }
+
+func (h *harness) balance(org, subject string) money.Amount {
+	h.t.Helper()
+	amt, err := h.fin.Balance(context.Background(), org, subject, "usd", false)
+	if err != nil {
+		h.t.Fatalf("balance %s/%s: %v", org, subject, err)
+	}
+	return amt
+}
+
+// tie asserts both sides of the settlement moved by exactly want — a payment is two
+// entries that agree, never one.
+func (h *harness) tie(want money.Amount, when string) {
+	h.t.Helper()
+	if got := h.debited(); got.Cmp(want) != 0 {
+		h.t.Fatalf("%s: payer debited %s, want exactly %s", when, got.String(), want.String())
+	}
+	if got := h.credited(); got.Cmp(want) != 0 {
+		h.t.Fatalf("%s: payee credited %s, want exactly %s", when, got.String(), want.String())
+	}
 }
 
 func newHarness(t *testing.T) *harness {
@@ -66,9 +97,10 @@ func newHarness(t *testing.T) *harness {
 	_, _ = rand.Read(raw)
 	t.Setenv("CLOUD_KMS_MASTER_KEY_REF", base64.StdEncoding.EncodeToString(raw))
 
-	// Default: NO co-resident finance (counting tests exercise the HTTP metering
-	// path). The ledger test publishes its own; both reset on cleanup.
-	finance.Publish(nil)
+	// A settlement is a ledger entry on BOTH sides, so every test gets a real
+	// co-resident ledger — there is no "settled" to assert without one.
+	fin := finance.New(t.TempDir())
+	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(nil); _ = wallets.Shutdown(); _ = Shutdown() })
 
 	log := luxlog.New("test")
@@ -89,7 +121,7 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("wallets.Mount: %v", err)
 	}
 
-	doer := &countingDoer{}
+	doer := &commerceDoer{}
 	meter, err := metering.New(metering.Config{BaseURL: "http://commerce.test", HTTPClient: doer})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
@@ -107,9 +139,12 @@ func newHarness(t *testing.T) *harness {
 	paid.Get("/other", served)
 	paid.Get("/free", served)
 
-	h := &harness{t: t, app: app, doer: doer, payerOrg: "payerorg", payeeOrg: "payeeorg"}
+	h := &harness{t: t, app: app, doer: doer, fin: fin, payerOrg: "payerorg", payeeOrg: "payeeorg"}
 	h.payerKey, _ = crypto.GenerateKey()
 	h.recipient = h.createRecipient(h.payeeOrg)
+	if _, err := fin.Deposit(context.Background(), depositUSD(h.payerOrg, h.payerOrg, funded, "fund")); err != nil {
+		t.Fatalf("fund payer: %v", err)
+	}
 	return h
 }
 
@@ -252,8 +287,9 @@ func TestChallengeVerifyServe(t *testing.T) {
 	if rcpt.Payer != h.payerOrg || rcpt.SettledVia != "ledger" || rcpt.Amount != "1" {
 		t.Fatalf("bad receipt: %+v", rcpt)
 	}
-	if h.doer.count() != 1 {
-		t.Fatalf("metering usage recorded %d times, want 1", h.doer.count())
+	h.tie(money.FromCents(100), "after one paid request")
+	if h.doer.calls() != 0 {
+		t.Fatalf("settlement went out over HTTP (%d calls) instead of the co-resident ledger", h.doer.calls())
 	}
 
 	// Receipt lookup is tenant-scoped: the payer sees it; another org gets 404.
@@ -281,9 +317,7 @@ func TestNonceReplayRejected(t *testing.T) {
 	if code, b, _ := h.payFor("/paid/tool", h.payerOrg, reqTool, nonce); code != 200 {
 		t.Fatalf("first payment = %d (%s)", code, b)
 	}
-	if h.doer.count() != 1 {
-		t.Fatalf("usage after first payment = %d, want 1", h.doer.count())
-	}
+	h.tie(money.FromCents(100), "after the first payment")
 
 	// Reuse the SAME (from, nonce) to buy a DIFFERENT, more expensive resource.
 	reqOther := h.challenge("/paid/other", h.payerOrg)
@@ -294,9 +328,7 @@ func TestNonceReplayRejected(t *testing.T) {
 	if !bytes.Contains(b, []byte("nonce_replayed")) {
 		t.Fatalf("replay not flagged: %s", b)
 	}
-	if h.doer.count() != 1 {
-		t.Fatalf("replay double-charged: usage = %d, want 1", h.doer.count())
-	}
+	h.tie(money.FromCents(100), "after the replay was refused")
 }
 
 // Re-submitting the SAME authorization (a client retry) is idempotent: served
@@ -325,9 +357,7 @@ func TestSettleOnceOnRetry(t *testing.T) {
 			t.Fatalf("retry produced a new settlement id %s != %s", rc.ID, firstID)
 		}
 	}
-	if h.doer.count() != 1 {
-		t.Fatalf("settle-once violated: metered %d times across 3 retries, want 1", h.doer.count())
-	}
+	h.tie(money.FromCents(100), "after 3 retries of one authorization")
 }
 
 // An unpriced resource passes straight through — no 402, no charge.
@@ -340,9 +370,7 @@ func TestFreeResourcePassthrough(t *testing.T) {
 	if code != 200 || !bytes.Contains(b, []byte(`"served":true`)) {
 		t.Fatalf("free resource = %d (%s), want 200 served", code, b)
 	}
-	if h.doer.count() != 0 {
-		t.Fatalf("free resource charged: usage = %d", h.doer.count())
-	}
+	h.tie(money.Zero(), "after a free request")
 }
 
 // A priced resource requires a validated payer (ledger settlement debits an org).
@@ -357,27 +385,11 @@ func TestPricedResourceRequiresPayer(t *testing.T) {
 	}
 }
 
-// End-to-end LEDGER settlement: with a co-resident finance ledger, a paid request
-// debits the payer's org through the metering spine AND credits the recipient
-// wallet's ledger — once. A retry moves no more money.
+// End-to-end LEDGER settlement, stated as balances: a paid request debits the payer's
+// org through the metering spine AND credits the recipient wallet's ledger — once.
+// A retry moves no more money.
 func TestSettlesToRecipientLedger(t *testing.T) {
 	h := newHarness(t)
-	fin := finance.New(h.t.TempDir())
-	finance.Publish(fin)
-	ctx := context.Background()
-
-	// Fund the payer so its metered debit has balance to draw down.
-	if _, err := fin.Deposit(ctx, depositUSD(h.payerOrg, h.payerOrg, money.FromCents(1000), "fund")); err != nil {
-		t.Fatalf("fund payer: %v", err)
-	}
-	balance := func(org, subject string) int64 {
-		amt, err := fin.Balance(ctx, org, subject, "usd", false)
-		if err != nil {
-			t.Fatalf("balance: %v", err)
-		}
-		return amt.Cents()
-	}
-
 	pubRegistry(map[string]Terms{
 		"/paid/tool": {Amount: money.FromCents(100), RecipientOrg: h.payeeOrg, RecipientWalletID: h.recipient},
 	})
@@ -389,21 +401,39 @@ func TestSettlesToRecipientLedger(t *testing.T) {
 	if code, b, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, string(pb), ""); code != 200 {
 		t.Fatalf("paid request = %d (%s)", code, b)
 	}
-	if got := balance(h.payerOrg, h.payerOrg); got != 900 {
-		t.Fatalf("payer balance = %d cents, want 900 (1000 - 100)", got)
-	}
-	if got := balance(h.payeeOrg, h.recipient); got != 100 {
-		t.Fatalf("recipient balance = %d cents, want 100", got)
+	h.tie(money.FromCents(100), "after payment")
+	if got := h.balance(h.payerOrg, h.payerOrg); got.Cmp(money.FromCents(900)) != 0 {
+		t.Fatalf("payer balance = %s, want 9 (10 - 1)", got.String())
 	}
 
 	// Retry the same authorization: settle-once → balances unchanged.
 	if code, _, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, string(pb), ""); code != 200 {
 		t.Fatal("retry not served")
 	}
-	if got := balance(h.payerOrg, h.payerOrg); got != 900 {
-		t.Fatalf("payer balance after retry = %d cents, want still 900", got)
+	h.tie(money.FromCents(100), "after retrying the same authorization")
+}
+
+// A settlement moves BOTH sides or neither. With no ledger to credit the payee, the
+// payer must not be charged and the resource must not be served — the alternative is
+// money debited into nothing, or (with the credit alone) money minted from a missing
+// dependency.
+func TestSettlementRefusesHalfMove(t *testing.T) {
+	h := newHarness(t)
+	pubRegistry(map[string]Terms{
+		"/paid/tool": {Amount: money.FromCents(100), RecipientOrg: h.payeeOrg, RecipientWalletID: h.recipient},
+	})
+	req := h.challenge("/paid/tool", h.payerOrg)
+	now := nowUnix()
+	proof := signProof(t, h.payerKey, req, randNonce(), now-60, now+300)
+	pb, _ := json.Marshal(proof)
+
+	ledger := finance.Current()
+	finance.Publish(nil) // the payee's ledger goes away mid-flight
+	code, b, _ := h.req(http.MethodGet, "/paid/tool", h.payerOrg, string(pb), "")
+	finance.Publish(ledger)
+
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("settlement with no payee ledger = %d (%s), want 503 — never serve a half-moved payment", code, b)
 	}
-	if got := balance(h.payeeOrg, h.recipient); got != 100 {
-		t.Fatalf("recipient balance after retry = %d cents, want still 100", got)
-	}
+	h.tie(money.Zero(), "after a refused settlement")
 }

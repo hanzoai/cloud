@@ -18,6 +18,7 @@
 package x402
 
 import (
+	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -121,6 +122,43 @@ const (
 	DefaultTokenName    = "USD Coin"
 	DefaultTokenVersion = "2"
 )
+
+// Sign is the CLIENT half of the protocol and the exact mirror of Verify: it
+// produces the ERC-3009 authorization a payer submits on the X-Payment header,
+// bound to exactly the requirements it was challenged with. Empty tokenName /
+// tokenVersion take the USDC defaults, the same substitution Config makes.
+//
+// It lives here, beside Verify, because the EIP-712 encoding is ONE encoding: a
+// signer that wrote it out a second time would be free to drift from the verifier
+// and would fail only in production, where a real payer's signature stops
+// recovering. One encoding, two directions.
+func Sign(req PaymentRequirements, key *ecdsa.PrivateKey, nonce string,
+	validAfter, validBefore int64, tokenName, tokenVersion string) (Proof, error) {
+
+	if key == nil {
+		return Proof{}, fmt.Errorf("x402: sign requires a key")
+	}
+	p := Proof{
+		From: crypto.PubkeyToAddress(key.PublicKey).Hex(), To: req.Payee, Value: req.Amount,
+		ValidAfter: validAfter, ValidBefore: validBefore, Nonce: nonce,
+	}
+	if tokenName == "" {
+		tokenName = DefaultTokenName
+	}
+	if tokenVersion == "" {
+		tokenVersion = DefaultTokenVersion
+	}
+	digest, err := eip712Digest(req, p, tokenName, tokenVersion)
+	if err != nil {
+		return Proof{}, err
+	}
+	sig, err := crypto.Sign(digest[:], key)
+	if err != nil {
+		return Proof{}, fmt.Errorf("x402: sign: %w", err)
+	}
+	p.Signature = "0x" + hex.EncodeToString(sig)
+	return p, nil
+}
 
 // Verify checks that p is a well-formed, in-window, unaltered authorization for
 // the requirements req: the To/Value match, the time window holds at now, and the
