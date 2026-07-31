@@ -10,6 +10,7 @@
 //	GET /v1/world/news       merged, filtered, freshest-first feed -> {items:[…]}
 //	GET /v1/world/pipeline   per-project pipeline config (read)    -> {…}
 //	PUT /v1/world/pipeline   per-project pipeline config (write)   -> {…}
+//	GET /v1/world/limits     a World plan's rate/alert/model gates -> {…}
 //	GET /v1/world/stream     SSE live refresh (ZAP-native)         -> event: news
 //
 // TENANT ISOLATION is enforced SERVER-SIDE on every request. The (org, project)
@@ -23,7 +24,8 @@
 // ported rss-proxy.js allowlist (allowlist.go), enforced at BOTH the PUT write
 // boundary and at fetch time, including on redirect targets (client CheckRedirect).
 //
-// Order 142 binds /v1/world/* ahead of the AI /v1/* catch-all (150).
+// The host routes by first matching prefix in manifest.Apps order, and world's row
+// (/v1/world) precedes the ai row that answers the bare /v1 remainder.
 package world
 
 import (
