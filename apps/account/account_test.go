@@ -328,7 +328,7 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("get pre-mint: want 200, got %d (%s)", code, body)
 	}
-	var st keyList
+	var st apiKeyList
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 0 {
 		t.Fatalf("pre-mint key set should be empty: %s", body)
@@ -422,7 +422,7 @@ func TestKeys_PublishableTypeIsAFieldNotAnEndpoint(t *testing.T) {
 	// A publishable key is LISTED WITH ITS FULL VALUE — it is public by construction
 	// and useless to its holder if it cannot be read back.
 	_, body = call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
-	var st keyList
+	var st apiKeyList
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 1 || st.Keys[0].Type != "publishable" {
 		t.Fatalf("want one publishable key listed, got %s", body)
@@ -442,7 +442,7 @@ func TestKeys_TypesAreIndependent(t *testing.T) {
 	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"secret"}`)
 	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"publishable"}`)
 
-	var st keyList
+	var st apiKeyList
 	_, body := call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 2 {
@@ -460,6 +460,53 @@ func TestKeys_TypesAreIndependent(t *testing.T) {
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 1 || st.Keys[0].Type != "secret" {
 		t.Fatalf("revoking the publishable key must leave the secret key working, got %s", body)
+	}
+}
+
+// A DELETE addresses what it deletes with its URL, so the typed revoke binds its
+// input from `?type=` and the document declares exactly that parameter. The class
+// is STILL read out of a JSON body when the query omits it, because callers written
+// against the older shape send it there — and resolving that to the empty string
+// would default to secret and destroy the caller's session-equivalent credential in
+// place of the publishable one they named. Typing described this wire; it did not
+// replace it, and this test is what says so.
+func TestKeys_RevokeReadsTheClassFromTheBodyWhenTheQueryOmitsIt(t *testing.T) {
+	f := newFakeIAM()
+	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
+
+	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"secret"}`)
+	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"publishable"}`)
+
+	// No `?type=` at all — the class rides in the body, as the older callers send it.
+	code, body := call(t, app, http.MethodDelete, "/v1/keys", "alice", "acme", `{"type":"publishable"}`)
+	if code != http.StatusOK {
+		t.Fatalf("body-selected revoke: want 200, got %d (%s)", code, body)
+	}
+	if len(f.revokedType) != 1 || f.revokedType[0] != "publishable" {
+		t.Fatalf("the class in the body must reach IAM, got %v", f.revokedType)
+	}
+	// The answer names the class it resolved, so a caller that named none can see
+	// which credential it just destroyed.
+	var out revokedKey
+	mustJSON(t, body, &out)
+	if !out.OK || out.Type != keyTypePublishable {
+		t.Fatalf("revoke must answer {ok,type}, got %s", body)
+	}
+	// And the secret key is untouched — the whole reason the fallback survives.
+	var st apiKeyList
+	_, list := call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	mustJSON(t, list, &st)
+	if len(st.Keys) != 1 || st.Keys[0].Type != keyTypeSecret {
+		t.Fatalf("a body-selected revoke must leave the secret key working, got %s", list)
+	}
+
+	// When both are sent the URL WINS: it is the half the method carries, the half
+	// the document declares, and the half a generated client fills in.
+	if code, _ = call(t, app, http.MethodDelete, "/v1/keys?type=secret", "alice", "acme", `{"type":"publishable"}`); code != http.StatusOK {
+		t.Fatalf("query-selected revoke: want 200, got %d", code)
+	}
+	if len(f.revokedType) != 2 || f.revokedType[1] != keyTypeSecret {
+		t.Fatalf("`?type=` must win over the body, got %v", f.revokedType)
 	}
 }
 
@@ -514,6 +561,28 @@ func TestKeys_LegacyPathIsAThinDeprecatedAlias(t *testing.T) {
 	code, body := call(t, app, http.MethodPost, "/v1/iam/keys?type=publishable", "alice", "acme", "")
 	if code != http.StatusOK || !strings.Contains(string(body), "pk-") {
 		t.Fatalf("alias POST must behave identically: %d %s", code, body)
+	}
+
+	// Every method, including the revoke: the Deprecation header is carried by the
+	// middleware the op is REGISTERED with, not by a wrapper around one handler, so
+	// this is exactly the announcement a re-registration quietly drops.
+	req = httptest.NewRequest(http.MethodDelete, "/v1/iam/keys?type=publishable", nil)
+	req.Header.Set("X-User-Id", "alice")
+	req.Header.Set("X-Org-Id", "acme")
+	resp, err = app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("alias DELETE: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("alias DELETE: want 200, got %d", resp.StatusCode)
+	}
+	if resp.Header.Get("Deprecation") != "true" || !strings.Contains(resp.Header.Get("Link"), "/v1/keys") {
+		t.Fatalf("the superseded revoke must announce itself deprecated and name /v1/keys, got %q / %q",
+			resp.Header.Get("Deprecation"), resp.Header.Get("Link"))
+	}
+	if len(f.revokedType) != 1 || f.revokedType[0] != "publishable" {
+		t.Fatalf("alias DELETE must revoke the class it named, got %v", f.revokedType)
 	}
 }
 
@@ -716,7 +785,7 @@ func TestIAMKeysBeatsWildcard(t *testing.T) {
 	if strings.Contains(string(body), "iam-wildcard") {
 		t.Fatalf("/v1/iam/keys reached the wildcard, not the native handler: %s", body)
 	}
-	var st keyList
+	var st apiKeyList
 	mustJSON(t, body, &st) // native response shape
 
 	// POST /v1/iam/keys (mint) must ALSO hit the native handler and target the derived id.
@@ -726,6 +795,17 @@ func TestIAMKeysBeatsWildcard(t *testing.T) {
 	}
 	if len(f.mintedFor) != 1 || f.mintedFor[0] != "acme/alice" {
 		t.Fatalf("native mint must target acme/alice, got %v", f.mintedFor)
+	}
+
+	// DELETE too — and it is the method that matters most here. A revoke that lands
+	// on the wildcard reaches IAM's own Guard and 401s, so the caller is told their
+	// key still works when nothing tried to revoke it.
+	code, body = call(t, app, http.MethodDelete, "/v1/iam/keys", "alice", "acme", "")
+	if code != http.StatusOK || strings.Contains(string(body), "iam-wildcard") {
+		t.Fatalf("DELETE /v1/iam/keys must revoke via the native handler, got %d (%s)", code, body)
+	}
+	if len(f.revokedFor) != 1 || f.revokedFor[0] != "acme/alice" {
+		t.Fatalf("native revoke must target acme/alice, got %v", f.revokedFor)
 	}
 
 	// /v1/iam/onboard is likewise native (not the wildcard).

@@ -112,17 +112,42 @@ func (e *iamEdge) pass(c *zip.Ctx) error {
 	}
 
 	body := c.Body()
-	// A scoped WRITE must carry the caller's own org in owner + organization, so an
-	// omitted/empty one can't create an owner="" row visible across tenants.
-	if write && iamKeyed[seg] && !super {
-		if e.field(body, "organization") != org || e.field(body, "owner") != org {
+	// PIN, don't infer. Every scoped segment — everything gated that is not org
+	// METADATA (whose object is owned by "admin" and is guarded by NAME just above)
+	// — carries the caller's own org EXPLICITLY from here on. Nothing downstream
+	// gets to decide which tenant an unqualified request meant.
+	//
+	// This used to cover only the three org-KEYED segments, which left the reads the
+	// console actually calls — get-users, get-user, get-roles — forwarded BARE. A
+	// bare read is not unscoped: IAM scopes it to whatever org the ONE forwarding
+	// credential resolves to, so every tenant's team page was answered from that
+	// credential's org (measured: 262 rows, all owner=hanzo). And a credential that
+	// CAN cross orgs makes it strictly worse — IAM's lister applies no Owner filter
+	// at all for an unqualified super read, returning every tenant at once. The pin
+	// is what makes the edge, not the credential, the thing that decides scope.
+	if !iamMeta[seg] && !super {
+		// The owner rides in whichever coordinate the request already uses. IAM falls
+		// back to `?id=<owner>/<name>` ONLY while `?owner=` is empty, so setting owner
+		// beside an id would suppress the id and turn every single read into "id
+		// (owner/name) or name is required". Rewriting the id's OWNER half pins the
+		// tenant and keeps the name.
+		if id := q.Get("id"); id != "" {
+			q.Set("id", org+"/"+e.name(id))
+		} else {
+			q.Set("owner", org)
+		}
+		// organization= is the second key: the segments that scope by it (projects)
+		// must not be left to a default either.
+		if iamKeyed[seg] {
+			q.Set("organization", org)
+		}
+		// A scoped WRITE must NAME the caller's own org in its body — the body is what
+		// IAM authorizes a write against, so pinning the query alone would leave the
+		// write itself unscoped. Required, not defaulted: an omitted owner would
+		// create an owner="" row visible across tenants.
+		if write && (e.field(body, "owner") != org || (iamKeyed[seg] && e.field(body, "organization") != org)) {
 			return c.JSON(http.StatusForbidden, e.fail("out of scope"))
 		}
-	}
-	// Pin the org on org-keyed traffic so an omitted organization can't make IAM's
-	// lister drop its filter and return every tenant's rows.
-	if iamKeyed[seg] && !super {
-		q.Set("organization", org)
 	}
 
 	return e.forward(c, seg, q, write, body)

@@ -75,7 +75,7 @@ func TestRunRetriesTransientThenSucceedsBillsOnce(t *testing.T) {
 		t.Fatalf("run that recovers after 2 retries want 200, got %d (%s)", code, body)
 	}
 	// The reply must be the recovered content — not dropped.
-	var rv runView
+	var rv agentRunView
 	_ = json.Unmarshal(body, &rv)
 	if rv.Output != "recovered" {
 		t.Fatalf("reply must carry the recovered output, got %q", rv.Output)
@@ -110,7 +110,7 @@ func TestRunFailsOverToReliableModelAndBillsIt(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("failover run want 200, got %d (%s)", code, body)
 	}
-	var rv runView
+	var rv agentRunView
 	_ = json.Unmarshal(body, &rv)
 	if rv.Output != "from-best" {
 		t.Fatalf("failover reply must come from the reliable model, got %q", rv.Output)

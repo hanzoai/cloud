@@ -21,15 +21,15 @@ import (
 //
 // The property under test is one sentence: a request that presented NO credential gets
 // the anonymous PROJECTION, no matter which door resolved its tenant. It used to hold
-// on exactly one door (/v1/event) and fail on three, because the decision was written
-// once per door instead of once per trust level:
+// on exactly one door (/v1/event) and fail on the rest, because the decision was
+// written once per door instead of once per trust level:
 //
 //   - captureTenant's last resort turned the request Host into a REAL brand org
 //     (cloud.BrandForHostOK ⇒ 'hanzo' / 'lux' / 'zoo') at FULL CaptureEvent capability,
-//     so /v1/analytics{,/batch}, /v1/tracker and /v1/insights/e let anyone on the
-//     internet inject revenue, orders, personId and groupId into a brand's partition —
-//     the partition /v1/analytics/overview, /top, /v1/analytics/campaign and the GTM
-//     funnel (clients/guide) all read.
+//     so every door but /v1/event let anyone on the internet inject revenue, orders,
+//     personId and groupId into a brand's partition — the partition
+//     /v1/analytics/overview, /top, /v1/analytics/campaign and the GTM funnel
+//     (clients/guide) all read.
 //   - the published-site carve called the full-capability core with ZERO credential and
 //     the site's real org, so the same injection worked against any customer's org by
 //     setting a Host header.

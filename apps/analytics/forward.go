@@ -18,9 +18,9 @@
 // forwards each event to the org's connected ad/analytics platforms (GA4, Meta CAPI,
 // …). The seam is:
 //
-//   - ONE-WAY. analytics never imports destinations; destinations calls SetSink from
-//     its Mount. A nil sink means no fan-out (the default when destinations is off),
-//     so this file changes nothing about ingest when the subsystem is absent.
+//   - ONE-WAY. analytics never imports its consumers; each (destinations, the
+//     platform event-bus bridge) calls AddSink from its own Mount. No sinks means
+//     no fan-out, so this file changes nothing about ingest when they are absent.
 //   - RAW. The sink receives the event BEFORE the warehouse privacy scrub, because a
 //     server-side Conversions-API forwarder must hash the match keys (email/phone/
 //     click ids) the warehouse deliberately drops. The org connected the destination
@@ -52,13 +52,20 @@ type SinkEvent struct {
 	Properties  map[string]any
 }
 
-// sink is the downstream fan-out hook, installed once by the destinations subsystem
-// at Mount (nil ⇒ no fan-out). A subsystem Mount runs before request traffic, so no
-// lock is needed on this package-global.
-var sink func(org string, evs []SinkEvent)
+// sinks are the downstream fan-out consumers, registered by subsystem Mounts
+// (destinations; the platform event-bus bridge in apps/webhooks). Mounts run
+// before request traffic, so no lock is needed on this package-global.
+var sinks []func(org string, evs []SinkEvent)
 
-// SetSink installs (nil clears) the downstream fan-out hook.
-func SetSink(fn func(org string, evs []SinkEvent)) { sink = fn }
+// AddSink registers a downstream fan-out consumer and returns its remover.
+// Every registered sink receives every accepted batch, each on its own
+// detached, panic-guarded dispatch — one seam, N consumers, none of which can
+// block or fail ingest or each other.
+func AddSink(fn func(org string, evs []SinkEvent)) (remove func()) {
+	i := len(sinks)
+	sinks = append(sinks, fn)
+	return func() { sinks[i] = nil }
+}
 
 // fanOut hands the accepted batch to the sink, detached and fail-soft. org is the
 // SERVER-resolved tenant (already an owned copy from principal.Org). It builds
@@ -66,8 +73,16 @@ func SetSink(fn func(org string, evs []SinkEvent)) { sink = fn }
 // core's drop rule) and, if any remain and a sink is installed, dispatches them on a
 // panic-guarded goroutine so ingest is never blocked or failed by a destination.
 func fanOut(org string, evs []CaptureEvent) {
-	fn := sink
-	if fn == nil || len(evs) == 0 {
+	if len(evs) == 0 {
+		return
+	}
+	live := make([]func(string, []SinkEvent), 0, len(sinks))
+	for _, fn := range sinks {
+		if fn != nil {
+			live = append(live, fn)
+		}
+	}
+	if len(live) == 0 {
 		return
 	}
 	// The public tenant never fans out. A destination is a connection an ORG made, and
@@ -105,8 +120,11 @@ func fanOut(org string, evs []CaptureEvent) {
 	if len(out) == 0 {
 		return
 	}
-	go func() {
-		defer func() { _ = recover() }()
-		fn(org, out)
-	}()
+	for _, fn := range live {
+		fn := fn
+		go func() {
+			defer func() { _ = recover() }()
+			fn(org, out)
+		}()
+	}
 }

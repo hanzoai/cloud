@@ -11,6 +11,7 @@
 //   - an image-ref allowlist restricted to the org registries we own,
 //
 // so a leaked token can never push to an arbitrary registry.
+
 package platform
 
 import (
@@ -244,12 +245,39 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	req.Repo = strings.TrimSpace(req.Repo)
 	req.Image = strings.TrimSpace(req.Image)
 
-	// Release self-publishes ghcr.io/hanzoai/cloud (compute version → build → smoke
-	// → tag → notify) — a fabric operation reserved to the MACHINE token. An
-	// interactive login, even an admin, never cuts a cloud release.
+	// Release self-publishes the platform's own image (compute version → build →
+	// smoke → tag → notify).
+	//
+	// IAM DECIDES IT AND NOTHING ELSE DOES, and the authority it takes is the SAME
+	// one an ordinary build takes: admin of an org that OWNS the registry namespace
+	// being published to. Releasing ghcr.io/hanzoai/cloud is admin of the org that
+	// owns `hanzoai` — a lux admin is refused, exactly as they are refused an
+	// ordinary push to ghcr.io/hanzoai/*.
+	//
+	// It used to demand platform SUDO, and that was a category error. SuperAdmin is
+	// the CROSS-TENANT scope — the authority to act in an org you do not belong to.
+	// Publishing your own org's artifact is not cross-tenant, so requiring the
+	// broadest scope in the system for it did not make the operation safer; it made
+	// releasing impossible for the engineers who own the artifact, while the only
+	// identities that could were the ones trusted with every other tenant's data.
+	// Conflating "privileged" with "cross-tenant" is the same error that let an
+	// org-role bit be read as platform authority.
+	//
+	// The namespace is taken from the CONSTANT releaseImage, never from the request:
+	// launchRelease publishes releaseImage regardless of what req.Image says, so
+	// binding on the request would be a check against a value the caller chooses.
 	if req.Release {
-		if !viaToken {
-			return zip.ErrForbidden("release builds require the platform build token")
+		if viaToken && !principal.IsSuperAdmin(c) {
+			return zip.ErrForbidden("the platform build token may enqueue a build but may not cut a release; IAM is the only authority for it")
+		}
+		if !principal.IsSuperAdmin(c) {
+			org, ok := principal.Org(c)
+			if !ok || !imageInOrgRegistry(releaseImage, org) {
+				return zip.ErrForbidden("cutting this release requires admin of the org that owns " + releaseImage)
+			}
+			if !principal.IsOrgAdmin(c) {
+				return zip.ErrForbidden("cutting a release requires an org admin")
+			}
 		}
 		return startRelease(s, c, req)
 	}

@@ -34,7 +34,11 @@ var frozen = []string{
 	"benchmark", "research", "experiments", "books", "treasury", "admin",
 	"admission", "tasks", "automations", "tools", "marketplace", "referrals",
 	"guide", "company", "compliance", "legal", "agent", "ask",
-	"translate", "zen", "ai", "plugins",
+	// ai precedes zen — a DECISION, not drift: both claim "/v1", equal patterns
+	// resolve by mount order, and the /v1 remainder (the OpenAI-compatible
+	// surface) must land on ai. zen's row is deliberately shadowed on the light
+	// host (see its apps.go comment).
+	"translate", "ai", "zen", "plugins",
 }
 
 // TestAppsOrderMatchesFrozen proves the source's mount order is byte-identical to

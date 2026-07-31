@@ -44,7 +44,7 @@ var engineView = func(org string) (fleetView, error) {
 	if eng == nil {
 		return nil, errFleetUnconfigured
 	}
-	return eng.View(org), nil
+	return eng.View(tasksengine.Org(org)), nil
 }
 
 // fleetView is the slice of tasksengine.View fleetRun needs.

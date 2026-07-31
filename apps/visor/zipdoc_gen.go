@@ -42,18 +42,11 @@ func init() {
 			"machineRef.id": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
 		},
 	})
-	zip.Describe("DELETE /v1/machines/:id/agent-binding", zip.Doc{
-		Description: "unbindMachineAgent detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204.",
+	zip.Describe("DELETE /v1/machines/:id/agent", zip.Doc{
+		Description: "unbindAgent detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204.",
 		Fields: map[string]string{
 			"machineRef.id": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
 		},
-	})
-	zip.Describe("GET /v1/agent-bindings", zip.Doc{
-		Description: "listAgentBindings returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
-		Fields: map[string]string{
-			"bindingList.agentBindings": "AgentBindings is one row per bound machine, emitted verbatim as vm reports\nit so vm stays the single source of truth for the binding shape.",
-		},
-		Response: json.RawMessage(`{"agentBindings":[{"machineId":"drop-a","agentName":"bot-a","status":"running","publicIp":"1.2.3.4"}]}`),
 	})
 	zip.Describe("GET /v1/clusters", zip.Doc{
 		Description: "listClusters returns the caller org's clusters from both sources: the managed\nclusters projected from Visor's node pools, and the BYO clusters attached to the\ncaller's project. A Visor outage costs the managed half only — the BYO half\nstill lists, because a page that 502s on an optional provider is worse than a\npage that shows what it can.",
@@ -175,12 +168,19 @@ func init() {
 		},
 		Response: json.RawMessage(`{"id":"web-1","name":"Web 1","region":"sfo3","type":"s-2vcpu-4gb","status":"running","publicIp":"1.2.3.4","vcpu":2}`),
 	})
-	zip.Describe("GET /v1/machines/:id/agent-binding", zip.Doc{
-		Description: "getMachineAgentBinding returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
+	zip.Describe("GET /v1/machines/:id/agent", zip.Doc{
+		Description: "getAgent returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
 		Fields: map[string]string{
 			"machineRef.id": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
 		},
 		Response: json.RawMessage(`{"machineId":"drop-a","agentName":"bot-a","status":"running","botVersion":"1.4.0"}`),
+	})
+	zip.Describe("GET /v1/machines/agents", zip.Doc{
+		Description: "listAgents returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
+		Fields: map[string]string{
+			"bindingList.agentBindings": "AgentBindings is one row per bound machine, emitted verbatim as vm reports\nit so vm stays the single source of truth for the binding shape.",
+		},
+		Response: json.RawMessage(`{"agentBindings":[{"machineId":"drop-a","agentName":"bot-a","status":"running","publicIp":"1.2.3.4"}]}`),
 	})
 	zip.Describe("POST /v1/clusters", zip.Doc{
 		Description: "attachCluster attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/clusters. Billed the nominal management fee: the\ncustomer brings the compute, Hanzo meters the management plane.",
@@ -254,8 +254,8 @@ func init() {
 		Example:  json.RawMessage(`{"name":"prod","region":"nyc3","nodePool":{"name":"gpu","size":"gpu-h100x8-640gb","count":2}}`),
 		Response: json.RawMessage(`{"doksClusterId":"cl-1","doClusterId":"cl-1","name":"prod","region":"nyc3","status":"provisioning","nodePools":[],"nodeCount":0,"kind":"managed"}`),
 	})
-	zip.Describe("POST /v1/machines/:id/bind-agent", zip.Doc{
-		Description: "bindMachineAgent binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field.",
+	zip.Describe("PUT /v1/machines/:id/agent", zip.Doc{
+		Description: "bindAgent binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field.",
 		Fields: map[string]string{
 			"bindAgentReq.agentName":  "AgentName is the cloud Agent (/v1/agents) the machine will run. Required.",
 			"bindAgentReq.botVersion": "BotVersion pins the @hanzo/bot runtime version; empty takes the default.",

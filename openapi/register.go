@@ -1,10 +1,13 @@
-// Register is the seam through which a subsystem DECLARES the payload types the
-// router cannot derive. The projector (From) reads only two sources: the live
-// route table, which says WHICH operations exist, and this registry, which says
-// what a declared operation's bodies CONTAIN. The drift-proof property survives
-// because the registry cannot add an operation: a registration whose route is
-// not in the router simply never renders, so the document still cannot disagree
-// with the router — schemas are additive metadata on routes that exist.
+// Register and Describe are the seam through which a subsystem DECLARES what
+// the router cannot derive: the payload types an operation binds (Register)
+// and, for an operation whose handler the wire refuses to let become a typed
+// op, its prose (Describe). The projector (From) reads only two sources: the
+// live route table, which says WHICH operations exist, and this registry, which
+// says what a declared operation's bodies CONTAIN and what its refused handler
+// DOES. The drift-proof property survives because the registry cannot add an
+// operation: a declaration whose route is not in the router simply never
+// renders, so the document still cannot disagree with the router — schemas and
+// prose are additive metadata on routes that exist.
 //
 // The schema itself is derived by reflection from the very Go structs the
 // handler binds (json tags), stated once at the registration site next to the
@@ -36,11 +39,24 @@ type Response struct {
 	Content     map[string]Media `json:"content,omitempty"`
 }
 
-// registration is one declared operation body pair; nil means "not declared",
-// never "empty".
+// registration is one operation's declared halves. The BODY half (Register):
+// req/resp types, nil meaning "not declared", never "empty"; alts is set only
+// when req is [OneOf] — the alternative shapes in declared order, kept as types
+// because reflect.TypeOf on the OneOf slice itself knows only that it is a
+// slice of any. The PROSE half (Describe): summary/description for an operation
+// whose handler cannot be a typed op. Each half carries its own presence flag
+// so the duplicate check guards the half actually being re-declared — one
+// package Registering the bodies and Describing the prose of one operation is
+// two halves of one declaration, not a clash.
 type registration struct {
-	req  reflect.Type
-	resp reflect.Type
+	req      reflect.Type
+	alts     []reflect.Type
+	resp     reflect.Type
+	declared bool // the body half is present (Register ran)
+
+	summary     string
+	description string
+	described   bool // the prose half is present (Describe ran)
 }
 
 // opKey addresses a registration the same way the router addresses a route:
@@ -55,23 +71,111 @@ var (
 	registry = map[opKey]registration{}
 )
 
+// Binary is the request declaration for a body that is not JSON at all: opaque
+// bytes under the caller's own content type — an uploaded PDF or image, an
+// OFX/QFX/CSV bank statement, a script. Pass it as Register's req for a route
+// whose handler reads the body raw.
+//
+// It exists because "no declaration" and "a byte body" were rendering
+// IDENTICALLY, and they are opposite facts. An operation with no requestBody is
+// what a route that takes no body publishes, so every SDK generator reading the
+// document emitted a call with no payload parameter for routes that cannot work
+// without one (POST /v1/books/scan eats a receipt; /v1/books/bank/import eats a
+// statement). OpenAPI's own spelling for an opaque body is a string of format
+// binary, which is what this renders — the honest declaration a Go struct cannot
+// make, since no struct describes a file.
+//
+// It is a REQUEST-only value: a response that is bytes is a different fact this
+// generator has no route needing yet, and inventing the second half before
+// anything asks for it is how one seam becomes two.
+type Binary struct{}
+
+var binaryReq = reflect.TypeOf(Binary{})
+
+// OneOf is the request declaration for a body whose wire is POLYMORPHIC: one path
+// that accepts several unrelated JSON shapes, all decoded by the same handler.
+// Pass the zero value of each shape, in the order a reader should meet them:
+//
+//	openapi.Register("/v1/event", "POST",
+//	    openapi.OneOf{Event{}, []Event{}, CaptureBatch{}}, CaptureResult{})
+//
+// It exists for the same reason [Binary] does — the honest declaration a single Go
+// struct cannot make. The alternative was to name ONE of the shapes and call it the
+// wire, which is a document that omits the two forms every batching client actually
+// sends, and an SDK whose only ingest call cannot send a batch. OpenAPI's own
+// spelling for "several shapes, caller picks" is `oneOf`, which is what this
+// renders; each alternative is derived by reflection exactly as a lone req is, so a
+// named struct among them still becomes one shared component.
+//
+// REQUEST-only, like Binary: a response that varies by shape is a fact no route
+// here needs stated yet, and inventing the second half before one asks is how one
+// seam becomes two.
+type OneOf []any
+
+var oneOfReq = reflect.TypeOf(OneOf{})
+
 // Register declares the request and response body types for one route, keyed by
 // the fiber pattern exactly as the route is registered. Pass the zero value of
 // the handler's own binding struct (or a slice of the view type for list
-// endpoints); pass nil for a side that has no body. Called from the owning
-// subsystem's init, next to its route table.
+// endpoints), [Binary] for a raw byte body, and nil for a side that has no body.
+// Called from the owning subsystem's init, next to its route table.
 //
 // A duplicate registration for the same (method, path) is a programming error
 // at init time and panics loudly rather than letting two declarations race for
 // one operation.
 func Register(path, method string, req, resp any) {
 	key := opKey{method: strings.ToUpper(method), path: path}
+	half := registration{req: reflect.TypeOf(req), resp: reflect.TypeOf(resp), declared: true}
+	if alts, poly := req.(OneOf); poly {
+		if len(alts) == 0 {
+			panic(fmt.Sprintf("openapi: empty OneOf for %s %s — a polymorphic body has alternatives", key.method, path))
+		}
+		half.alts = make([]reflect.Type, len(alts))
+		for i, a := range alts {
+			half.alts[i] = reflect.TypeOf(a)
+		}
+	}
 	regMu.Lock()
 	defer regMu.Unlock()
-	if _, dup := registry[key]; dup {
+	reg := registry[key]
+	if reg.declared {
 		panic(fmt.Sprintf("openapi: duplicate Register for %s %s", key.method, key.path))
 	}
-	registry[key] = registration{req: reflect.TypeOf(req), resp: reflect.TypeOf(resp)}
+	reg.req, reg.alts, reg.resp, reg.declared = half.req, half.alts, half.resp, true
+	registry[key] = reg
+}
+
+// Describe declares the PROSE for one route — the summary and description a
+// consumer reads — keyed by the fiber pattern exactly as the route is
+// registered, like [Register]. Called from the owning subsystem's init, next to
+// the wire fact that keeps the handler untyped.
+//
+// It exists for the operation a typed op cannot carry. A typed op's prose is
+// lifted from its doc comment by zipdoc, so the ONLY operations with nowhere to
+// state prose are the ones the wire refuses to let become typed ops — SSE
+// streams, raw proxies, redirects. Leaving those bare publishes an operationId
+// and NOTHING else: every SDK generated off the document offers a call it
+// cannot explain, and a spec-derived CLI a command with no help text. Describe
+// is that prose's seam, with the same drift-proof property Register has: a
+// description whose route is not in the router never renders, so prose is
+// additive metadata on routes that exist — the registry still cannot add an
+// operation.
+//
+// Empty prose is refused loudly: a Describe that states nothing is a
+// programming error, not a declaration.
+func Describe(path, method, summary, description string) {
+	key := opKey{method: strings.ToUpper(method), path: path}
+	if strings.TrimSpace(summary) == "" && strings.TrimSpace(description) == "" {
+		panic(fmt.Sprintf("openapi: empty Describe for %s %s — a declaration states something", key.method, key.path))
+	}
+	regMu.Lock()
+	defer regMu.Unlock()
+	reg := registry[key]
+	if reg.described {
+		panic(fmt.Sprintf("openapi: duplicate Describe for %s %s", key.method, key.path))
+	}
+	reg.summary, reg.description, reg.described = summary, description, true
+	registry[key] = reg
 }
 
 // registered returns the declaration for a live route, or nil.
@@ -96,12 +200,38 @@ func newComponents() *components {
 	return &components{schemas: map[string]any{}, types: map[string]reflect.Type{}}
 }
 
-// apply attaches the registration's bodies to op, emitting named schemas into c.
-// The success response is stated under the "2XX" range key: the handler's exact
-// status code is not derivable (201 vs 200 lives in the handler body), and the
-// range is what this generator can honestly assert — the success body's shape.
+// apply attaches the registration's declared halves to op — prose verbatim,
+// bodies emitting named schemas into c. The success response is stated under
+// the "2XX" range key: the handler's exact status code is not derivable (201 vs
+// 200 lives in the handler body), and the range is what this generator can
+// honestly assert — the success body's shape.
 func (r *registration) apply(op *Operation, c *components) error {
-	if r.req != nil {
+	if r.described {
+		op.Summary, op.Description = r.summary, r.description
+	}
+	switch {
+	case r.req == binaryReq:
+		// Not JSON, and not a component: an opaque body has no fields to name, so
+		// it is declared inline under the content type that means "bytes".
+		op.RequestBody = &RequestBody{Content: map[string]Media{
+			"application/octet-stream": {Schema: &Schema{Type: "string", Format: "binary"}},
+		}}
+	case r.req == oneOfReq:
+		// One path, several accepted shapes. The alternatives are derived exactly
+		// as a lone request type is, so a named struct among them lands in
+		// components once and is $ref'd from here.
+		alts := make([]*Schema, len(r.alts))
+		for i, t := range r.alts {
+			s, err := schemaOf(t, c)
+			if err != nil {
+				return fmt.Errorf("%s request alternative %d: %w", op.OperationID, i, err)
+			}
+			alts[i] = s
+		}
+		op.RequestBody = &RequestBody{Content: map[string]Media{
+			"application/json": {Schema: &Schema{OneOf: alts}},
+		}}
+	case r.req != nil:
 		s, err := schemaOf(r.req, c)
 		if err != nil {
 			return fmt.Errorf("%s request: %w", op.OperationID, err)
@@ -132,6 +262,14 @@ func schemaOf(t reflect.Type, c *components) (*Schema, error) {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
+	// A custom marshaler makes the type's Go shape NOT its wire shape, so the
+	// honest answer is unconstrained. It is checked BEFORE the kind switch because
+	// the rule is about the marshaler, not about being a struct: json.RawMessage is
+	// a []byte that emits raw JSON, and reading it as a slice published every
+	// declared raw-JSON field as a base64 STRING — the one shape it is never.
+	if t.Implements(jsonMarshaler) || reflect.PointerTo(t).Implements(jsonMarshaler) {
+		return &Schema{}, nil
+	}
 	switch t.Kind() {
 	case reflect.String:
 		return &Schema{Type: "string"}, nil
@@ -160,11 +298,6 @@ func schemaOf(t reflect.Type, c *components) (*Schema, error) {
 		}
 		return &Schema{Type: "object", AdditionalProperties: elem}, nil
 	case reflect.Struct:
-		// A custom marshaler makes the struct's fields NOT its wire shape;
-		// the honest answer is unconstrained, not the fields' schema.
-		if t.Implements(jsonMarshaler) || reflect.PointerTo(t).Implements(jsonMarshaler) {
-			return &Schema{}, nil
-		}
 		if name := t.Name(); name != "" {
 			if prev, taken := c.types[name]; taken {
 				if prev != t {

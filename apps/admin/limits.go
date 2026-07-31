@@ -56,7 +56,7 @@ type capIn struct {
 // commerce's own platform-admin gate.
 //
 // Response: {"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z",
-// "end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"data2":0}
+// "end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"total":0}
 func (o ops) getPromo(ctx context.Context, _ *core.None) (*rawOut, error) {
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (o ops) getPromo(ctx context.Context, _ *core.None) (*rawOut, error) {
 // Example: {"percentOff":50,"start":"2026-07-01T00:00:00Z","end":"2026-09-01T00:00:00Z",
 // "plans":["pro"],"active":true}
 // Response: {"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z",
-// "end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"data2":0}
+// "end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"total":0}
 func (o ops) putPromo(ctx context.Context, _ *promoIn) (*rawOut, error) {
 	c, err := core.Admit(ctx)
 	if err != nil {
@@ -110,7 +110,7 @@ type promoIn struct {
 // Example: {"org":"acme"}
 // Response: {"status":"ok","msg":"","data":[{"id":"cap_1","limitCents":100000,
 // "enforce":true,"periodSpendCents":42000,"over":false,"warn":false,
-// "resetsAt":"2026-08-01T00:00:00Z"}],"data2":0}
+// "resetsAt":"2026-08-01T00:00:00Z"}],"total":0}
 func (o ops) listSpendCaps(ctx context.Context, in *capIn) (*rawOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
@@ -131,7 +131,7 @@ func (o ops) listSpendCaps(ctx context.Context, in *capIn) (*rawOut, error) {
 //
 // Example: {"org":"acme","limitCents":100000,"enforce":true}
 // Response: {"status":"ok","msg":"","data":{"id":"cap_1","limitCents":100000,
-// "enforce":true},"data2":0}
+// "enforce":true},"total":0}
 func (o ops) createSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
@@ -151,7 +151,7 @@ func (o ops) createSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
 //
 // Example: {"org":"acme","limitCents":250000,"enforce":false}
 // Response: {"status":"ok","msg":"","data":{"id":"cap_1","limitCents":250000,
-// "enforce":false},"data2":0}
+// "enforce":false},"total":0}
 func (o ops) updateSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
@@ -228,5 +228,5 @@ func relay(raw []byte, status int, err error) (*rawOut, error) {
 	if len(raw) == 0 {
 		return &rawOut{Status: core.OK, Data: map[string]bool{"ok": true}}, nil
 	}
-	return &rawOut{Status: core.OK, Data: json.RawMessage(raw), Data2: core.Total(0)}, nil
+	return &rawOut{Status: core.OK, Data: json.RawMessage(raw), Total: core.Total(0)}, nil
 }

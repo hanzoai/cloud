@@ -77,7 +77,7 @@ func (q *queue) client() (tasksclient.Client, error) {
 		return nil, errEngineNotReady
 	}
 	cli, err := tasksclient.Dial(tasksclient.Options{
-		HostPort:  fmt.Sprintf("127.0.0.1:%d", eng.ZAPPort()),
+		Address:   eng.Address(),
 		Namespace: "default",
 	})
 	if err != nil {

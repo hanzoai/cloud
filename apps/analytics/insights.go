@@ -27,13 +27,12 @@ package analytics
 // with a Datastore consumer, no handler changes.
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/zap-proto/zip"
 )
@@ -133,45 +132,67 @@ func decodeInsights(body []byte) ([]CaptureEvent, error) {
 	return caps, nil
 }
 
-// insightsEvents answers GET /v1/insights/events — the console's recent-events
-// read (newest first). Tenant-scoped server-side; limit defaults 50, caps 200.
-func insightsEvents(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
+// productEvent is one stored product event as the console reads it back. The columns are
+// the first-class ones the capture path promotes; everything else the caller sent
+// stays in properties, verbatim.
+type productEvent struct {
+	// ID is the row's stable event id — the client's own idempotency id when it sent
+	// one, else the server-minted one.
+	ID string `json:"id"`
+	// Timestamp is when the event happened, RFC3339 UTC.
+	Timestamp string `json:"timestamp"`
+	// Event is the event name, e.g. $pageview.
+	Event string `json:"event"`
+	// Type is the canonical kind: pageview, error, identify, group or event.
+	Type string `json:"type"`
+	// DistinctID is the person/visitor the event is attributed to.
+	DistinctID string `json:"distinctId"`
+	// SessionID groups the events of one visit. Omitted when the client sent none.
+	SessionID string `json:"sessionId,omitempty"`
+	// Product is the surface that emitted the event. Omitted when absent.
+	Product string `json:"product,omitempty"`
+	// URL is the full page address the event fired on. Omitted when absent.
+	URL string `json:"url,omitempty"`
+	// Path is the URL's path component, the key the topPages lens groups by.
+	Path string `json:"path,omitempty"`
+	// Properties is the caller's own property bag, returned verbatim as stored — any
+	// JSON object. Omitted when the row carries none or it did not parse.
+	Properties json.RawMessage `json:"properties,omitempty"`
+}
+
+// eventList is a page of stored product events, newest first.
+type eventList struct {
+	// Data is the events, newest first. Empty rather than absent when there are none.
+	Data []productEvent `json:"data"`
+}
+
+// InsightsEvents returns the caller org's most recent product events, newest first.
+// The console's raw-event view over the same table the capture doors write: one row
+// per stored event, with the caller's own property bag returned verbatim.
+//
+// The org is the validated principal's — never a parameter — and a read requires a
+// real bearer, never the write-only publishable key. 403 without a validated bearer,
+// 503 when the warehouse is unreachable.
+//
+// Example: {"limit": 100}
+func (o readOps) insightsEvents(ctx context.Context, in *limitQuery) (*eventList, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	limit, _ := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	rows, err := datastore.Query(c.Context(), `
+	rows, err := datastore.Query(ctx, `
 		SELECT id, timestamp, event, event_type, distinct_id, session_id,
 		       product, url, path, properties
 		FROM hanzo.events
 		WHERE tenant_id = ?
 		ORDER BY timestamp DESC
-		LIMIT ?`, org, limit)
+		LIMIT ?`, org, in.rows())
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
-	type ev struct {
-		ID         string          `json:"id"`
-		Timestamp  string          `json:"timestamp"`
-		Event      string          `json:"event"`
-		Type       string          `json:"type"`
-		DistinctID string          `json:"distinctId"`
-		SessionID  string          `json:"sessionId,omitempty"`
-		Product    string          `json:"product,omitempty"`
-		URL        string          `json:"url,omitempty"`
-		Path       string          `json:"path,omitempty"`
-		Properties json.RawMessage `json:"properties,omitempty"`
-	}
-	out := make([]ev, 0, len(rows))
+	out := make([]productEvent, 0, len(rows))
 	for _, r := range rows {
-		e := ev{
+		e := productEvent{
 			ID: asStr(r["id"]), Timestamp: asStr(r["timestamp"]), Event: asStr(r["event"]),
 			Type: asStr(r["event_type"]), DistinctID: asStr(r["distinct_id"]),
 			SessionID: asStr(r["session_id"]), Product: asStr(r["product"]),
@@ -182,11 +203,25 @@ func insightsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out = append(out, e)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &eventList{Data: out}, nil
 }
 
-func insightsHealth(s *cloud.Service[state], c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]any{"ok": true, "engine": "hanzo-analytics", "surface": "/v1/insights"})
+// insightsStatus is the liveness answer of the unified insights surface.
+type insightsStatus struct {
+	// OK is always true — reaching this route is the liveness fact it reports.
+	OK bool `json:"ok"`
+	// Engine names the engine serving the surface: hanzo-analytics.
+	Engine string `json:"engine"`
+	// Surface is the path prefix this status covers: /v1/insights.
+	Surface string `json:"surface"`
+}
+
+// InsightsHealth reports that the unified insights surface is serving. It reads no
+// tenant data and consults no dependency, so it answers 200 unconditionally and needs
+// no principal — liveness must be probe-able. The warehouse-connectivity probe is a
+// different question and lives at GET /v1/analytics/health.
+func (o readOps) insightsHealth(ctx context.Context, _ *noArgs) (*insightsStatus, error) {
+	return &insightsStatus{OK: true, Engine: "hanzo-analytics", Surface: "/v1/insights"}, nil
 }
 
 func asStr(v any) string {

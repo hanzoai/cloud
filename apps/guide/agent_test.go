@@ -50,7 +50,7 @@ func TestAgentToolStepSucceeds(t *testing.T) {
 		return map[string]any{"name": "Positioning-1"}, nil
 	}
 	d := agentDeps{ai: ai, model: "zen", store: st, invoke: invoke, toolOK: func(string) bool { return true }}
-	step := Step{ID: "positioning", Title: "P", Tool: "content_generate", Draft: "write it", DraftInto: "brief", Args: map[string]any{"doctype": "Campaign"}}
+	step := JourneyStep{ID: "positioning", Title: "P", Tool: "content_generate", Draft: "write it", DraftInto: "brief", Args: map[string]any{"doctype": "Campaign"}}
 
 	emit, evs := collect()
 	final, err := runAgent(ctx, d, "acme", "acme", step, emit)
@@ -94,7 +94,7 @@ func TestAgentToolFailureNotDone(t *testing.T) {
 		return nil, errors.New("slack not connected")
 	}
 	d := agentDeps{store: st, invoke: invoke, toolOK: func(string) bool { return true }}
-	step := Step{ID: "email", Title: "E", Tool: "slack_send_message"}
+	step := JourneyStep{ID: "email", Title: "E", Tool: "slack_send_message"}
 
 	emit, evs := collect()
 	final, err := runAgent(ctx, d, "acme", "acme", step, emit)
@@ -128,7 +128,7 @@ func TestAgentAssistedStepNoTool(t *testing.T) {
 		t.Fatal("invoke must NOT be called for a tool-less step")
 		return nil, nil
 	}}
-	step := Step{ID: "referral", Title: "R", Draft: "advise"}
+	step := JourneyStep{ID: "referral", Title: "R", Draft: "advise"}
 
 	emit, _ := collect()
 	final, err := runAgent(ctx, d, "acme", "acme", step, emit)
@@ -152,7 +152,7 @@ func TestAgentUnknownToolRejected(t *testing.T) {
 	d := agentDeps{store: st,
 		invoke: func(context.Context, string, string, map[string]any) (any, error) { called = true; return nil, nil },
 		toolOK: func(string) bool { return false }}
-	step := Step{ID: "x", Title: "X", Tool: "made_up_tool"}
+	step := JourneyStep{ID: "x", Title: "X", Tool: "made_up_tool"}
 
 	if _, err := runAgent(ctx, d, "acme", "acme", step, func(event) {}); err == nil {
 		t.Fatal("unknown tool should error")

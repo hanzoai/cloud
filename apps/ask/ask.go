@@ -30,6 +30,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/answer"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -46,11 +47,18 @@ type state struct {
 // maxQuestion bounds the request body.
 const maxQuestion = 2000
 
-// AskRequest is the POST /v1/ask body. The advisor path uses question (figures
+// askRequest is the POST /v1/ask body. The advisor path uses question (figures
 // grounding). The WEB grounding domain is selected by mode (search|news|research|
 // deep) and parameterized by the remaining fields; q is the answer-engine alias for
 // question. All web fields are optional and inert unless mode names a web domain.
-type AskRequest struct {
+//
+// It is named for its product rather than AskRequest, and askAnswer likewise: the
+// schema namespace is FLAT across the whole fleet, apps/books ALREADY publishes an
+// `AskRequest` and an `AskResponse` of different shapes (its books-grounded ask),
+// and openapi.Weave refuses one name with two shapes. This request is declared to
+// the document (see the init below), so the collision would have been live the
+// moment it was.
+type askRequest struct {
 	Question string `json:"question"`
 	Q        string `json:"q"` // answer-engine alias for question
 
@@ -68,23 +76,53 @@ type AskRequest struct {
 
 // query is the caller's question, accepting either the advisor field (question) or
 // the answer-engine alias (q). Trimmed by the handler.
-func (r AskRequest) query() string {
+func (r askRequest) query() string {
 	if q := strings.TrimSpace(r.Q); q != "" {
 		return q
 	}
 	return r.Question
 }
 
-// AskResponse is the /v1/ask contract: a natural-language answer grounded in Figures, the
+// askAnswer is the /v1/ask contract: a natural-language answer grounded in Figures, the
 // followups worth asking next, the domain reads (Sources) the figures came from, and the Domain
 // that grounded the question ("" when none could). Every Figure is a real value; the Answer
 // narrates them.
-type AskResponse struct {
+type askAnswer struct {
 	Answer    string   `json:"answer"`
 	Figures   []Fact   `json:"figures"`
 	Followups []string `json:"followups"`
 	Sources   []string `json:"sources"`
 	Domain    string   `json:"domain"`
+}
+
+// POST /v1/ask is NOT a typed op, and it cannot become one without moving the wire.
+// Three independent facts keep it out, each one a wire fact zip's typed path has no
+// vocabulary for. TestAskRefusalIsTheWire measures all three.
+//
+//  1. ONE ROUTE, TWO SUCCESS SHAPES. The advisor branch answers askAnswer
+//     ({answer,figures,followups,sources,domain}); the web branch answers a
+//     DIFFERENT eight-key object ({answer,sources,follow_ups,followups,figures,
+//     domain,mode,model} — apps/answer/answer.go, Serve's non-streaming return). A
+//     typed op declares exactly one Out, so one of the two would be reshaped.
+//  2. THE WEB BRANCH STREAMS. When the caller asks for SSE (Accept:
+//     text/event-stream, ?stream=1, or `"stream": true`) Serve answers through
+//     c.SendStreamWriter — a server-sent-event stream, not a JSON value. zip's
+//     typed path writes c.JSON(out) for a non-nil Out and stamps cmp.Or(op.Status,
+//  204. over a nil one, so there is no Out that means "I already streamed".
+//  3. THE MONEY DENIAL IS A DOMAIN BODY. An out-of-funds caller gets
+//     cloud.DenyResource — the fleet-wide NESTED {"error":{"code","message"}} at
+//     402/503 (apps/answer/answer.go, the Bill.Gate branch). A typed op's only
+//     refusal is a RETURNED error, which zip renders as the flat HTTPError
+//     {status,code,error}. Same class as the apps/ml creates.
+//
+// Staying untyped costs the prose, the MCP tool and the CLI command — and it must
+// not also cost a document that says this route takes no body, or every generated
+// SDK offers an ask with nowhere to put the question. The request declaration below
+// is what buys that back. The RESPONSE is deliberately NOT declared: it is the
+// polymorphic half above, and a single declared shape would be a false statement
+// about the other branch, which is worse than saying nothing.
+func init() {
+	openapi.Register("/v1/ask", http.MethodPost, askRequest{}, nil)
 }
 
 // Mount wires POST /v1/ask into cloud, building the contributor registry (books today) over the
@@ -112,7 +150,7 @@ func askHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	if _, ok := principal.Org(c); !ok {
 		return zip.ErrUnauthorized("sign in to ask")
 	}
-	var in AskRequest
+	var in askRequest
 	if err := c.Bind(&in); err != nil {
 		return err
 	}
@@ -149,7 +187,7 @@ func askHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 		return askJSON(c, honestFallback())
 	}
 
-	resp := AskResponse{
+	resp := askAnswer{
 		Figures:   facts,
 		Followups: followups(domain.Name()),
 		Sources:   sources,
@@ -166,7 +204,7 @@ func askHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 // the door translates its own body into the engine's Request and lends it the
 // Base (logger + the ONE per-org meter) and the AI plane. No loop logic lives
 // here — clients/answer is its one home.
-func serveWeb(s *cloud.Service[*state], c *zip.Ctx, in AskRequest, q string) error {
+func serveWeb(s *cloud.Service[*state], c *zip.Ctx, in askRequest, q string) error {
 	e := answer.Engine{Base: s.Base, AI: s.State.ai, Model: s.State.model}
 	return e.Serve(c, answer.Request{
 		Mode:       in.Mode,
@@ -247,8 +285,8 @@ func templateAnswer(facts []Fact) string {
 // honestFallback is the answer when NO domain can ground the question. It names what the advisor
 // CAN answer and offers grounded questions to ask instead — and carries ZERO figures, because a
 // figure the advisor cannot ground is a figure it must not state.
-func honestFallback() AskResponse {
-	return AskResponse{
+func honestFallback() askAnswer {
+	return askAnswer{
 		Answer:    "I can answer questions about your finances today — MRR, revenue, burn, runway, margin, cash, and P&L. Infra and usage advisors are coming.",
 		Figures:   []Fact{},
 		Followups: []string{"What's my MRR?", "How long is my runway?", "What is my gross margin?"},

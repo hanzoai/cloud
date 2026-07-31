@@ -49,7 +49,7 @@ func fixedCred(t Target) (credRef, error) {
 func TestTokenFunc_OwnerMustMatchOrg(t *testing.T) {
 	// Credential mints owner=hanzo. A hanzo target passes; an acme target is refused
 	// (misscoped credential — LOW-1 defense in depth, independent of the server guard).
-	c := newKMSClient("http://cloud", loginDoer{owner: "hanzo"})
+	c := newKMSClient("http://cloud", embedded, loginDoer{owner: "hanzo"})
 	tf := newTokenFunc(c, fixedCred, "dst")
 
 	if _, err := tf(context.Background(), Target{Org: "hanzo"}); err != nil {
@@ -63,7 +63,7 @@ func TestTokenFunc_OwnerMustMatchOrg(t *testing.T) {
 
 func TestTokenFunc_AdminTokenRefused(t *testing.T) {
 	// An admin-owner token must never be used for a fleet (tenant) target.
-	c := newKMSClient("http://cloud", loginDoer{owner: "admin", isAdmin: true})
+	c := newKMSClient("http://cloud", embedded, loginDoer{owner: "admin", isAdmin: true})
 	tf := newTokenFunc(c, fixedCred, "dst")
 	_, err := tf(context.Background(), Target{Org: "admin"})
 	if err == nil || !strings.Contains(err.Error(), "ADMIN") {

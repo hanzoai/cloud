@@ -10,6 +10,7 @@
 //	GET /v1/world/news       merged, filtered, freshest-first feed -> {items:[…]}
 //	GET /v1/world/pipeline   per-project pipeline config (read)    -> {…}
 //	PUT /v1/world/pipeline   per-project pipeline config (write)   -> {…}
+//	GET /v1/world/limits     a World plan's rate/alert/model gates -> {…}
 //	GET /v1/world/stream     SSE live refresh (ZAP-native)         -> event: news
 //
 // TENANT ISOLATION is enforced SERVER-SIDE on every request. The (org, project)
@@ -23,7 +24,8 @@
 // ported rss-proxy.js allowlist (allowlist.go), enforced at BOTH the PUT write
 // boundary and at fetch time, including on redirect targets (client CheckRedirect).
 //
-// Order 142 binds /v1/world/* ahead of the AI /v1/* catch-all (150).
+// The host routes by first matching prefix in manifest.Apps order, and world's row
+// (/v1/world) precedes the ai row that answers the bare /v1 remainder.
 package world
 
 import (
@@ -36,7 +38,15 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/world openapi` and by the Dockerfile before every build.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 const (
 	feedCacheTTL = 10 * time.Minute
@@ -122,12 +132,30 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// EVERY org and enforcing now would 402 all users. Flip on once the catalog
 	// licenses "world" to a tier (and confirm /v1/world/news may 403 unvalidated —
 	// RequireProduct refuses anonymous callers). See clients/entitlements.
+	// Bridge FIRST: a typed op receives only a context, so the facts its signature
+	// drops — the validated org, and the request the PROJECT claim and the ?project
+	// cross-check ride on — reach it by being parked there. fiber runs middleware in
+	// registration order, so one installed after its leaves never runs. Installed
+	// through the scope's Use, once per declared prefix, so it covers exactly what
+	// this subsystem serves and nothing else; Serve installs the same bridge for the
+	// whole binary and nesting is harmless, which keeps these ops scoped even in a
+	// test app that never calls Serve.
+	app.Use(cloud.Bridge())
+
 	g := app.Group("/v1/world")
-	g.Get("/news", s.getNews)
-	g.Get("/pipeline", s.getPipeline)
-	g.Put("/pipeline", s.putPipeline)
+	zip.Get(g, "/news", s.news)
+	zip.Get(g, "/pipeline", s.pipeline)
+	zip.Put(g, "/pipeline", s.setPipeline)
+	zip.Get(g, "/limits", s.limits)
+
+	// GET /v1/world/stream stays an untyped handler, deliberately: it is Server-Sent
+	// Events. A typed op returns ONE value that zip marshals and writes as the whole
+	// response, and this route holds the connection open writing frame after frame
+	// through c.SendStreamWriter (stream.go) until the client goes away. There is no
+	// Out that can express a stream, so typing it would turn a live feed into a
+	// single JSON object. Its document prose is declared instead by stream.go's
+	// init (openapi.Describe), so the SDKs and the spec-derived CLI still carry it.
 	g.Get("/stream", s.stream)
-	g.Get("/limits", s.getLimits)
 
 	log.Info("world surface mounted", "brand", deps.Brand,
 		"ai", s.ai != nil, "kms", s.kms != nil, "allowlisted_hosts", len(s.rssAllow))

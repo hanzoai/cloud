@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
+	"github.com/zap-proto/zip"
 )
 
 // Mount() must register the overlapping static + wildcard routes (/v1/exec and

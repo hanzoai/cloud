@@ -19,6 +19,8 @@
     "/v1/admin/plugins": {
       "get": {
         "operationId": "adminPlugins",
+        "summary": "list reports what each host is actually running: every loaded plugin with its version, pid, uptime, reload and restart counts, and its measured CPU, RSS, thread and fd cost — read from the kernel, which is only answerable at all because a plugin is a process.",
+        "description": "list reports what each host is actually running: every loaded plugin with its\nversion, pid, uptime, reload and restart counts, and its measured CPU, RSS,\nthread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
         "tags": [
           "admin"
         ],
@@ -27,15 +29,48 @@
             "name": "scope",
             "in": "query",
             "required": false,
+            "description": "Scope \"host\" answers for THIS host only. Default \"fleet\" fans out to every\nlive peer. A peer answers a host-scoped read, which is what stops the\nfan-out recursing.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "fleet"
           }
         ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "host": "cloud-0",
+                      "plugins": [
+                        {
+                          "name": "billing",
+                          "prefix": "/v1/billing",
+                          "reloads": 1,
+                          "restarts": 0,
+                          "running": true,
+                          "source": "url",
+                          "version": "9f2c…"
+                        }
+                      ],
+                      "self": true
+                    }
+                  ],
+                  "drift": [
+                    {
+                      "drifted": false,
+                      "name": "billing",
+                      "running": 1,
+                      "versions": [
+                        "9f2c…"
+                      ]
+                    }
+                  ],
+                  "msg": "",
+                  "status": "ok"
+                },
                 "schema": {
                   "$ref": "#/components/schemas/ListOut"
                 }
@@ -49,6 +84,8 @@
     "/v1/admin/plugins/{name}/disable": {
       "post": {
         "operationId": "adminDisablePlugin",
+        "summary": "disable stops the plugin.",
+        "description": "disable stops the plugin. Its routes STAY REGISTERED and answer 503 — not 404.\n\nThat is zip's choice and this keeps it. Removing the routes would mutate the\nroute table, and re-adding them on enable would grow it without bound across\nrepeated cycles, which is the invariant that makes reloads flat in memory. It\nis also the better answer: 404 says \"no such API\" and a client may cache it\nand stop retrying, while 503 says \"this API exists and is down right now\",\nwhich is true and retryable. Which of the two 503s this is — deliberate stop\nor crash — is what the status's disabled flag reports.",
         "tags": [
           "admin"
         ],
@@ -57,14 +94,19 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the app, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "billing"
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "name": "billing"
+              },
               "schema": {
                 "$ref": "#/components/schemas/NameIn"
               }
@@ -76,6 +118,16 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "host": "cloud-0",
+                      "ok": true
+                    }
+                  ],
+                  "msg": "billing disabled",
+                  "status": "ok"
+                },
                 "schema": {
                   "$ref": "#/components/schemas/ActionOut"
                 }
@@ -89,6 +141,8 @@
     "/v1/admin/plugins/{name}/enable": {
       "post": {
         "operationId": "adminEnablePlugin",
+        "summary": "enable brings a stopped or disabled plugin back on the artifact it already has: the zero Plugin names no new artifact, so Reload reuses the loaded spec and clears the disabled flag.",
+        "description": "enable brings a stopped or disabled plugin back on the artifact it already\nhas: the zero Plugin names no new artifact, so Reload reuses the loaded spec\nand clears the disabled flag. Named for what an operator means by it.",
         "tags": [
           "admin"
         ],
@@ -97,14 +151,19 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the app, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "billing"
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "name": "billing"
+              },
               "schema": {
                 "$ref": "#/components/schemas/NameIn"
               }
@@ -116,6 +175,16 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "host": "cloud-0",
+                      "ok": true
+                    }
+                  ],
+                  "msg": "billing enabled",
+                  "status": "ok"
+                },
                 "schema": {
                   "$ref": "#/components/schemas/ActionOut"
                 }
@@ -129,6 +198,8 @@
     "/v1/admin/plugins/{name}/reload": {
       "post": {
         "operationId": "adminReloadPlugin",
+        "summary": "reload swaps a plugin for another build without dropping a request.",
+        "description": "reload swaps a plugin for another build without dropping a request. The\nreplacement is started and proven to be LISTENING before any traffic moves to\nit, so a bad build leaves the old one serving and returns an error rather\nthan a hole; the old process then drains before it is killed.\n\nWith a version or url+sum it pins; naming a digest this host has run before is\nthe rollback, and costs no network because the digest IS the cache key. With\nneither it restarts what is already loaded.\n\nFleet scope applies it to one host at a time and STOPS at the first failure,\nso a build that cannot come up reaches exactly one host.",
         "tags": [
           "admin"
         ],
@@ -137,14 +208,20 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the app, from the path. It must be one the manifest declares.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "billing"
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "name": "billing",
+                "version": "v1.2.3"
+              },
               "schema": {
                 "$ref": "#/components/schemas/ReloadIn"
               }
@@ -156,6 +233,17 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "host": "cloud-0",
+                      "ok": true,
+                      "version": "9f2c…"
+                    }
+                  ],
+                  "msg": "billing -\u003e 9f2c…",
+                  "status": "ok"
+                },
                 "schema": {
                   "$ref": "#/components/schemas/ActionOut"
                 }
@@ -173,21 +261,7 @@
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "host": {
-                  "type": "string"
-                },
-                "msg": {
-                  "type": "string"
-                },
-                "ok": {
-                  "type": "boolean"
-                },
-                "version": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/Result"
             },
             "type": "array"
           },
@@ -196,6 +270,57 @@
           },
           "status": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Drift": {
+        "properties": {
+          "disabled": {
+            "type": "integer"
+          },
+          "down": {
+            "type": "integer"
+          },
+          "drifted": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "running": {
+            "type": "integer"
+          },
+          "versions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Host": {
+        "properties": {
+          "addr": {
+            "type": "string"
+          },
+          "error": {
+            "description": "Err is set when a peer could not be reached. Its plugins are then\nunknown, which is NOT the same as none, so the list stays empty and the\ndrift below refuses to conclude anything from it.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the pod's stable id, and Addr where it was reached. Self is true\nfor the host that answered the request.",
+            "type": "string"
+          },
+          "plugins": {
+            "items": {
+              "$ref": "#/components/schemas/Status"
+            },
+            "type": "array"
+          },
+          "self": {
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -204,118 +329,13 @@
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "addr": {
-                  "type": "string"
-                },
-                "error": {
-                  "type": "string"
-                },
-                "host": {
-                  "type": "string"
-                },
-                "plugins": {
-                  "items": {
-                    "properties": {
-                      "addr": {
-                        "type": "string"
-                      },
-                      "disabled": {
-                        "type": "boolean"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "pid": {
-                        "type": "integer"
-                      },
-                      "prefix": {
-                        "type": "string"
-                      },
-                      "prefixes": {
-                        "items": {
-                          "type": "string"
-                        },
-                        "type": "array"
-                      },
-                      "reloads": {
-                        "type": "integer"
-                      },
-                      "restarts": {
-                        "type": "integer"
-                      },
-                      "running": {
-                        "type": "boolean"
-                      },
-                      "since": {
-                        "properties": {},
-                        "type": "object"
-                      },
-                      "source": {
-                        "type": "string"
-                      },
-                      "usage": {
-                        "properties": {
-                          "cpuNs": {
-                            "type": "integer"
-                          },
-                          "fds": {
-                            "type": "integer"
-                          },
-                          "rssBytes": {
-                            "type": "integer"
-                          },
-                          "threads": {
-                            "type": "integer"
-                          }
-                        },
-                        "type": "object"
-                      },
-                      "version": {
-                        "type": "string"
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "type": "array"
-                },
-                "self": {
-                  "type": "boolean"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/Host"
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "drift": {
             "items": {
-              "properties": {
-                "disabled": {
-                  "type": "integer"
-                },
-                "down": {
-                  "type": "integer"
-                },
-                "drifted": {
-                  "type": "boolean"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "running": {
-                  "type": "integer"
-                },
-                "versions": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/Drift"
             },
             "type": "array"
           },
@@ -324,6 +344,9 @@
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -331,9 +354,11 @@
       "NameIn": {
         "properties": {
           "name": {
+            "description": "Name is the app, from the path.",
             "type": "string"
           },
           "scope": {
+            "description": "Scope \"host\" applies here only; default \"fleet\" applies everywhere.",
             "type": "string"
           }
         },
@@ -342,19 +367,119 @@
       "ReloadIn": {
         "properties": {
           "name": {
+            "description": "Name is the app, from the path. It must be one the manifest declares.",
             "type": "string"
           },
           "scope": {
+            "description": "Scope \"host\" applies here only. Default \"fleet\" rolls it out one host at\na time, halting on the first host that fails to come up.",
             "type": "string"
           },
           "sum": {
             "type": "string"
           },
           "url": {
+            "description": "URL is the artifact directly, for an origin with no index. Sum is its hex\nSHA-256 and is REQUIRED with it: zip refuses an unverified download, and\nso does this.",
             "type": "string"
           },
           "version": {
+            "description": "Version is a release tag, resolved to a URL and digest through the\norigin's binaries.json index — the same index CI publishes, so there is\nno second table mapping versions to digests.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Result": {
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Status": {
+        "properties": {
+          "addr": {
+            "description": "Addr is the socket or address serving it.",
+            "type": "string"
+          },
+          "disabled": {
+            "description": "Disabled is true when Unload stopped it deliberately, as opposed to it\nhaving crashed. Both answer 503, so without this an operator cannot tell\na maintenance window from an outage — and would page for the former.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pid": {
+            "description": "PID is the child process, or 0 when this host did not start it.",
+            "type": "integer"
+          },
+          "prefix": {
+            "description": "Prefix is the FIRST subtree this plugin answers — the one a log line\nnames it by. Prefixes is every subtree, and a plugin may own several.\nReporting only the first would understate the blast radius of taking\nthis plugin down, which is the question a fleet view exists to answer.",
+            "type": "string"
+          },
+          "prefixes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reloads": {
+            "description": "Reloads counts successful swaps since Load. A climbing number on one\nhost and not its peers is the signal that a rollout is uneven.",
+            "type": "integer"
+          },
+          "restarts": {
+            "description": "Restarts counts times the supervisor brought this plugin back after it\ndied on its own. Distinct from Reloads, which are deliberate: a nonzero\nRestarts is a plugin crashing, and a climbing one is a crash loop.",
+            "type": "integer"
+          },
+          "running": {
+            "description": "Running is false after Unload, or after a child exited and no Reload has\nreplaced it. Its routes stay registered and answer 503, so a false here\nis the difference between \"not deployed\" and \"deployed but down\".",
+            "type": "boolean"
+          },
+          "since": {
+            "description": "Since is when the CURRENT instance started — it resets on Reload, so it\nreports the age of what is running, not of the mount.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is where the binary came from: \"embedded\", \"path\", \"url\", or\n\"remote\" for an instance this host did not start.",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage",
+            "description": "Usage is what this plugin costs right now, read from the kernel."
+          },
+          "version": {
+            "description": "Version is the artifact's SHA-256 when it was installed from a URL —\nthe only version identifier that cannot drift from the bits actually\nrunning, since it IS the bits. Empty for the other sources.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Usage": {
+        "properties": {
+          "cpuNs": {
+            "description": "CPU is total user+system time this instance has consumed since it\nstarted. It only ever climbs, so a rate is the interesting derivative.",
+            "type": "integer"
+          },
+          "fds": {
+            "type": "integer"
+          },
+          "rssBytes": {
+            "description": "RSS is resident memory in bytes — the honest number for \"what does this\nplugin cost\", as opposed to virtual size.",
+            "type": "integer"
+          },
+          "threads": {
+            "description": "Threads and FDs are the two limits a busy service hits first, and both\nare leaks when they climb without bound.",
+            "type": "integer"
           }
         },
         "type": "object"

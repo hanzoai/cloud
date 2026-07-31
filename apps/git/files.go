@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/zap-proto/zip"
 )
 
 // files.go — the delivery inventory read, and its two adapters.
@@ -27,7 +29,7 @@ import (
 // read at `main` could straddle a push and assemble half an inventory from one
 // commit and half from the next; pinning here makes the read consistent by
 // construction rather than by every caller remembering to.
-func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref, glob string) (rev string, files []cloud.File, err error) {
+func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref, glob string) (rev string, files []plane.File, err error) {
 	if strings.TrimSpace(glob) == "" {
 		return "", nil, errBadInput
 	}
@@ -48,7 +50,7 @@ func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref
 	if err != nil {
 		return "", nil, err
 	}
-	out := make([]cloud.File, 0, len(paths))
+	out := make([]plane.File, 0, len(paths))
 	for _, p := range paths {
 		blob, err := repo.Blob(ctx, res, p, maxBlobBytes)
 		if err != nil {
@@ -58,7 +60,7 @@ func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref
 			// assembling a desired set would prune whatever went missing.
 			return "", nil, fmt.Errorf("read %s at %s: %w", p, ShortRev(res), err)
 		}
-		f := cloud.File{Path: p, Truncated: blob.Truncated}
+		f := plane.File{Path: p, Truncated: blob.Truncated}
 		if !blob.Truncated {
 			f.Data = blob.Content
 		}
@@ -70,32 +72,39 @@ func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref
 // exposeFiles publishes the inventory read on the internal plane. Called from
 // Mount, beside the other cross-app seams.
 //
-// The tenant comes from the CAPABILITY, never the request body: the caller's
-// Ident is what the edge minted, so a body cannot widen the org it is answered
-// for. Anonymous is refused rather than defaulted — delivery reaching git with
-// no principal must fail, not read someone's repo.
+// The tenant comes from the CALLER, never the argument: the identity is what the
+// edge minted, so an argument cannot widen the org it is answered for. Anonymous
+// is refused rather than defaulted — delivery reaching git with no principal
+// must fail, not read someone's repo.
 func exposeFiles() {
-	cloud.Expose("git.files", func(ctx context.Context, who cloud.Ident, req []byte) ([]byte, error) {
-		if who.Org == "" {
-			return nil, cloud.Fault(403, "org required")
-		}
-		repo, ref, glob, err := cloud.FilesReq(req)
-		if err != nil {
-			return nil, cloud.Fault(400, err.Error())
-		}
-		s := mounted.Load()
-		if s == nil {
-			return nil, cloud.Fault(503, "git not mounted")
-		}
-		rev, files, err := coreFiles(s, ctx, tenant{org: who.Org, project: who.Project}, repo, ref, glob)
-		switch {
-		case errors.Is(err, errBadInput):
-			return nil, cloud.Fault(400, "glob is required")
-		case errors.Is(err, errNotFound):
-			return nil, cloud.Fault(404, "repo, ref or revision not found")
-		case err != nil:
-			return nil, cloud.Fault(500, err.Error())
-		}
-		return cloud.PutFiles(rev, files), nil
-	})
+	zip.Post[plane.FilesIn, plane.Files](cloud.Plane(), "/git/files", planeFiles,
+		zip.WithOperationID(plane.GitFiles),
+		zip.WithSummary("A repo's files at one revision"))
+}
+
+// planeFiles reads the glob-selected files of one of the caller's repos at one
+// revision, returning the resolved commit and each file's path and contents.
+// The org is the CALLER's plane identity, never the argument — an anonymous
+// caller is refused — and the whole reply is read at one resolved commit, so a
+// caller can never assemble half an inventory from each side of a push. A named
+// handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeFiles(ctx context.Context, in *plane.FilesIn) (*plane.Files, error) {
+	who := cloud.Who(ctx)
+	if who.Org == "" {
+		return nil, zip.ErrForbidden("git files: org required")
+	}
+	s := mounted.Load()
+	if s == nil {
+		return nil, zip.Errorf(503, "git not mounted")
+	}
+	rev, files, err := coreFiles(s, ctx, tenant{org: who.Org, project: who.Project}, in.Repo, in.Ref, in.Glob)
+	switch {
+	case errors.Is(err, errBadInput):
+		return nil, zip.ErrBadRequest("glob is required")
+	case errors.Is(err, errNotFound):
+		return nil, zip.ErrNotFound("repo, ref or revision not found")
+	case err != nil:
+		return nil, zip.Errorf(500, "%v", err)
+	}
+	return &plane.Files{Rev: rev, Files: files}, nil
 }

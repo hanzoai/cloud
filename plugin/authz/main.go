@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hanzoai/authz"
+	"github.com/hanzoai/authz/serve"
 	"github.com/hanzoai/cloud"
+	"github.com/zap-proto/zip"
 )
 
 // Standalone entry for the authz app.
@@ -19,7 +20,10 @@ func main() {
 	if err := cloud.Serve([]cloud.Plugin{{
 		Name:  "authz",
 		Price: cloud.Free,
-		App:   authz.Mount,
+		// The adapter lives HERE, on cloud's side: authz is a leaf and must never
+		// import cloud, so cloud's plugin contract bends to the leaf rather than the
+		// leaf learning about Deps.
+		App: func(app *zip.App, deps cloud.Deps) error { return serve.Mount(app, deps.Logger) },
 	}}, []string{"authz"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

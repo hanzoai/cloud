@@ -64,6 +64,25 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) httpRes
 	return httpResult{Code: resp.StatusCode, Body: b}
 }
 
+// reqRaw issues one request with the body EXACTLY as given — no JSON marshal —
+// for the wire tests whose whole point is a non-JSON body (the YAML document
+// PUTs). Headers are the caller's own, so it serves the org identity and the
+// SuperAdmin planes alike.
+func reqRaw(t *testing.T, app *zip.App, method, path string, headers map[string]string, raw []byte) httpResult {
+	t.Helper()
+	rq := httptest.NewRequest(method, path, bytes.NewReader(raw))
+	for k, v := range headers {
+		rq.Header.Set(k, v)
+	}
+	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return httpResult{Code: resp.StatusCode, Body: b}
+}
+
 // testStore returns a real per-org *Store on a temp dir — the org isolation is
 // physical, so this exercises the exact production open path.
 func testStore(t *testing.T) *Store {

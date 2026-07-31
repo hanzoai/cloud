@@ -6,6 +6,7 @@
 // selects a container; ?tail= bounds the lines. Never fabricates output — an
 // unreachable cluster or absent pod yields an honest 200 with an empty tail + the
 // reason, not invented logs.
+
 package deploy
 
 import (

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -24,14 +25,18 @@ func annApp(t *testing.T) *zip.App {
 	t.Cleanup(func() { _ = store.Close() })
 	s := &annService{store: store, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Get("/v1/o11y/annotation-queues", s.listQueues)
-	app.Post("/v1/o11y/annotation-queues", s.createQueue)
-	app.Get("/v1/o11y/annotation-queues/:id", s.getQueue)
-	app.Patch("/v1/o11y/annotation-queues/:id", s.updateQueue)
-	app.Delete("/v1/o11y/annotation-queues/:id", s.deleteQueue)
-	app.Get("/v1/o11y/annotation-queues/:id/items", s.listItems)
-	app.Post("/v1/o11y/annotation-queues/:id/items", s.addItems)
-	app.Patch("/v1/o11y/annotation-queues/:id/items/:itemId", s.updateItem)
+	// cloud.Bridge FIRST, exactly as MountO11y installs it: a typed op reads its
+	// validated org off the context, so without this every route here 403s.
+	app.Group(o11yPrefix).Use(cloud.Bridge())
+	g := app.Group(o11yPrefix)
+	zip.Get(g, "/annotation-queues", s.listQueues)
+	zip.Post(g, "/annotation-queues", s.createQueue, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/annotation-queues/:id", s.getQueue)
+	zip.Patch(g, "/annotation-queues/:id", s.updateQueue)
+	zip.Delete(g, "/annotation-queues/:id", s.deleteQueue)
+	zip.Get(g, "/annotation-queues/:id/items", s.listItems)
+	zip.Post(g, "/annotation-queues/:id/items", s.addItems, zip.WithStatus(http.StatusCreated))
+	zip.Patch(g, "/annotation-queues/:id/items/:itemId", s.updateItem)
 	return app
 }
 
@@ -126,6 +131,14 @@ func TestAnnotationQueueLifecycle(t *testing.T) {
 	}
 	if detail.PendingCount != 2 || detail.CompletedCount != 0 || len(detail.Items) != 2 {
 		t.Fatalf("detail counts/items = %+v", detail)
+	}
+	// The detail carries the QUEUE's own fields alongside its progress, flat —
+	// the same bytes the list's rows carry. Asserted from the raw body, not the
+	// decoded struct, so it stays a statement about the WIRE: the detail shape is
+	// written flat precisely because zip's schema builder cannot see through an
+	// embedded struct, and this is what would break if it were ever re-nested.
+	if !bytes.Contains(body, []byte(`"id":"`+q.ID+`"`)) || !bytes.Contains(body, []byte(`"name":"review-q"`)) {
+		t.Fatalf("detail must carry the queue's own id + name flat, got %s", body)
 	}
 	var traceItem annItemView
 	for _, it := range detail.Items {

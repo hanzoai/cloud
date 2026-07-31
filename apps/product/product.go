@@ -1,5 +1,7 @@
-// Package product exposes the read-only Search and Vector product surfaces
-// the Hanzo console panels call at api.cloud.hanzo.ai, per HIP-0106.
+// Package product is the read-only inventory of the search and vector backends:
+// /v1/search-docs/{indexes,stats} read from Meilisearch and
+// /v1/vector/{collections,stats} from Qdrant, reshaped into the rows the console
+// renders.
 //
 // The console's Search/Indexes and Vector panels call
 // https://api.hanzo.ai/v1/search-docs/* and /v1/vector/* with a
@@ -20,6 +22,7 @@
 package product
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -30,8 +33,11 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 // config is resolved once from env at Mount. Endpoints default to the
 // in-cluster service DNS; keys come from the search/vector secrets already
@@ -75,89 +81,23 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	logger = logger.New("subsystem", "product")
 	cfg := loadConfig()
+	o := productOps{cfg: cfg, log: logger}
 
-	// ── Search (Meilisearch-backed) ───────────────────────────────────
-	app.Get("/v1/search-docs/indexes", func(c *zip.Ctx) error {
-		if err := authorize(c, cfg.searchKey); err != nil {
-			return err
-		}
-		stats, err := meiliStats(cfg)
-		if err != nil {
-			logger.Warn("search indexes: meili stats unreachable", "err", err)
-			return c.JSON(http.StatusOK, map[string]any{"indexes": []searchIndex{}})
-		}
-		created := meiliIndexCreatedAt(cfg) // best-effort; may be empty
-		out := make([]searchIndex, 0, len(stats.Indexes))
-		for name, ix := range stats.Indexes {
-			ts := created[name]
-			out = append(out, searchIndex{
-				Name:          name,
-				DocCount:      ix.NumberOfDocuments,
-				LastIndexedAt: nullableTS(ts.updatedAt),
-				CreatedAt:     orNow(ts.createdAt),
-			})
-		}
-		sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-		return c.JSON(http.StatusOK, map[string]any{"indexes": out})
-	})
+	// The bearer key is a REQUEST fact — a header — and a typed op receives only a
+	// context, so the check that used to open each handler is middleware on the
+	// two subtrees instead. Middleware runs before the op, exactly where the
+	// in-handler call ran, so an unconfigured deployment still 503s and a wrong key
+	// still 401s before anything reaches an upstream. Two subtrees, two keys: the
+	// search bearer never admits a vector read.
+	sg := app.Group("/v1/search-docs")
+	sg.Use(requireKey(cfg.searchKey))
+	zip.Get(sg, "/indexes", o.searchIndexes)
+	zip.Get(sg, "/stats", o.searchStats)
 
-	app.Get("/v1/search-docs/stats", func(c *zip.Ctx) error {
-		if err := authorize(c, cfg.searchKey); err != nil {
-			return err
-		}
-		stats, err := meiliStats(cfg)
-		if err != nil {
-			logger.Warn("search stats: meili unreachable", "err", err)
-			return c.JSON(http.StatusOK, searchStats{SearchesPerDay: []dayCount{}})
-		}
-		var total int64
-		for _, ix := range stats.Indexes {
-			total += ix.NumberOfDocuments
-		}
-		return c.JSON(http.StatusOK, searchStats{
-			TotalDocuments: total,
-			// Meilisearch keeps no query-history counters; sessions/searches and
-			// the per-day series are not derivable from the index. Report the
-			// honest zero/empty rather than a fabricated number.
-			TotalSearches:  0,
-			TotalSessions:  0,
-			SearchesPerDay: []dayCount{},
-		})
-	})
-
-	// ── Vector (Qdrant-backed) ────────────────────────────────────────
-	app.Get("/v1/vector/collections", func(c *zip.Ctx) error {
-		if err := authorize(c, cfg.vectorKey); err != nil {
-			return err
-		}
-		cols, err := qdrantCollections(cfg)
-		if err != nil {
-			logger.Warn("vector collections: qdrant unreachable", "err", err)
-			return c.JSON(http.StatusOK, map[string]any{"collections": []vectorCollection{}})
-		}
-		return c.JSON(http.StatusOK, map[string]any{"collections": cols})
-	})
-
-	app.Get("/v1/vector/stats", func(c *zip.Ctx) error {
-		if err := authorize(c, cfg.vectorKey); err != nil {
-			return err
-		}
-		cols, err := qdrantCollections(cfg)
-		if err != nil {
-			logger.Warn("vector stats: qdrant unreachable", "err", err)
-			return c.JSON(http.StatusOK, vectorStats{})
-		}
-		var vectors, storage int64
-		for _, col := range cols {
-			vectors += col.VectorCount
-			storage += col.StorageBytes
-		}
-		return c.JSON(http.StatusOK, vectorStats{
-			TotalCollections:  int64(len(cols)),
-			TotalVectors:      vectors,
-			TotalStorageBytes: storage,
-		})
-	})
+	vg := app.Group("/v1/vector")
+	vg.Use(requireKey(cfg.vectorKey))
+	zip.Get(vg, "/collections", o.vectorCollections)
+	zip.Get(vg, "/stats", o.vectorStats)
 
 	logger.Info("product surface mounted",
 		"search", cfg.searchURL, "vector", cfg.vectorURL,
@@ -165,21 +105,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// authorize enforces the bearer key against the configured upstream key with a
-// constant-time compare. It returns a *zip.HTTPError (which zip's errorHandler
-// renders as a JSON body with the right status) on rejection and writes
-// nothing itself, so the handler simply `return`s the error — no double-write.
+// requireKey enforces the bearer key against the configured upstream key with a
+// constant-time compare, for every route of the subtree it is installed on. It
+// returns a *zip.HTTPError (which zip's errorHandler renders as a JSON body with
+// the right status) on rejection and writes nothing itself — no double-write.
 // An unset key fails closed (503) so a mis-provisioned deploy never silently
 // serves an open endpoint.
-func authorize(c *zip.Ctx, want string) error {
-	if want == "" {
-		return zip.Errorf(http.StatusServiceUnavailable, "product surface not configured")
+//
+// It is MIDDLEWARE rather than a call at the top of each handler because the
+// credential is a header, and a typed op receives only a context: the check has
+// to run where it can still see the request. It runs in exactly the position the
+// in-handler call held — before the op — so the statuses and their order are
+// unchanged.
+func requireKey(want string) zip.Handler {
+	return func(c *zip.Ctx) error {
+		if want == "" {
+			return zip.Errorf(http.StatusServiceUnavailable, "product surface not configured")
+		}
+		got := bearer(c.Header("Authorization"))
+		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+			return zip.ErrUnauthorized("invalid api key")
+		}
+		return c.Continue()
 	}
-	got := bearer(c.Header("Authorization"))
-	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-		return zip.ErrUnauthorized("invalid api key")
-	}
-	return nil
 }
 
 func bearer(h string) string {
@@ -190,39 +138,190 @@ func bearer(h string) string {
 	return h
 }
 
+// ── typed ops ────────────────────────────────────────────────────────────────
+
+// productOps binds the resolved upstream config to the typed product ops. A
+// TypedHandler takes no service parameter, so the config arrives as a RECEIVER
+// and every op is a method value — also the only bound form cmd/zipdoc can lift
+// prose from.
+type productOps struct {
+	cfg config
+	log luxlog.Logger
+}
+
+// noIn is the input of an op that takes nothing: no body, no path parameter, no
+// query. GET carries no request body (zip's hasBody), so this publishes nothing.
+type noIn struct{}
+
+// searchIndexList is the GET /v1/search-docs/indexes envelope.
+type searchIndexList struct {
+	// Indexes is one row per Meilisearch index, sorted by name. Empty — never
+	// absent — when the search service cannot be reached.
+	Indexes []searchIndex `json:"indexes"`
+}
+
+// vectorCollectionList is the GET /v1/vector/collections envelope.
+type vectorCollectionList struct {
+	// Collections is one row per Qdrant collection, sorted by name. Empty — never
+	// absent — when the vector service cannot be reached.
+	Collections []vectorCollection `json:"collections"`
+}
+
+// searchIndexes lists the search indexes with their document counts and timestamps.
+//
+// It reads the in-cluster Meilisearch service and reshapes its /stats and
+// /indexes replies into the rows the console's Search panel renders. The read is
+// degrade-friendly by design: an unreachable Meilisearch answers 200 with an
+// EMPTY list, so the panel shows an honest empty state instead of an error.
+// createdAt falls back to now and lastIndexedAt to null when the index list is
+// unavailable.
+func (o productOps) searchIndexes(ctx context.Context, _ *noIn) (*searchIndexList, error) {
+	stats, err := meiliStats(o.cfg)
+	if err != nil {
+		o.log.Warn("search indexes: meili stats unreachable", "err", err)
+		return &searchIndexList{Indexes: []searchIndex{}}, nil
+	}
+	created := meiliIndexCreatedAt(o.cfg) // best-effort; may be empty
+	out := make([]searchIndex, 0, len(stats.Indexes))
+	for name, ix := range stats.Indexes {
+		ts := created[name]
+		out = append(out, searchIndex{
+			Name:          name,
+			DocCount:      ix.NumberOfDocuments,
+			LastIndexedAt: nullableTS(ts.updatedAt),
+			CreatedAt:     orNow(ts.createdAt),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return &searchIndexList{Indexes: out}, nil
+}
+
+// searchStats totals the documents across every search index.
+//
+// totalDocuments is summed from Meilisearch's own per-index counts. The other
+// three fields are structurally zero rather than estimated: Meilisearch keeps no
+// query-history counters, so searches, sessions and the per-day series are not
+// derivable from the index and this surface reports the honest zero instead of a
+// fabricated number. An unreachable Meilisearch answers 200 with all zeros.
+func (o productOps) searchStats(ctx context.Context, _ *noIn) (*searchStats, error) {
+	stats, err := meiliStats(o.cfg)
+	if err != nil {
+		o.log.Warn("search stats: meili unreachable", "err", err)
+		return &searchStats{SearchesPerDay: []dayCount{}}, nil
+	}
+	var total int64
+	for _, ix := range stats.Indexes {
+		total += ix.NumberOfDocuments
+	}
+	return &searchStats{
+		TotalDocuments: total,
+		TotalSearches:  0,
+		TotalSessions:  0,
+		SearchesPerDay: []dayCount{},
+	}, nil
+}
+
+// vectorCollections lists the vector collections with their size and geometry.
+//
+// It reads the in-cluster Qdrant service: the collection list, then each
+// collection's detail for its point count, vector dimension and distance metric.
+// Per-collection detail is best-effort — one collection that fails to describe
+// itself keeps its name and defaults (dimension 0, cosine) rather than blanking
+// the whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.
+func (o productOps) vectorCollections(ctx context.Context, _ *noIn) (*vectorCollectionList, error) {
+	cols, err := qdrantCollections(o.cfg)
+	if err != nil {
+		o.log.Warn("vector collections: qdrant unreachable", "err", err)
+		return &vectorCollectionList{Collections: []vectorCollection{}}, nil
+	}
+	return &vectorCollectionList{Collections: cols}, nil
+}
+
+// vectorStats totals the collections, vectors and storage across the vector store.
+//
+// Every figure is summed from the same per-collection detail
+// GET /v1/vector/collections returns, so the two panels can never disagree. An
+// unreachable Qdrant answers 200 with all zeros rather than an error.
+func (o productOps) vectorStats(ctx context.Context, _ *noIn) (*vectorStats, error) {
+	cols, err := qdrantCollections(o.cfg)
+	if err != nil {
+		o.log.Warn("vector stats: qdrant unreachable", "err", err)
+		return &vectorStats{}, nil
+	}
+	var vectors, storage int64
+	for _, col := range cols {
+		vectors += col.VectorCount
+		storage += col.StorageBytes
+	}
+	return &vectorStats{
+		TotalCollections:  int64(len(cols)),
+		TotalVectors:      vectors,
+		TotalStorageBytes: storage,
+	}, nil
+}
+
 // ── console response shapes (must match web/src/features/{search,vector}/types.ts) ──
 
+// searchIndex is one Meilisearch index as the console's Search panel reads it.
 type searchIndex struct {
-	Name          string  `json:"name"`
-	DocCount      int64   `json:"docCount"`
+	// Name is the index uid.
+	Name string `json:"name"`
+	// DocCount is how many documents the index currently holds.
+	DocCount int64 `json:"docCount"`
+	// LastIndexedAt is the index's last update time (RFC 3339), null when the
+	// index list could not be read.
 	LastIndexedAt *string `json:"lastIndexedAt"`
-	CreatedAt     string  `json:"createdAt"`
+	// CreatedAt is the index's creation time (RFC 3339); it falls back to now when
+	// the index list could not be read.
+	CreatedAt string `json:"createdAt"`
 }
 
+// dayCount is one day of a per-day series.
 type dayCount struct {
-	Date  string `json:"date"`
-	Count int64  `json:"count"`
+	// Date is the day, YYYY-MM-DD.
+	Date string `json:"date"`
+	// Count is that day's total.
+	Count int64 `json:"count"`
 }
 
+// searchStats is the search totals the console's Search panel renders.
 type searchStats struct {
-	TotalDocuments int64      `json:"totalDocuments"`
-	TotalSearches  int64      `json:"totalSearches"`
-	TotalSessions  int64      `json:"totalSessions"`
+	// TotalDocuments is the sum of every index's document count.
+	TotalDocuments int64 `json:"totalDocuments"`
+	// TotalSearches is always 0: Meilisearch keeps no query-history counter, so
+	// this surface reports the honest zero rather than an estimate.
+	TotalSearches int64 `json:"totalSearches"`
+	// TotalSessions is always 0, for the same reason as totalSearches.
+	TotalSessions int64 `json:"totalSessions"`
+	// SearchesPerDay is always empty, for the same reason as totalSearches.
 	SearchesPerDay []dayCount `json:"searchesPerDay"`
 }
 
+// vectorCollection is one Qdrant collection as the console's Vector panel reads it.
 type vectorCollection struct {
-	Name           string `json:"name"`
-	VectorCount    int64  `json:"vectorCount"`
-	Dimension      int64  `json:"dimension"`
+	// Name is the collection name.
+	Name string `json:"name"`
+	// VectorCount is the collection's point count.
+	VectorCount int64 `json:"vectorCount"`
+	// Dimension is the size of one vector in the collection.
+	Dimension int64 `json:"dimension"`
+	// DistanceMetric is the collection's distance function; "cosine" when the
+	// collection's detail could not be read.
 	DistanceMetric string `json:"distanceMetric"`
-	StorageBytes   int64  `json:"storageBytes,omitempty"`
-	CreatedAt      string `json:"createdAt"`
+	// StorageBytes is the collection's on-disk size, omitted when unknown.
+	StorageBytes int64 `json:"storageBytes,omitempty"`
+	// CreatedAt is the collection's creation time (RFC 3339); Qdrant does not
+	// report one, so it is empty today.
+	CreatedAt string `json:"createdAt"`
 }
 
+// vectorStats is the vector-store totals the console's Vector panel renders.
 type vectorStats struct {
-	TotalCollections  int64 `json:"totalCollections"`
-	TotalVectors      int64 `json:"totalVectors"`
+	// TotalCollections is how many collections the store holds.
+	TotalCollections int64 `json:"totalCollections"`
+	// TotalVectors is the sum of every collection's point count.
+	TotalVectors int64 `json:"totalVectors"`
+	// TotalStorageBytes is the sum of every collection's on-disk size.
 	TotalStorageBytes int64 `json:"totalStorageBytes"`
 }
 

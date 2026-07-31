@@ -26,6 +26,7 @@
 //     the SSE model_api gate), and
 //   - the /v1/world/model planet-scale engine (feat/world-model-engine), whose
 //     pro-tier gate calls ResolveWorldLimits and checks WorldLimits.ModelAPI.
+//
 // Both MUST resolve through ResolveWorldLimits so the policy stays single-sourced.
 //
 // FOLLOW-UP (documented, coordinated — not built here). Per-request ENFORCEMENT
@@ -42,11 +43,9 @@ package world
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/plan"
-	"github.com/zap-proto/zip"
 )
 
 // WorldLimits is the resolved World plan contract for one caller: the enforcement
@@ -102,30 +101,68 @@ func ResolveWorldLimits(ctx context.Context, planID string) (WorldLimits, error)
 	return WorldLimitsFromEntitlements(ent), nil
 }
 
-// getLimits serves GET /v1/world/limits?plan=<id> — the machine-readable contract
-// echo. It returns the resolved limits for the requested plan (default world-free)
-// so agents and the dashboard configure themselves against the live catalog
-// instead of hardcoding tier numbers. Always 200 with the fail-closed floor on a
-// resolution error, so a catalog blip never breaks the client.
-func (s *service) getLimits(c *zip.Ctx) error {
-	planID := strings.TrimSpace(c.Query("plan"))
+// limitsQuery names the World plan whose limits to echo.
+type limitsQuery struct {
+	// Plan is a World plan id from the live @hanzo/plans catalog, e.g. world-pro.
+	// Empty means world-free, and so does an id the catalog does not know — this
+	// never fails on an unknown plan.
+	Plan string `json:"plan"`
+}
+
+// limitsView is a World plan's resolved limits.
+type limitsView struct {
+	// Plan echoes the plan id the limits were resolved for, after the empty-means-
+	// world-free default.
+	Plan string `json:"plan"`
+	// Unit names what the two rate numbers are counted in: requests/minute.
+	Unit string `json:"unit"`
+	// Limits is the plan's decision.
+	Limits limitsBlock `json:"limits"`
+}
+
+// limitsBlock is the four numbers a World plan grants.
+type limitsBlock struct {
+	// APIRateLimit is requests per minute allowed against the REST /v1/world
+	// surface. -1 means unlimited.
+	APIRateLimit int `json:"apiRateLimit"`
+	// MCPRateLimit is requests per minute allowed against the MCP surface. -1
+	// means unlimited.
+	MCPRateLimit int `json:"mcpRateLimit"`
+	// MaxAlerts is how many saved OSINT alert rules the plan allows. -1 means
+	// unlimited.
+	MaxAlerts int `json:"maxAlerts"`
+	// ModelAPI is whether the plan reaches the World model endpoint and the SSE
+	// stream. The free floor is false, and that is what a catalog outage
+	// resolves to.
+	ModelAPI bool `json:"modelApi"`
+}
+
+// limits echoes a World plan's rate limits, alert quota and model-API grant, read
+// straight from the live @hanzo/plans catalog, so agents and dashboards configure
+// themselves against the catalog instead of hardcoding tier numbers.
+//
+// An empty or unknown plan resolves world-free, and a catalog failure serves that
+// same free floor rather than erroring — so this always answers 200, and it can only
+// ever under-grant. It reports the contract; it does not enforce it.
+func (s *service) limits(ctx context.Context, in *limitsQuery) (*limitsView, error) {
+	planID := strings.TrimSpace(in.Plan)
 	if planID == "" {
 		planID = "world-free"
 	}
-	lim, err := ResolveWorldLimits(c.Context(), planID)
+	lim, err := ResolveWorldLimits(ctx, planID)
 	if err != nil {
 		s.log.Warn("world limits resolve failed; serving free floor", "plan", planID, "err", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"plan": planID,
-		"unit": "requests/minute",
-		"limits": map[string]any{
-			"apiRateLimit": lim.APIRateLimit,
-			"mcpRateLimit": lim.MCPRateLimit,
-			"maxAlerts":    lim.MaxAlerts,
-			"modelApi":     lim.ModelAPI,
+	return &limitsView{
+		Plan: planID,
+		Unit: "requests/minute",
+		Limits: limitsBlock{
+			APIRateLimit: lim.APIRateLimit,
+			MCPRateLimit: lim.MCPRateLimit,
+			MaxAlerts:    lim.MaxAlerts,
+			ModelAPI:     lim.ModelAPI,
 		},
-	})
+	}, nil
 }
 
 // entInt coerces an entitlement numeric value to int. Catalog values arrive as

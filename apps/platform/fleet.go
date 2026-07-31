@@ -25,9 +25,10 @@
 // be a second top-level product (`/v1/paas`) — the same platform under a second
 // name, which is exactly the duplicate definition the one-way rule forbids.
 //
-// SECURITY — every route is authorized off ONE IAM identity, exactly like the
-// /v1/runner build path (runner.go): the guard admits a validated principal
-// (principal.Validated) who is a SuperAdmin OR an OrgAdmin, and each handler then
+// SECURITY — every route is authorized off ONE IAM identity through the
+// platform's one gate (cloud.Guard, gate.go): the read routes take cloud.Admin,
+// which admits a validated principal who is a SuperAdmin OR an OrgAdmin, the
+// deploy takes cloud.Super, and each handler then
 // CONFINES a non-super caller to its own org's platform namespaces
 // (scopedNamespaces, keyed on principal.Org — never a client header). A SuperAdmin
 // observes/acts on the whole fleet; an OrgAdmin only on the namespaces its org owns;
@@ -40,6 +41,7 @@
 // construction clients/ml uses. When no kubeconfig is resolvable the board mounts
 // anyway and every endpoint fails closed (503 + the real init error; the shared
 // /v1/platform/health route reports "degraded"), never status-theater.
+
 package platform
 
 import (
@@ -246,16 +248,16 @@ func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
 	// emitter publishes — so every generated SDK would call a path the manifest
 	// prefix does not name. Fiber happens to match both forms, which is exactly why
 	// this hides: the router forgives it and the CONTRACT does not.
-	app.Get("/v1/platform/fleet", fleetGuard(s, cloud.Handle(s, listFleet)))
-	app.Get("/v1/platform/fleet/:app", fleetGuard(s, cloud.Handle(s, getFleetApp)))
-	// MUTATION is superadmin-only (fleetOperatorGuard), NOT the broader read guard: the
+	app.Get("/v1/platform/fleet", cloud.Guard(cloud.Admin, cloud.Handle(s, listFleet)))
+	app.Get("/v1/platform/fleet/:app", cloud.Guard(cloud.Admin, cloud.Handle(s, getFleetApp)))
+	// MUTATION is superadmin-only (cloud.Super), NOT the broader read gate: the
 	// only namespaces this board scans are the platform's OWN tier (hanzo{,-testnet,
 	// -devnet}), so a rolling restart here recreates a SHARED platform service
 	// (iam/kms/gateway/…). Per the 2026-07-08 admin-org P0 a brand-org ("hanzo")
 	// admin is a CUSTOMER-org admin, not a platform operator — restarting prod iam is
 	// a platform-operator action. Gating the read board (below) any wider is bounded
 	// (observe, audit-logged); gating a restart wider is a live DoS lever (RED H1).
-	app.Post("/v1/platform/fleet/:app/deploy", fleetOperatorGuard(s, cloud.Handle(s, deployFleet)))
+	app.Post("/v1/platform/fleet/:app/deploy", cloud.Guard(cloud.Super, cloud.Handle(s, deployFleet)))
 
 	// Native release seam: install the first-party CR-rollout hook (build.go's
 	// RegisterServiceReleaser inversion) so a proven, clean-semver image rolls onto
@@ -272,103 +274,63 @@ func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
 	exposeFleet(s)
 }
 
-// guard authorizes the PaaS fleet board off ONE IAM identity, exactly like the
-// /v1/runner build path (clients/platform/runner.go runnerIAMAdmin): a validated
-// principal (principal.Validated — X-User-Id minted from a signature-verified JWT,
-// unforgeable off-gateway) who is a SuperAdmin OR an OrgAdmin. Fail-closed: any
-// other request is refused 403 before the handler — no cluster object is read or
-// mutated.
+// THE ROLE GATE is cloud.Guard(cloud.Admin) on the read routes and
+// cloud.Guard(cloud.Super) on the mutation, registered above — the platform's one
+// authorization rule (gate.go, HIP-0519), parameterised by how much authority
+// each route needs. The read board admits a SuperAdmin OR an admin of its own
+// org, which lets the platform operator drive it off a plain `hanzo login` with
+// no shared token; the deploy/restart admits platform sudo only, because it
+// recreates a SHARED platform service and a brand-org admin is a customer-org
+// admin (the 2026-07-08 admin-org P0), which is also what closes the fleet-restart
+// DoS lever (RED H1).
 //
 // The ROLE only opens the door; the TENANT boundary is enforced inside each
 // handler by scopedNamespaces(c): a SuperAdmin observes the whole fleet, an
 // OrgAdmin is CONFINED to the platform namespaces its own validated org owns, so a
 // tenant admin can never observe — or restart — another org's, or a platform, app.
 // This mirrors runner.go's org attribution (default to the caller's org, refuse a
-// foreign one) for a READ/RESTART surface. Broadening from SuperAdmin-only lets the
-// platform operator drive the board off a plain `hanzo login` with no shared token.
-func fleetGuard(s *cloud.Service[fleetState], h zip.Handler) zip.Handler {
-	return func(c *zip.Ctx) error {
-		p := requestPrincipal(c)
-		if !p.validated {
-			return zip.ErrForbidden("authentication required (run `hanzo login`)")
-		}
-		if !p.mayObserve() {
-			return zip.ErrForbidden("admin required")
-		}
-		return h(c)
-	}
-}
+// foreign one) for a READ/RESTART surface.
 
-// operatorGuard restricts a route to a platform SUPERADMIN (a member of the
-// reserved admin org — principal.IsSuperAdmin). It is stricter than guard on
-// purpose: the mutating deploy/restart acts on the platform's OWN service tier, so
-// it is a platform-operator action, NOT one a customer-org admin — even an admin of
-// the brand org — may take (the 2026-07-08 admin-org P0: "a plain hanzo admin is a
-// customer-org admin only"). A validated OrgAdmin who is not a SuperAdmin is refused
-// 403 here, closing the fleet-restart DoS lever (RED H1) while the read board stays
-// on the broader guard.
-func fleetOperatorGuard(s *cloud.Service[fleetState], h zip.Handler) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if !principal.Validated(c) {
-			return zip.ErrForbidden("authentication required (run `hanzo login`)")
-		}
-		if !principal.IsSuperAdmin(c) {
-			return zip.ErrForbidden("deploy is a platform-operator action — requires a superadmin identity (a member of the admin org)")
-		}
-		return h(c)
-	}
-}
-
-// fleetPrincipal is WHO is asking, reduced to the only facts the fleet surface
-// authorizes on: whether a validated principal is present at all, platform sudo,
-// admin-of-one's-own-org, and the validated tenant key. It is a VALUE rather than a
-// place, because the SAME caller now arrives two ways — as an HTTP request on
-// /v1/platform/fleet, and as a delegated capability on the internal plane
-// (rpc.go) — and the two must reach the identical verdict. Extraction differs;
-// the rule below does not.
-//
-// The two admin bits stay APART (apps/principal: conflating them is a privilege
-// escalation). super is cross-tenant platform sudo; orgAdmin administers only its
-// own org and is never platform-privileged — it opens the door, and the tenant
-// boundary below is what confines it.
+// fleetPrincipal is WHO is asking: the platform's three authority facts
+// (cloud.Authority) plus the validated tenant key this surface confines on. It is
+// a VALUE rather than a place, because the SAME caller arrives two ways — as an
+// HTTP request on /v1/platform/fleet, and as a delegated capability on the
+// internal plane (rpc.go) — and the two must reach the identical verdict.
+// Extraction differs; the rule (cloud.Scope.Admits) does not.
 type fleetPrincipal struct {
-	validated bool   // a credential was verified (X-User-Id was minted, not restored)
-	super     bool   // platform sudo: a member of the reserved admin org
-	orgAdmin  bool   // admin OF ITS OWN org — org-scoped, not platform-privileged
-	org       string // the VALIDATED tenant key; "" when the caller carries none
+	cloud.Authority
+	org string // the VALIDATED tenant key; "" when the caller carries none
 }
 
 // requestPrincipal reads one off an HTTP request — the authority headers
 // SanitizeIdentity strips on ingress and re-mints only from validated claims.
 func requestPrincipal(c *zip.Ctx) fleetPrincipal {
 	org, _ := principal.Org(c)
-	return fleetPrincipal{
-		validated: principal.Validated(c),
-		super:     principal.IsSuperAdmin(c),
-		orgAdmin:  principal.IsOrgAdmin(c),
-		org:       org,
-	}
+	return fleetPrincipal{Authority: cloud.AuthorityOf(c), org: org}
 }
 
-// capPrincipal reads one off a capability delegated over the internal plane. It
-// carries the SAME headers requestPrincipal reads, packed into the envelope by the
-// caller's Dial(...).As(c) — a peer can only pass on authority it already held, and
-// the org key goes through principal.OrgOf, the same decision Org applies to a
-// request. So a caller cannot widen itself by crossing the socket.
-func capPrincipal(who cloud.Ident) fleetPrincipal {
+// capPrincipal reads one off the identity a plane call carries. It is the SAME
+// set of headers requestPrincipal reads, forwarded by zip from the gateway's
+// assertion — a peer can only pass on authority it already held — and the org
+// key goes through principal.OrgOf, the same decision Org applies to a request.
+// So a caller cannot widen itself by crossing the socket.
+func capPrincipal(who zip.Caller) fleetPrincipal {
 	org, _ := principal.OrgOf(who.User, who.Org)
 	return fleetPrincipal{
-		validated: strings.TrimSpace(who.User) != "",
-		super:     who.Admin,
-		orgAdmin:  who.OrgAdmin,
-		org:       org,
+		Authority: cloud.Authority{
+			Validated: strings.TrimSpace(who.User) != "",
+			Super:     who.Admin,
+			OrgAdmin:  who.OrgAdmin,
+		},
+		org: org,
 	}
 }
 
-// mayObserve is the ROLE gate — the whole door, in one expression: a validated
-// principal that is a SuperAdmin OR an admin of its own org. It only opens the
-// door; scopeNamespaces is what confines whoever walks through.
-func (p fleetPrincipal) mayObserve() bool { return p.validated && (p.super || p.orgAdmin) }
+// mayObserve is the read board's door, on the plane transport: the SAME
+// cloud.Admin scope the HTTP routes are guarded with, applied to the authority a
+// capability carries. It only opens the door; scopeNamespaces is what confines
+// whoever walks through.
+func (p fleetPrincipal) mayObserve() bool { return cloud.Admin.Admits(p.Authority) }
 
 // scopeNamespaces is the TENANT boundary — the one confinement rule, applied to the
 // scanned set. A SuperAdmin sees every scanned namespace (the whole fleet). A
@@ -383,7 +345,7 @@ func (p fleetPrincipal) mayObserve() bool { return p.validated && (p.super || p.
 // It is applied AT THE SCAN, before any CR is read, so a confined caller never even
 // lists another org's apps — the boundary is not a filter over rows already fetched.
 func scopeNamespaces(all []string, p fleetPrincipal) []string {
-	if p.super {
+	if p.Super {
 		return all
 	}
 	if p.org == "" {

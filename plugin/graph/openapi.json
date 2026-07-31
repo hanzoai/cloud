@@ -22,17 +22,139 @@
     "/v1/indexers": {
       "get": {
         "operationId": "get_v1_indexers",
+        "summary": "ListIndexers reports the deployment's chain indexer(s) and how far each has indexed.",
+        "description": "ListIndexers reports the deployment's chain indexer(s) and how far each has\nindexed. Identity and health come from the indexer's /health; the latest indexed\nblock (height + time) from its /v1/explorer/blocks. The row EXISTS if EITHER call\nreaches the indexer; when the indexer is entirely unreachable the answer degrades\nto an honest-EMPTY list at 200, not a 502. No chain HEAD is exposed by the indexer\nREST, so `lag` is honestly omitted rather than fabricated.",
         "tags": [
           "indexers"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexersOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/oracles": {
       "get": {
         "operationId": "get_v1_oracles",
+        "summary": "ListOracles reports the on-chain price/data oracles from the graph's O-Chain PriceFeed registry.",
+        "description": "ListOracles reports the on-chain price/data oracles from the graph's O-Chain\nPriceFeed registry. A reachable graph with no feeds answers an honest empty list;\nan unreachable or erroring graph likewise degrades to an empty list at 200 rather\nthan a 502, so the console never error-toasts. No feed is ever fabricated.",
         "tags": [
           "oracles"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/oraclesOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "indexerView": {
+        "properties": {
+          "chain": {
+            "description": "Chain is the chain this indexer indexes, as the indexer names it.",
+            "type": "string"
+          },
+          "height": {
+            "description": "Height is the latest INDEXED block height, as a decimal string. Absent when\nnothing has been indexed yet.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID identifies the indexer: its chain name, else its chain id, else the brand.",
+            "type": "string"
+          },
+          "lag": {
+            "description": "Lag is how far behind the chain HEAD this indexer is. The indexer REST does not\nexpose the head, so it is always absent rather than a fabricated zero.",
+            "type": "string"
+          },
+          "network": {
+            "description": "Network is the deployment's network tier: mainnet, testnet or devnet.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"degraded\" when /health explicitly reports unhealthy, else \"active\".",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the latest indexed block's timestamp, RFC 3339 UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "indexersOut": {
+        "properties": {
+          "indexers": {
+            "description": "Indexers is one row per reachable chain indexer, or an empty list when the\nindexer is unreachable — never a fabricated row.",
+            "items": {
+              "$ref": "#/components/schemas/indexerView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "oracleView": {
+        "properties": {
+          "feed": {
+            "description": "Feed is the trading pair this feed prices.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the feed's own id, else its trading pair.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the feed's display name — the trading pair, e.g. \"LUX/USD\".",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the oracle network the feed originates from; \"O-Chain\" by default.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"active\" for a listed feed.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the feed's own timestamp, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the feed's price, verbatim as the registry carries it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "oraclesOut": {
+        "properties": {
+          "oracles": {
+            "description": "Oracles is one row per on-chain price feed, or an empty list when the graph is\nunreachable or carries none — never a fabricated feed.",
+            "items": {
+              "$ref": "#/components/schemas/oracleView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }

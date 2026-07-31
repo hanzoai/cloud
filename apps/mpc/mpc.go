@@ -3,7 +3,7 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-// Package mpcseal is cloud's client-side-CEK sealing client for the SEPARATE
+// Package mpc is cloud's client-side-CEK sealing client for the SEPARATE
 // MPC node ring (ghcr.io/luxfi/mpc). It is the minimal inlined subset of the
 // former github.com/hanzoai/kms/sdk/go client that clients/fleet and
 // clients/provisioning use to seal per-org secrets (BYO kubeconfigs,

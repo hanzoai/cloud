@@ -92,7 +92,7 @@ func waitlist(ctx context.Context, in *waitlistIn) (*rawOut, error) {
 			Status: core.OK,
 			Msg:    "the waitlist engine is not configured on this deployment",
 			Data:   map[string]any{},
-			Data2:  core.Total(0),
+			Total:  core.Total(0),
 		}, nil
 	}
 	q := url.Values{}

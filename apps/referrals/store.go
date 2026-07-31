@@ -24,10 +24,10 @@ var (
 	errUnknownCode  = errors.New("referrals: unknown referral code")
 )
 
-// Status values. A referral advances signed_up → qualified → credited. It never
+// Status values. A referral advances signup → qualified → credited. It never
 // moves backward; credited is terminal (the bonus was granted, once).
 const (
-	StatusSignedUp  = "signed_up"
+	StatusSignup    = "signup"
 	StatusQualified = "qualified"
 	StatusCredited  = "credited"
 )
@@ -106,6 +106,9 @@ CREATE TABLE IF NOT EXISTS referrals (
 );
 CREATE INDEX IF NOT EXISTS ix_referrals_referrer ON referrals(referrer_org, created_at);
 CREATE INDEX IF NOT EXISTS ix_referrals_status   ON referrals(status);
+
+-- One vocabulary: the pre-rename rows said 'signed_up'. Idempotent.
+UPDATE referrals SET status='signup' WHERE status='signed_up';
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("referrals migrate: %w", err)
@@ -196,7 +199,7 @@ func (s *Store) Claim(ctx context.Context, id, referrerOrg, refereeOrg, code str
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO referrals (id, referrer_org, referee_org, code, status, created_at)
 		 VALUES (?,?,?,?,?,strftime('%s','now'))`,
-		id, referrerOrg, refereeOrg, normalizeCode(code), StatusSignedUp)
+		id, referrerOrg, refereeOrg, normalizeCode(code), StatusSignup)
 	if err == nil {
 		r, gerr := s.get(ctx, id)
 		return r, true, gerr
@@ -286,13 +289,13 @@ func (s *Store) ListByReferrer(ctx context.Context, referrerOrg string, limit in
 }
 
 // ListPending returns referrals still awaiting the qualify check (status
-// signed_up), oldest first, bounded — the sweep + the lazy-on-read check fold
+// signup), oldest first, bounded — the sweep + the lazy-on-read check fold
 // over this set. optReferrer scopes to one referrer ("" = all, the admin sweep).
 func (s *Store) ListPending(ctx context.Context, optReferrer string, limit int) ([]Referral, error) {
 	if optReferrer == "" {
-		return s.query(ctx, `SELECT `+referralCols+` FROM referrals WHERE status=? ORDER BY created_at ASC LIMIT ?`, StatusSignedUp, limit)
+		return s.query(ctx, `SELECT `+referralCols+` FROM referrals WHERE status=? ORDER BY created_at ASC LIMIT ?`, StatusSignup, limit)
 	}
-	return s.query(ctx, `SELECT `+referralCols+` FROM referrals WHERE status=? AND referrer_org=? ORDER BY created_at ASC LIMIT ?`, StatusSignedUp, optReferrer, limit)
+	return s.query(ctx, `SELECT `+referralCols+` FROM referrals WHERE status=? AND referrer_org=? ORDER BY created_at ASC LIMIT ?`, StatusSignup, optReferrer, limit)
 }
 
 // ListAll returns every referral newest-first (the admin directory), bounded.

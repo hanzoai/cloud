@@ -1,13 +1,13 @@
 package prompts
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -51,13 +51,16 @@ var starterCatalog = sync.OnceValues(func() ([]CatalogEntry, error) {
 	return out, nil
 })
 
-// catalog → the read-only starter library { data: [CatalogEntry] }. Not
-// org-scoped (static reference content), but served under the authenticated
-// /v1/prompts surface like the rest of the module.
-func catalog(s *cloud.Service[state], c *zip.Ctx) error {
+// Catalog returns the read-only starter prompt library shipped with the binary —
+// reference content every tenant sees the same, NOT the caller's own prompts and
+// never mixed into them. An org's library stays honestly empty until someone
+// explicitly imports a starter, which is an ordinary POST /v1/prompts. Entries that
+// would fail the create guards are dropped, so everything offered here can actually
+// be imported.
+func (o promptOps) catalog(_ context.Context, _ *noInput) (*catalogList, error) {
 	entries, err := starterCatalog()
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "catalog: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "catalog: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": entries})
+	return &catalogList{Data: entries}, nil
 }

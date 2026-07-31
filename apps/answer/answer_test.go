@@ -90,11 +90,11 @@ func TestQueryTermsStopwordsAndDedupe(t *testing.T) {
 // ── pricing policy (money: bounded, configurable, per-mode) ───────────────────
 
 func TestFeeCentsDefaultsAndOverrides(t *testing.T) {
-	if got := feeCents("deep", modes["deep"].feeCents); got != 10 {
-		t.Fatalf("deep default fee: want 10, got %d", got)
+	if got := feeCents("research", modes["research"].feeCents); got != 10 {
+		t.Fatalf("research default fee: want 10, got %d", got)
 	}
-	t.Setenv("CLOUD_ASK_FEE_CENTS_DEEP", "25")
-	if got := feeCents("deep", modes["deep"].feeCents); got != 25 {
+	t.Setenv("CLOUD_ASK_FEE_CENTS_RESEARCH", "25")
+	if got := feeCents("research", modes["research"].feeCents); got != 25 {
 		t.Fatalf("per-mode override: want 25, got %d", got)
 	}
 	t.Setenv("CLOUD_ASK_FEE_CENTS", "7")
@@ -133,10 +133,13 @@ func TestIsModeAndResolve(t *testing.T) {
 			t.Fatalf("%q must NOT be an answer-engine mode (advisor path)", m)
 		}
 	}
-	if resolveMode("DEEP").name != "deep" || !resolveMode("deep").plan {
-		t.Fatal("deep must resolve and plan")
+	// "deep" is a retired NAME that must still land on research — never fall
+	// through to search, which would answer a deep request with one query.
+	if resolveMode("DEEP").name != "research" || !resolveMode("deep").plan {
+		t.Fatal("deep must fold into research and plan")
 	}
-	if resolveMode("research").maxQueries != 4 {
+	// 6, not 4: research absorbed deep's budget in the collapse.
+	if resolveMode("research").maxQueries != 6 {
 		t.Fatal("research maxQueries")
 	}
 }
@@ -145,7 +148,8 @@ func TestIsModeAndResolve(t *testing.T) {
 // NOTHING (snippets keep them inside a tight latency budget), the deep ones read
 // pages, and no mode may exceed the hard ceiling.
 func TestModeReadBudget(t *testing.T) {
-	want := map[string]int{"search": 0, "news": 0, "research": 4, "deep": 6}
+	// research absorbed deep's budget when the two collapsed into one mode.
+	want := map[string]int{"search": 0, "news": 0, "research": 6}
 	for name, m := range modes {
 		if m.readTop != want[name] {
 			t.Fatalf("mode %q readTop = %d, want %d", name, m.readTop, want[name])

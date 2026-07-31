@@ -2,29 +2,30 @@ package automations
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
-	"github.com/zap-proto/zip"
 )
 
-// invoke.go decomplects tool dispatch from its front doors. ONE core (dispatchTool)
+// invoke.go decomplects tool dispatch from its callers. ONE core (dispatchTool)
 // resolves a tool name to its connector action and runs it with a RunContext whose
-// credential Token is pinned to the VALIDATED org; TWO doors call it:
+// credential Token is pinned to the VALIDATED org.
 //
-//   - mcpToolCall — the HTTP JSON-RPC door (POST /v1/automations/mcp tools/call),
-//     metering + auditing with the request context.
-//   - InvokeTool  — the in-process door a sibling subsystem (the Business AI guide)
-//     uses to act through the per-principal MCP plane without an HTTP hop, metering
-//     + auditing with no HTTP context.
+// Two callers reach it, and neither is an HTTP door of this subsystem's own:
 //
-// Both doors share the SAME dispatch, per-org concurrency bound, credential scope,
-// meter (one unit), and audit record — so they can never diverge on what a tool
-// does or on who is allowed to run it.
+//   - connectorToolProvider.Dispatch — the unified tool plane, which is how a
+//     connector action is reached from POST /v1/tools/call and therefore from the
+//     fleet's one agent door.
+//   - InvokeTool — the in-process seam a sibling subsystem (the Business AI guide)
+//     uses to act as an org without an HTTP hop, metering + auditing with no HTTP
+//     context.
+//
+// Both share the SAME dispatch, per-org concurrency bound, credential scope, meter
+// (one unit) and audit record — so they can never diverge on what a tool does or
+// on who is allowed to run it.
 
 // Dispatch sentinels let each door map a failure onto its own error convention
 // (the JSON-RPC door to -32601/-32005, the in-process door to a returned error)
@@ -62,43 +63,9 @@ func dispatchTool(ctx context.Context, org, name string, args map[string]any) (a
 	})
 }
 
-// mcpToolCall is the HTTP JSON-RPC door: it dispatches a tool through the shared
-// core and shapes the result/error as JSON-RPC. RunContext is pinned to the
-// VALIDATED org by dispatchTool, so a caller can never invoke a tool against
-// another tenant's credentials. One metered unit + one audit record per successful
-// call; a failed/blocked call is audited as an error and NOT billed.
-func mcpToolCall(s *cloud.Service[state], c *zip.Ctx, org string, req mcpRequest) error {
-	var p struct {
-		Name      string         `json:"name"`
-		Arguments map[string]any `json:"arguments"`
-	}
-	body, _ := json.Marshal(req.Params)
-	_ = json.Unmarshal(body, &p)
-
-	out, err := dispatchTool(c.Context(), org, p.Name, p.Arguments)
-	if err != nil {
-		switch {
-		case errors.Is(err, errUnknownTool):
-			return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32601, err.Error()))
-		case errors.Is(err, errToolBusy):
-			return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32005, err.Error()))
-		default:
-			auditEvent(s, c, org, "automations.mcp.call", p.Name, "error", http.StatusFailedDependency)
-			return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32000, err.Error()))
-		}
-	}
-	meterUnit(s, org, c)
-	auditEvent(s, c, org, "automations.mcp.call", p.Name, "ok", http.StatusOK)
-
-	text, _ := json.Marshal(out)
-	return c.JSON(http.StatusOK, mcpResultObj(req.ID, map[string]any{
-		"content": []map[string]any{{"type": "text", "text": string(text)}},
-	}))
-}
-
 // InvokeTool runs a single MCP tool as principal `org`, in-process — the same
 // dispatch, credential scope, per-org concurrency bound, metering, and audit as
-// POST /v1/automations/mcp tools/call, minus the HTTP hop. It is the seam a sibling
+// POST /v1/tools/call, minus the HTTP hop. It is the seam a sibling
 // subsystem (the Business AI guide) uses to act through the per-principal MCP
 // plane. `org` MUST be the caller's VALIDATED principal.Org: the dispatch pins
 // every credential and effect to it, so an in-process caller can never exceed that
@@ -127,7 +94,7 @@ func ToolExists(name string) bool {
 	return ok
 }
 
-// auditToolCall appends the MCP tool-call audit record from the in-process door (no
+// auditToolCall appends the tool-call audit record from the in-process seam (no
 // HTTP context, so no actor sub/email/ip — the org is the attributable actor).
 // Nil recorder → no-op. Mirrors auditRun.
 func auditToolCall(s *cloud.Service[state], ctx context.Context, org, tool, result string, status int) {
@@ -136,12 +103,12 @@ func auditToolCall(s *cloud.Service[state], ctx context.Context, org, tool, resu
 	}
 	rec := audit.Record{
 		Actor:    audit.Actor{Org: org},
-		Action:   "automations.mcp.call",
+		Action:   "automations.tool.call",
 		Resource: audit.Resource{Type: "automations", ID: tool},
 		Auth:     audit.AuthContext{Method: "in-process"},
 		Outcome:  audit.Outcome{Result: result, Status: status},
 	}
 	if _, err := s.State.audit.Append(ctx, rec); err != nil {
-		s.Log.Warn("audit append failed", "err", err, "action", "automations.mcp.call")
+		s.Log.Warn("audit append failed", "err", err, "action", "automations.tool.call")
 	}
 }

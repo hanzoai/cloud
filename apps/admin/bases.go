@@ -95,7 +95,7 @@ func baseProxy(ctx context.Context, target, token string) (json.RawMessage, int,
 //
 // Response: {"status":"ok","msg":"","data":[{"name":"acme-base","org":"acme",
 // "url":"https://acme.base.hanzo.ai","status":"running","plan":"pro","region":"nyc3",
-// "created":"2026-03-01T00:00:00Z"}],"data2":1}
+// "created":"2026-03-01T00:00:00Z"}],"total":1}
 func (o ops) bases(ctx context.Context, _ *core.None) (*basesOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
@@ -108,7 +108,7 @@ func (o ops) bases(ctx context.Context, _ *core.None) (*basesOut, error) {
 			Status: core.OK,
 			Msg:    "the Base engine is not yet embedded on this deployment",
 			Data:   []baseInstance{},
-			Data2:  core.Total(0),
+			Total:  core.Total(0),
 		}, nil
 	}
 	q := url.Values{}
@@ -134,16 +134,16 @@ func (o ops) bases(ctx context.Context, _ *core.None) (*basesOut, error) {
 			out = append(out, r)
 		}
 	}
-	return &basesOut{Status: core.OK, Data: out, Data2: core.Total(len(out))}, nil
+	return &basesOut{Status: core.OK, Data: out, Total: core.Total(len(out))}, nil
 }
 
-// basesOut is the GET /v1/admin/bases envelope. data2 == len(data): the list is the
+// basesOut is the GET /v1/admin/bases envelope. total == len(data): the list is the
 // caller's whole window after scope filtering, unpaginated.
 type basesOut struct {
 	Status string         `json:"status"`
 	Msg    string         `json:"msg"`
 	Data   []baseInstance `json:"data"`
-	Data2  *int           `json:"data2,omitempty"`
+	Total  *int           `json:"total,omitempty"`
 }
 
 // decodeInstances tolerates BOTH a bare JSON array and a { data: [...] } envelope (the two

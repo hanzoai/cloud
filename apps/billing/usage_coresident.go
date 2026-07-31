@@ -19,7 +19,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // coResidentUsage builds the customer usage envelope from cloud's OWN finance ledger
@@ -33,7 +35,30 @@ import (
 func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte, bool, error) {
 	fin := finance.Current()
 	if fin == nil {
-		return nil, false, nil // split deploy → commerce S2S read
+		// No ledger here — every process but commerce. Ask the one that has it
+		// before falling back to the S2S read, which is 501 unless a commerce URL is
+		// configured. That 501 is what a customer's usage page showed once apps
+		// became their own binaries.
+		ctx, cancel := context.WithTimeout(ctx, usagePeerTimeout)
+		defer cancel()
+		reply, err := cloud.Ask[struct{}, plane.UsageRows](cloud.For(ctx, org), "commerce",
+			plane.FinanceUsage, &struct{}{})
+		if err != nil || reply == nil {
+			return nil, false, nil // no peer either → the configured S2S read
+		}
+		rows := make([]finance.UsageRow, 0, len(reply.Rows))
+		for _, r := range reply.Rows {
+			cents, cerr := r.Amount.Minor()
+			if cerr != nil {
+				return nil, false, cerr
+			}
+			rows = append(rows, finance.UsageRow{ID: r.ID, Model: r.Model, Cents: cents, CreatedAt: r.CreatedAt})
+		}
+		env := usageEnvelope(org, rows)
+		if out, ok := enrichUsageLedger(env, product, groupBy); ok {
+			return out, true, nil
+		}
+		return env, true, nil
 	}
 	// The usage read is an OPTIONAL capability (the base FinanceClient is
 	// Balance+Deposit+RecordUsage); a finance impl without it falls back to the proxy.
@@ -61,10 +86,17 @@ func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte,
 // enrichUsageLedger can still attribute a product where the unit implies one.
 func usageEnvelope(org string, rows []finance.UsageRow) []byte {
 	type usageRow struct {
-		TransactionID string         `json:"transactionId"`
-		Amount        int64          `json:"amount"`
-		Metadata      map[string]any `json:"metadata"`
-		CreatedAt     string         `json:"createdAt"`
+		TransactionID string `json:"transactionId"`
+		Amount        int64  `json:"amount"`
+		// Decimal is the SAME debit, exact — the ledger's 18-decimal value as a
+		// decimal string, the spelling plane.Money already uses. `amount` stays
+		// cents because that is the wire the console and enrichUsageLedger parse
+		// today; this field is what lets a reader stop summing roundings. A page
+		// of sub-cent calls totals correctly from `decimal` and totals ZERO from
+		// `amount` — that difference is the 24% the console understated.
+		Decimal   string         `json:"decimal,omitempty"`
+		Metadata  map[string]any `json:"metadata"`
+		CreatedAt string         `json:"createdAt"`
 	}
 	out := make([]usageRow, 0, len(rows))
 	for _, r := range rows {
@@ -72,13 +104,25 @@ func usageEnvelope(org string, rows []finance.UsageRow) []byte {
 		if r.Model != "" {
 			md["model"] = r.Model
 		}
-		out = append(out, usageRow{
+		row := usageRow{
 			TransactionID: r.ID,
 			Amount:        r.Cents,
 			Metadata:      md,
 			CreatedAt:     time.Unix(r.CreatedAt, 0).UTC().Format(time.RFC3339),
-		})
+		}
+		// A zero Amount is a row built WITHOUT the exact value (a test double, or
+		// a builder that predates the field) — a real debit is never zero, the
+		// guards drop those before the ledger. Omit the field rather than assert
+		// a 0 the cents beside it deny.
+		if !r.Amount.IsZero() {
+			row.Decimal = r.Amount.String()
+		}
+		out = append(out, row)
 	}
 	body, _ := json.Marshal(map[string]any{"user": org, "count": len(out), "usage": out})
 	return body
 }
+
+// usagePeerTimeout bounds the cross-process usage read. A usage page is
+// interactive: a slow ledger must surface rather than hold the request open.
+const usagePeerTimeout = 10 * time.Second

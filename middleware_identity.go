@@ -4,7 +4,7 @@ package cloud
 //
 // THE PROBLEM. zip.Ctx.Org()/IsAdmin()/User() read the X-Org-Id / X-User-IsAdmin
 // / X-User-Id request headers verbatim. In production the gateway
-// (hanzoai/gateway) is the sole minter of those headers: it strips any
+// (hanzoai/gateway) is the sole author of those headers: it strips any
 // client-supplied copy and re-injects them from a validated IAM JWT (HIP-0026).
 // cloud TRUSTS that contract. But cloud-api is also reachable WITHOUT the gateway
 // in front — directly in-cluster (cloud-api.hanzo.svc:8000, used by console's
@@ -19,7 +19,7 @@ package cloud
 // catalog + /v1/pricing/sync, provisioning, ml, eval, plan) becomes
 // trustworthy without touching a single handler.
 //
-// ADMIN IS SUPERADMIN. The gateway mints X-User-IsAdmin from the JWT `isAdmin`
+// ADMIN IS SUPERADMIN. The gateway writes X-User-IsAdmin from the JWT `isAdmin`
 // bool, which IAM also sets true for ORG admins (an org owner). The cloud admin
 // surfaces (global catalog writes, the literal "admin" org bucket) mean
 // SuperAdmin. So the admin authority here is granted ONLY to a validated
@@ -33,6 +33,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/hanzoai/authz"
 	"github.com/zap-proto/zip"
 )
 
@@ -61,7 +62,7 @@ func OrgHasUnsafeRune(s string) bool {
 }
 
 // cookieTokenNames are the session-cookie names that may carry an IAM access
-// token (mirrors iamauth.CookieToken). hanzo_iam_token is the cookie the ai
+// token (mirrors edge.Cookie). hanzo_iam_token is the cookie the ai
 // (casibase) layer SETS after login (ai/controllers/account.go iamTokenCookieName)
 // — it MUST be read here too, or the embedded console (whose browser holds only
 // that httpOnly cookie, no Authorization header) resolves to no principal and
@@ -76,7 +77,7 @@ func OrgHasUnsafeRune(s string) bool {
 // account.go, clients/team), and are read only if no un-shadowable cookie is present.
 var cookieTokenNames = []string{"__Host-hanzo_iam_token", "hanzo_iam_token", "iam_access_token", "access_token", "hanzo_token"}
 
-// authorityHeaders are the identity/authority headers the gateway mints and the
+// authorityHeaders are the identity/authority headers the gateway writes and the
 // ONLY ones a downstream may trust. The sanitizer deletes every one on ingress
 // so nothing a client sent survives as identity, then re-injects from a
 // validated principal.
@@ -85,12 +86,12 @@ var cookieTokenNames = []string{"__Host-hanzo_iam_token", "hanzo_iam_token", "ia
 // X-Environment). A sub-scope NARROWS within an org; it is not identity authority,
 // so it is handled in a separate pass (sanitizeSubScopes, keyed on
 // subScopeHeaders): every raw client copy is deleted on ingress, then X-Project-Id
-// is RE-MINTED from the validated `project` claim (claims.mintedProject) exactly
+// is RE-WRITTEN from the validated `project` claim (claims.renderProject) exactly
 // like X-Org-Id from `owner`, still checked non-foreign to the effective org
 // (projectIsForeign — org_scope.go refuses a project REGISTERED to a DIFFERENT org,
 // which also drops an admin's own-org project when a SuperAdmin views another
 // org), and dropped on the anonymous path. The raw client X-Project-Id is NEVER a
-// source. So after this pass X-Project-Id is a TRUSTWORTHY server-minted scope,
+// source. So after this pass X-Project-Id is a TRUSTWORTHY server-written scope,
 // which is exactly why principal.ValidatedProject reports it claim-backed and per-
 // project spend caps HARD-enforce. The native evals subsystem, which scopes
 // exclusively by c.Org() and ignores X-Project-Id, is unaffected.
@@ -104,7 +105,7 @@ var authorityHeaders = []string{
 	"X-User-IsAdmin",
 	"X-User-IsOrgAdmin",
 	// X-User-Owner is the HOME org (the validated `owner` claim) — the identity +
-	// BILLING anchor, minted below DISTINCT from X-Org-Id (the effective/acted-on
+	// BILLING anchor, written below DISTINCT from X-Org-Id (the effective/acted-on
 	// org). Stripped on ingress like every authority header so a client can never
 	// forge who pays, then re-injected only from validated claims.
 	"X-User-Owner",
@@ -119,7 +120,7 @@ var authorityHeaders = []string{
 // authority. All are deleted on ingress like the authority headers so no raw client
 // copy survives, then re-injected by sanitizeSubScopes only for a validated
 // principal:
-//   - X-Project-Id is MINTED from the validated `project` claim (claims.mintedProject),
+//   - X-Project-Id is WRITTEN from the validated `project` claim (claims.renderProject),
 //     exactly like X-Org-Id from `owner`, then still checked non-foreign to the
 //     effective org (defense in depth; it also drops an admin's own-org project when
 //     a SuperAdmin views another org). The raw client copy is never a source.
@@ -164,7 +165,7 @@ var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id
 // client input), and — since F1 — the DATA plane fails closed too: it gates on a
 // validated principal (clients/principal.Validated) and the anonymous request
 // carries no X-User-Id, so the restored X-Org-Id is refused, not served. Never
-// fails OPEN. The availability cost is bounded to COLD caches: the jwksCache is
+// fails OPEN. The availability cost is bounded to COLD caches: the edge key cache is
 // stale-on-error (a warm cache keeps validating through a transient JWKS outage),
 // so only a from-cold JWKS failure degrades to anonymous-403.
 func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
@@ -176,8 +177,8 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		// (admin org-switch input + Phase-1 data passthrough for the org; the app /
 		// billing-account attribution hints), then delete every authority header AND
 		// every sub-scope header, so nothing a client sent survives as identity OR
-		// scope. X-Project-Id is NOT captured: it is minted from the validated
-		// `project` claim below (claims.mintedProject), never from a client value. A
+		// scope. X-Project-Id is NOT captured: it is written from the validated
+		// `project` claim below (claims.renderProject), never from a client value. A
 		// client org bearing a whitespace/control/format rune is refused here (not trimmed):
 		// trimming would collapse "acme " onto "acme", and the injective org
 		// boundary must never fold two distinct org identifiers into one.
@@ -227,7 +228,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 					"sub", claims.Subject, "aud", claims.Audience)
 			}
 			if id := claims.userID(); id != "" {
-				req.Header.Set("X-User-Id", id)
+				req.Header.Set(authz.HeaderUser, id)
 			}
 			// X-User-Name is the IAM USERNAME (the `name` half of <owner>/<name>),
 			// stamped DISTINCT from X-User-Id (the UUID subject). The gateway path
@@ -239,10 +240,10 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// authorityHeader it is stripped on ingress (line ~97) and re-injected here
 			// ONLY from validated claims — never a client value.
 			if uname := claims.username(); uname != "" {
-				req.Header.Set("X-User-Name", uname)
+				req.Header.Set(authz.HeaderUserName, uname)
 			}
 			if claims.Email != "" {
-				req.Header.Set("X-User-Email", claims.Email)
+				req.Header.Set(authz.HeaderUserEmail, claims.Email)
 			}
 			// X-User-Owner is the HOME org — the validated `owner` claim, minted
 			// here DISTINCT from X-Org-Id (the effective org set below). It is the
@@ -254,7 +255,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// switch, so it is independent of the effective-org decision. An unsafe/
 			// empty owner mints nothing (billing then fails closed with no home org).
 			if owner != "" {
-				req.Header.Set("X-User-Owner", owner)
+				req.Header.Set(authz.HeaderUserOwner, owner)
 			}
 			// effOrg is the org actually acted as: the switched-to org for a global
 			// admin, else the principal's own owner. Sub-scopes are validated against
@@ -262,7 +263,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// project; a project owned by neither is refused).
 			var effOrg string
 			switch {
-			case owner != "" && owner == adminOrg && !isMachinePrincipal(claims):
+			case owner != "" && owner == adminOrg && isHuman(claims):
 				// SuperAdmin ⟺ the principal's HOME org IS the reserved admin org AND the
 				// principal is HUMAN.
 				//
@@ -285,18 +286,26 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 				// signal") and relied on by TestMasqueradeSpendsOwnBooks, whose SuperAdmin
 				// carries isAdmin=false. Reading the USER's org is what closes the
 				// escalation; a second signal is not needed and is not free. The human gate
-				// (!isMachinePrincipal) is the necessary companion once the audience is no
-				// longer a gate — otherwise ANY admin-org client_credentials app (type ==
-				// "application"), not just the KMS-sync one, would inherit platform-admin and
-				// read every org. A machine principal falls through to the owner-scoped case
-				// below (org-scoped, not super). Honored org-switch for the human admin.
-				req.Header.Set("X-User-IsAdmin", "true")
+				// (isHuman) is the necessary companion once the audience is no longer a gate —
+				// otherwise ANY admin-org client_credentials app, not just the KMS-sync one,
+				// would inherit platform-admin and read every org. A machine principal falls
+				// through to the owner-scoped case below (org-scoped, not super). Honored
+				// org-switch for the human admin.
+				//
+				// It is a POSITIVE human test rather than a negated machine one on purpose:
+				// this grants the only cross-tenant scope in the system, so an unidentifiable
+				// principal must be refused, not admitted by default. The org question just
+				// below answers with the opposite polarity — it GRANTS an org from an
+				// app-selected claim, so it needs a positively identified MACHINE — and one
+				// predicate serving both is how a legacy human token came to be handed the
+				// app's org instead of failing closed.
+				req.Header.Set(authz.HeaderUserAdmin, "true")
 				if cliOrg != "" {
 					effOrg = cliOrg
 				} else {
 					effOrg = owner
 				}
-				req.Header.Set("X-Org-Id", effOrg)
+				req.Header.Set(authz.HeaderOrg, effOrg)
 			case owner != "":
 				// Any other principal acts in the org it SELECTED, provided the
 				// validated token says it is a member of that org — the `orgs` claim
@@ -318,7 +327,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 				if isMember(claims.Orgs, cliOrg) {
 					effOrg = cliOrg
 				}
-				req.Header.Set("X-Org-Id", effOrg)
+				req.Header.Set(authz.HeaderOrg, effOrg)
 			}
 			// X-User-IsOrgAdmin marks a validated principal that is an admin OF ITS OWN
 			// ORG — the IAM `isAdmin` bit (claims.IsAdmin). It is minted on the SAME
@@ -340,10 +349,10 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// admin surfaces refused their own owner. Keyed on effOrg, not on the
 			// home org: the bit must describe the org the request ACTS in, so
 			// switching to an org you merely belong to never carries admin across.
-			if (claims.IsAdmin || isOrgAdmin(claims.Orgs, effOrg)) && !isMachinePrincipal(claims) {
-				req.Header.Set("X-User-IsOrgAdmin", "true")
+			if (claims.IsAdmin || isOrgAdmin(claims.Orgs, effOrg)) && isHuman(claims) {
+				req.Header.Set(authz.HeaderUserOrgAdmin, "true")
 			}
-			sanitizeSubScopes(c, effOrg, claims.mintedProject(), cliApp, claims.mintedBillingAccount())
+			sanitizeSubScopes(c, effOrg, claims.renderProject(), cliApp, claims.renderBillingAccount())
 			return c.Continue()
 		}
 
@@ -352,7 +361,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		// plane gates on a validated principal anyway). Restore only the client org
 		// for the Phase-1 data path (see residual note above).
 		if cliOrg != "" {
-			req.Header.Set("X-Org-Id", cliOrg)
+			req.Header.Set(authz.HeaderOrg, cliOrg)
 		}
 		return c.Continue()
 	}
@@ -371,7 +380,7 @@ func IdentityMiddleware(cfg *Config) zip.Handler {
 // VALIDATED principal, the raw client copies having been deleted on ingress. It
 // is the project/app half of the trust boundary:
 //
-//   - project is the caller's MINTED `project` claim (claims.mintedProject — empty
+//   - project is the caller's validated `project` claim (claims.renderProject — empty
 //     for the default project, so the header stays absent ⟺ default). It is
 //     re-injected only when NON-foreign to org (projectIsForeign): the caller's own
 //     claim survives; a project REGISTERED to a different org is refused (dropped),
@@ -395,13 +404,13 @@ func sanitizeSubScopes(c *zip.Ctx, org, project, app, billingAccount string) {
 	}
 	req := c.Fiber().Request()
 	if project != "" && !projectIsForeign(c.Context(), org, project) {
-		req.Header.Set("X-Project-Id", project)
+		req.Header.Set(authz.HeaderProject, project)
 	}
 	if app != "" {
-		req.Header.Set("X-App-Id", app)
+		req.Header.Set(authz.HeaderApp, app)
 	}
-	// X-Billing-Account-Id names WHO PAYS, so it is minted from the validated
-	// `billing_account` claim (claims.mintedBillingAccount) and never from a client
+	// X-Billing-Account-Id names WHO PAYS, so it is written from the validated
+	// `billing_account` claim (claims.renderBillingAccount) and never from a client
 	// value — the raw copy is deleted on ingress and not restored here. It used to
 	// be forwarded as-is, which was defensible only while it was a mere attribution
 	// hint that no debit read. It is not one anymore: ai/object.Payer now resolves
@@ -409,7 +418,7 @@ func sanitizeSubScopes(c *zip.Ctx, org, project, app, billingAccount string) {
 	// naming its own payer — the whole thing the claim exists to prevent. Absent when
 	// IAM minted no account (a pre-claim token); Payer then falls back.
 	if billingAccount != "" {
-		req.Header.Set("X-Billing-Account-Id", billingAccount)
+		req.Header.Set(authz.HeaderBillingAccount, billingAccount)
 	}
 }
 

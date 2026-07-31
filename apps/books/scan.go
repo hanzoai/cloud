@@ -32,6 +32,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -44,17 +45,47 @@ const scanSourceKind = "scan"
 const maxScanUpload = 8 << 20
 
 // scannerRoutes registers the scanner + inbox + vendors/rules + transactions surface on the
-// books app (called from routes()).
+// books app (called from routes()). The group is rebuilt here, from a literal prefix,
+// because that is what makes each typed op's path resolvable from this file; it is the same
+// /v1/books subtree routes() already installed Bridge + noStore on.
 func scannerRoutes(app cloud.Router, s *cloud.Service[*state]) {
+	g := app.Group("/v1/books")
+	o := booksOps{s: s}
+	zip.Get(g, "/inbox", o.listInbox)
+	zip.Get(g, "/vendors", o.listVendors)
+	zip.Get(g, "/rules", o.listRules)
+	zip.Get(g, "/transactions", o.listTransactions)
+	// The three JSON writes. Each one's body IS its In; the ?sandbox selector stays on
+	// the URL (query, typed.go) rather than moving into the body a typed POST's In is
+	// documented as, so typing described these routes without moving them.
+	zip.Post(g, "/scan/book", o.bookScan)
+	zip.Post(g, "/vendors", o.upsertVendor)
+	zip.Post(g, "/rules", o.upsertRule)
+
+	// UNTYPED, for a stated reason. scan and the inbox upload take RAW document bytes
+	// (a PDF, an image, plain text) as their body: zip's typed decoder unmarshals the
+	// body as JSON, so a PDF upload would answer 400 instead of scanning — there is no
+	// JSON In that names a file. They still DECLARE what they take and answer, in the
+	// init below.
 	app.Post("/v1/books/scan", cloud.Handle(s, scanHandler))
-	app.Post("/v1/books/scan/book", cloud.Handle(s, scanBookHandler))
 	app.Post("/v1/books/inbox", cloud.Handle(s, inboxUploadHandler))
-	app.Get("/v1/books/inbox", cloud.Handle(s, inboxListHandler))
-	app.Get("/v1/books/vendors", cloud.Handle(s, vendorsListHandler))
-	app.Post("/v1/books/vendors", cloud.Handle(s, vendorUpsertHandler))
-	app.Get("/v1/books/rules", cloud.Handle(s, rulesListHandler))
-	app.Post("/v1/books/rules", cloud.Handle(s, ruleUpsertHandler))
-	app.Get("/v1/books/transactions", cloud.Handle(s, transactionsHandler))
+}
+
+// "Cannot be a typed op" is not "must be undocumented". Both routes above published
+// nothing at all — no request, no response — which a consumer of the document cannot
+// distinguish from a route that takes no body and returns none. openapi.Register is
+// the seam for exactly that: the request is [openapi.Binary] (a receipt, byte for
+// byte, under the caller's own content type — see scanText, which accepts a PDF or
+// plain UTF-8), and the response is the very value each handler marshals on success:
+// ScanDraft for the scan, InboxItem for the upload. Pure DESCRIPTION — no route,
+// status, field or byte moves. What they still lack, and only a typed op can give
+// them, is prose, an MCP tool and a CLI command.
+//
+// init, not scannerRoutes: Register panics on a duplicate declaration, and
+// scannerRoutes runs once per Mount.
+func init() {
+	openapi.Register("/v1/books/scan", "POST", openapi.Binary{}, ScanDraft{})
+	openapi.Register("/v1/books/inbox", "POST", openapi.Binary{}, InboxItem{})
 }
 
 // LineItem is one line of a scanned document — a description and its amount in exact cents.
@@ -140,7 +171,11 @@ func scanHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 // FORCED server-side to (scan, ScanID) so a client can never post a scan under another
 // source's key or double-book by editing the id.
 type BookRequest struct {
-	ScanID  string  `json:"scanId"`
+	// ScanID is the scanned document's file hash, as GET /v1/books/inbox and the scan
+	// draft report it. It is the idempotency key: re-booking the same scan writes nothing.
+	ScanID string `json:"scanId"`
+	// Voucher is the reviewed voucher to post. Its source is FORCED to (scan, scanId)
+	// server-side, so it can never be booked under another source's key.
 	Voucher Voucher `json:"voucher"`
 	// Override books this bill even when one of the SAME economic identity
 	// (vendor, total, issue date) already posted — the explicit human confirmation that a
@@ -151,32 +186,40 @@ type BookRequest struct {
 // BookResponse reports the outcome of a scan book: posted=false means the same scan already
 // booked (idempotent no-op), never a second voucher.
 type BookResponse struct {
+	// ScanID echoes the scan that was booked.
 	ScanID string `json:"scanId"`
-	Posted bool   `json:"posted"`
+	// Posted is true when this call wrote the voucher, false when the same scan had
+	// already booked and nothing was written.
+	Posted bool `json:"posted"`
 }
 
-// scanBookHandler answers POST /v1/books/scan/book: it posts the reviewed voucher through
-// the ONE post() choke point, idempotent by (scan, scanId). A re-book of the same scan
-// returns posted=false and writes nothing. This is the scanner's only write.
-func scanBookHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to book a scan")
-	}
-	var in BookRequest
-	if err := c.Bind(&in); err != nil {
-		return err
+// BookScan posts a reviewed scanned bill to the ledger. It is the scanner's ONLY write:
+// the voucher goes through the same post() choke point every other source uses, so it is
+// checked to balance (Σdebit == Σcredit) and is idempotent by (scan, scanId) — re-booking
+// the same scan answers posted=false and writes nothing. A bill whose economic identity
+// (vendor, total, issue date) already posted under a DIFFERENT scan is refused 409 unless
+// override is set, which is what stops the same receipt re-scanned into a new file hash
+// from double-booking. An unbalanced voucher is refused 400.
+//
+// Example: {"scanId": "a5f3c1", "voucher": {"description": "GitHub", "legs": [{"account": "5300", "debit": 1234}, {"account": "2001", "credit": 1234}]}}
+func (o booksOps) bookScan(ctx context.Context, in *BookRequest) (*BookResponse, error) {
+	// Tenant first, the order this route has always refused in: an anonymous caller is
+	// 401 whatever it sends.
+	org, err := tenant(ctx, "book a scan")
+	if err != nil {
+		return nil, err
 	}
 	scanID := strings.TrimSpace(in.ScanID)
 	if scanID == "" {
-		return zip.ErrBadRequest("scanId is required")
+		return nil, zip.ErrBadRequest("scanId is required")
 	}
 	if len(in.Voucher.Legs) == 0 {
-		return zip.ErrBadRequest("voucher has no legs")
+		return nil, zip.ErrBadRequest("voucher has no legs")
 	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
+	sandbox := sandboxFrom(ctx)
+	st, err := o.s.State.storeFor(org, sandbox)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "books open failed")
 	}
 	v := in.Voucher
 	v.SourceKind, v.SourceID = scanSourceKind, scanID // FORCE the idempotency key
@@ -192,28 +235,28 @@ func scanBookHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	// already posted under a DIFFERENT scan unless the human explicitly overrides.
 	id := voucherIdentity(v)
 	if !in.Override {
-		if prior, dup, err := st.scanIdentityBooked(c.Context(), id, scanID); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "dedup check failed")
+		if prior, dup, err := st.scanIdentityBooked(ctx, id, scanID); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "dedup check failed")
 		} else if dup {
-			return zip.ErrConflict(fmt.Sprintf(
+			return nil, zip.ErrConflict(fmt.Sprintf(
 				"a bill from %s for %s dated %s already booked (scan %s) — set override to book a duplicate",
 				id.Vendor, dollars(id.Total), id.Issued, prior))
 		}
 	}
-	posted, err := st.post(c.Context(), v, RoundOffAllowance)
+	posted, err := st.post(ctx, v, RoundOffAllowance)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error()) // an unbalanced reviewed voucher is a client error
+		return nil, zip.ErrBadRequest(err.Error()) // an unbalanced reviewed voucher is a client error
 	}
 	if posted {
-		if err := st.recordScanIdentity(c.Context(), id, scanID, v.PostingAt); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "identity record failed")
+		if err := st.recordScanIdentity(ctx, id, scanID, v.PostingAt); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "identity record failed")
 		}
 	}
-	if err := st.markInboxBooked(c.Context(), scanID); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "inbox update failed")
+	if err := st.markInboxBooked(ctx, scanID); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "inbox update failed")
 	}
-	s.State.syncDurable(org, sandboxQuery(c), boolToInt(posted))
-	return booksJSON(c, BookResponse{ScanID: scanID, Posted: posted})
+	o.s.State.syncDurable(org, sandbox, boolToInt(posted))
+	return &BookResponse{ScanID: scanID, Posted: posted}, nil
 }
 
 // scanText extracts the document's text: a PDF is rendered via pdfLines (pure Go, the same

@@ -3,6 +3,7 @@
 // version observed from the live Deployment, the reconciled health, and the sync
 // verdict (declared == running ⇒ Synced, else OutOfSync). The console renders this
 // as the ArgoCD application list.
+
 package deploy
 
 import (

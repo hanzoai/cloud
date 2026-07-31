@@ -1058,9 +1058,15 @@ type KindTotal struct {
 	CostUSD     float64 `json:"cost_usd"`
 }
 
-// Totals is the observatory's headline aggregate: canonical (answered) counts plus
+// ResearchTotals is the observatory's headline aggregate: canonical (answered) counts plus
 // *_retained, and a per-kind breakdown. Deterministic from the store.
-type Totals struct {
+//
+// The name carries its own product because the SCHEMA namespace is FLAT: zip keys a
+// component schema on the Go type's bare name (typeName drops the package), so the
+// fleet weave refuses two apps that mean different things by one name. It was
+// `Totals`, and apps/admin publishes a `Totals` of its own about volumes and
+// clusters — the weave named the collision the moment this type became an op's Out.
+type ResearchTotals struct {
 	Project             string      `json:"project,omitempty"`
 	Projects            int         `json:"projects"`
 	Experiments         int         `json:"experiments"` // canonical
@@ -1073,21 +1079,21 @@ type Totals struct {
 	ByKind              []KindTotal `json:"by_kind"`
 }
 
-func (s *store) totals(ctx context.Context, project string) (Totals, error) {
+func (s *store) totals(ctx context.Context, project string) (ResearchTotals, error) {
 	exps, err := s.allExp(ctx)
 	if err != nil {
-		return Totals{}, err
+		return ResearchTotals{}, err
 	}
 	atts, err := s.allAtt(ctx)
 	if err != nil {
-		return Totals{}, err
+		return ResearchTotals{}, err
 	}
 	if project != "" {
 		exps = filterExp(exps, project)
 		atts = filterAtt(atts, project)
 	}
 
-	var t Totals
+	var t ResearchTotals
 	t.Project = project
 	t.ExperimentsRetained = len(exps)
 	t.AttemptsRetained = len(atts)

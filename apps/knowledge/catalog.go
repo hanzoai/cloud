@@ -14,12 +14,7 @@ package knowledge
 
 import (
 	"context"
-	"net/http"
 	"sort"
-
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/zap-proto/zip"
 )
 
 // nativeConnectors describes the first-party Go connectors' display metadata. A
@@ -50,15 +45,26 @@ type catalogEntry struct {
 	Configured  bool   `json:"configured"`
 }
 
-// listCatalog returns the ONE catalog: every native Go connector plus every long-tail
-// piece connector, sorted by provider for a stable listing. `configured` reports
-// whether the deployment has OAuth credentials for it (so the console shows Connect vs
-// a "not configured" hint). No secret is ever returned; this is metadata only.
-func listCatalog(s *cloud.Service[state], c *zip.Ctx) error {
+// catalogOut is the unified connector catalog.
+type catalogOut struct {
+	// Connectors is every connectable source, sorted by provider.
+	Connectors []catalogEntry `json:"connectors"`
+}
+
+// ListConnectorCatalog returns the ONE catalog of everything a caller can
+// connect: every first-party connector and every long-tail one, in a single list
+// sorted by provider. `configured` reports whether this deployment holds OAuth
+// credentials for a source, so the console can show Connect rather than a dead
+// button, and `kind` is a badge only — the connect and sync lifecycle is
+// identical for both. The catalog itself is org-independent; a validated
+// principal is still required. It is metadata only: no secret is ever returned.
+//
+// Response: {"connectors": [{"provider": "github", "displayName": "GitHub", "description": "Repositories, READMEs, and issues.", "kind": "native", "configured": true}]}
+func (o ops) listCatalog(ctx context.Context, _ *noInput) (*catalogOut, error) {
 	// A valid principal is required (the catalog is only served to authenticated
 	// callers), though the catalog content itself is org-independent.
-	if _, ok := principal.Org(c); !ok {
-		return zip.ErrForbidden("valid principal required")
+	if _, err := tenant(ctx); err != nil {
+		return nil, err
 	}
 	out := make([]catalogEntry, 0, len(providers))
 	for provider := range providers {
@@ -72,7 +78,7 @@ func listCatalog(s *cloud.Service[state], c *zip.Ctx) error {
 			e.DisplayName = meta.displayName
 			e.Description = meta.description
 		} else if pc, ok := pieceConnectors[provider]; ok {
-			e.DisplayName = pieceDisplayName(c.Context(), pc.piece, provider)
+			e.DisplayName = pieceDisplayName(ctx, pc.piece, provider)
 			e.Description = "activepieces connector (" + pc.piece + ")"
 		} else {
 			e.DisplayName = provider
@@ -80,7 +86,7 @@ func listCatalog(s *cloud.Service[state], c *zip.Ctx) error {
 		out = append(out, e)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Provider < out[j].Provider })
-	return c.JSON(http.StatusOK, map[string]any{"connectors": out})
+	return &catalogOut{Connectors: out}, nil
 }
 
 // pieceDisplayName returns a human display name for a piece-backed connector. It is a

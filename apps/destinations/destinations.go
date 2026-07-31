@@ -15,6 +15,7 @@ import (
 	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -22,17 +23,28 @@ import (
 // in-process seam. It composes clients/analytics (installs the fan-out sink) and
 // clients/integrations (a destination may reuse an OAuth connection's token).
 //
-// Surface (all org-scoped; /v1 only; mutations require org admin):
+// Surface (all org-scoped; /v1 only; mutations require org admin). Four of the
+// five are TYPED ops — one registry entry each, which the document, the MCP tool,
+// the CLI command and the generated SDK method are all projected from:
 //
-//	GET    /v1/destinations                 platforms + this org's connection status
-//	GET    /v1/destinations/:platform       one platform status
-//	POST   /v1/destinations/:platform       connect/update (ids + secret) -> Status
-//	DELETE /v1/destinations/:platform       disconnect (forget secrets + row)
-//	POST   /v1/destinations/:platform/test  send ONE synthetic event end-to-end
+//	GET    /v1/destinations                 platforms + this org's connection status   [typed]
+//	GET    /v1/destinations/:platform       one platform status                        [typed]
+//	POST   /v1/destinations/:platform       connect/update (ids + secret)               untyped, see routes()
+//	DELETE /v1/destinations/:platform       disconnect (forget secrets + row)          [typed]
+//	POST   /v1/destinations/:platform/test  send ONE synthetic event end-to-end        [typed]
 //
-// TENANT ISOLATION mirrors clients/ads and clients/integrations: the org is
-// principal.Org (a VALIDATED principal, never a client header); every store row is
-// keyed (org,platform) and every KMS secret lives under a per-org path.
+// TENANT ISOLATION mirrors clients/ads and clients/integrations: the org is the
+// VALIDATED principal's (principal.OrgFrom for a typed op, principal.Org for the
+// untyped one — the same value, read through the seam each has), never a client
+// header and never an In field; every store row is keyed (org,platform) and every
+// KMS secret lives under a per-org path.
+//
+// The card type is DestinationStatus, not Status, and the config-input type is
+// DestinationField, not Field: the OpenAPI schema namespace is FLAT across the
+// whole fleet, `Status` is already apps/plugins', and openapi.Weave refuses one
+// name with two shapes because every generated SDK would bind whichever it read
+// last. Typing is what makes a package enter that namespace, so the qualification
+// is part of this conversion and not cosmetic.
 
 const (
 	// kmsEnv is the stable KMS environment slug destinations secrets are sealed
@@ -64,6 +76,9 @@ type state struct {
 // mounted is the active service so Shutdown + the in-process seam reach it.
 var mounted *cloud.Service[state]
 
+// removeSink unregisters this subsystem's fan-out consumer on Shutdown.
+var removeSink func()
+
 // Mount wires /v1/destinations/* onto app. Complex flavour (a package global for the
 // seam + Shutdown, and it installs the analytics fan-out sink), so it constructs the
 // Service value directly.
@@ -76,6 +91,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("destinations.Mount: empty DataDir")
+	}
+	// destinations registers TYPED ops, which live on the *zip.App's registry — the
+	// one value OpenAPI, MCP and the CLI are projected from. A Router that is not
+	// backed by one must fail the mount rather than serve routes no projection knows.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("destinations.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
 		return fmt.Errorf("destinations.Mount: data dir: %w", err)
@@ -94,11 +116,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted = s
 
-	routes(app, s)
+	routes(app, zapp, s)
 
 	// Install the fan-out sink onto the canonical event plane, unless disabled.
 	if fanoutEnabled() {
-		analytics.SetSink(func(org string, evs []analytics.SinkEvent) { consume(s, org, evs) })
+		removeSink = analytics.AddSink(func(org string, evs []analytics.SinkEvent) { consume(s, org, evs) })
 		b.Log.Info("destinations fan-out sink installed", "platforms", len(s.State.dests))
 	} else {
 		b.Log.Info("destinations fan-out disabled", "flag", publicFanoutEnv)
@@ -107,18 +129,266 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-func routes(app cloud.Router, s *cloud.Service[state]) {
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// routes registers the /v1/destinations surface. Four of the five are TYPED ops
+// — one registry entry each, which the document, the MCP tool, the CLI command
+// and the generated SDK method are all projected from.
+//
+// The collection root takes the ABSOLUTE path on the app rather than the empty
+// leaf of the group: `g.Get("")` normalises to the group's prefix plus a slash,
+// so the untyped projection published `/v1/destinations/` — a path this API has
+// never served, sitting in openapi.yaml beside its slashless siblings.
+//
+// POST /:platform stays UNTYPED, deliberately. Its body's property NAMES are
+// chosen at request time by the addressed platform's Spec (see connect below) and
+// each value may arrive as a JSON string, number or bool, which no Go struct
+// describes. It DECLARES its bodies through openapi.Register instead (see the
+// init below), so the cost of staying untyped is the three things zip's registry
+// supplies — prose, an MCP tool, a CLI command — and not a fourth, a document
+// claiming the route takes no body.
+//
+// Registration order is match order, and it is the order it has always been.
+func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
+	// The bridge FIRST, bounded to destinations' own subtree: a typed op receives
+	// only a context, so the validated org has to be parked there, and fiber runs
+	// middleware in registration order — one installed after these leaves would
+	// never run. cloud.Serve installs one app-wide too; nesting is harmless (the
+	// inner one is what the handler sees), and having it here is what makes this
+	// package's own tests — which mount on a bare zip.App — exercise the same
+	// tenancy the binary does.
 	g := app.Group("/v1/destinations")
-	g.Get("", cloud.Handle(s, list))
-	g.Get("/:platform", cloud.Handle(s, get))
+	g.Use(cloud.Bridge())
+
+	o := ops{s: s}
+	zip.Get(zapp, "/v1/destinations", o.list)
+	zip.Get(zapp, "/v1/destinations/:platform", o.get)
 	g.Post("/:platform", cloud.Handle(s, connect))
-	g.Delete("/:platform", cloud.Handle(s, disconnect))
-	g.Post("/:platform/test", cloud.Handle(s, test))
+	zip.Delete(zapp, "/v1/destinations/:platform", o.disconnect)
+	zip.Post(zapp, "/v1/destinations/:platform/test", o.test)
+}
+
+// The one untyped route DECLARES what it carries. Its request is the map the
+// handler binds — an object whose keys are the addressed platform's own config
+// and secret names, so `additionalProperties` is open by construction and that is
+// the honest schema, not a thin one — and its response is the same
+// DestinationStatus card every other route answers with. Without this the
+// document said POST /v1/destinations/{platform} takes NO body, which is the one
+// thing it cannot work without.
+func init() {
+	openapi.Register("/v1/destinations/:platform", "POST", map[string]any{}, DestinationStatus{})
+}
+
+// ops binds the service to the typed ops. A TypedHandler takes no service
+// parameter, so the service arrives as a RECEIVER and every op is a method value
+// — also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// tenantOf is the VALIDATED org for a typed op — the one the gateway asserted and
+// cloud.Bridge parked on the context, never a field of In. An In field is
+// caller-supplied, so a tenant key read from one is a cross-tenant read the
+// caller asserted for itself. It applies the same validOrg custody check the
+// untyped handlers do, because the org is folded into the KMS secret path.
+func tenantOf(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("a validated principal is required")
+	}
+	if !validOrg(org) {
+		return "", zip.ErrBadRequest("org must be a DNS-1123 label")
+	}
+	return org, nil
+}
+
+// orgAdmin reports whether the caller is an org admin — the gate every
+// destination MUTATION keeps. It needs the REQUEST rather than the tenant because
+// org-admin-ness lives in a header (X-User-IsOrgAdmin) that principal.OrgFrom
+// does not carry. False off the HTTP path: no request, no attested caller, no
+// mutation.
+func orgAdmin(ctx context.Context) bool {
+	if c, ok := cloud.Request(ctx); ok {
+		return principal.IsOrgAdmin(c)
+	}
+	return false
+}
+
+// noInput is the In of an op addressed entirely by the caller's principal: it
+// takes nothing off the wire.
+type noInput struct{}
+
+// destinationRef addresses one destination platform. The slug is the path
+// segment: the URL is the addressing authority, so it binds from there whatever
+// a body says.
+type destinationRef struct {
+	// Platform is the destination to act on, from the path: ga4 | meta | tiktok |
+	// linkedin | x | reddit | posthog | umami.
+	Platform string `json:"platform"`
+}
+
+// destinationList is every destination this deployment can forward to, each with
+// the caller org's connection state.
+type destinationList struct {
+	// Destinations is one card per registered platform, in slug order.
+	Destinations []DestinationStatus `json:"destinations"`
+}
+
+// destinationDisconnected acknowledges a disconnect.
+type destinationDisconnected struct {
+	// Disconnected is true when the credentials and the row are gone.
+	Disconnected bool `json:"disconnected"`
+}
+
+// destinationTest is the outcome of one synthetic send, reported as DATA so the
+// console renders a platform rejection rather than an HTTP error.
+//
+// Sent, Message and Error are POINTERS so each is absent exactly when the wire
+// has never carried it: a failure answers {ok,error} and a success {ok,sent,
+// message}, and a non-pointer field with `omitempty` would drop a real "sent": 0
+// while a non-pointer without it would add "sent": 0 to every failure. The fields
+// are in ALPHABETICAL order because the map this replaced marshalled its keys
+// sorted, and the bytes on the wire must not move.
+type destinationTest struct {
+	// Error is the platform's rejection, present only on a failed send.
+	Error *string `json:"error,omitempty"`
+	// Message is the platform's own note about the send, present only on success.
+	Message *string `json:"message,omitempty"`
+	// OK is true when the platform accepted the synthetic event.
+	OK bool `json:"ok"`
+	// Sent is how many events the platform accepted, present only on success.
+	Sent *int `json:"sent,omitempty"`
+}
+
+// list reports every destination this deployment can forward to, each with the
+// caller org's connection state: whether it is connected, whether it is enabled,
+// whether a credential resolves right now, and the config fields the console
+// renders for it.
+func (o ops) list(ctx context.Context, _ *noInput) (*destinationList, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := o.s.State.store.List(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	byPlatform := make(map[string]Row, len(rows))
+	for _, r := range rows {
+		byPlatform[r.Platform] = r
+	}
+	out := make([]DestinationStatus, 0, len(o.s.State.dests))
+	for _, id := range sortedIDs(o.s.State.dests) {
+		dest := o.s.State.dests[id]
+		if r, ok := byPlatform[id]; ok {
+			out = append(out, statusOf(o.s, ctx, org, dest, &r))
+		} else {
+			out = append(out, statusOf(o.s, ctx, org, dest, nil))
+		}
+	}
+	return &destinationList{Destinations: out}, nil
+}
+
+// get reports one destination's card for the caller's org — its config fields,
+// its connection state, and whether a credential resolves right now. A platform
+// this deployment does not carry is not found.
+//
+// Example: {"platform": "ga4"}
+func (o ops) get(ctx context.Context, in *destinationRef) (*DestinationStatus, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	dest, ok := o.s.State.dests[strings.TrimSpace(in.Platform)]
+	if !ok {
+		return nil, zip.ErrNotFound("unknown destination")
+	}
+	row, found, err := o.s.State.store.Get(ctx, org, dest.ID())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	if found {
+		st := statusOf(o.s, ctx, org, dest, &row)
+		return &st, nil
+	}
+	st := statusOf(o.s, ctx, org, dest, nil)
+	return &st, nil
+}
+
+// disconnect forgets a destination for the caller's org: every credential held in
+// KMS, then the stored config. Idempotent, and it requires org admin.
+//
+// Example: {"platform": "ga4"}
+func (o ops) disconnect(ctx context.Context, in *destinationRef) (*destinationDisconnected, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	dest, ok := o.s.State.dests[strings.TrimSpace(in.Platform)]
+	if !ok {
+		return nil, zip.ErrNotFound("unknown destination")
+	}
+	if !orgAdmin(ctx) {
+		return nil, zip.ErrForbidden("disconnecting a destination requires org admin")
+	}
+	if o.s.State.kms != nil {
+		for _, name := range dest.Spec().Secrets {
+			if err := kmsDelete(o.s, kmsPath(org, dest.ID()), name); err != nil {
+				o.s.Log.Warn("destinations kms delete failed (continuing)", "platform", dest.ID(), "org", org, "secret", name, "err", err)
+			}
+		}
+	}
+	if _, err := o.s.State.store.Delete(ctx, org, dest.ID()); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+	}
+	return &destinationDisconnected{Disconnected: true}, nil
+}
+
+// test sends ONE synthetic pageview through the connected destination end to end
+// and reports what the platform said. A send the platform refuses is reported as
+// data — {"ok": false, "error": …} at 200 — so the console shows the platform's
+// own words rather than an error about Hanzo. It requires org admin.
+//
+// Example: {"platform": "ga4"}
+func (o ops) test(ctx context.Context, in *destinationRef) (*destinationTest, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	dest, ok := o.s.State.dests[strings.TrimSpace(in.Platform)]
+	if !ok {
+		return nil, zip.ErrNotFound("unknown destination")
+	}
+	if !orgAdmin(ctx) {
+		return nil, zip.ErrForbidden("testing a destination requires org admin")
+	}
+	row, found, err := o.s.State.store.Get(ctx, org, dest.ID())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
+	}
+	if !found {
+		return nil, zip.ErrNotFound("destination not connected")
+	}
+	secret, err := resolveSecret(o.s, org, dest, row.Config)
+	if err != nil {
+		return nil, zip.ErrBadRequest("no credential is configured for this destination")
+	}
+	res, serr := dest.Send(ctx, row.Config, secret, []Conversion{syntheticConversion(org, o.s.Brand)})
+	if serr != nil {
+		msg := serr.Error()
+		return &destinationTest{OK: false, Error: &msg}, nil
+	}
+	return &destinationTest{OK: true, Sent: &res.Sent, Message: &res.Message}, nil
 }
 
 // Shutdown closes the store and clears the sink. Idempotent.
 func Shutdown() error {
-	analytics.SetSink(nil)
+	if removeSink != nil {
+		removeSink()
+		removeSink = nil
+	}
 	if mounted == nil || mounted.State.store == nil {
 		mounted = nil
 		return nil
@@ -246,26 +516,45 @@ func sealSecrets(s *cloud.Service[state], path string, secrets map[string]string
 
 // ── views ────────────────────────────────────────────────────────────────────
 
-// Status is a destination's card for an org: its Spec (fields the console renders),
+// DestinationStatus is a destination's card for an org: its Spec (fields the console renders),
 // this org's connection state, and whether a credential is resolvable (live).
-type Status struct {
-	Platform  string   `json:"platform"`
-	Name      string   `json:"name"`
-	Category  string   `json:"category"`
-	Connected bool     `json:"connected"`
-	Enabled   bool     `json:"enabled"`
-	Live      bool     `json:"live"`
-	Account   string   `json:"account,omitempty"`
-	Config    Config   `json:"config,omitempty"`
-	Fields    []Field  `json:"fields"`
-	Secrets   []string `json:"secrets"`
+type DestinationStatus struct {
+	Platform string `json:"platform"` // the platform slug, and the path segment every route addresses it by
+	Name     string `json:"name"`     // the platform's display name ("Google Analytics 4")
+	Category string `json:"category"` // groups the card: Analytics | Advertising
+	// Connected is true when this org has a stored row for the platform — it has
+	// been configured here at least once. It says nothing about whether a
+	// credential still resolves; that is Live.
+	Connected bool `json:"connected"`
+	// Enabled is whether the fan-out forwards to this destination. False on a
+	// destination that is connected but paused, and on one never connected.
+	Enabled bool `json:"enabled"`
+	// Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this
+	// org, else the integrations connection named by the platform's Fallback, else
+	// no credential needed at all (a public-ingest sink like Umami). False on a
+	// connected destination whose secret has gone missing — Connected && !Live is
+	// exactly the "reconnect me" state.
+	Live bool `json:"live"`
+	// Account is the operator's own label for the connected account, as supplied on
+	// connect. Absent when unset.
+	Account string `json:"account,omitempty"`
+	// Config is the org's stored NON-SECRET configuration — the measurement/pixel
+	// ids keyed by DestinationField.Key. A secret is never in here; secrets live in
+	// KMS and only their names are published, in Secrets.
+	Config Config `json:"config,omitempty"`
+	// Fields are the non-secret inputs this platform needs, which the console card
+	// renders and the connect body fills.
+	Fields []DestinationField `json:"fields"`
+	// Secrets are the KMS secret NAMES this platform custodies for the org — names
+	// only, never values. The connect body accepts each under its camelCase form.
+	Secrets []string `json:"secrets"`
 }
 
 // statusOf builds the card for a destination, folding in the org's live row (row may
 // be nil when not connected). Live reflects whether a credential resolves NOW.
-func statusOf(s *cloud.Service[state], ctx context.Context, org string, dest Destination, row *Row) Status {
+func statusOf(s *cloud.Service[state], ctx context.Context, org string, dest Destination, row *Row) DestinationStatus {
 	spec := dest.Spec()
-	st := Status{
+	st := DestinationStatus{
 		Platform: dest.ID(), Name: dest.Name(), Category: dest.Category(),
 		Fields: spec.Fields, Secrets: spec.Secrets,
 	}
@@ -281,56 +570,6 @@ func statusOf(s *cloud.Service[state], ctx context.Context, org string, dest Des
 }
 
 // ── handlers ─────────────────────────────────────────────────────────────────
-
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	rows, err := s.State.store.List(c.Context(), org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-	}
-	byPlatform := make(map[string]Row, len(rows))
-	for _, r := range rows {
-		byPlatform[r.Platform] = r
-	}
-	out := make([]Status, 0, len(s.State.dests))
-	for _, id := range sortedIDs(s.State.dests) {
-		dest := s.State.dests[id]
-		if r, ok := byPlatform[id]; ok {
-			out = append(out, statusOf(s, c.Context(), org, dest, &r))
-		} else {
-			out = append(out, statusOf(s, c.Context(), org, dest, nil))
-		}
-	}
-	return c.JSON(http.StatusOK, map[string]any{"destinations": out})
-}
-
-func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	dest, ok := s.State.dests[platformParam(c)]
-	if !ok {
-		return zip.ErrNotFound("unknown destination")
-	}
-	row, found, err := s.State.store.Get(c.Context(), org, dest.ID())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-	}
-	if found {
-		return c.JSON(http.StatusOK, statusOf(s, c.Context(), org, dest, &row))
-	}
-	return c.JSON(http.StatusOK, statusOf(s, c.Context(), org, dest, nil))
-}
 
 // connect provisions (or updates) a destination: non-secret ids into the store, API
 // secret(s) sealed to KMS (fail-closed). Connecting an ad destination is an org-admin
@@ -398,73 +637,6 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, statusOf(s, c.Context(), org, dest, &row))
 }
 
-// disconnect forgets a destination: every custodied KMS secret, then the row.
-// Idempotent. Org-admin.
-func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	dest, ok := s.State.dests[platformParam(c)]
-	if !ok {
-		return zip.ErrNotFound("unknown destination")
-	}
-	if !principal.IsOrgAdmin(c) {
-		return zip.ErrForbidden("disconnecting a destination requires org admin")
-	}
-	if s.State.kms != nil {
-		for _, name := range dest.Spec().Secrets {
-			if err := kmsDelete(s, kmsPath(org, dest.ID()), name); err != nil {
-				s.Log.Warn("destinations kms delete failed (continuing)", "platform", dest.ID(), "org", org, "secret", name, "err", err)
-			}
-		}
-	}
-	if _, err := s.State.store.Delete(c.Context(), org, dest.ID()); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"disconnected": true})
-}
-
-// test sends ONE synthetic event through the connected destination end-to-end and
-// reports the platform's response as DATA (a send failure is {ok:false,error:…}, not
-// an HTTP error, so the console renders it). Org-admin.
-func test(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	dest, ok := s.State.dests[platformParam(c)]
-	if !ok {
-		return zip.ErrNotFound("unknown destination")
-	}
-	if !principal.IsOrgAdmin(c) {
-		return zip.ErrForbidden("testing a destination requires org admin")
-	}
-	row, found, err := s.State.store.Get(c.Context(), org, dest.ID())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
-	}
-	if !found {
-		return zip.ErrNotFound("destination not connected")
-	}
-	secret, err := resolveSecret(s, org, dest, row.Config)
-	if err != nil {
-		return zip.ErrBadRequest("no credential is configured for this destination")
-	}
-	cv := syntheticConversion(org, s.Brand)
-	res, serr := dest.Send(c.Context(), row.Config, secret, []Conversion{cv})
-	if serr != nil {
-		return c.JSON(http.StatusOK, map[string]any{"ok": false, "error": serr.Error()})
-	}
-	return c.JSON(http.StatusOK, map[string]any{"ok": true, "sent": res.Sent, "message": res.Message})
-}
-
 // syntheticConversion builds the one test event: a pageview attributed to a stable
 // per-org test visitor. It carries no PII — only the external test id.
 func syntheticConversion(org, brand string) Conversion {
@@ -491,22 +663,22 @@ func syntheticConversion(org, brand string) Conversion {
 // non-secret fields (the guide cannot fabricate a measurement/pixel id), returning an
 // honest error otherwise, and reports whether the destination is now live. Fails
 // closed when unmounted / invalid org / unknown platform.
-func Connect(ctx context.Context, org, platform string, in map[string]any) (Status, error) {
+func Connect(ctx context.Context, org, platform string, in map[string]any) (DestinationStatus, error) {
 	if mounted == nil {
-		return Status{}, fmt.Errorf("destinations: not mounted")
+		return DestinationStatus{}, fmt.Errorf("destinations: not mounted")
 	}
 	s := mounted
 	if !validOrg(org) {
-		return Status{}, fmt.Errorf("destinations: invalid org")
+		return DestinationStatus{}, fmt.Errorf("destinations: invalid org")
 	}
 	dest, ok := s.State.dests[strings.TrimSpace(platform)]
 	if !ok {
-		return Status{}, fmt.Errorf("destinations: unknown platform %q", platform)
+		return DestinationStatus{}, fmt.Errorf("destinations: unknown platform %q", platform)
 	}
 	spec := dest.Spec()
 	existing, found, err := s.State.store.Get(ctx, org, dest.ID())
 	if err != nil {
-		return Status{}, err
+		return DestinationStatus{}, err
 	}
 	cfg := Config{}
 	if found {
@@ -521,7 +693,7 @@ func Connect(ctx context.Context, org, platform string, in map[string]any) (Stat
 	}
 	for _, f := range spec.Fields {
 		if f.Required && cfg[f.Key] == "" {
-			return Status{}, fmt.Errorf("%s requires %s", dest.ID(), f.Key)
+			return DestinationStatus{}, fmt.Errorf("%s requires %s", dest.ID(), f.Key)
 		}
 	}
 	row := Row{Org: org, Platform: dest.ID(), Enabled: true, Config: cfg}
@@ -529,7 +701,7 @@ func Connect(ctx context.Context, org, platform string, in map[string]any) (Stat
 		row.AccountLabel = existing.AccountLabel
 	}
 	if err := s.State.store.Upsert(ctx, row); err != nil {
-		return Status{}, err
+		return DestinationStatus{}, err
 	}
 	return statusOf(s, ctx, org, dest, &row), nil
 }
@@ -537,7 +709,7 @@ func Connect(ctx context.Context, org, platform string, in map[string]any) (Stat
 // List returns the org's destination status for every registered platform — the seam
 // a sibling (the guide) reads to report what is connected. Fails closed when
 // unmounted.
-func List(ctx context.Context, org string) ([]Status, error) {
+func List(ctx context.Context, org string) ([]DestinationStatus, error) {
 	if mounted == nil {
 		return nil, fmt.Errorf("destinations: not mounted")
 	}
@@ -553,7 +725,7 @@ func List(ctx context.Context, org string) ([]Status, error) {
 	for _, r := range rows {
 		byPlatform[r.Platform] = r
 	}
-	out := make([]Status, 0, len(s.State.dests))
+	out := make([]DestinationStatus, 0, len(s.State.dests))
 	for _, id := range sortedIDs(s.State.dests) {
 		dest := s.State.dests[id]
 		if r, ok := byPlatform[id]; ok {

@@ -16,6 +16,7 @@
 // (run), so the ordering invariant is enforced by construction and unit-tested
 // hermetically, while each concrete step (a k8s Job for build/smoke, a GitHub API
 // call for tag/notify) is wired once in releaseFor.
+
 package platform
 
 import (

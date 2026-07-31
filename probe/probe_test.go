@@ -1,13 +1,31 @@
 // Package probe measures what zip's typed-op machinery can actually bind, at
 // the zip version this module pins. It exists because `zip.Get[In, Out]` is
-// advertised as ONE op projected into three surfaces (REST · OpenAPI · MCP),
-// and cloud's 792 raw routes were slated to migrate onto it. Before migrating
-// them, this measures the projection against the route shapes cloud ACTUALLY
-// has: a path param (/v1/agents/sessions/:id), query filters (?live&host=), and
-// an org that must come from the validated principal rather than the caller.
+// advertised as ONE op projected into every surface (REST · OpenAPI · MCP · CLI
+// · the op-call plane), and cloud's raw routes were slated to migrate onto it.
+// It measures the projection against the route shapes cloud ACTUALLY has: a path
+// param (/v1/agents/sessions/:id), query filters (?live&host=), and an org that
+// must come from the validated principal rather than the caller.
 //
 // The result gates the migration, so it is a test, not a memo: it fails the
 // build if the answer changes.
+//
+// THE ANSWER CHANGED. Every blocker this package was written to pin is gone as
+// of zip v1.18.x, and these tests now assert the CAPABILITY rather than its
+// absence — which is what the pins told whoever came next to do:
+//
+//   - a typed op binds its whole URL, path params and query alike (zip v1.17.4
+//     / v1.17.7), so the 16 of 25 clients/agents routes that carry a path param
+//     can migrate as they are;
+//   - the document declares its path parameters, typed from the In field they
+//     bind to (zip v1.18.0), so a templated path is valid OpenAPI 3.1 and a
+//     generated client knows about :id;
+//   - the org half never needed a framework change and still does not: the
+//     principal bridge below carries it on the request context.
+//
+// What remains pinned is the DEFAULT: a typed op with no [zip.App.Authorize]
+// installed answers an anonymous MCP caller. The remedy exists — an Authorizer
+// runs at the op-invoke seam for REST and MCP alike — so this is a statement
+// about what cloud must install, not about what zip cannot do.
 package probe
 
 import (
@@ -117,13 +135,16 @@ func rpc(t *testing.T, url, body string, hdr map[string]string) (int, string) {
 	return resp.StatusCode, strings.TrimSpace(string(b))
 }
 
-// TestURLBinding measures whether a typed op can see its own URL.
+// TestTypedOpBindsURL measures whether a typed op can see its own URL. It can,
+// both halves of it.
 //
-// zip v1.8.2 decodes In from the request BODY only — registerTyped's fiber
-// handler passes c.Body() (nil for GET) into op.invoke and nothing else. So a
-// path param and a query filter never reach the handler. 16 of clients/agents'
-// 25 routes carry a path param; every one of them would receive a zero In.
-func TestTypedOpCannotBindURL(t *testing.T) {
+// It used to pin the opposite: zip v1.8.2 decoded In from the request BODY only,
+// so a path param and a query filter never reached the handler and the 16 of
+// clients/agents' 25 routes that carry a path param could not migrate as they
+// were. zip binds both now, so this asserts the binding — the URL is the
+// addressing authority, so a path param wins over a query one, which wins over
+// the body.
+func TestTypedOpBindsURL(t *testing.T) {
 	var got bound
 	app := zip.New(zip.Config{AppName: "probe", OpenAPI: zip.OpenAPIConfig{Title: "cloud", Version: "v1.0.0"}})
 
@@ -157,18 +178,17 @@ func TestTypedOpCannotBindURL(t *testing.T) {
 	t.Logf("GET /v1/agents/sessions?live=true&host=evo")
 	t.Logf("  In      = %+v", got.filter)
 
-	// THE FINDING, pinned as the current contract. These assertions say the URL
-	// does NOT reach a typed handler. When they start failing, zip has gained URL
-	// binding — invert them and the clients/agents migration is unblocked.
-	if got.key.ID != "" {
-		t.Fatalf("zip now binds path params (In.ID=%q) — UNBLOCKED: invert this test "+
-			"and migrate clients/agents", got.key.ID)
+	// THE FINDING, as the current contract: the whole URL reaches the handler.
+	if got.key.ID != "sess-abc123" {
+		t.Fatalf("path param did not bind: In.ID=%q, want %q — a typed op must see "+
+			"the segment the router MATCHED on", got.key.ID, "sess-abc123")
 	}
-	if got.filter.Live || got.filter.Host != "" {
-		t.Fatalf("zip now binds query params (In=%+v) — UNBLOCKED: invert this test", got.filter)
+	if !got.filter.Live || got.filter.Host != "evo" {
+		t.Fatalf("query did not bind: In=%+v, want {Live:true Host:evo} — half a URL "+
+			"is half an API, and every filtered read is in that half", got.filter)
 	}
-	t.Log("PINNED: a typed op receives a ZERO In from a URL — no path param, no query. " +
-		"16/25 clients/agents routes carry a path param, so they cannot migrate as-is.")
+	t.Log("PINNED: a typed op binds its whole URL — path params and query alike. " +
+		"The clients/agents migration is unblocked on this axis.")
 }
 
 // TestProjections records the payoff side: the OpenAPI document and the MCP tool
@@ -205,13 +225,35 @@ func TestTypedOpProjectionsPopulate(t *testing.T) {
 	}
 
 	// The path is templated, so OpenAPI 3.1 REQUIRES a matching path-parameter
-	// object. zip emits none — pinned. When this fails, the doc projection has
-	// learned parameters and the emitted spec is valid.
-	if strings.Contains(spec, `"in": "path"`) || strings.Contains(spec, `"in":"path"`) {
-		t.Fatalf("zip now emits path parameters — UNBLOCKED: invert this test")
+	// object. It has one — and the parameter is TYPED from the In field it binds
+	// to, so the document describes the same value the handler receives.
+	params := digParams(t, doc, "/v1/agents/sessions/{id}", "get")
+	if len(params) != 1 {
+		t.Fatalf("parameters = %v, want the one path param — a templated path with no "+
+			"parameter object is an invalid document that cannot tell a client about :id", params)
 	}
-	t.Log("PINNED: the doc declares templated path /v1/agents/sessions/{id} with NO " +
-		"parameter object — an invalid OpenAPI 3.1 document that cannot tell a client about :id.")
+	p, _ := params[0].(map[string]any)
+	if p["name"] != "id" || p["in"] != "path" || p["required"] != true {
+		t.Fatalf("parameter = %v, want a required path param named id", p)
+	}
+	if sch, _ := p["schema"].(map[string]any); sch["type"] != "string" {
+		t.Fatalf("parameter schema = %v, want the type of sessionKey.ID", p["schema"])
+	}
+	t.Log("PINNED: the doc declares templated path /v1/agents/sessions/{id} WITH its " +
+		"parameter object, typed from the In field it binds to.")
+}
+
+// digParams reads one operation's parameter list out of the document.
+func digParams(t *testing.T, doc map[string]any, path, method string) []any {
+	t.Helper()
+	paths, _ := doc["paths"].(map[string]any)
+	item, ok := paths[path].(map[string]any)
+	if !ok {
+		t.Fatalf("no path %q in the document; paths = %v", path, paths)
+	}
+	op, _ := item[method].(map[string]any)
+	params, _ := op["parameters"].([]any)
+	return params
 }
 
 // TestMCPIsUnauthenticated is the security half. A typed op is auto-published as
@@ -219,9 +261,12 @@ func TestTypedOpProjectionsPopulate(t *testing.T) {
 // receives context.Background() — it cannot see a header, so it cannot run
 // cloud's authz gate (tenant(c) → 403), which every agents handler relies on.
 //
-// So the op answers an anonymous caller. The only way a typed handler could
-// learn an org would be an org field IN the typed In — which is caller-supplied,
-// i.e. a cross-tenant read. Both horns are unacceptable; this test pins them.
+// So an op with no Authorizer installed answers an anonymous caller. That is now
+// a statement about the DEFAULT, not about the framework: zip.App.Authorize runs
+// one decision on the decoded In at the op-invoke seam, for REST and MCP alike,
+// which is the seam this test was written to say did not exist. What is still
+// true — and is the reason an org must never be an In field — is that an In
+// field is caller-supplied, so reading the org from one is a cross-tenant read.
 func TestTypedOpMCPIsAnonymous(t *testing.T) {
 	var got bound
 	app := zip.New(zip.Config{AppName: "probe", OpenAPI: zip.OpenAPIConfig{Title: "cloud", Version: "v1.0.0"}})

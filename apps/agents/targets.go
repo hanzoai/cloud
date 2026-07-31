@@ -530,16 +530,129 @@ func toTargetView(t Target, load TargetLoad) targetView {
 	return v
 }
 
+// targetOps binds the service to the typed target ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value (o.registerTarget), which
+// is also the only bound form cmd/zipdoc can lift prose from.
+type targetOps struct{ s *cloud.Service[state] }
+
+// callerOf is caller() for a typed op: the validated principal behind the
+// request — the owner of a machine it registers, the actor a session is recorded
+// under. Empty off the HTTP path, where there is no request and therefore no
+// caller — which fails closed, since an empty owner never satisfies the ownership
+// arm of targetOwns.
+func callerOf(ctx context.Context) string {
+	if c, ok := cloud.Request(ctx); ok {
+		return caller(c)
+	}
+	return ""
+}
+
+// targetOwns is ownsTarget() for a typed op. It needs the REQUEST rather than the
+// tenant because org-admin-ness lives in a header (X-User-IsOrgAdmin) that
+// principal.OrgFrom does not carry. False off the HTTP path: no request, no
+// attested caller, no management rights.
+func targetOwns(ctx context.Context, t Target) bool {
+	if c, ok := cloud.Request(ctx); ok {
+		return ownsTarget(c, t)
+	}
+	return false
+}
+
+// tenantOf is the validated org for a typed op — the one the gateway asserted and
+// cloud.Bridge parked on the context, never a field of In. An In field is
+// caller-supplied, so a tenant key read from one is a cross-tenant read the
+// caller asserted for itself.
+func tenantOf(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
+}
+
+// noInput is the In of an op addressed entirely by the caller's principal: it
+// takes nothing off the wire. ONE of these for the whole package.
+type noInput struct{}
+
+// noContent is the Out of an op that answers 204 with an empty body. It is an
+// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
+// 204 only when the Out type has no name, so a defined type here would publish
+// "200 with a body" about a route that answers 204 with none.
+type noContent = struct{}
+
+// targetRef addresses one target. The id is the path segment: the URL is the
+// addressing authority, so it binds from there whatever a body says.
+type targetRef struct {
+	// ID is the target to act on, from the path.
+	ID string `json:"id"`
+}
+
+// targetList is a page of the caller org's targets.
+type targetList struct {
+	// Targets is every target registered to the caller's org.
+	Targets []targetView `json:"targets"`
+}
+
+// targetDeleted acknowledges a deregistration.
+type targetDeleted struct {
+	// Deleted is true when the target was removed.
+	Deleted bool `json:"deleted"`
+	// ID is the target that was removed.
+	ID string `json:"id"`
+}
+
+// patchTargetIn is a partial update. Every field is optional — a nil field is
+// left alone — and the id comes from the path.
+//
+// The mutable fields are spelled out HERE, not embedded from a body struct with
+// one user. They used to be embedded, and the shipped consequence was measurable:
+// zip's schema walk takes only EXPORTED fields and an embedded field of an
+// unexported type is not one, so openapi.yaml published this request body as
+// `{id}` alone and no generated client could send a single mutable field.
+type patchTargetIn struct {
+	// ID is the target to update, from the path.
+	ID       string   `json:"id"`
+	Label    *string  `json:"label"`
+	Kind     *string  `json:"kind"`
+	Status   *string  `json:"status"`
+	Capacity *string  `json:"capacity"`
+	Host     *string  `json:"host"`
+	Spec     *Spec    `json:"spec"`
+	Metrics  *Metrics `json:"metrics"` // present => a heartbeat; the server stamps its time
+}
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // mountTargets registers the target routes. Called from Mount BEFORE the
 // /v1/agents/:ref wildcard (Fiber matches in registration order) so "targets" is not
 // captured as a ref. The static /v1/agents/targets precedes /v1/agents/targets/:id.
 func mountTargets(s *cloud.Service[state], app cloud.Router) {
 	g := app.Group("/v1/agents")
-	g.Post("/targets", cloud.Handle(s, registerTarget))
-	g.Get("/targets", cloud.Handle(s, listTargets))
-	g.Get("/targets/:id", cloud.Handle(s, getTarget))
-	g.Patch("/targets/:id", cloud.Handle(s, patchTarget))
-	g.Delete("/targets/:id", cloud.Handle(s, deleteTarget))
+	// cloud.Bridge is installed ONCE, at the top of Mount, ahead of every leaf on
+	// this prefix. It used to be installed here, which was too late for the leaves
+	// registered before this call: fiber runs middleware in registration order, so
+	// the sessions and agent-CRUD routes above would have had no org on the context
+	// the moment they became typed ops.
+	//
+	// TYPED ops, declared on the group itself: zip.Get and friends take any
+	// Router since v1.18.0, so the prefix is part of each op's path and every
+	// projection — the document, the MCP tool, the CLI command, the call plane —
+	// follows from this one registration.
+	// Declared on the GROUP, so each op's path is the group's prefix composed with
+	// its leaf — the same composition the router does, and the identity every
+	// projection keys on. cmd/zipdoc resolves the prefix the same way as of zip
+	// v1.18.3, so the doc comments below reach the document and the MCP tool list.
+	o := targetOps{s: s}
+	zip.Post(g, "/targets", o.registerTarget)
+	zip.Get(g, "/targets", o.listTargets)
+	zip.Get(g, "/targets/:id", o.getTarget)
+	zip.Patch(g, "/targets/:id", o.patchTarget)
+	zip.Delete(g, "/targets/:id", o.deleteTarget)
 	// The #48 route-work machine surface (claim-key, claim long-poll, report)
 	// lives on the same target routes; register after the CRUD so the
 	// extra-segment paths are unambiguous.
@@ -558,46 +671,49 @@ type targetReq struct {
 	Metrics  Metrics `json:"metrics"`
 }
 
-func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// RegisterTarget registers a machine as an agent target, or re-links one that is
+// already registered. Re-linking is idempotent and keyed on org+host+owner, so a
+// machine that reconnects refreshes its own row rather than piling up duplicates;
+// it answers 200, while a first registration answers 201.
+//
+// Example: {"label": "workshop", "kind": "gpu", "host": "gpu-01"}
+func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetView, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body targetReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	label := strings.TrimSpace(body.Label)
 	if label == "" {
-		return zip.ErrBadRequest("label is required")
+		return nil, zip.ErrBadRequest("label is required")
 	}
 	if len(label) > maxTargetLabel {
-		return zip.ErrBadRequest("label too long")
+		return nil, zip.ErrBadRequest("label too long")
 	}
 	kind := strings.TrimSpace(body.Kind)
 	if kind == "" {
 		kind = TargetMachine
 	}
 	if !validTargetKind(kind) {
-		return zip.ErrBadRequest("kind must be laptop|cloud|gpu|cluster|machine")
+		return nil, zip.ErrBadRequest("kind must be laptop|cloud|gpu|cluster|machine")
 	}
 	status := strings.TrimSpace(body.Status)
 	if status == "" {
 		status = TargetOnline
 	}
 	if !validTargetStatus(status) {
-		return zip.ErrBadRequest("status must be online|offline|draining")
+		return nil, zip.ErrBadRequest("status must be online|offline|draining")
 	}
 	capacity := strings.TrimSpace(body.Capacity)
 	if len(capacity) > maxTargetCapacity {
-		return zip.ErrBadRequest("capacity too long")
+		return nil, zip.ErrBadRequest("capacity too long")
 	}
 	host := strings.TrimSpace(body.Host)
 	if len(host) > maxHost {
-		return zip.ErrBadRequest("host too long")
+		return nil, zip.ErrBadRequest("host too long")
 	}
 	if len(body.Spec.GPUs) > maxGPUs {
-		return zip.ErrBadRequest("too many gpus")
+		return nil, zip.ErrBadRequest("too many gpus")
 	}
 	spec := body.Spec.Sanitize()
 	metrics := body.Metrics.Sanitize()
@@ -610,7 +726,7 @@ func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
 	// The registering principal OWNS this machine (least privilege): only it (or an
 	// org admin) may later mint the claim key, claim runs, report, patch, or delete
 	// it. tenant() already required a validated principal, so this is non-empty.
-	owner := caller(c)
+	owner := callerOf(ctx)
 
 	// Idempotent re-link: the SAME machine (org+host+owner) refreshes its existing
 	// target rather than piling up duplicates, so mission-control shows one row per
@@ -620,75 +736,88 @@ func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
 	// machine; the caller falls through to create its own. Only an explicit host keys
 	// this — an anonymous target (no host) always creates.
 	if host != "" {
-		if existing, err := s.State.store.GetLinkableTargetByHost(c.Context(), org, host, owner); err == nil {
+		if existing, err := o.s.State.store.GetLinkableTargetByHost(ctx, org, host, owner); err == nil {
 			existing.Owner = owner // bind an adopted unowned row; no-op if already ours
 			existing.Label, existing.Kind, existing.Status, existing.Capacity = label, kind, status, capacity
 			existing.Spec, existing.Metrics, existing.MetricsAt = spec, metrics, metricsAt
 			existing.UpdatedAt = now
-			if err := s.State.store.UpdateTarget(c.Context(), existing); err != nil {
-				return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+			if err := o.s.State.store.UpdateTarget(ctx, existing); err != nil {
+				return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 			}
-			recordSample(s, existing) // a re-link carrying metrics IS a heartbeat
-			load, _ := s.State.store.SessionLoad(c.Context(), org, existing.ID, existing.Host)
-			return c.JSON(http.StatusOK, toTargetView(existing, load))
+			recordSample(o.s, existing) // a re-link carrying metrics IS a heartbeat
+			load, _ := o.s.State.store.SessionLoad(ctx, org, existing.ID, existing.Host)
+			v := toTargetView(existing, load)
+			return &v, nil
 		}
 	}
 
 	id, err := genID("tgt")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	t := Target{
 		ID: id, Org: org, Owner: owner, Label: label, Kind: kind, Status: status,
 		Capacity: capacity, Host: host, Spec: spec, Metrics: metrics, MetricsAt: metricsAt,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.State.store.CreateTarget(c.Context(), t); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+	if err := o.s.State.store.CreateTarget(ctx, t); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	recordSample(s, t) // a registration carrying metrics is the target's first sample
-	return c.JSON(http.StatusCreated, toTargetView(t, TargetLoad{}))
+	recordSample(o.s, t) // a registration carrying metrics is the target's first sample
+	// 201 only on the CREATE branch — the re-link above answers 200, which is
+	// the correct REST distinction and the reason this op cannot declare a single
+	// zip.WithStatus. See LLM.md: the conditional-status class waits for
+	// multi-status responses in zip.
+	cloud.Created(ctx)
+	v := toTargetView(t, TargetLoad{})
+	return &v, nil
 }
 
 // ---- list ----
 
-func listTargets(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.ListTargets(c.Context(), org)
+// ListTargets returns every machine registered to the caller's org, newest
+// first, each with its live session load.
+func (o targetOps) listTargets(ctx context.Context, _ *noInput) (*targetList, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	rows, err := o.s.State.store.ListTargets(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]targetView, 0, len(rows))
 	for _, t := range rows {
-		load, _ := s.State.store.SessionLoad(c.Context(), org, t.ID, t.Host)
+		load, _ := o.s.State.store.SessionLoad(ctx, org, t.ID, t.Host)
 		out = append(out, toTargetView(t, load))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"targets": out})
+	return &targetList{Targets: out}, nil
 }
 
 // ---- detail ----
 
-func getTarget(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// GetTarget returns one registered machine, with its live session load.
+//
+// Example: {"id": "tgt_1"}
+func (o targetOps) getTarget(ctx context.Context, in *targetRef) (*targetView, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := idParam(c)
+	id := in.ID
 	if len(id) > maxTargetID {
-		return zip.ErrNotFound("target not found")
+		return nil, zip.ErrNotFound("target not found")
 	}
-	t, err := s.State.store.GetTarget(c.Context(), org, id)
+	t, err := o.s.State.store.GetTarget(ctx, org, id)
 	if err == errTargetNotFound {
-		return zip.ErrNotFound("target not found")
+		return nil, zip.ErrNotFound("target not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	load, _ := s.State.store.SessionLoad(c.Context(), org, t.ID, t.Host)
-	return c.JSON(http.StatusOK, toTargetView(t, load))
+	load, _ := o.s.State.store.SessionLoad(ctx, org, t.ID, t.Host)
+	v := toTargetView(t, load)
+	return &v, nil
 }
 
 // ---- patch ----
@@ -703,71 +832,73 @@ type patchTargetReq struct {
 	Metrics  *Metrics `json:"metrics"` // present => a heartbeat; the server stamps its time
 }
 
-func patchTarget(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// PatchTarget updates one machine in place. Every field is optional; a field the
+// request omits is left alone. A metrics patch IS a heartbeat — the server stamps
+// its own clock, so a client can neither forge nor backdate staleness.
+//
+// Example: {"id": "tgt_1", "status": "draining"}
+func (o targetOps) patchTarget(ctx context.Context, in *patchTargetIn) (*targetView, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := idParam(c)
-	t, err := s.State.store.GetTarget(c.Context(), org, id)
+	id := in.ID
+	t, err := o.s.State.store.GetTarget(ctx, org, id)
 	if err == errTargetNotFound {
-		return zip.ErrNotFound("target not found")
+		return nil, zip.ErrNotFound("target not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
 	// Only the machine's owner (or an org admin) may mutate it — a member cannot
 	// reconfigure/drain another member's machine. Fail-closed to the SAME not-found
 	// an unknown id gives, so a probe learns nothing about what exists.
-	if !ownsTarget(c, t) {
-		return zip.ErrNotFound("target not found")
+	if !targetOwns(ctx, t) {
+		return nil, zip.ErrNotFound("target not found")
 	}
-	var body patchTargetReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	if body.Label != nil {
 		nl := strings.TrimSpace(*body.Label)
 		if nl == "" {
-			return zip.ErrBadRequest("label cannot be empty")
+			return nil, zip.ErrBadRequest("label cannot be empty")
 		}
 		if len(nl) > maxTargetLabel {
-			return zip.ErrBadRequest("label too long")
+			return nil, zip.ErrBadRequest("label too long")
 		}
 		t.Label = nl
 	}
 	if body.Kind != nil {
 		nk := strings.TrimSpace(*body.Kind)
 		if !validTargetKind(nk) {
-			return zip.ErrBadRequest("kind must be laptop|cloud|gpu|cluster|machine")
+			return nil, zip.ErrBadRequest("kind must be laptop|cloud|gpu|cluster|machine")
 		}
 		t.Kind = nk
 	}
 	if body.Status != nil {
 		ns := strings.TrimSpace(*body.Status)
 		if !validTargetStatus(ns) {
-			return zip.ErrBadRequest("status must be online|offline|draining")
+			return nil, zip.ErrBadRequest("status must be online|offline|draining")
 		}
 		t.Status = ns
 	}
 	if body.Capacity != nil {
 		nc := strings.TrimSpace(*body.Capacity)
 		if len(nc) > maxTargetCapacity {
-			return zip.ErrBadRequest("capacity too long")
+			return nil, zip.ErrBadRequest("capacity too long")
 		}
 		t.Capacity = nc
 	}
 	if body.Host != nil {
 		nh := strings.TrimSpace(*body.Host)
 		if len(nh) > maxHost {
-			return zip.ErrBadRequest("host too long")
+			return nil, zip.ErrBadRequest("host too long")
 		}
 		t.Host = nh
 	}
 	now := time.Now().Unix()
 	if body.Spec != nil {
 		if len(body.Spec.GPUs) > maxGPUs {
-			return zip.ErrBadRequest("too many gpus")
+			return nil, zip.ErrBadRequest("too many gpus")
 		}
 		t.Spec = body.Spec.Sanitize()
 	}
@@ -782,46 +913,52 @@ func patchTarget(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 	t.UpdatedAt = now
-	if err := s.State.store.UpdateTarget(c.Context(), t); err != nil {
+	if err := o.s.State.store.UpdateTarget(ctx, t); err != nil {
 		if err == errTargetNotFound {
-			return zip.ErrNotFound("target not found")
+			return nil, zip.ErrNotFound("target not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
 	if body.Metrics != nil {
-		recordSample(s, t) // THE heartbeat: append it to the fleet series too
+		recordSample(o.s, t) // THE heartbeat: append it to the fleet series too
 	}
-	load, _ := s.State.store.SessionLoad(c.Context(), org, t.ID, t.Host)
-	return c.JSON(http.StatusOK, toTargetView(t, load))
+	load, _ := o.s.State.store.SessionLoad(ctx, org, t.ID, t.Host)
+	v := toTargetView(t, load)
+	return &v, nil
 }
 
 // ---- delete ----
 
-func deleteTarget(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// DeleteTarget deregisters one machine. Only its owner, or an org admin, may
+// remove it; an unknown id, a cross-org id and a machine owned by someone else
+// all answer the same not-found, so a probe learns nothing about what exists.
+//
+// Example: {"id": "tgt_1"}
+func (o targetOps) deleteTarget(ctx context.Context, in *targetRef) (*targetDeleted, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := idParam(c)
+	id := in.ID
 	// Resolve + ownership-gate before deleting: only the machine's owner (or an org
 	// admin) may deregister it. A cross-org id, an unknown id, and a non-owned id all
 	// collapse to the same not-found — no oracle.
-	t, err := s.State.store.GetTarget(c.Context(), org, id)
+	t, err := o.s.State.store.GetTarget(ctx, org, id)
 	if err == errTargetNotFound {
-		return zip.ErrNotFound("target not found")
+		return nil, zip.ErrNotFound("target not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	if !ownsTarget(c, t) {
-		return zip.ErrNotFound("target not found")
+	if !targetOwns(ctx, t) {
+		return nil, zip.ErrNotFound("target not found")
 	}
-	deleted, err := s.State.store.DeleteTarget(c.Context(), org, id)
+	deleted, err := o.s.State.store.DeleteTarget(ctx, org, id)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("target not found")
+		return nil, zip.ErrNotFound("target not found")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"deleted": true, "id": id})
+	return &targetDeleted{Deleted: true, ID: id}, nil
 }

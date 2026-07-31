@@ -1075,6 +1075,34 @@ type Plugin struct {
 	// that gates everything. Set App or Mount, never both — the field IS the
 	// grant, so it is stated once and apps.TestWireFrozen fails on a new one.
 	App func(*zip.App, Deps) error
+
+	// Door is this subsystem's PER-CALLER contribution to the MCP door: the tools
+	// that exist because of who is asking, which the build-time projection cannot
+	// hold. Nil — every subsystem but one — leaves the door exactly the typed ops.
+	//
+	// It is stated HERE, at the composition root, for the reason Price and
+	// Prefixes are: what a binary serves is a property of the binary, declared
+	// where the binary is assembled, not installed from inside a Mount that runs
+	// after the door is configured.
+	Door zip.Source
+}
+
+// door is the ONE per-caller tool source of a binary. Two subsystems each
+// claiming one would be two answers to "what else can this caller call", so the
+// second is a composition error and not a merge.
+func door(plugins []Plugin) (zip.Source, error) {
+	var src zip.Source
+	var held string
+	for _, p := range plugins {
+		if p.Door == nil {
+			continue
+		}
+		if src != nil {
+			return nil, fmt.Errorf("%s and %s both declare a Door — a binary has one per-caller tool source", held, p.Name)
+		}
+		src, held = p.Door, p.Name
+	}
+	return src, nil
 }
 
 // MountAll mounts every ENABLED subsystem in specs, in slice order — the order is

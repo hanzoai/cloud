@@ -1,0 +1,100 @@
+[
+  {
+    "description": "DeleteFlagDefinition removes one flag definition by key and records the\ndeletion in the change log. A key the caller's store does not hold is a 404.",
+    "inputSchema": {
+      "properties": {
+        "key": {
+          "description": "Key is the flag key to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_flags_defs_key"
+  },
+  {
+    "description": "ListFlagActivity returns the caller's flag change log newest-first: every\ncreate, update and delete, with the actor and the time.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit caps the rows returned. 1–500; anything else takes the default 100.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_flags_activity"
+  },
+  {
+    "description": "ListFlagDefinitions returns every flag definition in the caller's (org,\nproject) store, by key, with its version and who last changed it.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_flags_defs"
+  },
+  {
+    "description": "GetFlagDefinition returns one flag definition by key, or 404 when the caller's\nstore has none under that key.",
+    "inputSchema": {
+      "properties": {
+        "key": {
+          "description": "Key is the flag key to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_flags_defs_key"
+  },
+  {
+    "description": "Health reports that the flag engine is serving. It is not gated: liveness must\nbe probe-able without a token.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_flags_health"
+  },
+  {
+    "description": "Evaluate runs the caller's flag definitions for one identity and returns the\nPostHog-shaped verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
+    "inputSchema": {
+      "properties": {
+        "distinct_id": {
+          "description": "DistinctID is the identity the flags are evaluated for. Required.",
+          "type": "string"
+        },
+        "groups": {
+          "description": "Groups are the group-level properties, keyed by group type index."
+        },
+        "person_properties": {
+          "description": "PersonProperties are the person-level properties conditions match against."
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_flags"
+  },
+  {
+    "description": "Evaluate runs the caller's flag definitions for one identity and returns the\nPostHog-shaped verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
+    "inputSchema": {
+      "properties": {
+        "distinct_id": {
+          "description": "DistinctID is the identity the flags are evaluated for. Required.",
+          "type": "string"
+        },
+        "groups": {
+          "description": "Groups are the group-level properties, keyed by group type index."
+        },
+        "person_properties": {
+          "description": "PersonProperties are the person-level properties conditions match against."
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_flags_decide"
+  },
+  {
+    "description": "PutFlagDefinition creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the PostHog-shaped\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity.",
+    "inputSchema": {},
+    "name": "put_v1_flags_defs_key"
+  }
+]

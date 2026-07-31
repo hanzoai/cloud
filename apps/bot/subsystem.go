@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// subsystem.go — /v1/bot, the node control plane in the cloud binary.
+// Package bot is /v1/bot, the node control plane: bot nodes on user machines
+// dial in and hold a socket, and an org lists its connected nodes and invokes
+// commands on one, authorized once at the socket.
 //
 //	GET  /v1/bot/connect            the socket a node dials and holds open
 //	GET  /v1/bot/nodes              this org's connected nodes
@@ -169,12 +171,35 @@ func Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// routes registers the surface. Handlers are wrapped in cloud.Terminal because
-// this subsystem mounts AFTER the commerce embed, whose /v1 error filter rewrites
-// any error a downstream handler PROPAGATES into a 500 — which would turn every
-// refusal here (the 403 that is the tenant boundary, the 404 that is a node in
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/bot openapi` and by the Dockerfile before every build.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// ops binds the mounted Service so each op can be a method value — the only bound
+// form cmd/zipdoc can lift prose from. It carries STATE and no logic.
+type ops struct{ s *cloud.Service[state] }
+
+// routes registers the surface. The untyped handlers are wrapped in cloud.Terminal
+// because this subsystem mounts AFTER the commerce embed, whose /v1 error filter
+// rewrites any error a downstream handler PROPAGATES into a 500 — which would turn
+// every refusal here (the 403 that is the tenant boundary, the 404 that is a node in
 // another org) into an indistinguishable server error.
+//
+// THREE OF THE FOUR ROUTES STAY UNTYPED, each for a wire reason named at its
+// registration below. A typed op answers ONE marshalled value at ONE declared
+// success status, and these three do not.
 func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
+	// Bridge FIRST: a typed op receives only a context, so the validated org
+	// reaches it by being parked there. fiber runs middleware in registration
+	// order, so one installed after its leaves never runs. Installed through the
+	// scope's Use, once per declared prefix, so it lands on exactly the subtrees
+	// this subsystem declares (/v1/bot/connect, /v1/bot/nodes, /v1/bot/peer/invoke)
+	// rather than on a /v1/bot the scope does not own — which would fail the mount.
+	app.Use(cloud.Bridge())
+
 	// One transport for the process, not one per dial: it carries the uptime a
 	// node reads out of the handshake, which is the process's, not the socket's.
 	ws := NodeWS(s.State.reg, WSOptions{ServerVersion: deps.Version, Logger: s.Log})
@@ -183,6 +208,10 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 	// principal: the transport reads the org off the request, and off-gateway that
 	// header is a client's claim until a principal proves otherwise — which would
 	// let anyone attach a node into any tenant.
+	//
+	// UNTYPED BY DESIGN: this is a WebSocket upgrade. It answers 101 and then the
+	// connection is a duplex frame stream for the life of the node, which is not a
+	// status a typed op can declare or a value it can return.
 	app.Get("/v1/bot/connect", cloud.Terminal(cloud.Handle(s, func(_ *cloud.Service[state], c *zip.Ctx) error {
 		if _, ok := principal.Org(c); !ok {
 			return zip.ErrForbidden("X-Org-Id required")
@@ -190,11 +219,31 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 		return ws(c)
 	})))
 
-	app.Get("/v1/bot/nodes", cloud.Terminal(cloud.Handle(s, listNodes)))
+	o := ops{s: s}
+	zip.Get(app.Group("/v1/bot"), "/nodes", o.listNodes)
+
+	// UNTYPED BY DESIGN: a policy refusal here is a 403 carrying a DOMAIN body —
+	// {"error":"denied","code":…,"reason":…} — that a client switches on, and the
+	// SAME body is returned both for a pre-flight sanitize refusal and for the
+	// node's own denial. A typed op's only way to refuse is to RETURN an error,
+	// which zip renders as its flat {status,code,error} HTTPError; writing the
+	// body from inside the op does not escape it either, because a nil Out makes
+	// zip stamp cmp.Or(op.Status, 204) over the 403. Same class as apps/ml's
+	// in-band 402 and task #78's multi-status responses. It also needs the
+	// caller's X-Device-Id (callerOf), which no In field may carry: a caller that
+	// could name its own device could pre-approve its own system.run.
 	app.Post("/v1/bot/nodes/:id/invoke", cloud.Terminal(cloud.Handle(s, invokeNode)))
 
 	// The machine hop. It carries no user identity and authenticates with its own
 	// token, so it is deliberately outside the principal gate the routes above use.
+	//
+	// UNTYPED BY DESIGN: it is a net/http handler (Registry.PeerHandler) whose
+	// refusals are text/plain — 503 "peer forwarding disabled", 403 "forbidden",
+	// 405, 400 — while every zip error is JSON, and it caps the forwarded body
+	// with http.MaxBytesReader, a bound a typed op cannot see. Its org also
+	// arrives IN THE BODY, which is correct for a replica-to-replica forward
+	// authenticated by a shared token but is exactly what an In field must never
+	// be for a caller-facing route.
 	app.Post(PeerInvokePath, zip.AdaptNetHTTP(s.State.reg.PeerHandler()))
 }
 
@@ -207,27 +256,53 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 // be ASKED to do is the allowlist and the declared commands, checked at the
 // socket, not this list.
 type nodeView struct {
-	ID          string   `json:"id"`
-	DisplayName string   `json:"displayName,omitempty"`
-	Platform    string   `json:"platform,omitempty"`
-	Version     string   `json:"version,omitempty"`
-	Caps        []string `json:"caps"`
-	Commands    []string `json:"commands"`
-	ConnectedAt string   `json:"connectedAt"`
+	// ID is the node's own identifier within the org — the value
+	// POST /v1/bot/nodes/{id}/invoke addresses it by.
+	ID string `json:"id"`
+	// DisplayName is the human name the node reported for itself.
+	DisplayName string `json:"displayName,omitempty"`
+	// Platform is the operating system and architecture the node reported.
+	Platform string `json:"platform,omitempty"`
+	// Version is the node agent's own version string.
+	Version string `json:"version,omitempty"`
+	// Caps is the capability list the node reported. It is a self-report, useful
+	// to SHOW and never load-bearing: what a node may actually be asked to do is
+	// decided at the socket by the deployment's allowlist.
+	Caps []string `json:"caps"`
+	// Commands is the command list the node reported. Same standing as Caps: a
+	// self-report, checked again at the socket before anything runs.
+	Commands []string `json:"commands"`
+	// ConnectedAt is when this node's socket was established, RFC3339 UTC.
+	ConnectedAt string `json:"connectedAt"`
 }
 
+// nodesView is the org's live node list.
 type nodesView struct {
+	// Nodes is every node of the caller's org with a live socket to THIS replica,
+	// ordered by id. A node connected to a different replica is not in it.
 	Nodes []nodeView `json:"nodes"`
 }
 
-// listNodes returns the caller org's connected nodes — and only that org's,
-// because the org is half of every key in the table it reads.
-func listNodes(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// nodesQuery is the node list's input. It carries nothing: which nodes a caller
+// sees is entirely their validated org's.
+type nodesQuery struct{}
+
+// listNodes returns the caller org's currently connected bot nodes: what each one
+// calls itself, the platform it runs on, its agent version, when its socket was
+// established, and the capabilities and commands it reported.
+//
+// Only this org's nodes are listed — the org is half of every key in the table it
+// reads — and only nodes attached to THIS replica, because the list is of live
+// sockets rather than of registrations. The capability and command lists are the
+// node's own self-report: useful to show, never load-bearing, because what a node
+// may actually be asked to do is decided at the socket against the deployment's
+// allowlist.
+func (o ops) listNodes(ctx context.Context, _ *nodesQuery) (*nodesView, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return nil, zip.ErrForbidden("X-Org-Id required")
 	}
-	sessions := s.State.reg.List(org)
+	sessions := o.s.State.reg.List(org)
 	out := make([]nodeView, 0, len(sessions))
 	for _, sess := range sessions {
 		out = append(out, nodeView{
@@ -242,7 +317,7 @@ func listNodes(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	// A map has no order; a list a human reads should have one.
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return c.JSON(http.StatusOK, nodesView{Nodes: out})
+	return &nodesView{Nodes: out}, nil
 }
 
 func nonNil(v []string) []string {

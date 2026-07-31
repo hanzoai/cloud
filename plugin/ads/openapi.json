@@ -19,20 +19,88 @@
     "/v1/ads/campaigns": {
       "get": {
         "operationId": "get_v1_ads_campaigns",
+        "summary": "listCampaigns returns the caller org's ad campaigns, most recently updated first, optionally narrowed to one lifecycle status.",
+        "description": "listCampaigns returns the caller org's ad campaigns, most recently updated\nfirst, optionally narrowed to one lifecycle status. The listing is bounded by\nthe org: another tenant's campaigns are not reachable from here at all.",
         "tags": [
           "ads"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status filters to one lifecycle state (draft, active, paused, completed).\nEmpty returns every campaign the org has.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "active"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many campaigns come back: default 200, maximum 1000. A\nvalue that is not a positive integer reads as the default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/campaignList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_ads_campaigns",
+        "summary": "createCampaign registers a new ad campaign for the caller's org and answers 201 with the stored row.",
+        "description": "createCampaign registers a new ad campaign for the caller's org and answers\n201 with the stored row. It only records the campaign — nothing is sent to the\nad network until POST /v1/ads/campaigns/{id}/launch runs it. The org is\nstamped by the server from the validated principal, so a body can never place\na campaign in another tenant.",
         "tags": [
           "ads"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": 50000,
+                "name": "Spring Launch",
+                "objective": "conversions",
+                "platform": "meta"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/campaignInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdCampaign"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/ads/campaigns/{id}": {
       "delete": {
-        "operationId": "delete_v1_ads_campaigns_by_id",
+        "operationId": "delete_v1_ads_campaigns_id",
+        "summary": "deleteCampaign removes one of the caller org's campaigns and answers 204 with no body.",
+        "description": "deleteCampaign removes one of the caller org's campaigns and answers 204 with\nno body. It deletes the stored record only: a campaign already launched keeps\nrunning on the ad network, which must be stopped there. An id another org owns\nreads as not found.",
         "tags": [
           "ads"
         ],
@@ -43,12 +111,20 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "camp_2f9c1d"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_ads_campaigns_by_id",
+        "operationId": "get_v1_ads_campaigns_id",
+        "summary": "getCampaign returns one of the caller org's campaigns.",
+        "description": "getCampaign returns one of the caller org's campaigns. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
         "tags": [
           "ads"
         ],
@@ -59,12 +135,27 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "camp_2f9c1d"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdCampaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_ads_campaigns_by_id",
+        "operationId": "put_v1_ads_campaigns_id",
+        "summary": "updateCampaign replaces the user-owned fields of one of the caller org's campaigns and answers the stored row.",
+        "description": "updateCampaign replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution.",
         "tags": [
           "ads"
         ],
@@ -75,9 +166,39 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "camp_2f9c1d"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": 75000,
+                "id": "camp_2f9c1d",
+                "name": "Spring Launch",
+                "platform": "meta",
+                "status": "paused"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/updateCampaignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdCampaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/ads/campaigns/{id}/launch": {
@@ -101,9 +222,166 @@
     "/v1/ads/summary": {
       "get": {
         "operationId": "get_v1_ads_summary",
+        "summary": "summary rolls the caller org's ad campaigns up into four numbers: how many campaigns exist, how many are active, and the summed budget and spend across all of them.",
+        "description": "summary rolls the caller org's ad campaigns up into four numbers: how many\ncampaigns exist, how many are active, and the summed budget and spend across\nall of them. Budget and spend are MINOR units (cents), the same units the\ncampaign rows carry. It counts only this org's campaigns.",
         "tags": [
           "ads"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/adSummary"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdCampaign": {
+        "properties": {
+          "account": {
+            "description": "provider ad-account ref (Meta act_\u003cid\u003e)",
+            "type": "string"
+          },
+          "budget": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "externalId": {
+            "description": "provider campaign id after a launch",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "objective": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "spend": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "adSummary": {
+        "properties": {
+          "active": {
+            "description": "Active is how many of those campaigns are in the active state.",
+            "type": "integer"
+          },
+          "budget": {
+            "description": "Budget is the summed budget of every campaign in the org, in cents.",
+            "type": "integer"
+          },
+          "campaigns": {
+            "description": "Campaigns is how many campaigns the org has, in every state.",
+            "type": "integer"
+          },
+          "spend": {
+            "description": "Spend is the summed spend of every campaign in the org, in cents.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "campaignInput": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider ad-account this campaign runs on (Meta act_\u003cid\u003e). Optional.",
+            "type": "string"
+          },
+          "budget": {
+            "description": "Budget is the campaign budget in MINOR units (cents). Negative values clamp to 0.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the campaign's display label. Required; trimmed and bounded to 1024 bytes.",
+            "type": "string"
+          },
+          "objective": {
+            "description": "Objective is the campaign goal as the provider names it. Optional, bounded to 1024 bytes.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is the ad network: meta, google, tiktok or x. Empty defaults to meta.",
+            "type": "string"
+          },
+          "spend": {
+            "description": "Spend is the amount spent so far in MINOR units (cents). Negative values clamp to 0.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the lifecycle state: draft, active, paused or completed. Empty defaults to draft.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "campaignList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching campaigns, newest-updated first.",
+            "items": {
+              "$ref": "#/components/schemas/AdCampaign"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "updateCampaignIn": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider ad-account this campaign runs on (Meta act_\u003cid\u003e). Optional.",
+            "type": "string"
+          },
+          "budget": {
+            "description": "Budget is the campaign budget in MINOR units (cents). Negative values clamp to 0.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the campaign's display label. Required; trimmed and bounded to 1024 bytes.",
+            "type": "string"
+          },
+          "objective": {
+            "description": "Objective is the campaign goal as the provider names it. Optional, bounded to 1024 bytes.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is the ad network: meta, google, tiktok or x. Empty defaults to meta.",
+            "type": "string"
+          },
+          "spend": {
+            "description": "Spend is the amount spent so far in MINOR units (cents). Negative values clamp to 0.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the lifecycle state: draft, active, paused or completed. Empty defaults to draft.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

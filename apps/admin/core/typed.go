@@ -35,7 +35,7 @@ import (
 )
 
 // The two states of the /v1 envelope every admin op answers with
-// ({ status, msg, data, data2 } — the operator transport's get<T>/getList<T> shape).
+// ({ status, msg, data, total } — the operator transport's get<T>/getList<T> shape).
 // The transport surfaces anything that is not OK as an error, never a value, so a
 // failed read is a 200 carrying Err — NOT an HTTP error status.
 const (
@@ -48,15 +48,21 @@ const (
 // document — the ops that DO take input each declare their own named In.
 type None struct{}
 
-// Total is the row count of a LIST read, as the pointer the envelope's optional data2
+// Total is the row count of a LIST read, as the pointer the envelope's optional total
 // field takes. Present — even at zero — on a success; left nil on a failure, because a
 // failed read has no count and adding the key would change the wire.
 func Total(n int) *int { return &n }
 
 // Admit is the SuperAdmin gate, called once at the top of every PLATFORM op. It is the
 // same fail-closed predicate the old Guard wrapper applied: a request whose validated
-// identity is not a SuperAdmin (X-User-IsAdmin != "true", which SanitizeIdentity sets
-// only for owner == AdminOrg) is refused 403 before any upstream is touched.
+// identity is not a SuperAdmin (principal.IsSuperAdmin — X-User-IsAdmin, which
+// SanitizeIdentity sets only for owner == AdminOrg) is refused 403 before any upstream
+// is touched.
+//
+// It gates on that ONE fact, not the platform's cloud.Super scope, which also requires
+// principal.Validated: the cockpit's second tier (AdmitScoped) and its org-scoped reads
+// resolve a SuperAdmin off the admin bit alone, so requiring the conjunct here would
+// give one surface two admin rules.
 //
 // It returns the request because an admitted op almost always needs it — to replay the
 // caller's credential to IAM, or to read the body a passthrough forwards verbatim.
@@ -65,7 +71,7 @@ func Admit(ctx context.Context) (*zip.Ctx, error) {
 	if !ok {
 		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
-	if !c.IsAdmin() {
+	if !principal.IsSuperAdmin(c) {
 		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
 	return c, nil

@@ -238,7 +238,7 @@ func TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost(t *testing.T) {
 // than only the canonical one: the request Host NEVER selects a tenant. It used to be a
 // distinction — /v1/event ignored the Host while the deprecated aliases resolved
 // anonymous traffic on a recognized brand host to that BRAND's REAL org, a real tenant
-// picked by a caller-settable header. That was the hole; the aliases now take the same
+// picked by a caller-settable header. That was the hole; every door now takes the same
 // anonymous lane, so the Host buys nothing anywhere.
 //
 // A pageview is admitted identically on a brand host and on an unrelated one, and the
@@ -248,19 +248,18 @@ func TestEvent_NoBrandHostFallback(t *testing.T) {
 	app := mountApp(t)
 	pageview := `{"batch":[{"type":"pageview"}]}`
 	commerce := `{"batch":[{"type":"event","event":"order_completed","revenue":999}]}`
-	for _, path := range []string{"/v1/event", "/v1/analytics", "/v1/tracker"} {
-		for _, host := range []string{"hanzo.ai", "zoo.ngo", "evil.example.com"} {
-			if code, body := doHost(t, app, path, "", "", host, pageview); code != http.StatusServiceUnavailable {
-				t.Fatalf("anonymous pageview %s on host %q want 503 (admitted to the public tenant), got %d (%s)",
-					path, host, code, body)
-			}
-			code, body := doHost(t, app, path, "", "", host, commerce)
-			if code != http.StatusOK {
-				t.Fatalf("anonymous commerce %s on host %q want 200 all-dropped, got %d (%s)", path, host, code, body)
-			}
-			if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-				t.Fatalf("anonymous commerce %s on host %q receipt = %+v, want accepted:0 dropped:1", path, host, r)
-			}
+	path := canonDoor
+	for _, host := range []string{"hanzo.ai", "zoo.ngo", "evil.example.com"} {
+		if code, body := doHost(t, app, path, "", "", host, pageview); code != http.StatusServiceUnavailable {
+			t.Fatalf("anonymous pageview %s on host %q want 503 (admitted to the public tenant), got %d (%s)",
+				path, host, code, body)
+		}
+		code, body := doHost(t, app, path, "", "", host, commerce)
+		if code != http.StatusOK {
+			t.Fatalf("anonymous commerce %s on host %q want 200 all-dropped, got %d (%s)", path, host, code, body)
+		}
+		if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
+			t.Fatalf("anonymous commerce %s on host %q receipt = %+v, want accepted:0 dropped:1", path, host, r)
 		}
 	}
 }

@@ -33,6 +33,16 @@ func mountApp(t *testing.T) *zip.App {
 
 func req(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
 	t.Helper()
+	code, b, _ := probe(t, app, method, path, org, body)
+	return code, b
+}
+
+// probe is req plus the response's Content-Type. The relay wire includes that
+// header — the bundle's own envelopes go out under the bare `application/json`,
+// fiber's typed JSON writer adds `; charset=utf-8` — so a test that pins the
+// refusal wire has to be able to read it.
+func probe(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte, string) {
+	t.Helper()
 	var r io.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -55,7 +65,7 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) (int, [
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, b
+	return resp.StatusCode, b, resp.Header.Get("Content-Type")
 }
 
 // TestHTTPEndToEnd is the wire proof of the full captable fold over Base: the

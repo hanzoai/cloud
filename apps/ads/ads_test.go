@@ -23,11 +23,11 @@ func TestPerOrgIsolation(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
 
-	mp, err := s.CreateCampaign(ctx, Campaign{ID: "camp_mp", Org: "maxpower", Name: "Spring Launch", Platform: "meta", Status: "active", Budget: 50000, CreatedAt: 1, UpdatedAt: 1})
+	mp, err := s.CreateCampaign(ctx, AdCampaign{ID: "camp_mp", Org: "maxpower", Name: "Spring Launch", Platform: "meta", Status: "active", Budget: 50000, CreatedAt: 1, UpdatedAt: 1})
 	if err != nil {
 		t.Fatalf("create maxpower campaign: %v", err)
 	}
-	if _, err := s.CreateCampaign(ctx, Campaign{ID: "camp_acme", Org: "acme", Name: "Acme Blast", Platform: "google", Status: "draft", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if _, err := s.CreateCampaign(ctx, AdCampaign{ID: "camp_acme", Org: "acme", Name: "Acme Blast", Platform: "google", Status: "draft", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("create acme campaign: %v", err)
 	}
 
@@ -46,7 +46,7 @@ func TestPerOrgIsolation(t *testing.T) {
 	}
 
 	// acme cannot UPDATE maxpower's campaign (cross-tenant write → not found, no mutation).
-	if _, err := s.UpdateCampaign(ctx, Campaign{ID: mp.ID, Org: "acme", Name: "HIJACK", Platform: "x", Status: "paused", UpdatedAt: 2}); !errors.Is(err, errNotFound) {
+	if _, err := s.UpdateCampaign(ctx, AdCampaign{ID: mp.ID, Org: "acme", Name: "HIJACK", Platform: "x", Status: "paused", UpdatedAt: 2}); !errors.Is(err, errNotFound) {
 		t.Fatalf("acme UPDATE maxpower campaign want errNotFound, got %v", err)
 	}
 	got, _ := s.GetCampaign(ctx, "maxpower", mp.ID)
@@ -72,7 +72,7 @@ func TestCampaignCRUD(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
 
-	created, err := s.CreateCampaign(ctx, Campaign{
+	created, err := s.CreateCampaign(ctx, AdCampaign{
 		ID: "camp_1", Org: "hanzo", Name: "Q3 Growth", Platform: "google", Status: "draft",
 		Objective: "signups", Budget: 100000, Spend: 0, CreatedAt: 10, UpdatedAt: 10,
 	})
@@ -86,7 +86,7 @@ func TestCampaignCRUD(t *testing.T) {
 	}
 
 	// Update: flip to active, add spend.
-	if _, err := s.UpdateCampaign(ctx, Campaign{
+	if _, err := s.UpdateCampaign(ctx, AdCampaign{
 		ID: created.ID, Org: "hanzo", Name: "Q3 Growth", Platform: "google", Status: "active",
 		Objective: "signups", Budget: 100000, Spend: 25000, UpdatedAt: 20,
 	}); err != nil {

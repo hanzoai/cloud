@@ -19,41 +19,946 @@
     "/v1/usage": {
       "post": {
         "operationId": "post_v1_usage",
+        "summary": "record ingests a batch of account-usage samples — what a developer's OWN AI accounts have consumed of their OWN plans, metered from each provider's own login — and appends them to the warehouse series.",
+        "description": "record ingests a batch of account-usage samples — what a developer's OWN AI\naccounts have consumed of their OWN plans, metered from each provider's own\nlogin — and appends them to the warehouse series. Answers 202.\n\nSend either a `samples` array or one sample's fields at the top level. Every\nsample needs a provider, a machine and a known window class; an unknown window or\nkind is refused rather than silently rewritten, because a dash filled with a class\nnobody reported is worse than an error. There is no timestamp field: the server\nowns the observation clock, and a sample says which window it measured with\nwindowStart or resetsAt.\n\nIt is FAIL-SOFT on storage: a warehouse outage costs a poll of history\n(stored:false), never a failed request. It records usage ONLY — the link registry\nis refreshed separately via POST /v1/links, so there is one and only one way to\nupdate an account row.",
         "tags": [
           "usage"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/reportReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reportResp"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        }
       }
     },
     "/v1/usage/analytics": {
       "get": {
         "operationId": "get_v1_usage_analytics",
+        "summary": "analytics is the entitlement-GATED per-provider breakdown of the caller org's LLM usage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads its totals from.",
+        "description": "analytics is the entitlement-GATED per-provider breakdown of the caller org's LLM\nusage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads\nits totals from. Basic own-org usage stays ungated at /v1/usage/summary.\n\nA plan that does not grant the analytics datastore is refused with 402, and an\nunresolvable plan fails closed to the free floor, which does not grant it. The\nwindow is clamped forward to the plan's retention entitlement, so a tenant can\nnever read older than its plan allows even with a custom start. The response is\nmarked no-store.\n\nINTERIM (mirrors apps/world's limits echo): no org→plan resolver exists in cloud\nyet — the subscription lookup is owned by the billing plane and the gateway\nprincipal carries no plan claim — so the caller passes the plan and the gate\nresolves THAT plan's access.",
         "tags": [
           "usage"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the exclusive window end, RFC3339. Read only when Range is custom.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "description": "Plan is the plan id whose entitlement decides access and retention. INTERIM:\ncloud has no org-to-plan resolver yet, so the caller names the plan; when\nthat resolver lands this becomes the caller org's own plan.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the window: 24h, 7d, 30d, or custom. Empty means 24h.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the inclusive window start, RFC3339. Read only when Range is\ncustom, and clamped forward to the plan's retention floor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/usageAnalyticsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/usage/analytics/access": {
       "get": {
         "operationId": "get_v1_usage_analytics_access",
+        "summary": "analyticsAccess echoes a plan's resolved analytics entitlement so a dashboard can configure itself against the LIVE catalog instead of hardcoding tier numbers.",
+        "description": "analyticsAccess echoes a plan's resolved analytics entitlement so a dashboard can\nconfigure itself against the LIVE catalog instead of hardcoding tier numbers. An\nempty plan resolves the free floor, and a catalog resolution failure serves that\nsame floor rather than erroring — so this always answers 200. It is a read-only\ncontract echo and carries no tenant data.",
         "tags": [
           "usage"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "description": "Plan is a plan id from the live @hanzo/plans catalog. Empty resolves the\nfree floor, and so does an id the catalog does not know — this never fails\non an unknown plan.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/usageAnalyticsAccess"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/usage/samples": {
       "get": {
         "operationId": "get_v1_usage_samples",
+        "summary": "samples is the PER-PROVIDER view: one connected account's own consumption of its own plan — \"my Claude Max plan is 47% through its 6h window, resets at 14:20\".",
+        "description": "samples is the PER-PROVIDER view: one connected account's own consumption of its\nown plan — \"my Claude Max plan is 47% through its 6h window, resets at 14:20\".\n\n`current` is the newest instance of each lane (the headline); `windows` is the\nhistory behind it. Both come from ONE deduped read, so they can never disagree.\nThe rows are the caller's OWN linked accounts, scoped to the validated principal\nand its subject — never another user's, and never another org's.",
         "tags": [
           "usage"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "description": "Account narrows to ONE linked account of that provider. Empty covers every\naccount the caller has linked there.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "description": "Provider is the upstream to read, e.g. anthropic. Required.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the window to read: 1h, 24h, 7d or 30d. Empty means 24h, and any\nother label is refused rather than silently replaced.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Window narrows to ONE window class: 6h, day, week or month. Empty covers\nevery class.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/dashResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/usage/summary": {
       "get": {
         "operationId": "get_v1_usage_summary",
+        "summary": "summary answers GET /v1/usage/summary: the caller's own usage footprint over one window — the categorized spend roll-up from the commerce ledger, the org's LLM usage totals from the warehouse, and the caller's OWN linked provider accounts beside the org's Hanzo-routed usage.",
+        "description": "summary answers GET /v1/usage/summary: the caller's own usage footprint over one\nwindow — the categorized spend roll-up from the commerce ledger, the org's LLM\nusage totals from the warehouse, and the caller's OWN linked provider accounts\nbeside the org's Hanzo-routed usage.\n\nEvery source degrades INDEPENDENTLY to honest zeros and says so in `sources` and\nin its own `available` flag, so a partial deploy reports \"no data\" rather than\nfabricating spend. The account rows and the Hanzo rows are concatenated and never\nsummed: a plan's percent is not money.\n\nThe response is org-scoped from the validated principal and marked no-store — a\nsigned-out caller is refused.",
         "tags": [
           "usage"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the window: 24h, 7d, 30d, or custom. Empty means 24h. A label this\nsurface does not know is refused rather than silently replaced.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the inclusive window start, RFC3339. Read only when Range is\ncustom.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the exclusive window end, RFC3339. Read only when Range is custom.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/usageSummary"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Accounts": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/SourceState",
+            "description": "Account is the state of the caller's own linked-account side."
+          },
+          "hanzo": {
+            "$ref": "#/components/schemas/SourceState",
+            "description": "Hanzo is the state of the org's Hanzo-routed side."
+          },
+          "rows": {
+            "description": "Rows is the two row sets CONCATENATED, never summed — each row says which\nside it came from. A percent is not money and a provider's own spend is not\na Hanzo charge, so adding them would produce a number that means nothing.",
+            "items": {
+              "$ref": "#/components/schemas/TotalView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "CategorySpend": {
+        "properties": {
+          "category": {
+            "description": "Category is the bucket the ledger's own tag mapped to. An untagged or\nunrecognised line gets its own honest bucket rather than being folded away.",
+            "type": "string"
+          },
+          "cents": {
+            "description": "Cents is what the org spent in that bucket over the window, in US cents.",
+            "type": "integer"
+          },
+          "count": {
+            "description": "Count is how many ledger lines rolled up into it.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "LLM": {
+        "properties": {
+          "available": {
+            "description": "Available is false when the warehouse was not connected or a query blipped.\nThe totals below are then honest zeros, NOT measured ones.",
+            "type": "boolean"
+          },
+          "completionTokens": {
+            "description": "CompletionTokens is the output half.",
+            "type": "integer"
+          },
+          "costCents": {
+            "description": "CostCents is what they cost the org, in US cents. This IS a Hanzo charge.",
+            "type": "integer"
+          },
+          "models": {
+            "description": "Models is how many distinct models were used.",
+            "type": "integer"
+          },
+          "promptTokens": {
+            "description": "PromptTokens is the input half of that total.",
+            "type": "integer"
+          },
+          "requests": {
+            "description": "Requests is how many completions the org made in the window.",
+            "type": "integer"
+          },
+          "source": {
+            "description": "Source names the warehouse table the totals came from.",
+            "type": "string"
+          },
+          "tokens": {
+            "description": "Tokens is the total tokens those completions consumed.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ProviderBreakdown": {
+        "properties": {
+          "available": {
+            "description": "Available is false when the warehouse could not be read, which means \"no\nanswer\" and NOT \"no usage\" — Items is then empty for a reason.",
+            "type": "boolean"
+          },
+          "items": {
+            "description": "Items is one row per provider, most tokens first.",
+            "items": {
+              "$ref": "#/components/schemas/ProviderRow"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "Source names the warehouse table the rows came from.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProviderRow": {
+        "properties": {
+          "costCents": {
+            "description": "CostCents is what they cost the org, in US cents.",
+            "type": "integer"
+          },
+          "provider": {
+            "description": "Provider is the upstream the requests were routed to, e.g. anthropic.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is how many completions the org made against that provider.",
+            "type": "integer"
+          },
+          "tokens": {
+            "description": "Tokens is the total tokens those completions consumed, prompt plus\ncompletion.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SourceState": {
+        "properties": {
+          "available": {
+            "description": "Available is whether this side's ledger answered. False means its rows are\nmissing, not that there were none.",
+            "type": "boolean"
+          },
+          "note": {
+            "description": "Note is the human sentence that says what this side's numbers mean, so a\nboard cannot present a plan percentage as a Hanzo charge.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope is whose rows this side carries: \"user\" or \"org\".",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the table of record the rows came from.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Sources": {
+        "properties": {
+          "commerce": {
+            "description": "Commerce is whether the billing ledger answered the spend block.",
+            "type": "boolean"
+          },
+          "warehouse": {
+            "description": "Warehouse is whether the usage warehouse answered the LLM block.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Spend": {
+        "properties": {
+          "available": {
+            "description": "Available is false when the commerce ledger was unconfigured or\nunreachable. Every number below is then an honest zero, NOT a measured one.",
+            "type": "boolean"
+          },
+          "availableCents": {
+            "description": "AvailableCents is what of that balance is still spendable.",
+            "type": "integer"
+          },
+          "balanceCents": {
+            "description": "BalanceCents is the prepaid wallet's balance, in US cents.",
+            "type": "integer"
+          },
+          "byCategory": {
+            "description": "ByCategory is the window's spend split by ledger category, largest first.",
+            "items": {
+              "$ref": "#/components/schemas/CategorySpend"
+            },
+            "type": "array"
+          },
+          "mtdCents": {
+            "description": "MTDCents is commerce's authoritative month-to-date consumed figure, which\nis a different period from the window and is not derived from it.",
+            "type": "integer"
+          },
+          "overageCents": {
+            "description": "OverageCents is month-to-date consumption beyond the plan's allowance.",
+            "type": "integer"
+          },
+          "series": {
+            "description": "Series is the window's spend over time, gap-filled at the window's\ninterval.",
+            "items": {
+              "$ref": "#/components/schemas/SpendPoint"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "Source names where the roll-up came from.",
+            "type": "string"
+          },
+          "totalCents": {
+            "description": "TotalCents is consumption over the requested window, in US cents. It is\nself-consistent with ByCategory and Series.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SpendPoint": {
+        "properties": {
+          "cents": {
+            "description": "Cents is the consumption recorded in that bucket, in US cents.",
+            "type": "integer"
+          },
+          "t": {
+            "description": "T is the bucket's start instant, RFC3339 UTC. Buckets are gap-filled, so a\nwindow with no spend still has its points.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TotalView": {
+        "properties": {
+          "confidence": {
+            "description": "Confidence says how much the counters mean; a percentage-only meter leaves\nthem at zero.",
+            "type": "string"
+          },
+          "costCents": {
+            "description": "CostCents is the row's cost in US cents. For an \"account\" row this is the\nPROVIDER's own charge, not a Hanzo one.",
+            "type": "integer"
+          },
+          "provider": {
+            "description": "Provider is the upstream the usage was measured against.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is how many requests the row covers.",
+            "type": "integer"
+          },
+          "scope": {
+            "description": "Scope is whose row it is: \"user\" for the caller's own linked accounts,\n\"org\" for the whole tenant's Hanzo-routed usage.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is where the row came from: \"account\" is the provider's own meter\non the caller's linked account, \"hanzo\" is Hanzo-routed inference. The two\nare never summed.",
+            "type": "string"
+          },
+          "tokens": {
+            "description": "Tokens is the total tokens the row covers.",
+            "type": "integer"
+          },
+          "usedPct": {
+            "description": "UsedPct is how much of a plan window the row consumed, 0–100. It is a\nshare, never money.",
+            "type": "number"
+          },
+          "window": {
+            "description": "Window is the meter window class the row rolls up, when it has one.",
+            "type": "string"
+          },
+          "windows": {
+            "description": "Windows is how many window instances rolled up into the row.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "dashResp": {
+        "properties": {
+          "account": {
+            "description": "Account is the linked account that was asked about, when one was named.",
+            "type": "string"
+          },
+          "available": {
+            "description": "Available is false when the warehouse could not be read. That means \"no\nanswer\", NOT \"no usage\" — the two lists below are then empty for a reason.",
+            "type": "boolean"
+          },
+          "current": {
+            "description": "Current is the newest window instance of each lane — the dash headline.",
+            "items": {
+              "$ref": "#/components/schemas/usageWindowView"
+            },
+            "type": "array"
+          },
+          "from": {
+            "description": "From is the inclusive start of that window, RFC3339 UTC.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the upstream that was asked about, echoed back.",
+            "type": "string"
+          },
+          "range": {
+            "description": "Range is the window that was served: 1h, 24h, 7d or 30d.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope says whose rows these are: the caller's own linked accounts.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source names the meter of record — the provider's own login, not Hanzo.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the exclusive end of that window, RFC3339 UTC.",
+            "type": "string"
+          },
+          "windows": {
+            "description": "Windows is every instance in range, newest first — the history behind it.",
+            "items": {
+              "$ref": "#/components/schemas/usageWindowView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "reportReq": {
+        "properties": {
+          "account": {
+            "description": "Account is the linked account the window was metered from.",
+            "type": "string"
+          },
+          "cachedInputTokens": {
+            "description": "CachedInputTokens is the prompt tokens the provider served from cache.",
+            "type": "integer"
+          },
+          "confidence": {
+            "description": "Confidence says how much the counters below mean.",
+            "type": "string"
+          },
+          "costCents": {
+            "description": "CostCents is what the window cost on the PROVIDER's own plan, in US cents.",
+            "type": "integer"
+          },
+          "costLimitCents": {
+            "description": "CostLimitCents is the plan's spend ceiling for the window, in US cents.",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is the provider's currency when it is not US cents.",
+            "type": "string"
+          },
+          "inputTokens": {
+            "description": "InputTokens is prompt tokens consumed in the window.",
+            "type": "integer"
+          },
+          "kind": {
+            "description": "Kind is subscription or apikey. Empty is accepted; anything else is\nrefused.",
+            "type": "string"
+          },
+          "lane": {
+            "description": "Lane is the meter lane within the account.",
+            "type": "string"
+          },
+          "machine": {
+            "description": "Machine is the host whose meter read the window. Required on every sample.",
+            "type": "string"
+          },
+          "outputTokens": {
+            "description": "OutputTokens is completion tokens produced in the window.",
+            "type": "integer"
+          },
+          "plan": {
+            "description": "Plan is the provider plan the account is on, e.g. a Claude Max plan.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the upstream the account belongs to, e.g. anthropic. Required\non every sample.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is how many requests the window covers.",
+            "type": "integer"
+          },
+          "resetsAt": {
+            "description": "ResetsAt is when the measured window rolls over, RFC3339.",
+            "type": "string"
+          },
+          "samples": {
+            "description": "Samples is the batch form: every lane a poller measured, in one call. When\nit is non-empty the top-level sample fields are ignored.",
+            "items": {
+              "$ref": "#/components/schemas/sampleReq"
+            },
+            "type": "array"
+          },
+          "synthetic": {
+            "description": "Synthetic marks a window the meter inferred rather than read.",
+            "type": "boolean"
+          },
+          "totalTokens": {
+            "description": "TotalTokens is the window's total tokens.",
+            "type": "integer"
+          },
+          "usedPct": {
+            "description": "UsedPct is how much of the window's allowance is consumed, 0–100.",
+            "type": "number"
+          },
+          "window": {
+            "description": "Window is the window class: 6h, day, week or month. Required, and a class\nthis surface does not know is refused rather than rewritten.",
+            "type": "string"
+          },
+          "windowMinutes": {
+            "description": "WindowMinutes is the window's real length in minutes, as the meter reports\nit.",
+            "type": "integer"
+          },
+          "windowStart": {
+            "description": "WindowStart is when the measured window opened, RFC3339. This is how a\nbackfill states WHICH window it measured; the server always owns the\nobservation clock, so there is no timestamp field.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reportResp": {
+        "properties": {
+          "accepted": {
+            "description": "Accepted is how many samples passed validation. Every one of them was\naccepted, or the whole report was refused — there is no partial success.",
+            "type": "integer"
+          },
+          "stored": {
+            "description": "Stored is whether the warehouse actually persisted them. False means the\ndatastore was unavailable and the poll of history was lost; the request\nstill succeeded, so a device retries without being blocked.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "sampleReq": {
+        "properties": {
+          "account": {
+            "description": "Account is the linked account the window was metered from.",
+            "type": "string"
+          },
+          "cachedInputTokens": {
+            "description": "CachedInputTokens is the prompt tokens the provider served from cache.",
+            "type": "integer"
+          },
+          "confidence": {
+            "description": "Confidence says how much the counters below mean.",
+            "type": "string"
+          },
+          "costCents": {
+            "description": "CostCents is what the window cost on the PROVIDER's own plan, in US cents.",
+            "type": "integer"
+          },
+          "costLimitCents": {
+            "description": "CostLimitCents is the plan's spend ceiling for the window, in US cents.",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is the provider's currency when it is not US cents.",
+            "type": "string"
+          },
+          "inputTokens": {
+            "description": "InputTokens is prompt tokens consumed in the window.",
+            "type": "integer"
+          },
+          "kind": {
+            "description": "Kind is subscription or apikey. Empty is accepted; anything else is\nrefused.",
+            "type": "string"
+          },
+          "lane": {
+            "description": "Lane is the meter lane within the account.",
+            "type": "string"
+          },
+          "machine": {
+            "description": "Machine is the host whose meter read the window. Required.",
+            "type": "string"
+          },
+          "outputTokens": {
+            "description": "OutputTokens is completion tokens produced in the window.",
+            "type": "integer"
+          },
+          "plan": {
+            "description": "Plan is the provider plan the account is on, e.g. a Claude Max plan.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the upstream the account belongs to, e.g. anthropic. Required.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is how many requests the window covers.",
+            "type": "integer"
+          },
+          "resetsAt": {
+            "description": "ResetsAt is when the measured window rolls over, RFC3339. Empty is\nallowed; anything else that is not RFC3339 is refused.",
+            "type": "string"
+          },
+          "synthetic": {
+            "description": "Synthetic marks a window the meter inferred rather than read.",
+            "type": "boolean"
+          },
+          "totalTokens": {
+            "description": "TotalTokens is the window's total tokens.",
+            "type": "integer"
+          },
+          "usedPct": {
+            "description": "UsedPct is how much of the window's allowance is consumed, 0–100.",
+            "type": "number"
+          },
+          "window": {
+            "description": "Window is the window class: 6h, day, week or month. Required, and a class\nthis surface does not know is refused rather than rewritten.",
+            "type": "string"
+          },
+          "windowMinutes": {
+            "description": "WindowMinutes is the window's real length in minutes, as the meter reports\nit.",
+            "type": "integer"
+          },
+          "windowStart": {
+            "description": "WindowStart is when the measured window opened, RFC3339. Empty is allowed;\nanything else that is not RFC3339 is refused.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "usageAnalyticsAccess": {
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/usageAnalyticsGrant",
+            "description": "Access is what that plan grants."
+          },
+          "plan": {
+            "description": "Plan echoes the plan id that was resolved, exactly as it was asked for.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "usageAnalyticsGrant": {
+        "properties": {
+          "datastore": {
+            "description": "Datastore is whether the plan may read GET /v1/usage/analytics at all. The\nfree floor is false, and that is what a catalog outage resolves to.",
+            "type": "boolean"
+          },
+          "export": {
+            "description": "Export is whether the plan may export the analytics it can read.",
+            "type": "boolean"
+          },
+          "retentionDays": {
+            "description": "RetentionDays is how far back the plan may read. GET /v1/usage/analytics\nclamps a custom window's start to this, so an older `start` returns the\nclamped window rather than an error.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "usageAnalyticsView": {
+        "properties": {
+          "end": {
+            "description": "End is the window's exclusive end, RFC3339 UTC.",
+            "type": "string"
+          },
+          "export": {
+            "description": "Export is whether the resolved plan allows exporting these rows.",
+            "type": "boolean"
+          },
+          "plan": {
+            "description": "Plan echoes the plan id the entitlement was resolved from.",
+            "type": "string"
+          },
+          "providers": {
+            "$ref": "#/components/schemas/ProviderBreakdown",
+            "description": "Providers is the per-provider roll-up over the window."
+          },
+          "range": {
+            "description": "Range is the window label that was served, which is what was asked for.",
+            "type": "string"
+          },
+          "retentionDays": {
+            "description": "RetentionDays is how far back the resolved plan allows reading.",
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/usageScope",
+            "description": "Scope is the tenant the rows were read under — the validated principal's org."
+          },
+          "start": {
+            "description": "Start is the window's inclusive start, RFC3339 UTC, AFTER the retention\nclamp — so it may be later than the start that was asked for.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "usageScope": {
+        "properties": {
+          "org": {
+            "description": "Org is the IAM org slug the rows were read under — the validated\nprincipal's, never a client header.",
+            "type": "string"
+          },
+          "user": {
+            "description": "User is the caller's own subject, whose linked-account rows the accounts\nblock carries. Absent on a read that is org-scoped only.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "usageSummary": {
+        "properties": {
+          "accounts": {
+            "$ref": "#/components/schemas/Accounts",
+            "description": "Accounts is the caller's own linked provider accounts beside the org's\nHanzo-routed usage, labelled row by row and never summed together."
+          },
+          "end": {
+            "description": "End is the window's exclusive end, RFC3339 UTC.",
+            "type": "string"
+          },
+          "interval": {
+            "description": "Interval is the bucket width the spend series is gap-filled at.",
+            "type": "string"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/LLM",
+            "description": "LLM is the org's Hanzo-routed inference totals from the warehouse."
+          },
+          "range": {
+            "description": "Range is the window label that was served.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/usageScope",
+            "description": "Scope is the tenant and subject the roll-up was answered for."
+          },
+          "sources": {
+            "$ref": "#/components/schemas/Sources",
+            "description": "Sources says which upstreams actually answered, so a zero can be read as\n\"no data yet\" rather than as a measurement."
+          },
+          "spend": {
+            "$ref": "#/components/schemas/Spend",
+            "description": "Spend is the categorized cost roll-up from the billing ledger."
+          },
+          "start": {
+            "description": "Start is the window's inclusive start, RFC3339 UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "usageWindowView": {
+        "properties": {
+          "account": {
+            "description": "Account is the linked provider account the window belongs to.",
+            "type": "string"
+          },
+          "cachedInputTokens": {
+            "description": "CachedInputTokens is the prompt tokens served from the provider's cache;\nomitted when unknown.",
+            "type": "integer"
+          },
+          "confidence": {
+            "description": "Confidence says how much the counters beside it mean — a meter that\nreported only a percentage leaves them at zero, and this is how a reader\ntells that from a true zero.",
+            "type": "string"
+          },
+          "costCents": {
+            "description": "CostCents is what the window cost on the PROVIDER's own plan, in US cents.\nIt is not a Hanzo charge.",
+            "type": "integer"
+          },
+          "costLimitCents": {
+            "description": "CostLimitCents is the plan's spend ceiling for the window, in US cents.",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is the provider's currency when it is not US cents.",
+            "type": "string"
+          },
+          "inputTokens": {
+            "description": "InputTokens is prompt tokens consumed in the window; omitted when unknown.",
+            "type": "integer"
+          },
+          "lane": {
+            "description": "Lane is the meter lane this instance belongs to, e.g. a provider's own\nrolling-window meter.",
+            "type": "string"
+          },
+          "machine": {
+            "description": "Machine is the host whose meter reported the window.",
+            "type": "string"
+          },
+          "outputTokens": {
+            "description": "OutputTokens is completion tokens produced in the window; omitted when\nunknown.",
+            "type": "integer"
+          },
+          "plan": {
+            "description": "Plan is the provider plan the account is on, e.g. a Claude Max plan.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is how many requests were made in the window; omitted when the\nmeter did not report it.",
+            "type": "integer"
+          },
+          "resetsAt": {
+            "description": "ResetsAt is when this window rolls over, RFC3339 UTC; omitted when unknown.",
+            "type": "string"
+          },
+          "synthetic": {
+            "description": "Synthetic marks an instance the meter inferred rather than read.",
+            "type": "boolean"
+          },
+          "totalTokens": {
+            "description": "TotalTokens is the window's total tokens; omitted when unknown.",
+            "type": "integer"
+          },
+          "usedPct": {
+            "description": "UsedPct is how much of the window's allowance is consumed, 0–100.",
+            "type": "number"
+          },
+          "window": {
+            "description": "Window is the window class: 6h, day, week or month.",
+            "type": "string"
+          },
+          "windowMinutes": {
+            "description": "WindowMinutes is the window's real length in minutes when the meter\nreported one; omitted when it did not.",
+            "type": "integer"
+          },
+          "windowStart": {
+            "description": "WindowStart is when this window opened, RFC3339 UTC; omitted when unknown.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

@@ -221,7 +221,7 @@ func subscribedTo(csv string, kind cloud.LifecycleKind) bool {
 // used verbatim as the link target.
 func lifecycleMessage(s *cloud.Service[state], ctx context.Context, ev cloud.LifecycleEvent) (string, []any) {
 	repo := slackEscape(ev.Org + "/" + ev.Repo)
-	link := cloneURL(s, ev.Org, ev.Repo)
+	link := cloneURL(s, ev.Org, ev.Project, ev.Repo)
 
 	var emoji, title, summary string
 	var fields []any

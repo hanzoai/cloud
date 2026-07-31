@@ -41,7 +41,7 @@ func (reddit) Category() string { return categoryAdvertising }
 
 func (reddit) Spec() Spec {
 	return Spec{
-		Fields: []Field{
+		Fields: []DestinationField{
 			{Key: "accountId", Label: "Ad Account ID", Required: true, Example: "a2_abc123"},
 		},
 		Secrets:  []string{"access_token"},

@@ -10,6 +10,7 @@
 // Every field is a REAL Visor value or an honest omission. Telemetry Visor does
 // not carry (GPU utilization/temperature/power) is left off the gpuView so the
 // UI shows "—", never a fabricated 0.
+
 package visor
 
 import (

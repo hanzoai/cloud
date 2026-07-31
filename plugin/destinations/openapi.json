@@ -16,17 +16,33 @@
     }
   ],
   "paths": {
-    "/v1/destinations/": {
+    "/v1/destinations": {
       "get": {
         "operationId": "get_v1_destinations",
+        "summary": "list reports every destination this deployment can forward to, each with the caller org's connection state: whether it is connected, whether it is enabled, whether a credential resolves right now, and the config fields the console renders for it.",
+        "description": "list reports every destination this deployment can forward to, each with the\ncaller org's connection state: whether it is connected, whether it is enabled,\nwhether a credential resolves right now, and the config fields the console\nrenders for it.",
         "tags": [
           "destinations"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/destinationList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/destinations/{platform}": {
       "delete": {
-        "operationId": "delete_v1_destinations_by_platform",
+        "operationId": "delete_v1_destinations_platform",
+        "summary": "disconnect forgets a destination for the caller's org: every credential held in KMS, then the stored config.",
+        "description": "disconnect forgets a destination for the caller's org: every credential held in\nKMS, then the stored config. Idempotent, and it requires org admin.",
         "tags": [
           "destinations"
         ],
@@ -35,14 +51,30 @@
             "name": "platform",
             "in": "path",
             "required": true,
+            "description": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "ga4"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/destinationDisconnected"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_destinations_by_platform",
+        "operationId": "get_v1_destinations_platform",
+        "summary": "get reports one destination's card for the caller's org — its config fields, its connection state, and whether a credential resolves right now.",
+        "description": "get reports one destination's card for the caller's org — its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
         "tags": [
           "destinations"
         ],
@@ -51,11 +83,25 @@
             "name": "platform",
             "in": "path",
             "required": true,
+            "description": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "ga4"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationStatus"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_destinations_by_platform",
@@ -71,12 +117,36 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DestinationStatus"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/destinations/{platform}/test": {
       "post": {
-        "operationId": "post_v1_destinations_by_platform_test",
+        "operationId": "post_v1_destinations_platform_test",
+        "summary": "test sends ONE synthetic pageview through the connected destination end to end and reports what the platform said.",
+        "description": "test sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
         "tags": [
           "destinations"
         ],
@@ -85,11 +155,146 @@
             "name": "platform",
             "in": "path",
             "required": true,
+            "description": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "ga4"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/destinationTest"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DestinationField": {
+        "properties": {
+          "example": {
+            "description": "a sample value of the right shape (\"G-XXXXXXX\"), when one helps",
+            "type": "string"
+          },
+          "key": {
+            "description": "the camelCase key on both the connect body and the stored config",
+            "type": "string"
+          },
+          "label": {
+            "description": "human label for the console card's input",
+            "type": "string"
+          },
+          "required": {
+            "description": "when true, a connect that leaves it empty is refused 400",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "DestinationStatus": {
+        "properties": {
+          "account": {
+            "description": "Account is the operator's own label for the connected account, as supplied on\nconnect. Absent when unset.",
+            "type": "string"
+          },
+          "category": {
+            "description": "groups the card: Analytics | Advertising",
+            "type": "string"
+          },
+          "config": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Config is the org's stored NON-SECRET configuration — the measurement/pixel\nids keyed by DestinationField.Key. A secret is never in here; secrets live in\nKMS and only their names are published, in Secrets.",
+            "type": "object"
+          },
+          "connected": {
+            "description": "Connected is true when this org has a stored row for the platform — it has\nbeen configured here at least once. It says nothing about whether a\ncredential still resolves; that is Live.",
+            "type": "boolean"
+          },
+          "enabled": {
+            "description": "Enabled is whether the fan-out forwards to this destination. False on a\ndestination that is connected but paused, and on one never connected.",
+            "type": "boolean"
+          },
+          "fields": {
+            "description": "Fields are the non-secret inputs this platform needs, which the console card\nrenders and the connect body fills.",
+            "items": {
+              "$ref": "#/components/schemas/DestinationField"
+            },
+            "type": "array"
+          },
+          "live": {
+            "description": "Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this\norg, else the integrations connection named by the platform's Fallback, else\nno credential needed at all (a public-ingest sink like Umami). False on a\nconnected destination whose secret has gone missing — Connected \u0026\u0026 !Live is\nexactly the \"reconnect me\" state.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "the platform's display name (\"Google Analytics 4\")",
+            "type": "string"
+          },
+          "platform": {
+            "description": "the platform slug, and the path segment every route addresses it by",
+            "type": "string"
+          },
+          "secrets": {
+            "description": "Secrets are the KMS secret NAMES this platform custodies for the org — names\nonly, never values. The connect body accepts each under its camelCase form.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "destinationDisconnected": {
+        "properties": {
+          "disconnected": {
+            "description": "Disconnected is true when the credentials and the row are gone.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "destinationList": {
+        "properties": {
+          "destinations": {
+            "description": "Destinations is one card per registered platform, in slug order.",
+            "items": {
+              "$ref": "#/components/schemas/DestinationStatus"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "destinationTest": {
+        "properties": {
+          "error": {
+            "description": "Error is the platform's rejection, present only on a failed send.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is the platform's own note about the send, present only on success.",
+            "type": "string"
+          },
+          "ok": {
+            "description": "OK is true when the platform accepted the synthetic event.",
+            "type": "boolean"
+          },
+          "sent": {
+            "description": "Sent is how many events the platform accepted, present only on success.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

@@ -11,6 +11,8 @@ package x402
 // later — the clean seam: x402 enforces payment; the marketplace declares what is
 // priced and who is paid.
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"encoding/hex"
@@ -24,12 +26,12 @@ import (
 	"sync"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/wallets"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -163,9 +165,23 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// ops binds the subsystem to its typed handler: a TypedHandler has no parameter
+// for the service, so it arrives as a RECEIVER and the op is a method value —
+// the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// routes registers the receipt lookup.
+//
+// Bridge FIRST, on the group and BEFORE the leaf: fiber runs middleware in
+// registration order, so one installed after its route never runs. It parks the
+// request a typed op's signature drops, which is how the op below resolves the
+// PAYER (see settlement). Serve installs one app-wide too; nesting is harmless,
+// and this package's own tests mount on a bare app with no Serve, so this install
+// is what makes them work.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/x402")
-	g.Get("/settlements/:id", cloud.Handle(s, getSettlement))
+	g := app.Group("/v1/x402", cloud.Bridge())
+	o := ops{s: s}
+	zip.Get(g, "/settlements/:id", o.settlement)
 }
 
 // Enforce is the pay-per-use middleware a priced route group applies. It is a
@@ -316,21 +332,53 @@ func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, 
 	return nil
 }
 
-// getSettlement is the receipt lookup: GET /v1/x402/settlements/:id, scoped to the
-// caller's payer org so one tenant can never read another's settlement.
-func getSettlement(s *cloud.Service[state], c *zip.Ctx) error {
-	payer := principal.Ledger(c)
+// settlementRef addresses one settlement by the id its receipt carries.
+type settlementRef struct {
+	// ID is the settlement id from the URL — the deterministic keccak(from|nonce)
+	// key an x402 receipt is issued under (the `id` field of a Receipt, and the
+	// value of the X-Payment-Response header a paid request answers with).
+	ID string `json:"id"`
+}
+
+// Settlement reads one x402 payment receipt by id.
+//
+// It is scoped to the caller's PAYER org — the ledger that was debited — so one
+// tenant can never read another's settlement, and an id that exists but belongs
+// to somebody else is a 404 exactly like one that does not exist. A caller with
+// no billable identity is refused outright.
+func (o ops) settlement(ctx context.Context, in *settlementRef) (*Receipt, error) {
+	payer := payerOf(ctx)
 	if payer == "" {
-		return zip.ErrForbidden("sign in")
+		return nil, zip.ErrForbidden("sign in")
 	}
-	st, found, err := s.State.store.getScoped(c.Context(), payer, strings.TrimSpace(c.Param("id")))
+	st, found, err := o.s.State.store.getScoped(ctx, payer, strings.TrimSpace(in.ID))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get settlement: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get settlement: %v", err)
 	}
 	if !found {
-		return zip.ErrNotFound("settlement not found")
+		return nil, zip.ErrNotFound("settlement not found")
 	}
-	return c.JSON(http.StatusOK, receiptOf(st))
+	return receiptOf(st), nil
+}
+
+// payerOf resolves the org whose LEDGER this caller spends from — the same value
+// the Enforce middleware debits and the same one every settlement row is keyed on.
+//
+// It reaches the request cloud.Bridge parked rather than asking
+// principal.OrgFrom, because the payer is not the org: principal.Ledger folds in
+// the SuperAdmin masquerade rule (X-User-IsAdmin + the X-User-Owner home claim),
+// so a platform admin inspecting another org still reads their OWN settlements.
+// OrgFrom carries only X-Org-Id and would silently widen that read to the
+// inspected tenant's receipts.
+//
+// Fails closed off the HTTP path (the CLI's LocalInvoke, where there is no
+// request): no request, no attested payer, no receipt.
+func payerOf(ctx context.Context) string {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return ""
+	}
+	return principal.Ledger(c)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

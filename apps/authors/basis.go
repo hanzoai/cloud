@@ -32,15 +32,11 @@ package authors
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/blueprint"
-	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/zap-proto/zip"
 )
 
 // The PUBLISHED formulas. Fixed literals, not strings assembled from the constants
@@ -187,74 +183,4 @@ func attributionAt(edges []DeployEvent, at int64) []map[string]any {
 		})
 	}
 	return out
-}
-
-// basis answers GET /v1/authors/basis for the validated caller — the audit trail
-// behind their own royalty, subject resolved from the principal so no id can be
-// supplied. It is a separate endpoint from the dashboard precisely because the
-// dashboard accrues lazily on read: an audit must not move the money it is auditing,
-// so this path never sweeps and calling it N times leaves the balances and the ledger
-// byte-identical.
-func basis(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("sign in to view your royalty basis")
-	}
-	period, err := periodOf(c)
-	if err != nil {
-		return err
-	}
-	ctx := c.Context()
-	a, err := s.State.store.GetByOrg(ctx, org)
-	if err == errNotFound {
-		// Honest, not a 404 — a 404 here would answer "is this org an author?".
-		return c.JSON(http.StatusOK, map[string]any{
-			"isAuthor":        false,
-			"defaultShareBps": defaultShareBps,
-		})
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
-	}
-	out, err := basisOf(s, ctx, a, period)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
-	}
-	return c.JSON(http.StatusOK, out)
-}
-
-// adminBasis answers GET /v1/admin/authors/:id/basis — the same builder, so support
-// sees exactly what the author sees. Additive; the author's own endpoint stays the
-// primary surface. SuperAdmin only.
-func adminBasis(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
-	}
-	period, err := periodOf(c)
-	if err != nil {
-		return err
-	}
-	ctx := c.Context()
-	a, err := s.State.store.GetByID(ctx, strings.TrimSpace(c.Param("id")))
-	if err == errNotFound {
-		return zip.ErrNotFound("author not found")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
-	}
-	out, err := basisOf(s, ctx, a, period)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
-	}
-	return adminOK(c, out)
-}
-
-// periodOf reads the optional ?period= narrowing, accepting only the shape the
-// accrual latch mints.
-func periodOf(c *zip.Ctx) (string, error) {
-	p := strings.TrimSpace(c.Query("period"))
-	if p != "" && !periodShape.MatchString(p) {
-		return "", zip.ErrBadRequest("period must be YYYY-MM")
-	}
-	return p, nil
 }

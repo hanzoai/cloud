@@ -85,7 +85,7 @@ type computeLeaf struct {
 //
 // Example: {"kind":"bot","org":"acme","range":"7d"}
 // Response: {"status":"ok","msg":"","data":[{"org":"acme","app":"support","project":"default",
-// "kind":"bot","machines":4,"active":2,"spendCents":900,"lastTs":"2026-07-26T18:00:00Z"}],"data2":1}
+// "kind":"bot","machines":4,"active":2,"spendCents":900,"lastTs":"2026-07-26T18:00:00Z"}],"total":1}
 func compute(ctx context.Context, in *computeIn) (*computeOut, error) {
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func compute(ctx context.Context, in *computeIn) (*computeOut, error) {
 	// Honest-empty when the warehouse is not connected or the usage table is not
 	// provisioned yet (the visor/commerce emitter is still being wired).
 	if !datastore.Ready() || !computeTableExists(ctx) {
-		return &computeOut{Status: core.OK, Data: []computeLeaf{}, Data2: core.Total(0)}, nil
+		return &computeOut{Status: core.OK, Data: []computeLeaf{}, Total: core.Total(0)}, nil
 	}
 
 	// `kind` is an OPEN LowCardinality spectrum (bot | machine | cluster | nodepool |
@@ -107,7 +107,7 @@ func compute(ctx context.Context, in *computeIn) (*computeOut, error) {
 		return &computeOut{Status: core.Err, Msg: "compute query: " + err.Error()}, nil
 	}
 	leaves := computeLeavesFromRows(rows)
-	return &computeOut{Status: core.OK, Data: leaves, Data2: core.Total(len(leaves))}, nil
+	return &computeOut{Status: core.OK, Data: leaves, Total: core.Total(len(leaves))}, nil
 }
 
 // computeIn is the GET /v1/admin/compute query.
@@ -123,13 +123,13 @@ type computeIn struct {
 	Range string `json:"range"`
 }
 
-// computeOut is the GET /v1/admin/compute envelope. data2 == len(data): the roll-up is
+// computeOut is the GET /v1/admin/compute envelope. total == len(data): the roll-up is
 // one row per group, unpaginated.
 type computeOut struct {
 	Status string        `json:"status"`
 	Msg    string        `json:"msg"`
 	Data   []computeLeaf `json:"data"`
-	Data2  *int          `json:"data2,omitempty"`
+	Total  *int          `json:"total,omitempty"`
 }
 
 // buildComputeQuery assembles the two-level roll-up (pure, so it is unit-tested).

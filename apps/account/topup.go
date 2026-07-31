@@ -47,7 +47,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/zap-proto/zip"
 )
@@ -176,9 +175,14 @@ type walletTopupReq struct {
 	// Which accepted rail the transfer was sent on, e.g. "base-usdc". The client
 	// names it rather than the server guessing from the tx: the same address can
 	// exist on several chains, so inferring would risk crediting against the wrong
-	// treasury.
-	Rail        string `json:"rail"`
-	TxHash      string `json:"txHash"`
+	// treasury. It may be omitted only while exactly one rail is enabled.
+	Rail string `json:"rail"`
+	// TxHash is the hash of the ERC-20 transfer that was already sent to the rail's
+	// treasury. The receipt is read from that chain; nothing is credited that the
+	// chain did not confirm.
+	TxHash string `json:"txHash"`
+	// FromAddress is the wallet the transfer was sent from. Optional; when given it
+	// must match the transfer's on-chain sender.
 	FromAddress string `json:"fromAddress"`
 	// A client-supplied `userId` is intentionally NOT read — the credit lands on the
 	// validated caller (no IDOR). Neither is any amount: the credit is the ON-CHAIN
@@ -186,15 +190,26 @@ type walletTopupReq struct {
 }
 
 type walletTopupResp struct {
-	CreditedCents int64  `json:"creditedCents"`
-	Balance       int64  `json:"balance"`
-	TxHash        string `json:"txHash"`
-	Status        string `json:"status"`
+	// CreditedCents is the USD credit recorded, derived from the ON-CHAIN value
+	// using the token's own decimals — never a client-supplied number.
+	CreditedCents int64 `json:"creditedCents"`
+	// Balance is the org's new USD-ledger balance in cents. Best-effort: a read
+	// failure reports 0, and the credit has already landed either way.
+	Balance int64 `json:"balance"`
+	// TxHash is the transfer that was credited.
+	TxHash string `json:"txHash"`
+	// Status is how commerce recorded the payment.
+	Status string `json:"status"`
 }
 
-// topupRails answers GET /v1/commerce/topup/rails: the accepted (chain, token,
-// treasury) set, so the browser can render "send USDC here" WITHOUT the addresses
-// being baked into its bundle.
+// railList is the accepted-rail set a browser reads to render the send UI.
+type railList struct {
+	// Rails is every (chain, token, treasury) triple this deployment accepts.
+	Rails []railView `json:"rails"`
+}
+
+// TopupRails lists the accepted (chain, token, treasury) triples, so a browser can
+// render "send USDC here" without the addresses being baked into its bundle.
 //
 // This exists because the console previously gated its top-up UI on
 // NEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants. Enabling a rail
@@ -203,8 +218,9 @@ type walletTopupResp struct {
 // Serving the set at runtime keeps ONE source of truth (the server's config) and
 // lets a rail be switched on without shipping a bundle.
 //
-// Everything here is public on-chain data; no secret is exposed.
-func topupRails(s *cloud.Service[state], c *zip.Ctx) error {
+// Everything here is public on-chain data; no secret is exposed, and the set is
+// empty on a deployment that accepts no crypto rail.
+func (o ops) topupRails(ctx context.Context, _ *noInput) (*railList, error) {
 	cfg := loadTopupConfig()
 	// Encode as [] rather than null, so clients can just read .length.
 	view := make([]railView, 0, len(cfg.rails))
@@ -214,7 +230,7 @@ func topupRails(s *cloud.Service[state], c *zip.Ctx) error {
 			Token: r.Token, Symbol: r.Symbol, Decimals: r.Decimals, Treasury: r.Treasury,
 		})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"rails": view})
+	return &railList{Rails: view}, nil
 }
 
 // railView is what a browser is told about a rail: everything needed to send funds
@@ -222,37 +238,53 @@ func topupRails(s *cloud.Service[state], c *zip.Ctx) error {
 // config (an RPC URL, a key reference, a provider credential) cannot leak by merely
 // existing — a new field is published only if it is added here on purpose.
 type railView struct {
-	ID       string `json:"id"`
-	Chain    string `json:"chain"`
-	ChainID  int64  `json:"chainId"`
-	Token    string `json:"token"`
-	Symbol   string `json:"symbol"`
-	Decimals int    `json:"decimals"`
+	// ID is the stable rail id to name when submitting a transfer, e.g. "base-usdc".
+	ID string `json:"id"`
+	// Chain is the human chain name, e.g. "Base".
+	Chain string `json:"chain"`
+	// ChainID is the EIP-155 chain id the wallet must be on.
+	ChainID int64 `json:"chainId"`
+	// Token is the ERC-20 contract address to transfer.
+	Token string `json:"token"`
+	// Symbol is the display symbol, e.g. "USDC".
+	Symbol string `json:"symbol"`
+	// Decimals is the token's decimal places — 6 for USDC, 18 for an 18-decimal
+	// token. Cents are derived per-rail from it.
+	Decimals int `json:"decimals"`
+	// Treasury is the address on this chain to send funds to.
 	Treasury string `json:"treasury"`
 }
 
-// walletTopup verifies a sent stablecoin transfer on-chain and credits the caller's
-// org. The credited amount is the ON-CHAIN value, never a client number.
-func walletTopup(s *cloud.Service[state], c *zip.Ctx) error {
+// WalletTopup credits the caller's org for a stablecoin transfer they already sent
+// to the treasury. It reads the receipt from that rail's chain, confirms a mined,
+// successful ERC-20 Transfer to the rail's treasury, derives USD cents from the
+// on-chain value using the token's own decimals, records the credit, and returns
+// the amount plus the new balance.
+//
+// The credited amount is the ON-CHAIN value, never a number the caller sends, and
+// the credit lands on the caller's own validated org — there is no way to name a
+// third-party subject. Nothing is credited that the chain did not confirm: a
+// missing, failed or non-matching transaction is refused, and a deployment with no
+// payment rail enabled says so rather than inventing a credit.
+//
+// Example: {"rail": "base-usdc", "txHash": "0x0000000000000000000000000000000000000000000000000000000000000001"}
+func (o ops) walletTopup(ctx context.Context, in *walletTopupReq) (*walletTopupResp, error) {
 	cfg := loadTopupConfig()
 	// No accepted rail ⇒ honest "not configured yet" rather than a fake credit.
 	if !cfg.configured() {
-		return zip.Errorf(http.StatusNotImplemented, "crypto top-up is not configured yet (no payment rail is enabled)")
+		return nil, zip.Errorf(http.StatusNotImplemented, "crypto top-up is not configured yet (no payment rail is enabled)")
 	}
 
 	// The credit lands on the VALIDATED caller's own org (X-Org-Id) — require it.
-	cr, ok := resolveCaller(c, true)
+	cr, c, ok := requestCaller(ctx, true)
 	if !ok {
-		return zip.ErrForbidden("sign in to top up your balance")
+		return nil, zip.ErrForbidden("sign in to top up your balance")
 	}
 
-	var body walletTopupReq
-	if err := c.Bind(&body); err != nil {
-		return zip.ErrBadRequest("invalid JSON body")
-	}
+	body := *in
 	txHash := strings.TrimSpace(body.TxHash)
 	if !txHashRe.MatchString(txHash) {
-		return zip.ErrBadRequest("a valid transaction hash is required")
+		return nil, zip.ErrBadRequest("a valid transaction hash is required")
 	}
 	// With exactly one rail the client may omit it; naming it is required as soon as
 	// there is a choice, so a transfer can never be checked against another chain's
@@ -263,25 +295,27 @@ func walletTopup(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	rl, ok := cfg.find(railID)
 	if !ok {
-		return zip.ErrBadRequest("unknown payment rail: name one from GET /v1/commerce/topup/rails")
+		return nil, zip.ErrBadRequest("unknown payment rail: name one from GET /v1/commerce/topup/rails")
 	}
 
+	rctx := c.Context()
+
 	// ── 1. Verify the transfer on-chain ──────────────────────────────────────────
-	cents, verifiedFrom, herr := verifyTransfer(c.Context(), rl, txHash, strings.TrimSpace(body.FromAddress))
+	cents, verifiedFrom, herr := verifyTransfer(rctx, rl, txHash, strings.TrimSpace(body.FromAddress))
 	if herr != nil {
-		return herr
+		return nil, herr
 	}
 
 	// ── 2. Record to commerce as a crypto payment on this rail (S2S) ─────────────
-	status, herr := recordCryptoPayment(c.Context(), cfg, rl, cr, txHash, verifiedFrom, cents)
+	status, herr := recordCryptoPayment(rctx, cfg, rl, cr, txHash, verifiedFrom, cents)
 	if herr != nil {
-		return herr
+		return nil, herr
 	}
 
 	// New USD-ledger balance — best-effort; the credit already landed.
-	balance := commerceBalanceCents(c.Context(), cfg, cr)
+	balance := commerceBalanceCents(rctx, cfg, cr)
 
-	return c.JSON(http.StatusOK, walletTopupResp{CreditedCents: cents, Balance: balance, TxHash: txHash, Status: status})
+	return &walletTopupResp{CreditedCents: cents, Balance: balance, TxHash: txHash, Status: status}, nil
 }
 
 // ── on-chain verification (plain JSON-RPC) ───────────────────────────────────────
@@ -461,6 +495,17 @@ func commerceBalanceCents(ctx context.Context, cfg topupConfig, cr caller) int64
 // body + status. Mirrors clients/admin/commerce.go's auth. Takes (base, token) rather
 // than the HUSD topupConfig so both the wallet top-up AND the /v1/billing/* data bridge
 // (billing.go) share this ONE S2S transport.
+//
+// It is a JSON transport, NOT a transparent proxy, and the two bridges that share it
+// inherit exactly that. Three facts, none of them accidental and none repaired here:
+// the request Content-Type is SET to application/json whenever there is a body (so a
+// form/multipart/binary body forwards its bytes under a JSON label), the response
+// headers are not returned at all (so an upstream Content-Type or
+// Content-Disposition cannot be relayed — see billing.go's header note), and the
+// response body is capped at 1 MiB by the LimitReader below, which TRUNCATES a
+// larger answer and reports it with the upstream's own 200. That cap is right for
+// the JSON callers it was written for and wrong for a PDF, which is the one
+// non-JSON payload in billingForwardable.
 func commerceDo(ctx context.Context, base, token, method, path string, q url.Values, org string, body []byte) ([]byte, int, error) {
 	if base == "" {
 		return nil, 0, fmt.Errorf("commerce not configured")

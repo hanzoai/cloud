@@ -16,18 +16,48 @@
     }
   ],
   "paths": {
-    "/v1/prefs/": {
+    "/v1/prefs": {
       "get": {
         "operationId": "get_v1_prefs",
+        "summary": "GetPrefs returns the signed-in caller's OWN preference document — the theme, density and pinned nav that follow them across every Hanzo surface.",
+        "description": "GetPrefs returns the signed-in caller's OWN preference document — the theme,\ndensity and pinned nav that follow them across every Hanzo surface. There is no\npath to another user's preferences: not for an org admin, not for a platform\nSuperAdmin, because the subject is built from the validated credential and is the\nmandatory predicate on the read. A caller who has never saved anything gets an\nempty document at 200, never a 404, so the user menu always renders.",
         "tags": [
           "prefs"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/prefsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
         "operationId": "patch_v1_prefs",
         "tags": [
           "prefs"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "prefsView": {
+        "properties": {
+          "prefs": {
+            "description": "Prefs is the caller's preference document: an opaque JSON object whose keys\nthe surfaces own, returned verbatim. `{}` when nothing has been saved."
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the document was last written, unix seconds. Absent when\nnothing has been saved.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

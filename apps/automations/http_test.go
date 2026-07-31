@@ -21,7 +21,6 @@ func TestOrgGating403(t *testing.T) {
 		{http.MethodGet, "/v1/automations/flows/x"},
 		{http.MethodGet, "/v1/automations/runs"},
 		{http.MethodPost, "/v1/automations/flows/x/run"},
-		{http.MethodPost, "/v1/automations/mcp"},
 	}
 	for _, g := range gated {
 		if r := req(t, app, g.method, g.path, "", nil); r.Code != http.StatusForbidden {

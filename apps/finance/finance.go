@@ -1,8 +1,9 @@
-// Package finance is the ZAP-native money subsystem: a per-CUSTOMER, double-entry
-// PREPAID WALLET on the native ledger core. It is the in-process implementation of
-// cloud's types.FinanceClient (package alias finance.Client, mirroring commerce.Client)
-// — the ONE money seam the ai prepaid gate, the admin grant, and the edge meter all
-// bill through.
+// Package finance is the prepaid wallet: a per-CUSTOMER, double-entry balance on the
+// native ledger core (apps/treasury/ledger, the same engine the platform reserve posts
+// to). It registers NO routes and NO ops — it is the in-process implementation of
+// cloud's types.FinanceClient (package alias finance.Client, mirroring commerce.Client),
+// the ONE money seam the ai prepaid gate, the admin grant, commerce's credit mint and
+// the edge meter all bill through; billing is the customer-facing door onto it.
 //
 // ONE LIGHTWEIGHT FILE PER ORG. Each org's books are an isolated Hanzo Base (SQLite)
 // file at <dataDir>/orgs/<org>/finance.db (a separate <...>/finance-test.db for sandbox
@@ -176,7 +177,7 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 				return nil // idempotent replay — already credited once
 			}
 		}
-		e := ledger.Entry{
+		e := ledger.JournalEntry{
 			ID:        id,
 			Kind:      kindDeposit,
 			Ref:       ref,
@@ -258,7 +259,7 @@ func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) er
 		if ref == "" {
 			ref = id // no request id → fresh ref (non-idempotent, still a single debit)
 		}
-		e := ledger.Entry{
+		e := ledger.JournalEntry{
 			ID:        id,
 			Kind:      kindUsage,
 			Ref:       ref,

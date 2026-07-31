@@ -1,0 +1,79 @@
+[
+  {
+    "description": "limits echoes a World plan's rate limits, alert quota and model-API grant, read\nstraight from the live @hanzo/plans catalog, so agents and dashboards configure\nthemselves against the catalog instead of hardcoding tier numbers.\n\nAn empty or unknown plan resolves world-free, and a catalog failure serves that\nsame free floor rather than erroring — so this always answers 200, and it can only\never under-grant. It reports the contract; it does not enforce it.",
+    "inputSchema": {
+      "properties": {
+        "plan": {
+          "description": "Plan is a World plan id from the live @hanzo/plans catalog, e.g. world-pro.\nEmpty means world-free, and so does an id the catalog does not know — this\nnever fails on an unknown plan.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_world_limits"
+  },
+  {
+    "description": "news returns the caller's merged world-news feed: every source their project's\npipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed —\nfetched concurrently, narrowed by the pipeline's keyword/region/source filters,\ndeduplicated by link and sorted freshest first, capped at 50 items.\n\nA project with no stored pipeline gets a sensible default set of world feeds\nrather than an empty answer. A source that fails or times out is SKIPPED: the feed\ndegrades to honest partial results and never 5xxs because one outlet was down.\nReading also publishes the result to the /v1/world/stream subscribers of the same\n(org, project), so a dashboard's own refresh updates every open tab.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_world_news"
+  },
+  {
+    "description": "pipeline returns the caller project's news pipeline: which feeds it reads and how\nthe merged result is filtered. A project that has never written one is answered\nwith the built-in world feeds and `default: true`, so a fresh project sees the\nsame feed /v1/world/news would actually serve rather than an empty configuration.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_world_pipeline"
+  },
+  {
+    "description": "setPipeline replaces the caller project's news pipeline and returns what was\nstored. It is a WHOLE replacement, not a patch: a field the request leaves out is\nstored empty, so sending only feeds clears the filters.\n\nEvery feed URL is validated HERE, at the write boundary — http(s) only, and the\nhost must be on the server's allowlist — so a stored pipeline can never name a\nhost the fetcher would later refuse, and the allowlist is one decision in one\nplace rather than a check at each fetch.",
+    "inputSchema": {
+      "$defs": {
+        "Filters": {
+          "properties": {
+            "keywords": {
+              "description": "Keywords keeps only items whose TITLE contains one of these,\ncase-insensitively. They are also the GDELT queries the feed fans out to,\none per keyword of three characters or more — so a keyword both widens what\nis fetched and narrows what is kept.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "regions": {
+              "description": "Regions keeps only items whose TITLE contains one of these, matched\ncase-insensitively as a substring. Empty keeps every region.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "sources": {
+              "description": "Sources keeps only items whose outlet name contains one of these,\ncase-insensitively. Empty keeps every outlet.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "feeds": {
+          "description": "Feeds is the RSS/Atom feed URLs to read, at most 64. Each must be an\nhttp(s) URL whose host is on the server's allowlist — the SSRF guard is\napplied here, at the write, so a stored pipeline can never name a host the\nfetcher would refuse. Blank entries are dropped and duplicates collapse.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "filters": {
+          "$ref": "#/$defs/Filters",
+          "description": "Filters narrows the merged feed. Terms are trimmed, de-duplicated\ncase-insensitively, and capped at 64 per axis."
+        }
+      },
+      "type": "object"
+    },
+    "name": "put_v1_world_pipeline"
+  }
+]
