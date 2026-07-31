@@ -16946,6 +16946,137 @@ components:
             the owner co-signs it out of band.
           type: string
       type: object
+    registryImage:
+      properties:
+        name:
+          description: Name is the repository name inside the org's namespace (e.g.
+            "cloud").
+          type: string
+        ref:
+          description: |-
+            Ref is the full pullable reference (host + org + name) the docker CLI
+            takes verbatim.
+          type: string
+      type: object
+    registryImageList:
+      properties:
+        data:
+          description: Data is the org's repositories.
+          items:
+            $ref: '#/components/schemas/registryImage'
+          type: array
+        truncated:
+          description: |-
+            Truncated is true when the catalog walk hit its page bound before the
+            registry was exhausted — the list is a prefix, not the whole.
+          type: boolean
+      type: object
+    registryMint:
+      properties:
+        image:
+          description: Image is the repository name inside the org's namespace (e.g.
+            "cloud").
+          type: string
+      type: object
+    registryPackage:
+      properties:
+        description:
+          description: Description says what the package is, as published.
+          type: string
+        name:
+          description: Name is the package name (`<org>` or `@<org>/…`).
+          type: string
+        updated:
+          description: Updated is when the package last changed, as the registry reports
+            it.
+          type: string
+        version:
+          description: Version is the latest published version.
+          type: string
+      type: object
+    registryPackageList:
+      properties:
+        data:
+          description: Data is the packages in the org's scope.
+          items:
+            $ref: '#/components/schemas/registryPackage'
+          type: array
+      type: object
+    registryProject:
+      properties:
+        images:
+          description: Images is how many of the org's repositories the OCI catalog
+            holds.
+          type: integer
+        packages:
+          description: Packages is how many of the org's packages the npm registry
+            reports.
+          type: integer
+        project:
+          description: |-
+            Project is the namespace: the org's slug, which prefixes its image names
+            and scopes its npm packages.
+          type: string
+      type: object
+    registryProjectList:
+      properties:
+        data:
+          description: Data is the namespaces visible to the caller.
+          items:
+            $ref: '#/components/schemas/registryProject'
+          type: array
+      type: object
+    registryStatus:
+      properties:
+        host:
+          description: Host is the OCI registry host clients push to and pull from.
+          type: string
+        oci:
+          description: Oci is true when the OCI registry answered its /v2/ probe.
+          type: boolean
+        pkg:
+          description: Pkg is true when the npm registry answered its ping.
+          type: boolean
+        pkgHost:
+          description: PkgHost is the npm registry host.
+          type: string
+        realm:
+          description: |-
+            Realm is the token endpoint the OCI registry's challenge advertises,
+            present only when the registry is reachable and auth-gated.
+          type: string
+        service:
+          description: Service is the token service name from the same challenge.
+          type: string
+      type: object
+    registryTagList:
+      properties:
+        data:
+          description: Data is the tag names, as the registry reports them.
+          items:
+            type: string
+          type: array
+        image:
+          description: Image is the repository name inside the org's namespace.
+          type: string
+        ref:
+          description: Ref is the full repository reference the tags belong to.
+          type: string
+      type: object
+    registryToken:
+      properties:
+        expires:
+          description: Expires is the token's lifetime in seconds.
+          type: integer
+        ref:
+          description: Ref is the one repository reference the token can pull.
+          type: string
+        token:
+          description: |-
+            Token is the bearer to present on the OCI wire
+            (`Authorization: Bearer …` against the host's /v2/ routes).
+          type: string
+      type: object
     replaceKitIn:
       properties:
         category:
@@ -45290,6 +45421,148 @@ paths:
       summary: Records that the caller's org signed up through a referral code.
       tags:
       - referrals
+  /v1/registry/images:
+    get:
+      description: |-
+        Images lists the org's container repositories, read live from the OCI
+        catalog and filtered server-side to the org's namespace — the page can only
+        ever hold the caller's own images.
+      operationId: get_v1_registry_images
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registryImageList'
+          description: ok
+      summary: Images lists the org's container repositories, read live from the OCI
+        catalog and filtered server-side to the org's namespace — the page can only
+        ever hold the caller's own images.
+      tags:
+      - registry
+  /v1/registry/packages:
+    get:
+      description: |-
+        Packages lists the org's npm packages — `<org>` and `@<org>/…` — from the
+        npm registry's search index, optionally narrowed by a query within that
+        scope. The org boundary is applied server-side after the search, so a query
+        can never widen it.
+      operationId: get_v1_registry_packages
+      parameters:
+      - description: |-
+          Query narrows the listing within the org's scope when present; the org
+          boundary itself is never widened by it. It rides the query string.
+        in: query
+        name: query
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registryPackageList'
+          description: ok
+      summary: Packages lists the org's npm packages — `<org>` and `@<org>/…` — from
+        the npm registry's search index, optionally narrowed by a query within that
+        scope.
+      tags:
+      - registry
+  /v1/registry/projects:
+    get:
+      description: |-
+        Projects lists the namespaces the caller can see with what each holds: the
+        org's slug, its repository count on the OCI catalog, and its package count
+        on the npm registry. Today that is exactly one row — the caller's org.
+      operationId: get_v1_registry_projects
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registryProjectList'
+          description: ok
+      summary: 'Projects lists the namespaces the caller can see with what each holds:
+        the org''s slug, its repository count on the OCI catalog, and its package
+        count on the npm registry.'
+      tags:
+      - registry
+  /v1/registry/status:
+    get:
+      description: |-
+        Status reports whether the OCI and npm registries are reachable and, when
+        the OCI half is auth-gated, which token realm its challenge advertises — an
+        honest lens for "is the registry plane up", never a fabricated ok.
+      operationId: get_v1_registry_status
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registryStatus'
+          description: ok
+      summary: Status reports whether the OCI and npm registries are reachable and,
+        when the OCI half is auth-gated, which token realm its challenge advertises
+        — an honest lens for "is the registry plane up", never a fabricated ok.
+      tags:
+      - registry
+  /v1/registry/tags:
+    get:
+      description: |-
+        Tags lists one org-owned repository's tags, read live from the OCI registry.
+        The repository is addressed inside the org's namespace — a name outside it
+        cannot be expressed, and an unknown one answers 404.
+      operationId: get_v1_registry_tags
+      parameters:
+      - description: |-
+          Image is the repository name inside the org's namespace, as returned by
+          the images op. It rides the query string.
+        in: query
+        name: image
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registryTagList'
+          description: ok
+      summary: Tags lists one org-owned repository's tags, read live from the OCI
+        registry.
+      tags:
+      - registry
+  /v1/registry/token:
+    post:
+      description: |-
+        Token mints a short-lived, pull-only registry token for exactly one of the
+        org's images, through the same IAM realm the docker CLI authenticates
+        against. The scope is pinned server-side to `<org>/<image>` with the `pull`
+        action — no field exists to name another org's image or ask for push. Use it
+        as `Authorization: Bearer …` on the OCI wire; it expires in minutes.
+      operationId: post_v1_registry_token
+      requestBody:
+        content:
+          application/json:
+            example:
+              image: cloud
+            schema:
+              $ref: '#/components/schemas/registryMint'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registryToken'
+          description: ok
+      summary: Token mints a short-lived, pull-only registry token for exactly one
+        of the org's images, through the same IAM realm the docker CLI authenticates
+        against.
+      tags:
+      - registry
   /v1/releases:
     get:
       operationId: get_v1_releases
@@ -50364,6 +50637,10 @@ tags:
     cloud credit once the referee actually spends — at-most-once, never on signup
     alone.'
   name: referrals
+- description: 'Package registry is Hanzo Registry: the management plane over the
+    platform''s artifact registries — list projects, container images, tags and npm
+    packages, and mint scoped pull tokens, on the unified /v1 plane.'
+  name: registry
 - name: releases
 - description: 'Package research mounts the Hanzo Cloud /v1/research/* surface: the
     R&D EVIDENCE plane (HIP-0512 §"Hanzo Research").'
