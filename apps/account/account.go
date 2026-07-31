@@ -1,6 +1,6 @@
 // Package account mounts the signed-in caller's OWN account self-service surface
 // natively in the unified cloud binary — the Go port of the console's two NON-proxy
-// Next server routes (app/keys + app/onboard) plus the money/store data bridges the
+// Next server routes (app/keys + app/onboard) plus the server-side money work the
 // statically-exported console needs (task #41, "True 1-binary FE"). It replaces the
 // retired /v1/console/* namespace: "console" is just the cloud FE name, so there is NO
 // /v1/console API domain — every route lives on its REAL domain.
@@ -9,10 +9,22 @@
 // reverse-proxies — app/cloud, app/ai — vanish in the one-binary model: the SPA calls
 // the canonical /v1/* on its own origin and the already-mounted subsystems answer. The
 // routes ported HERE do REAL server work a static SPA cannot: keys/onboard run
-// privileged IAM logic as the confidential `hanzo-console` client; embed-status/topup
-// do server-side verification; and the billing/commerce bridges inject the commerce
-// SERVICE token and pin the caller's own subject SERVER-SIDE (a passthrough would leak
-// cross-tenant ledgers). Each has no pure-proxy equivalent, so it must be ported.
+// privileged IAM logic as the confidential `hanzo-console` client, and
+// embed-status/topup do server-side verification. Each has no pure-proxy equivalent,
+// so it must be ported.
+//
+// The billing and store DATA are not among them, and the difference is the whole
+// lesson. They were ported as two catch-all forwarders — GET|POST /v1/billing/* and
+// full-CRUD /v1/commerce/*, mounted last (order 122), re-serving families other apps
+// already own by re-dialing them over HTTP with the admin COMMERCE_SERVICE_TOKEN. That
+// token satisfies commerce's MayMintMoney, so forwarding WAS authorization and the only
+// thing standing between a signed-in member and the mint routes was a hand-maintained
+// allowlist. They are gone. Every endpoint either forwarded is served natively — by
+// billing (order 121) or by the co-resident commerce embed (order 100) — at a prefix the
+// manifest names DEEPER than the bare stem, so each already won the route and the
+// forwarder saw none of them. What survives here is the part that was never the proxy:
+// the subject-pinning those native routes apply themselves (billing_coresident.go's
+// PinBillingSubject) and the S2S token check they gate on (billing.go's IsServiceToken).
 //
 // SURFACE — each route on its REAL domain (every one requires a VALIDATED principal — a
 // gateway-minted, IAM-verified X-User-Id; a client-forged X-Org-Id on the bearer-less
@@ -26,40 +38,26 @@
 //	GET    /v1/csrf                  — mint the anti-CSRF token the SPA echoes on money writes (csrf.go).
 //	GET    /v1/embed-status          — brand-app embed entitlement + reachability probe (embed.go).
 //	POST   /v1/commerce/topup/wallet — HUSD on-chain verify → commerce credit (topup.go).
-//	GET    /v1/billing/*             — per-tenant billing read, SCOPED to the validated caller (billing.go).
-//	…      /v1/commerce/*            — per-tenant STORE CRUD, SCOPED to the validated caller's org (commerce.go).
+//	GET    /v1/commerce/topup/rails  — the accepted on-chain rails the send UI renders (topup.go).
 //
-// TWO SUBSYSTEM REGISTRATIONS FROM ONE PACKAGE. A route-ordering constraint forces the
-// split (Fiber matches by registration order — the earliest-mounted route wins):
-//   - `account` (order 48) mounts the SPECIFIC self-service routes. keys/onboard MUST
-//     win over clients/iam's /v1/iam/* WILDCARD (order 50), and topup MUST win over the
-//     commerce embed (order 100) + the /v1/commerce/* bridge — so they mount EARLY.
-//   - `account-bridge` (order 122) mounts the CATCH-ALL data bridges. /v1/billing/* must
-//     sit AFTER clients/billing's specific routes (order 121) and /v1/commerce/* after
-//     the commerce embed (order 100) — so they mount LATE.
-//
-// Both share one state shape + the process-wide CSRF key (csrf.go), so a token minted at
-// /v1/csrf verifies on the /v1/billing|commerce writes.
+// ONE SUBSYSTEM REGISTRATION, at order 48. The order is a convention, not the
+// protection: the fiber fork inserts endpoint routes MOST-SPECIFIC-FIRST regardless of
+// when they were registered (zap-proto/fiber router_precedence.go — ServeMux semantics,
+// a static literal beats a param beats a greedy wildcard), so /v1/keys and
+// /v1/commerce/topup/wallet win over clients/iam's /v1/iam/* and the commerce embed
+// because they are DEEPER, not because they mount earlier. Specificity is also why the
+// retired bridge's two bare stems could never have shadowed anything — and why nothing
+// needed to replace them when they went.
 //
 // TYPED OPS. Every ADDRESSABLE route here is a typed op (zip.Get/Post/Delete with
 // real In/Out types) — eleven of them — so each is ONE registry entry the REST
 // route, the OpenAPI operation's schema and prose, the MCP tool, the CLI command
-// and every generated SDK method all derive from. Seven routes are deliberately
-// NOT, and they are the same seven:
-//
-//   - The /v1/billing/* and /v1/commerce/* bridges are catch-alls: the path is a
-//     wildcard remainder, the body is forwarded verbatim to another service and the
-//     answer is that service's bytes and status. There is no In and no Out to name —
-//     they are opaque by construction, not by omission. What they may reach is
-//     nonetheless bounded, by an allowlist rather than by a type (billing.go).
-//
-// That partition is a GATE, not prose: typed_wire_test.go holds the seven as a
-// CLOSED list with the wire fact behind each, and fails on any account operation
-// that is neither a typed op nor named there — so the next route added here is
-// typed by default, and dropping one out of the registry takes a deliberate edit
-// with a reason. Re-check the seven when zip gains raw-body binding and
-// multi-status/passthrough responses; until then eleven of eighteen is the honest
-// floor for this package.
+// and every generated SDK method all derive from. That is now ALL of them: the
+// seven exceptions were the bridge's seven wildcard methods, and they went with it.
+// typed_wire_test.go holds the exception list as a CLOSED (and now EMPTY) set and
+// fails on any account operation that is neither a typed op nor named there — so the
+// next route added here is typed by default, and dropping one out of the registry
+// takes a deliberate edit with a reason.
 //
 // TENANCY. The caller is resolved from the VALIDATED identity headers ONLY
 // (principal.Validated / c.Org() / c.User()), the same trust boundary every mutating
@@ -98,10 +96,10 @@ var errNotConfigured = errors.New("iam confidential client not configured")
 // errNotFound is a not-present sentinel (e.g. the user row IAM cannot return).
 var errNotFound = errors.New("not found")
 
-// state is account's own data; shared deps live in the embedded cloud.Base. Both
-// subsystem registrations (account @48, account-bridge @122) build their own value;
-// the CSRF key is the process-wide singleton (csrf.go) so a token minted by one
-// verifies on the other.
+// state is account's own data; shared deps live in the embedded cloud.Base. The
+// CSRF key is the process-wide singleton (csrf.go), so a token minted at /v1/csrf
+// verifies on whatever money write echoes it — including the co-resident commerce
+// writes mounted from another package.
 type state struct {
 	iam      *iamClient
 	csrfKey  []byte       // keyed-BLAKE3 MAC key for the money-write CSRF token (csrf.go)
@@ -113,9 +111,8 @@ type state struct {
 // brute-force / enumeration when a caller reaches cloud directly (gateway bypassed).
 const keysWriteRatePerMin = 30
 
-// newService builds the shared subsystem value. Both subsystem Mounts construct one;
-// the CSRF key is the process-wide singleton (csrf.go) so account (order 48) and
-// account-bridge (order 122) verify each other's tokens.
+// newService builds the subsystem value. The CSRF key is the process-wide
+// singleton (csrf.go), so a token minted here verifies wherever it is echoed.
 func newService(deps cloud.Deps) *cloud.Service[state] {
 	b := cloud.NewBase(deps, "account")
 	st := state{iam: newIAMClient()}
@@ -124,7 +121,7 @@ func newService(deps cloud.Deps) *cloud.Service[state] {
 	return &cloud.Service[state]{Base: b, State: st}
 }
 
-// MountAccount wires the SPECIFIC self-service routes (order 48) — the ones that must
+// MountAccount wires account's self-service routes (order 48) — the ones that must
 // win over the IAM /v1/iam/* wildcard (50) and the commerce embed (100).
 func MountAccount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
@@ -139,21 +136,6 @@ func MountAccount(app cloud.Router, deps cloud.Deps) error {
 	}
 	s.Log.Info("account self-service surface mounted",
 		"iam", s.State.iam.base, "configured", s.State.iam.configured(), "brand", s.Brand)
-	return nil
-}
-
-// MountBridge wires the CATCH-ALL data bridges (order 122) — the /v1/billing/* and
-// /v1/commerce/* proxies that must sit AFTER clients/billing (121) + the commerce embed.
-func MountBridge(app cloud.Router, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("account.MountBridge: nil app")
-	}
-	if deps.Logger == nil {
-		return fmt.Errorf("account.MountBridge: nil deps.Logger")
-	}
-	s := newService(deps)
-	routesBridge(s, app)
-	s.Log.Info("account data bridges mounted", "prefixes", "/v1/billing/*,/v1/commerce/*", "brand", s.Brand)
 	return nil
 }
 
@@ -246,39 +228,14 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// Console module embed-entitlement + reachability probe (embed.go).
 	zip.Get(open, "/embed-status", o.embedStatus)
 	// HUSD wallet top-up (on-chain verify → commerce credit). A SPECIFIC commerce route
-	// that must beat the /v1/commerce/* bridge (122) AND the commerce embed (100) — so it
-	// mounts here at 48, ahead of both.
+	// that must beat the commerce embed (100), so it mounts here at 48, ahead of it.
 	zip.Post(write, "/commerce/topup/wallet", o.walletTopup)
 	// The accepted rails are public on-chain data (chain, token, treasury), read by
 	// the browser to render the send UI. A GET with no side effects and no secret,
 	// so it needs neither CSRF nor the write limiter — but it MUST sit beside the
-	// POST at this priority, or the /v1/commerce/* bridge swallows it.
+	// POST at this priority, for the same reason.
 	zip.Get(open, "/commerce/topup/rails", o.topupRails)
 	return nil
-}
-
-// routesBridge wires the per-tenant catch-all data bridges (order 122).
-func routesBridge(s *cloud.Service[state], app cloud.Router) {
-	// Per-tenant billing DATA bridge — the canonical /v1/billing/* the statically-exported
-	// console calls, forwarded to commerce with the admin service token and SCOPED to the
-	// validated caller's own subject (billing.go). Registered AFTER clients/billing's
-	// specific routes (121 < 122) so those win and this catches the rest. GET+POST only.
-	// The wildcard is what the ROUTER matches; it is NOT the forwardable set — billing.go's
-	// billingForwardable allowlist decides that, per method, and 404s everything else
-	// BEFORE the admin service token is attached. Widening this pattern grants nothing on
-	// its own; adding a line to that table is the only way to expose an endpoint.
-	csrf := requireCSRF(s)
-	app.Get("/v1/billing/*", cloud.Handle(s, billingData))
-	app.Post("/v1/billing/*", csrf(cloud.Handle(s, billingData)))
-	// Per-tenant STORE DATA bridge — the canonical /v1/commerce/* the console calls,
-	// forwarded to commerce's bare store surface /v1/<kind> with the admin service token
-	// and SCOPED to the validated caller's own org (commerce.go). Registered AFTER the
-	// commerce embed (100 < 122) so the embed wins when enabled. Full CRUD.
-	app.Get("/v1/commerce/*", cloud.Handle(s, commerceData))
-	app.Post("/v1/commerce/*", csrf(cloud.Handle(s, commerceData)))
-	app.Put("/v1/commerce/*", csrf(cloud.Handle(s, commerceData)))
-	app.Patch("/v1/commerce/*", csrf(cloud.Handle(s, commerceData)))
-	app.Delete("/v1/commerce/*", csrf(cloud.Handle(s, commerceData)))
 }
 
 // ops binds the service to the typed account ops. A TypedHandler is
