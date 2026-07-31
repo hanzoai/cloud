@@ -1,5 +1,7 @@
-// Package product exposes the read-only Search and Vector product surfaces
-// the Hanzo console panels call at api.cloud.hanzo.ai, per HIP-0106.
+// Package product is the read-only inventory of the search and vector backends:
+// /v1/search-docs/{indexes,stats} read from Meilisearch and
+// /v1/vector/{collections,stats} from Qdrant, reshaped into the rows the console
+// renders.
 //
 // The console's Search/Indexes and Vector panels call
 // https://api.hanzo.ai/v1/search-docs/* and /v1/vector/* with a

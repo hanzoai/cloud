@@ -1,7 +1,7 @@
 // Package catalog is the CROSS-ORG discovery lens: one place to find every
 // project, app and site the fleet has built, whichever org built it.
 //
-// It owns no store. The corpus lives in the lexical index (clients/index) — the
+// It owns no store. The corpus lives in the lexical index (apps/index) — the
 // same store the Meilisearch dialect serves — so relevance, paging, persistence
 // and encryption at rest are the ones the platform already runs. What this
 // package adds is the ONE thing the index cannot express on its own: a corpus
