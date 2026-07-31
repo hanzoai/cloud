@@ -10,20 +10,20 @@ import (
 
 // typed_wire_test.go turns git's typed/untyped PARTITION from prose into a GATE.
 //
-// apps/git/LLM.md said "COMPLETE at 24 typed / 24 refused" and named four
-// refusal families. Prose cannot fail, so it decays two ways: a new raw route
-// lands and the count is silently wrong, or a refusal is retired and the reason
-// outlives the route it described. Both are invisible until somebody re-reads
-// the file. The list below is the same partition as a VALUE the suite checks in
-// both directions — every served operation is typed or named here, and every
-// name still describes an operation git serves. Copied in shape from
-// apps/team/typed_wire_test.go, which is the one form of this gate.
+// apps/git/LLM.md said "COMPLETE at 24 typed / 24 refused" while thirty routes
+// were refused, and named four refusal families. Prose cannot fail, so it decays
+// two ways: a new raw route lands and the count is silently wrong, or a refusal
+// is retired and the reason outlives the route it described. Both are invisible
+// until somebody re-reads the file. The list below is the same partition as a
+// VALUE the suite checks in both directions — every served operation is typed or
+// named here, and every name still describes an operation git serves. Copied in
+// shape from apps/team/typed_wire_test.go, which is the one form of this gate.
 
 // untypedByDesign is the CLOSED list of git operations that are NOT typed ops,
 // each with the wire fact that keeps it raw. A typed op is a route PLUS a
 // registry entry — the one value the OpenAPI operation, the MCP tool, the CLI
 // command and the SDK method all come from — so an operation missing from that
-// registry is invisible to all four. These 24 are missing on purpose. Addresses
+// registry is invisible to all four. These 30 are missing on purpose. Addresses
 // are written the way the DOCUMENT writes them, which is the identity every
 // projection keys on.
 var untypedByDesign = map[string]string{
@@ -105,9 +105,12 @@ var untypedByDesign = map[string]string{
 	// (zip/ctx.go HTTPError) — a different field name and a different type for
 	// `status`. cloud.Bridge only applies a handler-set status on SUCCESS, and the
 	// only exported setters are Created/Accepted, so nothing lets a typed op
-	// answer a 4xx with this body. Typing these renames the error field on a live
-	// wire. They shrink by client migration, not by typing: the shared /zap plane
-	// already replays the typed /v1 ops frame-for-frame.
+	// answer a 4xx with this body. The field is LOAD-BEARING, not cosmetic:
+	// zapface/dispatch.go:89-91 unmarshals the non-2xx envelope and forwards
+	// env.Msg to the ZAP client as its error text, so a typed op's {..., error}
+	// body would decode to an empty Msg and every ZAP failure would arrive with
+	// no message at all. They shrink by client migration, not by typing: the
+	// shared /zap plane already replays the typed /v1 ops frame-for-frame.
 	"POST /v1/git/zap/createRepo": "the ZAP envelope: a failure is a non-2xx {status:\"error\", msg}, " +
 		"where a typed op's returned error renders zip's {status:<int>, code, error}.",
 	"POST /v1/git/zap/listRepos": "the ZAP envelope: a failure is a non-2xx {status:\"error\", msg}, " +
@@ -151,7 +154,7 @@ func gitOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 }
 
 // TestEveryRouteIsTypedOrNamed fails when a git operation is neither a typed op
-// nor one of the 24 above — so the next route added here is typed by default,
+// nor one of the 30 above — so the next route added here is typed by default,
 // and dropping one out of the registry takes a deliberate edit with a reason.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	served, typed := gitOps(t)
@@ -203,6 +206,62 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	}
 }
 
+// voidOps is the CLOSED list of git's typed ops whose handler returns a nil *Out
+// — the ONE fact about a typed op the document cannot reflect, because it lives
+// in the handler's body and not in its types. zip writes a nil *Out as 204 with
+// no body (typed.go), and keys the DOCUMENT on 204 only when the Out type has no
+// NAME. `noContent` used to be a defined type here, so these four published "200
+// with a `noContent` body" about a wire that has always answered 204 with none —
+// git was the only app in the fleet that DEFINED the type rather than aliasing
+// it, and the only publisher of a `noContent` schema. Every SDK generated from
+// that document expected a status the service never sends.
+var voidOps = map[string]bool{
+	"DELETE /v1/git/repos/{name}":                    true,
+	"DELETE /v1/git/keys/{id}":                       true,
+	"DELETE /v1/git/repos/{name}/subscriptions/{id}": true,
+	"DELETE /v1/git/repos/{name}/mirrors/{id}":       true,
+}
+
+// TestVoidOpsPublishTheStatusTheySend holds every typed op's DOCUMENTED success
+// response to the one its handler can produce, in both directions: a void op must
+// publish 204 and no content, and every other typed op must publish a 2xx that
+// carries a schema. The wire half is asserted where the calls are made
+// (git_test.go, ssh_test.go, lifecycle_test.go all require 204 from these four);
+// this is the half that keeps the document from drifting away from it.
+func TestVoidOpsPublishTheStatusTheySend(t *testing.T) {
+	app := mountApp(t)
+	reg, err := openapi.Typed(app)
+	if err != nil {
+		t.Fatalf("typed registry: %v", err)
+	}
+	for key, op := range reg.Ops {
+		responses, ok := op.Responses.(map[string]any)
+		if !ok {
+			t.Errorf("%s: responses are %T, not the object a typed op projects", key, op.Responses)
+			continue
+		}
+		for code, raw := range responses {
+			body, _ := raw.(map[string]any)
+			hasContent := body["content"] != nil
+			switch {
+			case voidOps[key] && (code != "204" || hasContent):
+				t.Errorf("%s returns a nil *Out — the wire is 204 with no body — but the document says "+
+					"%s, content=%t. Make its Out the UNNAMED empty struct (noContent, ops.go): zip keys "+
+					"204 on the Out type having no name.", key, code, hasContent)
+			case !voidOps[key] && !hasContent:
+				t.Errorf("%s publishes %s with no schema, so every generated SDK drops the body it "+
+					"returns. Either its Out type went void (add it to voidOps) or the projection "+
+					"regressed.", key, code)
+			}
+		}
+	}
+	for key := range voidOps {
+		if _, ok := reg.Ops[key]; !ok {
+			t.Errorf("voidOps names %q, which is not a typed git op", key)
+		}
+	}
+}
+
 // declaredBodies is the CLOSED list of untypedByDesign routes that DECLARE the
 // request they read (openapi.Register, webhook.go). "Cannot be a typed op" is not
 // "must be undocumented": a route publishing an operationId and nothing else is
@@ -231,7 +290,7 @@ var declaredBodies = map[string]string{
 	"POST /{org}/{project}/{repo}/git-receive-pack":        "application/octet-stream",
 }
 
-// TestRefusedRoutesDeclareTheBodyTheyRead holds the description of the 24 refusals
+// TestRefusedRoutesDeclareTheBodyTheyRead holds the description of the 30 refusals
 // to the list above, in both directions.
 func TestRefusedRoutesDeclareTheBodyTheyRead(t *testing.T) {
 	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "git", Version: "v1"})

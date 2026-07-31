@@ -1,7 +1,7 @@
 # apps/git — typed-op status
 
-COMPLETE at **24 typed / 24 refused**, and that partition is now a **GATE, not
-prose**: `untypedByDesign` (typed_wire_test.go) is the closed list of the 24
+COMPLETE at **24 typed / 30 refused**, and that partition is now a **GATE, not
+prose**: `untypedByDesign` (typed_wire_test.go) is the closed list of the 30
 refusals with the wire fact behind each, and `TestEveryRouteIsTypedOrNamed`
 fails three ways — a served operation that is neither typed nor named, a name
 that describes an operation git no longer serves, and a name that IS a typed op.
@@ -14,52 +14,57 @@ partition, and prose cannot fail — that is the whole reason it moved.
 Every route with a JSON request/response shape is a typed op (ops.go states the
 seam; routes() in git.go registers them on the /v1/git group behind
 bridgePrincipal). The four refusal families below were re-verified against the
-handlers and against zip v1.18.6 itself, not against this file. Do not re-type
+handlers and against zip v1.18.15 itself, not against this file. Do not re-type
 them; run the gate before believing any route counter that says git has untyped
 work left.
 
-**A refusal is still DESCRIBED.** Eight of the 24 read a request body, and each
+**A refusal is still DESCRIBED.** Twelve of the 30 read a request body, and each
 now declares it through `openapi.Register` (webhook.go's init) without becoming a
 typed op: the forge webhook's push envelope, the three ZAP procedures that bind
-one, and the four pack POSTs as `openapi.Binary`. They previously published an
+one, and the eight pack POSTs as `openapi.Binary`. They previously published an
 operationId, tags and nothing else — which no SDK generator can tell apart from a
 route that takes no body, so the published webhook had nowhere to put a delivery.
 `declaredBodies` + `TestRefusedRoutesDeclareTheBodyTheyRead` pin it both ways: a
-declared body that vanishes fails, and a body declared for one of the sixteen
+declared body that vanishes fails, and a body declared for one of the eighteen
 that read none fails too. What a refusal still cannot have, and only a typed op
 gives, is prose, an MCP tool and a CLI command.
 
 ## The four refusal families
 
-1. **POST /v1/git/webhook** (git.go:296, handler webhook.go:73) — 1 route.
+1. **POST /v1/git/webhook** (git.go:315, handler webhook.go:159) — 1 route.
    Auth IS the HMAC over the RAW received bytes, verified before parse
-   (webhook.go:79); zip's `invoke` unmarshals BEFORE the handler (typed.go),
+   (webhook.go:165); zip's `invoke` unmarshals BEFORE the handler (typed.go),
    so a typed In destroys the exact bytes the signature covers. It also
    answers a benign 204 to deliveries it ignores (non-push, ref delete, bot)
    where a typed op's decode failure would 400 and retry-storm the forge, and
    it is wrapped in cloud.Terminal so its 401/400 cannot be flattened by the
    co-mounted /v1 error handler.
 
-2. **Smart-HTTP git protocol** (git.go:334-336 under /v1/git, git.go:344-346
-   root-level on the git host) — 6 routes. The git pack wire: request bodies
-   are `application/x-git-*-request` pack streams, responses are
-   `application/x-git-*-advertisement|result` streamed via SendStream
-   (smart_http.go:73,100-102,151) — not JSON in either direction. The
-   root-level trio additionally falls through with c.Next() on non-git hosts
-   (onGitHost, git.go:404), and a typed dispatch cannot decline into the next
-   route.
+2. **Smart-HTTP git protocol** (git.go:353-355 and :361-363 under /v1/git,
+   git.go:371-376 root-level on the git host) — 12 routes: the org/repo trio
+   and the project-scoped org/project/repo trio, each at both addresses. The
+   git pack wire: request bodies are `application/x-git-*-request` pack
+   streams, responses are `application/x-git-*-advertisement|result`, the
+   packfile streamed via SendStream (smart_http.go:151,180) — not JSON in
+   either direction. The root-level six additionally fall through with
+   c.Next() on non-git hosts (onGitHost, git.go:434), and a typed dispatch
+   cannot decline into the next route.
 
-3. **Browser UI** (ui.go:47-60) — 12 routes. Server-rendered text/html
+3. **Browser UI** (ui.go:137-150) — 12 routes. Server-rendered text/html
    (html/template); a typed dispatch ends in c.JSON(out). The root-level six
    are also host-gated with the same c.Next() fall-through as family 2.
 
-4. **ZAP procedure adapters** (zap.go:69-73) — 5 routes. The published
+4. **ZAP procedure adapters** (zap.go:120-124) — 5 routes. The published
    envelope contract: success is the cloud.OK envelope, failure is a non-2xx
-   `{status:"error", msg}` body (zap.go:88), while a typed op's returned error
+   `{status:"error", msg}` body (zap.go:138), while a typed op's returned error
    renders zip's `HTTPError` — `{status:<int>, code, error:<msg>}`
    (zip/ctx.go:200-206, written by `errorHandler` at ctx.go:222) — so typing
    both RENAMES the message field (`msg`→`error`) and changes the TYPE of
-   `status` (string→int) on a wire the bridge's clients parse. There is no shim:
+   `status` (string→int) on a wire the bridge's clients parse. `msg` is
+   LOAD-BEARING, not cosmetic: `zapface/dispatch.go:89-91` unmarshals the
+   non-2xx envelope and forwards `env.Msg` to the ZAP client as its error text,
+   so a typed op's `{..., error}` body decodes to an empty `Msg` and every ZAP
+   failure arrives with no message at all. There is no shim:
    `cloud.Bridge` applies a handler-set status only when the handler returned
    `err == nil` (typed.go:78), and the only exported setters are
    `Created`/`Accepted`, so nothing lets a typed op answer a 4xx with a body of
@@ -105,18 +110,29 @@ this copy; typing more apps that carry a project scope will keep re-finding it.
   shared view type. The pack responses and the twelve HTML pages have no seam at
   all: `openapi.Binary` is request-only by design, and a text/html response is
   the second half it deliberately does not invent.
-- Bodyless POST (playbook #7 in the root LLM.md): **1** — `POST
-  /v1/git/repos/{name}/gc` publishes a required body over `repoRef`, whose
-  only property is the `name` path param. Wire unharmed (bindURL binds the
-  path last); waits on zip declaring a bodyless POST.
+- Bodyless POST (playbook #7 in the root LLM.md): **0** — `POST
+  /v1/git/repos/{name}/gc` used to publish a required body over `repoRef`,
+  whose only property is the `name` path param; zip now recognises an In whose
+  every field is URL-borne and publishes no requestBody for it.
+- **CLOSED: the four void ops declared a status they never sent.** `noContent`
+  was a DEFINED type (`type noContent struct{}`), and zip keys 204 on the Out
+  type having NO NAME — so `DELETE /v1/git/repos/{name}`, `/keys/{id}`,
+  `/repos/{name}/subscriptions/{id}` and `/repos/{name}/mirrors/{id}` published
+  "200 with a `noContent` body" about a wire that has always answered 204 with
+  none (git_test.go:188, ssh_test.go:118, lifecycle_test.go:95,170,434). git was
+  the only app in the fleet that defined the type rather than aliasing it, and
+  the only publisher of a `noContent` schema. Now `type noContent = struct{}`
+  (ops.go) and `TestVoidOpsPublishTheStatusTheySend` holds the document to the
+  wire per op, so the two cannot drift apart again.
 - Conditional status (playbook "Statuses"): **0** — every git op has one
   success status; the four 201 creators declare `zip.WithStatus`.
-- **NEW: the `summary` carries a raw newline** — **20 of git's 24** typed ops,
-  and **215 of the fleet's 387** described operations across 18 packages.
-  `firstSentence` (zip/openapi.go:606) returns the substring up to the first
-  `". "` VERBATIM, so a first sentence that wraps in the Go source ships its
-  line break into the OpenAPI `summary`, the CLI command summary
-  (clispec.go:41, cli.go:133) and every generated SDK's first docstring line.
+- **CLOSED: the `summary` carried a raw newline** — was **20 of git's 24** typed
+  ops and **215 of the fleet's 387** described operations across 18 packages;
+  now **0 and 0**, fixed once in `firstSentence` (zip v1.18.13), never in 215
+  doc comments. It returned the substring up to the first `". "` VERBATIM, so a
+  first sentence that wraps in the Go source shipped its line break into the
+  OpenAPI `summary`, the CLI command summary (clispec.go:41, cli.go:133) and
+  every generated SDK's first docstring line.
   Re-measure from the committed subsets, never from prose:
 
       python3 - <<'EOF'
@@ -189,15 +205,16 @@ this copy; typing more apps that carry a project scope will keep re-finding it.
       EOF
       go run /tmp/cliname/main.go   # from the repo root, so it resolves this module's zip
 
-- **NEW: NINE host-gated root paths are published as if `api.hanzo.ai` served
+- **NEW: TWELVE host-gated root paths are published as if `api.hanzo.ai` served
   them.** The six root UI pages (`/`, `/explore`, `/{org}/{repo}`, and the
-  tree/blob/commits forms) and the three root smart-HTTP routes are registered on
+  tree/blob/commits forms) and the six root smart-HTTP routes (the org/repo trio
+  and its project-scoped twin) are registered on
   the ROOT router and gated to the git host by `onGitHost`, which falls through
   with `c.Next()` on every other Host — `TestRootSmartHTTP_HostGuard` and
   `TestRootUI_HostGuard` pin the 404 on `api.hanzo.test`. The document has ONE
   `servers` entry, `https://api.hanzo.ai`, and no notion of a per-path host, so
-  all nine land in `plugin/git/openapi.json` and then in `openapi.yaml`
-  unqualified: every SDK generated from the golden gains nine methods that 404
+  all twelve land in `plugin/git/openapi.json` and then in `openapi.yaml`
+  unqualified: every SDK generated from the golden gains twelve methods that 404
   against the server the document itself names. `GET /` is the sharpest — its
   operationId is the bare word `get`.
 
@@ -205,7 +222,7 @@ this copy; typing more apps that carry a project scope will keep re-finding it.
   its #7 shape (a true wire under-described), and it is the one class here that
   cannot be closed inside this package: either the projection learns a per-path
   `servers` (OpenAPI 3.1 allows it on a path item) or a host-gated route declares
-  itself out of the document. The `/git/*` six are NOT in this nine — those are
+  itself out of the document. The `/git/*` six are NOT in this twelve — those are
   registered without a host gate and do serve on every host, so publishing them
   is true (they answer HTML, which is why they are in `untypedByDesign`). Count
   them from the golden, never from this list:
