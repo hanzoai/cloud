@@ -1,19 +1,21 @@
-// Package captable folds hanzoai/captable into the unified hanzoai/cloud binary
-// as an in-process subsystem (HIP-0106) — the PILOT of epic #96 (fold the
-// Captable,Inc app into cloud, drop Next.js/Prisma/Postgres). Cloud serves the
-// cap-table surface (/v1/captable/*) ITSELF, per tenant, on Base/SQLite.
+// Package captable is the org's cap table: stakeholders, share classes, share
+// certificates and transfers, option grants and equity plans, SAFEs and
+// convertible notes, priced rounds and their investments, and the summary that
+// totals outstanding and fully-diluted ownership from them.
 //
-// WRAP, DON'T REWRITE — the read-WRITE variant. Where clients/plan + clients/
-// pricing host a read-only @hanzo catalog in goja, captable hosts the tRPC
+// It runs per tenant on Base/SQLite in the unified cloud binary (HIP-0106).
+//
+// WRAP, DON'T REWRITE — the read-WRITE variant. Where apps/plan + apps/pricing
+// host a read-only @hanzo catalog in goja, captable hosts the tRPC
 // business LOGIC (ported to a self-contained goja bundle in github.com/hanzoai/
 // captable) and gives it PERSISTENCE over per-tenant Base/SQLite. The bundle
 // carries logic; the Go host carries storage. The seam between them is the
-// REUSABLE clients/goja binding (the RW-Base goja host), which esign (#100)
+// REUSABLE apps/goja binding (the RW-Base goja host), which esign (#100)
 // and dataroom (#101) reuse unchanged — this leaf is just:
 //
 //	captable bundle (github.com/hanzoai/captable.Bundle)  +  the per-tenant Schema
 //	                         │
-//	                  clients/goja.NewBase(...)   ← injects __db/__newId/__now,
+//	                  apps/goja.NewBase(...)   ← injects __db/__newId/__now,
 //	                         │                       one SQLite file per tenant,
 //	                  /v1/captable/* zip routes     one transaction per request
 //

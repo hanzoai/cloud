@@ -1,5 +1,5 @@
 // Package erp declares the ERPNext-core business model as DocType fixtures on the
-// framework engine (clients/framework). Like clients/cms, ERP is NOT a bespoke
+// framework engine (apps/framework). Like apps/cms, ERP is NOT a bespoke
 // subsystem and mounts NO HTTP surface of its own: an ERP master (Item, Customer,
 // Account…) IS a framework DocType in module "erp", a transaction (Sales Order,
 // Sales Invoice, Stock Entry…) IS a submittable framework document with child
@@ -10,6 +10,11 @@
 // This package only DECLARES the fixtures and the native-Go business hooks and
 // registers them with the engine at init — the ONE source of truth for the ERP
 // model, per-org on Base/SQLite.
+//
+// It does not ship today. No binary imports it — not plugin/framework, not the
+// host — so its init never runs, the "erp" module is never registered, and
+// POST /v1/framework/modules/erp/install answers for a module the engine has
+// never heard of. Linking it into plugin/framework is the whole activation.
 //
 // This is the second app lane on the framework (CMS was the first), proving the
 // thesis: one engine + one renderer renders every business app. It reuses the
