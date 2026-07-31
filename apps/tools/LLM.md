@@ -83,6 +83,53 @@ Wiring, end to end:
 The host asks the open plugin only on a `tools/list` that NAMES a caller
 (`X-Org-Id`). An anonymous list is still a memcpy and still starts no child.
 
+## Paying for a tool — `registry.go` `Charger`, and where it binds
+
+A priced tool used to be unpayable. `tools.SetCharger` had no production caller and
+`x402.Publish` had none either, so every monetized listing resolved to
+`ErrChargerUnset` — a permanent 402 with no terms in it, which no client could ever
+satisfy. Prices were in the catalog and revenue was not.
+
+The seam is now closed in ONE place, `apps/marketplace/payments.go`, wired from
+`marketplace.Mount`:
+
+- `x402.Publish(&registry{store})` — the price table. Resource ids are `tool:<name>`
+  (`resourceOf`), because every tool call arrives on the same route and a path
+  cannot say which capability is being bought. The prefix also keeps the table from
+  ever pricing a URL by accident.
+- `tools.SetCharger(charger{})` — settlement, which is `x402.Settle` on that id.
+
+The `Charger` takes a TOOL NAME and nothing else. Who pays is `principal.Ledger` on
+the request; what it costs and who is paid are the payment layer's table. Note the
+old shape billed `p.Owner` — the HOME org — which is the rule `principal.BillingOrg`
+repudiates: the SELECTED org pays. Deleting the field deleted the bug.
+
+Every dispatch is offered to the charger, free ones included: "is this priced" is one
+lookup in the same table that settles, and asking it twice is how a gate and a
+settlement come to disagree.
+
+**Prices are exact.** `Price.Amount` is `money.Amount`, 18-dp. A per-call price of
+`$0.0025` is a quarter of a cent and stays one; in the old `AmountCents int64` it was
+`0`, i.e. free. Per-token prices are the normal case on a tool plane, so cents were
+never the right type. `CheapestPublicForTool` also compares in Go rather than SQL:
+`$10` is `10^19` atto, past int64, so `ORDER BY CAST(price AS INTEGER)` would
+mis-order the expensive half of the shop.
+
+### What is NOT closed — the process boundary
+
+All three seams are process-globals (`x402.reg`, `tools.std`, `wallets.mounted`), so
+the wiring binds **within one process**. In the split fleet (`manifest/apps.go` runs
+`tools`, `marketplace`, `x402` and `wallets` as four binaries) a dispatch in the
+tools process finds no charger and fails CLOSED — `ErrChargerUnset` → 402. Safe, but
+still unpayable there.
+
+This predates the change: `tools.SetPricer` was called from the same Mount and had
+the same property. What it needs is a price table the tools process can read —
+either a shared store or an internal settle call on `apps/x402` — and that is a
+deployment-topology decision, not a wiring one. Until then, a priced tool is payable
+exactly where marketplace, x402 and wallets are co-resident, which is what
+`apps/marketplace/payments_test.go` composes and proves end to end.
+
 ## Running a stdio package in our cloud — NOT BUILT, and why
 
 The catalog carries `packages[]` with `runtimeHint: npx|uvx|docker` because that
