@@ -8866,6 +8866,41 @@ components:
           description: Name is the bucket name to create.
           type: string
       type: object
+    bucketRecord:
+      properties:
+        bucket:
+          description: Bucket is the bucket's name within the org.
+          type: string
+        history:
+          description: History is how many revisions each key keeps.
+          type: integer
+        ttl:
+          description: TTL is the entry expiry in seconds; 0 means none.
+          type: integer
+        values:
+          description: Values is how many values the bucket holds right now.
+          type: integer
+      type: object
+    bucketWrite:
+      properties:
+        bucket:
+          description: |-
+            Bucket is the bucket's name within the org, from the path: 1–64 of
+            [A-Za-z0-9_], no dash.
+          type: string
+        history:
+          description: History is how many revisions each key keeps, 1–64. 0 means
+            1.
+          type: integer
+        maxValue:
+          description: |-
+            MaxValue caps one value's size in bytes. 0 or less means the server's
+            ceiling.
+          type: integer
+        ttl:
+          description: TTL expires entries after this many SECONDS. 0 means no expiry.
+          type: integer
+      type: object
     buildList:
       properties:
         builds:
@@ -8965,6 +9000,90 @@ components:
             Verify is the exact command that re-derives every commit binding below
             straight from git, so nothing here has to be taken on trust.
           type: string
+      type: object
+    busAck:
+      properties:
+        duplicate:
+          description: |-
+            Duplicate is true when JetStream deduplicated the message by its
+            Nats-Msg-Id instead of storing it again.
+          type: boolean
+        ok:
+          description: OK is true when the bus accepted the message.
+          type: boolean
+        seq:
+          description: Seq is the message's sequence in that stream.
+          type: integer
+        stream:
+          description: |-
+            Stream is the stream that stored the message — absent when no stream
+            captures the subject and the message went out core (fire-and-forget).
+          type: string
+      type: object
+    busMessage:
+      properties:
+        data:
+          description: Data is the payload as UTF-8 text.
+          type: string
+        headers:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          description: Headers are the message's headers, when it carries any.
+          type: object
+        seq:
+          description: Seq is the message's stream sequence — fetched messages only.
+          type: integer
+        subject:
+          description: Subject is the message's subject in the org's own namespace.
+          type: string
+        time:
+          description: |-
+            Time is when the stream stored the message, RFC3339 — fetched messages
+            only.
+          type: string
+      type: object
+    busPublish:
+      properties:
+        data:
+          description: |-
+            Data is the payload, carried verbatim as UTF-8 text (typically JSON).
+            Binary payloads belong on the NATS port.
+          type: string
+        headers:
+          additionalProperties:
+            type: string
+          description: |-
+            Headers are optional message headers, one value per name. A Nats-Msg-Id
+            header is JetStream's deduplication key: a repeat within the stream's
+            dedup window is acknowledged as duplicate rather than stored twice.
+          type: object
+        subject:
+          description: |-
+            Subject is the subject to publish to, in the org's own namespace — e.g.
+            orders.created. No wildcards.
+          type: string
+      type: object
+    busRequest:
+      properties:
+        data:
+          description: Data is the request payload, carried verbatim as UTF-8 text.
+          type: string
+        headers:
+          additionalProperties:
+            type: string
+          description: Headers are optional request headers, one value per name.
+          type: object
+        subject:
+          description: Subject is the subject a responder listens on, in the org's
+            namespace.
+          type: string
+        timeoutMs:
+          description: |-
+            TimeoutMs bounds the wait for a reply. 0 or less means the default of
+            5000; anything above 30000 is clamped to 30000.
+          type: integer
       type: object
     byoGPU:
       properties:
@@ -10980,6 +11099,70 @@ components:
             form. Signing in goes through IAM, at GET /v1/deploy/login.
           type: boolean
       type: object
+    consumerPage:
+      properties:
+        data:
+          description: Data are the stream's consumers.
+          items:
+            $ref: '#/components/schemas/consumerRecord'
+          type: array
+      type: object
+    consumerRecord:
+      properties:
+        ack:
+          description: 'Ack is the acknowledgement discipline: explicit, none or all.'
+          type: string
+        ackWait:
+          description: AckWait is the redelivery timeout in seconds.
+          type: integer
+        acked:
+          description: Acked is the stream sequence acknowledged furthest.
+          type: integer
+        deliver:
+          description: 'Deliver is the starting point: all, last, new or lastPerSubject.'
+          type: string
+        delivered:
+          description: Delivered is the stream sequence delivered furthest.
+          type: integer
+        filter:
+          description: Filter is the subject filter, in the org's namespace; empty
+            means all.
+          type: string
+        maxDeliver:
+          description: MaxDeliver is the delivery-attempt cap; -1 means unlimited.
+          type: integer
+        name:
+          description: Name is the durable consumer name.
+          type: string
+        pending:
+          description: Pending is how many messages await delivery.
+          type: integer
+        redelivered:
+          description: Redelivered is how many messages are being redelivered.
+          type: integer
+        stream:
+          description: Stream is the stream it consumes, in the org's view.
+          type: string
+      type: object
+    consumerWrite:
+      properties:
+        ack:
+          type: string
+        ackWait:
+          type: integer
+        deliver:
+          type: string
+        filter:
+          type: string
+        maxDeliver:
+          type: integer
+        name:
+          description: 'Name is the durable consumer name: 1–64 of [A-Za-z0-9_-].'
+          type: string
+        stream:
+          description: Stream is the stream to consume, from the path.
+          type: string
+      type: object
     contactList:
       properties:
         data:
@@ -12173,6 +12356,25 @@ components:
         total:
           description: Total is len(data) — the rows in this answer, not the store's
             history.
+          type: integer
+      type: object
+    fetchQuery:
+      properties:
+        batch:
+          description: |-
+            Batch is the most messages to return. 0 or less means 1; anything above
+            100 is clamped to 100.
+          type: integer
+        name:
+          description: Name is the consumer, from the path.
+          type: string
+        stream:
+          description: Stream is the stream, from the path.
+          type: string
+        waitMs:
+          description: |-
+            WaitMs is how long to wait for the batch to fill before answering with
+            what arrived. 0 or less means the default of 5000; clamped to 30000.
           type: integer
       type: object
     fileContent:
@@ -13610,6 +13812,52 @@ components:
             $ref: '#/components/schemas/StarterKit'
           type: array
       type: object
+    kvAck:
+      properties:
+        revision:
+          description: Revision is the revision the write created.
+          type: integer
+      type: object
+    kvEntry:
+      properties:
+        created:
+          description: Created is when this revision was written, RFC3339.
+          type: string
+        key:
+          description: Key is the entry's key.
+          type: string
+        operation:
+          description: 'Operation is what wrote the revision: put, del or purge.'
+          type: string
+        revision:
+          description: Revision is the entry's revision in the bucket.
+          type: integer
+        value:
+          description: Value is the value as UTF-8 text; empty for delete and purge
+            markers.
+          type: string
+      type: object
+    kvPage:
+      properties:
+        data:
+          description: Data are the key's retained revisions.
+          items:
+            $ref: '#/components/schemas/kvEntry'
+          type: array
+      type: object
+    kvWrite:
+      properties:
+        bucket:
+          description: Bucket is the bucket, from the path.
+          type: string
+        key:
+          description: Key is the key, from the path.
+          type: string
+        value:
+          description: Value is the value, carried verbatim as UTF-8 text (typically
+            JSON).
+          type: string
+      type: object
     kycRefreshOut:
       properties:
         formation:
@@ -14040,6 +14288,16 @@ components:
           description: 'Status is "active": a listed service is a configured, dialable
             mesh entry.'
           type: string
+      type: object
+    messagePage:
+      properties:
+        data:
+          description: |-
+            Data are the messages in this batch — empty when nothing was pending
+            within the wait.
+          items:
+            $ref: '#/components/schemas/busMessage'
+          type: array
       type: object
     metricList:
       properties:
@@ -18206,6 +18464,106 @@ components:
           type: array
         workload:
           type: string
+      type: object
+    streamPage:
+      properties:
+        data:
+          description: Data are the org's streams.
+          items:
+            $ref: '#/components/schemas/streamRecord'
+          type: array
+      type: object
+    streamRecord:
+      properties:
+        bytes:
+          description: Bytes is how many bytes the stream holds right now.
+          type: integer
+        consumers:
+          description: Consumers is how many consumers the stream carries.
+          type: integer
+        created:
+          description: Created is when the stream was created, RFC3339.
+          type: string
+        discard:
+          description: 'Discard says which end gives way at the limits: old or new.'
+          type: string
+        firstSeq:
+          description: FirstSeq is the sequence of the oldest retained message.
+          type: integer
+        lastSeq:
+          description: LastSeq is the sequence of the newest message.
+          type: integer
+        maxAge:
+          description: MaxAge is the age cap in seconds; 0 means unlimited.
+          type: integer
+        maxBytes:
+          description: MaxBytes is the retained-byte cap; -1 means unlimited.
+          type: integer
+        maxMsgs:
+          description: MaxMsgs is the retained-message cap; -1 means unlimited.
+          type: integer
+        messages:
+          description: Messages is how many messages the stream holds right now.
+          type: integer
+        name:
+          description: Name is the stream's name within the org.
+          type: string
+        retention:
+          description: 'Retention is the discipline: limits, interest or workqueue.'
+          type: string
+        storage:
+          description: 'Storage is the backend: file or memory.'
+          type: string
+        subjects:
+          description: Subjects are the subjects it captures, in the org's namespace.
+          items:
+            type: string
+          type: array
+      type: object
+    streamUpdate:
+      properties:
+        discard:
+          type: string
+        maxAge:
+          type: integer
+        maxBytes:
+          type: integer
+        maxMsgs:
+          type: integer
+        retention:
+          type: string
+        storage:
+          type: string
+        stream:
+          description: Stream is the stream to update, from the path.
+          type: string
+        subjects:
+          items:
+            type: string
+          type: array
+      type: object
+    streamWrite:
+      properties:
+        discard:
+          type: string
+        maxAge:
+          type: integer
+        maxBytes:
+          type: integer
+        maxMsgs:
+          type: integer
+        name:
+          description: 'Name is the stream''s name within the org: 1–64 of [A-Za-z0-9_],
+            no dash.'
+          type: string
+        retention:
+          type: string
+        storage:
+          type: string
+        subjects:
+          items:
+            type: string
+          type: array
       type: object
     structureIn:
       properties:
@@ -43983,6 +44341,537 @@ paths:
         and last changed.'
       tags:
       - prompts
+  /v1/pubsub/jetstream/streams:
+    get:
+      description: |-
+        ListStreams returns the org's streams, sorted by name.
+
+        A stream is the durable log: it captures every message published to its
+        subjects and retains them by its own limits, independent of any consumer.
+        The listing is org-scoped server-side — one org can never see another's
+        streams, and the platform's own planes never appear.
+      operationId: get_v1_pubsub_jetstream_streams
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/streamPage'
+          description: ok
+      summary: ListStreams returns the org's streams, sorted by name.
+      tags:
+      - pubsub
+    post:
+      description: |-
+        CreateStream creates a durable stream capturing the given subjects and
+        returns it. 409 when the org already has a stream of that name; the subjects
+        are the org's own and cannot collide with another org's.
+      operationId: post_v1_pubsub_jetstream_streams
+      requestBody:
+        content:
+          application/json:
+            example:
+              maxAge: 86400
+              name: ORDERS
+              subjects:
+              - orders.>
+            schema:
+              $ref: '#/components/schemas/streamWrite'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/streamRecord'
+          description: created
+      summary: CreateStream creates a durable stream capturing the given subjects
+        and returns it.
+      tags:
+      - pubsub
+  /v1/pubsub/jetstream/streams/{stream}:
+    delete:
+      description: |-
+        DeleteStream removes one stream of the caller's org — its retained messages
+        and its consumers with it — and answers 204 with no body. 404 when the org
+        has no stream of that name.
+      operationId: delete_v1_pubsub_jetstream_streams_stream
+      parameters:
+      - description: Stream is the stream's name, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteStream removes one stream of the caller's org — its retained
+        messages and its consumers with it — and answers 204 with no body.
+      tags:
+      - pubsub
+    get:
+      description: |-
+        GetStream returns one stream of the caller's org — its configuration and its
+        live state (messages, bytes, sequence range, consumer count). 404 when the
+        org has no stream of that name.
+      operationId: get_v1_pubsub_jetstream_streams_stream
+      parameters:
+      - description: Stream is the stream's name, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/streamRecord'
+          description: ok
+      summary: GetStream returns one stream of the caller's org — its configuration
+        and its live state (messages, bytes, sequence range, consumer count).
+      tags:
+      - pubsub
+    put:
+      description: |-
+        UpdateStream rewrites a stream's configuration — subjects, limits, discard —
+        and returns the updated stream. It is a PUT: the spec sent replaces the spec
+        held, with one reading for the enums a caller omits — an empty storage,
+        retention or discard keeps the stream's current one, because JetStream holds
+        storage and retention immutable and refuses a change with a 400 rather than
+        this door pretending it took.
+      operationId: put_v1_pubsub_jetstream_streams_stream
+      parameters:
+      - description: Stream is the stream to update, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              maxMsgs: 100000
+              subjects:
+              - orders.>
+              - refunds.>
+            schema:
+              $ref: '#/components/schemas/streamUpdate'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/streamRecord'
+          description: ok
+      summary: UpdateStream rewrites a stream's configuration — subjects, limits,
+        discard — and returns the updated stream.
+      tags:
+      - pubsub
+  /v1/pubsub/jetstream/streams/{stream}/consumers:
+    get:
+      description: |-
+        ListConsumers returns one stream's consumers, sorted by name. 404 when the
+        org has no stream of that name.
+      operationId: get_v1_pubsub_jetstream_streams_stream_consumers
+      parameters:
+      - description: Stream is the stream's name, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/consumerPage'
+          description: ok
+      summary: ListConsumers returns one stream's consumers, sorted by name.
+      tags:
+      - pubsub
+    post:
+      description: |-
+        CreateConsumer creates a durable consumer on one stream and returns it. A
+        consumer is a named cursor: it tracks what has been delivered and what is
+        acknowledged, so many workers can share it and none sees a message twice
+        outside redelivery. 409 when the stream already has a consumer of that name
+        with a different configuration.
+      operationId: post_v1_pubsub_jetstream_streams_stream_consumers
+      parameters:
+      - description: Stream is the stream to consume, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              ack: explicit
+              filter: orders.created
+              name: worker
+            schema:
+              $ref: '#/components/schemas/consumerWrite'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/consumerRecord'
+          description: created
+      summary: CreateConsumer creates a durable consumer on one stream and returns
+        it.
+      tags:
+      - pubsub
+  /v1/pubsub/jetstream/streams/{stream}/consumers/{name}:
+    delete:
+      description: |-
+        DeleteConsumer removes one consumer — its cursor, not the stream's messages —
+        and answers 204 with no body. 404 when the stream or the consumer does not
+        exist.
+      operationId: delete_v1_pubsub_jetstream_streams_stream_consumers_name
+      parameters:
+      - description: Stream is the stream, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      - description: Name is the consumer, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteConsumer removes one consumer — its cursor, not the stream's
+        messages — and answers 204 with no body.
+      tags:
+      - pubsub
+    get:
+      description: |-
+        GetConsumer returns one consumer of one org stream — its configuration and
+        its cursor: delivered and acknowledged sequences, pending and redelivered
+        counts. 404 when the stream or the consumer does not exist.
+      operationId: get_v1_pubsub_jetstream_streams_stream_consumers_name
+      parameters:
+      - description: Stream is the stream, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      - description: Name is the consumer, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/consumerRecord'
+          description: ok
+      summary: 'GetConsumer returns one consumer of one org stream — its configuration
+        and its cursor: delivered and acknowledged sequences, pending and redelivered
+        counts.'
+      tags:
+      - pubsub
+  /v1/pubsub/jetstream/streams/{stream}/consumers/{name}/next:
+    post:
+      description: |-
+        Fetch pulls the next batch from a consumer and acknowledges it — the
+        request/response way to consume a stream. The hand-off is at-most-once: a
+        message returned here is acked here, so a caller that loses the response does
+        not see it again. Workers needing at-least-once delivery consume the same
+        consumer over the NATS port, where acks are theirs to send. An empty batch
+        after the wait is an empty page, not an error.
+      operationId: post_v1_pubsub_jetstream_streams_stream_consumers_name_next
+      parameters:
+      - description: Stream is the stream, from the path.
+        in: path
+        name: stream
+        required: true
+        schema:
+          type: string
+      - description: Name is the consumer, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              batch: 10
+              waitMs: 2000
+            schema:
+              $ref: '#/components/schemas/fetchQuery'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/messagePage'
+          description: ok
+      summary: Fetch pulls the next batch from a consumer and acknowledges it — the
+        request/response way to consume a stream.
+      tags:
+      - pubsub
+  /v1/pubsub/kv/{bucket}:
+    delete:
+      description: |-
+        DeleteBucket removes one bucket of the caller's org — every key and every
+        revision with it — and answers 204 with no body. 404 when the org has no
+        bucket of that name.
+      operationId: delete_v1_pubsub_kv_bucket
+      parameters:
+      - description: Bucket is the bucket's name, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteBucket removes one bucket of the caller's org — every key and
+        every revision with it — and answers 204 with no body.
+      tags:
+      - pubsub
+    post:
+      description: |-
+        CreateBucket creates a KV bucket and returns it. A bucket is keyed state on
+        the same durable plane as the streams: each key holds up to History
+        revisions, entries can expire by TTL, and watchers on the NATS port see every
+        write. 409 when the org already has a bucket of that name.
+      operationId: post_v1_pubsub_kv_bucket
+      parameters:
+      - description: |-
+          Bucket is the bucket's name within the org, from the path: 1–64 of
+          [A-Za-z0-9_], no dash.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              history: 5
+              ttl: 3600
+            schema:
+              $ref: '#/components/schemas/bucketWrite'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/bucketRecord'
+          description: created
+      summary: CreateBucket creates a KV bucket and returns it.
+      tags:
+      - pubsub
+  /v1/pubsub/kv/{bucket}/{key}:
+    delete:
+      description: |-
+        Delete removes one key — a delete marker in the key's history, so watchers
+        see it and Get answers 404 — and answers 204 with no body. 404 when the
+        bucket does not exist.
+      operationId: delete_v1_pubsub_kv_bucket_key
+      parameters:
+      - description: Bucket is the bucket, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - description: Key is the key, from the path.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Delete removes one key — a delete marker in the key's history, so watchers
+        see it and Get answers 404 — and answers 204 with no body.
+      tags:
+      - pubsub
+    get:
+      description: |-
+        Get returns one key's current value and revision. 404 when the bucket does
+        not exist, the key was never written, or its latest revision is a delete.
+      operationId: get_v1_pubsub_kv_bucket_key
+      parameters:
+      - description: Bucket is the bucket, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - description: Key is the key, from the path.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kvEntry'
+          description: ok
+      summary: Get returns one key's current value and revision.
+      tags:
+      - pubsub
+    put:
+      description: |-
+        Put sets one key to one value and returns the revision the write created.
+        Writes are versioned: each put is a new revision and the bucket retains up to
+        its History of them per key.
+      operationId: put_v1_pubsub_kv_bucket_key
+      parameters:
+      - description: Bucket is the bucket, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - description: Key is the key, from the path.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              value: '{"theme":"dark"}'
+            schema:
+              $ref: '#/components/schemas/kvWrite'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kvAck'
+          description: ok
+      summary: Put sets one key to one value and returns the revision the write created.
+      tags:
+      - pubsub
+  /v1/pubsub/kv/{bucket}/{key}/history:
+    get:
+      description: |-
+        History returns one key's retained revisions, oldest first — every put and
+        every delete marker up to the bucket's History depth. 404 when the bucket
+        does not exist or the key was never written.
+      operationId: get_v1_pubsub_kv_bucket_key_history
+      parameters:
+      - description: Bucket is the bucket, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - description: Key is the key, from the path.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kvPage'
+          description: ok
+      summary: History returns one key's retained revisions, oldest first — every
+        put and every delete marker up to the bucket's History depth.
+      tags:
+      - pubsub
+  /v1/pubsub/publish:
+    post:
+      description: |-
+        Publish puts one message on the org's bus. When a stream captures the subject
+        the write is DURABLE — the receipt names the stream and sequence only after
+        JetStream has it on storage, and a repeated Nats-Msg-Id header within the
+        dedup window answers duplicate instead of storing twice. When nothing
+        captures it, the message goes out core NATS: delivered to current
+        subscribers, receipt {ok}, nothing retained.
+      operationId: post_v1_pubsub_publish
+      requestBody:
+        content:
+          application/json:
+            example:
+              data: '{"id":"o_1"}'
+              headers:
+                Nats-Msg-Id: o_1
+              subject: orders.created
+            schema:
+              $ref: '#/components/schemas/busPublish'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/busAck'
+          description: ok
+      summary: Publish puts one message on the org's bus.
+      tags:
+      - pubsub
+  /v1/pubsub/request:
+    post:
+      description: |-
+        Request sends one request on the org's bus and waits for one reply — the
+        synchronous half of pub/sub, for callers speaking to a responder subscribed
+        on the NATS port. 404 when nobody is listening on the subject; 408 when a
+        responder exists but no reply arrived within the timeout.
+      operationId: post_v1_pubsub_request
+      requestBody:
+        content:
+          application/json:
+            example:
+              data: '{"sku":"gpu_1"}'
+              subject: billing.quote
+              timeoutMs: 2000
+            schema:
+              $ref: '#/components/schemas/busRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/busMessage'
+          description: ok
+      summary: Request sends one request on the org's bus and waits for one reply
+        — the synchronous half of pub/sub, for callers speaking to a responder subscribed
+        on the NATS port.
+      tags:
+      - pubsub
   /v1/referrals:
     get:
       description: |-
@@ -49123,6 +50012,11 @@ tags:
 - description: 'Package prompts mounts the Hanzo Cloud /v1/prompts surface: a per-org,
     versioned prompt library.'
   name: prompts
+- description: 'Package pubsub is the platform message bus: publish/subscribe messaging,
+    durable JetStream streams and consumers, and a key-value store, served to tenants
+    at /v1/pubsub over the embedded Hanzo PubSub (NATS + JetStream) node this same
+    package runs.'
+  name: pubsub
 - description: 'Package referrals is the customer referral loop: every org has a stable
     code and share link, a new org claims it at signup, and BOTH sides are granted
     cloud credit once the referee actually spends — at-most-once, never on signup
