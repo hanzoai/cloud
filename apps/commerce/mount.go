@@ -426,6 +426,30 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		commercebilling.TopupWithToken,
 	)
 
+	// POST /v1/billing/subscribe/card — the card-on-file MONTHLY subscription: vault a
+	// Square nonce as a reusable card, charge the first period at the SERVER-AUTHORITATIVE
+	// plan price, create the subscription. It is the paid path's front door, and it had NO
+	// route in this binary at all: commerce publishes it on its api.Route() `user` group
+	// (api/billing/handlers.go), which the co-resident embed never compiles, and mount
+	// never registered it — so the one endpoint that turns a visitor into a subscriber
+	// answered the account bridge's "sign in to view billing" no matter who called it.
+	//
+	// Chain is topup/token's byte-for-byte, and for the same reasons: both are browser
+	// money-WRITES that charge a single-use Square nonce. commerce's own gate is the
+	// `user` group (TokenRequired — any authenticated member may subscribe by paying);
+	// IAMTokenRequired is that gate here, resolving the org GetOrganization reads.
+	// PinBillingSubject pins the subject into query AND body, so subscribeSubject can
+	// only ever resolve the caller's OWN org (its `userId` is honored only inside that
+	// bound) — the IDOR boundary billingData set. The PAN never touches this binary:
+	// the nonce goes to Square and the settled charge is its own mint authority.
+	app.Post("/v1/billing/subscribe/card",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.SubscribeWithCard,
+	)
+
 	// The remaining console billing WRITES that share topup/token's self-dispatch loop
 	// class — each is a POST the console makes (billingForwardable in billing.go), each had
 	// NO co-resident handler, so each fell through to the account bridge's /v1/billing/*
