@@ -7,8 +7,9 @@ package analytics
 // production caller, publish had no production caller, and the drain was never
 // constructed — so every browser error reached the legacy wide table and stopped, and
 // event.error, the one table built for it, stayed empty. These tests bind the
-// CONNECTIONS rather than the pieces: each piece had tests already, and each piece was
-// right on its own.
+// CONNECTIONS rather than the pieces — and since the flip they also hold the wide
+// table OUT: the fact is the only storage projection, so the ingest path executing
+// any warehouse statement at all is the regression.
 
 import (
 	"context"
@@ -77,10 +78,12 @@ func TestBrowserErrorReachesTheErrorPlane(t *testing.T) {
 			"error is one an issue list cannot assemble")
 	}
 
-	// The legacy wide row is still written, because the read lenses still select from
-	// it. Two projections of one admitted event, not two admissions.
-	if len(w.rows) != 1 {
-		t.Fatalf("wrote %d wide INSERTs, want 1 — the hanzo.events lenses still read that table", len(w.rows))
+	// The fact is the ONLY copy: the wide hanzo.events projection is retired, so the
+	// ingest path must touch warehouseExec NOT AT ALL — no DDL, no INSERT. The error
+	// lens (/v1/errors) reads event.error, where the sink lands exactly this fact.
+	if len(w.stmts) != 0 {
+		t.Fatalf("ingest executed %d warehouse statements (%v), want 0 — the fact publish "+
+			"is the one write path; a statement here is the wide double-write growing back", len(w.stmts), w.stmts)
 	}
 }
 
@@ -130,11 +133,12 @@ func frameFiles(f *fault) []string {
 	return out
 }
 
-// TestOneAdmissionTwoProjections pins that the wide row and the fact come from the SAME
-// decision. The two normalizers disagree about names (a page view is $pageview in one and
-// page_viewed in the other), and letting each decide admission for itself is exactly how
-// a signal ends up in one store and not the other.
-func TestOneAdmissionTwoProjections(t *testing.T) {
+// TestOneAdmissionOneProjection pins the flip's core claim: one admission decision
+// (normalize) and ONE storage projection (the fact). Its predecessor
+// (TestOneAdmissionTwoProjections) asserted a wide hanzo.events INSERT beside the
+// facts; that second projection is retired, so the pin now holds the write path to
+// exactly the facts — a wide insert reappearing is the failure, not the expectation.
+func TestOneAdmissionOneProjection(t *testing.T) {
 	w := fakeWarehouse(t)
 	app := mountApp(t)
 	const body = `{"batch":[{"event":"signup_completed"},{"type":"pageview","url":"https://hanzo.ai/"},` +
@@ -149,8 +153,8 @@ func TestOneAdmissionTwoProjections(t *testing.T) {
 	if len(w.facts) != 3 {
 		t.Fatalf("published %d facts for 3 admitted events, want 3", len(w.facts))
 	}
-	if len(w.rows) != 1 {
-		t.Fatalf("wrote %d wide INSERTs, want 1 — a batch is ONE multi-row insert", len(w.rows))
+	if len(w.stmts) != 0 {
+		t.Fatalf("ingest executed %d warehouse statements, want 0 — the facts are the only projection", len(w.stmts))
 	}
 	got := map[signal]int{}
 	for _, f := range w.facts {
@@ -164,12 +168,11 @@ func TestOneAdmissionTwoProjections(t *testing.T) {
 	}
 }
 
-// TestAnUnpublishableBatchWritesNothing pins the ORDER of the two commits, which is the
-// only thing that decides what a client's retry COSTS. Both stores answer 503 and the
-// client re-sends the whole batch either way; every event.* table is a ReplacingMergeTree
-// keyed on the fact id and absorbs the re-send, while hanzo.events is a plain MergeTree
-// and keeps the duplicate forever. So the commit that can fail must be the one that can
-// also be repeated — and if these ever swap, this is what notices.
+// TestAnUnpublishableBatchWritesNothing pins the commit's honesty: the publish IS the
+// commit, so a batch the plane cannot take is a 503 with NO residue anywhere — the
+// retry it asks for is safe because every event.* table is a ReplacingMergeTree keyed
+// on the fact id, and there is no second, non-idempotent store left for a retry to
+// duplicate into (that was hanzo.events, and it is retired from this path).
 func TestAnUnpublishableBatchWritesNothing(t *testing.T) {
 	w := fakeWarehouse(t)
 	app := mountApp(t)
@@ -181,9 +184,9 @@ func TestAnUnpublishableBatchWritesNothing(t *testing.T) {
 		t.Fatalf("ingest with an unavailable plane = %d (%s), want 503 — a fact that was admitted "+
 			"and could not be made durable is the caller's business", code, resp)
 	}
-	if len(w.rows) != 0 {
-		t.Fatalf("wrote %d wide rows after the publish failed — the retry that 503 asks for would "+
-			"duplicate every one of them", len(w.rows))
+	if len(w.stmts) != 0 {
+		t.Fatalf("executed %d warehouse statements after the publish failed — nothing may land "+
+			"beside a commit that answered 503", len(w.stmts))
 	}
 }
 
@@ -233,9 +236,9 @@ func TestMetricIsRefusedNotAccepted(t *testing.T) {
 	if len(w.facts) != 0 {
 		t.Errorf("published %d metric facts onto a subject no writer drains", len(w.facts))
 	}
-	if len(w.rows) != 0 {
-		t.Errorf("wrote %d wide rows for a metric — folding a sample into a generic product event "+
-			"stores something that is not what was sent", len(w.rows))
+	if len(w.stmts) != 0 {
+		t.Errorf("executed %d warehouse statements for a metric — folding a sample into a generic "+
+			"product event stores something that is not what was sent", len(w.stmts))
 	}
 }
 

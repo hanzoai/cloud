@@ -13,7 +13,7 @@ import (
 func TestOutcomesSQL_TenantIsolation(t *testing.T) {
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
-	org := "acme'; DROP TABLE hanzo.events;--"
+	org := "acme'; DROP TABLE event.event;--"
 	exposure := "$feature_flag_called"
 	metric := "order_completed"
 
@@ -26,9 +26,9 @@ func TestOutcomesSQL_TenantIsolation(t *testing.T) {
 	if strings.Contains(sql, "DROP TABLE") {
 		t.Fatalf("SQL carries injected text: %s", sql)
 	}
-	// tenant_id is bound; the org is the trailing eventsWhere arg.
-	if !strings.Contains(sql, "tenant_id = ?") {
-		t.Fatalf("query must bind tenant_id positionally: %s", sql)
+	// org is bound; it is the trailing eventsWhere arg.
+	if !strings.Contains(sql, "org = ?") {
+		t.Fatalf("query must bind org positionally: %s", sql)
 	}
 	// args order: [exposure, metric, start, end, org, exposure, metric].
 	if len(args) != 7 {

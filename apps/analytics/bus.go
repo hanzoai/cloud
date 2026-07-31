@@ -481,10 +481,11 @@ const maxSubjectToken = 48
 // grammar, and the envelope are one decision, and a consumer that also published would
 // be a second owner of all three.
 //
-// FAIL-SOFT, unlike the fact path above. The batch is already durable in the warehouse
-// by the time this runs, so a bus that is down publishes nothing and says nothing to the
-// caller — the ingest already answered 200. It is called detached (forward.go), so a
-// slow bus costs a goroutine and never an ingest.
+// FAIL-SOFT, unlike the fact path above. The batch is already COMMITTED as facts
+// (publish, above) by the time this runs, so a bus that is down for this second
+// vocabulary loses only envelope deliveries, never data — the ingest already answered
+// 200 for the durable copy. It is called detached (forward.go), so a slow bus costs a
+// goroutine and never an ingest.
 func PublishEvents(org string, evs []SinkEvent) {
 	if org == "" || len(evs) == 0 {
 		return
@@ -493,7 +494,7 @@ func PublishEvents(org string, evs []SinkEvent) {
 	defer cancel()
 	cl, err := conn.connect(ctx)
 	if err != nil {
-		return // bus down: the warehouse copy is the durable one
+		return // bus down: the fact commit is the durable copy
 	}
 	for _, e := range evs {
 		body, err := json.Marshal(EventEnvelope{
