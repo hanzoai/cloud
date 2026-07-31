@@ -107,8 +107,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b = &broker{nc: nc, js: js, mounted: time.Now()}
 
-	// cloud.Bridge parks the request so a typed op can read the validated
-	// principal — the ONE source of the org every handler scopes by.
+	// cloud.Bridge parks the VALIDATED org so a typed op — which receives a
+	// context and nothing else — can read it back (callerOf): the ONE source of
+	// the org every handler scopes by. Installed before the leaves it serves,
+	// since fiber runs middleware in registration order.
 	app.Use(cloud.Bridge())
 	g := app.Group("/v1/mq")
 
@@ -164,12 +166,15 @@ func (br *broker) live(ctx context.Context) (context.Context, context.CancelFunc
 // fact off the validated principal, never an In field: an In field is
 // caller-supplied, so a tenant key read from one would be a cross-tenant read
 // the caller asserted for itself.
+//
+// It reads the org Bridge PARKED, not the request. The org is all this surface
+// needs — nothing here turns on admin-ness, a project or a forwarded credential
+// — and principal.OrgFrom is the typed-op reader for exactly that, so reaching
+// for cloud.Request would take the escape hatch to recompute principal.Org(c),
+// the same value by the longer way. Fails closed off the HTTP path, where
+// nothing is parked and every op refuses rather than serving an untenanted one.
 func callerOf(ctx context.Context) (string, error) {
-	c, ok := cloud.Request(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("X-Org-Id required")
-	}
-	org, ok := principal.Org(c)
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return "", zip.ErrForbidden("X-Org-Id required")
 	}
