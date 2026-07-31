@@ -1,8 +1,8 @@
-// Package pubsub embeds the Hanzo PubSub core data plane (NATS + JetStream) as
-// an in-process cloud subsystem (HIP-0106) — the same fold pattern as
-// iam/kms/tasks. It binds the NATS client port (default :4222) and
-// serves JetStream over the cloud data dir; the embedded Kafka adaptor
-// (clients/kafka) and any in-cluster NATS/Kafka client talk to it. It is a
+// Package pubsub is the platform message bus: an embedded Hanzo PubSub node
+// (NATS + JetStream) that binds the NATS client port (default :4222) and serves
+// JetStream over the cloud data dir — the ONE durable log every other app
+// publishes facts onto and consumes them from. The Kafka-wire adaptor
+// (apps/kafka) and any in-cluster NATS/Kafka client talk to it. It is a
 // single embedded node running JetStream over the local file store — there is
 // NO ZooKeeper, raft, or etcd in the path (Lux consensus only; the optional
 // Quasar PQ control plane is a follow-up, see github.com/hanzoai/pubsub/embed).
@@ -35,8 +35,8 @@ import (
 	psembed "github.com/hanzoai/pubsub/embed"
 )
 
-// Mount order is the slice position in apps.Wire(): this infrastructure data
-// plane must bind BEFORE clients/kafka dials it. It registers no HTTP routes, so
+// Mount order is the row position in manifest/apps.go: this infrastructure data
+// plane must bind BEFORE apps/kafka dials it. It registers no HTTP routes, so
 // the position only fixes the pubsub-before-kafka mount sequence.
 
 // srv holds the running embedded server so shutdown can stop it. Set once by Mount.

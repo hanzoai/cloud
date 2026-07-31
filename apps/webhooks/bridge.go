@@ -22,6 +22,7 @@
 // FAIL-SOFT both ways: the sink runs detached (forward.go), and a bus that is
 // down publishes nothing while the warehouse copy is already durable — the bus
 // is the fan-out spine, not the system of record.
+
 package webhooks
 
 import (

@@ -1,6 +1,10 @@
-// Package notify folds the Hanzo Notify SEND surface into the unified cloud
-// binary (HIP-0106), mounting /v1/notify/* natively in-process — the native
-// replacement for the standalone notifyd (github.com/hanzoai/notify) Deployment.
+// Package notify is the platform's transactional sender: POST /v1/notify/send
+// delivers one message by email or SMS through the caller org's OWN KMS-held
+// provider credential, and notify.Send (send.go) is that same rail for
+// in-process callers — one sender, never a second provider path.
+//
+// It is the native replacement for the standalone notifyd
+// (github.com/hanzoai/notify) Deployment.
 //
 // SCOPE — the one live contract. notifyd's ONLY production consumer is Hanzo IAM,
 // which POSTs OTP sends to POST /v1/notify/send?sync=true with the wire body
@@ -28,9 +32,8 @@
 //
 // SECURITY — the trust boundary moves with the code. notifyd was ClusterIP-internal
 // and trusted a raw X-Org-Id header. Mounted here, /v1/notify/send is reachable via
-// the public gateway (api.hanzo.ai forwards every path to cloud), so — like
-// clients/auto did when it folded the auto engine — this gates on a VALIDATED
-// principal and derives the org from principal.Org (the identity middleware's
+// the public gateway (api.hanzo.ai forwards every path to cloud), so it gates on a
+// VALIDATED principal and derives the org from principal.Org (the identity middleware's
 // trusted, gateway-minted X-Org-Id), never from a client-supplied header. An
 // unauthenticated caller gets 401; a signed-in caller can only send scoped to their
 // OWN org.
@@ -38,7 +41,7 @@
 // CREDENTIALS — KMS only, never env, never plaintext, never logged. Provider
 // credentials are read EXCLUSIVELY from cloud's embedded KMS via cloud.Deps.KMS,
 // at the org-scoped, rotatable ref orgs/<org>/notify/<service>/<key> — the SAME
-// /orgs/<org> namespace clients/integrations uses, so a cred is writable and
+// /orgs/<org> namespace apps/integrations uses, so a cred is writable and
 // rotatable through POST /v1/kms/orgs/:org/secrets with a validated org token
 // (no operator-injected env Secret, no restart to rotate). The org is the
 // VALIDATED principal's tenant (never a client header). A missing key yields an
@@ -69,7 +72,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Mount order is the slice position in apps.Wire(): /v1/notify/* must bind after
+// Mount order is the row position in manifest/apps.go: /v1/notify/* must bind after
 // the product control planes and BEFORE the AI /v1/* catch-all, so the send
 // routes resolve here rather than in the AI fallthrough.
 
@@ -265,7 +268,7 @@ func (s *service) defaultProvider(ctx context.Context, org, channel string) (str
 // creds resolves a provider's credential bag from KMS ONLY — never env, never
 // plaintext, never logged. Each key is read from cloud's embedded KMS
 // (cloud.Deps.KMS) at the org-scoped, rotatable ref orgs/<org>/notify/<svc>/<key>,
-// the same /orgs/<org> convention clients/integrations uses (so a cred is
+// the same /orgs/<org> convention apps/integrations uses (so a cred is
 // writable + rotatable via POST /v1/kms/orgs/:org/secrets). A nil store or a
 // missing key leaves the value empty; constructProvider then fails closed.
 func (s *service) creds(ctx context.Context, org, svc string) map[string]string {
