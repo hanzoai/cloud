@@ -33,19 +33,19 @@ func newScopeIAM() *scopeIAM {
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/organizations"):
+		case r.URL.Path == "/v1/iam/get-organizations":
 			io.WriteString(w, `{"status":"ok","msg":"","data":[
 				{"owner":"admin","name":"hanzo","displayName":"Hanzo","createdTime":"2020-01-01T00:00:00Z"},
 				{"owner":"admin","name":"maxpower","displayName":"MaxPower","createdTime":"2021-02-02T00:00:00Z"}
 			],"total":2}`)
-		case strings.HasSuffix(r.URL.Path, "/organizations/get"):
+		case r.URL.Path == "/v1/iam/get-organization":
 			id := r.URL.Query().Get("id") // owner/name
 			name := id
 			if i := strings.LastIndex(id, "/"); i >= 0 {
 				name = id[i+1:]
 			}
 			fmt.Fprintf(w, `{"status":"ok","msg":"","data":{"owner":"admin","name":%q,"displayName":%q,"createdTime":"2021-02-02T00:00:00Z"}}`, name, name)
-		case strings.HasSuffix(r.URL.Path, "/users"):
+		case r.URL.Path == "/v1/iam/get-users":
 			f.mu.Lock()
 			f.lastUsersOwner = r.URL.Query().Get("owner")
 			f.mu.Unlock()
