@@ -51967,49 +51967,6 @@ paths:
       summary: Provision a search index for your org
       tags:
       - search
-  /v1/search-docs/indexes:
-    get:
-      description: |-
-        Lists the search indexes with their document counts and timestamps.
-
-        It reads the in-cluster Meilisearch service and reshapes its /stats and
-        /indexes replies into the rows the console's Search panel renders. The read is
-        degrade-friendly by design: an unreachable Meilisearch answers 200 with an
-        EMPTY list, so the panel shows an honest empty state instead of an error.
-        createdAt falls back to now and lastIndexedAt to null when the index list is
-        unavailable.
-      operationId: get_v1_search-docs_indexes
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/searchIndexList'
-          description: ok
-      summary: Lists the search indexes with their document counts and timestamps.
-      tags:
-      - search-docs
-  /v1/search-docs/stats:
-    get:
-      description: |-
-        Totals the documents across every search index.
-
-        totalDocuments is summed from Meilisearch's own per-index counts. The other
-        three fields are structurally zero rather than estimated: Meilisearch keeps no
-        query-history counters, so searches, sessions and the per-day series are not
-        derivable from the index and this surface reports the honest zero instead of a
-        fabricated number. An unreachable Meilisearch answers 200 with all zeros.
-      operationId: get_v1_search-docs_stats
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/searchStats'
-          description: ok
-      summary: Totals the documents across every search index.
-      tags:
-      - search-docs
   /v1/search/{name}:
     delete:
       description: |-
@@ -52060,6 +52017,49 @@ paths:
       summary: GetSearch returns one search index's metadata.
       tags:
       - search
+  /v1/search/indexes:
+    get:
+      description: |-
+        Lists the search indexes with their document counts and timestamps.
+
+        It reads the in-cluster Meilisearch service and reshapes its /stats and
+        /indexes replies into the rows the console's Search panel renders. The read is
+        degrade-friendly by design: an unreachable Meilisearch answers 200 with an
+        EMPTY list, so the panel shows an honest empty state instead of an error.
+        createdAt falls back to now and lastIndexedAt to null when the index list is
+        unavailable.
+      operationId: get_v1_search_indexes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchIndexList'
+          description: ok
+      summary: Lists the search indexes with their document counts and timestamps.
+      tags:
+      - search-docs
+  /v1/search/stats:
+    get:
+      description: |-
+        Totals the documents across every search index.
+
+        totalDocuments is summed from Meilisearch's own per-index counts. The other
+        three fields are structurally zero rather than estimated: Meilisearch keeps no
+        query-history counters, so searches, sessions and the per-day series are not
+        derivable from the index and this surface reports the honest zero instead of a
+        fabricated number. An unreachable Meilisearch answers 200 with all zeros.
+      operationId: get_v1_search_stats
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchStats'
+          description: ok
+      summary: Totals the documents across every search index.
+      tags:
+      - search-docs
   /v1/security/findings:
     get:
       description: Lists the caller org's findings — rule, severity, path, line, masked
