@@ -376,3 +376,41 @@ func TestStudioReadyGatesCapability(t *testing.T) {
 		t.Fatalf("a ready node must give no block reason: %q", w.studioBlockReason())
 	}
 }
+
+// A control plane that is ROLLING must not kill this worker. The presence write is
+// the call whose error ends the process, and systemd's restart kills the studio the
+// worker supervises — taking any render that was sampling with it. A cloud deploy did
+// exactly that: api.hanzo.ai answered 503 for the seconds its pod was replaced, and a
+// compose that had run for minutes was gone.
+//
+// The retry is what separates a blip from an outage, so it is asserted on the shape
+// that bit: fail, fail, then succeed — one call's worth of error must not be terminal.
+func TestRegisterRidesOutARollingControlPlane(t *testing.T) {
+	t.Setenv("HANZO_TOKEN", "t")
+	var mu sync.Mutex
+	presence := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/fleet/activities") {
+			w.WriteHeader(http.StatusOK) // namespace ensure — already best-effort
+			return
+		}
+		mu.Lock()
+		presence++
+		n := presence
+		mu.Unlock()
+		if n < 3 {
+			http.Error(w, "no available server", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	w := testWorker(t, srv.URL)
+	if err := w.register(context.Background()); err != nil {
+		t.Fatalf("register gave up on a rolling control plane: %v", err)
+	}
+	if presence != 3 {
+		t.Fatalf("presence attempts = %d, want 3 (two 503s ridden out, then success)", presence)
+	}
+}
