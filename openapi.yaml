@@ -20954,6 +20954,48 @@ components:
             $ref: '#/components/schemas/byoWorker'
           type: array
       type: object
+    worldIndex:
+      properties:
+        product:
+          description: Product is the product's name as customers know it.
+          type: string
+        summary:
+          description: Summary is one sentence naming what this surface serves.
+          type: string
+        wires:
+          description: |-
+            Wires is every protocol door onto World, REST first. It is deliberately NOT
+            a list of REST operations: GET /v1/openapi.json is the one enumeration of
+            those, and a second copy here would be a second thing to keep true.
+          items:
+            $ref: '#/components/schemas/worldWire'
+          type: array
+      type: object
+    worldWire:
+      properties:
+        auth:
+          description: |-
+            Auth states what the wire asks of the caller, including which parts of it
+            answer without a token.
+          type: string
+        name:
+          description: Name is the wire's short id — rest, mcp or zap.
+          type: string
+        path:
+          description: Path is the address the wire answers on, under this same origin.
+          type: string
+        protocol:
+          description: |-
+            Protocol names what the wire speaks, so a caller knows which client to
+            point at it.
+          type: string
+        spec:
+          description: |-
+            Spec is where this wire's operations are enumerated, when they are
+            enumerated in a document at all. Empty for a wire that describes itself
+            over its own protocol.
+          type: string
+      type: object
     zapProcReq:
       properties:
         description:
@@ -57222,6 +57264,36 @@ paths:
       summary: Keyless web meta-search, in the SearXNG JSON envelope.
       tags:
       - websearch
+  /v1/world:
+    get:
+      description: |-
+        Answers GET /v1/world — the product's front door, naming every wire this
+        surface answers on.
+
+        It exists because two of those wires are INVISIBLE to the generated document.
+        /v1/world/mcp and /v1/world/zap are carved off the cloud catch-all by the
+        ingress and answered by world-gw, so the cloud router never serves them — and
+        openapi.Describe renders prose only for a route the router actually serves,
+        which is the very property that keeps the document from being able to claim an
+        operation nothing answers. Both addresses are real and public, so without this
+        op the only way to learn they exist is to read the ingress config. This is
+        where that fact lives, in the product's own surface.
+
+        Public on purpose: discovery precedes credentials. It reports addresses and
+        protocols only — never feed data, and never the caller's plan, which
+        GET /v1/world/limits owns — so there is nothing here to leak.
+      operationId: get_v1_world
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/worldIndex'
+          description: ok
+      summary: Answers GET /v1/world — the product's front door, naming every wire
+        this surface answers on.
+      tags:
+      - world
   /v1/world/limits:
     get:
       description: |-
