@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -202,6 +203,28 @@ func DescribeRest(path, summary, description string) {
 			Describe(path, m, summary, description)
 		}
 	}
+}
+
+// describedRoutes returns the routes that have DECLARED prose, sorted, so the
+// bijection [Complete] enforces can be read in the one direction the registry
+// cannot answer by itself: not "does this operation have prose" but "does this
+// prose have an operation".
+func describedRoutes() []opKey {
+	regMu.Lock()
+	defer regMu.Unlock()
+	out := make([]opKey, 0, len(registry))
+	for k, r := range registry {
+		if r.described {
+			out = append(out, k)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].path != out[j].path {
+			return out[i].path < out[j].path
+		}
+		return out[i].method < out[j].method
+	})
+	return out
 }
 
 // registered returns the declaration for a live route, or nil.

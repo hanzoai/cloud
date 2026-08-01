@@ -7,13 +7,22 @@
 // Vercel edge functions (api/gdelt-doc.js, api/rss-proxy.js) with an
 // org-scoped, in-binary subsystem.
 //
-// Surface (all org/project-scoped; /v1 only):
+// Surface (/v1 only; org/project-scoped except where marked public):
 //
+//	GET /v1/world            front door: the product and its wires    -> {…} PUBLIC
 //	GET /v1/world/news       merged, filtered, freshest-first feed -> {items:[…]}
 //	GET /v1/world/pipeline   per-project pipeline config (read)    -> {…}
 //	PUT /v1/world/pipeline   per-project pipeline config (write)   -> {…}
-//	GET /v1/world/limits     a World plan's rate/alert/model gates -> {…}
+//	GET /v1/world/limits     a World plan's rate/alert/model gates -> {…} PUBLIC
 //	GET /v1/world/stream     SSE live refresh (ZAP-native)         -> event: news
+//
+// Two more wires answer under this prefix and are NOT served by this binary:
+// /v1/world/mcp (Model Context Protocol) and /v1/world/zap (ZAP over WebSocket)
+// are carved off the cloud catch-all by the ingress and answered by world-gw. The
+// generated document cannot declare them — openapi.Describe renders prose only
+// for a route this router actually serves, which is what stops the document
+// claiming an operation nothing answers — so GET /v1/world names them instead.
+// That op is the only place in the product's own surface those addresses appear.
 //
 // TENANT ISOLATION is enforced SERVER-SIDE on every request. The (org, project)
 // tuple is principal.Org + principal.Project (the values SanitizeIdentity minted
@@ -144,11 +153,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// test app that never calls Serve.
 	app.Use(cloud.Bridge())
 
-	g := app.Group("/v1/world")
-	zip.Get(g, "/news", s.news)
-	zip.Get(g, "/pipeline", s.pipeline)
-	zip.Put(g, "/pipeline", s.setPipeline)
-	zip.Get(g, "/limits", s.limits)
+	// The ops are declared on the APP with absolute paths rather than on a group,
+	// because one of them IS the prefix: GET /v1/world has no leaf, and a group
+	// cannot express it — zip.Get(g, "") composes to "/v1/world/", a different
+	// route. A group for four plus an app-level exception for one is two idioms;
+	// one absolute address per op is one, and it is the form apps/pricing and
+	// apps/plan already use for exactly this reason.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("world.Mount: router is not backed by a zip app — typed ops have no registry to declare into")
+	}
+	zip.Get(zapp, "/v1/world", s.index)
+	zip.Get(zapp, "/v1/world/news", s.news)
+	zip.Get(zapp, "/v1/world/pipeline", s.pipeline)
+	zip.Put(zapp, "/v1/world/pipeline", s.setPipeline)
+	zip.Get(zapp, "/v1/world/limits", s.limits)
 
 	// GET /v1/world/stream stays an untyped handler, deliberately: it is Server-Sent
 	// Events. A typed op returns ONE value that zip marshals and writes as the whole
@@ -157,7 +176,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Out that can express a stream, so typing it would turn a live feed into a
 	// single JSON object. Its document prose is declared instead by stream.go's
 	// init (openapi.Describe), so the SDKs and the spec-derived CLI still carry it.
-	g.Get("/stream", s.stream)
+	zapp.Get("/v1/world/stream", s.stream)
 
 	log.Info("world surface mounted", "brand", deps.Brand,
 		"ai", s.ai != nil, "kms", s.kms != nil, "allowlisted_hosts", len(s.rssAllow))
