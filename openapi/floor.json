@@ -1,6 +1,6 @@
 {
-  "paths": 1384,
-  "operations": 1952,
+  "paths": 1396,
+  "operations": 1965,
   "products": {
     "admin": 87,
     "ads": 7,
@@ -86,7 +86,7 @@
     "guide": 19,
     "health": 1,
     "help": 4,
-    "iam": 179,
+    "iam": 192,
     "images": 1,
     "index": 17,
     "indexers": 1,
