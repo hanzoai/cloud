@@ -21,6 +21,7 @@ require (
 	github.com/hanzoai/iam v1.33.42
 	github.com/hanzoai/kafka v1.3.1
 	github.com/hanzoai/money v0.2.1
+	github.com/hanzoai/namespace v1.1.0
 	github.com/hanzoai/notify v1.7.2
 	github.com/hanzoai/otel-collector v1.2.0
 	github.com/hanzoai/plans v1.4.4

@@ -9,7 +9,7 @@ import (
 
 func newStore(t *testing.T, org string) *Store {
 	t.Helper()
-	db, err := cloud.OrgDB(t.TempDir(), org, "", "code")
+	db, err := cloud.OrgDB(t.TempDir(), cloud.MustOrgNamespace(org, ""), "code")
 	if err != nil {
 		t.Fatalf("OrgDB: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestStoreLexicalAndSymbol(t *testing.T) {
 // code. This is the org boundary — one SQLite file per org.
 func TestStoreIsolation(t *testing.T) {
 	dir := t.TempDir()
-	adb, err := cloud.OrgDB(dir, "orgA", "", "code")
+	adb, err := cloud.OrgDB(dir, cloud.MustOrgNamespace("orgA", ""), "code")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestStoreIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = a.Close() }()
-	bdb, err := cloud.OrgDB(dir, "orgB", "", "code")
+	bdb, err := cloud.OrgDB(dir, cloud.MustOrgNamespace("orgB", ""), "code")
 	if err != nil {
 		t.Fatal(err)
 	}

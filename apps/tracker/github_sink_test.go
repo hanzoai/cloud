@@ -44,7 +44,7 @@ func TestGitHubIssueMirrorUpsert(t *testing.T) {
 		t.Fatalf("create result: %+v", res)
 	}
 
-	store, err := mounted.State.stores.For("hanzo", "default")
+	store, err := mounted.State.stores.For(cloud.MustOrgNamespace("hanzo", "default"))
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}

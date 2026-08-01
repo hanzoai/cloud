@@ -98,7 +98,7 @@ func TestAnalyticsEventReachesWebhook(t *testing.T) {
 	stores := cloud.NewOrgStore[*store](t.TempDir(), "webhooks", openStore)
 	defer func() { _ = stores.CloseAll() }()
 	d := newDispatcher(stores, luxlog.New("test"))
-	st, err := stores.For("acme", "")
+	st, err := stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
 		t.Fatal(err)
 	}
