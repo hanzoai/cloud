@@ -32,7 +32,7 @@ func TestMigrateOverLegacyAgentsTable(t *testing.T) {
 		Name:      "agents",
 		LegacyDDL: legacyAgentsDDL,
 		Open: func(path string) (io.Closer, error) {
-			st, err := openStore(path)
+			st, err := openStoreAt(path)
 			if err != nil {
 				return nil, err
 			}
@@ -90,7 +90,7 @@ func TestMigrateOverLegacySessionsTable(t *testing.T) {
 		Name:      "sessions",
 		LegacyDDL: legacySessionsDDL,
 		Open: func(path string) (io.Closer, error) {
-			st, err := openStore(path)
+			st, err := openStoreAt(path)
 			if err != nil {
 				return nil, err
 			}

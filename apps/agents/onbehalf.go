@@ -44,7 +44,11 @@ func runOnBehalf(s *cloud.Service[state], ctx context.Context, org, userSub, ref
 	if s.State.ai == nil {
 		return Run{}, fmt.Errorf("agents: inference is not configured on this deployment")
 	}
-	a, err := s.State.store.Resolve(ctx, org, strings.TrimSpace(ref))
+	sto, err := s.State.storeFor(org)
+	if err != nil {
+		return Run{}, err
+	}
+	a, err := sto.Resolve(ctx, org, strings.TrimSpace(ref))
 	if err != nil {
 		return Run{}, err // errNotFound or a real DB error — caller replies generically
 	}

@@ -1,12 +1,6 @@
 package agents
 
-import (
-	"context"
-	"fmt"
-	"strings"
-
-	"github.com/hanzoai/cloud/apps/principal"
-)
+import "context"
 
 // ListForOrg returns the org's agents from the in-process store — the ONE
 // exported seam other in-process subsystems use to read the canonical agent
@@ -23,12 +17,9 @@ import (
 // token claim), never a raw client header. Fails closed (nil, error) when the
 // agents subsystem is not mounted or the org is empty/oversized.
 func ListForOrg(ctx context.Context, org string) ([]Agent, error) {
-	if mounted == nil || mounted.State.store == nil {
-		return nil, fmt.Errorf("agents: not mounted")
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return nil, err
 	}
-	org = strings.TrimSpace(org)
-	if org == "" || len(org) > principal.MaxOrgLen {
-		return nil, fmt.Errorf("agents: invalid org")
-	}
-	return mounted.State.store.List(ctx, org)
+	return sto.List(ctx, org)
 }

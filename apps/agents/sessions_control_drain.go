@@ -57,12 +57,12 @@ type controlDrain struct {
 // Example: {"id": "sess_1", "after": 12}
 func (o sessionOps) drain(ctx context.Context, in *controlDrainIn) (*controlDrain, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
 	id := in.ID
-	if _, err := s.State.store.GetSession(ctx, org, id); err == errSessionNotFound {
+	if _, err := sto.GetSession(ctx, org, id); err == errSessionNotFound {
 		return nil, zip.ErrNotFound("session not found")
 	} else if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
@@ -75,7 +75,7 @@ func (o sessionOps) drain(ctx context.Context, in *controlDrainIn) (*controlDrai
 		after = 0
 	}
 
-	evs, err := s.State.store.ListControlAfter(ctx, org, id, after, 200)
+	evs, err := sto.ListControlAfter(ctx, org, id, after, 200)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "drain control: %v", err)
 	}
@@ -107,8 +107,7 @@ func (s *Store) ListControlAfter(ctx context.Context, org, sessionID string, sin
 		limit = 200
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id,session_id,org,seq,kind,actor,payload,created_at
-		 FROM agent_session_events WHERE org=? AND session_id=? AND kind=? AND seq>?
+		`SELECT `+eventCols+` FROM agent_session_events WHERE org=? AND session_id=? AND kind=? AND seq>?
 		 ORDER BY seq ASC LIMIT ?`, org, sessionID, KindControl, since, limit)
 	if err != nil {
 		return nil, err

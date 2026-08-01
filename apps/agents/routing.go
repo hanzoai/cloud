@@ -51,7 +51,7 @@ var (
 )
 
 // migrateClaimKeys creates the per-target claim-key + serving-liveness table in
-// the SAME agents.db (one store, one tenancy column). Idempotent.
+// the org's own agents file, beside the targets it authenticates. Idempotent.
 func (s *Store) migrateClaimKeys() error {
 	const ddl = `
 CREATE TABLE IF NOT EXISTS agent_target_claim_keys (
@@ -167,13 +167,13 @@ func (s *Store) TargetDispatchable(ctx context.Context, org, targetID string) er
 // imports the store directly). Returns nil when a run may be routed to (org,
 // targetID), else a descriptive error.
 func TargetDispatchable(ctx context.Context, org, targetID string) error {
-	if mounted == nil {
-		return fmt.Errorf("agents: not mounted")
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return err
 	}
-	org = strings.TrimSpace(org)
 	targetID = strings.TrimSpace(targetID)
-	if org == "" || targetID == "" {
-		return fmt.Errorf("agents: org and target required")
+	if targetID == "" {
+		return fmt.Errorf("agents: target required")
 	}
-	return mounted.State.store.TargetDispatchable(ctx, org, targetID)
+	return sto.TargetDispatchable(ctx, org, targetID)
 }
