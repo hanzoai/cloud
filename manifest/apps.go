@@ -106,6 +106,16 @@ var Apps = []App{
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
 	{Name: "webhooks", Prefixes: []string{"/v1/webhooks"}},
 	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models", "/v1/train/experiments", "/v1/train/health", "/v1/train/jobs"}},
+	// The dataset plane sits BESIDE ml under /v1/ml rather than inside it, because
+	// the two share a face and nothing else. ml is a Kubernetes CRD bridge whose
+	// tenant boundary is a per-org NAMESPACE and whose failure domain is the
+	// cluster; this is a warehouse-backed record plane whose tenant boundary is a
+	// qualified `<brand>/<org>` KEY and whose failure domain is the columnar store.
+	// One package holding two tenancy models is the shape a privilege bug grows in,
+	// so they are two rows claiming two disjoint sets of leaves — and zip refuses
+	// two owners for one prefix at compose time, which checks it rather than
+	// trusting it.
+	{Name: "dataset", Prefixes: []string{"/v1/ml/datasets"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},
