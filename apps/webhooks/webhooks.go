@@ -150,7 +150,7 @@ func routes(app cloud.Router, s *cloud.Service[*state]) error {
 	zip.Delete(g, "/:id", o.deleteEndpoint)
 	zip.Get(g, "/:id/deliveries", o.listDeliveries)
 	zip.Post(g, "/:id/test", o.testEndpoint)
-	zip.Post(g, "/:id/rotate-secret", o.rotateSecret)
+	zip.Post(g, "/:id/secret", o.rotateSecret)
 	return nil
 }
 

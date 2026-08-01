@@ -74,7 +74,7 @@
       "properties": {},
       "type": "object"
     },
-    "name": "post_v1_webhooks_id_rotate-secret"
+    "name": "post_v1_webhooks_id_secret"
   },
   {
     "description": "Sends ONE signed test event to the endpoint right now and answers\nthe outcome inline, so the console can show whether the subscriber is reachable\nwithout waiting for real traffic. It takes the same attempt path the bus\ndispatcher takes — one attempt, 10s timeout, no retry ladder — and records the\nresult in the endpoint's delivery log. It works on a DISABLED endpoint too:\nvalidating one you have paused is the whole point.",
