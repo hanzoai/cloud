@@ -27,15 +27,12 @@ import (
 // are written the way the DOCUMENT writes them, which is the identity every
 // projection keys on.
 var untypedByDesign = map[string]string{
-	// 1. The canonical-forge webhook. Auth IS the HMAC over the RAW received
-	// bytes, verified before any parse (webhook.go), and zip's invoke unmarshals
-	// BEFORE the handler — so a typed In destroys the exact bytes the signature
-	// covers. It also answers a benign 204 to deliveries it ignores (non-push,
-	// ref delete, bot author) where a typed op's decode failure would 400 and
-	// retry-storm the forge.
-	"POST /v1/git/webhook": "auth is an HMAC over the RAW request bytes, verified before parse; a typed " +
-		"In decodes first and cannot re-derive them. Ignored deliveries answer 204, which a decode " +
-		"failure would turn into a 400 the forge retries.",
+	// 1. The RETIRED canonical-forge webhook (webhook.go), kept as a tombstone
+	// that answers 410 naming platform.hanzo.ai. It reads no body and returns no
+	// value, so there is no In and no Out for a typed op to be built from — a
+	// typed op is a shape, and this route deliberately has none left.
+	"POST /v1/git/webhook": "retired: reads no request and returns no value, only a 410 naming the " +
+		"door that builds. A typed op needs an In or an Out; a tombstone has neither.",
 
 	// 2. The smart-HTTP git pack protocol, on both hosts. Neither direction is
 	// JSON: requests are application/x-git-*-request pack streams, responses are
@@ -276,7 +273,9 @@ func TestVoidOpsPublishTheStatusTheySend(t *testing.T) {
 // usage), the ref advertisement, and the twelve HTML pages. Declaring a body for
 // one of those would replace an honest silence with a fresh falsehood.
 var declaredBodies = map[string]string{
-	"POST /v1/git/webhook":                                 "application/json",
+	// No /v1/git/webhook entry: it was retired to a 410 and reads nothing, so
+	// declaring a body would hand every SDK a payload parameter for a call that
+	// ignores it — the "fresh falsehood" this list exists to prevent.
 	"POST /v1/git/zap/createRepo":                          "application/json",
 	"POST /v1/git/zap/getRepo":                             "application/json",
 	"POST /v1/git/zap/deleteRepo":                          "application/json",
