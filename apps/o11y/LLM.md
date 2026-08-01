@@ -85,6 +85,27 @@ identity rewrite of the path it is already registered on, and the order-70
 wildcard serves it. Restoring the v3 route upstream is the wrong direction: it
 resurrects a second spelling of one noun and undoes a deliberate deletion.
 
+The bump was rehearsed end to end before being refused — `plugin/o11y` built at
+v1.5.38 with all three forwards updated, run against an upstream carrying
+v1.5.38's route table and its REAL v5 request decoder. `/v1/o11y/sessions` → 200
+and the llmobs reads → 200, so those two forwards are correct and ready; the
+console's composite came back `400 unknown field "queryType" in composite query`
+at the wire. That is the whole bump: two sites fix cleanly, one has no target,
+and they ship together or not at all.
+
+The rehearsal also answers whether `rewriteExternalPath` should survive. It is
+o11y's (`mount.go`), never cloud's, so there is nothing here to delete — but it
+was NOT an identity function at v1.5.34: an unknown path arrived upstream as
+`/api/zzz-not-a-route`, rewritten. At v1.5.38 the same request arrives verbatim.
+Internal and external spellings having converged is exactly what made it an
+identity rewrite, which is why the rename deleted it in the same commit. The
+only paths that still legitimately carry `/api/` are the Sentry SDK's own wire
+form (above) — its protocol, not our route.
+
+Worth knowing for any future seam: cloud PROPAGATES the runtime's status. A
+forward to a dead internal path surfaces as a real 404/400, not a 200-shaped
+envelope wrapping one, so this class of drift fails loudly at the client.
+
 ## Typed ops: 12 of the 20 routes, and why the other 8 cannot be
 
 Every route this package OWNS the shape of is a typed op (`zip.Get[In,Out]` and
