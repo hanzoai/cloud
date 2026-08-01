@@ -71,3 +71,28 @@ func TestSessionTerminalIsBounded(t *testing.T) {
 		t.Fatal("an over-long terminal url was accepted")
 	}
 }
+
+// A published terminal must survive an UPDATE, not just an INSERT. The column was
+// added to the insert and the scan but not to UpdateSession, so PATCH accepted the
+// value, echoed it back, and dropped it — the session read as if it had never been
+// published.
+func TestTerminalSurvivesUpdate(t *testing.T) {
+	s := testSessionStore(t)
+	ctx := context.Background()
+
+	x := mkSession("hanzo", "sess_u", "", "sess_u")
+	if err := s.CreateSession(ctx, x); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	x.Terminal = "https://abc.share.hanzo.ai"
+	if err := s.UpdateSession(ctx, x); err != nil {
+		t.Fatalf("UpdateSession: %v", err)
+	}
+	got, err := s.GetSession(ctx, "hanzo", "sess_u")
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if got.Terminal != x.Terminal {
+		t.Fatalf("terminal = %q after update, want %q", got.Terminal, x.Terminal)
+	}
+}
