@@ -252,6 +252,33 @@ func init() {
 	zip.Describe("POST /git/files", zip.Doc{
 		Description: "Reads the glob-selected files of one of the caller's repos at one\nrevision, returning the resolved commit and each file's path and contents.\nThe org is the CALLER's plane identity, never the argument — an anonymous\ncaller is refused — and the whole reply is read at one resolved commit, so a\ncaller can never assemble half an inventory from each side of a push. A named\nhandler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
+	zip.Describe("POST /git/import", zip.Doc{
+		Description: "Creates the repo and mirrors the upstream, for the CALLER's org.\n\nThe org is never read off the argument: it is the identity the edge minted and\nthe plane carried, so a caller holding one org's context cannot create a repo\nin another's namespace. Project carries the provider-side account, which is\nwhat keeps two upstreams of the same name — hanzoai/ai and hanzo-apps/ai —\ndistinct repos rather than one overwriting the other.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"ImportIn.cloneUrl":  "CloneURL is the upstream to mirror from.",
+			"ImportIn.mirrorUrl": "MirrorURL registers an outbound mirror target; empty registers none.",
+			"ImportIn.project":   "Project is the sub-scope the repo lives in — the provider-side account for\nan import, so two upstreams of the same name stay distinct.",
+			"ImportIn.repo":      "Repo is the repository name to create locally.",
+			"ImportIn.token":     "Token authenticates the fetch. It rides the internal socket only, and is\npresented to git out of band (env-fed http.extraHeader), never argv.",
+			"Imported.repo":      "Repo names what was imported.",
+		},
+	})
+	zip.Describe("POST /git/inbound", zip.Doc{
+		Description: "Advances ONE branch of the CALLER's repo from an upstream push.\n\nNative is canonical: the fetch never force-overwrites a native ref, so a\ndivergence comes back as Conflict with native untouched rather than as an\nerror — the caller needs to know it diverged, not retry into an overwrite.\nThe org is the caller's plane identity, so a push routed to one org can never\nadvance another's refs.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"InboundIn.cloneUrl": "CloneURL is the upstream to fetch the ref from.",
+			"InboundIn.origin":   "Origin is the source host, so the outbound mirror suppresses the echo.",
+			"InboundIn.project":  "Project is the sub-scope — the provider-side account.",
+			"InboundIn.ref":      "Ref is the FULL ref, e.g. refs/heads/main or refs/tags/v1.2.3.",
+			"InboundIn.repo":     "Repo is the native repository name.",
+			"InboundIn.token":    "Token authenticates the fetch; env-fed downstream, never argv.",
+			"Synced.applied":     "Applied is true when native fast-forwarded.",
+			"Synced.before":      "Before and After are the native tips around an Applied fetch.",
+			"Synced.conflict":    "Conflict is true when native had diverged and was NOT overwritten.",
+			"Synced.detail":      "Detail is the human reason for a conflict or a skip.",
+			"Synced.noOp":        "NoOp is true when native was already at that tip.",
+		},
+	})
 	zip.Describe("POST /git/publish", zip.Doc{
 		Description: "Reconciles a project's canonical repo to the project's published\nvisibility: it provisions the repo on first publish and thereafter flips only\nthe public bit, then keeps the GitHub replica's visibility in step.\nIdempotent, so projects can fire it on every create, visibility change and\nmoderation event. The org is the CALLER's plane identity, never the argument —\na caller that could name the org would be publishing into another tenant's\nrepos — and an anonymous caller is refused. A named handler, not a closure, so\nzipdoc can lift this prose into the registry.",
 	})

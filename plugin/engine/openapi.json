@@ -51,8 +51,8 @@
     "/v1/engine/models": {
       "get": {
         "operationId": "get_v1_engine_models",
-        "summary": "Models lists the models the engine serves, each with its load state — the server's own model table (its OpenAI-style list envelope, load status included), relayed verbatim.",
-        "description": "Models lists the models the engine serves, each with its load state — the\nserver's own model table (its OpenAI-style list envelope, load status\nincluded), relayed verbatim.",
+        "summary": "Models lists the models the engine serves, each with its load state — the server's own model table (its standard list envelope, load status included), relayed verbatim.",
+        "description": "Models lists the models the engine serves, each with its load state — the\nserver's own model table (its standard list envelope, load status\nincluded), relayed verbatim.",
         "tags": [
           "engine"
         ],
