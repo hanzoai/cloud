@@ -63,8 +63,8 @@ type Session struct {
 	// Provider/Account tag a session with the linked AI account it ran under (the
 	// login-manager tie-in): which provider (claude|codex|hanzo|…) and which
 	// subscription/api account served this run. Optional (a surface that doesn't
-	// know sets ""), surfaced so the cockpit shows "this ran on your Claude Max
-	// acct" and so a login-out (link revoke) can stop the sessions that used it.
+	// know sets ""), surfaced so the cockpit shows which linked account served
+	// the run and so a login-out (link revoke) can stop the sessions that used it.
 	Provider string
 	Account  string
 

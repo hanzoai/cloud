@@ -57,7 +57,7 @@ type byoGPU struct {
 // engineAdvertisement is a hanzo-engine model server a BYO worker runs on its node
 // (advertised by `hanzo link --serve-engine`). hanzo-engine serves the OpenAI
 // AND Anthropic HTTP APIs from one port, so the gateway can route model calls to this
-// GPU as an OpenAI-compatible provider. Surfaced verbatim on GET /v1/fleet/workers.
+// GPU on the standard chat-completions provider. Surfaced verbatim on GET /v1/fleet/workers.
 type engineAdvertisement struct {
 	URL    string   `json:"url"`
 	APIs   []string `json:"apis,omitempty"`   // ["openai","anthropic"]

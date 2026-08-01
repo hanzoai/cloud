@@ -148,7 +148,7 @@ type worker struct {
 
 // engineAdvertisement describes a hanzo-engine model server on this node.
 // hanzo-engine serves the OpenAI AND Anthropic HTTP APIs from ONE axum port
-// (0.0.0.0:1234), so the gateway can route model calls here as an OpenAI-compatible
+// (0.0.0.0:1234), so the gateway can route model calls here on the standard chat-completions
 // (Type=Local) provider. This rides in the fleet presence record's Input.
 type engineAdvertisement struct {
 	URL    string   `json:"url"`              // base the gateway calls (…:1234)
@@ -2290,7 +2290,7 @@ func describeEngine(adv *engineAdvertisement) string {
 }
 
 // providerBody is the POST /v1/ai/providers payload registering this node's engine
-// as an org model provider. hanzo-engine is OpenAI-compatible, so Type=Local: the
+// as an org model provider. hanzo-engine speaks the standard chat-completions wire, so Type=Local: the
 // gateway speaks the OpenAI wire format to it and auto-appends /v1 to providerUrl.
 func (w *worker) providerBody() map[string]any {
 	model := "default"
