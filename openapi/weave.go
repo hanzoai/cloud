@@ -72,15 +72,24 @@ type Conflict struct {
 // operations in that app's own subset — the same op tags the document's own tag
 // list is a function of, so this cannot name a product the document lacks.
 //
-// Two rules keep the inheritance honest, and both resolve to SILENCE:
+// THE OWNER IS THE APP THAT ANSWERS THE PRODUCT'S ROOT — the shallowest path
+// under /v1/<product> anyone serves — and not merely the app that serves some of
+// it. Sharing a product is the ordinary case, not the broken one: /v1/plans is the
+// plan catalog with two of its rows kept by commerce, /v1/s3 is a provisioned
+// add-on whose bucket data plane is storage, /v1/search and /v1/vector the same
+// shape. Reading "two claimants" as ambiguity silenced four products that were
+// never ambiguous, because depth already says which app the product IS and which
+// merely has routes inside it. Where nobody is alone at the root the answer is
+// still SILENCE: /v1/finance is billing at /v1/finance/balance and treasury at
+// /v1/finance/accounts, neither above the other, and picking one would publish a
+// coin flip as a fact.
 //
-//   - One app, or nothing. /v1/finance is billing AND treasury; /v1/s3 is
-//     provisioning AND storage. An ambiguous owner must produce no description,
-//     because picking one would publish a coin flip as a fact.
-//   - The owner's own sentence, or nothing. A sole owner with no package doc
-//     (metrics, authz, licensing) leaves its products blank. The cure is a doc
-//     comment in that app; synthesizing a line from the product name here would
-//     make an undescribed product indistinguishable from a described one.
+// The second rule is unchanged and also resolves to silence: the owner's own
+// sentence, or nothing. A root owner with no package doc (metrics, authz,
+// licensing — each mounting a subsystem that lives in another module, so there is
+// no package here to read) leaves its products blank. The cure is a doc comment in
+// that service; synthesizing a line from the product name here would make an
+// undescribed product indistinguishable from a described one.
 //
 // A tag NAMED for an app keeps that app's own sentence regardless. That is the
 // pre-existing answer and it stays the stronger evidence: /v1/admin is served by
@@ -88,36 +97,65 @@ type Conflict struct {
 // already said exactly what admin is.
 func prose(parts []Part) map[string]string {
 	said := make(map[string]string, len(parts)) // app → what it says about itself
-	owner := map[string]string{}                // product → its sole app, "" once two claim it
+	// product → who answers its ROOT: the shallowest depth any app serves under
+	// it, and every app tied there. One app at that depth is the owner; two is a
+	// product no app defines.
+	type claim struct {
+		depth int
+		apps  map[string]bool
+	}
+	root := map[string]*claim{}
 	for _, p := range parts {
 		if d := p.Doc.Info.Description; d != "" && d != fleetInfo.Description {
 			said[p.App] = d
 		}
-		for _, item := range p.Doc.Paths {
+		for path, item := range p.Doc.Paths {
+			d := segments(path)
 			for _, op := range item {
 				for _, t := range op.Tags {
-					if prev, claimed := owner[t]; !claimed {
-						owner[t] = p.App
-					} else if prev != p.App {
-						owner[t] = "" // sticky: "" is never an app name, so a third claimant re-empties it
+					switch c := root[t]; {
+					case c == nil:
+						root[t] = &claim{depth: d, apps: map[string]bool{p.App: true}}
+					case d < c.depth:
+						c.depth, c.apps = d, map[string]bool{p.App: true}
+					case d == c.depth:
+						c.apps[p.App] = true
 					}
 				}
 			}
 		}
 	}
 
-	out := make(map[string]string, len(owner))
-	for product, app := range owner {
-		if d := said[app]; d != "" {
-			out[product] = d
+	out := make(map[string]string, len(root))
+	for product, c := range root {
+		if len(c.apps) != 1 {
+			continue
+		}
+		for app := range c.apps {
+			if d := said[app]; d != "" {
+				out[product] = d
+			}
 		}
 	}
 	for app, d := range said {
-		if _, isProduct := owner[app]; isProduct {
+		if _, isProduct := root[app]; isProduct {
 			out[app] = d
 		}
 	}
 	return out
+}
+
+// segments is a path's depth in segments: how deep under the product root an
+// operation sits. /v1/plans is 2 and /v1/plans/entries is 3, so the app holding
+// the bare product noun outranks one holding a resource inside it.
+func segments(path string) int {
+	n := 0
+	for _, s := range strings.Split(path, "/") {
+		if s != "" {
+			n++
+		}
+	}
+	return n
 }
 
 func (c *Conflict) Error() string {

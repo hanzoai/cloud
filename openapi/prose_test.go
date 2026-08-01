@@ -99,3 +99,55 @@ func TestCompleteReadsAWildcardDeclarationThroughTheSameTranslation(t *testing.T
 		t.Fatalf("a correctly-keyed wildcard declaration was read as an orphan: %v", err)
 	}
 }
+
+// A product's sentence comes from the app that answers its ROOT. Sharing a
+// product is ordinary — /v1/plans is the plan catalog with two rows kept by
+// commerce — and depth is what says which app the product IS.
+func TestProseComesFromTheAppThatAnswersTheProductRoot(t *testing.T) {
+	parts := []Part{
+		{App: "commerce", Doc: &Document{
+			Info:  Info{Description: "Package commerce is selling: checkout, subscriptions, invoices."},
+			Paths: map[string]PathItem{"/v1/plans/entries": {"get": {Tags: []string{"plans"}}}},
+		}},
+		{App: "plan", Doc: &Document{
+			Info:  Info{Description: "Package plan is the plan catalog: every tier you can buy."},
+			Paths: map[string]PathItem{"/v1/plans": {"get": {Tags: []string{"plans"}}}},
+		}},
+	}
+	got := prose(parts)["plans"]
+	if !strings.HasPrefix(got, "Package plan is the plan catalog") {
+		t.Fatalf("plans took the wrong app's sentence: %q", got)
+	}
+}
+
+// Where nobody is alone at the root the answer is SILENCE. /v1/finance is billing
+// at /v1/finance/balance and treasury at /v1/finance/accounts, neither above the
+// other; picking one would publish a coin flip as a fact.
+func TestProseIsSilentWhenNoAppAnswersTheProductRootAlone(t *testing.T) {
+	parts := []Part{
+		{App: "billing", Doc: &Document{
+			Info:  Info{Description: "Package billing is your org's balance."},
+			Paths: map[string]PathItem{"/v1/finance/balance": {"get": {Tags: []string{"finance"}}}},
+		}},
+		{App: "treasury", Doc: &Document{
+			Info:  Info{Description: "Package treasury is the reserve fund behind every payout."},
+			Paths: map[string]PathItem{"/v1/finance/accounts": {"get": {Tags: []string{"finance"}}}},
+		}},
+	}
+	if got, said := prose(parts)["finance"]; said {
+		t.Fatalf("an unowned product was described anyway: %q", got)
+	}
+}
+
+// A root owner with no package doc leaves its products blank rather than taking
+// the fleet's own sentence — an undescribed product must stay distinguishable
+// from a described one.
+func TestProseIsSilentWhenTheRootOwnerSaysNothingAboutItself(t *testing.T) {
+	parts := []Part{{App: "metrics", Doc: &Document{
+		Info:  fleetInfo,
+		Paths: map[string]PathItem{"/v1/metrics/query": {"get": {Tags: []string{"metrics"}}}},
+	}}}
+	if got, said := prose(parts)["metrics"]; said {
+		t.Fatalf("the fleet's own sentence was published as a product description: %q", got)
+	}
+}
