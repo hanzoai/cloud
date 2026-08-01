@@ -47,13 +47,13 @@ func TestO11ySQL_ReadsCanonicalTables(t *testing.T) {
 		wantQMarks       int
 	}{
 		{"usageTotals", o11yUsageTotalsSQL(), "hanzo.cloud_usage", 1},
-		{"traceTotals", o11yTraceTotalsSQL(), "o11y_traces.distributed_o11y_index_v3", 1},
-		{"logVolume", o11yLogVolumeSQL(), "o11y_logs.distributed_logs_v2", 1},
+		{"traceTotals", o11yTraceTotalsSQL(), "event.span", 1},
+		{"logVolume", o11yLogVolumeSQL(), "event.log", 1},
 		{"usageSeries", o11yUsageSeriesSQL("1 HOUR"), "hanzo.cloud_usage", 1},
-		{"logSeries", o11yLogSeriesSQL("1 HOUR"), "o11y_logs.distributed_logs_v2", 1},
+		{"logSeries", o11yLogSeriesSQL("1 HOUR"), "event.log", 1},
 		{"topOrgs", o11yTopOrgsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", o11yTopModelsSQL(), "hanzo.cloud_usage", 1},
-		{"topServices", o11yTopServicesSQL(), "o11y_traces.distributed_o11y_index_v3", 1},
+		{"topServices", o11yTopServicesSQL(), "event.span", 1},
 		// WHY this pin moved (o11y_ai.observations → console.observations → event.span):
 		// the first name was a database that never existed; the second held the real
 		// rows but was a surface name on a store already folded into the event plane.
