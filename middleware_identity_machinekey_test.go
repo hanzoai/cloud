@@ -43,7 +43,7 @@ func iamKeyServer(t *testing.T, owner, name string) *httptest.Server {
 func orgScopedProbe(t *testing.T, v *identityValidator, mutate func(*http.Request)) (status int, org string) {
 	t.Helper()
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/v1/agents", func(c *zip.Ctx) error {
 		o, ok := principal.Org(c)
 		if !ok {
