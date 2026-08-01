@@ -21,13 +21,14 @@ package admin
 // (datastore.Query) the analytics/compute lenses already use, no second
 // connection.
 //
-// Signals, each from its canonical table in the one datastore:
-//   - LLM usage  → hanzo.cloud_usage         : requests, tokens, cost, errors, top orgs, top models
-//   - Traces     → o11y_traces.distributed_o11y_index_v3 : request count, latency p50/p95/p99,
-//                                                              error rate, top services
-//   - Logs       → o11y_logs.distributed_logs_v2 : fleet log volume + volume-over-time
-//   - LLM gens   → event.span                : gen_ai spans — a gen_ai span IS the
-//                                              observation of record (see o11yAIObs)
+// Signals, each from its canonical table in the one datastore — the EVENT PLANE
+// plus the ai ledger, no o11y_* database anywhere:
+//   - LLM usage  → hanzo.cloud_usage : requests, tokens, cost, errors, top orgs, top models
+//   - Traces     → event.span        : request count, latency p50/p95/p99,
+//                                      error rate, top services
+//   - Logs       → event.log         : fleet log volume + volume-over-time
+//   - LLM gens   → event.span        : gen_ai spans — a gen_ai span IS the
+//                                      observation of record (see o11yAIObs)
 //
 // SUPERADMIN ONLY (core.Admit, the op's first line): the gateway strips a client
 // X-Org-Id and re-mints from the JWT owner, and this handler applies NO org filter,
@@ -51,9 +52,9 @@ import (
 	"github.com/hanzoai/cloud/apps/datastore"
 )
 
-// Fully-qualified datastore tables. admin only READS these — the ZAP collector
-// (o11y_*), the ai ledger (hanzo.cloud_usage), and the event plane (apps/analytics)
-// own their writes.
+// Fully-qualified datastore tables. admin only READS these — the ZAP receivers
+// (event.span/event.log, planesink.go), the ai ledger (hanzo.cloud_usage), and the
+// event plane (apps/analytics) own their writes.
 //
 // The AI lens reads the PLANE's span table: a gen_ai span IS the observation of
 // record (HIP-0132; llmobs in hanzoai/o11y projects the very same attributes).
@@ -69,8 +70,8 @@ import (
 // through toFloat64OrZero.
 const (
 	o11yUsageTable = "hanzo.cloud_usage"
-	o11yTraceTable = "o11y_traces.distributed_o11y_index_v3"
-	o11yLogTable   = "o11y_logs.distributed_logs_v2"
+	o11yTraceTable = "event.span"
+	o11yLogTable   = "event.log"
 
 	// The fleet AI observation source: gen_ai spans on the event plane. These
 	// consts are ONE projection stated ONCE — aimetrics.go reads them too. (Its
@@ -88,15 +89,16 @@ const (
 	o11yTopN         = 10
 	o11yServiceLimit = 12
 
-	// o11yServiceCol is the v3 index's materialized service-name column, and
-	// o11yDurationCol its span duration. The v3 schema is snake_case and spells
-	// resource attributes with a $$ separator — it is NOT `serviceName`/`durationNano`
-	// (that was the v2 index). Naming the v2 columns does not error loudly here: the
-	// query fails, the caller's `if err == nil` swallows it, and the whole trace half of
-	// the board renders honest-looking zeros forever. Pinned as constants so the two
-	// queries below and the per-subsystem board all spell them once.
-	o11yServiceCol  = "resource_string_service$$name"
-	o11yDurationCol = "duration_nano"
+	// o11yServiceCol is event.span's native service column, o11yDurationCol its span
+	// duration (UInt64 nanoseconds). The plane spells them plainly — `service` and
+	// `duration` — NOT the o11y v3 index's `resource_string_service$$name` /
+	// `duration_nano`, nor the v2 index's `serviceName` / `durationNano`. Naming a
+	// column that does not exist does not error loudly here: the query fails, the
+	// caller's `if err == nil` swallows it, and the whole trace half of the board
+	// renders honest-looking zeros forever. Pinned as constants so the two queries
+	// below and the per-subsystem board all spell them once.
+	o11yServiceCol  = "service"
+	o11yDurationCol = "duration"
 )
 
 // o11yGlobal is the whole fleet o11y board payload.
@@ -125,14 +127,14 @@ type o11yTotals struct {
 	Errors           int64 `json:"errors"`
 	Orgs             int64 `json:"orgs"`
 	Models           int64 `json:"models"`
-	// Traces (o11y_index_v3), all services.
+	// Traces (event.span), all services.
 	TraceCount     int64   `json:"traceCount"`
 	LatencyP50Ms   float64 `json:"latencyP50Ms"`
 	LatencyP95Ms   float64 `json:"latencyP95Ms"`
 	LatencyP99Ms   float64 `json:"latencyP99Ms"`
 	TraceErrorRate float64 `json:"traceErrorRate"` // percent (0..100)
 	Services       int64   `json:"services"`
-	// Logs (distributed_logs_v2), fleet volume over the window.
+	// Logs (event.log), fleet volume over the window.
 	LogVolume int64 `json:"logVolume"`
 }
 
@@ -220,8 +222,10 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 		return &o11yOut{Status: core.OK, Data: &payload}, nil
 	}
 
-	sinceTS := chTS(since)         // DateTime literal — cloud_usage.timestamp, traces.timestamp
-	sinceNanos := since.UnixNano() // UInt64 nanos — logs.timestamp
+	// ONE DateTime bound for every source: hanzo.cloud_usage keys on `timestamp`,
+	// and the plane's event.span / event.log both key on a `time` DateTime64(9)
+	// column — a single DateTime literal binds against all three.
+	sinceTS := chTS(since)
 	interval := o11yBucket(rangeLabel)
 
 	// LLM usage totals (all orgs).
@@ -233,7 +237,7 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 		fillTraceTotals(&payload.Totals, firstRowOr(rows))
 	}
 	// Fleet log volume.
-	if rows, err := datastore.Query(ctx, o11yLogVolumeSQL(), sinceNanos); err == nil {
+	if rows, err := datastore.Query(ctx, o11yLogVolumeSQL(), sinceTS); err == nil {
 		payload.Totals.LogVolume = chInt64(firstRowOr(rows)["c"])
 	}
 	// Usage time-series (fleet).
@@ -241,7 +245,7 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 		payload.Series = usageSeriesFromRows(rows)
 	}
 	// Log-volume time-series (fleet).
-	if rows, err := datastore.Query(ctx, o11yLogSeriesSQL(interval), sinceNanos); err == nil {
+	if rows, err := datastore.Query(ctx, o11yLogSeriesSQL(interval), sinceTS); err == nil {
 		payload.LogSeries = logSeriesFromRows(rows)
 	}
 	// Top orgs by usage.
@@ -287,13 +291,13 @@ func o11yTraceTotalsSQL() string {
 		"round(quantile(0.5)(" + o11yDurationCol + ") / 1e6, 2) AS p50, " +
 		"round(quantile(0.95)(" + o11yDurationCol + ") / 1e6, 2) AS p95, " +
 		"round(quantile(0.99)(" + o11yDurationCol + ") / 1e6, 2) AS p99, " +
-		"round(100 * countIf(has_error) / greatest(count(), 1), 3) AS err_rate, " +
+		"round(100 * countIf(status = 'error') / greatest(count(), 1), 3) AS err_rate, " +
 		"uniqExact(" + o11yServiceCol + ") AS services " +
-		"FROM " + o11yTraceTable + " WHERE timestamp >= ?"
+		"FROM " + o11yTraceTable + " WHERE time >= ?"
 }
 
 func o11yLogVolumeSQL() string {
-	return "SELECT count() AS c FROM " + o11yLogTable + " WHERE timestamp >= ?"
+	return "SELECT count() AS c FROM " + o11yLogTable + " WHERE time >= ?"
 }
 
 func o11yUsageSeriesSQL(interval string) string {
@@ -304,8 +308,8 @@ func o11yUsageSeriesSQL(interval string) string {
 }
 
 func o11yLogSeriesSQL(interval string) string {
-	return "SELECT toStartOfInterval(toDateTime(timestamp / 1000000000), INTERVAL " + interval + ") AS ts, " +
-		"count() AS c FROM " + o11yLogTable + " WHERE timestamp >= ? GROUP BY ts ORDER BY ts"
+	return "SELECT toStartOfInterval(time, INTERVAL " + interval + ") AS ts, " +
+		"count() AS c FROM " + o11yLogTable + " WHERE time >= ? GROUP BY ts ORDER BY ts"
 }
 
 func o11yTopOrgsSQL() string {
@@ -322,9 +326,9 @@ func o11yTopModelsSQL() string {
 
 func o11yTopServicesSQL() string {
 	return "SELECT " + o11yServiceCol + " AS service, count() AS requests, " +
-		"round(100 * countIf(has_error) / greatest(count(), 1), 3) AS error_rate, " +
+		"round(100 * countIf(status = 'error') / greatest(count(), 1), 3) AS error_rate, " +
 		"round(quantile(0.95)(" + o11yDurationCol + ") / 1e6, 2) AS p95 " +
-		"FROM " + o11yTraceTable + " WHERE timestamp >= ? AND " + o11yServiceCol + " != '' " +
+		"FROM " + o11yTraceTable + " WHERE time >= ? AND " + o11yServiceCol + " != '' " +
 		"GROUP BY service ORDER BY requests DESC LIMIT " + strconv.Itoa(o11yServiceLimit)
 }
 
