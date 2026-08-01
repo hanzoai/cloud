@@ -43,21 +43,22 @@ var untypedByDesign = map[string]string{
 		"(plane/shelf/surface/error), which a typed op's error envelope would drop.",
 }
 
-// Two decisions recorded here rather than discovered at integration, because both
-// are about the WIRE and neither is visible in a handler:
+// One decision recorded here rather than discovered at integration, because it is
+// about the WIRE and is not visible in a handler:
 //
-// POST /v1/ml/search IS TYPED AND IS GATED. cloud.DenyResource writes the fleet's
-// NESTED {"error":{"code","message"}} 402 in band, and a typed op's returned error
-// renders as the FLAT envelope — so typing a gated op changes the refusal body.
-// That only matters for a route an existing client already parses, and this is a
-// NEW route with no such client. It therefore stays typed and returns a typed
-// 402, which is the shape every new surface should use.
+// EVERY PRICED OP IS TYPED AND REFUSES IN THE FLEET'S OWN MONEY CONTRACT. A typed
+// op's returned error renders as zip's FLAT envelope, which is a second vocabulary
+// for a refusal the platform already has words for — so the /v1/ml group carries
+// cloud.DenyEnvelope and each gated op returns cloud.Denied, and a 402 from here
+// is byte-for-byte a 402 from anywhere else. Held by
+// [TestScoreAndLearn_AreGatedOnTheCallersOwnBalance].
 //
-// POST /v1/ml/score AND /v1/ml/learn ARE NOT METERED HERE. The billable unit is a
-// SCREEN, and a screen is billed once, at the decision, by the plane that owns
-// the decision. Metering the same physical act twice on two surfaces is a double
-// charge no test would catch, so the model plane meters only what is its own: an
-// exhaustive search.
+// This file used to record the opposite decision for score and learn — that they
+// were "billed once, at the decision, by the plane that owns the decision". No
+// such plane exists: THIS is the plane that owns the decision, and the two ops an
+// abuser would call in a loop were free, unbounded compute against per-tenant
+// model state and a per-tenant disk write. A note explaining why an expensive op
+// is not metered is worth exactly as much as the plane it defers to.
 
 // mountApp mounts risk the way plugin/risk does — the whole Mount, so the
 // projection ledgers below read the surface a deployed binary serves and not a
@@ -357,7 +358,7 @@ func TestHealthCarriesItsReport(t *testing.T) {
 	if err := json.Unmarshal(body, &rep); err != nil {
 		t.Fatalf("unmarshal %s: %v", body, err)
 	}
-	for _, k := range []string{"service", "status", "plane", "shelf", "surface", "resident"} {
+	for _, k := range []string{"service", "status", "plane", "shelf", "surface", "resident", "evicted"} {
 		if _, ok := rep[k]; !ok {
 			t.Errorf("the probe's body has no %q — a probe that does not report is status theatre", k)
 		}

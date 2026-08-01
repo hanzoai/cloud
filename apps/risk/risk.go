@@ -110,7 +110,13 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 	// cloud.Bridge FIRST on each group. A typed op receives only a context, so the
 	// validated identity it reads has to be parked there; fiber runs middleware in
 	// registration order, so one installed after its leaves never runs.
-	gml.Use(cloud.Bridge())
+	//
+	// cloud.DenyEnvelope beside it on the priced group, for the same
+	// registration-order reason: every op that costs compute gates on the caller's
+	// balance, and the envelope is what makes the refusal the fleet's own nested
+	// {"error":{"code","message"}} 402 rather than a second vocabulary for a
+	// refusal the platform already has words for.
+	gml.Use(cloud.Bridge(), cloud.DenyEnvelope())
 	grisk.Use(cloud.Bridge())
 	o := ops{s: s}
 
@@ -182,7 +188,11 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	res["shelf"] = true
 	res["surface"] = storeReady()
-	res["resident"] = s.State.plane.residents()
+	// Both are COUNTS and neither names a tenant, so the probe stays a fact about
+	// the process. `evicted` is here because the resident bound is the one bound
+	// whose pressure a tenant cannot see for itself: eviction is lossless, so the
+	// only sign it is happening at all is this number climbing.
+	res["resident"], res["evicted"] = s.State.plane.residents()
 	return c.JSON(http.StatusOK, res)
 }
 
@@ -209,12 +219,13 @@ func Shutdown(context.Context) error {
 // closure — one binary, one mount, one plane. Same shape as apps/dataroom.
 var mounted *plane
 
-// residents is how many tenants' models are held right now. It names a count and
-// never a tenant, so the probe reveals nothing about who is using the plane.
-func (p *plane) residents() int {
+// residents is how many tenants' models are held right now, and how many have
+// been evicted to hold that bound. Both name a COUNT and never a tenant, so the
+// probe reveals nothing about who is using the plane.
+func (p *plane) residents() (held int, evicted int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return len(p.res)
+	return len(p.res), p.evicted
 }
 
 // The prose for the one route that is untyped by design. zipdoc lifts prose from
@@ -234,6 +245,10 @@ func init() {
 			"An unreachable event surface is REPORTED and is not a failure. Scoring reads "+
 			"in-memory aggregates and never the warehouse, so a warm that cannot run degrades how "+
 			"much history a model has seen and does not stop it deciding.\n\n"+
+			"It also reports how many organisations' models are resident and how many have been "+
+			"evicted to hold that bound. Eviction is lossless — learned state is written to that "+
+			"organisation's own store first and its aggregates rebuild from its own record — so a "+
+			"climbing count is a capacity signal, not a loss.\n\n"+
 			"It answers about the process, not about a tenant: it takes no organisation and names "+
 			"none.")
 }
