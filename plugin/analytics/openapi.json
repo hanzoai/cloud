@@ -251,7 +251,7 @@
       "post": {
         "operationId": "post_v1_event",
         "summary": "Capture product events into your org's warehouse",
-        "description": "Stores pageviews, browser errors, identifies and custom commerce events as rows in the caller's own tenant, and answers a receipt {accepted, dropped} that always totals what was sent — a beacon is never silently discarded.\n\nONE door for every wire a Hanzo surface emits, dispatched by the SHAPE of the body and never by a second path: a bare event object, a bare array of them, the {batch:[…]} / {events:[…]} envelope, the team console's snake_case array, and the PostHog wire (spelled `distinct_id`/`api_key`, which the canonical wire never uses). BATCH IS A BODY, NOT A PATH — there is no /v1/event/batch, because an array already is one.\n\nWHAT THE CALLER PRESENTS DECIDES WHAT IT MAY WRITE, and the door itself grants nothing. A validated bearer or an org API key writes the full event at full fidelity. A PUBLISHABLE key (pk-, on Authorization: Bearer, x-hanzo-ingest-key, or ?ingest_key= for navigator.sendBeacon, which cannot set headers) does the same, and is the credential a browser bundle ships: it is deliberately NOT a secret, it resolves WHICH tenant a beacon belongs to and nothing more. A pk- never authenticates and can READ NOTHING — not this org's errors, not a lens, not any other route on this API — so a leaked one lets a stranger write into your stream, and never lets one read out of it. Reading these rows back always takes a real bearer. A Hanzo Team workspace token resolves its org at REDUCED capability: the signed account names the person, so a `distinctId` in the body cannot pin events on a colleague.\n\nNO CREDENTIAL IS ALSO ADMITTED, and that is the point — a logged-out visitor has none. Such a write is PROJECTED: filed under the reserved `$public` tenant, narrowed to what the SERVER can name — pageviews and errors, whose names the route supplies, plus the closed autocapture vocabulary ($click, $input, $change, $submit, $view) resolved through a server-owned table — and stripped to the fields the projection names, so revenue, personId, groupId, an arbitrary event name and every property but the element annotation cannot reach a row. Everything refused is counted in `dropped`. On a published-site host the same projection applies with that site's org as the tenant. But a credential that IS presented and does NOT resolve is 403, never quietly downgraded: filing a misconfigured key's events under $public would hide them in a partition their owner cannot read.\n\nThe anonymous lane alone is bounded: 413 over 64 KiB, 400 over 50 events, 429 on the per-client-IP and per-peer caps, and a DNT:1 or Sec-GPC:1 request stores nothing and says so in the receipt. Where a deployment switches anonymous capture off, a credential-less write is 403 instead. Authenticated bodies are offered to the observability plane first, which claims LLM-observability ingestion batches and declines everything else.",
+        "description": "Stores pageviews, browser errors, identifies and custom commerce events as rows in the caller's own tenant, and answers a receipt {accepted, dropped} that always totals what was sent — a beacon is never silently discarded.\n\nONE door for every wire a Hanzo surface emits, dispatched by the SHAPE of the body and never by a second path: a bare event object, a bare array of them, the {batch:[…]} / {events:[…]} envelope, the team console's snake_case array, and the PostHog wire (spelled `distinct_id`/`api_key`, which the canonical wire never uses). BATCH IS A BODY, NOT A PATH — there is no /v1/event/batch, because an array already is one.\n\nWHAT THE CALLER PRESENTS DECIDES WHAT IT MAY WRITE, and the door itself grants nothing. A validated bearer or an org API key writes the full event at full fidelity. A PUBLISHABLE key (pk-, on Authorization: Bearer, x-hanzo-ingest-key, or ?ingest_key= for navigator.sendBeacon, which cannot set headers) does the same, and is the credential a browser bundle ships: it is deliberately NOT a secret, it resolves WHICH tenant a beacon belongs to and nothing more. A pk- never authenticates and can READ NOTHING — not this org's errors, not a lens, not any other route on this API — so a leaked one lets a stranger write into your stream, and never lets one read out of it. Reading these rows back always takes a real bearer. A Hanzo Team workspace token resolves its org at REDUCED capability: the signed account names the person, so a `distinctId` in the body cannot pin events on a colleague.\n\nNO CREDENTIAL IS ALSO ADMITTED, and that is the point — a logged-out visitor has none. Such a write is PROJECTED: filed under the reserved `$public` tenant, narrowed to what the SERVER can name — pageviews and errors, whose names the route supplies, plus the closed autocapture vocabulary ($click, $input, $change, $submit, $view) resolved through a server-owned table — and stripped to the fields the projection names, so revenue, personId, groupId, an arbitrary event name and every property but the element annotation cannot reach a row. ITS IDENTITY IS NAMESPACED for the same reason the name is: nobody signed for it, so a `distinctId` off the wire is stored under a reserved `$anon:` prefix that no identified subject carries — an anonymous visitor still counts as one visitor, and still cannot be joined to a person the org knows. Everything refused is counted in `dropped`. On a published-site host the same projection applies with that site's org as the tenant. But a credential that IS presented and does NOT resolve is 403, never quietly downgraded: filing a misconfigured key's events under $public would hide them in a partition their owner cannot read.\n\nThe anonymous lane alone is bounded: 413 over 64 KiB, 400 over 50 events, 429 on the per-client-IP and per-peer caps, and a DNT:1 or Sec-GPC:1 request stores nothing and says so in the receipt. Where a deployment switches anonymous capture off, a credential-less write is 403 instead. Authenticated bodies are offered to the observability plane first, which claims LLM-observability ingestion batches and declines everything else.",
         "tags": [
           "event"
         ],
@@ -357,8 +357,8 @@
     "/v1/insights/events": {
       "get": {
         "operationId": "get_v1_insights_events",
-        "summary": "InsightsEvents returns the caller org's most recent product events, newest first.",
-        "description": "InsightsEvents returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
+        "summary": "Returns the caller org's most recent product events, newest first.",
+        "description": "Returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
         "tags": [
           "insights"
         ],
@@ -391,8 +391,8 @@
     "/v1/insights/health": {
       "get": {
         "operationId": "get_v1_insights_health",
-        "summary": "InsightsHealth reports that the unified insights surface is serving.",
-        "description": "InsightsHealth reports that the unified insights surface is serving. It reads no\ntenant data and consults no dependency, so it answers 200 unconditionally and needs\nno principal — liveness must be probe-able. The warehouse-connectivity probe is a\ndifferent question and lives at GET /v1/analytics/health.",
+        "summary": "Reports that the unified insights surface is serving.",
+        "description": "Reports that the unified insights surface is serving. It reads no\ntenant data and consults no dependency, so it answers 200 unconditionally and needs\nno principal — liveness must be probe-able. The warehouse-connectivity probe is a\ndifferent question and lives at GET /v1/analytics/health.",
         "tags": [
           "insights"
         ],
@@ -459,24 +459,23 @@
         "type": "object"
       },
       "CaptureBatch": {
-        "type": "object",
         "properties": {
           "batch": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/CaptureEvent"
-            }
+            },
+            "type": "array"
           },
           "events": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/CaptureEvent"
-            }
+            },
+            "type": "array"
           }
-        }
+        },
+        "type": "object"
       },
       "CaptureEvent": {
-        "type": "object",
         "properties": {
           "anonymousId": {
             "type": "string"
@@ -536,8 +535,8 @@
             "type": "string"
           },
           "properties": {
-            "type": "object",
-            "additionalProperties": {}
+            "additionalProperties": {},
+            "type": "object"
           },
           "quantity": {
             "type": "integer"
@@ -587,10 +586,10 @@
           "utm": {
             "$ref": "#/components/schemas/UTM"
           }
-        }
+        },
+        "type": "object"
       },
       "CaptureResult": {
-        "type": "object",
         "properties": {
           "accepted": {
             "type": "integer"
@@ -598,7 +597,8 @@
           "dropped": {
             "type": "integer"
           }
-        }
+        },
+        "type": "object"
       },
       "CommerceOverview": {
         "properties": {
@@ -630,7 +630,6 @@
         "type": "object"
       },
       "Event": {
-        "type": "object",
         "properties": {
           "distinctId": {
             "type": "string"
@@ -639,8 +638,8 @@
             "type": "string"
           },
           "properties": {
-            "type": "object",
-            "additionalProperties": {}
+            "additionalProperties": {},
+            "type": "object"
           },
           "time": {
             "type": "string"
@@ -648,16 +647,16 @@
           "type": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "Exception": {
-        "type": "object",
         "properties": {
           "frames": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/Frame"
-            }
+            },
+            "type": "array"
           },
           "handled": {
             "type": "boolean"
@@ -671,10 +670,10 @@
           "type": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "Frame": {
-        "type": "object",
         "properties": {
           "column": {
             "type": "integer"
@@ -688,7 +687,8 @@
           "line": {
             "type": "integer"
           }
-        }
+        },
+        "type": "object"
       },
       "LLMOverview": {
         "properties": {
@@ -740,7 +740,6 @@
         "type": "object"
       },
       "LogBody": {
-        "type": "object",
         "properties": {
           "body": {
             "type": "string"
@@ -751,14 +750,14 @@
           "severity": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "MetricBody": {
-        "type": "object",
         "properties": {
           "labels": {
-            "type": "object",
-            "additionalProperties": {}
+            "additionalProperties": {},
+            "type": "object"
           },
           "name": {
             "type": "string"
@@ -766,7 +765,8 @@
           "value": {
             "type": "number"
           }
-        }
+        },
+        "type": "object"
       },
       "ModelRow": {
         "properties": {
@@ -865,7 +865,6 @@
         "type": "object"
       },
       "SpanBody": {
-        "type": "object",
         "properties": {
           "duration": {
             "type": "integer"
@@ -885,7 +884,8 @@
           "trace": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "Timeseries": {
         "properties": {
@@ -1009,7 +1009,6 @@
         "type": "object"
       },
       "UTM": {
-        "type": "object",
         "properties": {
           "campaign": {
             "type": "string"
@@ -1026,7 +1025,8 @@
           "term": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "UsagePoint": {
         "properties": {
@@ -1154,7 +1154,6 @@
         "type": "object"
       },
       "healthLens": {
-        "type": "object",
         "properties": {
           "available": {
             "type": "boolean"
@@ -1162,10 +1161,10 @@
           "table": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "healthLenses": {
-        "type": "object",
         "properties": {
           "events": {
             "$ref": "#/components/schemas/healthLens"
@@ -1173,10 +1172,10 @@
           "llm": {
             "$ref": "#/components/schemas/healthLens"
           }
-        }
+        },
+        "type": "object"
       },
       "healthPlane": {
-        "type": "object",
         "properties": {
           "bus": {
             "type": "string"
@@ -1190,10 +1189,10 @@
           "stream": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "healthReport": {
-        "type": "object",
         "properties": {
           "datastore": {
             "type": "boolean"
@@ -1219,16 +1218,16 @@
           "warehouse": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "insightsBody": {
-        "type": "object",
         "properties": {
           "batch": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/insightsEvent"
-            }
+            },
+            "type": "array"
           },
           "distinct_id": {
             "type": "string"
@@ -1237,8 +1236,8 @@
             "type": "string"
           },
           "properties": {
-            "type": "object",
-            "additionalProperties": {}
+            "additionalProperties": {},
+            "type": "object"
           },
           "timestamp": {
             "type": "string"
@@ -1246,10 +1245,10 @@
           "uuid": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "insightsEvent": {
-        "type": "object",
         "properties": {
           "distinct_id": {
             "type": "string"
@@ -1258,8 +1257,8 @@
             "type": "string"
           },
           "properties": {
-            "type": "object",
-            "additionalProperties": {}
+            "additionalProperties": {},
+            "type": "object"
           },
           "timestamp": {
             "type": "string"
@@ -1267,7 +1266,8 @@
           "uuid": {
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "insightsStatus": {
         "properties": {
@@ -1287,7 +1287,6 @@
         "type": "object"
       },
       "loss": {
-        "type": "object",
         "properties": {
           "exhausted": {
             "type": "integer"
@@ -1295,7 +1294,8 @@
           "undecodable": {
             "type": "integer"
           }
-        }
+        },
+        "type": "object"
       },
       "productEvent": {
         "properties": {
