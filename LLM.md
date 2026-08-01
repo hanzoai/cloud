@@ -753,6 +753,24 @@ document pipeline" below.)
     said nothing. **106 of 112 apps** have a package doc; the tag NAME is never
     conditional on one — the list stays a function of the document's operations,
     so a consumer enumerating products loses none.
+  - **The owner is the app that answers the product's ROOT** — the shallowest path
+    under `/v1/<product>` anyone serves (`prose`, openapi/weave.go). Sharing a
+    product is the ORDINARY case: `/v1/plans` is the plan catalog with two rows
+    kept by commerce, `/v1/s3` a provisioned add-on whose bucket data plane is
+    storage, `/v1/search` and `/v1/vector` the same shape. Reading "two claimants"
+    as ambiguity silenced those four products though none was ambiguous — depth
+    already says which app the product IS and which merely has routes inside it.
+    Where nobody is alone at the root the answer is still SILENCE: `/v1/finance`
+    is billing at `/v1/finance/balance` and treasury at `/v1/finance/accounts`,
+    neither above the other, so picking one would publish a coin flip as a fact.
+  - Still blank, measured, and each for a stated reason — **6 of 149 tags**:
+    `finance` (no app answers its root); `authz`, `licensing`, `metrics`, `logs`,
+    `traces` (root owner mounts a subsystem in ANOTHER MODULE, so there is no
+    package here to read). The upstream modules do carry package docs, but
+    maintainer-voiced ones ("the native, prometheus-free time-series store"), and
+    publishing those as a product description would be worse than silence — the
+    remedy is a customer-facing package doc in hanzoai/{metrics,authz,licensing}
+    plus a Synopsis that can reach a mounted module, not a string invented here.
 - **What the router CANNOT tell you — do not try to fix this in the generator.**
   Method, path, path params, and product are derivable; request/response schemas,
   query/header params, status codes, and auth are NOT. The router holds a
