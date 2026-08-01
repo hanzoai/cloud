@@ -199,7 +199,7 @@ func blobThreshold() int {
 }
 
 // eventIngestSink pins the live sink for the process so shutdownEventIngest can
-// flush/close it, mirroring embed.go's embeddedRuntime and ingest.go's embeddedIngest.
+// flush/close it, mirroring embed.go's embeddedRuntime and planesink.go's embeddedPlaneSink.
 var eventIngestSink eventSink
 
 // mountEventIngest installs the LLM-obs claim on the ONE event door
