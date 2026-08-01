@@ -180,21 +180,127 @@ func TestTraffic_ViewIsBounded(t *testing.T) {
 	}
 }
 
-// The table must not grow without bound under an adversary minting credentials.
+// The table must not grow without bound under an adversary minting credentials —
+// and the bound is the TENANT'S OWN, so it is that tenant's table that stops
+// growing.
 func TestTraffic_TableIsBounded(t *testing.T) {
 	tr := NewTraffic()
 	now := t0
-	for i := 0; i < maxKeys+5_000; i++ {
+	for i := 0; i < maxCallers+5_000; i++ {
 		if i%1000 == 0 {
 			now = now.Add(2 * window) // let idle keys age out
 		}
 		tr.Observe(sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models"), now)
 	}
 	tr.mu.Lock()
-	n := len(tr.kv)
+	n := len(tr.tenants["acme"].callers.m)
 	tr.mu.Unlock()
-	if n >= maxKeys {
-		t.Fatalf("the sensor holds %d keys, at or past the %d cap", n, maxKeys)
+	if n >= maxCallers {
+		t.Fatalf("acme holds %d caller keys, at or past its %d ceiling", n, maxCallers)
+	}
+}
+
+// REGRESSION — the systemic defect. A process-wide cap over a table every tenant
+// shares is a cross-tenant denial of service: the org that fills it evicts the
+// org that was quiet, and the victim's abuse controls go silent with no error and
+// no alert.
+//
+// The assertion is the property, not the number: one org drives its OWN table
+// past its ceiling for several windows, and a second org's state — its counts and
+// its held verdict — is untouched throughout. A shared LRU fails this; a per-org
+// keyspace with a per-org bound cannot.
+func TestTraffic_OneTenantCannotEvictAnother(t *testing.T) {
+	tr := NewTraffic()
+	now := t0
+
+	victim := sig("victim", "fpVictim", "198.51.100.7", "/v1/models")
+	tr.Observe(victim, now)
+	tr.Observe(victim, now)
+	tr.Hold(victim, Hold{Action: "block", Reason: "stuffing"}, time.Minute, now)
+
+	// The noisy tenant mints far more credentials than its own table holds, and
+	// keeps doing it across windows so an LRU would have every chance to reach for
+	// somebody else's keys.
+	for i := 0; i < maxCallers*2; i++ {
+		tr.Observe(sig("noisy", fmt.Sprintf("fp%07d", i), "203.0.113.9", "/v1/chat"), now)
+	}
+
+	if h, ok := tr.Held(victim, now); !ok || h.Action != "block" {
+		t.Fatalf("the victim's verdict was evicted by another tenant's traffic: %+v ok=%v", h, ok)
+	}
+	v := tr.View("victim", ModeShadow, now)
+	if v.Requests != 2 || len(v.Callers) != 1 {
+		t.Fatalf("the victim's own counts moved: %+v", v)
+	}
+	if v.Saturated != 0 {
+		t.Fatalf("the victim is reported saturated by another tenant's traffic: %d", v.Saturated)
+	}
+
+	// The noisy tenant degraded ITSELF, and says so rather than going quiet.
+	if n := tr.View("noisy", ModeShadow, now); n.Saturated == 0 {
+		t.Fatal("a tenant at its own ceiling must report it (Saturated), not drop keys silently")
+	}
+}
+
+// The ADDRESS table is the one an unauthenticated flood lands in, and it is the
+// one a forged X-Forwarded-For used to feed without any ceiling at all. It is
+// bounded per tenant like the credential table, and the anonymous lane is one
+// tenant — so the worst an address flood can do is fill the lane it arrived in.
+func TestTraffic_HostTableIsBoundedPerTenant(t *testing.T) {
+	tr := NewTraffic()
+	now := t0
+	for i := 0; i < maxHosts+2_000; i++ {
+		// A distinct address AND a credential, which is what opens a host row.
+		tr.Observe(Signal{Org: "", Cred: "fp", IP: fmt.Sprintf("198.51.%d.%d", i/256%256, i%256), Path: "/v1/models"}, now)
+	}
+	tr.mu.Lock()
+	n := len(tr.tenants[""].hosts.m)
+	tr.mu.Unlock()
+	if n >= maxHosts {
+		t.Fatalf("the anonymous lane holds %d address keys, at or past its %d ceiling", n, maxHosts)
+	}
+}
+
+// A live verdict is enforcement. Reclaiming it to make room would turn a memory
+// bound into a security bypass — the caller the scorer refused would be released
+// by nothing more than the table filling up.
+func TestTraffic_ReclaimNeverDropsALiveHold(t *testing.T) {
+	tr := NewTraffic()
+	now := t0
+	held := sig("acme", "fpHeld", "203.0.113.1", "/v1/models")
+	tr.Hold(held, Hold{Action: "block"}, time.Minute, now)
+
+	for i := 0; i < maxCallers*2; i++ {
+		tr.Observe(sig("acme", fmt.Sprintf("fp%07d", i), "203.0.113.1", "/v1/chat"), now)
+	}
+	if _, ok := tr.Held(held, now); !ok {
+		t.Fatal("a live verdict was reclaimed by the tenant's own bound")
+	}
+}
+
+// The tenant table is bounded too, and it is swept by IDLENESS — never to make
+// room for whoever is calling now, which would be the same cross-tenant eviction
+// one level up.
+func TestTraffic_IdleTenantsAreReclaimed(t *testing.T) {
+	tr := NewTraffic()
+	tr.Observe(sig("gone", "fp1", "203.0.113.1", "/v1/models"), t0)
+
+	tr.mu.Lock()
+	tr.sweepTenantsLocked(t0.Add(tenantIdle + time.Minute))
+	_, still := tr.tenants["gone"]
+	tr.mu.Unlock()
+	if still {
+		t.Fatal("a tenant idle for longer than any verdict can live was kept")
+	}
+
+	// And an ACTIVE tenant is not swept, whatever else is happening.
+	tr.Observe(sig("live", "fp1", "203.0.113.1", "/v1/models"), t0)
+	tr.mu.Lock()
+	tr.sweepTenantsLocked(t0.Add(time.Second))
+	_, kept := tr.tenants["live"]
+	tr.mu.Unlock()
+	if !kept {
+		t.Fatal("an active tenant was swept")
 	}
 }
 
@@ -321,9 +427,52 @@ func TestPolicy_TheAnonymousLaneResolvesToThePlatformRow(t *testing.T) {
 	if got := s.Mode(""); got != ModeLive {
 		t.Fatalf("anonymous = %q after arming the platform row, want %q", got, ModeLive)
 	}
-	// And the platform row is a DEFAULT for a tenant, not an override of one: an
-	// org that has said nothing inherits it.
-	if got := s.Mode("globex"); got != ModeLive {
-		t.Fatalf("globex = %q, want the inherited %q", got, ModeLive)
+}
+
+// REGRESSION — arming one scope must not arm another. Mode used to be seeded from
+// the platform row for every per-org resolution, so a single PUT against the
+// reserved admin org (the ONLY way to arm the anonymous lane) silently switched
+// every tenant in the estate to enforcing: no write to their row, nothing changed
+// in their config, and a statistical judgement began refusing their traffic.
+//
+// Arming is a decision per scope. The platform row governs the anonymous lane;
+// a tenant is live only if that tenant's own row says so.
+func TestPolicy_ArmingThePlatformRowDoesNotArmTenants(t *testing.T) {
+	s, err := New(t.TempDir(), "admin", Policy{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	if _, err := s.PutPlatform(t.Context(), Policy{Mode: ModeLive}); err != nil {
+		t.Fatalf("PutPlatform: %v", err)
+	}
+	if got := s.Mode(""); got != ModeLive {
+		t.Fatalf("the anonymous lane did not arm: %q", got)
+	}
+	// An org that never asked to be armed is NOT armed — whether it has a row of
+	// its own or none at all.
+	if got := s.Mode("globex"); got != ModeShadow {
+		t.Fatalf("globex was armed by the platform row: %q", got)
+	}
+	if _, err := s.Put(t.Context(), "acme", Policy{OrgRPM: 120}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if got := s.Mode("acme"); got != ModeShadow {
+		t.Fatalf("acme was armed by the platform row: %q", got)
+	}
+	// The read-back a tenant sees agrees with the mode actually in force for it.
+	if eff := s.Effective("acme"); eff.Mode == ModeLive {
+		t.Fatalf("Effective reports acme live while Mode says shadow: %+v", eff)
+	}
+	// Arming a tenant by name still works, and reaches only that tenant.
+	if _, err := s.Put(t.Context(), "acme", Policy{Mode: ModeLive}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if got := s.Mode("acme"); got != ModeLive {
+		t.Fatalf("acme = %q after being armed by name, want %q", got, ModeLive)
+	}
+	if got := s.Mode("globex"); got != ModeShadow {
+		t.Fatalf("arming acme reached globex: %q", got)
 	}
 }

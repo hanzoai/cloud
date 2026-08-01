@@ -337,17 +337,3 @@ func parseNonNegCents(s string) (int64, bool) {
 	}
 	return n, true
 }
-
-// ClientIP extracts the originating client IP from X-Forwarded-For (the gateway
-// sets it); the left-most entry is the real client. Shared by the edge gate and
-// the resource meter so usage records carry a consistent client_ip.
-func ClientIP(c *zip.Ctx) string {
-	xff := c.Header("X-Forwarded-For")
-	if xff == "" {
-		return ""
-	}
-	if i := strings.IndexByte(xff, ','); i > 0 {
-		return strings.TrimSpace(xff[:i])
-	}
-	return strings.TrimSpace(xff)
-}
