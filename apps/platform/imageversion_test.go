@@ -38,11 +38,17 @@ func TestBuildArgsFromImageTag(t *testing.T) {
 	}
 }
 
-// Every build job is a fresh pod with an empty local cache, so without a REGISTRY
+// Every build job is a fresh pod with an empty local cache, so without a shared
 // cache each build re-downloads its whole dependency set (for studio: the entire
-// torch stack plus requirements, on every push). Both flags must be present and
-// must point at a per-repo `buildcache` tag.
-func TestBuildFrontendCmdCarriesRegistryCache(t *testing.T) {
+// torch stack plus requirements, on every push).
+//
+// The cache lives in the OBJECT STORE, not the registry. A registry cache is
+// pulled whole onto the node before any of it can be read and pushed back after,
+// so its size lands on the same 105GB disk that holds the images, the snapshots
+// and the build's working set — which is what filled the runner pool and evicted
+// builds fifteen minutes in. S3 is read ranged and per-blob, so the node holds
+// the working set and nothing else.
+func TestBuildFrontendCmdCarriesASharedCache(t *testing.T) {
 	join := func(cmd []any) string {
 		out := ""
 		for _, a := range cmd {
@@ -52,8 +58,17 @@ func TestBuildFrontendCmdCarriesRegistryCache(t *testing.T) {
 	}
 	got := join(buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/studio:v1.2.3"))
 	for _, want := range []string{
-		"--import-cache type=registry,ref=ghcr.io/hanzoai/studio:buildcache",
-		"--export-cache type=registry,ref=ghcr.io/hanzoai/studio:buildcache,mode=max",
+		"--import-cache type=s3,bucket=buildcache",
+		"--export-cache type=s3,bucket=buildcache",
+		// Keyed per repository inside one bucket, so a new repo needs no
+		// provisioning and two repos never share a cache.
+		"name=hanzoai-studio",
+		// mode=max keeps the intermediate stages, where the expensive steps live.
+		"mode=max",
+		// The INTERNAL endpoint: the public host is a CDN edge that takes no writes.
+		"endpoint_url=http://s3.hanzo.svc:9000",
+		// SeaweedFS addresses buckets by path, not by virtual host.
+		"use_path_style=true",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("build command missing %q\ngot:%s", want, got)

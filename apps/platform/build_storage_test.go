@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -62,5 +63,75 @@ func TestAFinishedBuildReleasesItsDiskPromptly(t *testing.T) {
 	// Still far longer than the terminal-state read, which polls every 5s.
 	if ttl < 60 {
 		t.Errorf("ttl %ds could delete the job before its result is read", ttl)
+	}
+}
+
+// The layer cache lives in the object store because it has to scale independently
+// of a build node. A registry cache is pulled WHOLE onto the node before any of it
+// can be read, so its size lands on the same 105GB disk that holds the images, the
+// snapshots and the build's own working set — 79GB retained with 26GB left, and a
+// build evicted fifteen minutes in.
+func TestTheCacheDoesNotLandOnTheNodesDisk(t *testing.T) {
+	var joined []string
+	for _, a := range buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/cloud:v1") {
+		joined = append(joined, a.(string))
+	}
+	s := strings.Join(joined, " ")
+	if strings.Contains(s, "type=registry") {
+		t.Error("a registry cache is pulled whole onto the node; that is what filled the runner pool")
+	}
+	if !strings.Contains(s, "type=s3") {
+		t.Error("the cache must live in the object store")
+	}
+}
+
+// The credential reaches buildkit through the ENVIRONMENT, never argv — a build
+// command is logged and inspectable, and a key on it is a key in the logs.
+func TestTheCacheCredentialIsNeverOnArgv(t *testing.T) {
+	var joined []string
+	for _, a := range buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/cloud:v1") {
+		joined = append(joined, a.(string))
+	}
+	s := strings.Join(joined, " ")
+	for _, leak := range []string{"access_key_id=", "secret_access_key=", "AWS_SECRET"} {
+		if strings.Contains(s, leak) {
+			t.Errorf("the build command carries %q; it belongs in the env", leak)
+		}
+	}
+	// And it IS supplied, from the same optional Secret the artifact publisher uses.
+	k := fakeK8s()
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+	cs, _, _ := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
+	env, _ := cs[0].(map[string]any)["env"].([]any)
+	found := map[string]bool{}
+	for _, e := range env {
+		em := e.(map[string]any)
+		name, _ := em["name"].(string)
+		found[name] = true
+		if strings.HasPrefix(name, "AWS_") {
+			ref := em["valueFrom"].(map[string]any)["secretKeyRef"].(map[string]any)
+			// Optional, so a cluster without the Secret still SCHEDULES the build:
+			// a cache accelerates, it never gates.
+			if ref["optional"] != true {
+				t.Errorf("%s is required; an absent cache credential would make the Job unschedulable", name)
+			}
+		}
+	}
+	for _, n := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} {
+		if !found[n] {
+			t.Errorf("%s is not supplied, so every build is a cache miss", n)
+		}
+	}
+}
+
+// The write goes to the INTERNAL endpoint. The public host is a CDN edge that
+// takes no writes — the same split artifactPutBase makes.
+func TestTheCacheWritesToTheInternalEndpoint(t *testing.T) {
+	ep := s3CacheEndpoint()
+	if !strings.HasPrefix(ep, "http://") && !strings.HasPrefix(ep, "https://") {
+		t.Errorf("endpoint %q has no scheme; buildkit needs a URL", ep)
+	}
+	if strings.Contains(ep, "s3.hanzo.ai") {
+		t.Error("that is the public edge; writes go to the in-cluster address")
 	}
 }
