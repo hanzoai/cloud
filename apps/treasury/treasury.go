@@ -51,6 +51,7 @@
 package treasury
 
 import (
+	"github.com/hanzoai/cloud/cek"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -114,7 +115,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
 		return fmt.Errorf("treasury.Mount: data dir: %w", err)
 	}
-	store, err := sqlstore.Open(filepath.Join(deps.DataDir, "treasury.db"))
+	// Platform-level, not per-org: the treasury is the fleet's own book.
+	store, err := sqlstore.Open(cek.Global, filepath.Join(deps.DataDir, "treasury.db"))
 	if err != nil {
 		return fmt.Errorf("treasury.Mount: open store: %w", err)
 	}

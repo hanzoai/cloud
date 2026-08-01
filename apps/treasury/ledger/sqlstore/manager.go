@@ -26,6 +26,7 @@
 package sqlstore
 
 import (
+	"github.com/hanzoai/cloud/cek"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -112,7 +113,14 @@ func (m *Manager) open(slug string) (*Store, error) {
 	if s, ok := m.cache[slug]; ok {
 		return s, nil
 	}
-	s, err := Open(m.path(slug))
+	// The house book is the platform's own; every other slug is a tenant's, and its
+	// key names that tenant (cek-rewrap bound it). Same rule as the path above, stated
+	// once beside it so the two cannot drift.
+	p := cek.Org(slug)
+	if slug == HouseSlug {
+		p = cek.Global
+	}
+	s, err := Open(p, m.path(slug))
 	if err != nil {
 		return nil, err
 	}

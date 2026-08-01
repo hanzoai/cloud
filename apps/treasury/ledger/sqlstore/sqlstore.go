@@ -42,9 +42,24 @@ type Store struct {
 	db *sql.DB
 }
 
-// Open opens (creating + migrating) the ledger database at path.
-func Open(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+// Open opens (creating + migrating) the ledger database at path, under the principal
+// its key is bound to.
+//
+// The principal is a PARAMETER because these stores do not share one. A per-org ledger
+// (orgs/<org>/finance.db) is bound to that org; the platform's own treasury.db is bound
+// to Global. This function used to hard-code Global for both — and cek-rewrap had
+// already moved every per-org sidecar to its owner ("a store's key names its owner",
+// 2026-07-31 01:25). So the data was migrated correctly and the opener was never
+// updated: every per-org ledger failed to unwrap with "wrong key, wrong principal, or
+// corrupt blob".
+//
+// That read as data loss and was not: 86 finance ledgers were intact and correctly
+// keyed the whole time. Because the AI balance gate is fail-closed and could not read a
+// balance, it refused EVERY completion — chat, copilot and documents — fleet-wide.
+// Naming the principal at the call site is what stops an opener and a migration from
+// disagreeing again, because now they cannot both be silent about it.
+func Open(p cek.Principal, path string) (*Store, error) {
+	db, err := cek.Open(p, path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}
