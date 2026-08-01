@@ -1,9 +1,10 @@
 # Addresses openapi.yaml publishes that the deployed api does NOT route.
 #
-# THIS FILE MAY ONLY SHRINK. openapi/reach.py probes every literal GET the
-# document publishes against the host that is serving THIS release — car 2 has
-# already proved `x-api-version` is ours, so both sides are the same version —
-# and refuses:
+# THIS FILE MAY ONLY SHRINK. openapi/reach.py probes every GET and HEAD the
+# document publishes — literal AND parameterised, filling each {param} with a
+# sentinel — against the host that is serving THIS release, since car 2 has
+# already proved `x-api-version` is ours and both sides are the same version. It
+# refuses:
 #
 #   a 404 that is not listed here  → a NEW dark address; the release goes red
 #   a line here that now answers   → delete the line, in the same commit
@@ -13,9 +14,12 @@
 # command in the CLI, so a line here is a call every client offers and no caller
 # can make.
 #
-# IT IS EMPTY, and that is a measurement, not a default. Probed against the
-# deployed release's own document and host (v1.801.350, 490 literal addresses):
-# zero dark. Anything that appears here from now on arrived after this line.
+# IT IS EMPTY, and that is a measurement, not a default. Probed against
+# api.hanzo.ai at v1.801.350: zero dark, across 748 addresses — 554 literal and
+# 194 parameterised. The parameterised ones had never been probed by anything
+# until the run that wrote this line: they are 36% of the document, and the only
+# thing that had ever been true of them was that nobody had looked. Anything that
+# appears here from now on arrived after this line.
 #
 # It did not start empty. Fourteen `/v1/pricing/*` addresses were dark — answered
 # by a Cloudflare worker that intercepted `/v1/pricing*` and `/v1/models*` by
