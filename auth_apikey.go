@@ -41,8 +41,9 @@ type iamKeys struct {
 	base  string
 	auth  string // client_secret_basic, or "" when unconfigured
 	http  *http.Client
-	cache cache[string, *idClaims] // secret key -> principal (get-user?accessKey)
-	orgs  cache[string, string]    // publishable key -> org, and no principal (resolve-key)
+	cache cache[string, *idClaims]  // secret key -> principal (get-user?accessKey)
+	orgs  cache[string, string]     // publishable key -> org, and no principal (resolve-key)
+	why   cache[string, KeyRefusal] // secret key -> WHY it did not resolve, for diagnosis only
 }
 
 // newIAMKeys reads the same IAM env clients/account does. With no confidential
@@ -55,6 +56,7 @@ func newIAMKeys() *iamKeys {
 		http:  &http.Client{Timeout: 5 * time.Second},
 		cache: newCache[string, *idClaims](60 * time.Second),
 		orgs:  newCache[string, string](60 * time.Second),
+		why:   newCache[string, KeyRefusal](60 * time.Second),
 	}
 }
 
@@ -208,11 +210,61 @@ func (k *iamKeys) lookupOrg(ctx context.Context, key string) string {
 	return strings.TrimSpace(env.Data.Org)
 }
 
+// KeyRefusal is the machine-readable reason IAM gives for not resolving a key —
+// `code` on the get-user?accessKey / resolve-key envelope (iam internal/store
+// apikey.go). Cloud does not interpret it; it carries it, so the surface that faces
+// a human can say "revoked, mint a new one" instead of IAM's generic "the entity
+// does not exist". "" means IAM gave no reason (an older IAM, or a store fault,
+// which is NOT a bad credential).
+type KeyRefusal string
+
+// RefusalForKey resolves an opaque secret key and reports WHY it failed, for the
+// surface that must explain the failure to a person. It shares resolve()'s cache, so
+// asking why costs no extra IAM call on the hot path: a resolved key answers ("",
+// true) from the same cached principal the auth path uses.
+func RefusalForKey(ctx context.Context, key string) (KeyRefusal, bool) {
+	key = strings.TrimSpace(key)
+	if !isAPIKey(key) || IsPublishableKey(key) {
+		return "", false
+	}
+	if claims := sharedKeys().resolve(ctx, key); claims != nil {
+		return "", true
+	}
+	return sharedKeys().refusal(ctx, key), false
+}
+
+// refusal reports the cached reason a key did not resolve. lookup records it when it
+// asks IAM, so this never issues a second call — the reason is a by-product of the
+// resolution that already happened, not a separate question.
+func (k *iamKeys) refusal(_ context.Context, key string) KeyRefusal {
+	r, _ := k.why.get(key)
+	return r
+}
+
+// KeyHint is the ONE way a key is named in a log line or an error message: its
+// prefix and nothing else. A credential must never be echoed whole, and "hk-902abd…"
+// is enough for a holder to tell WHICH of their keys failed while being useless to
+// anyone who intercepts it.
+func KeyHint(key string) string {
+	key = strings.TrimSpace(key)
+	const shown = 9 // "hk-" + 6
+	if len(key) <= shown {
+		return "…"
+	}
+	return key[:shown] + "…"
+}
+
 // lookup performs the authenticated get-user?accessKey call and maps the user row
 // to idClaims. Any failure (unreachable, denied, unknown key) yields nil. Name is
 // both the username IAM's owner/name lookups parse and the id fallback: a key has
 // no UUID subject, so userID() falls through to name — the gateway's historical
 // X-User-Id==name behavior the owner/name path expects.
+//
+// A refusal's REASON is recorded beside the (nil) principal rather than discarded.
+// It changes no decision here — a key that does not resolve is anonymous either way,
+// and that stays true — but throwing it away is what left every downstream surface
+// rendering IAM's generic "the entity does not exist" to users whose key had simply
+// been revoked.
 func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
 	u := k.base + "/v1/iam/get-user?" + url.Values{"accessKey": {key}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -232,6 +284,7 @@ func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
 	}
 	var env struct {
 		Status string `json:"status"`
+		Code   string `json:"code"` // WHY, when IAM refused (iam store.KeyFailure)
 		Data   *struct {
 			Owner   string `json:"owner"`
 			Name    string `json:"name"`
@@ -240,9 +293,11 @@ func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
 		} `json:"data"`
 	}
 	if json.Unmarshal(raw, &env) != nil || env.Status != "ok" || env.Data == nil {
+		k.why.put(key, KeyRefusal(strings.TrimSpace(env.Code)))
 		return nil
 	}
 	if strings.TrimSpace(env.Data.Owner) == "" {
+		k.why.put(key, KeyRefusal(strings.TrimSpace(env.Code)))
 		return nil
 	}
 	owner := strings.TrimSpace(env.Data.Owner)
@@ -294,8 +349,15 @@ func (c *cache[K, V]) get(k K) (V, bool) {
 	return e.v, true
 }
 
+// put stores a value. The ZERO cache is usable: its map is created on first write,
+// so a partially-constructed iamKeys (any caller that names only the caches it cares
+// about) records rather than panicking on a nil map. A zero ttl expires immediately,
+// which is the right reading of "no ttl was configured" — never cache forever.
 func (c *cache[K, V]) put(k K, v V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.m == nil {
+		c.m = make(map[K]entry[V])
+	}
 	c.m[k] = entry[V]{v: v, exp: time.Now().Add(c.ttl)}
 }
