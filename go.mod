@@ -34,7 +34,7 @@ require (
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
 	github.com/lib/pq v1.12.3
-	github.com/luxfi/aml v0.3.5
+	github.com/luxfi/aml v0.3.8-0.20260801232153-50e62d777a43
 	github.com/luxfi/log v1.6.0
 	github.com/luxfi/node v1.36.15
 	github.com/luxfi/trace v1.4.0

@@ -274,6 +274,21 @@ func decide(
 		USD:               nanoUSD(o.amount),
 	}
 	assessment := model.Inspect(tx, types.Entity{ID: o.subject, OrgID: t.String()})
+	// The attribution comes from the assessment that produced the SCORE THIS
+	// DECISION RECORDS, not from the alert. Two reasons, and both are the whole
+	// point of having an explanation at all.
+	//
+	// Inspect does not learn and Assess does; they run back to back, so the
+	// masses move between them and the alert's causes explain a marginally
+	// different score than the one written down. Reading the recorded
+	// assessment's causes means the reasons and the number they explain are the
+	// same arithmetic.
+	//
+	// And Assess yields a hit only when the model ALERTS, which it never does
+	// while the engine-level shadow is set — so a decision below the line, or any
+	// decision at all in shadow, would carry no explanation whatever. A score with
+	// no reason is exactly what an adverse-action regime does not allow.
+	out.causes = assessment.Causes
 	var modelHit *hit
 	if mh, ok := model.Assess(tx, types.Entity{ID: o.subject, OrgID: t.String()}); ok {
 		action := mh.Rule.Action
@@ -284,7 +299,6 @@ func decide(
 			Rule: mh.Rule.ID, Name: mh.Rule.Name, Action: action,
 			Weight: mh.Rule.Weight, Severity: mh.Rule.Severity,
 		}
-		out.causes = mh.Causes
 	}
 	if !assessment.Scored && assessment.Reason != "" {
 		out.refusal = assessment.Reason

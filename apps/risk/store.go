@@ -134,20 +134,28 @@ type shelf struct {
 
 func newShelf(dataDir string) *shelf { return &shelf{dataDir: dataDir, dbs: map[Tenant]*sql.DB{}} }
 
-// open resolves the tenant's file. The ORG half is what cloud.OrgDB takes — it
-// does its own brand scoping through DataDir and the deployment, so handing it
-// the qualified key would put the brand in the path twice.
+// open resolves the tenant's file. The ORG half is what cloud.OrgNamespace
+// takes — it does its own brand scoping through DataDir and the deployment, so
+// handing it the qualified key would put the brand in the path twice.
+//
+// OrgDB takes the NAME and nothing a name is made of, so the fold from org to
+// namespace happens once, at the one door, and this package cannot pair one
+// namespace's path with another namespace's key.
 func (s *shelf) open(t Tenant) (*sql.DB, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if db, ok := s.dbs[t]; ok {
 		return db, nil
 	}
-	db, err := cloud.OrgDB(s.dataDir, t.org(), "", "risk")
+	ns, err := cloud.OrgNamespace(t.org(), "")
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(schema); err != nil {
+	db, err := cloud.OrgDB(s.dataDir, ns, "risk")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(schema + qualitySchema); err != nil {
 		_ = db.Close()
 		return nil, err
 	}

@@ -128,6 +128,11 @@ var Apps = []App{
 		"/v1/risk",
 		"/v1/ml/features", "/v1/ml/restore", "/v1/ml/score", "/v1/ml/search",
 		"/v1/ml/snapshot", "/v1/ml/state", "/v1/ml/train",
+		// The scoring-quality leaves. They are on this row for the same reason
+		// the others are: a calibration maps THIS process's scores, and a replay
+		// reads the decisions this process wrote.
+		"/v1/ml/calibrate", "/v1/ml/calibration", "/v1/ml/evaluate",
+		"/v1/ml/learning", "/v1/ml/replay", "/v1/ml/replays",
 	}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},

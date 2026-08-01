@@ -36,6 +36,9 @@ var theOps = []string{
 	"riskDictionary", "riskMode", "riskSetMode",
 	"mlScore", "mlTrain", "mlState", "mlSetAppetite", "mlFeatures",
 	"mlSearch", "mlSearchResult", "mlSnapshot", "mlRestore",
+	"riskReasons", "riskPolicy", "riskSetPolicy", "riskPolicyVersions",
+	"mlCalibrate", "mlCalibration", "mlEvaluate", "mlLearning",
+	"mlReplay", "mlReplayReport",
 }
 
 func repoRoot(t *testing.T) string {

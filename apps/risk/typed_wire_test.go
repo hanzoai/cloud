@@ -166,6 +166,13 @@ func TestTheSurfaceIsWhatWasPromised(t *testing.T) {
 		"GET /v1/ml/features",
 		"POST /v1/ml/search", "GET /v1/ml/search/{id}",
 		"POST /v1/ml/snapshot", "POST /v1/ml/restore",
+		// defend — why a decision went the way it did, and what a score means
+		"GET /v1/risk/reasons",
+		"GET /v1/risk/policy", "PUT /v1/risk/policy",
+		"GET /v1/risk/policy/versions",
+		"POST /v1/ml/calibrate", "GET /v1/ml/calibration",
+		"POST /v1/ml/evaluate", "GET /v1/ml/learning",
+		"POST /v1/ml/replay", "GET /v1/ml/replays/{id}",
 	}
 	for _, w := range want {
 		if !served[w] {

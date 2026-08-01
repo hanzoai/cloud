@@ -31,6 +31,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/luxfi/aml/pkg/anomaly"
+	"github.com/luxfi/aml/pkg/reason"
 	"github.com/luxfi/aml/pkg/types"
 	"github.com/luxfi/aml/pkg/velocity"
 	"github.com/zap-proto/zip"
@@ -228,6 +229,14 @@ func mount(s *stateService, app cloud.Router) {
 		zip.WithOperationID("mlRestore"),
 		zip.WithSummary("Restore this tenant's learned state from its pinned snapshot"),
 		zip.WithTags("ml"))
+
+	// The SCORING-QUALITY surface — reason codes, calibration, the governed
+	// bands, evaluation and replay — is declared in quality.go and registered
+	// LAST, after cloud.Bridge is installed on both prefixes above. fiber matches
+	// middleware by path prefix in registration order, so ops registered after it
+	// sit behind the same tenant gate; tenant_test.go proves that rather than
+	// assuming it.
+	mountQuality(s, app)
 }
 
 // ── the shapes ──────────────────────────────────────────────────────────────
@@ -378,6 +387,43 @@ type riskDecision struct {
 	// Model is the digest of the model that produced this, so an auditor can pin
 	// the exact geometry that raised an alert.
 	Model string `json:"model"`
+	// Probability is what the score MEANS rather than how it ranks: the
+	// calibrated likelihood in [0,1]. ABSENT — not zero — when this organisation
+	// has no calibration fitted, or when the one it has was fitted under a
+	// scoring shape that has since moved. A density reported as a probability is
+	// a number that lies, and Refusal says which case applies.
+	Probability *float64 `json:"probability,omitempty"`
+	// Reasons is the adverse-action artefact: the principal reasons this went the
+	// way it did, strongest first, each a code from the closed vocabulary
+	// /v1/risk/reasons publishes, with the contribution it made and a sentence a
+	// person can be shown. The model's share is its own exact counterfactual —
+	// one coordinate moved to neutral and rescored on the same trees — never a
+	// surrogate fitted afterwards. Four at most: a list of nine is not an
+	// explanation.
+	Reasons []riskReason `json:"reasons,omitempty"`
+	// Policy is the digest of the score bands that read the probability, so an
+	// auditor can pin exactly which ladder was in force. Empty when no bands are
+	// set for this stage, in which case the evidence alone decided.
+	Policy string `json:"policy,omitempty"`
+	// Calibration is the digest of the map that produced Probability.
+	Calibration string `json:"calibration,omitempty"`
+}
+
+// riskReason is one principal reason behind a decision.
+type riskReason struct {
+	// Code is from the closed vocabulary. A free-text reason cannot be counted,
+	// cannot be tested and cannot be defended.
+	Code string `json:"code"`
+	// Weight is this reason's part of the decision, in [0,1].
+	Weight float64 `json:"weight"`
+	// Says is the sentence an investigator or a declined customer is shown, with
+	// this decision's own numbers in it.
+	Says string `json:"says"`
+	// Source names the specific rule, when the code does not. Empty for a model
+	// feature, whose code already names it exactly.
+	Source string `json:"source,omitempty"`
+	// Severity is the grading.
+	Severity string `json:"severity,omitempty"`
 }
 
 // riskDecisionsIn filters the decision log. Every filter is an equality on a
@@ -429,7 +475,16 @@ type riskDecisionPage struct {
 }
 
 // riskDecisionView is one decision with its evidence — the dispute packet: what
-// was decided, on what evidence, over which features, by which model.
+// was decided, on what evidence, over which features, by which model, how likely
+// it was and under whose thresholds.
+//
+// It carries the adverse-action artefact and not only the raw evidence, because
+// THIS is the surface anybody asking about a decision reads. A caller that did
+// not keep the body of the original call, an investigator opening a case months
+// later, a regulator asking why one customer was declined: all of them arrive
+// here. Reasons that existed only on the answer to the original POST would be
+// gone by then, and a decision nobody can state the reason for is the one thing
+// an adverse-action regime does not allow.
 type riskDecisionView struct {
 	// Decision is the row.
 	Decision riskDecisionBrief `json:"decision"`
@@ -439,6 +494,22 @@ type riskDecisionView struct {
 	Causes []riskCause `json:"causes,omitempty"`
 	// Model is the digest of the model that produced it.
 	Model string `json:"model"`
+	// Probability is the calibrated likelihood this decision was taken at, as
+	// RECORDED — read back, never recomputed, so it is what was true then and not
+	// what the calibration in force today would say. Absent when none was in
+	// force.
+	Probability *float64 `json:"probability,omitempty"`
+	// Reasons is the principal reasons, strongest first: the codes, the weights
+	// and the sentences a person is shown.
+	Reasons []riskReason `json:"reasons,omitempty"`
+	// Policy is the digest of the score bands that read the probability, so an
+	// auditor can pin the ladder that was in force.
+	Policy string `json:"policy,omitempty"`
+	// Calibration is the digest of the map that produced the probability.
+	Calibration string `json:"calibration,omitempty"`
+	// Refusal names why there is no probability, when there is none. Silence and
+	// a low probability render the same on a screen and are opposite facts.
+	Refusal string `json:"refusal,omitempty"`
 }
 
 // riskLabelIn records the outcome a human concluded.
@@ -1236,6 +1307,34 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 		}, shadow)
 
 	digest := o.s.State.model.Digest()
+
+	// GRADE. The calibrated probability, the principal reasons, and what this
+	// organisation's own bands ask for at that probability. It reads the tenant's
+	// own file, exactly as the rules, lists and suppressions above already do —
+	// so there is one idiom, no cache to invalidate, and nothing to rehydrate
+	// after the Recreate rollout that drops every in-memory model.
+	//
+	// A shape it cannot read is a probability it will not state: grade returns a
+	// refusal rather than a number, and the bands then reach nothing. That is the
+	// training-serving skew control, and it degrades to exactly the rule-driven
+	// decision this plane made before there was a calibration.
+	shape, err := scoringShape(db, digest)
+	if err != nil {
+		return nil, err
+	}
+	v := grade(db, shape, obs.stage, out)
+	if v.refusal != "" && out.refusal == "" {
+		out.refusal = v.refusal
+	}
+	// The stronger of the two authorities wins, in one place. A deny-list rule is
+	// this organisation's explicit instruction and must not be talked down by a
+	// low probability; a high probability must not be talked down by quiet
+	// evidence. Shadow is already handled twice over — the ladder answers its own
+	// floor, and decide has already forced allow.
+	if !out.shadow {
+		out.action = escalate(out.action, v.action)
+	}
+
 	// DURABLE FIRST. The decision is the record; the analytics copy comes after
 	// and is best-effort. Wired the other way, a bus hiccup loses evidence.
 	//
@@ -1253,6 +1352,14 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 		return nil, err
 	}
 
+	// The verdict lands in the SAME file immediately after the decision it
+	// grades. A decision whose reasons arrived separately could exist without
+	// them, and a decision nobody can say the reason for is the one thing an
+	// adverse-action regime does not allow.
+	if err := putVerdict(db, obs.id, obs.at, v); err != nil {
+		return nil, err
+	}
+
 	// METER the screen on the caller's own ledger, after the work.
 	o.s.State.bill.Meter(sc.org, sc.project, "screen", screenCents, sc.request, sc.clientIP)
 
@@ -1266,6 +1373,8 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 		ID: out.id, Action: out.action, Score: out.score, Agency: out.agency,
 		Hits: wireHits(out.hits), Causes: wireCauses(out.causes),
 		Shadow: out.shadow, Refusal: out.refusal, Model: digest,
+		Probability: v.probability, Reasons: wireReasons(v.reasons),
+		Policy: v.policy, Calibration: v.calibration,
 	}, nil
 }
 
@@ -1317,11 +1426,37 @@ func (o ops) decided(db *sql.DB, id string) (*riskDecision, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The verdict is read back rather than recomputed. Recomputing would grade
+	// the same decision against whatever calibration and bands are in force NOW,
+	// so a retry of an idempotent call could come back with different reasons for
+	// the same decision — which is exactly what an idempotency key promises will
+	// not happen.
+	v, _, err := getVerdict(db, id)
+	if err != nil {
+		return nil, err
+	}
 	return &riskDecision{
 		ID: view.Decision.ID, Action: view.Decision.Action, Score: view.Decision.Score,
 		Agency: view.Decision.Agency, Hits: view.Hits, Causes: view.Causes,
 		Shadow: view.Decision.Shadow, Refusal: view.Decision.Refusal, Model: view.Model,
+		Probability: v.probability, Reasons: wireReasons(v.reasons),
+		Policy: v.policy, Calibration: v.calibration,
 	}, nil
+}
+
+// wireReasons renders the principal reasons onto the wire.
+func wireReasons(rs []reason.Reason) []riskReason {
+	if len(rs) == 0 {
+		return nil
+	}
+	out := make([]riskReason, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, riskReason{
+			Code: r.Code, Weight: round4(r.Weight), Says: r.Says,
+			Source: r.Source, Severity: r.Severity,
+		})
+	}
+	return out
 }
 
 func (o ops) decisionView(db *sql.DB, id string) (*riskDecisionView, error) {
@@ -1331,8 +1466,18 @@ func (o ops) decisionView(db *sql.DB, id string) (*riskDecisionView, error) {
 	}
 	var causes []types.Cause
 	_ = json.Unmarshal(causesJSON, &causes)
+	// The grading is READ, never recomputed. Recomputing would grade a decision
+	// taken months ago against whatever calibration and bands are in force now,
+	// so the packet would answer "why was this declined" with a reason that did
+	// not exist on the day it was declined.
+	v, _, err := getVerdict(db, id)
+	if err != nil {
+		return nil, err
+	}
 	return &riskDecisionView{
 		Decision: brief(row), Hits: wireHits(hits), Causes: wireCauses(causes), Model: digest,
+		Probability: v.probability, Reasons: wireReasons(v.reasons),
+		Policy: v.policy, Calibration: v.calibration, Refusal: v.refusal,
 	}, nil
 }
 

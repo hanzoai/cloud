@@ -1,11 +1,180 @@
 [
   {
+    "description": "Calibrate fits the map that turns this organisation's scores into\nprobabilities, from its own judged decisions.\n\nA detector's score is a density — how isolated an event is among the mass this\norganisation's recent traffic laid down. It ranks well and it means nothing on\nits own: 0.8 is not \"80% likely\", and two organisations' 0.8s are not\ncomparable. Every band set on such a score is a number someone liked and every\ncost calculation over it is arithmetic on the wrong units.\n\nThe fit is refused rather than approximated when the evidence cannot support\none — too few judged decisions, or all of them one class — because a\ncalibration fitted on one class is a constant, and a constant reported as a\nprobability is a lie with a decimal point on it.\n\nIt records the SCORING SHAPE it was fitted under: the detector's geometry and\nfeature inventory folded with this organisation's enabled rule set. If either\nmoves, the map refuses to answer and the decision plane reports probabilities\nas absent — which is the training-serving skew control, and the reason it\ncannot fail silently.",
+    "inputSchema": {
+      "properties": {
+        "horizon": {
+          "description": "Horizon is how many days a decision must have aged before its outcome\ncounts as settled. It is the single most consequential field here: an\nanalyst judges within hours and a card dispute lands 30 to 120 days later,\nso measuring over everything strips the recent tail of exactly the\nchargebacks that make the base rate what it is. 120 for a payment lane, 14\nfor signup abuse, 0 only where every label genuinely arrives at once.\nBetween 0 and 3650, which is past every retention window here.",
+          "type": "integer"
+        },
+        "method": {
+          "description": "Method is isotonic or platt. Isotonic assumes only that a higher score is\nnever less likely to be productive, which is the one assumption the\ndetector guarantees, and needs data. Platt has two parameters and survives\na small sample at the cost of assuming a shape. Empty takes isotonic.",
+          "type": "string"
+        },
+        "rows": {
+          "description": "Rows bounds the history read, 1..50000. Zero takes the bound.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlCalibrate"
+  },
+  {
+    "description": "Calibration reads the map in force and how well it holds against reality.\n\nThe reliability report is the diagonal a console draws: bins of predicted\nprobability against the share that actually turned out productive. An empty\nbin reports absence rather than zero, because a point drawn at zero on that\nchart claims perfect confidence in innocence.\n\nCurrent is the field to read first. When it is false the scoring shape has\nmoved since the fit — a feature changed, or a rule was written, retired or\nreweighted — and the map refuses to answer, so every decision since reports\nits probability as absent. The remedy is a new fit, and until then the bands\ncannot act.",
+    "inputSchema": {
+      "properties": {
+        "horizon": {
+          "description": "Horizon is the maturity horizon in days, 0 to 3650 — see mlCalibrate, where\nthe same field decides the same thing and for the same reason.",
+          "type": "integer"
+        },
+        "rows": {
+          "description": "Rows bounds the history read, 1..50000. Zero takes the bound.",
+          "type": "integer"
+        },
+        "stage": {
+          "description": "Stage selects whose bands supply the operating point and the prices.\nEmpty measures at the cost-minimising threshold with no stated price,\nwhich reports separation and nothing about money.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlCalibration"
+  },
+  {
+    "description": "Evaluate measures the decision plane against what actually happened.\n\nThe metrics suit imbalanced data because fraud is rare and the usual ones do\nnot: accuracy is not computed at all, ROC-AUC is reported with the prevalence\nbeside it because it is uninterpretable without one, and average precision is\ncomputed by the step definition rather than the trapezoid — interpolating\nbetween operating points on a precision-recall curve credits a plane with\npoints it cannot reach, and flatters exactly the rare-event case the metric\nexists for.\n\nThe cost-weighted number is the one anybody outside the team cares about. A\nmiss and a false alarm have different prices, both stated on the stage's own\nbands, both integers of nano-units so the arithmetic is exact. The\ncost-minimising threshold is reported beside the one in force, and the gap\nbetween them is what a threshold review is about.\n\nUnacted bounds the trust in all of it: a blocked decision has no outcome, so a\njudged set drawn only from decisions the plane already acted on measures\nagreement with the incumbent rather than accuracy.",
+    "inputSchema": {
+      "properties": {
+        "horizon": {
+          "description": "Horizon is the maturity horizon in days, 0 to 3650 — see mlCalibrate, where\nthe same field decides the same thing and for the same reason.",
+          "type": "integer"
+        },
+        "rows": {
+          "description": "Rows bounds the history read, 1..50000. Zero takes the bound.",
+          "type": "integer"
+        },
+        "stage": {
+          "description": "Stage selects whose bands supply the operating point and the prices.\nEmpty measures at the cost-minimising threshold with no stated price,\nwhich reports separation and nothing about money.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlEvaluate"
+  },
+  {
     "description": "Features is the typology-to-feature inventory the model is built on: what each\ndimension measures, the risk indicator it serves, and the published source\nthose words come from.\n\nIt is code rather than a document because a mapping kept beside the model\ncannot drift away from what the model actually reads — and the attributability\nit makes possible is why this is a tree and not a net.",
     "inputSchema": {
       "properties": {},
       "type": "object"
     },
     "name": "mlFeatures"
+  },
+  {
+    "description": "Learning is the curve an operator reads before spending money on more labels:\nquality as a function of how much history the fit had.\n\nIt has TWO arms and the pair is the point. The train arm is the metric on the\nrows the fit saw, optimistic by construction. The ahead arm is the metric on a\nFIXED later window — the same rows at every step, all of them after everything\nany step trained on. Both still falling means more labels would help; the\ntrain arm falling while the ahead arm has stopped means the fit has started\nmemorising the sample and the next thing to change is the method, not the\nvolume.\n\nThe split is temporal and only temporal, never random. A random split lets a\nfit see the future — fraud arrives in campaigns, and half a campaign on each\nside of the line scores brilliantly on a pattern the fit has already been\nshown — and lets one device or one card appear on both sides, which rewards\nmemorising an identifier and is invisible in every metric.\n\nThe separation arm and the calibration arm say different things: a monotone\ncalibration cannot reorder anything, so ROC and PR are identical before and\nafter fitting one. ROC and PR moving along the curve is the DETECTOR getting\nbetter as it learns; Brier moving is the CALIBRATION getting better as labels\naccrue.",
+    "inputSchema": {
+      "properties": {
+        "horizon": {
+          "description": "Horizon is the maturity horizon in days, 0 to 3650.",
+          "type": "integer"
+        },
+        "method": {
+          "description": "Method is isotonic or platt, as for a fit.",
+          "type": "string"
+        },
+        "rows": {
+          "description": "Rows bounds the history read, 1..50000. Zero takes the bound.",
+          "type": "integer"
+        },
+        "stage": {
+          "description": "Stage supplies the prices, so the cost arm of the curve means something.",
+          "type": "string"
+        },
+        "steps": {
+          "description": "Steps is how many points the curve has, 2..20, default 10.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlLearning"
+  },
+  {
+    "description": "Replay answers what a candidate policy WOULD have decided, over the decisions\nthis organisation already made.\n\nThe RECORDED score is replayed and the model is not re-run, for two reasons\nthat are the difference between a backtest that means something and one that\ndoes not. A score states how unusual an event was against the traffic at that\nmoment, so recomputing it against today's aggregates answers a different\nquestion under the same name. And the detector has since learned from these\nvery events, so re-scoring them through it is the purest form of knowing the\nfuture — and it produces a beautiful number.\n\nSo the score is a fact and the candidate is a pure function of it, which is\nwhat makes the report DETERMINISTIC: no clock, no random source, no model\nstate, and nothing that reaches the output is a map. Two runs over the same\nrows return the same digest, which is what lets a replay be evidence.\n\nIt is written down. A replay is the justification attached to a threshold\nchange, so it is a record with an identifier and not a number that scrolled\npast in a console.",
+    "inputSchema": {
+      "$defs": {
+        "riskBand": {
+          "properties": {
+            "action": {
+              "description": "Action is what to do at or above it: challenge, review, restrict or block.",
+              "type": "string"
+            },
+            "at": {
+              "description": "At is the boundary, in [0,1]. It is a PROBABILITY and not a raw score —\na band over an uncalibrated score is a band over units that mean nothing,\nand the cost arithmetic beneath it would be meaningless too.",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "riskCost": {
+          "properties": {
+            "alarm": {
+              "description": "Alarm is the price of stopping something that was fine: an abandoned\npurchase, a support contact, and the share of those customers who do not\ncome back.",
+              "type": "integer"
+            },
+            "miss": {
+              "description": "Miss is the price of letting through what should have been stopped — on a\npayment lane, typically the disputed amount plus the network's fee.",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "bands": {
+          "description": "Bands is the candidate ladder. Empty replays the ladder currently in force,\nwhich is how a change of maturity horizon or of window is compared on its\nown.",
+          "items": {
+            "$ref": "#/$defs/riskBand"
+          },
+          "type": "array"
+        },
+        "cost": {
+          "$ref": "#/$defs/riskCost",
+          "description": "Cost is what being wrong is worth under the candidate. Empty takes the\nprices the stage's current bands state."
+        },
+        "floor": {
+          "description": "Floor is the action below the first band. Empty takes the floor the stage's\ncurrent ladder states.",
+          "type": "string"
+        },
+        "horizon": {
+          "description": "Horizon is the maturity horizon in days, 0 to 3650.",
+          "type": "integer"
+        },
+        "rows": {
+          "description": "Rows bounds the history read, 1..50000. Zero takes the bound.",
+          "type": "integer"
+        },
+        "stage": {
+          "description": "Stage is which lifecycle moment's decisions to replay. Required: replaying\na payout ladder over signup decisions answers a question nobody asked.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlReplay"
+  },
+  {
+    "description": "Reads a replay back. A threshold change is justified by one, so\nthe justification has to still be there when somebody asks about the change.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to read, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlReplayReport"
   },
   {
     "description": "Restore reinstates this tenant's learned state from its pinned snapshot.\n\nA snapshot whose shape does not match the running inventory is REFUSED, not\ncoerced, and a snapshot belonging to another tenant is refused twice — here,\nby the tenant that asked, and again inside the engine. State the model would\ntreat as its own memory has to have come from this algorithm over this feature\nset for this tenant.",
@@ -98,7 +267,7 @@
     "name": "mlSearch"
   },
   {
-    "description": "SearchResult reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
+    "description": "Reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -111,7 +280,7 @@
     "name": "mlSearchResult"
   },
   {
-    "description": "SetAppetite sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
+    "description": "Sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
     "inputSchema": {
       "properties": {
         "review": {
@@ -229,7 +398,7 @@
     "name": "riskActivity"
   },
   {
-    "description": "AddListEntries adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
+    "description": "Adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -266,7 +435,7 @@
     "name": "riskControls"
   },
   {
-    "description": "CreateList creates an allow or deny list a rule can name in an inlist term.",
+    "description": "Creates an allow or deny list a rule can name in an inlist term.",
     "inputSchema": {
       "properties": {
         "kind": {
@@ -283,7 +452,7 @@
     "name": "riskCreateList"
   },
   {
-    "description": "CreateRule admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
+    "description": "Admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
     "inputSchema": {
       "$defs": {
         "riskRule": {
@@ -455,7 +624,7 @@
     "name": "riskDecide"
   },
   {
-    "description": "DecisionDetail reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
+    "description": "Reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -497,7 +666,7 @@
     "name": "riskDecisions"
   },
   {
-    "description": "DeleteRule retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
+    "description": "Retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -551,7 +720,45 @@
     "name": "riskMode"
   },
   {
-    "description": "ReleaseControl lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
+    "description": "Policy reads the score bands in force, per lifecycle stage.\n\nA band maps a calibrated PROBABILITY to an action, which is why it is a\ngoverned value and not a constant: where the line sits between letting a\ncustomer through and stopping them is a business decision with a price on\neither side, and it belongs to the organisation making it. A threshold\ncompiled into the scoring path is a decision nobody signed and cannot be shown\nto have been in force on the day a particular customer was declined.",
+    "inputSchema": {
+      "properties": {
+        "stage": {
+          "description": "Stage is signup, payment, session, usage or payout. Empty reads every\nstage this organisation has set bands for.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskPolicy"
+  },
+  {
+    "description": "PolicyVersions is the audit trail: every version of one stage's bands, newest\nfirst, each with who set it, when and why.\n\nNothing here was ever edited, so this is the whole history and not a\nreconstruction of one.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit bounds the page, 1..200, default 50.",
+          "type": "integer"
+        },
+        "stage": {
+          "description": "Stage is the lifecycle moment. Required: a version history across stages\nwould interleave unrelated decisions.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskPolicyVersions"
+  },
+  {
+    "description": "Reasons is the closed vocabulary of reason codes a decision can cite.\n\nIt is DERIVED from the detector's own feature inventory rather than declared\nbeside it, so it cannot name a feature the model does not read and cannot omit\none it does. Every model code carries the typology, the supervisory indicator\nand the published citation those words come from, so a reason shown to a\nperson is checkable rather than asserted.\n\nA free-text reason cannot be counted, cannot be tested and cannot be compared\nbetween two decisions. Every regime that lets someone question an automated\ndecision asks for the principal reasons specifically — which is a ranked list\nover a fixed vocabulary, and this is the vocabulary.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskReasons"
+  },
+  {
+    "description": "Lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -564,7 +771,7 @@
     "name": "riskReleaseControl"
   },
   {
-    "description": "RemoveListEntry removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
+    "description": "Removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -589,7 +796,7 @@
     "name": "riskRules"
   },
   {
-    "description": "SetControl declares a reserve, a payout hold or a block on a subject.",
+    "description": "Declares a reserve, a payout hold or a block on a subject.",
     "inputSchema": {
       "$defs": {
         "riskSubject": {
@@ -633,7 +840,7 @@
     "name": "riskSetControl"
   },
   {
-    "description": "SetMode takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
+    "description": "Takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
     "inputSchema": {
       "properties": {
         "mode": {
@@ -644,6 +851,86 @@
       "type": "object"
     },
     "name": "riskSetMode"
+  },
+  {
+    "description": "Records a new version of one stage's bands.\n\nIt is an INSERT and never an update. A policy change is a governance decision,\nso the previous version stays exactly as it was and \"what was in force when\nthis customer was declined\" is a lookup rather than a reconstruction. The\nversion is minted here, the author comes from the validated principal rather\nthan from the body, and the reason is required — a threshold that moved with\nno stated reason is a decision with no author.\n\nEvery refusal below is a real way a ladder silently stops being a risk policy:\na band above one is an action nothing can reach, bands out of order mean a\nhigher probability asks for less, two bands at one probability leave which\napplies undecided, and a band repeating the action beneath it is dead weight\nthat makes the ladder look like it has more steps than it has.",
+    "inputSchema": {
+      "$defs": {
+        "riskBand": {
+          "properties": {
+            "action": {
+              "description": "Action is what to do at or above it: challenge, review, restrict or block.",
+              "type": "string"
+            },
+            "at": {
+              "description": "At is the boundary, in [0,1]. It is a PROBABILITY and not a raw score —\na band over an uncalibrated score is a band over units that mean nothing,\nand the cost arithmetic beneath it would be meaningless too.",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "riskCost": {
+          "properties": {
+            "alarm": {
+              "description": "Alarm is the price of stopping something that was fine: an abandoned\npurchase, a support contact, and the share of those customers who do not\ncome back.",
+              "type": "integer"
+            },
+            "miss": {
+              "description": "Miss is the price of letting through what should have been stopped — on a\npayment lane, typically the disputed amount plus the network's fee.",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "at": {
+          "description": "At is when it took effect, RFC 3339 in UTC.",
+          "type": "string"
+        },
+        "bands": {
+          "description": "Bands is the ladder, ascending.",
+          "items": {
+            "$ref": "#/$defs/riskBand"
+          },
+          "type": "array"
+        },
+        "by": {
+          "description": "By is who decided. A control that changed and cannot say who changed it is\na control nobody owns.",
+          "type": "string"
+        },
+        "cost": {
+          "$ref": "#/$defs/riskCost",
+          "description": "Cost is what this organisation says being wrong is worth. It is what makes\na threshold defensible rather than chosen, and it is what the\ncost-weighted metric is computed from."
+        },
+        "digest": {
+          "description": "Digest identifies what this ladder DECIDES — not who wrote it or when — so\na re-save that changed nothing keeps its identity and a moved threshold\ndoes not.",
+          "type": "string"
+        },
+        "floor": {
+          "description": "Floor is the action below the first band.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Reason is why it changed. Required on a write: a threshold moved without a\nstated reason is a decision with no author.",
+          "type": "string"
+        },
+        "shadow": {
+          "description": "Shadow observes without acting: every band is computed and recorded and\nthe action returned is always the floor. It is a second gate in series\nwith the tenant's live/shadow mode, so one flag flipped by mistake still\ncannot make an organisation act.",
+          "type": "boolean"
+        },
+        "stage": {
+          "description": "Stage is the lifecycle moment this governs. One ladder per stage: the\nprice of a false decline at signup and at payout are different numbers\nabout different things.",
+          "type": "string"
+        },
+        "version": {
+          "description": "Version is monotone within the stage. A change mints the next one and\nnothing is edited, so what was in force on a given day is a lookup rather\nthan a reconstruction.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSetPolicy"
   },
   {
     "description": "Simulate replays a candidate rule over this tenant's OWN recorded decisions\nand reports what it would have caught, what it would have given up, and how\nmuch of that a human has already judged.\n\nIt is a gate and not a nicety: a new typology has to be tested before live\nactivation, and a retirement has to be justified against the outgoing rule's\nperformance. Nothing is written — the replay reads the decision log and\nevaluates in memory.\n\nAn EMPTY history is REFUSED rather than reported as zero alerts. \"No alerts\"\nis exactly what a quiet rule looks like, and being unable to tell the two\napart is the failure a sandbox exists to prevent.",
@@ -737,7 +1024,7 @@
     "name": "riskSimulate"
   },
   {
-    "description": "SubjectState reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
+    "description": "Reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -804,7 +1091,7 @@
     "name": "riskUnsuppress"
   },
   {
-    "description": "UpdateRule replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
+    "description": "Replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
     "inputSchema": {
       "$defs": {
         "riskRule": {
