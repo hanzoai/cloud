@@ -10,62 +10,7 @@
       },
       "type": "object"
     },
-    "name": "delete_v1_o11y_annotation-queues_id"
-  },
-  {
-    "description": "ListAnnotationQueues returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project. Another org's queues are never\nvisible.",
-    "inputSchema": {
-      "properties": {
-        "limit": {
-          "description": "Limit is how many rows to return. Default 20, capped at 100.",
-          "type": "integer"
-        },
-        "page": {
-          "description": "Page is the 1-based page to read. Default 1.",
-          "type": "integer"
-        }
-      },
-      "type": "object"
-    },
-    "name": "get_v1_o11y_annotation-queues"
-  },
-  {
-    "description": "GetAnnotationQueue returns one review queue with its pending and completed\ncounts and its first page of items. A queue id belonging to another org is a\n404, never a cross-tenant read.",
-    "inputSchema": {
-      "properties": {
-        "id": {
-          "description": "ID is the annotation queue to act on, from the path.",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "get_v1_o11y_annotation-queues_id"
-  },
-  {
-    "description": "ListAnnotationQueueItems returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED. A queue id belonging to\nanother org is a 404, never a cross-tenant list.",
-    "inputSchema": {
-      "properties": {
-        "id": {
-          "description": "ID is the annotation queue whose items to list, from the path.",
-          "type": "string"
-        },
-        "limit": {
-          "description": "Limit is how many rows to return. Default 20, capped at 100.",
-          "type": "integer"
-        },
-        "page": {
-          "description": "Page is the 1-based page to read. Default 1.",
-          "type": "integer"
-        },
-        "status": {
-          "description": "Status filters to PENDING or COMPLETED items. Absent returns both.",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "get_v1_o11y_annotation-queues_id_items"
+    "name": "delete_v1_o11y_reviews_id"
   },
   {
     "description": "GetO11yLogs returns a page of one product's logs for the caller's org. A\nnormal caller sees its OWN request stream, derived from org-tagged spans; a\nvalidated platform SuperAdmin sees the product's raw infra stdout stream\ninstead. Poll for a live tail by passing the previous response's nextCursor\nback as sinceNs. A well-formed product with no backing workload answers an\nempty page rather than an error; a malformed slug is a 400.",
@@ -114,6 +59,61 @@
     "name": "get_v1_o11y_metrics"
   },
   {
+    "description": "ListAnnotationQueues returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project. Another org's queues are never\nvisible.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit is how many rows to return. Default 20, capped at 100.",
+          "type": "integer"
+        },
+        "page": {
+          "description": "Page is the 1-based page to read. Default 1.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_o11y_reviews"
+  },
+  {
+    "description": "GetAnnotationQueue returns one review queue with its pending and completed\ncounts and its first page of items. A queue id belonging to another org is a\n404, never a cross-tenant read.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the annotation queue to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_o11y_reviews_id"
+  },
+  {
+    "description": "ListAnnotationQueueItems returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED. A queue id belonging to\nanother org is a 404, never a cross-tenant list.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the annotation queue whose items to list, from the path.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Limit is how many rows to return. Default 20, capped at 100.",
+          "type": "integer"
+        },
+        "page": {
+          "description": "Page is the 1-based page to read. Default 1.",
+          "type": "integer"
+        },
+        "status": {
+          "description": "Status filters to PENDING or COMPLETED items. Absent returns both.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_o11y_reviews_id_items"
+  },
+  {
     "description": "GetO11yStatus reports whether a product's service is live: an in-cluster\nhealth probe with its measured latency, fused with the per-replica up\ninventory. Infra health is not tenant-partitioned — a service is up or down\nfor everyone — so any validated caller is served, but an unvalidated one is\nrefused. A product with no backing workload answers down/unknown-service\nwithout probing anything; a malformed slug is a 400.",
     "inputSchema": {
       "properties": {
@@ -160,7 +160,7 @@
       },
       "type": "object"
     },
-    "name": "patch_v1_o11y_annotation-queues_id"
+    "name": "patch_v1_o11y_reviews_id"
   },
   {
     "description": "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED\nand sets its assignee. Completing an item stamps its completedAt. An item that\nexists under a different queue answers the same 404 an unknown item does, and\nso does a queue belonging to another org.",
@@ -185,7 +185,7 @@
       },
       "type": "object"
     },
-    "name": "patch_v1_o11y_annotation-queues_id_items_itemId"
+    "name": "patch_v1_o11y_reviews_id_items_itemId"
   },
   {
     "description": "CreateAnnotationQueue creates a human-review queue in the caller's org and\nproject. A name already used by another queue in the same project is a 409.",
@@ -209,7 +209,7 @@
       },
       "type": "object"
     },
-    "name": "post_v1_o11y_annotation-queues"
+    "name": "post_v1_o11y_reviews"
   },
   {
     "description": "AddAnnotationQueueItems enqueues traces, observations or sessions on a review\nqueue. Each item names exactly one object, either by traceId / observationId /\nsessionId or by objectType plus objectId; every item enters PENDING. A queue\nid belonging to another org is a 404.",
@@ -260,6 +260,6 @@
       },
       "type": "object"
     },
-    "name": "post_v1_o11y_annotation-queues_id_items"
+    "name": "post_v1_o11y_reviews_id_items"
   }
 ]

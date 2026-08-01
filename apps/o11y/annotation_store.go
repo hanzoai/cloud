@@ -17,7 +17,7 @@ import (
 // named queue (optionally bound to eval score-configs) holds items — traces,
 // observations or sessions queued for a reviewer to score. The o11y span plane
 // (llmobs) has flat annotations but NO queue entity, so this is the native queue
-// backing the console AnnotationQueuesModule consumes at /v1/o11y/annotation-queues.
+// backing the console AnnotationQueuesModule consumes at /v1/o11y/reviews.
 //
 // Storage is Hanzo Base/SQLite (the eval-metastore discipline), NOT the datastore
 // span plane: queues are durable relational config, not append-only telemetry.

@@ -52,369 +52,6 @@
         ]
       }
     },
-    "/v1/o11y/annotation-queues": {
-      "get": {
-        "operationId": "get_v1_o11y_annotation-queues",
-        "summary": "ListAnnotationQueues returns a page of the caller org's human-review queues, newest first, narrowed to the caller's project.",
-        "description": "ListAnnotationQueues returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project. Another org's queues are never\nvisible.",
-        "tags": [
-          "o11y"
-        ],
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "description": "Page is the 1-based page to read. Default 1.",
-            "schema": {
-              "type": "integer"
-            },
-            "example": 1
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Limit is how many rows to return. Default 20, capped at 100.",
-            "schema": {
-              "type": "integer"
-            },
-            "example": 20
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/annQueueList"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      },
-      "post": {
-        "operationId": "post_v1_o11y_annotation-queues",
-        "summary": "CreateAnnotationQueue creates a human-review queue in the caller's org and project.",
-        "description": "CreateAnnotationQueue creates a human-review queue in the caller's org and\nproject. A name already used by another queue in the same project is a 409.",
-        "tags": [
-          "o11y"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "name": "hallucination review",
-                "scoreConfigIds": [
-                  "quality"
-                ]
-              },
-              "schema": {
-                "$ref": "#/components/schemas/createQueueReq"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/annQueueView"
-                }
-              }
-            },
-            "description": "created"
-          }
-        }
-      }
-    },
-    "/v1/o11y/annotation-queues/{id}": {
-      "delete": {
-        "operationId": "delete_v1_o11y_annotation-queues_id",
-        "summary": "DeleteAnnotationQueue removes one review queue and every item in it.",
-        "description": "DeleteAnnotationQueue removes one review queue and every item in it. A queue\nid belonging to another org answers the same 404 an unknown id does, so a\nprobe learns nothing about what exists.",
-        "tags": [
-          "o11y"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the annotation queue to act on, from the path.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "annq_1"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/annQueueDeleted"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      },
-      "get": {
-        "operationId": "get_v1_o11y_annotation-queues_id",
-        "summary": "GetAnnotationQueue returns one review queue with its pending and completed counts and its first page of items.",
-        "description": "GetAnnotationQueue returns one review queue with its pending and completed\ncounts and its first page of items. A queue id belonging to another org is a\n404, never a cross-tenant read.",
-        "tags": [
-          "o11y"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the annotation queue to act on, from the path.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "annq_1"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/annQueueDetailView"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "patch_v1_o11y_annotation-queues_id",
-        "summary": "UpdateAnnotationQueue changes a review queue's name, description or score-config set.",
-        "description": "UpdateAnnotationQueue changes a review queue's name, description or\nscore-config set. A field the request omits is left alone. A name another\nqueue in the same project already uses is a 409; a queue id belonging to\nanother org is a 404.",
-        "tags": [
-          "o11y"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the annotation queue to update, from the path.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "annq_1"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "annq_1",
-                "name": "hallucination review v2"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/updateQueueIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/annQueueView"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/o11y/annotation-queues/{id}/items": {
-      "get": {
-        "operationId": "get_v1_o11y_annotation-queues_id_items",
-        "summary": "ListAnnotationQueueItems returns a page of one review queue's items, newest first, optionally filtered to PENDING or COMPLETED.",
-        "description": "ListAnnotationQueueItems returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED. A queue id belonging to\nanother org is a 404, never a cross-tenant list.",
-        "tags": [
-          "o11y"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the annotation queue whose items to list, from the path.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "annq_1"
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "description": "Status filters to PENDING or COMPLETED items. Absent returns both.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "PENDING"
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "description": "Page is the 1-based page to read. Default 1.",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Limit is how many rows to return. Default 20, capped at 100.",
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/annItemList"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      },
-      "post": {
-        "operationId": "post_v1_o11y_annotation-queues_id_items",
-        "summary": "AddAnnotationQueueItems enqueues traces, observations or sessions on a review queue.",
-        "description": "AddAnnotationQueueItems enqueues traces, observations or sessions on a review\nqueue. Each item names exactly one object, either by traceId / observationId /\nsessionId or by objectType plus objectId; every item enters PENDING. A queue\nid belonging to another org is a 404.",
-        "tags": [
-          "o11y"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the annotation queue to add to, from the path.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "annq_1"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "annq_1",
-                "items": [
-                  {
-                    "traceId": "tr_1"
-                  }
-                ]
-              },
-              "schema": {
-                "$ref": "#/components/schemas/addItemsIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/annItemsCreated"
-                }
-              }
-            },
-            "description": "created"
-          }
-        }
-      }
-    },
-    "/v1/o11y/annotation-queues/{id}/items/{itemId}": {
-      "patch": {
-        "operationId": "patch_v1_o11y_annotation-queues_id_items_itemId",
-        "summary": "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED and sets its assignee.",
-        "description": "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED\nand sets its assignee. Completing an item stamps its completedAt. An item that\nexists under a different queue answers the same 404 an unknown item does, and\nso does a queue belonging to another org.",
-        "tags": [
-          "o11y"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the annotation queue the item belongs to, from the path.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "annq_1"
-          },
-          {
-            "name": "itemId",
-            "in": "path",
-            "required": true,
-            "description": "ItemID is the item to update, from the path.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "annqi_1"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "annq_1",
-                "itemId": "annqi_1",
-                "status": "COMPLETED"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/updateItemIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/annItemView"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
     "/v1/o11y/api/v2/healthz": {
       "get": {
         "operationId": "get_v1_o11y_api_v2_healthz",
@@ -578,6 +215,369 @@
         "tags": [
           "o11y"
         ]
+      }
+    },
+    "/v1/o11y/reviews": {
+      "get": {
+        "operationId": "get_v1_o11y_reviews",
+        "summary": "ListAnnotationQueues returns a page of the caller org's human-review queues, newest first, narrowed to the caller's project.",
+        "description": "ListAnnotationQueues returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project. Another org's queues are never\nvisible.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page to read. Default 1.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows to return. Default 20, capped at 100.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annQueueList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_o11y_reviews",
+        "summary": "CreateAnnotationQueue creates a human-review queue in the caller's org and project.",
+        "description": "CreateAnnotationQueue creates a human-review queue in the caller's org and\nproject. A name already used by another queue in the same project is a 409.",
+        "tags": [
+          "o11y"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "hallucination review",
+                "scoreConfigIds": [
+                  "quality"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createQueueReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annQueueView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/o11y/reviews/{id}": {
+      "delete": {
+        "operationId": "delete_v1_o11y_reviews_id",
+        "summary": "DeleteAnnotationQueue removes one review queue and every item in it.",
+        "description": "DeleteAnnotationQueue removes one review queue and every item in it. A queue\nid belonging to another org answers the same 404 an unknown id does, so a\nprobe learns nothing about what exists.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the annotation queue to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "annq_1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annQueueDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_v1_o11y_reviews_id",
+        "summary": "GetAnnotationQueue returns one review queue with its pending and completed counts and its first page of items.",
+        "description": "GetAnnotationQueue returns one review queue with its pending and completed\ncounts and its first page of items. A queue id belonging to another org is a\n404, never a cross-tenant read.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the annotation queue to act on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "annq_1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annQueueDetailView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patch_v1_o11y_reviews_id",
+        "summary": "UpdateAnnotationQueue changes a review queue's name, description or score-config set.",
+        "description": "UpdateAnnotationQueue changes a review queue's name, description or\nscore-config set. A field the request omits is left alone. A name another\nqueue in the same project already uses is a 409; a queue id belonging to\nanother org is a 404.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the annotation queue to update, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "annq_1"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "annq_1",
+                "name": "hallucination review v2"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/updateQueueIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annQueueView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/o11y/reviews/{id}/items": {
+      "get": {
+        "operationId": "get_v1_o11y_reviews_id_items",
+        "summary": "ListAnnotationQueueItems returns a page of one review queue's items, newest first, optionally filtered to PENDING or COMPLETED.",
+        "description": "ListAnnotationQueueItems returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED. A queue id belonging to\nanother org is a 404, never a cross-tenant list.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the annotation queue whose items to list, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "annq_1"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status filters to PENDING or COMPLETED items. Absent returns both.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "PENDING"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page to read. Default 1.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows to return. Default 20, capped at 100.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annItemList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_o11y_reviews_id_items",
+        "summary": "AddAnnotationQueueItems enqueues traces, observations or sessions on a review queue.",
+        "description": "AddAnnotationQueueItems enqueues traces, observations or sessions on a review\nqueue. Each item names exactly one object, either by traceId / observationId /\nsessionId or by objectType plus objectId; every item enters PENDING. A queue\nid belonging to another org is a 404.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the annotation queue to add to, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "annq_1"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "annq_1",
+                "items": [
+                  {
+                    "traceId": "tr_1"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/addItemsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annItemsCreated"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/o11y/reviews/{id}/items/{itemId}": {
+      "patch": {
+        "operationId": "patch_v1_o11y_reviews_id_items_itemId",
+        "summary": "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED and sets its assignee.",
+        "description": "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED\nand sets its assignee. Completing an item stamps its completedAt. An item that\nexists under a different queue answers the same 404 an unknown item does, and\nso does a queue belonging to another org.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the annotation queue the item belongs to, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "annq_1"
+          },
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "description": "ItemID is the item to update, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "annqi_1"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "annq_1",
+                "itemId": "annqi_1",
+                "status": "COMPLETED"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/updateItemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annItemView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/o11y/sessions": {

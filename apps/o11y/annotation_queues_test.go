@@ -29,14 +29,14 @@ func annApp(t *testing.T) *zip.App {
 	// validated org off the context, so without this every route here 403s.
 	app.Group(o11yPrefix).Use(cloud.Bridge())
 	g := app.Group(o11yPrefix)
-	zip.Get(g, "/annotation-queues", s.listQueues)
-	zip.Post(g, "/annotation-queues", s.createQueue, zip.WithStatus(http.StatusCreated))
-	zip.Get(g, "/annotation-queues/:id", s.getQueue)
-	zip.Patch(g, "/annotation-queues/:id", s.updateQueue)
-	zip.Delete(g, "/annotation-queues/:id", s.deleteQueue)
-	zip.Get(g, "/annotation-queues/:id/items", s.listItems)
-	zip.Post(g, "/annotation-queues/:id/items", s.addItems, zip.WithStatus(http.StatusCreated))
-	zip.Patch(g, "/annotation-queues/:id/items/:itemId", s.updateItem)
+	zip.Get(g, "/reviews", s.listQueues)
+	zip.Post(g, "/reviews", s.createQueue, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/reviews/:id", s.getQueue)
+	zip.Patch(g, "/reviews/:id", s.updateQueue)
+	zip.Delete(g, "/reviews/:id", s.deleteQueue)
+	zip.Get(g, "/reviews/:id/items", s.listItems)
+	zip.Post(g, "/reviews/:id/items", s.addItems, zip.WithStatus(http.StatusCreated))
+	zip.Patch(g, "/reviews/:id/items/:itemId", s.updateItem)
 	return app
 }
 
@@ -72,7 +72,7 @@ type iListEnvelope struct {
 
 func createQueue(t *testing.T, app *zip.App, org, project, name string) annQueueView {
 	t.Helper()
-	code, body := do(t, app, annReq(http.MethodPost, "/v1/o11y/annotation-queues", org, project,
+	code, body := do(t, app, annReq(http.MethodPost, "/v1/o11y/reviews", org, project,
 		map[string]any{"name": name, "scoreConfigIds": []string{"quality"}}))
 	if code != http.StatusCreated {
 		t.Fatalf("create queue %q: want 201, got %d (%s)", name, code, body)
@@ -98,7 +98,7 @@ func TestAnnotationQueueLifecycle(t *testing.T) {
 	}
 
 	// List returns the REST envelope {data, meta}.
-	code, body := do(t, app, annReq(http.MethodGet, "/v1/o11y/annotation-queues", "o", "", nil))
+	code, body := do(t, app, annReq(http.MethodGet, "/v1/o11y/reviews", "o", "", nil))
 	var list qListEnvelope
 	if code != http.StatusOK {
 		t.Fatalf("list: %d %s", code, body)
@@ -111,7 +111,7 @@ func TestAnnotationQueueLifecycle(t *testing.T) {
 	}
 
 	// Add two items: a trace + an observation.
-	code, body = do(t, app, annReq(http.MethodPost, "/v1/o11y/annotation-queues/"+q.ID+"/items", "o", "",
+	code, body = do(t, app, annReq(http.MethodPost, "/v1/o11y/reviews/"+q.ID+"/items", "o", "",
 		map[string]any{"items": []map[string]any{
 			{"traceId": "trace-1"},
 			{"observationId": "obs-9", "assignee": "reviewer@o"},
@@ -121,7 +121,7 @@ func TestAnnotationQueueLifecycle(t *testing.T) {
 	}
 
 	// Detail shows counts + embedded items, with the object mapped to traceId/observationId.
-	code, body = do(t, app, annReq(http.MethodGet, "/v1/o11y/annotation-queues/"+q.ID, "o", "", nil))
+	code, body = do(t, app, annReq(http.MethodGet, "/v1/o11y/reviews/"+q.ID, "o", "", nil))
 	var detail annQueueDetailView
 	if code != http.StatusOK {
 		t.Fatalf("detail: %d %s", code, body)
@@ -151,7 +151,7 @@ func TestAnnotationQueueLifecycle(t *testing.T) {
 	}
 
 	// List items → envelope with both.
-	code, body = do(t, app, annReq(http.MethodGet, "/v1/o11y/annotation-queues/"+q.ID+"/items", "o", "", nil))
+	code, body = do(t, app, annReq(http.MethodGet, "/v1/o11y/reviews/"+q.ID+"/items", "o", "", nil))
 	var items iListEnvelope
 	_ = json.Unmarshal(body, &items)
 	if code != http.StatusOK || items.Meta.TotalItems != 2 || len(items.Data) != 2 {
@@ -159,7 +159,7 @@ func TestAnnotationQueueLifecycle(t *testing.T) {
 	}
 
 	// Complete the trace item.
-	code, body = do(t, app, annReq(http.MethodPatch, "/v1/o11y/annotation-queues/"+q.ID+"/items/"+traceItem.ID, "o", "",
+	code, body = do(t, app, annReq(http.MethodPatch, "/v1/o11y/reviews/"+q.ID+"/items/"+traceItem.ID, "o", "",
 		map[string]any{"status": "COMPLETED", "assignee": "reviewer@o"}))
 	if code != http.StatusOK {
 		t.Fatalf("complete item: %d %s", code, body)
@@ -171,24 +171,24 @@ func TestAnnotationQueueLifecycle(t *testing.T) {
 	}
 
 	// Counts reflect the completion.
-	code, body = do(t, app, annReq(http.MethodGet, "/v1/o11y/annotation-queues/"+q.ID, "o", "", nil))
+	code, body = do(t, app, annReq(http.MethodGet, "/v1/o11y/reviews/"+q.ID, "o", "", nil))
 	_ = json.Unmarshal(body, &detail)
 	if detail.PendingCount != 1 || detail.CompletedCount != 1 {
 		t.Fatalf("post-complete counts = pending %d completed %d", detail.PendingCount, detail.CompletedCount)
 	}
 
 	// A status filter narrows the item list.
-	code, body = do(t, app, annReq(http.MethodGet, "/v1/o11y/annotation-queues/"+q.ID+"/items?status=COMPLETED", "o", "", nil))
+	code, body = do(t, app, annReq(http.MethodGet, "/v1/o11y/reviews/"+q.ID+"/items?status=COMPLETED", "o", "", nil))
 	_ = json.Unmarshal(body, &items)
 	if code != http.StatusOK || items.Meta.TotalItems != 1 {
 		t.Fatalf("completed filter = %d %+v", code, items)
 	}
 
 	// Delete → 200; then detail 404.
-	if code, _ := do(t, app, annReq(http.MethodDelete, "/v1/o11y/annotation-queues/"+q.ID, "o", "", nil)); code != http.StatusOK {
+	if code, _ := do(t, app, annReq(http.MethodDelete, "/v1/o11y/reviews/"+q.ID, "o", "", nil)); code != http.StatusOK {
 		t.Fatalf("delete: %d", code)
 	}
-	if code, _ := do(t, app, annReq(http.MethodGet, "/v1/o11y/annotation-queues/"+q.ID, "o", "", nil)); code != http.StatusNotFound {
+	if code, _ := do(t, app, annReq(http.MethodGet, "/v1/o11y/reviews/"+q.ID, "o", "", nil)); code != http.StatusNotFound {
 		t.Fatalf("get deleted queue: want 404, got %d", code)
 	}
 }
@@ -200,7 +200,7 @@ func TestAnnotationQueueOrgIsolation(t *testing.T) {
 	q := createQueue(t, app, "owner", "", "secret-q")
 
 	// Sibling org lists zero.
-	code, body := do(t, app, annReq(http.MethodGet, "/v1/o11y/annotation-queues", "intruder", "", nil))
+	code, body := do(t, app, annReq(http.MethodGet, "/v1/o11y/reviews", "intruder", "", nil))
 	var list qListEnvelope
 	_ = json.Unmarshal(body, &list)
 	if code != http.StatusOK || len(list.Data) != 0 {
@@ -212,11 +212,11 @@ func TestAnnotationQueueOrgIsolation(t *testing.T) {
 		method, path string
 		body         any
 	}{
-		{http.MethodGet, "/v1/o11y/annotation-queues/" + q.ID, nil},
-		{http.MethodPost, "/v1/o11y/annotation-queues/" + q.ID + "/items", map[string]any{"items": []map[string]any{{"traceId": "x"}}}},
-		{http.MethodGet, "/v1/o11y/annotation-queues/" + q.ID + "/items", nil},
-		{http.MethodPatch, "/v1/o11y/annotation-queues/" + q.ID, map[string]any{"name": "hijack"}},
-		{http.MethodDelete, "/v1/o11y/annotation-queues/" + q.ID, nil},
+		{http.MethodGet, "/v1/o11y/reviews/" + q.ID, nil},
+		{http.MethodPost, "/v1/o11y/reviews/" + q.ID + "/items", map[string]any{"items": []map[string]any{{"traceId": "x"}}}},
+		{http.MethodGet, "/v1/o11y/reviews/" + q.ID + "/items", nil},
+		{http.MethodPatch, "/v1/o11y/reviews/" + q.ID, map[string]any{"name": "hijack"}},
+		{http.MethodDelete, "/v1/o11y/reviews/" + q.ID, nil},
 	} {
 		if code, _ := do(t, app, annReq(tc.method, tc.path, "intruder", "", tc.body)); code != http.StatusNotFound {
 			t.Fatalf("intruder %s %s: want 404, got %d", tc.method, tc.path, code)
@@ -224,7 +224,7 @@ func TestAnnotationQueueOrgIsolation(t *testing.T) {
 	}
 
 	// The owner's queue survives every cross-tenant attempt.
-	if code, _ := do(t, app, annReq(http.MethodGet, "/v1/o11y/annotation-queues/"+q.ID, "owner", "", nil)); code != http.StatusOK {
+	if code, _ := do(t, app, annReq(http.MethodGet, "/v1/o11y/reviews/"+q.ID, "owner", "", nil)); code != http.StatusOK {
 		t.Fatalf("owner queue must survive, got %d", code)
 	}
 }
@@ -239,7 +239,7 @@ func TestAnnotationQueueProjectIsolation(t *testing.T) {
 
 	check := func(project string, want int) {
 		t.Helper()
-		code, body := do(t, app, annReq(http.MethodGet, "/v1/o11y/annotation-queues", "o", project, nil))
+		code, body := do(t, app, annReq(http.MethodGet, "/v1/o11y/reviews", "o", project, nil))
 		var list qListEnvelope
 		_ = json.Unmarshal(body, &list)
 		if code != http.StatusOK || len(list.Data) != want {
@@ -256,37 +256,37 @@ func TestAnnotationQueueProjectIsolation(t *testing.T) {
 func TestAnnotationQueueValidation(t *testing.T) {
 	app := annApp(t)
 
-	if code, _ := do(t, app, annReq(http.MethodPost, "/v1/o11y/annotation-queues", "o", "",
+	if code, _ := do(t, app, annReq(http.MethodPost, "/v1/o11y/reviews", "o", "",
 		map[string]any{"name": "  "})); code != http.StatusBadRequest {
 		t.Fatalf("blank name: want 400, got %d", code)
 	}
 
 	createQueue(t, app, "o", "", "dupe")
-	if code, _ := do(t, app, annReq(http.MethodPost, "/v1/o11y/annotation-queues", "o", "",
+	if code, _ := do(t, app, annReq(http.MethodPost, "/v1/o11y/reviews", "o", "",
 		map[string]any{"name": "dupe"})); code != http.StatusConflict {
 		t.Fatalf("duplicate name: want 409, got %d", code)
 	}
 
 	q := createQueue(t, app, "o", "", "valid-ops")
-	if code, _ := do(t, app, annReq(http.MethodPost, "/v1/o11y/annotation-queues/"+q.ID+"/items", "o", "",
+	if code, _ := do(t, app, annReq(http.MethodPost, "/v1/o11y/reviews/"+q.ID+"/items", "o", "",
 		map[string]any{"items": []map[string]any{{"objectType": "BOGUS", "objectId": "x"}}})); code != http.StatusBadRequest {
 		t.Fatalf("bad objectType: want 400, got %d", code)
 	}
-	if code, _ := do(t, app, annReq(http.MethodPost, "/v1/o11y/annotation-queues/"+q.ID+"/items", "o", "",
+	if code, _ := do(t, app, annReq(http.MethodPost, "/v1/o11y/reviews/"+q.ID+"/items", "o", "",
 		map[string]any{"items": []map[string]any{{"assignee": "nobody"}}})); code != http.StatusBadRequest {
 		t.Fatalf("objectless item: want 400, got %d", code)
 	}
 
 	// Add a real item, then a bad status update.
-	_, _ = do(t, app, annReq(http.MethodPost, "/v1/o11y/annotation-queues/"+q.ID+"/items", "o", "",
+	_, _ = do(t, app, annReq(http.MethodPost, "/v1/o11y/reviews/"+q.ID+"/items", "o", "",
 		map[string]any{"items": []map[string]any{{"traceId": "t1"}}}))
-	_, body := do(t, app, annReq(http.MethodGet, "/v1/o11y/annotation-queues/"+q.ID, "o", "", nil))
+	_, body := do(t, app, annReq(http.MethodGet, "/v1/o11y/reviews/"+q.ID, "o", "", nil))
 	var detail annQueueDetailView
 	_ = json.Unmarshal(body, &detail)
 	if len(detail.Items) != 1 {
 		t.Fatalf("expected 1 item, got %d", len(detail.Items))
 	}
-	if code, _ := do(t, app, annReq(http.MethodPatch, "/v1/o11y/annotation-queues/"+q.ID+"/items/"+detail.Items[0].ID, "o", "",
+	if code, _ := do(t, app, annReq(http.MethodPatch, "/v1/o11y/reviews/"+q.ID+"/items/"+detail.Items[0].ID, "o", "",
 		map[string]any{"status": "MAYBE"})); code != http.StatusBadRequest {
 		t.Fatalf("bad status: want 400, got %d", code)
 	}
@@ -297,10 +297,10 @@ func TestAnnotationQueueValidation(t *testing.T) {
 func TestAnnotationQueueRequiresPrincipal(t *testing.T) {
 	app := annApp(t)
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, "/v1/o11y/annotation-queues"},
-		{http.MethodPost, "/v1/o11y/annotation-queues"},
-		{http.MethodGet, "/v1/o11y/annotation-queues/x"},
-		{http.MethodPost, "/v1/o11y/annotation-queues/x/items"},
+		{http.MethodGet, "/v1/o11y/reviews"},
+		{http.MethodPost, "/v1/o11y/reviews"},
+		{http.MethodGet, "/v1/o11y/reviews/x"},
+		{http.MethodPost, "/v1/o11y/reviews/x/items"},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, nil)
 		req.Header.Set("X-Org-Id", "victim") // forged, no X-User-Id
