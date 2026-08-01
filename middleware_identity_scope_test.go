@@ -118,7 +118,7 @@ func newScopeApp(t *testing.T, v *identityValidator) (*zip.App, *scopeCap) {
 	t.Helper()
 	got := &scopeCap{}
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(c *zip.Ctx) error {
 		got.org = c.Org()
 		got.user = c.User()

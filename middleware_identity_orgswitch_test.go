@@ -51,7 +51,7 @@ func walletProbe(t *testing.T, claims idClaims, selected string) (billOrg, billU
 
 	done := make(chan struct{})
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(c *zip.Ctx) error {
 		in := identityFromCtx(c)
 		billOrg, billUser = in.Org, in.User
@@ -265,7 +265,7 @@ func TestAnonymousRoutesAreUntouched(t *testing.T) {
 	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/health", func(c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -316,7 +316,7 @@ func TestAnonymousGrantsNoPrincipal(t *testing.T) {
 	var gotUser string
 	var gotAdmin bool
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(c *zip.Ctx) error {
 		gotUser, gotAdmin = c.User(), c.IsAdmin()
 		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
@@ -383,7 +383,7 @@ func TestHomeOrgHeaderSurvivesSwitch(t *testing.T) {
 
 	var gotOwner, gotOrg string
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/anchor", func(c *zip.Ctx) error {
 		gotOwner, gotOrg = c.Header("X-User-Owner"), c.Org()
 		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
