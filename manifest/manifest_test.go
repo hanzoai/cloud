@@ -79,8 +79,8 @@ func TestNamesAreUnique(t *testing.T) {
 // to point an app somewhere else, and Lazy is the inverse of Eager because a
 // subsystem that owns a listener must not wait for a request that never comes.
 func TestPluginResolution(t *testing.T) {
-	t.Setenv("CLOUD_ZERO_TRUST_ADDR", "10.0.0.1:9000")
-	if got := (App{Name: "zero-trust"}).Plugin().Addr; got != "10.0.0.1:9000" {
+	t.Setenv("CLOUD_ZT_ADDR", "10.0.0.1:9000")
+	if got := (App{Name: "zt"}).Plugin().Addr; got != "10.0.0.1:9000" {
 		t.Errorf("ADDR override: got %q, want 10.0.0.1:9000", got)
 	}
 	t.Setenv("CLOUD_O11Y_BIN", "/opt/o11y")

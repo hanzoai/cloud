@@ -53,7 +53,7 @@ type state struct {
 // Mount wires the networking surface onto app per HIP-0106 — one line over the
 // generic subsystem entrypoint.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "zero-trust", build, routes)
+	return cloud.Mount(app, deps, "zt", build, routes)
 }
 
 // build constructs the zt state: the ZT controller client from its env

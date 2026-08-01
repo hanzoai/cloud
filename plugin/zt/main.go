@@ -9,28 +9,28 @@ import (
 	"github.com/hanzoai/cloud/manifest"
 )
 
-// Standalone entry for the zero-trust app.
+// Standalone entry for the zt app.
 //
 // This is the app's OWN composition root: it links only its own subsystem and
 // the cloud request tier, never the whole fleet, so the build is this one app
 // and not the ~3040-package union the fused binary was. The light host loads it
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
-// `zero-trust openapi`. Hand-owned — edit the spec below directly.
+// `zt openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Serve([]cloud.Plugin{{
-		Name:  "zero-trust",
+		Name:  "zt",
 		Price: cloud.Free,
 		Mount: zt.Mount,
-		// This subsystem is named "zero-trust" and serves NEITHER "/v1/zero-trust"
-		// nor anything under it — its four routes are /v1/networks[/:id],
-		// /v1/mesh/services and /v1/edge/nodes. The /v1/<Name> convention
-		// MountPrefixes assumes therefore covered NOTHING it registers, so every
-		// request here was attributed to no subsystem and any middleware installed
-		// through the scoped Router landed on "/v1/zero-trust" and never ran. The
-		// apps/plan defect, one app over. The list comes from the manifest so it
-		// cannot drift from the prefixes the host routes here.
-		Prefixes: manifest.PrefixesFor("zero-trust"),
-	}}, []string{"zero-trust"}); err != nil {
+		// This subsystem is named "zt" and serves NEITHER "/v1/zt" nor anything
+		// under it — its four routes are /v1/networks[/:id], /v1/mesh/services and
+		// /v1/edge/nodes. The /v1/<Name> convention MountPrefixes assumes therefore
+		// covered NOTHING it registers, so every request here was attributed to no
+		// subsystem and any middleware installed through the scoped Router landed
+		// on "/v1/zt" and never ran. The apps/plan defect, one app over. The list
+		// comes from the manifest so it cannot drift from the prefixes the host
+		// routes here.
+		Prefixes: manifest.PrefixesFor("zt"),
+	}}, []string{"zt"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
