@@ -65,6 +65,14 @@
     "name": "delete_v1_captable_stakeholders_id"
   },
   {
+    "description": "ListShareClasses returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_captable_classes"
+  },
+  {
     "description": "GetCompany returns the caller org's cap-table company record. The row is\nseeded when the tenant's store first opens, so it always exists; its name and\nincorporation details are set with PUT /v1/captable/company.",
     "inputSchema": {
       "properties": {},
@@ -81,14 +89,6 @@
     "name": "get_v1_captable_convertibles"
   },
   {
-    "description": "ListEquityPlans returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "get_v1_captable_equity-plans"
-  },
-  {
     "description": "ListInvestments returns the caller org's investments, newest first. It spans\nevery round, so it is the flat ledger of cheques written into the company,\neach naming its investor and the round it went into.",
     "inputSchema": {
       "properties": {},
@@ -103,6 +103,14 @@
       "type": "object"
     },
     "name": "get_v1_captable_options"
+  },
+  {
+    "description": "ListEquityPlans returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_captable_plans"
   },
   {
     "description": "ListRounds returns the caller org's fundraising rounds, newest first. A round\ngroups a fundraising event; a PRICED round also carries the share class and\nprice per share it issues at.",
@@ -132,14 +140,6 @@
       "type": "object"
     },
     "name": "get_v1_captable_safes"
-  },
-  {
-    "description": "ListShareClasses returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "get_v1_captable_share-classes"
   },
   {
     "description": "ListShares returns the caller org's share certificates, newest first. Each row\nis joined to its holder and its share class, so a certificate names who holds\nit and what class it is in without a second call.",

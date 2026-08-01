@@ -111,7 +111,7 @@ func TestHTTPEndToEnd(t *testing.T) {
 	founderID := stakeholders[0]["id"].(string)
 
 	// Issue a share class + 1,000,000 shares.
-	code, body = req(t, app, http.MethodPost, "/v1/captable/share-classes", "acme", map[string]any{
+	code, body = req(t, app, http.MethodPost, "/v1/captable/classes", "acme", map[string]any{
 		"name": "Common", "classType": "COMMON", "initialSharesAuthorized": 10000000,
 		"boardApprovalDate": "2026-01-01", "stockholderApprovalDate": "2026-01-02",
 		"votesPerShare": 1, "parValue": 0.0001, "pricePerShare": 0.0001, "seniority": 0,
@@ -121,7 +121,7 @@ func TestHTTPEndToEnd(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("create share class want 201, got %d (%s)", code, body)
 	}
-	code, body = req(t, app, http.MethodGet, "/v1/captable/share-classes", "acme", nil)
+	code, body = req(t, app, http.MethodGet, "/v1/captable/classes", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list share classes: %d", code)
 	}

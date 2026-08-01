@@ -42,6 +42,25 @@ func init() {
 			"stakeholderRef.id":       "ID is the stakeholder to delete.",
 		},
 	})
+	zip.Describe("GET /v1/captable/classes", zip.Doc{
+		Description: "ListShareClasses returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.",
+		Fields: map[string]string{
+			"captableShareClass.classType":                     "ClassType is COMMON or PREFERRED.",
+			"captableShareClass.companyName":                   "CompanyName is the name of the company whose cap table this is.",
+			"captableShareClass.conversionRights":              "ConversionRights describes what the class converts into, e.g.\nCONVERTS_TO_FUTURE_ROUND.",
+			"captableShareClass.id":                            "ID is the share class id.",
+			"captableShareClass.idx":                           "Idx is the class's 1-based position within the company, in creation order.",
+			"captableShareClass.initialSharesAuthorized":       "InitialSharesAuthorized is how many shares of this class are authorized.",
+			"captableShareClass.liquidationPreferenceMultiple": "LiquidationPreferenceMultiple is the preference multiple on liquidation.",
+			"captableShareClass.name":                          "Name is the class name, e.g. \"Common\" or \"Series A Preferred\".",
+			"captableShareClass.parValue":                      "ParValue is the par value per share.",
+			"captableShareClass.participationCapMultiple":      "ParticipationCapMultiple caps participation on liquidation; 0 is uncapped.",
+			"captableShareClass.prefix":                        "Prefix is the certificate prefix, CS for common and PS for preferred.",
+			"captableShareClass.pricePerShare":                 "PricePerShare is the issue price per share.",
+			"captableShareClass.seniority":                     "Seniority orders classes in a liquidation waterfall; higher is more senior.",
+			"captableShareClass.votesPerShare":                 "VotesPerShare is how many votes one share of this class carries.",
+		},
+	})
 	zip.Describe("GET /v1/captable/company", zip.Doc{
 		Description: "GetCompany returns the caller org's cap-table company record. The row is\nseeded when the tenant's store first opens, so it always exists; its name and\nincorporation details are set with PUT /v1/captable/company.",
 		Fields: map[string]string{
@@ -70,21 +89,6 @@ func init() {
 			"captableNote.status":          "Status is the note's state, e.g. DRAFT or ACTIVE.",
 			"captableNote.type":            "Type is the instrument kind, e.g. NOTE.",
 			"captableNotes.data":           "Data is every convertible note, newest first.",
-		},
-	})
-	zip.Describe("GET /v1/captable/equity-plans", zip.Doc{
-		Description: "ListEquityPlans returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.",
-		Fields: map[string]string{
-			"captableEquityPlan.boardApprovalDate":          "BoardApprovalDate is the ISO date the board approved the plan.",
-			"captableEquityPlan.comments":                   "Comments is free-form notes on the plan.",
-			"captableEquityPlan.createdAt":                  "CreatedAt is when the plan was recorded, in unix milliseconds.",
-			"captableEquityPlan.defaultCancellatonBehavior": "DefaultCancellatonBehavior is what happens to cancelled grants, RETIRE or\nRETURN_TO_POOL. The key is spelled as the cap-table wire spells it.",
-			"captableEquityPlan.id":                         "ID is the equity plan id.",
-			"captableEquityPlan.initialSharesReserved":      "InitialSharesReserved is how many shares the plan reserves.",
-			"captableEquityPlan.name":                       "Name is the plan name, e.g. \"2026 Stock Option Plan\".",
-			"captableEquityPlan.planEffectiveDate":          "PlanEffectiveDate is the ISO date the plan takes effect.",
-			"captableEquityPlan.shareClassId":               "ShareClassID is the class the reserved shares come from.",
-			"captableEquityPlans.data":                      "Data is every equity plan on the caller org's cap table, newest first.",
 		},
 	})
 	zip.Describe("GET /v1/captable/investments", zip.Doc{
@@ -119,6 +123,21 @@ func init() {
 			"captableOption.type":            "Type is the grant kind, ISO or NSO.",
 			"captableOption.vestingYears":    "VestingYears is the total vesting period in years.",
 			"captableOptions.data":           "Data is every option grant, newest first.",
+		},
+	})
+	zip.Describe("GET /v1/captable/plans", zip.Doc{
+		Description: "ListEquityPlans returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.",
+		Fields: map[string]string{
+			"captableEquityPlan.boardApprovalDate":          "BoardApprovalDate is the ISO date the board approved the plan.",
+			"captableEquityPlan.comments":                   "Comments is free-form notes on the plan.",
+			"captableEquityPlan.createdAt":                  "CreatedAt is when the plan was recorded, in unix milliseconds.",
+			"captableEquityPlan.defaultCancellatonBehavior": "DefaultCancellatonBehavior is what happens to cancelled grants, RETIRE or\nRETURN_TO_POOL. The key is spelled as the cap-table wire spells it.",
+			"captableEquityPlan.id":                         "ID is the equity plan id.",
+			"captableEquityPlan.initialSharesReserved":      "InitialSharesReserved is how many shares the plan reserves.",
+			"captableEquityPlan.name":                       "Name is the plan name, e.g. \"2026 Stock Option Plan\".",
+			"captableEquityPlan.planEffectiveDate":          "PlanEffectiveDate is the ISO date the plan takes effect.",
+			"captableEquityPlan.shareClassId":               "ShareClassID is the class the reserved shares come from.",
+			"captableEquityPlans.data":                      "Data is every equity plan on the caller org's cap table, newest first.",
 		},
 	})
 	zip.Describe("GET /v1/captable/rounds", zip.Doc{
@@ -180,25 +199,6 @@ func init() {
 			"captableSafe.type":            "Type is POST_MONEY or PRE_MONEY.",
 			"captableSafe.valuationCap":    "ValuationCap is the valuation cap, if any.",
 			"captableSafes.data":           "Data is every SAFE, newest first.",
-		},
-	})
-	zip.Describe("GET /v1/captable/share-classes", zip.Doc{
-		Description: "ListShareClasses returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.",
-		Fields: map[string]string{
-			"captableShareClass.classType":                     "ClassType is COMMON or PREFERRED.",
-			"captableShareClass.companyName":                   "CompanyName is the name of the company whose cap table this is.",
-			"captableShareClass.conversionRights":              "ConversionRights describes what the class converts into, e.g.\nCONVERTS_TO_FUTURE_ROUND.",
-			"captableShareClass.id":                            "ID is the share class id.",
-			"captableShareClass.idx":                           "Idx is the class's 1-based position within the company, in creation order.",
-			"captableShareClass.initialSharesAuthorized":       "InitialSharesAuthorized is how many shares of this class are authorized.",
-			"captableShareClass.liquidationPreferenceMultiple": "LiquidationPreferenceMultiple is the preference multiple on liquidation.",
-			"captableShareClass.name":                          "Name is the class name, e.g. \"Common\" or \"Series A Preferred\".",
-			"captableShareClass.parValue":                      "ParValue is the par value per share.",
-			"captableShareClass.participationCapMultiple":      "ParticipationCapMultiple caps participation on liquidation; 0 is uncapped.",
-			"captableShareClass.prefix":                        "Prefix is the certificate prefix, CS for common and PS for preferred.",
-			"captableShareClass.pricePerShare":                 "PricePerShare is the issue price per share.",
-			"captableShareClass.seniority":                     "Seniority orders classes in a liquidation waterfall; higher is more senior.",
-			"captableShareClass.votesPerShare":                 "VotesPerShare is how many votes one share of this class carries.",
 		},
 	})
 	zip.Describe("GET /v1/captable/shares", zip.Doc{
