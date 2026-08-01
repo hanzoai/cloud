@@ -26,6 +26,37 @@ func exposeImport() {
 	zip.Post[plane.ImportIn, plane.Imported](cloud.Plane(), "/git/import", planeImport,
 		zip.WithOperationID(plane.GitImport),
 		zip.WithSummary("Create a repo and mirror an upstream into it"))
+
+	zip.Post[plane.InboundIn, plane.Synced](cloud.Plane(), "/git/inbound", planeInbound,
+		zip.WithOperationID(plane.GitInbound),
+		zip.WithSummary("Advance one branch from an upstream push"))
+}
+
+// planeInbound advances ONE branch of the CALLER's repo from an upstream push.
+//
+// Native is canonical: the fetch never force-overwrites a native ref, so a
+// divergence comes back as Conflict with native untouched rather than as an
+// error — the caller needs to know it diverged, not retry into an overwrite.
+// The org is the caller's plane identity, so a push routed to one org can never
+// advance another's refs.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, error) {
+	who := cloud.Who(ctx)
+	if who.Org == "" {
+		return nil, zip.ErrForbidden("git inbound: org required")
+	}
+	res, err := cloud.InboundGitSync(ctx, cloud.GitInboundReq{
+		Org: who.Org, Project: in.Project, Repo: in.Repo, Ref: in.Ref,
+		CloneURL: in.CloneURL, Token: in.Token, Origin: in.Origin,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &plane.Synced{
+		Applied: res.Applied, NoOp: res.NoOp, Conflict: res.Conflict,
+		Detail: res.Detail, Before: res.Before, After: res.After,
+	}, nil
 }
 
 // planeImport creates the repo and mirrors the upstream, for the CALLER's org.
