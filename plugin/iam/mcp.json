@@ -1,6 +1,6 @@
 [
   {
-    "description": "Create a provider",
+    "description": "Adds an identity provider your people can sign in with, or a\nservice your applications send through — a social or enterprise login, an email\nor SMS sender, a storage or payment connector.\n\nA provider is configured once and then switched on per application, so several\napplications can share one set of credentials.",
     "inputSchema": {
       "properties": {
         "appId": {
@@ -161,7 +161,7 @@
     "name": "addProvider"
   },
   {
-    "description": "Create a token",
+    "description": "Records an access token — the credential an application or integration\npresents on a caller's behalf.",
     "inputSchema": {
       "properties": {
         "accessToken": {
@@ -208,6 +208,7 @@
           "type": "string"
         },
         "nonce": {
+          "description": "Nonce is the OIDC authorize nonce, stored on the code and echoed into the\nid_token minted at the exchange (OIDC Core §3.1.3.6) so a relying party\nbinds the id_token to its own request and detects replay.",
           "type": "string"
         },
         "organization": {
@@ -217,9 +218,11 @@
           "type": "string"
         },
         "publicGrant": {
+          "description": "PublicGrant records that this grant was established WITHOUT client\nauthentication — a PKCE code exchange from a client that presented no\nsecret. Whether a client is confidential is a property of the GRANT, not\nonly of the registration: `hanzo-cli` and every @hanzo/iam SPA keep a\nregistered secret for a BACKEND path while the surface that actually signs\nin is a public PKCE client that cannot hold one. authorizationCodeGrant\nalready makes exactly that bounded relaxation; this is the same fact,\nrecorded so refreshTokenGrant can honour it instead of demanding a secret\nthe client never had (which 401s invalid_client and kills the session at\nthe access token's expiry). Carried across rotation, so the second refresh\nbehaves like the first.",
           "type": "boolean"
         },
         "redirectUri": {
+          "description": "RedirectUri binds the authorization code to the exact redirect URI of the\nauthorize request (RFC 6749 §4.1.3): the token endpoint refuses a code\nredeemed with a different redirect_uri, closing code-injection across a\nclient's registered URIs.",
           "type": "string"
         },
         "refreshConsumed": {
@@ -229,6 +232,7 @@
           "type": "integer"
         },
         "refreshFamily": {
+          "description": "Refresh-token rotation state (v2). Each refresh belongs to a family (the\ngrant); rotation mints a new row in the same family and marks the prior\none consumed. Presenting a consumed refresh is reuse — the whole family is\nrevoked (RFC 9700 §4.14.2). RefreshExpireIn is the refresh token's own\nabsolute expiry (unix), independent of the access token's shorter life.",
           "type": "string"
         },
         "refreshToken": {
@@ -238,6 +242,7 @@
           "type": "string"
         },
         "resource": {
+          "description": "RFC 8707 resource indicator",
           "type": "string"
         },
         "scope": {
@@ -262,7 +267,7 @@
     "name": "addToken"
   },
   {
-    "description": "Create a webauthn credential",
+    "description": "Registers a passkey or security key for a person, so they\ncan sign in with their device instead of a password.",
     "inputSchema": {
       "properties": {
         "aaguid": {
@@ -339,7 +344,7 @@
     "name": "addWebauthnCredential"
   },
   {
-    "description": "Create an organization",
+    "description": "Makes a new organization — the account your users, applications, roles,\nprojects and workspaces are all named inside. It is the first write in a new\ntenant, and a name already in use is refused rather than taken over.",
     "inputSchema": {
       "$defs": {
         "AccountItem": {
@@ -616,7 +621,7 @@
     "name": "createOrganization"
   },
   {
-    "description": "Create or merge a session (upsert)",
+    "description": "Records a sign-in. Signing in again from another browser adds to the\nsession rather than replacing it, so one person can be signed in from a laptop\nand a phone at once.\n\nAsk for an exclusive sign-in and the opposite holds: the new sign-in is the only\none left and every other browser is signed out. That is the setting to use when\none person may hold only one live session at a time.",
     "inputSchema": {
       "properties": {
         "application": {
@@ -648,7 +653,7 @@
     "name": "createSession"
   },
   {
-    "description": "Delete an organization",
+    "description": "Removes an organization and everything named inside it. There is no\nundo, and every session issued under it stops working.\n\nThe built-in admin organization cannot be deleted — losing it would leave the\naccount with no way back in.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -663,7 +668,7 @@
     "name": "deleteOrganization"
   },
   {
-    "description": "Delete a provider by (owner, name)",
+    "description": "Removes a provider. Sign-in through it stops for every\napplication that used it, so give those applications another method first.\n\nA provider that is already gone answers \"nothing changed\" rather than an\nerror, so the call is safe to repeat.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -682,7 +687,7 @@
     "name": "deleteProvider"
   },
   {
-    "description": "Delete a session",
+    "description": "Signs a person out of one application — the session ends and every\nbrowser carrying it stops being authenticated.\n\nA session that is already gone reports that nothing was deleted rather than an\nerror, so the call is safe to repeat.",
     "inputSchema": {
       "properties": {
         "application": {
@@ -705,7 +710,7 @@
     "name": "deleteSession"
   },
   {
-    "description": "Delete a token by (owner, name)",
+    "description": "Revokes an access token. Whatever was using it stops being\nauthorized at once.\n\nA token that is already gone answers \"nothing changed\" rather than an error, so\nthe call is safe to repeat.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -724,7 +729,7 @@
     "name": "deleteToken"
   },
   {
-    "description": "Delete a webauthn credential by (owner, name)",
+    "description": "Removes a passkey or security key — what you call when\na device is lost. Make sure the person has another way to sign in first.\n\nA credential that is already gone answers \"nothing changed\" rather than an\nerror, so the call is safe to repeat.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -743,7 +748,7 @@
     "name": "deleteWebauthnCredential"
   },
   {
-    "description": "Delete an application",
+    "description": "Removes an application. Anyone mid-sign-in through it is\nturned away and its client credentials stop working, so retire the integration\nbefore deleting it.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -762,7 +767,7 @@
     "name": "delete_v1_iam_application"
   },
   {
-    "description": "Get one organization by owner and name",
+    "description": "Returns one organization: its display, its defaults and the sign-in rules\neveryone in it inherits.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -777,7 +782,7 @@
     "name": "getOrganization"
   },
   {
-    "description": "Get one provider by (owner, name)",
+    "description": "Returns one provider: what it connects to and how it is\nconfigured. Its credentials come back masked.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -796,7 +801,7 @@
     "name": "getProvider"
   },
   {
-    "description": "Get one session by owner/name/application",
+    "description": "Returns one person's session in one application — when it began and which\nbrowsers or devices are still carrying it.",
     "inputSchema": {
       "properties": {
         "application": {
@@ -819,7 +824,7 @@
     "name": "getSession"
   },
   {
-    "description": "Get one token by (owner, name)",
+    "description": "Returns one access token: who and what it was issued to, and when it\nexpires.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -838,7 +843,7 @@
     "name": "getToken"
   },
   {
-    "description": "Get one webauthn credential by (owner, name)",
+    "description": "Returns one passkey or security key: whose it is, what\ndevice it lives on, and when it was registered.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -857,7 +862,7 @@
     "name": "getWebauthnCredential"
   },
   {
-    "description": "Get one application by owner and name",
+    "description": "Returns one application: its sign-in methods, its allowed\nredirect URIs and the client credentials your integration authenticates with.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -876,7 +881,7 @@
     "name": "get_v1_iam_application"
   },
   {
-    "description": "List applications for an owner",
+    "description": "Returns the applications in one organization, newest first —\neach product or site your people sign in to, with the sign-in methods and\nredirect URIs it allows.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -891,7 +896,26 @@
     "name": "get_v1_iam_applications"
   },
   {
-    "description": "List audit logs for an owner",
+    "description": "Returns one application: its sign-in methods, its allowed\nredirect URIs and the client credentials your integration authenticates with.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "get_v1_iam_applications_get"
+  },
+  {
+    "description": "Returns your organization's audit trail, newest first — who did\nwhat, when, and from where. It is the record you reach for during a security\nreview or an incident.\n\nYou see your own organization's audit trail and no one else's; which organization that\nis comes from your credentials, not from the request.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -903,7 +927,7 @@
     "name": "get_v1_iam_audit-logs"
   },
   {
-    "description": "List certs for an owner",
+    "description": "Returns your organization's signing certificates, newest first — the keys\nthe tokens your applications verify are signed with. Private key material is\nmasked.\n\nYou see your own organization's certificates and no one else's; which\norganization that is comes from your credentials, not from the request, so a\nquery parameter can never widen the listing.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -915,7 +939,7 @@
     "name": "get_v1_iam_certs"
   },
   {
-    "description": "List invitations for an owner",
+    "description": "Returns your organization's invitations, newest first — who has\nbeen asked to join, on what terms, and how many seats each invitation still\nhas left.\n\nYou see your own organization's invitations and no one else's; which organization that\nis comes from your credentials, not from the request.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -927,7 +951,7 @@
     "name": "get_v1_iam_invitations"
   },
   {
-    "description": "List keys in an owner",
+    "description": "Returns your organization's API keys, newest first — what each is called,\nwhat it may reach, and its publishable half. Secret halves are never listed.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -939,7 +963,7 @@
     "name": "get_v1_iam_keys"
   },
   {
-    "description": "Get a key by (owner, name)",
+    "description": "Returns one API key: what it is called, what it may reach, and when it was\nissued.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -954,7 +978,7 @@
     "name": "get_v1_iam_keys_get"
   },
   {
-    "description": "List permissions for an owner",
+    "description": "Returns the permissions in one organization, newest first — each one a\ngrant saying which people or roles may do what, and to which resources.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -966,7 +990,7 @@
     "name": "get_v1_iam_permissions"
   },
   {
-    "description": "Get one permission by owner and name",
+    "description": "Returns one permission: who it grants to, what it allows, and the\nresources it covers.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -981,7 +1005,7 @@
     "name": "get_v1_iam_permissions_get"
   },
   {
-    "description": "List projects for an owner",
+    "description": "Returns your organization's projects, newest first — the scope\npeople pick between when their work is separated by product or client rather\nthan by team.\n\nYou see your own organization's projects and no one else's; which organization that\nis comes from your credentials, not from the request.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -993,7 +1017,7 @@
     "name": "get_v1_iam_projects"
   },
   {
-    "description": "List roles for an owner",
+    "description": "Returns your organization's roles, newest first — each a named group of\npeople that permissions are granted to.\n\nYou see your own organization's roles and no one else's; which organization\nthat is comes from your credentials, not from the request.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -1005,7 +1029,7 @@
     "name": "get_v1_iam_roles"
   },
   {
-    "description": "List users in an org",
+    "description": "Returns a page of the people in your organization, with the total so you\ncan page through the rest. Passwords, API secrets and MFA material are stripped\nfrom every entry.",
     "inputSchema": {
       "properties": {
         "limit": {
@@ -1026,7 +1050,7 @@
     "name": "get_v1_iam_users"
   },
   {
-    "description": "Get a user by (owner, name)",
+    "description": "Returns one person in your organization, by the organization they belong\nto and their username. Passwords, API secrets and MFA material are stripped\nfrom the response.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -1045,7 +1069,7 @@
     "name": "get_v1_iam_users_get"
   },
   {
-    "description": "List workspaces for an owner",
+    "description": "Returns your organization's workspaces, newest first — the scope a\nteam works in, alongside projects rather than instead of them.\n\nYou see your own organization's workspaces and no one else's; which organization that\nis comes from your credentials, not from the request.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -1057,7 +1081,7 @@
     "name": "get_v1_iam_workspaces"
   },
   {
-    "description": "List organizations",
+    "description": "Returns the organizations you can see, newest first. Narrow it to one\nparent account, and set a limit and offset to page through the rest.",
     "inputSchema": {
       "properties": {
         "limit": {
@@ -1075,7 +1099,7 @@
     "name": "listOrganizations"
   },
   {
-    "description": "List providers in an owner scope",
+    "description": "Returns your organization's providers, newest first — the\nidentity providers your people sign in with, and the senders and connectors\nyour applications go through.\n\nYou see your own organization's providers and no one else's; which organization\nthat is comes from your credentials, not from the request.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -1087,7 +1111,7 @@
     "name": "listProviders"
   },
   {
-    "description": "List an owner's sessions, newest first",
+    "description": "Returns who is currently signed in to your organization, newest first, and\ncan be narrowed to one person or one application. It is what you read before\nsigning someone out.",
     "inputSchema": {
       "properties": {
         "application": {
@@ -1108,7 +1132,7 @@
     "name": "listSessions"
   },
   {
-    "description": "List tokens in an owner scope",
+    "description": "Returns the access tokens issued in your organization, newest\nfirst, and can be narrowed to one organization. Use it to see what is currently\nauthorized before revoking anything.",
     "inputSchema": {
       "properties": {
         "organization": {
@@ -1123,7 +1147,7 @@
     "name": "listTokens"
   },
   {
-    "description": "List webauthn credentials in an owner scope",
+    "description": "Returns the passkeys and security keys registered in\nyour organization, newest first — which device each belongs to and when it was\nlast used.",
     "inputSchema": {
       "properties": {
         "owner": {
@@ -1135,7 +1159,7 @@
     "name": "listWebauthnCredentials"
   },
   {
-    "description": "Create an application (legacy verb)",
+    "description": "Registers an application in your organization — one product or site your\npeople sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs.\n\nThe older spelling of POST /v1/iam/application. A name already used in the\norganization is refused rather than overwritten.",
     "inputSchema": {
       "$defs": {
         "AccountItem": {
@@ -1320,12 +1344,14 @@
               "type": "integer"
             },
             "failedSigninLimit": {
+              "description": "Per-organization signin throttle. Zero means \"inherit the application\ndefault\"; a non-zero value overrides it. Safe bounds are clamped by the\nresource service before persistence.",
               "type": "integer"
             },
             "favicon": {
               "type": "string"
             },
             "founder": {
+              "description": "Founder is the stable storage id of the identity that provisioned this org\n(self-service onboarding). It is the resume token that makes provisioning\nconverge on a backend where each write autocommits independently (no\ntransaction rollback): after a partial failure that created the org but did\nnot move the founder in, a retry recognises the org as the founder's own and\ncompletes it, instead of refusing it as \"already taken\". It also fences the\norg to ONE tenant — a different identity can never complete or join it.",
               "type": "string"
             },
             "hasPrivilegeConsent": {
@@ -1404,6 +1430,7 @@
               "type": "array"
             },
             "orgBalance": {
+              "description": "Balance fields are read-only mirrors; authoritative balances live in\nCommerce (billing.hanzo.ai). Carried for field-complete v1 parity.",
               "type": "number"
             },
             "owner": {
@@ -1847,6 +1874,7 @@
           "type": "string"
         },
         "clientId": {
+          "description": "ClientId is the OAuth2/OIDC client identifier and the GLOBAL key every\nconfidential-client resolver authenticates against (store.GetApplicationByClientId,\nthe mint gates, Basic auth). It MUST be globally unique across ALL owners — a\ncollision would let one app shadow another at that key. This store persists each\nentity as a JSON document in a shared table, so there is no per-field column to\ncarry a DB UNIQUE index; uniqueness is enforced at the write in\napplications.Create/Update (ensureClientIdUnique), exactly as the (owner,name)\nnatural key is, and store.GetApplicationByClientId resolves admin-preferring as\ndefense-in-depth.",
           "type": "string"
         },
         "clientSecret": {
@@ -2145,7 +2173,7 @@
     "name": "post_v1_iam_add-application"
   },
   {
-    "description": "Create an organization (legacy verb)",
+    "description": "Creates an organization — the account everything else in your directory\nhangs from. Users, applications, roles, projects and workspaces are all\nnamed inside one organization, so this is the first write in a new tenant.\n\nThe older spelling of POST /v1/iam/organizations. Both reach the same\ncreate, so a name already taken is refused here too.",
     "inputSchema": {
       "$defs": {
         "AccountItem": {
@@ -2422,7 +2450,7 @@
     "name": "post_v1_iam_add-organization"
   },
   {
-    "description": "Create a project (legacy verb)",
+    "description": "Creates a project inside your organization — the scope people pick between\nwhen their work is separated by product or client rather than by team.\n\nThe older spelling of POST /v1/iam/projects. Creating one takes an\nadministrator of the owning organization.",
     "inputSchema": {
       "properties": {
         "createdTime": {
@@ -2464,7 +2492,7 @@
     "name": "post_v1_iam_add-project"
   },
   {
-    "description": "Create a provider (legacy verb)",
+    "description": "Adds an identity provider your people can sign in with, or a service your\napplications send through — a social or enterprise login, an email or SMS\nsender, a storage or payment connector.\n\nA provider is configured once here and then switched on per application, so\nseveral applications can share one set of credentials.\n\nThe older spelling of POST /v1/iam/providers.",
     "inputSchema": {
       "properties": {
         "appId": {
@@ -2625,7 +2653,7 @@
     "name": "post_v1_iam_add-provider"
   },
   {
-    "description": "Create a role (legacy verb)",
+    "description": "Creates a role — a named group of people that permissions are granted to.\nGranting to a role rather than to each person is what keeps access correct\nas your team changes: add someone to the role and they inherit everything\nit can do.\n\nThe older spelling of POST /v1/iam/roles.",
     "inputSchema": {
       "properties": {
         "createdTime": {
@@ -2676,7 +2704,7 @@
     "name": "post_v1_iam_add-role"
   },
   {
-    "description": "Create a user (legacy verb)",
+    "description": "Adds a person to your organization and, if you send a password, sets the\none they will sign in with. The password is hashed before it is stored and\nis never returned to you or to anyone else.\n\nUsernames are checked against one rule wherever an account is created —\nthis verb, password signup, a social sign-in, or SCIM — so a name accepted\nhere is a name accepted everywhere.\n\nThe older spelling of POST /v1/iam/users, and it posts the user's fields at\nthe top level rather than wrapped in {user, password}.",
     "inputSchema": {
       "$defs": {
         "Address": {
@@ -2840,6 +2868,7 @@
               "type": "string"
             },
             "createdTime": {
+              "description": "Descriptive metadata.",
               "type": "string"
             },
             "deleted": {
@@ -2873,12 +2902,14 @@
               "type": "boolean"
             },
             "model": {
+              "description": "Authorization model, targets, and decision. AuthzModel carries the v1\n`model` column (the named authz model); it is not the Go identifier\n`Model` because that name is taken by the embedded orm.Model[Permission]\nmixin. The HTTP contract is unchanged — json:\"model\".",
               "type": "string"
             },
             "name": {
               "type": "string"
             },
             "owner": {
+              "description": "Identity — the (owner, name) natural key.",
               "type": "string"
             },
             "resourceType": {
@@ -2900,6 +2931,7 @@
               "type": "string"
             },
             "submitter": {
+              "description": "Submission / approval workflow.",
               "type": "string"
             },
             "updatedAt": {
@@ -2907,6 +2939,7 @@
               "type": "string"
             },
             "users": {
+              "description": "Subjects the grant is evaluated for.",
               "items": {
                 "type": "string"
               },
@@ -3590,7 +3623,7 @@
     "name": "post_v1_iam_add-user"
   },
   {
-    "description": "Create a workspace (legacy verb)",
+    "description": "Creates a workspace inside your organization — the scope a team works in,\nalongside projects rather than instead of them.\n\nThe older spelling of POST /v1/iam/workspaces. Creating one takes an\nadministrator of the owning organization.",
     "inputSchema": {
       "properties": {
         "bucket": {
@@ -3632,7 +3665,7 @@
     "name": "post_v1_iam_add-workspace"
   },
   {
-    "description": "Create an application",
+    "description": "Registers an application in your organization — one product or site\nyour people sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs. A name already used in the organization is refused\nrather than overwritten.\n\nExported so the legacy add-application alias reuses this exact path — one\ncreate, two spellings.",
     "inputSchema": {
       "$defs": {
         "AccountItem": {
@@ -3817,12 +3850,14 @@
               "type": "integer"
             },
             "failedSigninLimit": {
+              "description": "Per-organization signin throttle. Zero means \"inherit the application\ndefault\"; a non-zero value overrides it. Safe bounds are clamped by the\nresource service before persistence.",
               "type": "integer"
             },
             "favicon": {
               "type": "string"
             },
             "founder": {
+              "description": "Founder is the stable storage id of the identity that provisioned this org\n(self-service onboarding). It is the resume token that makes provisioning\nconverge on a backend where each write autocommits independently (no\ntransaction rollback): after a partial failure that created the org but did\nnot move the founder in, a retry recognises the org as the founder's own and\ncompletes it, instead of refusing it as \"already taken\". It also fences the\norg to ONE tenant — a different identity can never complete or join it.",
               "type": "string"
             },
             "hasPrivilegeConsent": {
@@ -3901,6 +3936,7 @@
               "type": "array"
             },
             "orgBalance": {
+              "description": "Balance fields are read-only mirrors; authoritative balances live in\nCommerce (billing.hanzo.ai). Carried for field-complete v1 parity.",
               "type": "number"
             },
             "owner": {
@@ -4344,6 +4380,7 @@
           "type": "string"
         },
         "clientId": {
+          "description": "ClientId is the OAuth2/OIDC client identifier and the GLOBAL key every\nconfidential-client resolver authenticates against (store.GetApplicationByClientId,\nthe mint gates, Basic auth). It MUST be globally unique across ALL owners — a\ncollision would let one app shadow another at that key. This store persists each\nentity as a JSON document in a shared table, so there is no per-field column to\ncarry a DB UNIQUE index; uniqueness is enforced at the write in\napplications.Create/Update (ensureClientIdUnique), exactly as the (owner,name)\nnatural key is, and store.GetApplicationByClientId resolves admin-preferring as\ndefense-in-depth.",
           "type": "string"
         },
         "clientSecret": {
@@ -4642,317 +4679,7 @@
     "name": "post_v1_iam_application"
   },
   {
-    "description": "Create an audit log",
-    "inputSchema": {
-      "properties": {
-        "action": {
-          "type": "string"
-        },
-        "clientIp": {
-          "type": "string"
-        },
-        "createdTime": {
-          "type": "string"
-        },
-        "isTriggered": {
-          "type": "boolean"
-        },
-        "language": {
-          "type": "string"
-        },
-        "method": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "object": {
-          "type": "string"
-        },
-        "organization": {
-          "type": "string"
-        },
-        "owner": {
-          "type": "string"
-        },
-        "requestUri": {
-          "type": "string"
-        },
-        "response": {
-          "type": "string"
-        },
-        "statusCode": {
-          "type": "integer"
-        },
-        "user": {
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "post_v1_iam_audit-logs"
-  },
-  {
-    "description": "Delete an audit log",
-    "inputSchema": {
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "owner": {
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "post_v1_iam_audit-logs_delete"
-  },
-  {
-    "description": "Get one audit log",
-    "inputSchema": {
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "owner": {
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "post_v1_iam_audit-logs_get"
-  },
-  {
-    "description": "Update an audit log",
-    "inputSchema": {
-      "properties": {
-        "action": {
-          "type": "string"
-        },
-        "clientIp": {
-          "type": "string"
-        },
-        "createdTime": {
-          "type": "string"
-        },
-        "isTriggered": {
-          "type": "boolean"
-        },
-        "language": {
-          "type": "string"
-        },
-        "method": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "object": {
-          "type": "string"
-        },
-        "organization": {
-          "type": "string"
-        },
-        "owner": {
-          "type": "string"
-        },
-        "requestUri": {
-          "type": "string"
-        },
-        "response": {
-          "type": "string"
-        },
-        "statusCode": {
-          "type": "integer"
-        },
-        "user": {
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "post_v1_iam_audit-logs_update"
-  },
-  {
-    "description": "Create a cert",
-    "inputSchema": {
-      "properties": {
-        "accessKey": {
-          "type": "string"
-        },
-        "accessSecret": {
-          "type": "string"
-        },
-        "account": {
-          "type": "string"
-        },
-        "bitSize": {
-          "type": "integer"
-        },
-        "certificate": {
-          "type": "string"
-        },
-        "createdAt": {
-          "format": "date-time",
-          "type": "string"
-        },
-        "createdTime": {
-          "type": "string"
-        },
-        "cryptoAlgorithm": {
-          "type": "string"
-        },
-        "deleted": {
-          "type": "boolean"
-        },
-        "displayName": {
-          "type": "string"
-        },
-        "domainExpireTime": {
-          "type": "string"
-        },
-        "expireInYears": {
-          "type": "integer"
-        },
-        "expireTime": {
-          "type": "string"
-        },
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "owner": {
-          "type": "string"
-        },
-        "privateKey": {
-          "type": "string"
-        },
-        "provider": {
-          "type": "string"
-        },
-        "scope": {
-          "type": "string"
-        },
-        "type": {
-          "type": "string"
-        },
-        "updatedAt": {
-          "format": "date-time",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "post_v1_iam_certs"
-  },
-  {
-    "description": "Delete a cert",
-    "inputSchema": {
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "owner": {
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "post_v1_iam_certs_delete"
-  },
-  {
-    "description": "Get one cert",
-    "inputSchema": {
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "owner": {
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "post_v1_iam_certs_get"
-  },
-  {
-    "description": "Update a cert",
-    "inputSchema": {
-      "properties": {
-        "accessKey": {
-          "type": "string"
-        },
-        "accessSecret": {
-          "type": "string"
-        },
-        "account": {
-          "type": "string"
-        },
-        "bitSize": {
-          "type": "integer"
-        },
-        "certificate": {
-          "type": "string"
-        },
-        "createdAt": {
-          "format": "date-time",
-          "type": "string"
-        },
-        "createdTime": {
-          "type": "string"
-        },
-        "cryptoAlgorithm": {
-          "type": "string"
-        },
-        "deleted": {
-          "type": "boolean"
-        },
-        "displayName": {
-          "type": "string"
-        },
-        "domainExpireTime": {
-          "type": "string"
-        },
-        "expireInYears": {
-          "type": "integer"
-        },
-        "expireTime": {
-          "type": "string"
-        },
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "owner": {
-          "type": "string"
-        },
-        "privateKey": {
-          "type": "string"
-        },
-        "provider": {
-          "type": "string"
-        },
-        "scope": {
-          "type": "string"
-        },
-        "type": {
-          "type": "string"
-        },
-        "updatedAt": {
-          "format": "date-time",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "post_v1_iam_certs_update"
-  },
-  {
-    "description": "Delete an application (legacy verb)",
+    "description": "Registers an application in your organization — one product or site\nyour people sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs. A name already used in the organization is refused\nrather than overwritten.\n\nExported so the legacy add-application alias reuses this exact path — one\ncreate, two spellings.",
     "inputSchema": {
       "$defs": {
         "AccountItem": {
@@ -5137,12 +4864,14 @@
               "type": "integer"
             },
             "failedSigninLimit": {
+              "description": "Per-organization signin throttle. Zero means \"inherit the application\ndefault\"; a non-zero value overrides it. Safe bounds are clamped by the\nresource service before persistence.",
               "type": "integer"
             },
             "favicon": {
               "type": "string"
             },
             "founder": {
+              "description": "Founder is the stable storage id of the identity that provisioned this org\n(self-service onboarding). It is the resume token that makes provisioning\nconverge on a backend where each write autocommits independently (no\ntransaction rollback): after a partial failure that created the org but did\nnot move the founder in, a retry recognises the org as the founder's own and\ncompletes it, instead of refusing it as \"already taken\". It also fences the\norg to ONE tenant — a different identity can never complete or join it.",
               "type": "string"
             },
             "hasPrivilegeConsent": {
@@ -5221,6 +4950,7 @@
               "type": "array"
             },
             "orgBalance": {
+              "description": "Balance fields are read-only mirrors; authoritative balances live in\nCommerce (billing.hanzo.ai). Carried for field-complete v1 parity.",
               "type": "number"
             },
             "owner": {
@@ -5664,6 +5394,2364 @@
           "type": "string"
         },
         "clientId": {
+          "description": "ClientId is the OAuth2/OIDC client identifier and the GLOBAL key every\nconfidential-client resolver authenticates against (store.GetApplicationByClientId,\nthe mint gates, Basic auth). It MUST be globally unique across ALL owners — a\ncollision would let one app shadow another at that key. This store persists each\nentity as a JSON document in a shared table, so there is no per-field column to\ncarry a DB UNIQUE index; uniqueness is enforced at the write in\napplications.Create/Update (ensureClientIdUnique), exactly as the (owner,name)\nnatural key is, and store.GetApplicationByClientId resolves admin-preferring as\ndefense-in-depth.",
+          "type": "string"
+        },
+        "clientSecret": {
+          "type": "string"
+        },
+        "codeResendTimeout": {
+          "type": "integer"
+        },
+        "cookieExpireInHours": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "createdTime": {
+          "type": "string"
+        },
+        "customScopes": {
+          "items": {
+            "$ref": "#/$defs/ScopeDescription"
+          },
+          "type": "array"
+        },
+        "defaultGroup": {
+          "type": "string"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "disableSamlAttributes": {
+          "type": "boolean"
+        },
+        "disableSignin": {
+          "type": "boolean"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "enableAutoSignin": {
+          "type": "boolean"
+        },
+        "enableCodeSignin": {
+          "type": "boolean"
+        },
+        "enableExclusiveSignin": {
+          "type": "boolean"
+        },
+        "enableLinkWithEmail": {
+          "type": "boolean"
+        },
+        "enablePassword": {
+          "type": "boolean"
+        },
+        "enableSamlAssertionSignature": {
+          "type": "boolean"
+        },
+        "enableSamlC14n10": {
+          "type": "boolean"
+        },
+        "enableSamlCompress": {
+          "type": "boolean"
+        },
+        "enableSamlPostBinding": {
+          "type": "boolean"
+        },
+        "enableSignUp": {
+          "type": "boolean"
+        },
+        "enableSigninSession": {
+          "type": "boolean"
+        },
+        "enableWebAuthn": {
+          "type": "boolean"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "expireInHours": {
+          "type": "number"
+        },
+        "failedSigninFrozenTime": {
+          "type": "integer"
+        },
+        "failedSigninLimit": {
+          "type": "integer"
+        },
+        "favicon": {
+          "type": "string"
+        },
+        "footerHtml": {
+          "type": "string"
+        },
+        "forcedRedirectOrigin": {
+          "type": "string"
+        },
+        "forgetUrl": {
+          "type": "string"
+        },
+        "formBackgroundUrl": {
+          "type": "string"
+        },
+        "formBackgroundUrlMobile": {
+          "type": "string"
+        },
+        "formCss": {
+          "type": "string"
+        },
+        "formCssMobile": {
+          "type": "string"
+        },
+        "formOffset": {
+          "type": "integer"
+        },
+        "formSideHtml": {
+          "type": "string"
+        },
+        "grantTypes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "headerHtml": {
+          "type": "string"
+        },
+        "homepageUrl": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "ipRestriction": {
+          "type": "string"
+        },
+        "ipWhitelist": {
+          "type": "string"
+        },
+        "isShared": {
+          "type": "boolean"
+        },
+        "logo": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer"
+        },
+        "orgChoiceMode": {
+          "type": "string"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "organizationObj": {
+          "$ref": "#/$defs/Organization"
+        },
+        "otherDomains": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "providers": {
+          "items": {
+            "$ref": "#/$defs/ProviderItem"
+          },
+          "type": "array"
+        },
+        "redirectUris": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "refreshExpireInHours": {
+          "type": "number"
+        },
+        "samlAttributes": {
+          "items": {
+            "$ref": "#/$defs/SamlItem"
+          },
+          "type": "array"
+        },
+        "samlHashAlgorithm": {
+          "type": "string"
+        },
+        "samlReplyUrl": {
+          "type": "string"
+        },
+        "scopes": {
+          "items": {
+            "$ref": "#/$defs/ScopeItem"
+          },
+          "type": "array"
+        },
+        "signinHtml": {
+          "type": "string"
+        },
+        "signinItems": {
+          "items": {
+            "$ref": "#/$defs/SigninItem"
+          },
+          "type": "array"
+        },
+        "signinMethods": {
+          "items": {
+            "$ref": "#/$defs/SigninMethod"
+          },
+          "type": "array"
+        },
+        "signinUrl": {
+          "type": "string"
+        },
+        "signupHtml": {
+          "type": "string"
+        },
+        "signupItems": {
+          "items": {
+            "$ref": "#/$defs/SignupItem"
+          },
+          "type": "array"
+        },
+        "signupUrl": {
+          "type": "string"
+        },
+        "sslCert": {
+          "type": "string"
+        },
+        "sslMode": {
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "termsOfUse": {
+          "type": "string"
+        },
+        "themeData": {
+          "$ref": "#/$defs/ThemeData"
+        },
+        "title": {
+          "type": "string"
+        },
+        "tokenAttributes": {
+          "items": {
+            "$ref": "#/$defs/JwtItem"
+          },
+          "type": "array"
+        },
+        "tokenFields": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tokenFormat": {
+          "type": "string"
+        },
+        "tokenSigningMethod": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "upstreamHost": {
+          "type": "string"
+        },
+        "useEmailAsSamlNameId": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_iam_applications"
+  },
+  {
+    "description": "Removes an application. Anyone mid-sign-in through it is\nturned away and its client credentials stop working, so retire the integration\nbefore deleting it.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "post_v1_iam_applications_delete"
+  },
+  {
+    "description": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings.",
+    "inputSchema": {
+      "$defs": {
+        "AccountItem": {
+          "properties": {
+            "modifyRule": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "regex": {
+              "type": "string"
+            },
+            "tab": {
+              "type": "string"
+            },
+            "viewRule": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "Cert": {
+          "properties": {
+            "accessKey": {
+              "type": "string"
+            },
+            "accessSecret": {
+              "type": "string"
+            },
+            "account": {
+              "type": "string"
+            },
+            "bitSize": {
+              "type": "integer"
+            },
+            "certificate": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "createdTime": {
+              "type": "string"
+            },
+            "cryptoAlgorithm": {
+              "type": "string"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "domainExpireTime": {
+              "type": "string"
+            },
+            "expireInYears": {
+              "type": "integer"
+            },
+            "expireTime": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "privateKey": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "JwtItem": {
+          "properties": {
+            "category": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "MfaItem": {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "rule": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "Organization": {
+          "properties": {
+            "accountItems": {
+              "items": {
+                "$ref": "#/$defs/AccountItem"
+              },
+              "type": "array"
+            },
+            "accountMenu": {
+              "type": "string"
+            },
+            "balanceCredit": {
+              "type": "number"
+            },
+            "balanceCurrency": {
+              "type": "string"
+            },
+            "countryCodes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "createdAt": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "createdTime": {
+              "type": "string"
+            },
+            "dcrPolicy": {
+              "type": "string"
+            },
+            "defaultApplication": {
+              "type": "string"
+            },
+            "defaultAvatar": {
+              "type": "string"
+            },
+            "defaultPassword": {
+              "type": "string"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "disableSignin": {
+              "type": "boolean"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "enableSoftDeletion": {
+              "type": "boolean"
+            },
+            "enableTour": {
+              "type": "boolean"
+            },
+            "failedSigninFrozenTime": {
+              "type": "integer"
+            },
+            "failedSigninLimit": {
+              "description": "Per-organization signin throttle. Zero means \"inherit the application\ndefault\"; a non-zero value overrides it. Safe bounds are clamped by the\nresource service before persistence.",
+              "type": "integer"
+            },
+            "favicon": {
+              "type": "string"
+            },
+            "founder": {
+              "description": "Founder is the stable storage id of the identity that provisioned this org\n(self-service onboarding). It is the resume token that makes provisioning\nconverge on a backend where each write autocommits independently (no\ntransaction rollback): after a partial failure that created the org but did\nnot move the founder in, a retry recognises the org as the founder's own and\ncompletes it, instead of refusing it as \"already taken\". It also fences the\norg to ONE tenant — a different identity can never complete or join it.",
+              "type": "string"
+            },
+            "hasPrivilegeConsent": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "initScore": {
+              "type": "integer"
+            },
+            "ipRestriction": {
+              "type": "string"
+            },
+            "ipWhitelist": {
+              "type": "string"
+            },
+            "isPersonal": {
+              "type": "boolean"
+            },
+            "isProfilePublic": {
+              "type": "boolean"
+            },
+            "kerberosKdcHost": {
+              "type": "string"
+            },
+            "kerberosKeytab": {
+              "type": "string"
+            },
+            "kerberosRealm": {
+              "type": "string"
+            },
+            "kerberosServiceName": {
+              "type": "string"
+            },
+            "languages": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "ldapAttributes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "logo": {
+              "type": "string"
+            },
+            "logoDark": {
+              "type": "string"
+            },
+            "masterPassword": {
+              "type": "string"
+            },
+            "masterVerificationCode": {
+              "type": "string"
+            },
+            "mfaItems": {
+              "items": {
+                "$ref": "#/$defs/MfaItem"
+              },
+              "type": "array"
+            },
+            "mfaRememberInHours": {
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            },
+            "navItems": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "orgBalance": {
+              "description": "Balance fields are read-only mirrors; authoritative balances live in\nCommerce (billing.hanzo.ai). Carried for field-complete v1 parity.",
+              "type": "number"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "passwordExpireDays": {
+              "type": "integer"
+            },
+            "passwordObfuscatorKey": {
+              "type": "string"
+            },
+            "passwordObfuscatorType": {
+              "type": "string"
+            },
+            "passwordOptions": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "passwordSalt": {
+              "type": "string"
+            },
+            "passwordType": {
+              "type": "string"
+            },
+            "tags": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "themeData": {
+              "$ref": "#/$defs/ThemeData"
+            },
+            "updatedAt": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "useEmailAsUsername": {
+              "type": "boolean"
+            },
+            "usePermanentAvatar": {
+              "type": "boolean"
+            },
+            "userBalance": {
+              "type": "number"
+            },
+            "userNavItems": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "userTypes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "websiteUrl": {
+              "type": "string"
+            },
+            "widgetItems": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "Provider": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "bucket": {
+              "type": "string"
+            },
+            "category": {
+              "type": "string"
+            },
+            "cert": {
+              "type": "string"
+            },
+            "clientId": {
+              "type": "string"
+            },
+            "clientId2": {
+              "type": "string"
+            },
+            "clientSecret": {
+              "type": "string"
+            },
+            "clientSecret2": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "createdTime": {
+              "type": "string"
+            },
+            "customAuthUrl": {
+              "type": "string"
+            },
+            "customLogo": {
+              "type": "string"
+            },
+            "customTokenUrl": {
+              "type": "string"
+            },
+            "customUserInfoUrl": {
+              "type": "string"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "disableSsl": {
+              "type": "boolean"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "domain": {
+              "type": "string"
+            },
+            "emailRegex": {
+              "type": "string"
+            },
+            "enablePkce": {
+              "type": "boolean"
+            },
+            "enableProxy": {
+              "type": "boolean"
+            },
+            "enableSignAuthnRequest": {
+              "type": "boolean"
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "host": {
+              "type": "string"
+            },
+            "httpHeaders": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "id": {
+              "type": "string"
+            },
+            "idP": {
+              "type": "string"
+            },
+            "intranetEndpoint": {
+              "type": "string"
+            },
+            "issuerUrl": {
+              "type": "string"
+            },
+            "metadata": {
+              "type": "string"
+            },
+            "method": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "pathPrefix": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer"
+            },
+            "providerUrl": {
+              "type": "string"
+            },
+            "receiver": {
+              "type": "string"
+            },
+            "regionId": {
+              "type": "string"
+            },
+            "scopes": {
+              "type": "string"
+            },
+            "signName": {
+              "type": "string"
+            },
+            "sslMode": {
+              "type": "string"
+            },
+            "subType": {
+              "type": "string"
+            },
+            "templateCode": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "userMapping": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "ProviderItem": {
+          "properties": {
+            "bindingRule": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "canSignIn": {
+              "type": "boolean"
+            },
+            "canSignUp": {
+              "type": "boolean"
+            },
+            "canUnlink": {
+              "type": "boolean"
+            },
+            "countryCodes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "prompted": {
+              "type": "boolean"
+            },
+            "provider": {
+              "$ref": "#/$defs/Provider"
+            },
+            "rule": {
+              "type": "string"
+            },
+            "signupGroup": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "SamlItem": {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "nameFormat": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "ScopeDescription": {
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "ScopeItem": {
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "tools": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "SigninItem": {
+          "properties": {
+            "customCss": {
+              "type": "string"
+            },
+            "isCustom": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "placeholder": {
+              "type": "string"
+            },
+            "rule": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "SigninMethod": {
+          "properties": {
+            "displayName": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "rule": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "SignupItem": {
+          "properties": {
+            "customCss": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "options": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "placeholder": {
+              "type": "string"
+            },
+            "prompted": {
+              "type": "boolean"
+            },
+            "regex": {
+              "type": "string"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "rule": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "ThemeData": {
+          "properties": {
+            "borderRadius": {
+              "type": "integer"
+            },
+            "colorPrimary": {
+              "type": "string"
+            },
+            "isCompact": {
+              "type": "boolean"
+            },
+            "isEnabled": {
+              "type": "boolean"
+            },
+            "themeType": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "affiliationUrl": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "cert": {
+          "type": "string"
+        },
+        "certObj": {
+          "$ref": "#/$defs/Cert"
+        },
+        "certPublicKey": {
+          "type": "string"
+        },
+        "clientCert": {
+          "type": "string"
+        },
+        "clientId": {
+          "description": "ClientId is the OAuth2/OIDC client identifier and the GLOBAL key every\nconfidential-client resolver authenticates against (store.GetApplicationByClientId,\nthe mint gates, Basic auth). It MUST be globally unique across ALL owners — a\ncollision would let one app shadow another at that key. This store persists each\nentity as a JSON document in a shared table, so there is no per-field column to\ncarry a DB UNIQUE index; uniqueness is enforced at the write in\napplications.Create/Update (ensureClientIdUnique), exactly as the (owner,name)\nnatural key is, and store.GetApplicationByClientId resolves admin-preferring as\ndefense-in-depth.",
+          "type": "string"
+        },
+        "clientSecret": {
+          "type": "string"
+        },
+        "codeResendTimeout": {
+          "type": "integer"
+        },
+        "cookieExpireInHours": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "createdTime": {
+          "type": "string"
+        },
+        "customScopes": {
+          "items": {
+            "$ref": "#/$defs/ScopeDescription"
+          },
+          "type": "array"
+        },
+        "defaultGroup": {
+          "type": "string"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "disableSamlAttributes": {
+          "type": "boolean"
+        },
+        "disableSignin": {
+          "type": "boolean"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "enableAutoSignin": {
+          "type": "boolean"
+        },
+        "enableCodeSignin": {
+          "type": "boolean"
+        },
+        "enableExclusiveSignin": {
+          "type": "boolean"
+        },
+        "enableLinkWithEmail": {
+          "type": "boolean"
+        },
+        "enablePassword": {
+          "type": "boolean"
+        },
+        "enableSamlAssertionSignature": {
+          "type": "boolean"
+        },
+        "enableSamlC14n10": {
+          "type": "boolean"
+        },
+        "enableSamlCompress": {
+          "type": "boolean"
+        },
+        "enableSamlPostBinding": {
+          "type": "boolean"
+        },
+        "enableSignUp": {
+          "type": "boolean"
+        },
+        "enableSigninSession": {
+          "type": "boolean"
+        },
+        "enableWebAuthn": {
+          "type": "boolean"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "expireInHours": {
+          "type": "number"
+        },
+        "failedSigninFrozenTime": {
+          "type": "integer"
+        },
+        "failedSigninLimit": {
+          "type": "integer"
+        },
+        "favicon": {
+          "type": "string"
+        },
+        "footerHtml": {
+          "type": "string"
+        },
+        "forcedRedirectOrigin": {
+          "type": "string"
+        },
+        "forgetUrl": {
+          "type": "string"
+        },
+        "formBackgroundUrl": {
+          "type": "string"
+        },
+        "formBackgroundUrlMobile": {
+          "type": "string"
+        },
+        "formCss": {
+          "type": "string"
+        },
+        "formCssMobile": {
+          "type": "string"
+        },
+        "formOffset": {
+          "type": "integer"
+        },
+        "formSideHtml": {
+          "type": "string"
+        },
+        "grantTypes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "headerHtml": {
+          "type": "string"
+        },
+        "homepageUrl": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "ipRestriction": {
+          "type": "string"
+        },
+        "ipWhitelist": {
+          "type": "string"
+        },
+        "isShared": {
+          "type": "boolean"
+        },
+        "logo": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer"
+        },
+        "orgChoiceMode": {
+          "type": "string"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "organizationObj": {
+          "$ref": "#/$defs/Organization"
+        },
+        "otherDomains": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "providers": {
+          "items": {
+            "$ref": "#/$defs/ProviderItem"
+          },
+          "type": "array"
+        },
+        "redirectUris": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "refreshExpireInHours": {
+          "type": "number"
+        },
+        "samlAttributes": {
+          "items": {
+            "$ref": "#/$defs/SamlItem"
+          },
+          "type": "array"
+        },
+        "samlHashAlgorithm": {
+          "type": "string"
+        },
+        "samlReplyUrl": {
+          "type": "string"
+        },
+        "scopes": {
+          "items": {
+            "$ref": "#/$defs/ScopeItem"
+          },
+          "type": "array"
+        },
+        "signinHtml": {
+          "type": "string"
+        },
+        "signinItems": {
+          "items": {
+            "$ref": "#/$defs/SigninItem"
+          },
+          "type": "array"
+        },
+        "signinMethods": {
+          "items": {
+            "$ref": "#/$defs/SigninMethod"
+          },
+          "type": "array"
+        },
+        "signinUrl": {
+          "type": "string"
+        },
+        "signupHtml": {
+          "type": "string"
+        },
+        "signupItems": {
+          "items": {
+            "$ref": "#/$defs/SignupItem"
+          },
+          "type": "array"
+        },
+        "signupUrl": {
+          "type": "string"
+        },
+        "sslCert": {
+          "type": "string"
+        },
+        "sslMode": {
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "termsOfUse": {
+          "type": "string"
+        },
+        "themeData": {
+          "$ref": "#/$defs/ThemeData"
+        },
+        "title": {
+          "type": "string"
+        },
+        "tokenAttributes": {
+          "items": {
+            "$ref": "#/$defs/JwtItem"
+          },
+          "type": "array"
+        },
+        "tokenFields": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tokenFormat": {
+          "type": "string"
+        },
+        "tokenSigningMethod": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "upstreamHost": {
+          "type": "string"
+        },
+        "useEmailAsSamlNameId": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_iam_applications_update"
+  },
+  {
+    "description": "Records an audit entry, so activity from your own systems lands in the\nsame trail as everything the Hanzo Cloud records for you.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "clientIp": {
+          "type": "string"
+        },
+        "createdTime": {
+          "type": "string"
+        },
+        "isTriggered": {
+          "type": "boolean"
+        },
+        "language": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "object": {
+          "type": "string"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "requestUri": {
+          "type": "string"
+        },
+        "response": {
+          "type": "string"
+        },
+        "statusCode": {
+          "type": "integer"
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_iam_audit-logs"
+  },
+  {
+    "description": "Removes an audit entry. Retention policy is normally what should expire\na trail; deleting by hand leaves a gap a reviewer will notice.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_iam_audit-logs_delete"
+  },
+  {
+    "description": "Returns one audit entry in full: the action, the person or key behind it,\nand the request it came in on.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_iam_audit-logs_get"
+  },
+  {
+    "description": "Corrects an audit entry. The trail is append-only in normal operation\nand nothing in the Hanzo Cloud rewrites it — this exists for an administrator\nto correct an entry their own systems recorded wrongly.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "clientIp": {
+          "type": "string"
+        },
+        "createdTime": {
+          "type": "string"
+        },
+        "isTriggered": {
+          "type": "boolean"
+        },
+        "language": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "object": {
+          "type": "string"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "requestUri": {
+          "type": "string"
+        },
+        "response": {
+          "type": "string"
+        },
+        "statusCode": {
+          "type": "integer"
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_iam_audit-logs_update"
+  },
+  {
+    "description": "Adds a signing certificate your applications can verify tokens against\n— the call you make to bring your own key, or to stage the next one before a\nrotation. A name already used in your organization is refused.",
+    "inputSchema": {
+      "properties": {
+        "accessKey": {
+          "type": "string"
+        },
+        "accessSecret": {
+          "type": "string"
+        },
+        "account": {
+          "type": "string"
+        },
+        "bitSize": {
+          "type": "integer"
+        },
+        "certificate": {
+          "type": "string"
+        },
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "createdTime": {
+          "type": "string"
+        },
+        "cryptoAlgorithm": {
+          "type": "string"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "domainExpireTime": {
+          "type": "string"
+        },
+        "expireInYears": {
+          "type": "integer"
+        },
+        "expireTime": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "privateKey": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_iam_certs"
+  },
+  {
+    "description": "Removes a signing certificate. Tokens signed with it can no longer be\nverified, so retire it only once nothing is still presenting them.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_iam_certs_delete"
+  },
+  {
+    "description": "Returns one signing certificate — its algorithm, its validity window and\nits public half. The private key is masked.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_iam_certs_get"
+  },
+  {
+    "description": "Changes a signing certificate's settings. What it is called does not\nchange, and neither does when it was added.",
+    "inputSchema": {
+      "properties": {
+        "accessKey": {
+          "type": "string"
+        },
+        "accessSecret": {
+          "type": "string"
+        },
+        "account": {
+          "type": "string"
+        },
+        "bitSize": {
+          "type": "integer"
+        },
+        "certificate": {
+          "type": "string"
+        },
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "createdTime": {
+          "type": "string"
+        },
+        "cryptoAlgorithm": {
+          "type": "string"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "domainExpireTime": {
+          "type": "string"
+        },
+        "expireInYears": {
+          "type": "integer"
+        },
+        "expireTime": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "privateKey": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_iam_certs_update"
+  },
+  {
+    "description": "Deletes an application. Anyone mid-sign-in through it is turned away and\nits client credentials stop working, so retire the integration first.\n\nThe older spelling of DELETE /v1/iam/application.",
+    "inputSchema": {
+      "$defs": {
+        "AccountItem": {
+          "properties": {
+            "modifyRule": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "regex": {
+              "type": "string"
+            },
+            "tab": {
+              "type": "string"
+            },
+            "viewRule": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "Cert": {
+          "properties": {
+            "accessKey": {
+              "type": "string"
+            },
+            "accessSecret": {
+              "type": "string"
+            },
+            "account": {
+              "type": "string"
+            },
+            "bitSize": {
+              "type": "integer"
+            },
+            "certificate": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "createdTime": {
+              "type": "string"
+            },
+            "cryptoAlgorithm": {
+              "type": "string"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "domainExpireTime": {
+              "type": "string"
+            },
+            "expireInYears": {
+              "type": "integer"
+            },
+            "expireTime": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "privateKey": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "JwtItem": {
+          "properties": {
+            "category": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "MfaItem": {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "rule": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "Organization": {
+          "properties": {
+            "accountItems": {
+              "items": {
+                "$ref": "#/$defs/AccountItem"
+              },
+              "type": "array"
+            },
+            "accountMenu": {
+              "type": "string"
+            },
+            "balanceCredit": {
+              "type": "number"
+            },
+            "balanceCurrency": {
+              "type": "string"
+            },
+            "countryCodes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "createdAt": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "createdTime": {
+              "type": "string"
+            },
+            "dcrPolicy": {
+              "type": "string"
+            },
+            "defaultApplication": {
+              "type": "string"
+            },
+            "defaultAvatar": {
+              "type": "string"
+            },
+            "defaultPassword": {
+              "type": "string"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "disableSignin": {
+              "type": "boolean"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "enableSoftDeletion": {
+              "type": "boolean"
+            },
+            "enableTour": {
+              "type": "boolean"
+            },
+            "failedSigninFrozenTime": {
+              "type": "integer"
+            },
+            "failedSigninLimit": {
+              "description": "Per-organization signin throttle. Zero means \"inherit the application\ndefault\"; a non-zero value overrides it. Safe bounds are clamped by the\nresource service before persistence.",
+              "type": "integer"
+            },
+            "favicon": {
+              "type": "string"
+            },
+            "founder": {
+              "description": "Founder is the stable storage id of the identity that provisioned this org\n(self-service onboarding). It is the resume token that makes provisioning\nconverge on a backend where each write autocommits independently (no\ntransaction rollback): after a partial failure that created the org but did\nnot move the founder in, a retry recognises the org as the founder's own and\ncompletes it, instead of refusing it as \"already taken\". It also fences the\norg to ONE tenant — a different identity can never complete or join it.",
+              "type": "string"
+            },
+            "hasPrivilegeConsent": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "initScore": {
+              "type": "integer"
+            },
+            "ipRestriction": {
+              "type": "string"
+            },
+            "ipWhitelist": {
+              "type": "string"
+            },
+            "isPersonal": {
+              "type": "boolean"
+            },
+            "isProfilePublic": {
+              "type": "boolean"
+            },
+            "kerberosKdcHost": {
+              "type": "string"
+            },
+            "kerberosKeytab": {
+              "type": "string"
+            },
+            "kerberosRealm": {
+              "type": "string"
+            },
+            "kerberosServiceName": {
+              "type": "string"
+            },
+            "languages": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "ldapAttributes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "logo": {
+              "type": "string"
+            },
+            "logoDark": {
+              "type": "string"
+            },
+            "masterPassword": {
+              "type": "string"
+            },
+            "masterVerificationCode": {
+              "type": "string"
+            },
+            "mfaItems": {
+              "items": {
+                "$ref": "#/$defs/MfaItem"
+              },
+              "type": "array"
+            },
+            "mfaRememberInHours": {
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            },
+            "navItems": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "orgBalance": {
+              "description": "Balance fields are read-only mirrors; authoritative balances live in\nCommerce (billing.hanzo.ai). Carried for field-complete v1 parity.",
+              "type": "number"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "passwordExpireDays": {
+              "type": "integer"
+            },
+            "passwordObfuscatorKey": {
+              "type": "string"
+            },
+            "passwordObfuscatorType": {
+              "type": "string"
+            },
+            "passwordOptions": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "passwordSalt": {
+              "type": "string"
+            },
+            "passwordType": {
+              "type": "string"
+            },
+            "tags": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "themeData": {
+              "$ref": "#/$defs/ThemeData"
+            },
+            "updatedAt": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "useEmailAsUsername": {
+              "type": "boolean"
+            },
+            "usePermanentAvatar": {
+              "type": "boolean"
+            },
+            "userBalance": {
+              "type": "number"
+            },
+            "userNavItems": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "userTypes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "websiteUrl": {
+              "type": "string"
+            },
+            "widgetItems": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "Provider": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "bucket": {
+              "type": "string"
+            },
+            "category": {
+              "type": "string"
+            },
+            "cert": {
+              "type": "string"
+            },
+            "clientId": {
+              "type": "string"
+            },
+            "clientId2": {
+              "type": "string"
+            },
+            "clientSecret": {
+              "type": "string"
+            },
+            "clientSecret2": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "createdTime": {
+              "type": "string"
+            },
+            "customAuthUrl": {
+              "type": "string"
+            },
+            "customLogo": {
+              "type": "string"
+            },
+            "customTokenUrl": {
+              "type": "string"
+            },
+            "customUserInfoUrl": {
+              "type": "string"
+            },
+            "deleted": {
+              "type": "boolean"
+            },
+            "disableSsl": {
+              "type": "boolean"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "domain": {
+              "type": "string"
+            },
+            "emailRegex": {
+              "type": "string"
+            },
+            "enablePkce": {
+              "type": "boolean"
+            },
+            "enableProxy": {
+              "type": "boolean"
+            },
+            "enableSignAuthnRequest": {
+              "type": "boolean"
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "host": {
+              "type": "string"
+            },
+            "httpHeaders": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "id": {
+              "type": "string"
+            },
+            "idP": {
+              "type": "string"
+            },
+            "intranetEndpoint": {
+              "type": "string"
+            },
+            "issuerUrl": {
+              "type": "string"
+            },
+            "metadata": {
+              "type": "string"
+            },
+            "method": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "pathPrefix": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer"
+            },
+            "providerUrl": {
+              "type": "string"
+            },
+            "receiver": {
+              "type": "string"
+            },
+            "regionId": {
+              "type": "string"
+            },
+            "scopes": {
+              "type": "string"
+            },
+            "signName": {
+              "type": "string"
+            },
+            "sslMode": {
+              "type": "string"
+            },
+            "subType": {
+              "type": "string"
+            },
+            "templateCode": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "userMapping": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "ProviderItem": {
+          "properties": {
+            "bindingRule": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "canSignIn": {
+              "type": "boolean"
+            },
+            "canSignUp": {
+              "type": "boolean"
+            },
+            "canUnlink": {
+              "type": "boolean"
+            },
+            "countryCodes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "prompted": {
+              "type": "boolean"
+            },
+            "provider": {
+              "$ref": "#/$defs/Provider"
+            },
+            "rule": {
+              "type": "string"
+            },
+            "signupGroup": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "SamlItem": {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "nameFormat": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "ScopeDescription": {
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "ScopeItem": {
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "tools": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "SigninItem": {
+          "properties": {
+            "customCss": {
+              "type": "string"
+            },
+            "isCustom": {
+              "type": "boolean"
+            },
+            "label": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "placeholder": {
+              "type": "string"
+            },
+            "rule": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "SigninMethod": {
+          "properties": {
+            "displayName": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "rule": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "SignupItem": {
+          "properties": {
+            "customCss": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "options": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "placeholder": {
+              "type": "string"
+            },
+            "prompted": {
+              "type": "boolean"
+            },
+            "regex": {
+              "type": "string"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "rule": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "ThemeData": {
+          "properties": {
+            "borderRadius": {
+              "type": "integer"
+            },
+            "colorPrimary": {
+              "type": "string"
+            },
+            "isCompact": {
+              "type": "boolean"
+            },
+            "isEnabled": {
+              "type": "boolean"
+            },
+            "themeType": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "affiliationUrl": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "cert": {
+          "type": "string"
+        },
+        "certObj": {
+          "$ref": "#/$defs/Cert"
+        },
+        "certPublicKey": {
+          "type": "string"
+        },
+        "clientCert": {
+          "type": "string"
+        },
+        "clientId": {
+          "description": "ClientId is the OAuth2/OIDC client identifier and the GLOBAL key every\nconfidential-client resolver authenticates against (store.GetApplicationByClientId,\nthe mint gates, Basic auth). It MUST be globally unique across ALL owners — a\ncollision would let one app shadow another at that key. This store persists each\nentity as a JSON document in a shared table, so there is no per-field column to\ncarry a DB UNIQUE index; uniqueness is enforced at the write in\napplications.Create/Update (ensureClientIdUnique), exactly as the (owner,name)\nnatural key is, and store.GetApplicationByClientId resolves admin-preferring as\ndefense-in-depth.",
           "type": "string"
         },
         "clientSecret": {
@@ -5962,7 +8050,7 @@
     "name": "post_v1_iam_delete-application"
   },
   {
-    "description": "Delete an organization (legacy verb)",
+    "description": "Deletes an organization and everything named inside it — its users,\napplications, roles, projects and workspaces. There is no undo, and every\nsession issued under it stops working.\n\nThe older spelling of POST /v1/iam/organizations/delete.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -5977,7 +8065,7 @@
     "name": "post_v1_iam_delete-organization"
   },
   {
-    "description": "Delete a project (legacy verb)",
+    "description": "Deletes a project. The people and roles in your organization are unchanged;\nwhat goes is the scope itself, so anything addressed by it must move first.\n\nThe older spelling of POST /v1/iam/projects/delete.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -5992,7 +8080,7 @@
     "name": "post_v1_iam_delete-project"
   },
   {
-    "description": "Delete a provider (legacy verb)",
+    "description": "Removes a provider. Sign-in through it stops for every application that\nused it, so detach those applications first if they have no other method.\n\nThe older spelling of POST /v1/iam/providers/delete.",
     "inputSchema": {
       "properties": {
         "appId": {
@@ -6153,7 +8241,7 @@
     "name": "post_v1_iam_delete-provider"
   },
   {
-    "description": "Delete a role (legacy verb)",
+    "description": "Deletes a role. Everyone in it loses the access it carried; their accounts\nand any other roles they hold are untouched.\n\nThe older spelling of POST /v1/iam/roles/delete.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -6168,7 +8256,7 @@
     "name": "post_v1_iam_delete-role"
   },
   {
-    "description": "Delete a user (legacy verb)",
+    "description": "Removes a person from your organization. Their sessions stop working and\nthe account is gone, not suspended — to keep the record and only stop\nsign-in, update the user instead.\n\nThe older spelling of POST /v1/iam/users/delete.",
     "inputSchema": {
       "$defs": {
         "Address": {
@@ -6332,6 +8420,7 @@
               "type": "string"
             },
             "createdTime": {
+              "description": "Descriptive metadata.",
               "type": "string"
             },
             "deleted": {
@@ -6365,12 +8454,14 @@
               "type": "boolean"
             },
             "model": {
+              "description": "Authorization model, targets, and decision. AuthzModel carries the v1\n`model` column (the named authz model); it is not the Go identifier\n`Model` because that name is taken by the embedded orm.Model[Permission]\nmixin. The HTTP contract is unchanged — json:\"model\".",
               "type": "string"
             },
             "name": {
               "type": "string"
             },
             "owner": {
+              "description": "Identity — the (owner, name) natural key.",
               "type": "string"
             },
             "resourceType": {
@@ -6392,6 +8483,7 @@
               "type": "string"
             },
             "submitter": {
+              "description": "Submission / approval workflow.",
               "type": "string"
             },
             "updatedAt": {
@@ -6399,6 +8491,7 @@
               "type": "string"
             },
             "users": {
+              "description": "Subjects the grant is evaluated for.",
               "items": {
                 "type": "string"
               },
@@ -7082,7 +9175,7 @@
     "name": "post_v1_iam_delete-user"
   },
   {
-    "description": "Delete a workspace (legacy verb)",
+    "description": "Deletes a workspace. The people and roles in your organization are\nunchanged; what goes is the scope itself.\n\nThe older spelling of POST /v1/iam/workspaces/delete.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -7097,7 +9190,7 @@
     "name": "post_v1_iam_delete-workspace"
   },
   {
-    "description": "Create an invitation",
+    "description": "Issues an invitation to join your organization — the code or link a new\nmember redeems, with the role they arrive holding and the date it stops\nworking. A name already used in the organization is refused.",
     "inputSchema": {
       "properties": {
         "application": {
@@ -7154,7 +9247,7 @@
     "name": "post_v1_iam_invitations"
   },
   {
-    "description": "Delete an invitation",
+    "description": "Withdraws an invitation. It stops being redeemable at once; anyone who\nalready joined through it keeps their account.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -7169,7 +9262,7 @@
     "name": "post_v1_iam_invitations_delete"
   },
   {
-    "description": "Get one invitation",
+    "description": "Returns one invitation: who it is for, what it grants on acceptance, and\nwhen it expires.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -7184,7 +9277,7 @@
     "name": "post_v1_iam_invitations_get"
   },
   {
-    "description": "Update an invitation",
+    "description": "Changes an invitation's terms — the role it grants, how many may redeem\nit, or when it expires. What it is called does not change.",
     "inputSchema": {
       "properties": {
         "application": {
@@ -7241,10 +9334,11 @@
     "name": "post_v1_iam_invitations_update"
   },
   {
-    "description": "Create a key",
+    "description": "Issues an API key. A standard key comes back as a publishable half you\nmay ship in client code and a secret half you must not — the secret is shown\nonce, at creation, and cannot be retrieved afterwards. A publish-scoped key is\nissued with the publishable half only, so there is no secret to leak.\n\nA name already used in your organization is refused rather than reissued, so\ncreating twice never silently invalidates a key that is in production.",
     "inputSchema": {
       "properties": {
         "accessKey": {
+          "description": "AccessKey (pk-*) is the publishable identifier and lookup index;\nAccessSecret (sk-*) is the confidential secret.",
           "type": "string"
         },
         "accessSecret": {
@@ -7258,15 +9352,18 @@
           "type": "string"
         },
         "createdTime": {
+          "description": "CreatedTime and UpdatedTime are RFC3339 audit stamps carried as strings\nfor byte-parity with the v1 row (orm.Model separately tracks CreatedAt /\nUpdatedAt as time.Time for the store's own lifecycle).",
           "type": "string"
         },
         "deleted": {
           "type": "boolean"
         },
         "displayName": {
+          "description": "DisplayName is the human-facing label.",
           "type": "string"
         },
         "expireTime": {
+          "description": "ExpireTime is when the key stops being honored (empty = never). State is\nthe lifecycle flag (\"Active\", \"test\", …); \"test\" mints test-env\ncredentials instead of live ones.",
           "type": "string"
         },
         "id": {
@@ -7279,15 +9376,18 @@
           "type": "string"
         },
         "owner": {
+          "description": "Owner is the tenant that holds the key; Name is unique within Owner.",
           "type": "string"
         },
         "scope": {
+          "description": "Scope is the key's ACCESS CLASS, orthogonal to Type (which names the bound\nprincipal). Empty (the default, \"secret\") is a full key: a pk- publishable\nhalf AND a confidential sk- half, the sk- authenticating a server-side reader.\nKeyScopePublish is a WRITE-ONLY publishable key — a pk- half only, no secret —\nthat resolves to just an ORG (never a principal) at the ingest door and is safe\nto ship in client JS. A missing value on an existing row reads as the default,\nso every pre-Scope key is a secret key unchanged.",
           "type": "string"
         },
         "state": {
           "type": "string"
         },
         "type": {
+          "description": "Type is the scope the key is bound to — \"Organization\", \"Application\",\n\"User\", or \"General\" — and Organization / Application / User name the\nconcrete principal for whichever scope Type selects.",
           "type": "string"
         },
         "updatedAt": {
@@ -7306,7 +9406,7 @@
     "name": "post_v1_iam_keys"
   },
   {
-    "description": "Delete a key",
+    "description": "Revokes an API key. Anything still presenting it stops being authorized at\nonce, so roll the replacement out before you revoke.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -7321,10 +9421,11 @@
     "name": "post_v1_iam_keys_delete"
   },
   {
-    "description": "Update a key",
+    "description": "Changes what a key is called or what it may reach. The credential\nitself is not reissued — the key in your deployment keeps working.",
     "inputSchema": {
       "properties": {
         "accessKey": {
+          "description": "AccessKey (pk-*) is the publishable identifier and lookup index;\nAccessSecret (sk-*) is the confidential secret.",
           "type": "string"
         },
         "accessSecret": {
@@ -7338,15 +9439,18 @@
           "type": "string"
         },
         "createdTime": {
+          "description": "CreatedTime and UpdatedTime are RFC3339 audit stamps carried as strings\nfor byte-parity with the v1 row (orm.Model separately tracks CreatedAt /\nUpdatedAt as time.Time for the store's own lifecycle).",
           "type": "string"
         },
         "deleted": {
           "type": "boolean"
         },
         "displayName": {
+          "description": "DisplayName is the human-facing label.",
           "type": "string"
         },
         "expireTime": {
+          "description": "ExpireTime is when the key stops being honored (empty = never). State is\nthe lifecycle flag (\"Active\", \"test\", …); \"test\" mints test-env\ncredentials instead of live ones.",
           "type": "string"
         },
         "id": {
@@ -7359,15 +9463,18 @@
           "type": "string"
         },
         "owner": {
+          "description": "Owner is the tenant that holds the key; Name is unique within Owner.",
           "type": "string"
         },
         "scope": {
+          "description": "Scope is the key's ACCESS CLASS, orthogonal to Type (which names the bound\nprincipal). Empty (the default, \"secret\") is a full key: a pk- publishable\nhalf AND a confidential sk- half, the sk- authenticating a server-side reader.\nKeyScopePublish is a WRITE-ONLY publishable key — a pk- half only, no secret —\nthat resolves to just an ORG (never a principal) at the ingest door and is safe\nto ship in client JS. A missing value on an existing row reads as the default,\nso every pre-Scope key is a secret key unchanged.",
           "type": "string"
         },
         "state": {
           "type": "string"
         },
         "type": {
+          "description": "Type is the scope the key is bound to — \"Organization\", \"Application\",\n\"User\", or \"General\" — and Organization / Application / User name the\nconcrete principal for whichever scope Type selects.",
           "type": "string"
         },
         "updatedAt": {
@@ -7386,7 +9493,7 @@
     "name": "post_v1_iam_keys_update"
   },
   {
-    "description": "Create a permission",
+    "description": "Grants a permission — the call that gives a person or a role the ability to\ndo something. Adding refuses to overwrite a grant that already exists, so\nwidening an existing one is an update, never an accident.",
     "inputSchema": {
       "properties": {
         "actions": {
@@ -7409,6 +9516,7 @@
           "type": "string"
         },
         "createdTime": {
+          "description": "Descriptive metadata.",
           "type": "string"
         },
         "deleted": {
@@ -7442,12 +9550,14 @@
           "type": "boolean"
         },
         "model": {
+          "description": "Authorization model, targets, and decision. AuthzModel carries the v1\n`model` column (the named authz model); it is not the Go identifier\n`Model` because that name is taken by the embedded orm.Model[Permission]\nmixin. The HTTP contract is unchanged — json:\"model\".",
           "type": "string"
         },
         "name": {
           "type": "string"
         },
         "owner": {
+          "description": "Identity — the (owner, name) natural key.",
           "type": "string"
         },
         "resourceType": {
@@ -7469,6 +9579,7 @@
           "type": "string"
         },
         "submitter": {
+          "description": "Submission / approval workflow.",
           "type": "string"
         },
         "updatedAt": {
@@ -7476,6 +9587,7 @@
           "type": "string"
         },
         "users": {
+          "description": "Subjects the grant is evaluated for.",
           "items": {
             "type": "string"
           },
@@ -7487,7 +9599,7 @@
     "name": "post_v1_iam_permissions"
   },
   {
-    "description": "Delete a permission",
+    "description": "Revokes a permission. Everyone who held access only through it loses\nthat access immediately; grants they hold by another route are untouched.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -7502,7 +9614,7 @@
     "name": "post_v1_iam_permissions_delete"
   },
   {
-    "description": "Update a permission",
+    "description": "Changes who a permission grants to, what it allows, or the resources it\ncovers. Access changes as soon as the write lands. What the permission is\ncalled does not change, and neither does when it was created.",
     "inputSchema": {
       "properties": {
         "actions": {
@@ -7525,6 +9637,7 @@
           "type": "string"
         },
         "createdTime": {
+          "description": "Descriptive metadata.",
           "type": "string"
         },
         "deleted": {
@@ -7558,12 +9671,14 @@
           "type": "boolean"
         },
         "model": {
+          "description": "Authorization model, targets, and decision. AuthzModel carries the v1\n`model` column (the named authz model); it is not the Go identifier\n`Model` because that name is taken by the embedded orm.Model[Permission]\nmixin. The HTTP contract is unchanged — json:\"model\".",
           "type": "string"
         },
         "name": {
           "type": "string"
         },
         "owner": {
+          "description": "Identity — the (owner, name) natural key.",
           "type": "string"
         },
         "resourceType": {
@@ -7585,6 +9700,7 @@
           "type": "string"
         },
         "submitter": {
+          "description": "Submission / approval workflow.",
           "type": "string"
         },
         "updatedAt": {
@@ -7592,6 +9708,7 @@
           "type": "string"
         },
         "users": {
+          "description": "Subjects the grant is evaluated for.",
           "items": {
             "type": "string"
           },
@@ -7603,7 +9720,7 @@
     "name": "post_v1_iam_permissions_update"
   },
   {
-    "description": "Create a project",
+    "description": "Makes a project inside your organization — the scope people pick\nbetween when their work is separated by product or client rather than by team.\nA name already used in the organization is refused.",
     "inputSchema": {
       "properties": {
         "createdTime": {
@@ -7645,7 +9762,7 @@
     "name": "post_v1_iam_projects"
   },
   {
-    "description": "Delete a project",
+    "description": "Removes a project. The people and roles in your organization are\nunchanged; what goes is the scope itself, so move anything addressed by it\nfirst.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -7660,7 +9777,7 @@
     "name": "post_v1_iam_projects_delete"
   },
   {
-    "description": "Get one project",
+    "description": "Returns one project: what it is called and how it is set up.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -7675,7 +9792,7 @@
     "name": "post_v1_iam_projects_get"
   },
   {
-    "description": "Update a project",
+    "description": "Changes a project's settings. What it is called does not change, and\nneither does when it was created.",
     "inputSchema": {
       "properties": {
         "createdTime": {
@@ -7717,7 +9834,7 @@
     "name": "post_v1_iam_projects_update"
   },
   {
-    "description": "Create a role",
+    "description": "Makes a role — a named group of people that permissions are granted to.\nGranting to a role rather than to each person is what keeps access correct as\nyour team changes: add someone to the role and they inherit everything it can\ndo. A name already used in your organization is refused.",
     "inputSchema": {
       "properties": {
         "createdTime": {
@@ -7768,7 +9885,7 @@
     "name": "post_v1_iam_roles"
   },
   {
-    "description": "Delete a role",
+    "description": "Removes a role. Everyone in it loses the access it carried; their\naccounts, and any other role they hold, are untouched.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -7783,7 +9900,7 @@
     "name": "post_v1_iam_roles_delete"
   },
   {
-    "description": "Get one role",
+    "description": "Returns one role: who is in it, and the roles it includes.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -7798,7 +9915,7 @@
     "name": "post_v1_iam_roles_get"
   },
   {
-    "description": "Update a role",
+    "description": "Changes who is in a role, or which roles it includes. Access changes for\neveryone in it as soon as the write lands. What the role is called does not\nchange, and neither does when it was created.",
     "inputSchema": {
       "properties": {
         "createdTime": {
@@ -7849,7 +9966,7 @@
     "name": "post_v1_iam_roles_update"
   },
   {
-    "description": "Update an application (legacy verb)",
+    "description": "Updates one of your applications — its display, its sign-in methods and the\nredirect URIs it is allowed to return to. Which organization and name the\napplication has are fixed when it is created and are not editable here.\n\nA redirect URI you add becomes an allowed sign-in origin, so this is the\ncall that makes login work from a new host.\n\nThe older spelling of PUT /v1/iam/application.",
     "inputSchema": {
       "$defs": {
         "AccountItem": {
@@ -8034,12 +10151,14 @@
               "type": "integer"
             },
             "failedSigninLimit": {
+              "description": "Per-organization signin throttle. Zero means \"inherit the application\ndefault\"; a non-zero value overrides it. Safe bounds are clamped by the\nresource service before persistence.",
               "type": "integer"
             },
             "favicon": {
               "type": "string"
             },
             "founder": {
+              "description": "Founder is the stable storage id of the identity that provisioned this org\n(self-service onboarding). It is the resume token that makes provisioning\nconverge on a backend where each write autocommits independently (no\ntransaction rollback): after a partial failure that created the org but did\nnot move the founder in, a retry recognises the org as the founder's own and\ncompletes it, instead of refusing it as \"already taken\". It also fences the\norg to ONE tenant — a different identity can never complete or join it.",
               "type": "string"
             },
             "hasPrivilegeConsent": {
@@ -8118,6 +10237,7 @@
               "type": "array"
             },
             "orgBalance": {
+              "description": "Balance fields are read-only mirrors; authoritative balances live in\nCommerce (billing.hanzo.ai). Carried for field-complete v1 parity.",
               "type": "number"
             },
             "owner": {
@@ -8561,6 +10681,7 @@
           "type": "string"
         },
         "clientId": {
+          "description": "ClientId is the OAuth2/OIDC client identifier and the GLOBAL key every\nconfidential-client resolver authenticates against (store.GetApplicationByClientId,\nthe mint gates, Basic auth). It MUST be globally unique across ALL owners — a\ncollision would let one app shadow another at that key. This store persists each\nentity as a JSON document in a shared table, so there is no per-field column to\ncarry a DB UNIQUE index; uniqueness is enforced at the write in\napplications.Create/Update (ensureClientIdUnique), exactly as the (owner,name)\nnatural key is, and store.GetApplicationByClientId resolves admin-preferring as\ndefense-in-depth.",
           "type": "string"
         },
         "clientSecret": {
@@ -8859,7 +10980,7 @@
     "name": "post_v1_iam_update-application"
   },
   {
-    "description": "Update an organization (legacy verb)",
+    "description": "Updates your organization — its display, its default settings and the\nsign-in rules everyone in it inherits.\n\nThe older spelling of POST /v1/iam/organizations/update.",
     "inputSchema": {
       "$defs": {
         "AccountItem": {
@@ -9136,7 +11257,7 @@
     "name": "post_v1_iam_update-organization"
   },
   {
-    "description": "Update a provider (legacy verb)",
+    "description": "Updates a provider's settings or rotates the credentials it holds. The\nchange takes effect on the next sign-in through it — sessions already\nissued are unaffected.\n\nThe older spelling of POST /v1/iam/providers/update.",
     "inputSchema": {
       "properties": {
         "appId": {
@@ -9297,7 +11418,7 @@
     "name": "post_v1_iam_update-provider"
   },
   {
-    "description": "Update a role (legacy verb)",
+    "description": "Updates a role's members or the roles it includes. Access changes for\neveryone in it as soon as the write lands.\n\nThe older spelling of POST /v1/iam/roles/update.",
     "inputSchema": {
       "properties": {
         "createdTime": {
@@ -9348,7 +11469,7 @@
     "name": "post_v1_iam_update-role"
   },
   {
-    "description": "Update a user (legacy verb)",
+    "description": "Updates one of your users' profile, roles or credentials. Send a password\nto reset it; leave it out and the current one stands.\n\nThe older spelling of POST /v1/iam/users/update, with the user's fields at\nthe top level rather than wrapped in {user, password}.",
     "inputSchema": {
       "$defs": {
         "Address": {
@@ -9512,6 +11633,7 @@
               "type": "string"
             },
             "createdTime": {
+              "description": "Descriptive metadata.",
               "type": "string"
             },
             "deleted": {
@@ -9545,12 +11667,14 @@
               "type": "boolean"
             },
             "model": {
+              "description": "Authorization model, targets, and decision. AuthzModel carries the v1\n`model` column (the named authz model); it is not the Go identifier\n`Model` because that name is taken by the embedded orm.Model[Permission]\nmixin. The HTTP contract is unchanged — json:\"model\".",
               "type": "string"
             },
             "name": {
               "type": "string"
             },
             "owner": {
+              "description": "Identity — the (owner, name) natural key.",
               "type": "string"
             },
             "resourceType": {
@@ -9572,6 +11696,7 @@
               "type": "string"
             },
             "submitter": {
+              "description": "Submission / approval workflow.",
               "type": "string"
             },
             "updatedAt": {
@@ -9579,6 +11704,7 @@
               "type": "string"
             },
             "users": {
+              "description": "Subjects the grant is evaluated for.",
               "items": {
                 "type": "string"
               },
@@ -10262,7 +12388,7 @@
     "name": "post_v1_iam_update-user"
   },
   {
-    "description": "Create a user",
+    "description": "Adds a person to your organization. Send a password and it becomes the\none they sign in with; it is hashed before it is stored and never comes back\nin any response.\n\nThe username is checked against the same rule every account in the Hanzo Cloud\nis held to, whichever way it was created — this call, password signup, a social\nsign-in, or SCIM — so a name accepted here works everywhere.\n\nA name already taken in your organization is refused rather than overwritten.",
     "inputSchema": {
       "$defs": {
         "Address": {
@@ -10426,6 +12552,7 @@
               "type": "string"
             },
             "createdTime": {
+              "description": "Descriptive metadata.",
               "type": "string"
             },
             "deleted": {
@@ -10459,12 +12586,14 @@
               "type": "boolean"
             },
             "model": {
+              "description": "Authorization model, targets, and decision. AuthzModel carries the v1\n`model` column (the named authz model); it is not the Go identifier\n`Model` because that name is taken by the embedded orm.Model[Permission]\nmixin. The HTTP contract is unchanged — json:\"model\".",
               "type": "string"
             },
             "name": {
               "type": "string"
             },
             "owner": {
+              "description": "Identity — the (owner, name) natural key.",
               "type": "string"
             },
             "resourceType": {
@@ -10486,6 +12615,7 @@
               "type": "string"
             },
             "submitter": {
+              "description": "Submission / approval workflow.",
               "type": "string"
             },
             "updatedAt": {
@@ -10493,6 +12623,7 @@
               "type": "string"
             },
             "users": {
+              "description": "Subjects the grant is evaluated for.",
               "items": {
                 "type": "string"
               },
@@ -10565,6 +12696,7 @@
         "User": {
           "properties": {
             "accessKey": {
+              "description": "API credentials. AccessSecret / AccessSecretHash / the OAuth tokens are\nbearer material. AccessSecretHash MUST persist (orm stores via JSON; a\njson:\"-\" field is never saved), so it carries a real json tag and the\nhandler's redact() strips it (and AccessSecret + the token fields) before\nresponding.",
               "type": "string"
             },
             "accessSecret": {
@@ -10628,6 +12760,7 @@
               "type": "string"
             },
             "balance": {
+              "description": "Balance mirrors v1 for lossless migration but is authoritative in\nCommerce (billing.hanzo.ai), not here — do not write it from IAM.",
               "type": "number"
             },
             "balanceCredit": {
@@ -10671,6 +12804,7 @@
               "type": "string"
             },
             "createdIp": {
+              "description": "Sign-in provenance.",
               "type": "string"
             },
             "createdTime": {
@@ -10731,6 +12865,7 @@
               "type": "string"
             },
             "displayName": {
+              "description": "Profile.",
               "type": "string"
             },
             "douyin": {
@@ -10779,6 +12914,7 @@
               "type": "string"
             },
             "github": {
+              "description": "Linked federated-identity subjects, one column per connector (v1 parity).",
               "type": "string"
             },
             "gitlab": {
@@ -10806,6 +12942,7 @@
               "type": "string"
             },
             "id": {
+              "description": "Id is the user's STABLE OPAQUE identifier — the value the OIDC `sub` claim\ncarries. It is the v1 the legacy surface per-row UUID (e.g.\n\"e7d7fda0-4c53-4508-9d35-7ec892b7e5d7\"), migrated verbatim so a user's `sub`\nis byte-identical across the cutover: every live session, external reference,\nand the downstream money-path principal keyed on `sub` survive unchanged. A\nuser minted natively in v2 is assigned a fresh UUID here on create, so the\n`sub` is ALWAYS a stable opaque id going forward — never the (Owner, Name)\npair, which is mutable (a rename would otherwise silently reissue identity).\n\nIt is distinct from the embedded orm.Model STORAGE KEY — the value the datastore\nlocks and looks a row up by — which is NOT (Owner, Name) for every row: a MIGRATED\nlegacy row is stamped \"owner/name\" (SetId in the migrator), but a v2-native\nusers.Create'd row is NOT — Create allocates rather than pinning a key, so its\nstorage key is a store-assigned surrogate id (a GenerateID decimal string like\n\"17847909129933610000001\"). (Owner, Name) is therefore the natural/QUERY key\n(unique, indexed), not necessarily the storage key: resolve a row for a locked\nwrite by its REAL key (store.GetUserByName(...).Key().Encode(), which stamps both\nshapes — see internal/oidc updateUser), never by assuming \"owner/name\". This Id is\na first-class, indexed DOMAIN field; its json tag \"id\" dominates the promoted\norm.Model `Id_` (also \"id\") by shallower depth, so the persisted record's \"id\" is\nthis UUID — exactly the v1 shape. A row that carries no Id (a not-yet-assigned\npre-cutover user) falls back to the (Owner, Name) subject at mint; every other\npath resolves `sub`→user by Id.",
               "type": "string"
             },
             "idCard": {
@@ -10839,6 +12976,7 @@
               "type": "boolean"
             },
             "isDefaultAvatar": {
+              "description": "State flags.",
               "type": "boolean"
             },
             "isDeleted": {
@@ -10986,9 +13124,11 @@
               "type": "string"
             },
             "owner": {
+              "description": "Identity / tenancy. (Owner, Name) is the natural key.",
               "type": "string"
             },
             "passwordHash": {
+              "description": "Credential material. PasswordHash is a one-way bcrypt digest and is\nverify-only. It MUST be persisted (orm serializes the entity to its JSON\ndata column, so a json:\"-\" field would never be stored — that silently\nbroke login), so it carries a real json tag; the users API redact() strips\nit (and every other secret) from every response. PasswordType and\nPasswordSalt describe the digest scheme so rows hashed under the legacy\nargon2id scheme can still be verified and lazily re-hashed to bcrypt.",
               "type": "string"
             },
             "passwordSalt": {
@@ -11052,6 +13192,7 @@
               "type": "string"
             },
             "roles": {
+              "description": "Authorization attachments. Roles and Permissions are computed on read\nfrom the authz store and carried here for API parity with v1.",
               "items": {
                 "$ref": "#/$defs/Role"
               },
@@ -11137,6 +13278,7 @@
               "type": "string"
             },
             "webauthnCredentials": {
+              "description": "Multi-factor authentication. TotpSecret and RecoveryCodes are secret\nverify-only material — the handler strips them from every response.\nWebauthnCredentials is carried as raw JSON here for lossless migration;\nthe typed passkey model is the sibling WebauthnCredential entity.",
               "items": {},
               "type": "array"
             },
@@ -11184,7 +13326,7 @@
     "name": "post_v1_iam_users"
   },
   {
-    "description": "Delete a user",
+    "description": "Removes a person from your organization. Their sessions stop working\nimmediately and the account is gone rather than suspended — to keep the record\nand only stop sign-in, update the user instead.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -11203,7 +13345,7 @@
     "name": "post_v1_iam_users_delete"
   },
   {
-    "description": "Update a user",
+    "description": "Changes a person's profile, their roles, or the credentials they sign\nin with. Send a password to reset it; leave it out and their current one keeps\nworking.\n\nWho they are does not change: their organization, username and the identifier\ntheir existing sessions are keyed on all survive the write, so an update never\nsigns anyone out.",
     "inputSchema": {
       "$defs": {
         "Address": {
@@ -11367,6 +13509,7 @@
               "type": "string"
             },
             "createdTime": {
+              "description": "Descriptive metadata.",
               "type": "string"
             },
             "deleted": {
@@ -11400,12 +13543,14 @@
               "type": "boolean"
             },
             "model": {
+              "description": "Authorization model, targets, and decision. AuthzModel carries the v1\n`model` column (the named authz model); it is not the Go identifier\n`Model` because that name is taken by the embedded orm.Model[Permission]\nmixin. The HTTP contract is unchanged — json:\"model\".",
               "type": "string"
             },
             "name": {
               "type": "string"
             },
             "owner": {
+              "description": "Identity — the (owner, name) natural key.",
               "type": "string"
             },
             "resourceType": {
@@ -11427,6 +13572,7 @@
               "type": "string"
             },
             "submitter": {
+              "description": "Submission / approval workflow.",
               "type": "string"
             },
             "updatedAt": {
@@ -11434,6 +13580,7 @@
               "type": "string"
             },
             "users": {
+              "description": "Subjects the grant is evaluated for.",
               "items": {
                 "type": "string"
               },
@@ -11506,6 +13653,7 @@
         "User": {
           "properties": {
             "accessKey": {
+              "description": "API credentials. AccessSecret / AccessSecretHash / the OAuth tokens are\nbearer material. AccessSecretHash MUST persist (orm stores via JSON; a\njson:\"-\" field is never saved), so it carries a real json tag and the\nhandler's redact() strips it (and AccessSecret + the token fields) before\nresponding.",
               "type": "string"
             },
             "accessSecret": {
@@ -11569,6 +13717,7 @@
               "type": "string"
             },
             "balance": {
+              "description": "Balance mirrors v1 for lossless migration but is authoritative in\nCommerce (billing.hanzo.ai), not here — do not write it from IAM.",
               "type": "number"
             },
             "balanceCredit": {
@@ -11612,6 +13761,7 @@
               "type": "string"
             },
             "createdIp": {
+              "description": "Sign-in provenance.",
               "type": "string"
             },
             "createdTime": {
@@ -11672,6 +13822,7 @@
               "type": "string"
             },
             "displayName": {
+              "description": "Profile.",
               "type": "string"
             },
             "douyin": {
@@ -11720,6 +13871,7 @@
               "type": "string"
             },
             "github": {
+              "description": "Linked federated-identity subjects, one column per connector (v1 parity).",
               "type": "string"
             },
             "gitlab": {
@@ -11747,6 +13899,7 @@
               "type": "string"
             },
             "id": {
+              "description": "Id is the user's STABLE OPAQUE identifier — the value the OIDC `sub` claim\ncarries. It is the v1 the legacy surface per-row UUID (e.g.\n\"e7d7fda0-4c53-4508-9d35-7ec892b7e5d7\"), migrated verbatim so a user's `sub`\nis byte-identical across the cutover: every live session, external reference,\nand the downstream money-path principal keyed on `sub` survive unchanged. A\nuser minted natively in v2 is assigned a fresh UUID here on create, so the\n`sub` is ALWAYS a stable opaque id going forward — never the (Owner, Name)\npair, which is mutable (a rename would otherwise silently reissue identity).\n\nIt is distinct from the embedded orm.Model STORAGE KEY — the value the datastore\nlocks and looks a row up by — which is NOT (Owner, Name) for every row: a MIGRATED\nlegacy row is stamped \"owner/name\" (SetId in the migrator), but a v2-native\nusers.Create'd row is NOT — Create allocates rather than pinning a key, so its\nstorage key is a store-assigned surrogate id (a GenerateID decimal string like\n\"17847909129933610000001\"). (Owner, Name) is therefore the natural/QUERY key\n(unique, indexed), not necessarily the storage key: resolve a row for a locked\nwrite by its REAL key (store.GetUserByName(...).Key().Encode(), which stamps both\nshapes — see internal/oidc updateUser), never by assuming \"owner/name\". This Id is\na first-class, indexed DOMAIN field; its json tag \"id\" dominates the promoted\norm.Model `Id_` (also \"id\") by shallower depth, so the persisted record's \"id\" is\nthis UUID — exactly the v1 shape. A row that carries no Id (a not-yet-assigned\npre-cutover user) falls back to the (Owner, Name) subject at mint; every other\npath resolves `sub`→user by Id.",
               "type": "string"
             },
             "idCard": {
@@ -11780,6 +13933,7 @@
               "type": "boolean"
             },
             "isDefaultAvatar": {
+              "description": "State flags.",
               "type": "boolean"
             },
             "isDeleted": {
@@ -11927,9 +14081,11 @@
               "type": "string"
             },
             "owner": {
+              "description": "Identity / tenancy. (Owner, Name) is the natural key.",
               "type": "string"
             },
             "passwordHash": {
+              "description": "Credential material. PasswordHash is a one-way bcrypt digest and is\nverify-only. It MUST be persisted (orm serializes the entity to its JSON\ndata column, so a json:\"-\" field would never be stored — that silently\nbroke login), so it carries a real json tag; the users API redact() strips\nit (and every other secret) from every response. PasswordType and\nPasswordSalt describe the digest scheme so rows hashed under the legacy\nargon2id scheme can still be verified and lazily re-hashed to bcrypt.",
               "type": "string"
             },
             "passwordSalt": {
@@ -11993,6 +14149,7 @@
               "type": "string"
             },
             "roles": {
+              "description": "Authorization attachments. Roles and Permissions are computed on read\nfrom the authz store and carried here for API parity with v1.",
               "items": {
                 "$ref": "#/$defs/Role"
               },
@@ -12078,6 +14235,7 @@
               "type": "string"
             },
             "webauthnCredentials": {
+              "description": "Multi-factor authentication. TotpSecret and RecoveryCodes are secret\nverify-only material — the handler strips them from every response.\nWebauthnCredentials is carried as raw JSON here for lossless migration;\nthe typed passkey model is the sibling WebauthnCredential entity.",
               "items": {},
               "type": "array"
             },
@@ -12125,7 +14283,7 @@
     "name": "post_v1_iam_users_update"
   },
   {
-    "description": "Create a workspace",
+    "description": "Makes a workspace inside your organization — the scope a team works in,\nalongside projects rather than instead of them. A name already used in the\norganization is refused.",
     "inputSchema": {
       "properties": {
         "bucket": {
@@ -12167,7 +14325,7 @@
     "name": "post_v1_iam_workspaces"
   },
   {
-    "description": "Delete a workspace",
+    "description": "Removes a workspace. The people and roles in your organization are\nunchanged; what goes is the scope itself.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -12182,7 +14340,7 @@
     "name": "post_v1_iam_workspaces_delete"
   },
   {
-    "description": "Get one workspace",
+    "description": "Returns one workspace: what it is called and how it is set up.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -12197,7 +14355,7 @@
     "name": "post_v1_iam_workspaces_get"
   },
   {
-    "description": "Update a workspace",
+    "description": "Changes a workspace's settings. What it is called does not change, and\nneither does when it was created.",
     "inputSchema": {
       "properties": {
         "bucket": {
@@ -12239,7 +14397,7 @@
     "name": "post_v1_iam_workspaces_update"
   },
   {
-    "description": "Update an application",
+    "description": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings.",
     "inputSchema": {
       "$defs": {
         "AccountItem": {
@@ -12424,12 +14582,14 @@
               "type": "integer"
             },
             "failedSigninLimit": {
+              "description": "Per-organization signin throttle. Zero means \"inherit the application\ndefault\"; a non-zero value overrides it. Safe bounds are clamped by the\nresource service before persistence.",
               "type": "integer"
             },
             "favicon": {
               "type": "string"
             },
             "founder": {
+              "description": "Founder is the stable storage id of the identity that provisioned this org\n(self-service onboarding). It is the resume token that makes provisioning\nconverge on a backend where each write autocommits independently (no\ntransaction rollback): after a partial failure that created the org but did\nnot move the founder in, a retry recognises the org as the founder's own and\ncompletes it, instead of refusing it as \"already taken\". It also fences the\norg to ONE tenant — a different identity can never complete or join it.",
               "type": "string"
             },
             "hasPrivilegeConsent": {
@@ -12508,6 +14668,7 @@
               "type": "array"
             },
             "orgBalance": {
+              "description": "Balance fields are read-only mirrors; authoritative balances live in\nCommerce (billing.hanzo.ai). Carried for field-complete v1 parity.",
               "type": "number"
             },
             "owner": {
@@ -12951,6 +15112,7 @@
           "type": "string"
         },
         "clientId": {
+          "description": "ClientId is the OAuth2/OIDC client identifier and the GLOBAL key every\nconfidential-client resolver authenticates against (store.GetApplicationByClientId,\nthe mint gates, Basic auth). It MUST be globally unique across ALL owners — a\ncollision would let one app shadow another at that key. This store persists each\nentity as a JSON document in a shared table, so there is no per-field column to\ncarry a DB UNIQUE index; uniqueness is enforced at the write in\napplications.Create/Update (ensureClientIdUnique), exactly as the (owner,name)\nnatural key is, and store.GetApplicationByClientId resolves admin-preferring as\ndefense-in-depth.",
           "type": "string"
         },
         "clientSecret": {
@@ -13249,7 +15411,7 @@
     "name": "put_v1_iam_application"
   },
   {
-    "description": "Update an organization",
+    "description": "Changes an organization's display, its defaults and the sign-in rules\neveryone in it inherits. Which organization it is does not change, and neither\ndoes when it was created.",
     "inputSchema": {
       "$defs": {
         "AccountItem": {
@@ -13526,7 +15688,7 @@
     "name": "updateOrganization"
   },
   {
-    "description": "Update an existing provider",
+    "description": "Changes a provider's settings or rotates the credentials it\nholds. The change takes effect on the next sign-in through it — sessions\nalready issued are unaffected.\n\nA provider that is not there answers \"nothing changed\" rather than an error, so\nthe call is safe to repeat.",
     "inputSchema": {
       "properties": {
         "appId": {
@@ -13687,7 +15849,7 @@
     "name": "updateProvider"
   },
   {
-    "description": "Replace a session's cookie list",
+    "description": "Replaces the set of browsers a session covers — signing out the ones you\nleave off while the session itself stays live. A session that does not exist is\nreported as missing rather than created.",
     "inputSchema": {
       "properties": {
         "application": {
@@ -13716,7 +15878,7 @@
     "name": "updateSession"
   },
   {
-    "description": "Update an existing token",
+    "description": "Changes an access token's scope or expiry.\n\nA token that is not there answers \"nothing changed\" rather than an error, so\nthe call is safe to repeat.",
     "inputSchema": {
       "properties": {
         "accessToken": {
@@ -13763,6 +15925,7 @@
           "type": "string"
         },
         "nonce": {
+          "description": "Nonce is the OIDC authorize nonce, stored on the code and echoed into the\nid_token minted at the exchange (OIDC Core §3.1.3.6) so a relying party\nbinds the id_token to its own request and detects replay.",
           "type": "string"
         },
         "organization": {
@@ -13772,9 +15935,11 @@
           "type": "string"
         },
         "publicGrant": {
+          "description": "PublicGrant records that this grant was established WITHOUT client\nauthentication — a PKCE code exchange from a client that presented no\nsecret. Whether a client is confidential is a property of the GRANT, not\nonly of the registration: `hanzo-cli` and every @hanzo/iam SPA keep a\nregistered secret for a BACKEND path while the surface that actually signs\nin is a public PKCE client that cannot hold one. authorizationCodeGrant\nalready makes exactly that bounded relaxation; this is the same fact,\nrecorded so refreshTokenGrant can honour it instead of demanding a secret\nthe client never had (which 401s invalid_client and kills the session at\nthe access token's expiry). Carried across rotation, so the second refresh\nbehaves like the first.",
           "type": "boolean"
         },
         "redirectUri": {
+          "description": "RedirectUri binds the authorization code to the exact redirect URI of the\nauthorize request (RFC 6749 §4.1.3): the token endpoint refuses a code\nredeemed with a different redirect_uri, closing code-injection across a\nclient's registered URIs.",
           "type": "string"
         },
         "refreshConsumed": {
@@ -13784,6 +15949,7 @@
           "type": "integer"
         },
         "refreshFamily": {
+          "description": "Refresh-token rotation state (v2). Each refresh belongs to a family (the\ngrant); rotation mints a new row in the same family and marks the prior\none consumed. Presenting a consumed refresh is reuse — the whole family is\nrevoked (RFC 9700 §4.14.2). RefreshExpireIn is the refresh token's own\nabsolute expiry (unix), independent of the access token's shorter life.",
           "type": "string"
         },
         "refreshToken": {
@@ -13793,6 +15959,7 @@
           "type": "string"
         },
         "resource": {
+          "description": "RFC 8707 resource indicator",
           "type": "string"
         },
         "scope": {
@@ -13817,7 +15984,7 @@
     "name": "updateToken"
   },
   {
-    "description": "Update an existing webauthn credential",
+    "description": "Renames a registered passkey or security key, so a\nperson can tell their devices apart.\n\nA credential that is not there answers \"nothing changed\" rather than an error,\nso the call is safe to repeat.",
     "inputSchema": {
       "properties": {
         "aaguid": {
