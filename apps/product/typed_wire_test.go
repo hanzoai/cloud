@@ -65,7 +65,7 @@ func get(t *testing.T, app *zip.App, path, bearer string) (int, []byte) {
 func TestKeyGateRunsBeforeTheOp(t *testing.T) {
 	app := mountApp(t)
 
-	searchPaths := []string{"/v1/search-docs/indexes", "/v1/search-docs/stats"}
+	searchPaths := []string{"/v1/search/indexes", "/v1/search/stats"}
 	vectorPaths := []string{"/v1/vector/collections", "/v1/vector/stats"}
 
 	for _, p := range append(append([]string{}, searchPaths...), vectorPaths...) {
@@ -99,7 +99,7 @@ func TestUnconfiguredSurfaceFailsClosed(t *testing.T) {
 		t.Fatalf("Mount: %v", err)
 	}
 	for _, p := range []string{
-		"/v1/search-docs/indexes", "/v1/search-docs/stats",
+		"/v1/search/indexes", "/v1/search/stats",
 		"/v1/vector/collections", "/v1/vector/stats",
 	} {
 		// Even WITH a bearer: an unset upstream key is 503, never 200 and never 401.
@@ -116,7 +116,7 @@ func TestUnconfiguredSurfaceFailsClosed(t *testing.T) {
 func TestUnreachableUpstreamsDegradeTo200(t *testing.T) {
 	app := mountApp(t)
 
-	code, body := get(t, app, "/v1/search-docs/indexes", "search-key")
+	code, body := get(t, app, "/v1/search/indexes", "search-key")
 	if code != http.StatusOK {
 		t.Fatalf("indexes: %d (%s)", code, body)
 	}
@@ -132,7 +132,7 @@ func TestUnreachableUpstreamsDegradeTo200(t *testing.T) {
 		t.Errorf("collections body = %s, want {\"collections\":[]}", body)
 	}
 
-	code, body = get(t, app, "/v1/search-docs/stats", "search-key")
+	code, body = get(t, app, "/v1/search/stats", "search-key")
 	if code != http.StatusOK {
 		t.Fatalf("search stats: %d (%s)", code, body)
 	}
@@ -168,7 +168,7 @@ func productSurface(t *testing.T) (served map[string]bool, typed map[string]stri
 		t.Fatalf("typed registry: %v", err)
 	}
 	ours := func(p string) bool {
-		return strings.HasPrefix(p, "/v1/search-docs") || strings.HasPrefix(p, "/v1/vector")
+		return strings.HasPrefix(p, "/v1/search") || strings.HasPrefix(p, "/v1/vector")
 	}
 	served, typed = map[string]bool{}, map[string]string{}
 	for path, item := range doc.Paths {
