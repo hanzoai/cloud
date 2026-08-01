@@ -43,6 +43,48 @@ impl detail resolved inside the handlers, never leaked into a route:
 - `/v1/o11y/{services,dependency_graph,dashboards,rules,…}` — resolved by the
   upstream module's version-less alias (highest engine version wins).
 
+## The o11y pin is BLOCKED at v1.5.34 — do not bump it alone
+
+`go.mod` pins `github.com/hanzoai/o11y v1.5.34`. v1.5.37 renamed the module's
+INTERNAL route literals (`/api/vN/<rest>` → `/v1/o11y/<rest>`) and deleted
+`mount.go`'s `rewriteExternalPath`. The PUBLIC contract did not move — the seam
+existed precisely so `/v1/o11y/<resource>` stayed fixed while the internals
+churned — so nothing in production broke, and nothing here needs "fixing" to
+restore a path. What the bump does break is this package's three in-handler
+forwards, which name the internal spelling:
+
+- `sessions.go` forwards to `/api/sessions`; at v1.5.37+ that list is
+  `/v1/o11y/llm/sessions` (llmobs moved under `/llm/` to stop `sessions` and
+  `users` colliding with the auth/IAM nouns that already own those words).
+- `query.go` forwards to `/api/v3/<resource>` — **this is the blocker**.
+  v1.5.37 stopped mounting the v3 builder POST route
+  (`RegisterQueryRangeV3Routes` no longer registers `/query_range`;
+  `QueryRangeV3` lost its last reference, and `queryRangeV3`/`queryRangeV4`
+  survive only as unreferenced methods). `/v1/o11y/query_range` is now served by
+  the **v5** querier alone, and v5 refuses the console's composite with
+  `unknown field "queryType" in composite query` — asserted against the pinned
+  module in `query_test.go`. So the bump turns every console trace/log explorer
+  into a 400. There is no cloud-only edit that avoids this: the engine the
+  console speaks to no longer has a route.
+- `o11y.go`'s `isHealthPath` allowlists `/api/v{1,2}/{health,healthz,readyz,livez}`;
+  v1.5.37 moved the probes to `/v1/o11y/{healthz,readyz,livez}`. `typed_wire_test.go`
+  DOES catch this one — a bump fails the build there, which is the only reason
+  the query.go trap is reachable at all (fix the red test, ship the silent 400).
+
+`o11y.go`'s other forward, `eventToRuntimePath` (`/v1/event/<p>/envelope|store`
+→ `/v1/sentry/<p>/…`), is unaffected: both families survive the rename verbatim.
+`isErrorIngestPath`'s `/v1/o11y/api/<project>/envelope|store` also stays — that
+`/api/` segment is the Sentry SDK's own wire format, received as-is, not our
+spelling of a route.
+
+Unblocking it is a console change, not a cloud one: migrate `listQueryPayload`
++ `parseListRows` (hanzoai/console `src/lib/api/apm.ts`) to the v5 composite
+(`{schemaVersion, requestType, compositeQuery:{queries:[…]}}`), then bump, then
+DELETE `builderQueryHandler` outright — once the shapes agree the forward is an
+identity rewrite of the path it is already registered on, and the order-70
+wildcard serves it. Restoring the v3 route upstream is the wrong direction: it
+resurrects a second spelling of one noun and undoes a deliberate deletion.
+
 ## Typed ops: 12 of the 20 routes, and why the other 8 cannot be
 
 Every route this package OWNS the shape of is a typed op (`zip.Get[In,Out]` and
