@@ -10,19 +10,6 @@
       },
       "type": "object"
     },
-    "name": "delete_v1_iam_keys"
-  },
-  {
-    "description": "RevokeKey revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
-    "inputSchema": {
-      "properties": {
-        "type": {
-          "description": "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
     "name": "delete_v1_keys"
   },
   {
@@ -53,14 +40,6 @@
       "type": "object"
     },
     "name": "get_v1_embed"
-  },
-  {
-    "description": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "get_v1_iam_keys"
   },
   {
     "description": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
@@ -102,7 +81,7 @@
       },
       "type": "object"
     },
-    "name": "post_v1_iam_keys"
+    "name": "post_v1_keys"
   },
   {
     "description": "Onboard creates the caller's organization. Two flows, keyed on whether the caller\nalready has a home org (mirrors app/onboard/route.ts):\n\n  - FIRST-RUN (no owner): create + MOVE the user in as admin, so their next JWT\n    carries the new owner and the cloud scopes everything to it.\n  - ADDITIONAL (owner set): create the org but do NOT move the user — a move\n    changes their IAM owner (stripping a SuperAdmin's status + orphaning their\n    current org). They reach the new org via the OrgSwitcher, which re-scopes\n    X-Org-Id without touching IAM membership. A personal-org request from someone\n    who already has an org is meaningless → 409.",
@@ -119,19 +98,6 @@
       },
       "type": "object"
     },
-    "name": "post_v1_iam_onboard"
-  },
-  {
-    "description": "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
-    "inputSchema": {
-      "properties": {
-        "type": {
-          "description": "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "post_v1_keys"
+    "name": "post_v1_orgs"
   }
 ]

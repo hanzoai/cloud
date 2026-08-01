@@ -66,8 +66,7 @@ func TestCSRF_AmbientWriteWithoutTokenIsRefused(t *testing.T) {
 	for _, w := range []struct{ method, path string }{
 		{http.MethodPost, "/v1/keys"},
 		{http.MethodDelete, "/v1/keys"},
-		{http.MethodPost, "/v1/iam/keys"},   // …and through the deprecated alias
-		{http.MethodDelete, "/v1/iam/keys"}, // …which is gated by its own group
+		{http.MethodPost, "/v1/orgs"}, // …and the org write, on its own group
 	} {
 		code, _ := req(t, app, w.method, w.path, map[string]string{
 			"X-User-Id": "alice", "X-Org-Id": "acme",
@@ -88,7 +87,7 @@ func TestCSRF_AmbientWriteWithValidTokenAllows(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
 	tok := csrfToken(t, app, "alice", "acme")
-	code, body := req(t, app, http.MethodPost, "/v1/iam/keys", map[string]string{
+	code, body := req(t, app, http.MethodPost, "/v1/keys", map[string]string{
 		"X-User-Id": "alice", "X-Org-Id": "acme",
 		"Cookie":       "iam_access_token=opaque-sid",
 		"X-CSRF-Token": tok,
@@ -108,7 +107,7 @@ func TestCSRF_TokenBoundToIdentity(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
 	aliceTok := csrfToken(t, app, "alice", "acme")
-	code, _ := req(t, app, http.MethodPost, "/v1/iam/keys", map[string]string{
+	code, _ := req(t, app, http.MethodPost, "/v1/keys", map[string]string{
 		"X-User-Id": "mallory", "X-Org-Id": "acme", // different principal
 		"Cookie":       "iam_access_token=opaque-sid",
 		"X-CSRF-Token": aliceTok, // stolen/replayed token bound to alice
@@ -127,7 +126,7 @@ func TestCSRF_BearerAuthSkipsCSRF(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	code, body := req(t, app, http.MethodPost, "/v1/iam/keys", map[string]string{
+	code, body := req(t, app, http.MethodPost, "/v1/keys", map[string]string{
 		"X-User-Id": "alice", "X-Org-Id": "acme",
 		"Authorization": "Bearer some.jwt.token", // explicit (non-ambient) credential
 		"Cookie":        "iam_access_token=opaque-sid",
@@ -151,7 +150,7 @@ func TestRateLimit_PerPrincipalBurstThen429(t *testing.T) {
 	// would have reset the bucket every time — it must NOT now).
 	var got429 bool
 	for i := 0; i < keysWriteRatePerMin+5; i++ {
-		code, _ := req(t, app, http.MethodPost, "/v1/iam/keys", map[string]string{
+		code, _ := req(t, app, http.MethodPost, "/v1/keys", map[string]string{
 			"X-User-Id": "alice", "X-Org-Id": "acme",
 			"Authorization":   "Bearer j.w.t",                     // skip CSRF, isolate the limiter
 			"X-Forwarded-For": fmt.Sprintf("203.0.113.%d", i%250), // attacker rotates XFF
@@ -169,7 +168,7 @@ func TestRateLimit_PerPrincipalBurstThen429(t *testing.T) {
 	}
 
 	// bob (a different validated principal) is unaffected by alice's exhausted bucket.
-	code, body := req(t, app, http.MethodPost, "/v1/iam/keys", map[string]string{
+	code, body := req(t, app, http.MethodPost, "/v1/keys", map[string]string{
 		"X-User-Id": "bob", "X-Org-Id": "acme",
 		"Authorization": "Bearer j.w.t",
 	}, "")
