@@ -232,7 +232,7 @@ func TestSignAndSafeTxKeepTheirKeyOrder(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	if got := string(prop); got != `{"r":"0xr","s":"0xs","safeAddress":"0xsa","safeTxHash":"0xh","walletId":"wal_1"}` {
-		t.Fatalf("safe-tx answers %s — the key order moved off the map's sorted order", got)
+		t.Fatalf("transactions answers %s — the key order moved off the map's sorted order", got)
 	}
 }
 
@@ -266,7 +266,7 @@ func TestFailsClosedWithoutAValidatedPrincipal(t *testing.T) {
 		{http.MethodGet, "/v1/wallets/wal_x", nil},
 		{http.MethodPost, "/v1/wallets/wal_x/keys", nil},
 		{http.MethodPost, "/v1/wallets/wal_x/sign", map[string]any{"message": "x"}},
-		{http.MethodPost, "/v1/wallets/wal_x/safe-tx", map[string]any{"to": "0x0"}},
+		{http.MethodPost, "/v1/wallets/wal_x/transactions", map[string]any{"to": "0x0"}},
 	} {
 		if code, got := req(t, app, r.method, r.path, "", r.body); code != http.StatusForbidden {
 			t.Errorf("%s %s anonymous got %d, want 403 (%s)", r.method, r.path, code, got)
