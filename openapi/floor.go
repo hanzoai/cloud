@@ -64,7 +64,7 @@ func Measure(d *Document) Floor {
 	for _, item := range d.Paths {
 		for _, op := range item {
 			f.Operations++
-			for _, t := range op.Tags {
+			for _, t := range Products(op.Tags) {
 				f.Products[t]++
 			}
 		}

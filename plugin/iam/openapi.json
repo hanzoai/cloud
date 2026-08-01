@@ -12,6 +12,9 @@
   ],
   "tags": [
     {
+      "name": "compat"
+    },
+    {
       "name": "iam"
     }
   ],
@@ -83,7 +86,8 @@
         "summary": "Registers an application in your organization — one product or site your people sign in to, with its own client credentials, sign-in methods and allowed redirect URIs.",
         "description": "Registers an application in your organization — one product or site your\npeople sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs.\n\nThe older spelling of POST /v1/iam/application. A name already used in the\norganization is refused rather than overwritten.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -125,7 +129,8 @@
         "summary": "Creates an organization — the account everything else in your directory hangs from.",
         "description": "Creates an organization — the account everything else in your directory\nhangs from. Users, applications, roles, projects and workspaces are all\nnamed inside one organization, so this is the first write in a new tenant.\n\nThe older spelling of POST /v1/iam/organizations. Both reach the same\ncreate, so a name already taken is refused here too.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -157,7 +162,8 @@
         "summary": "Creates a project inside your organization — the scope people pick between when their work is separated by product or client rather than by team.",
         "description": "Creates a project inside your organization — the scope people pick between\nwhen their work is separated by product or client rather than by team.\n\nThe older spelling of POST /v1/iam/projects. Creating one takes an\nadministrator of the owning organization.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -189,7 +195,8 @@
         "summary": "Adds an identity provider your people can sign in with, or a service your applications send through — a social or enterprise login, an email or SMS sender, a storage or payment connector.",
         "description": "Adds an identity provider your people can sign in with, or a service your\napplications send through — a social or enterprise login, an email or SMS\nsender, a storage or payment connector.\n\nA provider is configured once here and then switched on per application, so\nseveral applications can share one set of credentials.\n\nThe older spelling of POST /v1/iam/providers.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -221,7 +228,8 @@
         "summary": "Creates a role — a named group of people that permissions are granted to.",
         "description": "Creates a role — a named group of people that permissions are granted to.\nGranting to a role rather than to each person is what keeps access correct\nas your team changes: add someone to the role and they inherit everything\nit can do.\n\nThe older spelling of POST /v1/iam/roles.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -253,7 +261,8 @@
         "summary": "Adds a person to your organization and, if you send a password, sets the one they will sign in with.",
         "description": "Adds a person to your organization and, if you send a password, sets the\none they will sign in with. The password is hashed before it is stored and\nis never returned to you or to anyone else.\n\nUsernames are checked against one rule wherever an account is created —\nthis verb, password signup, a social sign-in, or SCIM — so a name accepted\nhere is a name accepted everywhere.\n\nThe older spelling of POST /v1/iam/users, and it posts the user's fields at\nthe top level rather than wrapped in {user, password}.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -285,7 +294,8 @@
         "summary": "Creates a workspace inside your organization — the scope a team works in, alongside projects rather than instead of them.",
         "description": "Creates a workspace inside your organization — the scope a team works in,\nalongside projects rather than instead of them.\n\nThe older spelling of POST /v1/iam/workspaces. Creating one takes an\nadministrator of the owning organization.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -347,7 +357,8 @@
         "summary": "Removes an application.",
         "description": "Removes an application. Anyone mid-sign-in through it is\nturned away and its client credentials stop working, so retire the integration\nbefore deleting it.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "parameters": [
           {
@@ -385,7 +396,8 @@
         "summary": "Returns one application: its sign-in methods, its allowed redirect URIs and the client credentials your integration authenticates with.",
         "description": "Returns one application: its sign-in methods, its allowed\nredirect URIs and the client credentials your integration authenticates with.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "parameters": [
           {
@@ -423,7 +435,8 @@
         "summary": "Registers an application in your organization — one product or site your people sign in to, with its own client credentials, sign-in methods and allowed redirect URIs.",
         "description": "Registers an application in your organization — one product or site\nyour people sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs. A name already used in the organization is refused\nrather than overwritten.\n\nExported so the legacy add-application alias reuses this exact path — one\ncreate, two spellings.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -453,7 +466,8 @@
         "summary": "Changes an application's display, its sign-in methods and the redirect URIs it may return to — the call that makes login work from a new host.",
         "description": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -1005,7 +1019,8 @@
         "summary": "Deletes an application.",
         "description": "Deletes an application. Anyone mid-sign-in through it is turned away and\nits client credentials stop working, so retire the integration first.\n\nThe older spelling of DELETE /v1/iam/application.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -1057,7 +1072,8 @@
         "summary": "Deletes an organization and everything named inside it — its users, applications, roles, projects and workspaces.",
         "description": "Deletes an organization and everything named inside it — its users,\napplications, roles, projects and workspaces. There is no undo, and every\nsession issued under it stops working.\n\nThe older spelling of POST /v1/iam/organizations/delete.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -1089,7 +1105,8 @@
         "summary": "Deletes a project.",
         "description": "Deletes a project. The people and roles in your organization are unchanged;\nwhat goes is the scope itself, so anything addressed by it must move first.\n\nThe older spelling of POST /v1/iam/projects/delete.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -1121,7 +1138,8 @@
         "summary": "Removes a provider.",
         "description": "Removes a provider. Sign-in through it stops for every application that\nused it, so detach those applications first if they have no other method.\n\nThe older spelling of POST /v1/iam/providers/delete.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -1153,7 +1171,8 @@
         "summary": "Deletes a role.",
         "description": "Deletes a role. Everyone in it loses the access it carried; their accounts\nand any other roles they hold are untouched.\n\nThe older spelling of POST /v1/iam/roles/delete.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -1185,7 +1204,8 @@
         "summary": "Removes a person from your organization.",
         "description": "Removes a person from your organization. Their sessions stop working and\nthe account is gone, not suspended — to keep the record and only stop\nsign-in, update the user instead.\n\nThe older spelling of POST /v1/iam/users/delete.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -1217,7 +1237,8 @@
         "summary": "Deletes a workspace.",
         "description": "Deletes a workspace. The people and roles in your organization are\nunchanged; what goes is the scope itself.\n\nThe older spelling of POST /v1/iam/workspaces/delete.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -3563,7 +3584,8 @@
         "summary": "Updates one of your applications — its display, its sign-in methods and the redirect URIs it is allowed to return to.",
         "description": "Updates one of your applications — its display, its sign-in methods and the\nredirect URIs it is allowed to return to. Which organization and name the\napplication has are fixed when it is created and are not editable here.\n\nA redirect URI you add becomes an allowed sign-in origin, so this is the\ncall that makes login work from a new host.\n\nThe older spelling of PUT /v1/iam/application.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -3595,7 +3617,8 @@
         "summary": "Updates your organization — its display, its default settings and the sign-in rules everyone in it inherits.",
         "description": "Updates your organization — its display, its default settings and the\nsign-in rules everyone in it inherits.\n\nThe older spelling of POST /v1/iam/organizations/update.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -3637,7 +3660,8 @@
         "summary": "Updates a provider's settings or rotates the credentials it holds.",
         "description": "Updates a provider's settings or rotates the credentials it holds. The\nchange takes effect on the next sign-in through it — sessions already\nissued are unaffected.\n\nThe older spelling of POST /v1/iam/providers/update.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -3669,7 +3693,8 @@
         "summary": "Updates a role's members or the roles it includes.",
         "description": "Updates a role's members or the roles it includes. Access changes for\neveryone in it as soon as the write lands.\n\nThe older spelling of POST /v1/iam/roles/update.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
@@ -3701,7 +3726,8 @@
         "summary": "Updates one of your users' profile, roles or credentials.",
         "description": "Updates one of your users' profile, roles or credentials. Send a password\nto reset it; leave it out and the current one stands.\n\nThe older spelling of POST /v1/iam/users/update, with the user's fields at\nthe top level rather than wrapped in {user, password}.",
         "tags": [
-          "iam"
+          "iam",
+          "compat"
         ],
         "requestBody": {
           "content": {
