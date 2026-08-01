@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/search-docs/indexes", zip.Doc{
+	zip.Describe("GET /v1/search/indexes", zip.Doc{
 		Description: "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
 		Fields: map[string]string{
 			"searchIndex.createdAt":     "CreatedAt is the index's creation time (RFC 3339); it falls back to now when\nthe index list could not be read.",
@@ -17,7 +17,7 @@ func init() {
 			"searchIndexList.indexes":   "Indexes is one row per Meilisearch index, sorted by name. Empty — never\nabsent — when the search service cannot be reached.",
 		},
 	})
-	zip.Describe("GET /v1/search-docs/stats", zip.Doc{
+	zip.Describe("GET /v1/search/stats", zip.Doc{
 		Description: "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
 		Fields: map[string]string{
 			"dayCount.count":             "Count is that day's total.",

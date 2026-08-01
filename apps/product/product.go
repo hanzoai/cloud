@@ -1,10 +1,10 @@
 // Package product is the read-only inventory of the search and vector backends:
-// /v1/search-docs/{indexes,stats} read from Meilisearch and
+// /v1/search/{indexes,stats} read from Meilisearch and
 // /v1/vector/{collections,stats} from Qdrant, reshaped into the rows the console
 // renders.
 //
 // The console's Search/Indexes and Vector panels call
-// https://api.hanzo.ai/v1/search-docs/* and /v1/vector/* with a
+// https://api.hanzo.ai/v1/search/* and /v1/vector/* with a
 // bearer key (HANZO_SEARCH_API_KEY / HANZO_VECTOR_API_KEY). cloud-api is the
 // single edge that owns those paths: this subsystem proxies them to the
 // in-cluster Meilisearch (search.hanzo.svc) and Qdrant (vector.hanzo.svc)
@@ -89,7 +89,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// in-handler call ran, so an unconfigured deployment still 503s and a wrong key
 	// still 401s before anything reaches an upstream. Two subtrees, two keys: the
 	// search bearer never admits a vector read.
-	sg := app.Group("/v1/search-docs")
+	sg := app.Group("/v1/search")
 	sg.Use(requireKey(cfg.searchKey))
 	zip.Get(sg, "/indexes", o.searchIndexes)
 	zip.Get(sg, "/stats", o.searchStats)
@@ -153,7 +153,7 @@ type productOps struct {
 // query. GET carries no request body (zip's hasBody), so this publishes nothing.
 type noIn struct{}
 
-// searchIndexList is the GET /v1/search-docs/indexes envelope.
+// searchIndexList is the GET /v1/search/indexes envelope.
 type searchIndexList struct {
 	// Indexes is one row per Meilisearch index, sorted by name. Empty — never
 	// absent — when the search service cannot be reached.
