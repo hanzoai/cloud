@@ -457,6 +457,17 @@ func (o ops) listApplications(ctx context.Context, _ *noInput) (*argoAppList, er
 			list.Items = append(list.Items, projectApp(&crs[i], ns, running[crs[i].GetName()]))
 		}
 	}
+	// The platform plane. A SuperAdmin asking this endpoint means the fleet, and the
+	// fleet's applications are CD's — the App CRs above are the TENANT plane and the
+	// cluster holds none. Same source and same gate as /v1/deploy/gitops, so this
+	// widens the endpoint, never the audience; a tenant scope never reaches it.
+	if sc.superAdmin {
+		cd, err := o.cdApplications(ctx)
+		if err != nil {
+			return nil, k8sErr(o.s, "list", err)
+		}
+		list.Items = append(list.Items, cd...)
+	}
 	return &list, nil
 }
 
