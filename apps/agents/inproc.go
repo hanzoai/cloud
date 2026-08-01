@@ -29,12 +29,9 @@ import (
 // until CloseSession moves it to a terminal state. Best-effort live fan-out
 // (publish) rides the bus; the store row is the truth.
 func OpenSession(ctx context.Context, org, actor, agent, title string) (string, error) {
-	if mounted == nil {
-		return "", fmt.Errorf("agents: not mounted")
-	}
-	org = strings.TrimSpace(org)
-	if org == "" {
-		return "", fmt.Errorf("agents: org required")
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return "", err
 	}
 	agent = strings.TrimSpace(agent)
 	if agent == "" {
@@ -64,7 +61,7 @@ func OpenSession(ctx context.Context, org, actor, agent, title string) (string, 
 		RootID: id, Title: title,
 		StartedAt: now, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := mounted.State.store.CreateSession(ctx, x); err != nil {
+	if err := sto.CreateSession(ctx, x); err != nil {
 		return "", fmt.Errorf("agents: create session: %w", err)
 	}
 	publishSession(mounted, x, 0, 0)
@@ -82,14 +79,11 @@ func OpenSessionOn(ctx context.Context, org, actor, agent, title, target string)
 	if target == "" {
 		return OpenSession(ctx, org, actor, agent, title)
 	}
-	if mounted == nil {
-		return "", fmt.Errorf("agents: not mounted")
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return "", err
 	}
-	org = strings.TrimSpace(org)
-	if org == "" {
-		return "", fmt.Errorf("agents: org required")
-	}
-	if _, err := mounted.State.store.GetTarget(ctx, org, target); err != nil {
+	if _, err := sto.GetTarget(ctx, org, target); err != nil {
 		if err == errTargetNotFound {
 			return "", fmt.Errorf("agents: target not found in this org")
 		}
@@ -101,10 +95,10 @@ func OpenSessionOn(ctx context.Context, org, actor, agent, title, target string)
 	}
 	// Stamp the target onto the freshly-opened row (org-scoped update); a failure
 	// here is non-fatal — the session is live, it simply lacks its machine tag.
-	if x, gerr := mounted.State.store.GetSession(ctx, org, id); gerr == nil {
+	if x, gerr := sto.GetSession(ctx, org, id); gerr == nil {
 		x.Target = target
 		x.UpdatedAt = time.Now().Unix()
-		_ = mounted.State.store.UpdateSession(ctx, x)
+		_ = sto.UpdateSession(ctx, x)
 	}
 	return id, nil
 }
@@ -116,13 +110,13 @@ func OpenSessionOn(ctx context.Context, org, actor, agent, title, target string)
 // well-formed JSON (nil payload is allowed for a bare marker). actor falls back
 // to the org.
 func LogSessionEvent(ctx context.Context, org, sessionID, kind, actor string, payload []byte) error {
-	if mounted == nil {
-		return fmt.Errorf("agents: not mounted")
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return err
 	}
-	org = strings.TrimSpace(org)
 	sessionID = strings.TrimSpace(sessionID)
-	if org == "" || sessionID == "" {
-		return fmt.Errorf("agents: org and session id required")
+	if sessionID == "" {
+		return fmt.Errorf("agents: session id required")
 	}
 	kind = strings.TrimSpace(kind)
 	if !validKind(kind) {
@@ -134,7 +128,7 @@ func LogSessionEvent(ctx context.Context, org, sessionID, kind, actor string, pa
 	if len(payload) > 0 && !json.Valid(payload) {
 		return fmt.Errorf("agents: event payload must be valid JSON")
 	}
-	x, err := mounted.State.store.GetSession(ctx, org, sessionID)
+	x, err := sto.GetSession(ctx, org, sessionID)
 	if err != nil {
 		return err // errSessionNotFound (cross-org / unknown) or a real DB error
 	}
@@ -149,7 +143,7 @@ func LogSessionEvent(ctx context.Context, org, sessionID, kind, actor string, pa
 	if err != nil {
 		return fmt.Errorf("agents: rng: %w", err)
 	}
-	e, err := mounted.State.store.AppendEvent(ctx, Event{
+	e, err := sto.AppendEvent(ctx, Event{
 		ID: evID, SessionID: sessionID, Org: org, Kind: kind, Actor: actor,
 		Payload: string(payload), CreatedAt: time.Now().Unix(),
 	})
@@ -165,18 +159,18 @@ func LogSessionEvent(ctx context.Context, org, sessionID, kind, actor string, pa
 // forbids reopening a finished run; here we only ever set a terminal status, so a
 // double-close is a harmless no-op on an already-terminal row.
 func CloseSession(ctx context.Context, org, sessionID, status string) error {
-	if mounted == nil {
-		return fmt.Errorf("agents: not mounted")
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return err
 	}
-	org = strings.TrimSpace(org)
 	sessionID = strings.TrimSpace(sessionID)
-	if org == "" || sessionID == "" {
-		return fmt.Errorf("agents: org and session id required")
+	if sessionID == "" {
+		return fmt.Errorf("agents: session id required")
 	}
 	if !isTerminalStatus(status) {
 		return fmt.Errorf("agents: close status must be done or error")
 	}
-	x, err := mounted.State.store.GetSession(ctx, org, sessionID)
+	x, err := sto.GetSession(ctx, org, sessionID)
 	if err != nil {
 		return err
 	}
@@ -187,11 +181,11 @@ func CloseSession(ctx context.Context, org, sessionID, status string) error {
 	x.Status = status
 	x.EndedAt = now
 	x.UpdatedAt = now
-	if err := mounted.State.store.UpdateSession(ctx, x); err != nil {
+	if err := sto.UpdateSession(ctx, x); err != nil {
 		return fmt.Errorf("agents: close session: %w", err)
 	}
-	ev, _ := mounted.State.store.CountEvents(ctx, org, sessionID)
-	ch, _ := mounted.State.store.CountChildren(ctx, org, sessionID)
+	ev, _ := sto.CountEvents(ctx, org, sessionID)
+	ch, _ := sto.CountChildren(ctx, org, sessionID)
 	publishSession(mounted, x, ev, ch)
 	return nil
 }

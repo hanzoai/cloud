@@ -141,10 +141,12 @@ func (sc *scheduler) loop(ctx context.Context) {
 // launches the ones that are due, are not backed off, and have a free
 // concurrency slot. It is separated from loop() so tests can invoke it directly.
 func (sc *scheduler) tick(ctx context.Context, now time.Time) {
-	agents, err := sc.s.State.store.ListLongRunning(ctx)
-	if err != nil {
+	agents, errs := sc.s.State.allLongRunning(ctx)
+	for _, err := range errs {
+		// Per-org, non-fatal: the orgs that DID open still get their tick. A
+		// silent skip here would look exactly like an agent that stopped being
+		// scheduled, so every skipped org is named.
 		sc.log.Warn("scheduler: list long-running failed", "err", err)
-		return
 	}
 	live := make(map[string]bool, len(agents))
 	for _, a := range agents {
