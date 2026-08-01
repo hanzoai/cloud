@@ -18,7 +18,7 @@
       "name": "csrf"
     },
     {
-      "name": "embed-status"
+      "name": "embed"
     },
     {
       "name": "iam"
@@ -114,7 +114,7 @@
         "summary": "EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp, help) may be framed by the caller and is actually running, so a console module can choose between the embed and the provision panel.",
         "description": "EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself. ENTITLEMENT is\nserver-authoritative: each app is a single shared per-BRAND instance, so only a\nmember of the owning brand org — or a SuperAdmin — is given the embed URL; every\nother caller gets phase \"not-entitled\" and no URL. REACHABILITY is a probe of\nthat origin, which a cross-origin page cannot read for itself.\n\nThe probed host is always \u003capp\u003e.\u003cthis deployment's own brand domain\u003e: no part of\nit comes from the request, so this can never be steered into probing an\narbitrary origin.",
         "tags": [
-          "embed-status"
+          "embed"
         ],
         "parameters": [
           {
