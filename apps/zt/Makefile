@@ -4,5 +4,5 @@
 # needs: build, test, vet, openapi, clean. This names the app(s) this package
 # backs and includes it. Written from the same apps.Wire() parse that writes
 # plugin/<app>/main.go, so an app cannot have a main and no Makefile.
-APPS := zero-trust
+APPS := zt
 include ../../mk/plugin.mk
