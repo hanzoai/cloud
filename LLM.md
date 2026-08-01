@@ -752,9 +752,7 @@ document pipeline" below.)
     for a package with no doc, and the weave treats a part carrying it as having
     said nothing. **106 of 112 apps** have a package doc; the tag NAME is never
     conditional on one — the list stays a function of the document's operations,
-    so a consumer enumerating products loses none. Missing: `authz`, `licensing`,
-    `metrics` (their subsystem is another MODULE — nothing here to read), and
-    `commerce`, `security`, `bot` (local packages that document no package).
+    so a consumer enumerating products loses none.
 - **What the router CANNOT tell you — do not try to fix this in the generator.**
   Method, path, path params, and product are derivable; request/response schemas,
   query/header params, status codes, and auth are NOT. The router holds a
@@ -969,6 +967,24 @@ one before it.
   documents OF THE SAME API compare unequal over a title string. `Version` is the
   API CONTRACT version — `v1` forever, house law — never the build's:
   `cloud.Version` here would make every build differ from the committed golden.
+- **Every operation says what it does, and everything said is said about an
+  operation** (`openapi.Complete`, openapi/prose.go, called from `Describe` in
+  describe.go). Both halves fail the same way — a consumer holds an address and no
+  sentence — so both are refused at the ONE producer, naming the app, the route and
+  the remedy, and the artifact is simply not written. Downstream cannot repair
+  this: hanzoai/cli's generated tree used to print the operation's own HTTP ROUTE
+  when it had no sentence (`hanzo platform health` → "GET /v1/platform/health"),
+  and nobody filed a bug because a mechanical line reads exactly like a deliberate
+  one. A placeholder would be that fallback with better manners — it would travel
+  into eight SDKs, the MCP tool list and docs.hanzo.ai and be no more visible in
+  the one place that can fix it. The second half matters as much: `Describe`
+  renders nothing when its key is not a live route, so a MIS-KEYED declaration is
+  prose that was written, reviewed and silently dropped — `POST
+  /v1/store/storefront-token` published an operationId and nothing else while its
+  description sat under the store's old `/v1/store/token` address. An orphan is
+  judged only inside the products that app publishes, because every app binary
+  links cloud's core and therefore carries other subsystems' declarations.
+  **1491 of 1491 operations carry prose; 0 orphans.**
 - **`openapi.yaml` is a GOLDEN, woven from the per-app subsets, and the ONE
   artifact cloud publishes.** `make openapi` writes it (through the weave,
   `-weave`); `make test`, and therefore CI, verifies it with the same weave and no
