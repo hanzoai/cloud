@@ -27978,7 +27978,7 @@ paths:
       summary: ListLoadBalancers returns every load balancer the caller's org owns,
         under the friendly names the org created them with.
       tags:
-      - load-balancers
+      - balancers
     post:
       description: |-
         CreateLoadBalancer creates a load balancer in the caller's org namespace and
@@ -28010,7 +28010,7 @@ paths:
       summary: CreateLoadBalancer creates a load balancer in the caller's org namespace
         and answers 201 with it.
       tags:
-      - load-balancers
+      - balancers
   /v1/balancers/{id}:
     delete:
       description: |-
@@ -28032,7 +28032,7 @@ paths:
       summary: DeleteLoadBalancer removes one of the caller org's load balancers and
         answers 204.
       tags:
-      - load-balancers
+      - balancers
     get:
       description: |-
         GetLoadBalancer returns one of the caller org's load balancers by id. One that
@@ -28055,7 +28055,7 @@ paths:
           description: ok
       summary: GetLoadBalancer returns one of the caller org's load balancers by id.
       tags:
-      - load-balancers
+      - balancers
   /v1/base/health:
     get:
       description: |-
@@ -36843,7 +36843,7 @@ paths:
         (cms, erp, help) may be framed by the caller and is actually running, so a
         console module can choose between the embed and the provision panel.
       tags:
-      - embed-status
+      - embed
   /v1/enablement:
     get:
       description: |-
@@ -52050,7 +52050,7 @@ paths:
           description: ok
       summary: Lists the search indexes with their document counts and timestamps.
       tags:
-      - search-docs
+      - search
   /v1/search/stats:
     get:
       description: |-
@@ -52071,7 +52071,7 @@ paths:
           description: ok
       summary: Totals the documents across every search index.
       tags:
-      - search-docs
+      - search
   /v1/security/findings:
     get:
       description: Lists the caller org's findings — rule, severity, path, line, masked
@@ -57439,6 +57439,9 @@ tags:
 - description: Package automations is workflows that run themselves, on a schedule
     or a webhook.
   name: automations
+- description: Package do is the org-scoped private-network surface — /v1/vpcs and
+    /v1/balancers — carved out of Hanzo's OWN house DigitalOcean account.
+  name: balancers
 - description: 'Package base is managed Hanzo Base: a hosted backend for your app
     — collections, records, access rules and sign-in.'
   name: base
@@ -57550,7 +57553,7 @@ tags:
   name: edge
 - description: 'Package account is your own account: API keys you mint and revoke,
     org onboarding, and wallet top-up.'
-  name: embed-status
+  name: embed
 - description: 'Package pricing is the price list: what every model, provider, GPU
     tier, tool and hosting plan costs.'
   name: enablement
@@ -57656,9 +57659,6 @@ tags:
     a raw provider key) a developer has signed into, ON WHICH MACHINES, with each
     account''s latest usage snapshot.'
   name: links
-- description: Package do is the org-scoped private-network surface — /v1/vpcs and
-    /v1/load-balancers — carved out of Hanzo's OWN house DigitalOcean account.
-  name: load-balancers
 - name: logs
 - description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
     clusters — launch one, resize it, tear it down.'
@@ -57753,13 +57753,7 @@ tags:
 - description: Package websearch is a web search and a page fetch your agents can
     call.
   name: scrape
-- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
-    document, vector, search or object store, wired straight into your app.'
-  name: search
-- description: 'Package product is the read-only inventory of the search and vector
-    backends: /v1/search-docs/{indexes,stats} read from Meilisearch and /v1/vector/{collections,stats}
-    from Qdrant, reshaped into the rows the console renders.'
-  name: search-docs
+- name: search
 - description: 'Package security is secret scanning for your code: submit sources,
     get findings, masked never raw.'
   name: security
@@ -57826,7 +57820,7 @@ tags:
   name: validators
 - name: vector
 - description: Package do is the org-scoped private-network surface — /v1/vpcs and
-    /v1/load-balancers — carved out of Hanzo's OWN house DigitalOcean account.
+    /v1/balancers — carved out of Hanzo's OWN house DigitalOcean account.
   name: vpcs
 - description: 'Package wallets is blockchain key custody: create wallets, rotate
     their keys, and sign with them.'
