@@ -174,6 +174,53 @@ func TestNotStudioReadyClaimsNothing(t *testing.T) {
 	}
 }
 
+// Declining a render this node cannot serve must report NOTHING — the claim's lease
+// lapses and the engine returns the job to pending for a worker that can run it.
+//
+// It used to POST `fail`, which is terminal: the job was not handed to anyone, it was
+// destroyed. Two workers that had both just restarted each claimed one render and each
+// failed it, so the person who asked for that render got nothing back. `fail` is the
+// only verb here that can end a job, and a decline is precisely the case where it must
+// not be used.
+func TestDecliningARenderReturnsItInsteadOfFailingIt(t *testing.T) {
+	var claims []string
+	var reported []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/activities/claim"):
+			var body struct {
+				TaskQueue string `json:"taskQueue"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			claims = append(claims, body.TaskQueue)
+			if body.TaskQueue == "gpu:spark" {
+				a := &claimedActivity{Input: json.RawMessage(`{}`)}
+				a.Execution.WorkflowId, a.Execution.RunId = "wf1", "wf1"
+				a.Type.Name = studioCap // a RENDER, on a node whose studio is down
+				_ = json.NewEncoder(w).Encode(a)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			reported = append(reported, r.URL.Path) // complete / fail / heartbeat
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	// A node with a non-render lane keeps claiming even when its studio is down, so
+	// it is the one that meets a render it cannot serve.
+	w := testWorker(t, srv.URL)
+	w.studioReady = false
+	w.handlers["fn.run"] = echoHandler
+	if err := w.claimAndRun(context.Background(), io.Discard); err != nil {
+		t.Fatalf("claimAndRun: %v", err)
+	}
+	if len(reported) != 0 {
+		t.Fatalf("a declined render was reported terminal via %v; it must be left to the lease", reported)
+	}
+}
+
 // The terminal report must hit the RIGHT activity — namespace gpu-jobs, the CLAIMED
 // workflow+run ids, the correct verb. A stub that 200s every path lets an ns/id
 // routing regression pass, so assert the exact paths for both complete and fail.
