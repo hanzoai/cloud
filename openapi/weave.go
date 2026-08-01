@@ -120,7 +120,7 @@ func prose(parts []Part) map[string]string {
 		for path, item := range p.Doc.Paths {
 			d := segments(path)
 			for _, op := range item {
-				for _, t := range op.Tags {
+				for _, t := range Products(op.Tags) {
 					switch c := root[t]; {
 					case c == nil:
 						root[t] = &claim{depth: d, apps: map[string]bool{p.App: true}}
@@ -323,7 +323,7 @@ func Weave(parts []Part) (*Document, error) {
 	// the document's operations, exactly as From computes it.
 	for _, item := range out.Paths {
 		for _, op := range item {
-			for _, t := range op.Tags {
+			for _, t := range Products(op.Tags) {
 				tags[t] = true
 			}
 		}
