@@ -9,14 +9,7 @@ import (
 	"strings"
 	"time"
 
-	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
-	// the "sqlite" database/sql name under both build tags (cgo →
-	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
-	// modernc directly instead would double-register "sqlite" under CGO and
-	// panic at init. Blank import registers the driver.
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
-	_ "github.com/hanzoai/sqlite"
 )
 
 var (
@@ -25,9 +18,9 @@ var (
 )
 
 // Agent is the org-scoped definition of an autonomous worker: a model, a system
-// prompt (instructions), and a set of tool names it may call. Tenant isolation
-// is the org column, enforced on every query. It never stores a secret — tool
-// credentials live in KMS and are referenced by name at run time.
+// prompt (instructions), and a set of tool names it may call. It lives in its
+// org's own database (see Store), and never stores a secret — tool credentials
+// live in KMS and are referenced by name at run time.
 //
 // The bot-lifecycle fields promote an agent from a one-shot callable into a
 // long-running bot (per hanzo-agent-bot-architecture: "Bot = Agent + compute +
@@ -82,31 +75,28 @@ type Run struct {
 	CreatedAt  int64
 }
 
-// Store is the agents database. ONE SQLite file ({DataDir}/agents.db) holds
-// every org's records; tenancy is the org column.
+// Store is ONE ORG's agents database — the file at
+// {DataDir}/orgs/{slug}/agents.db that cloud.OrgStore opens and caches (HIP-0302
+// physical org isolation), holding that org's agents, runs, sessions, events,
+// targets and claim keys.
+//
+// Isolation is now the FILE. Every method still takes and still applies the org
+// it is given, and that is deliberate: the predicate costs nothing next to the
+// file it already runs in, and it is what makes a mis-resolved store fail closed
+// (an empty read) instead of serving a neighbour's rows. The file is the
+// boundary; the column is the proof that the boundary held.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
-	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+// openStore wraps a per-org *sql.DB that cloud.OrgDB has already opened —
+// cek-encrypted under the org's own key, single-writer, WAL — and runs the
+// schema migration over it. Its signature IS cloud.NewOrgStore's open func, so
+// this subsystem reaches its files the same one way the other fifteen do; it
+// never resolves a path or opens a driver itself.
+func openStore(db *sql.DB) (*Store, error) {
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
-		_ = db.Close()
 		return nil, err
 	}
 	return s, nil
@@ -172,13 +162,14 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_agent_created ON agent_runs(org, agent_na
 		ON agents(org, name) WHERE execution_mode='long-running' AND schedule<>''`); err != nil {
 		return fmt.Errorf("migrate: scheduled index: %w", err)
 	}
-	// Live agent-session control-plane tables live in the SAME agents.db (one
-	// store, one tenancy column) — sessions/events are to runs what the subagent
-	// tree is to a single call.
+	// Live agent-session control-plane tables live in the SAME per-org file —
+	// sessions/events are to runs what the subagent tree is to a single call, and
+	// keeping them in one file is what lets an event append allocate its sequence
+	// and bump its session in ONE transaction.
 	if err := s.migrateSessions(); err != nil {
 		return err
 	}
-	// Agent targets (the #48 dispatch destinations) live in the SAME agents.db too.
+	// Agent targets (the #48 dispatch destinations) live in the SAME file too.
 	if err := s.migrateTargets(); err != nil {
 		return err
 	}
@@ -322,6 +313,10 @@ func decodeList(s string) []string {
 }
 
 const agentCols = `id,org,name,model,instructions,description,tools,status,execution_mode,schedule,compute_ref,service_account_id,created_at,updated_at`
+
+// runCols is the run projection, named ONCE so the insert, the two reads and the
+// legacy fan-out cannot drift apart on a column added to only some of them.
+const runCols = `id,org,agent_name,status,model,input,output,error,duration_ms,created_at`
 
 func scanAgent(sc interface{ Scan(...any) error }) (Agent, error) {
 	var a Agent
@@ -497,8 +492,7 @@ func (s *Store) Delete(ctx context.Context, org, name string) (bool, error) {
 // InsertRun records one agent execution.
 func (s *Store) InsertRun(ctx context.Context, r Run) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_runs (id,org,agent_name,status,model,input,output,error,duration_ms,created_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agent_runs (`+runCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		r.ID, r.Org, r.AgentName, r.Status, r.Model, r.Input, r.Output, r.Error, r.DurationMs, r.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert run: %w", err)
@@ -512,8 +506,7 @@ func (s *Store) ListRuns(ctx context.Context, org, agent string, limit int) ([]R
 		limit = 50
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id,org,agent_name,status,model,input,output,error,duration_ms,created_at
-		 FROM agent_runs WHERE org=? AND agent_name=? ORDER BY created_at DESC LIMIT ?`, org, agent, limit)
+		`SELECT `+runCols+` FROM agent_runs WHERE org=? AND agent_name=? ORDER BY created_at DESC LIMIT ?`, org, agent, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list runs: %w", err)
 	}
@@ -541,8 +534,7 @@ func (s *Store) RunsSince(ctx context.Context, org string, since int64, limit in
 		limit = 200
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id,org,agent_name,status,model,input,output,error,duration_ms,created_at
-		 FROM agent_runs WHERE org=? AND created_at>=? ORDER BY created_at DESC LIMIT ?`, org, since, limit)
+		`SELECT `+runCols+` FROM agent_runs WHERE org=? AND created_at>=? ORDER BY created_at DESC LIMIT ?`, org, since, limit)
 	if err != nil {
 		return nil, fmt.Errorf("runs since: %w", err)
 	}

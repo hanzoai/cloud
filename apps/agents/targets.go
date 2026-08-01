@@ -318,14 +318,11 @@ func (s *Store) GetTargetByHost(ctx context.Context, org, host string) (Target, 
 // store, newest first. Fails closed when the subsystem is not mounted or the org
 // is empty/oversized.
 func TargetsForOrg(ctx context.Context, org string) ([]Target, error) {
-	if mounted == nil || mounted.State.store == nil {
-		return nil, fmt.Errorf("agents: not mounted")
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return nil, err
 	}
-	org = strings.TrimSpace(org)
-	if org == "" || len(org) > principal.MaxOrgLen {
-		return nil, fmt.Errorf("agents: invalid org")
-	}
-	return mounted.State.store.ListTargets(ctx, org)
+	return sto.ListTargets(ctx, org)
 }
 
 // ResolveTarget resolves a human's target REFERENCE — a target id or its friendly
@@ -340,25 +337,22 @@ func TargetsForOrg(ctx context.Context, org string) ([]Target, error) {
 // preferred). A reference that matches neither is not found — the caller renders an
 // honest error and NEVER falls back to a local run.
 func ResolveTarget(ctx context.Context, org, ref string) (Target, error) {
-	if mounted == nil || mounted.State.store == nil {
-		return Target{}, fmt.Errorf("agents: not mounted")
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return Target{}, err
 	}
-	org = strings.TrimSpace(org)
 	ref = strings.TrimSpace(ref)
-	if org == "" || len(org) > principal.MaxOrgLen {
-		return Target{}, fmt.Errorf("agents: invalid org")
-	}
 	if ref == "" || len(ref) > maxTargetID {
 		return Target{}, errTargetNotFound
 	}
 	// An id is exact and unambiguous — try it first.
-	if t, err := mounted.State.store.GetTarget(ctx, org, ref); err == nil {
+	if t, err := sto.GetTarget(ctx, org, ref); err == nil {
 		return t, nil
 	} else if err != errTargetNotFound {
 		return Target{}, err
 	}
 	// Else an exact, case-folded label match within this org.
-	rows, err := mounted.State.store.ListTargets(ctx, org)
+	rows, err := sto.ListTargets(ctx, org)
 	if err != nil {
 		return Target{}, err
 	}
@@ -374,14 +368,11 @@ func ResolveTarget(ctx context.Context, org, ref string) (Target, error) {
 // (target id OR host) mapping the HTTP views use, so the board and /v1/agents/
 // targets can never disagree about what is running where.
 func LoadOn(ctx context.Context, org, id, host string) (TargetLoad, error) {
-	if mounted == nil || mounted.State.store == nil {
-		return TargetLoad{}, fmt.Errorf("agents: not mounted")
+	sto, org, err := mountedStore(org)
+	if err != nil {
+		return TargetLoad{}, err
 	}
-	org = strings.TrimSpace(org)
-	if org == "" || len(org) > principal.MaxOrgLen {
-		return TargetLoad{}, fmt.Errorf("agents: invalid org")
-	}
-	return mounted.State.store.SessionLoad(ctx, org, id, host)
+	return sto.SessionLoad(ctx, org, id, host)
 }
 
 // DeleteTarget removes an org's target. Sessions keep their recorded target id (a
@@ -678,7 +669,7 @@ type targetReq struct {
 //
 // Example: {"label": "workshop", "kind": "gpu", "host": "gpu-01"}
 func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetView, error) {
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &o.s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -736,16 +727,16 @@ func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetVi
 	// machine; the caller falls through to create its own. Only an explicit host keys
 	// this — an anonymous target (no host) always creates.
 	if host != "" {
-		if existing, err := o.s.State.store.GetLinkableTargetByHost(ctx, org, host, owner); err == nil {
+		if existing, err := sto.GetLinkableTargetByHost(ctx, org, host, owner); err == nil {
 			existing.Owner = owner // bind an adopted unowned row; no-op if already ours
 			existing.Label, existing.Kind, existing.Status, existing.Capacity = label, kind, status, capacity
 			existing.Spec, existing.Metrics, existing.MetricsAt = spec, metrics, metricsAt
 			existing.UpdatedAt = now
-			if err := o.s.State.store.UpdateTarget(ctx, existing); err != nil {
+			if err := sto.UpdateTarget(ctx, existing); err != nil {
 				return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 			}
 			recordSample(o.s, existing) // a re-link carrying metrics IS a heartbeat
-			load, _ := o.s.State.store.SessionLoad(ctx, org, existing.ID, existing.Host)
+			load, _ := sto.SessionLoad(ctx, org, existing.ID, existing.Host)
 			v := toTargetView(existing, load)
 			return &v, nil
 		}
@@ -760,7 +751,7 @@ func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetVi
 		Capacity: capacity, Host: host, Spec: spec, Metrics: metrics, MetricsAt: metricsAt,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := o.s.State.store.CreateTarget(ctx, t); err != nil {
+	if err := sto.CreateTarget(ctx, t); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
 	recordSample(o.s, t) // a registration carrying metrics is the target's first sample
@@ -778,17 +769,17 @@ func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetVi
 // ListTargets returns every machine registered to the caller's org, newest
 // first, each with its live session load.
 func (o targetOps) listTargets(ctx context.Context, _ *noInput) (*targetList, error) {
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &o.s.State)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := o.s.State.store.ListTargets(ctx, org)
+	rows, err := sto.ListTargets(ctx, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]targetView, 0, len(rows))
 	for _, t := range rows {
-		load, _ := o.s.State.store.SessionLoad(ctx, org, t.ID, t.Host)
+		load, _ := sto.SessionLoad(ctx, org, t.ID, t.Host)
 		out = append(out, toTargetView(t, load))
 	}
 	return &targetList{Targets: out}, nil
@@ -800,7 +791,7 @@ func (o targetOps) listTargets(ctx context.Context, _ *noInput) (*targetList, er
 //
 // Example: {"id": "tgt_1"}
 func (o targetOps) getTarget(ctx context.Context, in *targetRef) (*targetView, error) {
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &o.s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -808,14 +799,14 @@ func (o targetOps) getTarget(ctx context.Context, in *targetRef) (*targetView, e
 	if len(id) > maxTargetID {
 		return nil, zip.ErrNotFound("target not found")
 	}
-	t, err := o.s.State.store.GetTarget(ctx, org, id)
+	t, err := sto.GetTarget(ctx, org, id)
 	if err == errTargetNotFound {
 		return nil, zip.ErrNotFound("target not found")
 	}
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	load, _ := o.s.State.store.SessionLoad(ctx, org, t.ID, t.Host)
+	load, _ := sto.SessionLoad(ctx, org, t.ID, t.Host)
 	v := toTargetView(t, load)
 	return &v, nil
 }
@@ -838,12 +829,12 @@ type patchTargetReq struct {
 //
 // Example: {"id": "tgt_1", "status": "draining"}
 func (o targetOps) patchTarget(ctx context.Context, in *patchTargetIn) (*targetView, error) {
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &o.s.State)
 	if err != nil {
 		return nil, err
 	}
 	id := in.ID
-	t, err := o.s.State.store.GetTarget(ctx, org, id)
+	t, err := sto.GetTarget(ctx, org, id)
 	if err == errTargetNotFound {
 		return nil, zip.ErrNotFound("target not found")
 	}
@@ -913,7 +904,7 @@ func (o targetOps) patchTarget(ctx context.Context, in *patchTargetIn) (*targetV
 		}
 	}
 	t.UpdatedAt = now
-	if err := o.s.State.store.UpdateTarget(ctx, t); err != nil {
+	if err := sto.UpdateTarget(ctx, t); err != nil {
 		if err == errTargetNotFound {
 			return nil, zip.ErrNotFound("target not found")
 		}
@@ -922,7 +913,7 @@ func (o targetOps) patchTarget(ctx context.Context, in *patchTargetIn) (*targetV
 	if body.Metrics != nil {
 		recordSample(o.s, t) // THE heartbeat: append it to the fleet series too
 	}
-	load, _ := o.s.State.store.SessionLoad(ctx, org, t.ID, t.Host)
+	load, _ := sto.SessionLoad(ctx, org, t.ID, t.Host)
 	v := toTargetView(t, load)
 	return &v, nil
 }
@@ -935,7 +926,7 @@ func (o targetOps) patchTarget(ctx context.Context, in *patchTargetIn) (*targetV
 //
 // Example: {"id": "tgt_1"}
 func (o targetOps) deleteTarget(ctx context.Context, in *targetRef) (*targetDeleted, error) {
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &o.s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -943,7 +934,7 @@ func (o targetOps) deleteTarget(ctx context.Context, in *targetRef) (*targetDele
 	// Resolve + ownership-gate before deleting: only the machine's owner (or an org
 	// admin) may deregister it. A cross-org id, an unknown id, and a non-owned id all
 	// collapse to the same not-found — no oracle.
-	t, err := o.s.State.store.GetTarget(ctx, org, id)
+	t, err := sto.GetTarget(ctx, org, id)
 	if err == errTargetNotFound {
 		return nil, zip.ErrNotFound("target not found")
 	}
@@ -953,7 +944,7 @@ func (o targetOps) deleteTarget(ctx context.Context, in *targetRef) (*targetDele
 	if !targetOwns(ctx, t) {
 		return nil, zip.ErrNotFound("target not found")
 	}
-	deleted, err := o.s.State.store.DeleteTarget(ctx, org, id)
+	deleted, err := sto.DeleteTarget(ctx, org, id)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}

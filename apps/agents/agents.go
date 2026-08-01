@@ -4,9 +4,14 @@
 // An agent is a model + a system prompt (instructions) + a set of tool names;
 // running one executes a real chat completion through the in-process AI client
 // (the SAME gateway path the rest of the console uses) and records the run.
-// Tenant isolation is the gateway-minted X-Org-Id (HIP-0026) enforced as the
-// org column on every query, so one tenant can never read, run, or delete
-// another's agents.
+//
+// Tenant isolation is the FILE: each org's records live in its own SQLite at
+// {DataDir}/orgs/{slug}/agents.db (HIP-0302), named from the gateway-minted
+// X-Org-Id (HIP-0026) and nothing else. One tenant cannot read, run or delete
+// another's agents because the query never reaches the database they are in.
+// tenancy.go is the whole of that argument and is the only file that resolves a
+// store; the org predicate every statement still carries is what makes a
+// mis-resolved store fail closed rather than answer.
 //
 // Surface (all org-scoped; console's AgentsModule reads {agents:[...]}):
 //
@@ -22,8 +27,10 @@
 // return) OR its org-unique name — resolved by Store.Resolve, so a created agent
 // is immediately gettable and runnable by whatever create/list handed back.
 //
-// The store is SQLite in deps.DataDir (Base/SQLite-only). It holds definitions
-// and run I/O only — never a secret; tool credentials live in KMS by reference.
+// The stores are per-org SQLite under deps.DataDir (Base/SQLite-only), opened
+// through cloud.OrgStore like every other per-org subsystem. They hold
+// definitions and run I/O only — never a secret; tool credentials live in KMS by
+// reference.
 package agents
 
 import (
@@ -35,7 +42,6 @@ import (
 	mrand "math/rand/v2"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -104,8 +110,13 @@ const (
 // the "agent"-provider meter (the commerce attribution + spend-cap scope key),
 // deliberately distinct from the subsystem's own Base.Bill, so it is NOT lifted.
 type state struct {
-	store *Store
-	ai    types.AIClient
+	// stores is the per-org agents database set: one SQLite file per org under
+	// {DataDir}/orgs/{slug}/agents.db, opened on first touch and cached. It
+	// replaced a single fleet-wide agents.db whose one connection every org's
+	// every event append queued behind. Reached ONLY through storeFor — see
+	// tenancy.go for why that is the whole isolation argument.
+	stores *cloud.OrgStore[*Store]
+	ai     types.AIClient
 	// defaultModel is the deployment's configured default served model
 	// (deps.AIDefaultModel). An agent created without an explicit model is
 	// stored with it, so the ONE model default lives in config, never hardcoded
@@ -292,18 +303,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("agents.Mount: router carries no typed-op registry")
 	}
-	store, err := openStore(filepath.Join(deps.DataDir, "agents.db"))
-	if err != nil {
-		return fmt.Errorf("agents.Mount: open store: %w", err)
-	}
 	// deps.AI may be nil when no gateway is configured; run() degrades honestly.
 	// agents is a "complex" mount (package-global `mounted`, a background scheduler,
 	// a shutdown teardown), so it builds the Service value directly.
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "agents"),
 		State: state{
-			store: store,
-			ai:    deps.AI,
+			stores: cloud.NewOrgStore[*Store](deps.DataDir, "agents", openStore),
+			ai:     deps.AI,
 			// cloud.ZenModel guards the CONFIG boundary: an operator who points
 			// CLOUD_AI_DEFAULT_MODEL at an upstream name still gets the Hanzo name
 			// stamped on every agent seeded or created without one. The caller
@@ -318,6 +325,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			// to the engine's Signal/Cancel API (see sessions_tasks.go).
 			tasks: disabledTaskController{},
 		},
+	}
+	// Split a pre-existing fleet-wide agents.db into per-org files BEFORE a route
+	// exists to read them, and fail the mount if it cannot be done: an empty
+	// registry served over live rows is the one outcome worse than not booting.
+	if err := fanOutLegacy(context.Background(), deps.DataDir, &s.State); err != nil {
+		_ = s.State.stores.CloseAll()
+		return fmt.Errorf("agents.Mount: %w", err)
 	}
 	mounted = s
 
@@ -461,7 +475,7 @@ type createAgentIn struct {
 // Example: {"name": "helper", "model": "enso-flash", "instructions": "be terse"}
 func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -512,7 +526,7 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 	// unbounded number of scheduled agents that each add recurring load to the
 	// shared store. Only counts when this create is itself long-running.
 	if mode == ModeLongRunning {
-		n, err := s.State.store.CountLongRunning(ctx, org)
+		n, err := sto.CountLongRunning(ctx, org)
 		if err != nil {
 			return nil, zip.Errorf(http.StatusInternalServerError, "count: %v", err)
 		}
@@ -533,7 +547,7 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 		ComputeRef: computeRef, ServiceAccountID: serviceAccountID,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.State.store.Create(ctx, a); err != nil {
+	if err := sto.Create(ctx, a); err != nil {
 		if err == errConflict {
 			return nil, zip.ErrConflict("agent already exists in this org")
 		}
@@ -547,17 +561,17 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 // number of runs recorded against it.
 func (o agentOps) list(ctx context.Context, _ *noInput) (*agentList, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.State.store.List(ctx, org)
+	rows, err := sto.List(ctx, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]agentView, 0, len(rows))
 	for _, a := range rows {
-		n, err := s.State.store.CountRuns(ctx, org, a.Name)
+		n, err := sto.CountRuns(ctx, org, a.Name)
 		if err != nil {
 			return nil, zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 		}
@@ -573,18 +587,18 @@ func (o agentOps) list(ctx context.Context, _ *noInput) (*agentList, error) {
 // Example: {"ref": "helper"}
 func (o agentOps) get(ctx context.Context, in *agentRef) (*agentDetail, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
-	a, err := s.State.store.Resolve(ctx, org, strings.TrimSpace(in.Ref))
+	a, err := sto.Resolve(ctx, org, strings.TrimSpace(in.Ref))
 	if err == errNotFound {
 		return nil, zip.ErrNotFound("agent not found")
 	}
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	runs, err := s.State.store.ListRuns(ctx, org, a.Name, 20)
+	runs, err := sto.ListRuns(ctx, org, a.Name, 20)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 	}
@@ -626,11 +640,11 @@ type updateAgentIn struct {
 // Example: {"ref": "helper", "instructions": "be terse and cite sources"}
 func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
-	a, err := s.State.store.Resolve(ctx, org, strings.TrimSpace(in.Ref))
+	a, err := sto.Resolve(ctx, org, strings.TrimSpace(in.Ref))
 	if err == errNotFound {
 		return nil, zip.ErrNotFound("agent not found")
 	}
@@ -690,7 +704,7 @@ func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, er
 	// agent was NOT already long-running (a no-op re-save of an existing
 	// long-running agent must not 409 against its own row).
 	if a.ExecutionMode == ModeLongRunning && !wasLongRunning {
-		n, cerr := s.State.store.CountLongRunning(ctx, org)
+		n, cerr := sto.CountLongRunning(ctx, org)
 		if cerr != nil {
 			return nil, zip.Errorf(http.StatusInternalServerError, "count: %v", cerr)
 		}
@@ -700,13 +714,13 @@ func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, er
 		}
 	}
 	a.UpdatedAt = time.Now().Unix()
-	if err := s.State.store.Update(ctx, a); err != nil {
+	if err := sto.Update(ctx, a); err != nil {
 		if err == errNotFound {
 			return nil, zip.ErrNotFound("agent not found")
 		}
 		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
-	n, _ := s.State.store.CountRuns(ctx, org, a.Name)
+	n, _ := sto.CountRuns(ctx, org, a.Name)
 	v := toView(a, n)
 	return &v, nil
 }
@@ -716,21 +730,21 @@ func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, er
 // Example: {"ref": "helper"}
 func (o agentOps) del(ctx context.Context, in *agentRef) (*noContent, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
 	// Resolve id-or-name first, then delete by the canonical name (agent_runs
 	// cascades on agent_name). Deleting by a raw id would never match the store's
 	// name key and silently 404 a real agent.
-	a, err := s.State.store.Resolve(ctx, org, strings.TrimSpace(in.Ref))
+	a, err := sto.Resolve(ctx, org, strings.TrimSpace(in.Ref))
 	if err == errNotFound {
 		return nil, zip.ErrNotFound("agent not found")
 	}
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "resolve: %v", err)
 	}
-	deleted, err := s.State.store.Delete(ctx, org, a.Name)
+	deleted, err := sto.Delete(ctx, org, a.Name)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -807,7 +821,11 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	if strings.TrimSpace(c.User()) == "" {
 		return zip.ErrForbidden("a validated principal is required to run an agent")
 	}
-	a, err := s.State.store.Resolve(c.Context(), org, refParam(c))
+	sto, err := s.State.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "store: %v", err)
+	}
+	a, err := sto.Resolve(c.Context(), org, refParam(c))
 	if err == errNotFound {
 		return zip.ErrNotFound("agent not found")
 	}
@@ -880,7 +898,12 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, acto
 	if r.Status == "error" {
 		span.SetStatus(codes.Error, r.Error)
 	}
-	if err := s.State.store.InsertRun(ctx, r); err != nil {
+	// The agent's own org names the file its run history lands in — the run has
+	// already been gated and executed under it, so this is bookkeeping, not a
+	// second authorization.
+	if sto, serr := s.State.storeFor(a.Org); serr != nil {
+		s.Log.Warn("record run failed", "org", a.Org, "agent", a.Name, "err", serr)
+	} else if err := sto.InsertRun(ctx, r); err != nil {
 		s.Log.Warn("record run failed", "org", a.Org, "agent", a.Name, "err", err)
 	}
 
@@ -1044,11 +1067,11 @@ func sleepBackoff(ctx context.Context, attempt int) error {
 // Example: {"ref": "helper", "limit": 20}
 func (o agentOps) runs(ctx context.Context, in *runsQuery) (*runList, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
-	a, err := s.State.store.Resolve(ctx, org, strings.TrimSpace(in.Ref))
+	a, err := sto.Resolve(ctx, org, strings.TrimSpace(in.Ref))
 	if err == errNotFound {
 		return nil, zip.ErrNotFound("agent not found")
 	}
@@ -1058,7 +1081,7 @@ func (o agentOps) runs(ctx context.Context, in *runsQuery) (*runList, error) {
 	// ListRuns owns the page bound: it reads 0 (absent) and anything outside
 	// 1..200 as its own 50, which is exactly what an unparseable ?limit= produced
 	// before — the binder leaves the field at zero for the same input.
-	runs, err := s.State.store.ListRuns(ctx, org, a.Name, in.Limit)
+	runs, err := sto.ListRuns(ctx, org, a.Name, in.Limit)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 	}
@@ -1079,14 +1102,14 @@ func (o agentOps) runs(ctx context.Context, in *runsQuery) (*runList, error) {
 // Example: {"range": "7D"}
 func (o agentOps) metrics(ctx context.Context, in *metricsQuery) (*metricsView, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
 	rng, buckets, step := metricsWindow(in.Range)
 	now := time.Now()
 	start := now.Add(-time.Duration(buckets) * step) // last bucket ends at now
-	runs, err := s.State.store.RunsSince(ctx, org, start.Unix(), 10000)
+	runs, err := sto.RunsSince(ctx, org, start.Unix(), 10000)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
 	}
@@ -1142,16 +1165,16 @@ func metricsWindow(raw string) (rng string, buckets int, step time.Duration) {
 // capped. Nothing is invented — an org with no agents and no runs gets [].
 func (o agentOps) activity(ctx context.Context, _ *noInput) (*activityFeed, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
 	const limit = 50
-	runs, err := s.State.store.RunsSince(ctx, org, 0, 200)
+	runs, err := sto.RunsSince(ctx, org, 0, 200)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "activity runs: %v", err)
 	}
-	rows, err := s.State.store.List(ctx, org)
+	rows, err := sto.List(ctx, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "activity agents: %v", err)
 	}
@@ -1344,8 +1367,8 @@ func Shutdown(ctx context.Context) error {
 		mounted.State.bus.close()
 	}
 	var err error
-	if mounted.State.store != nil {
-		err = mounted.State.store.Close()
+	if mounted.State.stores != nil {
+		err = mounted.State.stores.CloseAll()
 	}
 	mounted = nil
 	return err

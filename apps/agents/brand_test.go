@@ -111,7 +111,7 @@ func TestMigrateModelRewritesStoredRows(t *testing.T) {
 	ctx := context.Background()
 
 	// A store holding exactly what the live registry held.
-	st, err := openStore(dir)
+	st, err := openStoreAt(dir)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
