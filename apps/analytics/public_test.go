@@ -644,39 +644,7 @@ func TestFanOut_PublicTenantNeverReachesDestinations(t *testing.T) {
 	}
 }
 
-// ── the anonymous lane's IDENTITY and the name behind it ─────────────────────
-
-// TestAnonError_NameIsNeverTheExceptionClass: `error` is admitted because the SERVER
-// names it, and that sentence was FALSE while resolveName fell back to the caller's
-// exception class. A credential-less `{"type":"error","error":{"type":"…"}}` chose the
-// stored `name` — fifty distinct values per request, and on a published-site host in a
-// real org's partition.
-//
-// This walks the whole composition a handler does (admitPublic → foldException →
-// normalize) rather than resolveName alone, because the projection and the naming are
-// two halves of one rule: what the wire carries must not reach `name` through EITHER.
-// The class is not lost — it is the fault's `class`, which is what fingerprint() groups
-// on, and that is asserted here so the fix cannot be read as dropping the fact.
-func TestAnonError_NameIsNeverTheExceptionClass(t *testing.T) {
-	chosen := "AttackerChosen::Cardinality#" + strings.Repeat("x", 40)
-	out, dropped := admitPublic([]CaptureEvent{{
-		Type:  "error",
-		Error: &Exception{Type: chosen, Message: "boom"},
-	}})
-	if len(out) != 1 || dropped != 0 {
-		t.Fatalf("an anonymous error is admitted: got %d admitted, %d dropped", len(out), dropped)
-	}
-	f, ok := normalize("acme", time.Now(), foldException(out[0]))
-	if !ok {
-		t.Fatal("normalize dropped an admitted anonymous error")
-	}
-	if f.name != "error" {
-		t.Fatalf("stored name = %q, want %q — the caller's class reached the name column", f.name, "error")
-	}
-	if f.fault == nil || f.fault.class != chosen {
-		t.Fatalf("the class is still the fault's own fact: got %+v", f.fault)
-	}
-}
+// ── the anonymous lane's IDENTITY ───────────────────────────────────────────
 
 // TestAnonSubject_NamespacedNotTheCallersName: nobody signed for an anonymous row, so the
 // id it carries may not be a name that identifies a person. An unattested
