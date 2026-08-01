@@ -1,107 +1,95 @@
 name: CI/CD
-# The ONE pipeline for cloud, on our own runners against git.hanzo.ai.
+# THE RELEASE TRAIN. One workflow, one graph, one release.
+#
+#   gate ──┐
+#          ├─→ image ─→ rollout ─→ reach ─→ fanout ─→ receipt
+#   containment ─┘
 #
 # THE LAW: `.github/workflows` holds exactly one file — a sync nudge that runs
-# zero CI. Everything that gates, builds or deploys lives here.
+# zero CI. Everything that gates, builds, releases or fans out lives here, and
+# runs on our own runners against git.hanzo.ai.
 #
-# It absorbs the three pipelines that used to run beside each other:
+# WHAT CHANGED, AND WHY IT IS THE WHOLE POINT.
 #
-#   .github/workflows/cicd.yml  → `gate` (unchanged: the ~7-line caller; every
-#     real detail still lives in the repo-root hanzo.yml, which
-#     platform.hanzo.ai reads too, so no build logic moved)
-#   .github/workflows/containment.yml → `containment` (verbatim; only its own
-#     self-exclusion path follows the file)
-#   .hanzo/workflows/deploy.yml → deleted, then RESTORED (below)
+# This file used to gate, and .hanzo/workflows/deploy.yml used to release, and
+# they were two files with the SAME TRIGGER. Actions cannot express `needs:`
+# across workflow files, so `deploy` built, smoked, tagged and pinned while
+# `gate` was still running — or after it had gone red. That is not a
+# hypothetical: the drift gate (`make -f mk/fleet.mk surface-check`) was RED on
+# main while 87 commits and 6 releases went out in 24 hours, and what shipped was
+# a binary serving /v1/billing/gpu/eligibility and publishing
+# /v1/billing/gpu-eligibility. One build, two answers, both signed off.
 #
-# THIS FILE GATES. deploy.yml RELEASES. That split is new, and it reverses what
-# this header used to say.
+# So deploy.yml is GONE and its jobs are here, behind `needs:`. The gate was
+# always correct; it simply had no edge to the thing it was meant to stop.
 #
-# It used to read: "deliberately builds no cloud image — that image and its v*
-# tags have ONE owner, apps/platform/release.go (POST /v1/runner {release:true})."
-# The single owner was the right instinct and the wrong address. THE OWNER COULD
-# NOT SURVIVE ITS OWN DEPLOY.
+# THE TRAIN HAD ONE CAR. It ended at "pin pushed" — nothing regenerated the
+# document's projections, so an SDK, the MCP tool list, the CLI's captured
+# command surface and the docs each moved only when a human remembered. Measured:
+# npm `hanzoai` had two versions in its entire history, `hanzo-client` was not on
+# crates.io at all, four of seven SDK repos had no regeneration path, the three
+# that did had a `repository_dispatch: spec-update` listener NOTHING HAS EVER
+# SENT, and regenerating the CLI capture would have moved 15 operations.
 #
-# release.go ran build → smoke → tag → rollout in a goroutine detached with
-# context.WithoutCancel, inside a service that runs at replicas: 1 with strategy:
-# Recreate — and the last thing it did was move the pin that rolls that replica.
-# Any sync of charts/app/values/hanzo/cloud.yaml killed the only pod and the
-# pipeline with it, after the image was pushed but before it was smoked, tagged
-# or pinned. The tag list is the evidence: v1.801.326, 327, 329 and 335 exist;
-# 328, 330-334 and 336+ do not. Each gap is a published image nobody can name.
+# THE COUPLER IS THE DOCUMENT, PASSED BY VALUE AT A PINNED SHA. Every car below
+# carries (version, sha, sha256(openapi.yaml)). No car reads api.hanzo.ai to
+# GENERATE anything — at generation time the deploy has already happened, and
+# reading the host names whatever it is serving rather than the release that sent
+# it. The host is read for exactly one purpose: to prove the release is live.
 #
-# So the release moved to where every other service's release already runs, and
-# cloud stopped being the one service that did it differently.
-#
-# The ORIGINAL deploy.yml's defects were real and are not repeated. It shelled
-# `buildctl-daemonless.sh`, absent from the image this fleet serves for
-# `hanzo-build-linux-amd64` (catthehacker/ubuntu:act-24.04 —
-# universe:infra/k8s/git-runner/statefulset.yaml); the new one uses
-# docker/build-push-action on that runner's own daemon. It read a GIT_CLONE_TOKEN
-# secret that exists on neither the repo nor the org; the new one reads
-# GHCR_USER/GHCR_TOKEN/GH_PAT/KMS_CLIENT_* — the same set insights, analytics,
-# studio and bot-hub already release with. And it ended in a `kubectl patch app`
-# that cd.hanzo.ai's selfHeal undoes on its next poll; the new one ends in
-# pin.sh. Rollout is, and stays, a reviewed tag pin in hanzoai/universe.
+# IT DOES NOT ROLL BACK. IT BLOCKS AND RESUMES. You cannot unpublish a package
+# version, so the cars are ordered by irreversibility — in-repo (gate) → registry
+# but unnamed (image; the TAG is minted only after smoke, so a tag can never name
+# an image that did not boot) → production (rollout) → the outside world (fanout).
+# Every car is idempotent on (version, digest): re-running at the same sha reuses
+# the same version, re-probes instead of re-pushing, and treats "already there,
+# same bytes" as success. A failed car leaves a hole in the receipt, and the
+# receipt is the definition of shipped.
 on:
   push:
     branches: [main]
     # v* is what publishes the plugin binary (hanzo.yml `binaries:` → bucket:).
     # ci builds it on every push and publishes only on a tag, and the tag here is
-    # deploy.yml's receipt for an image that already built and smoked — so the
-    # artifact a host installs unattended can only come from a proven commit,
-    # and this still mints no tag of its own. (The receipt moved from release.go
-    # to deploy.yml; what it certifies did not.)
-    #
-    # This sat under `workflow_dispatch:` instead of `push:`, where it means
-    # nothing — and a SECOND `workflow_dispatch:` key below then overwrote that
-    # whole mapping, so the filter was dropped twice over. YAML takes the last
-    # duplicate key and says nothing, so the file parsed, the workflow ran, and
-    # `v*` tags simply never triggered a build. Effective `on:` was
-    #   {push: {branches: [main]}, workflow_dispatch: None, pull_request: None}
+    # the receipt for an image that already built and smoked — so the artifact a
+    # host installs unattended can only come from a proven commit.
     tags: ["v*"]
   pull_request:
-  # On-demand rebuild. Without this the ONLY way to get an image is to land a
-  # commit on main, so recovering from a bad build means pushing an empty commit
-  # and waiting — and POST .../workflows/cicd.yml/dispatches answers 500, which
-  # reads like a broken forge rather than a workflow that never opted in.
-  #
-  # It is also how the sync (sync-from-github.yml) starts this workflow after a
-  # fast-forward: a push made with the workflow token does not trigger workflows,
-  # so without this trigger every synced commit would gate nothing. deploy.yml
-  # declared no dispatch trigger, which is why that curl could only 404.
+  # On-demand rebuild, and the RESUME entry point. A release that failed at
+  # fanout is resumed by dispatching this workflow at the same sha: image and
+  # rollout recognise their own receipts and no-op in seconds, and the failed car
+  # runs again. It is also how sync-from-github.yml starts this after a
+  # fast-forward — a push made with the workflow token fires no workflows.
   workflow_dispatch:
 concurrency:
+  # ONE release at a time, queued not cancelled: the image is pushed early and
+  # the tag and pin come last, so killing a run midway leaves an orphan — ten of
+  # them between v1.801.335 and v1.801.350. Pull requests are a different ref, so
+  # they neither queue behind a release nor hold one up, and a new push to a PR
+  # cancels its own stale run.
   group: cicd-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  # The test gate, driven by hanzo.yml.
+  # ══ CAR 0 ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
+  #
+  # The test gate, driven by hanzo.yml, whose `app-contract` step is
+  # `make -f mk/fleet.mk surface-check`: regenerate all 116 app subsets FROM
+  # SOURCE, re-weave openapi.yaml, and refuse any porcelain change. It
+  # regenerates rather than comparing two derived artifacts (which is how
+  # plugin/ingress silently lost eight paths) and checks with --porcelain rather
+  # than `git diff` (so a NEW app's untracked subset cannot hide).
   gate:
-    # `.hanzo/workflows/`, and the reason it is safe to say that NOW is that the
-    # v1 channel tag moved: hanzoai/ci 66d4f21 publishes build.yml at BOTH paths
-    # from every tag, byte-identical apart from its header, because GitHub
-    # resolves only `.github/workflows` and git.hanzo.ai only `.hanzo/workflows`.
-    # Verified against the live remote — v1 and v2 both serve
-    # .hanzo/workflows/build.yml (blob 1100f49a672b).
-    #
-    # It could not be said before, and the old failure is worth keeping in view
-    # because of HOW it failed. Pinned at a path the ref does not carry, the
-    # forge cannot even construct a run:
-    #   PrepareRun: InsertRun: read hanzoai/ci@v1:.hanzo/workflows/build.yml:
-    #   object does not exist
-    # InsertRun fails before any run row is written, so there is no failed run to
-    # look at — pushes and workflow_dispatch alike silently do nothing. Dead CI
-    # here is not red, it is absent.
-    #
-    # The path has to move regardless. Reusables resolve through
-    # services/actions.ResolveUses, which enforces the WORKFLOW_DIRS allowlist on
-    # the referenced path, so once that list narrows to `.hanzo/workflows` alone
-    # a `uses:` naming `.github/workflows` is refused outright. Leaving it would
-    # trade one silent no-run for another.
+    # `.hanzo/workflows/`, because GitHub resolves only `.github/workflows` and
+    # git.hanzo.ai only `.hanzo/workflows`; hanzoai/ci publishes build.yml at BOTH
+    # paths from every tag, byte-identical apart from its header. Pinned at a path
+    # the ref does not carry, the forge cannot even construct a run — InsertRun
+    # fails before any run row is written, so there is no failed run to look at.
+    # Dead CI here is not red, it is absent.
     uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     with:
-      # Not on a tag: release.go mints v* only after that SHA passed this gate
-      # on main and built and smoked, so a tag build re-tests a proven commit —
-      # and app-contract alone is 108 links. Run it once, not twice.
+      # Not on a tag: the tag is minted below only after this gate passed on main
+      # AND the image built AND it smoked, so a tag build re-tests a proven
+      # commit — and app-contract alone is 108 links. Run it once, not twice.
       tests: ${{ github.ref_type != 'tag' }}
     secrets: inherit
 
@@ -200,12 +188,6 @@ jobs:
         # that cannot see them. Everything else stays on the public proxy + checksum
         # db, which is what makes a module hash immutable: zap-proto (all 55 repos)
         # and luxfi (all 37 deps here) are public and proxy-served.
-        #
-        # This previously named zap-proto — public, and never the reason anything
-        # here was direct — and then set GOSUMDB=off to compensate for hanzoai/*
-        # being absent, which disabled checksum verification for EVERY module in the
-        # build, public ones included. Naming the private namespace is what the off
-        # switch was standing in for.
         run: |
           git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
           {
@@ -240,13 +222,8 @@ jobs:
           set -euo pipefail
 
           # Containment is an IMPORT-GRAPH property, so prove it with the import
-          # graph. This step used to lead with `go build ./...`, which compiles
-          # AND LINKS every cmd/ main — work this proof does not need and this
-          # job should not be doing: `go list -deps` reads the same untagged
-          # file set without linking, in seconds, and the gate job is the ONE
-          # place that builds. A green compile here would also have proved
-          # nothing extra; the containment claim is entirely about which
-          # packages are reachable, which is what the graph answers.
+          # graph. `go list -deps` reads the same untagged file set without
+          # linking, in seconds, and the gate job is the ONE place that builds.
           for m in $(go list ./cmd/... ./plugin/...); do
             if go list -deps "$m" | grep -qx 'github.com/hanzoai/cloud/apps/controlplane'; then
               echo "::error::$m links apps/controlplane into a real binary — containment breach"
@@ -262,3 +239,486 @@ jobs:
 
           echo "OK: containment holds — apps/controlplane has zero buildable files by default and is linked into no cmd/ binary"
 
+  # ══ CAR 1 ══ THE IMAGE. Publish bytes; name them only once they boot.
+  #
+  # Unchanged from deploy.yml apart from `needs:` and the resume probe. The
+  # version maxes over BOTH published image tags AND git tags: the registry is the
+  # authority on what has been USED (an orphaned build publishes an image and no
+  # tag, so git alone would re-emit a live tag) but a tag can also outlive its
+  # image, so neither is a superset. The smoke gate stays BEFORE the tag, which is
+  # what makes a tag a receipt for an image that booted.
+  image:
+    needs: [gate, containment]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [hanzo-build-linux-amd64]
+    # cloud builds ~28 subsystems and has run 15m, 17m and 20m42s.
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      spec_sha256: ${{ steps.ver.outputs.spec_sha256 }}
+      resumed: ${{ steps.ver.outputs.resumed }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USER }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Version, derived ONCE — and reused on a resume
+        id: ver
+        env:
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+
+          # THE DIGEST OF THE DOCUMENT, computed here and carried by every car
+          # below. This is the coupler: a projection generated from any other
+          # bytes is a projection of a release nobody shipped.
+          SPEC_SHA=$(sha256sum openapi.yaml | cut -d' ' -f1)
+          echo "spec_sha256=$SPEC_SHA" >> "$GITHUB_OUTPUT"
+
+          # RESUME. A release that failed at a later car is re-run at the SAME
+          # sha, and must not mint a second version for one commit — that is how
+          # a tag comes to name bytes nobody smoked. If a v* tag already points
+          # here, this run IS that release: take its number and let every step
+          # below recognise its own receipt.
+          MINE=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          if [ -n "$MINE" ]; then
+            echo "version=${MINE#v}" >> "$GITHUB_OUTPUT"
+            echo "resumed=1" >> "$GITHUB_OUTPUT"
+            echo "resuming ${MINE} — already tagged at this commit"
+            exit 0
+          fi
+          echo "resumed=0" >> "$GITHUB_OUTPUT"
+
+          TOKEN=$(curl -fsSL -u "$GHCR_USER:$GHCR_TOKEN" \
+            "https://ghcr.io/token?scope=repository:hanzoai/cloud:pull&service=ghcr.io" | jq -r .token)
+
+          # What has been PUBLISHED. GHCR ignores n>1000 and pages via
+          # `Link: rel="next"`; a reader that drops the header sees one page,
+          # which for ~1700 tags topped out at v1.799.5 — blind to every recent
+          # release, so the max() leaned on git tags alone. Follow it to
+          # exhaustion.
+          REG=""
+          page="https://ghcr.io/v2/hanzoai/cloud/tags/list?n=1000"
+          while [ -n "$page" ]; do
+            hdr=$(mktemp)
+            body=$(curl -fsSL -D "$hdr" -H "Authorization: Bearer $TOKEN" "$page")
+            REG="${REG}
+          $(printf '%s' "$body" | jq -r '.tags[]? | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' | sed 's/^v//')"
+            nxt=$(tr -d '\r' < "$hdr" | sed -n 's/^[Ll]ink: *<\([^>]*\)>.*rel="next".*/\1/p' | head -1)
+            rm -f "$hdr"
+            [ -n "$nxt" ] && page="https://ghcr.io${nxt}" || page=""
+          done
+
+          # What has been TAGGED. ls-remote rather than /repos/../tags because the
+          # REST list paginates at 100 and this repo carries ~1700 refs. github.com,
+          # not the forge: that is where cloud's tags actually are; the forge copy
+          # trails and reading it would collide with fifty published images.
+          GIT=$(git ls-remote --tags "https://x-access-token:${GH_PAT}@github.com/hanzoai/cloud" \
+            | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' || true)
+
+          LAST=$(printf '%s\n%s\n%s\n' "$REG" "$GIT" "1.786.0" \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          if [ -z "${LAST:-}" ]; then
+            echo "::error::could not read published or tagged semver for cloud — refusing to guess the next patch"
+            exit 1
+          fi
+
+          IFS=. read -r MAJ MIN PAT <<<"$LAST"
+          NEXT="$MAJ.$MIN.$((PAT + 1))"
+
+          # 404 is the ONLY acceptable answer: anything else means the tag is
+          # taken (200) or we cannot tell (network/auth), and pushing on either
+          # risks a second digest behind an existing name.
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json' \
+            "https://ghcr.io/v2/hanzoai/cloud/manifests/v$NEXT")
+          if [ "$CODE" != "404" ]; then
+            echo "::error::refusing to push v$NEXT — manifest probe returned $CODE, expected 404 (tag taken, or existence unverifiable)"
+            exit 1
+          fi
+
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "highest seen v$LAST (registry + git tags) -> building v$NEXT (document sha256:$SPEC_SHA)"
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.ver.outputs.resumed == '0'
+        with: { driver: docker-container, driver-opts: network=host }
+
+      - uses: docker/build-push-action@v6
+        if: steps.ver.outputs.resumed == '0'
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}
+          # VERSION is what the binary reports as X-Api-Version. Without it the
+          # ldflag falls back to the `dev` default and a released image cannot
+          # say which release it is — and every car below keys off that header.
+          build-args: |
+            VERSION=v${{ steps.ver.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=v${{ steps.ver.outputs.version }}
+            org.opencontainers.image.source=https://github.com/hanzoai/cloud
+          secrets: |
+            GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
+
+      # build-push-action can exit 0 before the manifest resolves, so a green run
+      # could still mean a future ImagePullBackOff. Prove it pulls BEFORE the pin
+      # moves — pinning an image the registry cannot serve has no rollback path.
+      - name: Verify the pushed image resolves
+        run: |
+          set -euo pipefail
+          img="ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}"
+          for i in 1 2 3 4 5 6; do
+            docker buildx imagetools inspect "$img" >/dev/null 2>&1 && { echo "resolved $img"; exit 0; }
+            sleep 5
+          done
+          echo "::error::pushed image never resolved: $img"; exit 1
+
+      # THE SMOKE GATE. Boot the image that was actually pushed and require it to
+      # reach "zip listening" without a crash signature, on release.go's boot env
+      # — a writable /data, CLOUD_ENV=smoke and a throwaway 32-byte master key so
+      # the KMS plane mounts on its normal ready path rather than a degraded one.
+      #
+      # The script is handed over base64 because it contains both single and
+      # double quotes (the `"message":"zip listening"` needle), and re-quoting it
+      # for `sh -c` is how a gate quietly stops matching what it is looking for.
+      - name: Smoke the pushed image
+        if: steps.ver.outputs.resumed == '0'
+        run: |
+          set -euo pipefail
+          img="ghcr.io/hanzoai/cloud:v${{ steps.ver.outputs.version }}"
+
+          SMOKE_B64=$(base64 -w0 <<'SMOKE'
+          set -u
+          /cloud >/tmp/boot.log 2>&1 &
+          pid=$!
+          listening=0
+          for _ in $(seq 1 180); do
+            if grep -q '"message":"zip listening"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          cat /tmp/boot.log
+          if grep -Eiq 'metrics\.Mount|mount metrics|panic|want \*zip\.App' /tmp/boot.log; then echo 'SMOKE FAIL: startup-crash signature'; exit 1; fi
+          if [ "$listening" -ne 1 ]; then echo 'SMOKE FAIL: never reached listening'; exit 1; fi
+          kill -0 "$pid" 2>/dev/null || { echo 'SMOKE FAIL: exited after listening'; exit 1; }
+          echo 'SMOKE PASS'
+          SMOKE
+          )
+
+          # smoke's /data must be world-writable: the image runs as USER
+          # 65532:65532 and a bare `--tmpfs /data:rw` lands root-owned 0755 on
+          # the runner's dind daemon, so every /data write is refused — the
+          # gateway CEK lock, the audit sqlite, and `listen unix
+          # /data/credz.sock`. With the credz broker dead, kms/pubsub/kafka all
+          # fail to load and the smoke never reaches "zip listening".
+          docker run --rm \
+            --entrypoint /bin/sh \
+            --tmpfs /data:rw,mode=1777 \
+            -e CLOUD_DATA_DIR=/data \
+            -e CLOUD_ENV=smoke \
+            -e CLOUD_KMS_MASTER_KEY_REF="$(head -c 32 /dev/urandom | base64 -w0)" \
+            "$img" -c "echo $SMOKE_B64 | base64 -d | sh"
+
+  # ══ CAR 2 ══ ROLL OUT, AND PROVE IT IS LIVE.
+  #
+  # The train used to stop at "pin pushed". A pin is not a release — the RUNNING
+  # VERSION is — and every car below describes a system to the outside world, so
+  # each one must key off what is deployed or it describes something that is not
+  # there.
+  rollout:
+    needs: image
+    runs-on: [hanzo-build-linux-amd64]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # The receipt, minted only now: build pushed it, smoke proved it boots. A
+      # tag can therefore never name an image that did not start.
+      #
+      # 422 USED TO BE A HARD ERROR, and that is exactly what made a resume
+      # impossible: the second run of a release whose fanout failed died here
+      # instead of continuing. A 422 whose ref already points at OUR sha is this
+      # same release, already receipted — idempotent success. A 422 pointing
+      # anywhere else is a genuine collision and still fails.
+      - name: Tag the release
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          TAG="v${{ needs.image.outputs.version }}"
+          CODE=$(curl -s -o /tmp/tag.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${GH_PAT}" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/hanzoai/cloud/git/refs" \
+            -d "{\"ref\":\"refs/tags/${TAG}\",\"sha\":\"${{ github.sha }}\"}")
+          if [ "$CODE" = "422" ]; then
+            HAVE=$(curl -fsS -H "Authorization: Bearer ${GH_PAT}" \
+              "https://api.github.com/repos/hanzoai/cloud/git/ref/tags/${TAG}" | jq -r '.object.sha')
+            if [ "$HAVE" = "${{ github.sha }}" ]; then
+              echo "${TAG} already names ${HAVE} — this release, resumed"; exit 0
+            fi
+            echo "::error::tag ${TAG} exists and names ${HAVE}, not ${{ github.sha }}"; cat /tmp/tag.json; exit 1
+          fi
+          if [ "$CODE" != "201" ]; then
+            echo "::error::create tag ${TAG}: status $CODE"; cat /tmp/tag.json; exit 1
+          fi
+          echo "minted ${TAG} at ${{ github.sha }}"
+
+      # THE DEPLOY. cd.hanzo.ai watches hanzoai/universe, not the registry, so an
+      # image nothing points at is just bytes in ghcr.
+      - name: Ship it
+        env:
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          KMS_ORG: ${{ vars.KMS_ORG || 'hanzo' }}
+          KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
+          # pin.sh probes the registry before it moves anything; these let it read
+          # a private manifest instead of falling back to anonymous.
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.image.outputs.version }}"
+
+          # Secrets come from KMS, never from a file or a repo variable.
+          KMS_TOKEN=$(curl -fsS "${KMS_ENDPOINT}/v1/kms/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
+            | jq -r '.accessToken // empty')
+          [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
+
+          PIN_TOKEN=$(curl -fsS \
+            "${KMS_ENDPOINT}/v1/kms/orgs/${KMS_ORG}/secrets/deploy/UNIVERSE_PIN_TOKEN?env=${KMS_SECRET_ENV}" \
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty')
+          [ -n "$PIN_TOKEN" ] || { echo "::error::UNIVERSE_PIN_TOKEN missing in KMS at ${KMS_ORG}/deploy (env ${KMS_SECRET_ENV})"; exit 1; }
+          echo "::add-mask::${PIN_TOKEN}"
+
+          git clone --quiet --depth 1 \
+            "https://x-access-token:${PIN_TOKEN}@git.hanzo.ai/hanzo/universe" /tmp/universe
+
+          # Another service can land its own pin between our clone and our push.
+          # A shallow clone has no common history to rebase onto, so RE-APPLY
+          # rather than merge. Pinning is idempotent and derives everything from
+          # the file it finds, so the retry also re-checks the monotonic guard.
+          for attempt in 1 2 3 4 5; do
+            /tmp/universe/charts/app/pin.sh cloud "$VERSION"
+
+            if git -C /tmp/universe push --quiet origin HEAD:main 2>/dev/null; then
+              echo "pinned cloud to v${VERSION}"; exit 0
+            fi
+
+            echo "universe moved under us (attempt ${attempt}/5) — re-applying on the new tip"
+            git -C /tmp/universe fetch --quiet --depth 1 origin main
+            git -C /tmp/universe reset --hard --quiet FETCH_HEAD
+          done
+          echo "::error::could not push the pin after 5 attempts"; exit 1
+
+      # THE PIN IS NOT THE RELEASE. cd.hanzo.ai reconciles on its own schedule,
+      # so between the pin and the running pod there is a window in which every
+      # car below would describe the PREVIOUS version. Wait for the header the
+      # image itself reports, and refuse to fan out if it never arrives.
+      - name: Prove the release is live
+        run: |
+          set -euo pipefail
+          WANT="v${{ needs.image.outputs.version }}"
+          for i in $(seq 1 120); do
+            GOT=$(curl -fsSI https://api.hanzo.ai/v1/health 2>/dev/null \
+              | tr -d '\r' | sed -n 's/^[Xx]-[Aa]pi-[Vv]ersion: *//p' | head -1 || true)
+            if [ "$GOT" = "$WANT" ]; then echo "api.hanzo.ai is serving ${WANT} after $((i*10))s"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::api.hanzo.ai never reported ${WANT} (last saw '${GOT:-none}'). The image is published, tagged and pinned; cd.hanzo.ai has not reconciled it. Nothing downstream may describe a version that is not running — re-run this workflow at the same sha to resume once it has."
+          exit 1
+
+  # ══ CAR 3 ══ THE DOCUMENT TELLS THE TRUTH ABOUT PRODUCTION.
+  #
+  # `surface-check` proves the document equals the code. Nothing proved the
+  # address is REACHABLE, and three things break that independently: a stale
+  # subset, a prefix missing from manifest/apps.go, and an edge worker that
+  # intercepts before the origin. Every address here is a method in eight SDKs, a
+  # tool in the MCP list and a command in the CLI, so a dark address is a call
+  # every client offers and no caller can make.
+  reach:
+    needs: [image, rollout]
+    runs-on: [hanzo-build-linux-amd64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every published address is routed
+        run: python3 openapi/reach.py openapi.yaml https://api.hanzo.ai openapi/unreachable.txt
+
+      # THE MCP PROJECTION. The door serves exactly the tools in the committed
+      # plugin/*/mcp.json, so "the MCP tool list was refreshed" is not a claim to
+      # make — it is a number to check. It needs no car of its own: the subsets
+      # are regenerated by car 0, baked into the image by car 1 and deployed by
+      # car 2. This is the assertion that all three happened.
+      - name: The MCP tool list is the one this release committed
+        run: |
+          set -euo pipefail
+          WANT=$(jq -s '[.[]|length]|add' plugin/*/mcp.json)
+          GOT=$(curl -fsS -X POST https://api.hanzo.ai/v1/mcp \
+            -H 'content-type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | jq '.result.tools|length')
+          echo "MCP: committed ${WANT}, live ${GOT}"
+          [ "$WANT" = "$GOT" ] || { echo "::error::the MCP door serves ${GOT} tools and this release committed ${WANT}"; exit 1; }
+
+  # ══ CAR 4 ══ FAN OUT. One release, one document, every projection.
+  #
+  # Nine repos listen for `repository_dispatch: spec-update`. Three of them have
+  # listened since the day they were written and NOTHING HAS EVER SENT IT — the
+  # sender was assumed to be hanzoai/openapi, which has zero workflows. This is
+  # the sender.
+  #
+  # The payload is the coupler: (version, sha, spec_sha256). Each repo fetches
+  # openapi.yaml AT THAT SHA through hanzoai/ci's `client:` lane, refuses on a
+  # digest mismatch, regenerates, compiles itself AND its examples, and cuts a
+  # patch. The lane is one shape in seven languages, defined once.
+  fanout:
+    needs: [image, rollout, reach]
+    runs-on: [hanzo-build-linux-amd64]
+    timeout-minutes: 20
+    outputs:
+      dispatched: ${{ steps.send.outputs.dispatched }}
+    steps:
+      - name: Send spec-update to every projection
+        id: send
+        env:
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          KMS_ORG: ${{ vars.KMS_ORG || 'hanzo' }}
+          KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
+        run: |
+          set -euo pipefail
+
+          # CREDENTIAL: FLEET_DISPATCH_TOKEN — a fine-grained token carrying
+          # `contents:write` (a client repo's lane commits its regenerated
+          # projection and pushes a tag) and `metadata:read` on the nine repos
+          # below. From KMS, like every other secret this fleet uses; the repo
+          # holds only KMS_CLIENT_ID/SECRET.
+          #
+          # It does not exist yet. Wiring the car and naming the credential is
+          # the honest state — a release that cannot fan out fails HERE, loudly,
+          # naming the exact KMS path to create, instead of quietly shipping a
+          # cloud nobody's client knows about. That silent version is what the
+          # fleet has been living in.
+          KMS_TOKEN=$(curl -fsS "${KMS_ENDPOINT}/v1/kms/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
+            | jq -r '.accessToken // empty')
+          [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
+
+          TOKEN=$(curl -fsS \
+            "${KMS_ENDPOINT}/v1/kms/orgs/${KMS_ORG}/secrets/deploy/FLEET_DISPATCH_TOKEN?env=${KMS_SECRET_ENV}" \
+            -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty')
+          if [ -z "$TOKEN" ]; then
+            echo "::error::FLEET_DISPATCH_TOKEN missing in KMS at ${KMS_ORG}/deploy (env ${KMS_SECRET_ENV}). Create it as a GitHub fine-grained PAT with contents:write + metadata:read on hanzoai/{python-sdk,js-sdk,go-sdk,rust-sdk,java-sdk,kotlin-sdk,cpp-sdk,cli,docs}. Until it exists, every cloud release ships a document no client is regenerated from — which is the failure this car was built to end, so it fails rather than skipping."
+            exit 1
+          fi
+          echo "::add-mask::${TOKEN}"
+
+          PAYLOAD=$(jq -nc \
+            --arg v "v${{ needs.image.outputs.version }}" \
+            --arg s "${{ github.sha }}" \
+            --arg d "${{ needs.image.outputs.spec_sha256 }}" \
+            '{version:$v, sha:$s, spec_sha256:$d}')
+
+          # ONE EVENT TYPE for every projection — SDKs, the CLI and the docs
+          # alike. A second name for "the document moved" would be a second
+          # thing to keep in step.
+          ok=0; bad=""
+          for repo in python-sdk js-sdk go-sdk rust-sdk java-sdk kotlin-sdk cpp-sdk cli docs; do
+            CODE=$(curl -s -o /tmp/d.json -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/repos/hanzoai/${repo}/dispatches" \
+              -d "{\"event_type\":\"spec-update\",\"client_payload\":${PAYLOAD}}")
+            if [ "$CODE" = "204" ]; then
+              echo "  dispatched  hanzoai/${repo}"; ok=$((ok+1))
+            else
+              echo "  FAILED ${CODE}  hanzoai/${repo}"; cat /tmp/d.json; bad="${bad} ${repo}"
+            fi
+          done
+
+          echo "dispatched=${ok}" >> "$GITHUB_OUTPUT"
+          if [ -n "$bad" ]; then
+            echo "::error::spec-update was not accepted by:${bad}. A projection that never heard about this release describes the previous one."
+            exit 1
+          fi
+
+  # ══ CAR 5 ══ THE RECEIPT. This artifact IS the definition of "shipped".
+  #
+  # Always runs, so a hole is RECORDED rather than merely absent from a green
+  # run. It is the release's own GitHub Release — state belongs with the thing it
+  # describes, and a tag's receipt belongs on that tag. Writing it back into the
+  # repo would trigger the next release; an asset on the tag triggers nothing and
+  # is what the next run reads to know whether the last one finished.
+  receipt:
+    needs: [image, rollout, reach, fanout]
+    if: always() && needs.image.result == 'success'
+    runs-on: [hanzo-build-linux-amd64]
+    timeout-minutes: 15
+    steps:
+      - name: Write release.json onto the tag
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          TAG="v${{ needs.image.outputs.version }}"
+
+          jq -n \
+            --arg tag "$TAG" --arg sha "${{ github.sha }}" \
+            --arg spec "${{ needs.image.outputs.spec_sha256 }}" \
+            --arg image "${{ needs.image.result }}" \
+            --arg rollout "${{ needs.rollout.result }}" \
+            --arg reach "${{ needs.reach.result }}" \
+            --arg fanout "${{ needs.fanout.result }}" \
+            --arg n "${{ needs.fanout.outputs.dispatched }}" \
+            '{version:$tag, sha:$sha, spec_sha256:$spec,
+              cars:{image:$image, rollout:$rollout, reach:$reach, fanout:$fanout},
+              projections_dispatched:($n|tonumber? // 0)}' > /tmp/release.json
+          cat /tmp/release.json
+
+          BODY=$(jq -r '"**Document** `sha256:\(.spec_sha256)`\n\n| car | |\n|---|---|\n" +
+                        ([.cars|to_entries[]|"| \(.key) | \(.value) |"]|join("\n")) +
+                        "\n\nProjections dispatched: \(.projections_dispatched)/9\n\n```json\n" +
+                        (.|tostring) + "\n```"' /tmp/release.json)
+
+          # Idempotent: create, or update the one that a previous attempt left.
+          ID=$(curl -fsS -H "Authorization: Bearer ${GH_PAT}" \
+            "https://api.github.com/repos/hanzoai/cloud/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
+          if [ -n "$ID" ]; then
+            curl -fsS -X PATCH -H "Authorization: Bearer ${GH_PAT}" \
+              "https://api.github.com/repos/hanzoai/cloud/releases/${ID}" \
+              -d "$(jq -nc --arg b "$BODY" '{body:$b}')" >/dev/null
+          else
+            curl -fsS -X POST -H "Authorization: Bearer ${GH_PAT}" \
+              "https://api.github.com/repos/hanzoai/cloud/releases" \
+              -d "$(jq -nc --arg t "$TAG" --arg b "$BODY" '{tag_name:$t, name:$t, body:$b}')" >/dev/null
+          fi
+          echo "receipt written to the ${TAG} release"
+
+          # A HOLE IS A RED RELEASE. Not a warning, not a green run with a
+          # footnote — the receipt exists precisely so "cloud shipped but the CLI
+          # is two days stale" is a state you can point at rather than one that
+          # goes unnoticed for a week.
+          if jq -e '[.cars[]] | any(. != "success")' /tmp/release.json >/dev/null; then
+            echo "::error::this release is INCOMPLETE — see the car table on the ${TAG} release. Fix the failing car and re-run this workflow at ${{ github.sha }}: image and rollout will recognise their own receipts and no-op, and only the failed car runs again."
+            exit 1
+          fi
+          echo "${TAG} is complete: document, image, production, reachability and all nine projections."

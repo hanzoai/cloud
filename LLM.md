@@ -3017,12 +3017,76 @@ resolves, refuses if ANY resolved address is non-public, and dials the address i
 checked. Storage failures are best-effort throughout — a store that is down costs a
 cache hit, never the page.
 
-## Releases are cut by a merge to main
+## Releases are cut by a merge to main — and a release is a TRAIN
 
-`.github/workflows` is intentionally empty of CI. The image and its `v*` tags have ONE
-owner, `apps/platform/release.go`: compute the next version → build → SMOKE the
-pushed image → tag → roll out. The tag is a RECEIPT for a proven image, so a
-change that breaks boot never reaches production and leaves no phantom tag.
+`.github/workflows` is intentionally empty of CI. **ONE file, `.hanzo/workflows/cicd.yml`,
+is the whole pipeline**, and it is one `needs:` graph:
+
+```
+gate ──┐
+       ├─→ image ─→ rollout ─→ reach ─→ fanout ─→ receipt
+containment ─┘
+```
+
+| car | what it does | what it refuses |
+|---|---|---|
+| **gate** | hanzoai/ci reusable → `hanzo.yml` `test:` → `make -f mk/fleet.mk surface-check` | a route added, renamed or deleted without regenerating the document |
+| **containment** | apps/controlplane is unreachable from every real binary | stub crypto in a serve binary |
+| **image** | version derived ONCE → build → push → resolve → smoke | a tag naming an image that did not boot |
+| **rollout** | tag → universe pin → **poll `x-api-version` until it is ours** | describing a version that is not running |
+| **reach** | `openapi/reach.py` over every literal address + the MCP tool count | an address this document publishes that production does not route |
+| **fanout** | `repository_dispatch: spec-update` → 9 repos, payload `(version, sha, spec_sha256)` | a projection that never heard about this release |
+| **receipt** | `release.json` on the tag's GitHub Release, `if: always()` | a hole, silently |
+
+**Why this shape.** `cicd.yml` used to gate and `deploy.yml` used to release, and
+they were two files with the SAME TRIGGER. Actions cannot express `needs:` across
+workflow files, so deploy built, smoked, tagged and pinned while the gate was
+still running — or after it had gone red. That is measured, not hypothetical: the
+drift gate was RED on main while 87 commits and 6 releases shipped in 24 hours,
+and what went out was one binary serving `/v1/billing/gpu/eligibility` and
+publishing `/v1/billing/gpu-eligibility`. `deploy.yml` is deleted; its jobs are
+here, behind `needs:`.
+
+**The coupler is the document, passed BY VALUE at a pinned sha.** Every car
+carries `(version, sha, sha256(openapi.yaml))`. No car reads api.hanzo.ai to
+GENERATE anything — at generation time the deploy has already happened, so
+reading the host names whatever it is serving rather than the release that sent
+it. The host is read for exactly one purpose: to prove the release is live.
+
+**It does not roll back. It BLOCKS and RESUMES.** You cannot unpublish a package
+version, so the cars are ordered by irreversibility: in-repo → registry-but-
+unnamed (the tag is minted only after smoke) → production → the outside world.
+Every car is idempotent on `(version, digest)`. Re-running at the same sha reuses
+the version (a `v*` tag already pointing at HEAD *is* this release), treats a 422
+whose ref names our sha as success, and re-probes instead of re-pushing. `concurrency:
+cancel-in-progress: false` on main queues releases instead of orphaning them —
+ten numbers between `.335` and `.350` are images published under a version that
+was never tagged, smoked or pinned.
+
+**`openapi/unreachable.txt` is a ratchet, not an allowlist.** Every line is a
+published address production does not route, with its owner named in the header.
+The file may only shrink: a 404 not listed fails the release, and a listed line
+that starts answering must be deleted in the same commit. Today it holds 14
+`/v1/pricing/*` lines, all owned by a Cloudflare worker that exists in no repo.
+
+**The projections are gated, not hoped for.** MCP needs no car — the door serves
+exactly the tools in the committed `plugin/*/mcp.json`, so car 3 checks the
+number rather than claiming it (833 = 833 at v1.801.350). The eight clients and
+the docs each run hanzoai/ci's `client:` lane, which fetches `openapi.yaml` at
+the release's sha, **refuses on a digest mismatch**, regenerates, compiles itself
+and its examples, writes `.spec-lock` and cuts a patch.
+
+**Credential still to create: `FLEET_DISPATCH_TOKEN`** — a fine-grained PAT with
+`contents:write` + `metadata:read` on `hanzoai/{python-sdk,js-sdk,go-sdk,rust-sdk,java-sdk,kotlin-sdk,cpp-sdk,cli,docs}`,
+stored in KMS at `orgs/hanzo/secrets/deploy/FLEET_DISPATCH_TOKEN` (env `prod`),
+beside `UNIVERSE_PIN_TOKEN`. Until it exists the fanout car fails loudly and
+names it; that is deliberate — a release that quietly skips its projections is
+the failure this train was built to end.
+
+The image and its `v*` tags used to have a different owner, `apps/platform/release.go`:
+compute the next version → build → SMOKE the pushed image → tag → roll out. The
+tag is still a RECEIPT for a proven image; what moved is where the receipt is
+minted.
 
 The final step has ONE writer, and for a first-party service it is **universe git,
 not the cluster**. `clients/paas.releaseService` REFUSES to patch the operator
