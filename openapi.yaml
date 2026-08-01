@@ -36702,7 +36702,7 @@ paths:
       summary: Returns the Zero Trust edge-routers the caller's org owns.
       tags:
       - edge
-  /v1/embed-status:
+  /v1/embed:
     get:
       description: |-
         EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp,
@@ -36718,7 +36718,7 @@ paths:
         The probed host is always <app>.<this deployment's own brand domain>: no part of
         it comes from the request, so this can never be steered into probing an
         arbitrary origin.
-      operationId: get_v1_embed-status
+      operationId: get_v1_embed
       parameters:
       - description: 'App is the embedded app to report on: cms (Content Studio),
           erp or help.'

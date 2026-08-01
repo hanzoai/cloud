@@ -40,7 +40,7 @@ var untypedByDesign = map[string]string{}
 // form: what the document says is served, and which of those carry a typed
 // registry entry. There is no prefix filter and there must not be one — the app
 // holds this package's routes and nothing else, and account's surface is spread
-// across five top-level nouns (/v1/keys, /v1/iam, /v1/csrf, /v1/embed-status,
+// across five top-level nouns (/v1/keys, /v1/iam, /v1/csrf, /v1/embed,
 // /v1/commerce/topup), so any filter would be a second list to keep in sync
 // with the mount and would hide exactly the route that escaped it.
 func accountOps(t *testing.T) (served map[string]bool, typed map[string]string) {

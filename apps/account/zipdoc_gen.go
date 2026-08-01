@@ -47,7 +47,7 @@ func init() {
 			"csrfResp.expiresIn": "ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;\na write with an expired token is refused.",
 		},
 	})
-	zip.Describe("GET /v1/embed-status", zip.Doc{
+	zip.Describe("GET /v1/embed", zip.Doc{
 		Description: "EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself. ENTITLEMENT is\nserver-authoritative: each app is a single shared per-BRAND instance, so only a\nmember of the owning brand org — or a SuperAdmin — is given the embed URL; every\nother caller gets phase \"not-entitled\" and no URL. REACHABILITY is a probe of\nthat origin, which a cross-origin page cannot read for itself.\n\nThe probed host is always <app>.<this deployment's own brand domain>: no part of\nit comes from the request, so this can never be steered into probing an\narbitrary origin.",
 		Fields: map[string]string{
 			"embedStatusReq.app":        "App is the embedded app to report on: cms (Content Studio), erp or help.",

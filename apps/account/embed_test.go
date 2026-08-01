@@ -9,7 +9,7 @@ import (
 )
 
 // mountBrand mounts the account surface for a given deployment brand (the embed
-// entitlement + app-domain derivation are brand-scoped). IAM is unwired — embed-status
+// entitlement + app-domain derivation are brand-scoped). IAM is unwired — embed
 // does not use the confidential client.
 func mountBrand(t *testing.T, brand string) *zip.App {
 	t.Helper()
@@ -32,7 +32,7 @@ func stubProbe(t *testing.T, up bool) *int {
 func TestEmbedStatus_RequiresValidatedPrincipal(t *testing.T) {
 	stubProbe(t, true)
 	app := mountBrand(t, "hanzo")
-	code, _ := callH(t, app, http.MethodGet, "/v1/embed-status?app=cms", nil, "")
+	code, _ := callH(t, app, http.MethodGet, "/v1/embed?app=cms", nil, "")
 	if code != http.StatusForbidden {
 		t.Fatalf("no principal: want 403, got %d", code)
 	}
@@ -41,7 +41,7 @@ func TestEmbedStatus_RequiresValidatedPrincipal(t *testing.T) {
 func TestEmbedStatus_UnknownApp_400(t *testing.T) {
 	stubProbe(t, true)
 	app := mountBrand(t, "hanzo")
-	code, _ := callH(t, app, http.MethodGet, "/v1/embed-status?app=nope",
+	code, _ := callH(t, app, http.MethodGet, "/v1/embed?app=nope",
 		map[string]string{"X-User-Id": "alice", "X-Org-Id": "hanzo"}, "")
 	if code != http.StatusBadRequest {
 		t.Fatalf("unknown app: want 400, got %d", code)
@@ -52,7 +52,7 @@ func TestEmbedStatus_BrandMemberEntitled_Reachable(t *testing.T) {
 	calls := stubProbe(t, true)
 	app := mountBrand(t, "hanzo")
 	// A member of the owning brand org (hanzo) is entitled; the probe says up.
-	code, body := callH(t, app, http.MethodGet, "/v1/embed-status?app=cms",
+	code, body := callH(t, app, http.MethodGet, "/v1/embed?app=cms",
 		map[string]string{"X-User-Id": "z", "X-Org-Id": "hanzo"}, "")
 	if code != http.StatusOK {
 		t.Fatalf("brand member: want 200, got %d (%s)", code, body)
@@ -75,7 +75,7 @@ func TestEmbedStatus_SuperAdminEntitled(t *testing.T) {
 	app := mountBrand(t, "hanzo")
 	// A SuperAdmin from a DIFFERENT org is still entitled (isSuperAdmin bypass);
 	// the probe says down → not-provisioned but entitled with the embed URL.
-	code, body := callH(t, app, http.MethodGet, "/v1/embed-status?app=erp",
+	code, body := callH(t, app, http.MethodGet, "/v1/embed?app=erp",
 		map[string]string{"X-User-Id": "root", "X-Org-Id": "acme", "X-User-IsAdmin": "true"}, "")
 	if code != http.StatusOK {
 		t.Fatalf("admin: want 200, got %d", code)
@@ -92,7 +92,7 @@ func TestEmbedStatus_CustomerOrgNotEntitled_NotProbed(t *testing.T) {
 	app := mountBrand(t, "hanzo")
 	// A customer org (not the brand, not admin) is NOT entitled: no embed URL, no
 	// probe, honest not-entitled phase — never a cross-tenant frame.
-	code, body := callH(t, app, http.MethodGet, "/v1/embed-status?app=help",
+	code, body := callH(t, app, http.MethodGet, "/v1/embed?app=help",
 		map[string]string{"X-User-Id": "alice", "X-Org-Id": "acme"}, "")
 	if code != http.StatusOK {
 		t.Fatalf("customer: want 200, got %d", code)
@@ -111,7 +111,7 @@ func TestEmbedStatus_BrandDomainPerBrand(t *testing.T) {
 	stubProbe(t, true)
 	// lux apps live on lux.cloud (the app-hosting domain), NOT lux.network.
 	app := mountBrand(t, "lux")
-	code, body := callH(t, app, http.MethodGet, "/v1/embed-status?app=cms",
+	code, body := callH(t, app, http.MethodGet, "/v1/embed?app=cms",
 		map[string]string{"X-User-Id": "z", "X-Org-Id": "lux"}, "")
 	if code != http.StatusOK {
 		t.Fatalf("lux brand member: want 200, got %d", code)
