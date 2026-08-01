@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/namespace"
 )
 
 // createT + insert/count helpers exercise a resolved *sql.DB as a real org
@@ -40,8 +41,18 @@ func countMarker(t *testing.T, db *sql.DB, v string) int {
 func TestTenantDBPathConvention(t *testing.T) {
 	dir := "/data"
 
+	// path resolves a validated (org, project) the way every store does: through
+	// the ONE namespace constructor, then the ONE rendering of it.
+	path := func(org, project, subsystem string) (string, error) {
+		ns, err := OrgNamespace(org, project)
+		if err != nil {
+			return "", err
+		}
+		return nsPath(dir, ns, subsystem)
+	}
+
 	// org-scoped: {DataDir}/orgs/{org}/{subsystem}.db
-	got, _, err := orgDBPath(dir, "acme", "", "git")
+	got, err := path("acme", "", "git")
 	if err != nil {
 		t.Fatalf("org-scoped path: %v", err)
 	}
@@ -50,7 +61,7 @@ func TestTenantDBPathConvention(t *testing.T) {
 	}
 
 	// project-scoped nests under projects/{project}
-	got, _, err = orgDBPath(dir, "acme", "web", "tracker")
+	got, err = path("acme", "web", "tracker")
 	if err != nil {
 		t.Fatalf("project-scoped path: %v", err)
 	}
@@ -59,24 +70,39 @@ func TestTenantDBPathConvention(t *testing.T) {
 	}
 
 	// the default project is a real, nested segment (not folded into org scope)
-	got, _, _ = orgDBPath(dir, "acme", "default", "tracker")
+	got, _ = path("acme", "default", "tracker")
 	if want := filepath.Join(dir, "orgs", "acme", "projects", "default", "tracker.db"); got != want {
 		t.Fatalf("default-project path = %q, want %q", got, want)
 	}
 
+	// the deployment's own partition is a different KIND of namespace, so it
+	// cannot collide with a tenant's however the slugger changes.
+	got, err = nsPath(dir, PlatformNamespace(), "kms")
+	if err != nil {
+		t.Fatalf("platform path: %v", err)
+	}
+	if want := filepath.Join(dir, "orgs", "_platform", "kms.db"); got != want {
+		t.Fatalf("platform path = %q, want %q", got, want)
+	}
+
 	// fail-closed: empty/unsafe org, unsafe project, empty subsystem all error —
 	// NEVER a silent fall-through to some other org's file.
-	if _, _, err := orgDBPath(dir, "", "", "git"); err == nil {
+	if _, err := path("", "", "git"); err == nil {
 		t.Fatal("empty org must error")
 	}
-	if _, _, err := orgDBPath(dir, "bad org", "", "git"); err == nil {
+	if _, err := path("bad org", "", "git"); err == nil {
 		t.Fatal("org with a space (unsafe rune) must error")
 	}
-	if _, _, err := orgDBPath(dir, "acme", "bad project", "tracker"); err == nil {
+	if _, err := path("acme", "bad project", "tracker"); err == nil {
 		t.Fatal("project with a space (unsafe rune) must error")
 	}
-	if _, _, err := orgDBPath(dir, "acme", "", ""); err == nil {
+	if _, err := path("acme", "", ""); err == nil {
 		t.Fatal("empty subsystem must error")
+	}
+	// the zero namespace names no database — the mistake Go's zero value would
+	// otherwise turn into one file quietly shared by everyone who forgot to set one.
+	if _, err := nsPath(dir, namespace.Namespace{}, "git"); err == nil {
+		t.Fatal("the zero namespace must error")
 	}
 }
 
