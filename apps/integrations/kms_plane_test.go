@@ -83,3 +83,53 @@ func TestTheDetachedImportStatesItsTenant(t *testing.T) {
 		t.Error("the tenant must come from the authenticated request, not the work item")
 	}
 }
+
+// Each connected account is an independent installation with its own token and
+// its own pagination. Read in series their latencies ADD: 816 repos across three
+// accounts is ten sequential pages and about seven seconds, and under load the
+// largest account exceeded the request deadline and dropped out of the union
+// entirely. Degrading to the accounts that answered is right; an account failing
+// because it was listed last is not.
+func TestAccountsAreReadConcurrently(t *testing.T) {
+	src, err := os.ReadFile("github_app.go")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	s := string(src)
+	i := strings.Index(s, "func reachableRepos")
+	if i < 0 {
+		t.Fatal("reachableRepos is gone")
+	}
+	body := s[i:]
+	if j := strings.Index(body[1:], "\nfunc "); j > 0 {
+		body = body[:j]
+	}
+	if !strings.Contains(body, "sync.WaitGroup") || !strings.Contains(body, "go func(") {
+		t.Error("accounts are read in series; their latencies add and the last one starves")
+	}
+}
+
+// The union must be assembled in CONNECTION order, not completion order, or the
+// same set of accounts yields a different list each call and a caller paging it
+// sees rows reshuffle.
+func TestTheUnionOrderDoesNotDependOnWhoAnsweredFirst(t *testing.T) {
+	src, _ := os.ReadFile("github_app.go")
+	s := string(src)
+	i := strings.Index(s, "func reachableRepos")
+	body := s[i:]
+	if j := strings.Index(body[1:], "\nfunc "); j > 0 {
+		body = body[:j]
+	}
+	// Results land in a slice indexed by connection, then are merged in that
+	// order — never appended from inside the goroutines.
+	if !strings.Contains(body, "out[i] = result{") {
+		t.Error("results must be placed by connection index, not appended as they arrive")
+	}
+	if strings.Contains(body, "all = append(all,") && strings.Contains(body, "go func(i int") {
+		before := strings.Index(body, "wg.Wait()")
+		at := strings.Index(body, "all = append(all,")
+		if before < 0 || at < before {
+			t.Error("the union is built before every account has answered")
+		}
+	}
+}
