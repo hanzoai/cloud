@@ -20,6 +20,7 @@ import (
 	// FencedStore ship/hydrate (HOW it ships) + envelope Cipher (at rest). An
 	// OrgStore configured WithDurable routes every per-org file through it.
 	"github.com/hanzoai/cloud/internal/org"
+	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers the
@@ -81,47 +82,23 @@ func WithStoreLogger(log luxlog.Logger) OrgStoreOption {
 // SanitizeOrg refuses is an error — never a silent fall-through to another
 // org's file.
 func OrgDB(dataDir, org, project, subsystem string) (*sql.DB, error) {
-	path, orgSlug, err := orgDBPath(dataDir, org, project, subsystem)
+	ns, err := OrgNamespace(org, project)
 	if err != nil {
 		return nil, err
 	}
-	return openOrgDB(orgPrincipal(orgSlug), path)
+	return openNS(dataDir, ns, subsystem)
 }
 
-// orgDBPath builds the on-disk path for an org DB, folding org and (when
-// project-scoped) project through the injective SanitizeOrg slugger and failing
-// closed on any input that does not yield a safe, non-empty segment.
-func orgDBPath(dataDir, org, project, subsystem string) (path, orgSlug string, err error) {
-	if dataDir == "" {
-		return "", "", fmt.Errorf("cloud: OrgDB empty dataDir")
+// openNS resolves a namespace to its file and opens it under that namespace's
+// own key. It is the ONE seam between "which database" (orgns.go) and "an open
+// handle to it" (openOrgDB), so no caller can pair one namespace's name with
+// another namespace's key.
+func openNS(dataDir string, ns namespace.Namespace, subsystem string) (*sql.DB, error) {
+	path, err := nsPath(dataDir, ns, subsystem)
+	if err != nil {
+		return nil, err
 	}
-	if subsystem == "" {
-		return "", "", fmt.Errorf("cloud: OrgDB empty subsystem")
-	}
-	orgSlug = SanitizeOrg(org)
-	if orgSlug == "" {
-		return "", "", fmt.Errorf("cloud: OrgDB invalid org %q", org)
-	}
-	dir := filepath.Join(dataDir, "orgs", orgSlug)
-	if project != "" {
-		projSlug := SanitizeOrg(project)
-		if projSlug == "" {
-			return "", "", fmt.Errorf("cloud: OrgDB invalid project %q", project)
-		}
-		dir = filepath.Join(dir, "projects", projSlug)
-	}
-	return filepath.Join(dir, subsystem+".db"), orgSlug, nil
-}
-
-// orgPrincipal maps a resolved store slug to the principal whose key opens it. The
-// reserved platform slug is NOT a tenant — it is the deployment's own partition of an
-// otherwise per-org subsystem — so it keys under Global exactly like every other
-// platform store, and only real tenants get an owner-bound key.
-func orgPrincipal(slug string) cek.Principal {
-	if slug == reservedPlatformSlug {
-		return cek.Global
-	}
-	return cek.Org(slug)
+	return openOrgDB(nsPrincipal(ns), path)
 }
 
 // openOrgDB creates the parent dir 0700 and opens the SQLite file with the
@@ -171,52 +148,46 @@ func openOrgDB(p cek.Principal, path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// reservedPlatformSlug is the org directory holding a per-org subsystem's
-// genuinely DEPLOYMENT-WIDE (non-tenant) records. It contains '_', a rune
-// SanitizeOrg never emits (it folds '_'→'-'), so no tenant owner can ever resolve
-// to this directory — the platform partition can never collide with a real org's
-// file. See PlatformDB.
-const reservedPlatformSlug = "_platform"
-
 // PlatformDB opens the deployment's reserved, NON-tenant partition of an
 // otherwise per-org subsystem at {DataDir}/orgs/_platform/{subsystem}.db, through
 // the SAME cek + single-writer + WAL path as OrgDB. It is the home for records a
 // per-org subsystem holds that belong to no single tenant (e.g. a platform-wide
 // HMAC key): everything tenant-scoped stays in its own {DataDir}/orgs/{slug}/…
-// file. Because the slug carries a '_' that SanitizeOrg never produces, this file
-// is guaranteed disjoint from every tenant's. The caller owns migration + Close.
+// file. It is disjoint from every tenant's file because it is a different KIND
+// of namespace, not because of a rune its slug happens to carry. The caller owns
+// migration + Close.
 func PlatformDB(dataDir, subsystem string) (*sql.DB, error) {
-	if dataDir == "" {
-		return nil, fmt.Errorf("cloud: PlatformDB empty dataDir")
-	}
-	if subsystem == "" {
-		return nil, fmt.Errorf("cloud: PlatformDB empty subsystem")
-	}
-	return openOrgDB(cek.Global, filepath.Join(dataDir, "orgs", reservedPlatformSlug, subsystem+".db"))
+	return openNS(dataDir, PlatformNamespace(), subsystem)
 }
 
-// OrgStore is the lazily-opened, cached set of per-org stores of type T
-// for one subsystem, each keyed by its resolved DB path so an org's SQLite
-// file is opened (and migrated) exactly once. It is the caching layer over
-// OrgDB: every open routes through the same path resolver and pragmas, so
+// OrgStore is the lazily-opened, cached set of per-entity stores of type T for
+// one subsystem, each keyed by the NAMESPACE that names it so an entity's
+// SQLite file is opened (and migrated) exactly once. It is the caching layer
+// over OrgDB: every open routes through the same name, path and pragmas, so
 // there is ONE way a subsystem opens its org DBs and ONE hand-rolled map is
 // replaced by this shared value. T is the subsystem's own store handle (it owns
 // its schema via the open func's migration); T must Close its DB.
+//
+// The key is the namespace and not the path because the namespace is the fact
+// and the path is a rendering of it. Keyed by path, two spellings that render
+// the same file would be two entries and therefore two open handles on one
+// SQLite — which the at-rest cek layer does not support. Keyed by the value,
+// that state cannot be constructed.
 type OrgStore[T io.Closer] struct {
 	dataDir   string
 	subsystem string
 	open      func(*sql.DB) (T, error)
 
-	// dur (when non-nil) makes every per-org file HA-durable: forPath hydrates it
+	// dur (when non-nil) makes every per-org file HA-durable: forNS hydrates it
 	// from the object store before opening and binds a Durable that Sync ships
 	// fenced. nil ⇒ local-only, byte-identical to the pre-durability cache.
 	dur *Durability
 	log luxlog.Logger
 
 	mu       sync.Mutex
-	byPath   map[string]T
-	durables map[string]*org.Durable  // parallel to byPath, populated only when dur != nil
-	inflight map[string]*openState[T] // durable opens in progress, deduped by path (M1)
+	byNS     map[namespace.Namespace]T
+	durables map[namespace.Namespace]*org.Durable  // parallel to byNS, populated only when dur != nil
+	inflight map[namespace.Namespace]*openState[T] // durable opens in progress, deduped by namespace (M1)
 }
 
 // durableOpTimeout bounds every object-store round-trip a durable OrgStore makes
@@ -225,9 +196,10 @@ type OrgStore[T io.Closer] struct {
 // than blocking a caller — or the store-wide lock — indefinitely.
 const durableOpTimeout = 30 * time.Second
 
-// openState records a durable open in flight for one path, so concurrent For() calls
-// for the SAME org wait on the ONE open (its done channel) instead of double-opening,
-// WITHOUT any of them holding the store-wide c.mu across the object-store I/O.
+// openState records a durable open in flight for one namespace, so concurrent For()
+// calls for the SAME org wait on the ONE open (its done channel) instead of
+// double-opening, WITHOUT any of them holding the store-wide c.mu across the
+// object-store I/O.
 type openState[T io.Closer] struct {
 	done chan struct{}
 	st   T
@@ -251,9 +223,9 @@ func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, 
 		open:      open,
 		dur:       o.dur,
 		log:       o.log,
-		byPath:    map[string]T{},
-		durables:  map[string]*org.Durable{},
-		inflight:  map[string]*openState[T]{},
+		byNS:      map[namespace.Namespace]T{},
+		durables:  map[namespace.Namespace]*org.Durable{},
+		inflight:  map[namespace.Namespace]*openState[T]{},
 	}
 }
 
@@ -263,26 +235,12 @@ func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, 
 // distinct (org[, project]) resolves to a distinct file, so a query in one can
 // never reach another's rows.
 func (c *OrgStore[T]) For(orgID, project string) (T, error) {
-	path, _, err := orgDBPath(c.dataDir, orgID, project, c.subsystem)
+	ns, err := OrgNamespace(orgID, project)
 	if err != nil {
 		var zero T
 		return zero, err
 	}
-	slug, dbKey := c.durKey(orgID, project)
-	return c.forPath(slug, dbKey, path)
-}
-
-// durKey returns the org SLUG (the HRW election key + cipher AAD — the SAME slug the
-// on-disk path and the shard router hash use) and the durable object key for this
-// (org, project). The object layout mirrors the on-disk one (HIP-0302), so a store's
-// durable slot is the canonical orgs/<slug>[/projects/<proj>]/<subsystem>.db.
-func (c *OrgStore[T]) durKey(orgID, project string) (slug, dbKey string) {
-	slug = SanitizeOrg(orgID)
-	scope := ""
-	if project != "" {
-		scope = "projects/" + SanitizeOrg(project)
-	}
-	return slug, org.DBPath(slug, scope, c.subsystem)
+	return c.forNS(ns)
 }
 
 // Has reports whether (org, project) ALREADY has a store for this subsystem on
@@ -298,57 +256,65 @@ func (c *OrgStore[T]) durKey(orgID, project string) (slug, dbKey string) {
 // An authenticated, org-scoped caller does NOT want this: its org is real by
 // construction and its store must be created on first touch.
 func (c *OrgStore[T]) Has(orgID, project string) bool {
-	path, _, err := orgDBPath(c.dataDir, orgID, project, c.subsystem)
+	ns, err := OrgNamespace(orgID, project)
+	if err != nil {
+		return false
+	}
+	path, err := nsPath(c.dataDir, ns, c.subsystem)
 	if err != nil {
 		return false
 	}
 	return cek.Exists(path)
 }
 
-// forPath opens (and migrates on first use) the store at an already-resolved DB
-// path, caching by path. It is the shared core of For and Each: the cache key is
-// the path, so an org reached via For(org) and the SAME file reached via Each's
+// forNS opens (and migrates on first use) the store the namespace names, caching
+// by that namespace. It is the shared core of For and Each: the cache key is the
+// name, so an org reached via For(org) and the SAME file reached via Each's
 // enumeration resolve to the ONE handle — never a second open of the same file
 // (which the at-rest cek layer does not support concurrently).
-func (c *OrgStore[T]) forPath(slug, dbKey, path string) (T, error) {
+func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 	var zero T
+	path, err := nsPath(c.dataDir, ns, c.subsystem)
+	if err != nil {
+		return zero, err
+	}
 	c.mu.Lock()
-	if st, ok := c.byPath[path]; ok {
+	if st, ok := c.byNS[ns]; ok {
 		// Cache hit. If this durable store opened DEGRADED (read-only) and this replica
 		// has since become the org's elected owner — a rolling-upgrade membership change
 		// — promote it IN PLACE (M3): re-acquire the lease, hydrate the latest snapshot,
 		// and swap in a writer handle, with no process restart. The check is I/O-free and
 		// only does real work when the store is unowned AND newly elected (rare).
-		d := c.durables[path]
+		d := c.durables[ns]
 		if d == nil || !d.PendingPromotion() {
 			c.mu.Unlock()
 			return st, nil
 		}
-		if inf, promoting := c.inflight[path]; promoting {
+		if inf, promoting := c.inflight[ns]; promoting {
 			c.mu.Unlock()
 			<-inf.done
 			return inf.st, inf.err
 		}
 		inf := &openState[T]{done: make(chan struct{})}
-		c.inflight[path] = inf
-		delete(c.byPath, path)
-		delete(c.durables, path)
+		c.inflight[ns] = inf
+		delete(c.byNS, ns)
+		delete(c.durables, ns)
 		c.mu.Unlock()
 
-		st2, d2, err := c.promote(slug, dbKey, path, st, d)
+		st2, d2, err := c.promote(ns, path, st, d)
 		inf.st, inf.d, inf.err = st2, d2, err
 		c.mu.Lock()
-		delete(c.inflight, path)
+		delete(c.inflight, ns)
 		if d2 != nil { // a usable store (promoted writer, or the kept read-only one)
-			c.byPath[path] = st2
-			c.durables[path] = d2
+			c.byNS[ns] = st2
+			c.durables[ns] = d2
 		}
 		c.mu.Unlock()
 		close(inf.done)
 		if err != nil && d2 != nil && c.log != nil {
 			// Reopen degraded again (transient store/membership blip): still serving the
 			// prior read-only state, so log and keep availability rather than surface it.
-			c.log.Warn("org store promotion incomplete — serving prior state", "subsystem", c.subsystem, "org", slug, "err", err)
+			c.log.Warn("org store promotion incomplete — serving prior state", "subsystem", c.subsystem, "namespace", ns, "err", err)
 			return st2, nil
 		}
 		return st2, err
@@ -357,7 +323,7 @@ func (c *OrgStore[T]) forPath(slug, dbKey, path string) (T, error) {
 	// pre-durability cache.
 	if c.dur == nil {
 		defer c.mu.Unlock()
-		db, err := openOrgDB(orgPrincipal(slug), path)
+		db, err := openOrgDB(nsPrincipal(ns), path)
 		if err != nil {
 			return zero, err
 		}
@@ -366,29 +332,29 @@ func (c *OrgStore[T]) forPath(slug, dbKey, path string) (T, error) {
 			_ = db.Close()
 			return zero, err
 		}
-		c.byPath[path] = st
+		c.byNS[ns] = st
 		return st, nil
 	}
 	// Durable: run the open (object-store hydrate + cek) with c.mu RELEASED so a
 	// slow/hung SeaweedFS never stalls another org's open or a cache hit (M1). A
-	// concurrent open of the SAME path waits on the in-flight record rather than
-	// double-opening.
-	if inf, ok := c.inflight[path]; ok {
+	// concurrent open of the SAME namespace waits on the in-flight record rather
+	// than double-opening.
+	if inf, ok := c.inflight[ns]; ok {
 		c.mu.Unlock()
 		<-inf.done
 		return inf.st, inf.err
 	}
 	inf := &openState[T]{done: make(chan struct{})}
-	c.inflight[path] = inf
+	c.inflight[ns] = inf
 	c.mu.Unlock()
 
-	inf.st, inf.d, inf.err = c.openDurable(slug, dbKey, path)
+	inf.st, inf.d, inf.err = c.openDurable(ns, path)
 
 	c.mu.Lock()
-	delete(c.inflight, path)
+	delete(c.inflight, ns)
 	if inf.err == nil {
-		c.byPath[path] = inf.st
-		c.durables[path] = inf.d
+		c.byNS[ns] = inf.st
+		c.durables[ns] = inf.d
 	}
 	c.mu.Unlock()
 	close(inf.done)
@@ -404,16 +370,25 @@ func (c *OrgStore[T]) forPath(slug, dbKey, path string) (T, error) {
 // opens (reads serve local, writes fail closed via Sync) so a second replica can never
 // break the store. It returns the store handle and its Durable for the caller to
 // publish; it touches no shared map.
-func (c *OrgStore[T]) openDurable(slug, dbKey, path string) (T, *org.Durable, error) {
+func (c *OrgStore[T]) openDurable(ns namespace.Namespace, path string) (T, *org.Durable, error) {
 	var zero T
-	d := c.dur.For(slug, dbKey, path)
+	// The election key is the ENTITY — the org — not the file: every one of an
+	// org's project-scoped files is owned by the same elected writer, and the
+	// shard router hashes the same id. The object key is nsKey, the SAME
+	// rendering the local path came from, so the file and its remote slot cannot
+	// name different things.
+	dbKey, err := nsKey(ns, c.subsystem)
+	if err != nil {
+		return zero, nil, err
+	}
+	d := c.dur.For(ns.ID(), dbKey, path)
 	ctx, cancel := context.WithTimeout(context.Background(), durableOpTimeout)
-	err := d.Hydrate(ctx)
+	err = d.Hydrate(ctx)
 	cancel()
 	if err != nil && c.log != nil {
-		c.log.Warn("org store hydrate degraded — opening read-only", "subsystem", c.subsystem, "org", slug, "key", dbKey, "err", err)
+		c.log.Warn("org store hydrate degraded — opening read-only", "subsystem", c.subsystem, "namespace", ns, "key", dbKey, "err", err)
 	}
-	db, err := openOrgDB(orgPrincipal(slug), path)
+	db, err := openOrgDB(nsPrincipal(ns), path)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -441,7 +416,7 @@ func (c *OrgStore[T]) openDurable(slug, dbKey, path string) (T, *org.Durable, er
 // (the same read-only store, nil-or-err) when not yet claimable; (zero, err) only if the
 // reopen hard-fails after the claim (a local disk error — the entry is then dropped and
 // the failure surfaced).
-func (c *OrgStore[T]) promote(slug, dbKey, path string, old T, oldDur *org.Durable) (T, *org.Durable, error) {
+func (c *OrgStore[T]) promote(ns namespace.Namespace, path string, old T, oldDur *org.Durable) (T, *org.Durable, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), durableOpTimeout)
 	claimed, err := oldDur.TryClaim(ctx)
 	cancel()
@@ -449,7 +424,7 @@ func (c *OrgStore[T]) promote(slug, dbKey, path string, old T, oldDur *org.Durab
 		return old, oldDur, err // not the owner yet / store blip: keep serving read-only.
 	}
 	_ = old.Close() // quiesce: release the read-only handle before CarryForward swaps the file.
-	return c.openDurable(slug, dbKey, path)
+	return c.openDurable(ns, path)
 }
 
 // Sync ships the org's local file to its durable object, fenced at the lease round
@@ -462,15 +437,15 @@ func (c *OrgStore[T]) Sync(orgID, project string) (acked bool, err error) {
 	if c.dur == nil {
 		return true, nil
 	}
-	path, _, err := orgDBPath(c.dataDir, orgID, project, c.subsystem)
+	ns, err := OrgNamespace(orgID, project)
 	if err != nil {
 		return false, err
 	}
 	c.mu.Lock()
-	d := c.durables[path]
+	d := c.durables[ns]
 	c.mu.Unlock()
 	if d == nil {
-		return false, fmt.Errorf("cloud: OrgStore.Sync for %s before its store was opened", path)
+		return false, fmt.Errorf("cloud: OrgStore.Sync for %s/%s before its store was opened", ns, c.subsystem)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), durableOpTimeout)
 	defer cancel()
@@ -489,6 +464,7 @@ func (c *OrgStore[T]) Sync(orgID, project string) (acked bool, err error) {
 // sharding each writer's PVC holds only the orgs routed to it, so Each on a given
 // writer enumerates exactly that writer's orgs.
 func (c *OrgStore[T]) Each(fn func(slug string, st T, err error)) error {
+	var zero T
 	root := filepath.Join(c.dataDir, "orgs")
 	ents, err := os.ReadDir(root)
 	if err != nil {
@@ -505,9 +481,14 @@ func (c *OrgStore[T]) Each(fn func(slug string, st T, err error)) error {
 		if !cek.Exists(path) {
 			continue // this org has no store for this subsystem
 		}
-		// e.Name() IS the on-disk org slug — the same value durKey folds to and the
-		// election hashes; Each is org-root scoped, so the durable key has no project.
-		st, openErr := c.forPath(e.Name(), org.DBPath(e.Name(), "", c.subsystem), path)
+		// e.Name() IS the on-disk org slug — the value OrgNamespace wrote there, and
+		// the one the election hashes; Each is org-root scoped, so no project group.
+		ns, err := nsOnDisk(e.Name())
+		if err != nil {
+			fn(e.Name(), zero, err)
+			continue
+		}
+		st, openErr := c.forNS(ns)
 		fn(e.Name(), st, openErr)
 	}
 	return nil
@@ -536,14 +517,14 @@ func (c *OrgStore[T]) CloseAll() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var first error
-	for _, st := range c.byPath {
+	for _, st := range c.byNS {
 		if err := st.Close(); err != nil && first == nil {
 			first = err
 		}
 	}
-	c.byPath = map[string]T{}
-	c.durables = map[string]*org.Durable{}
-	c.inflight = map[string]*openState[T]{}
+	c.byNS = map[namespace.Namespace]T{}
+	c.durables = map[namespace.Namespace]*org.Durable{}
+	c.inflight = map[namespace.Namespace]*openState[T]{}
 	return first
 }
 
