@@ -643,3 +643,108 @@ func TestFanOut_PublicTenantNeverReachesDestinations(t *testing.T) {
 		t.Fatalf("a real org must still fan out, got %v", got)
 	}
 }
+
+// ── the anonymous lane's IDENTITY and the name behind it ─────────────────────
+
+// TestAnonError_NameIsNeverTheExceptionClass: `error` is admitted because the SERVER
+// names it, and that sentence was FALSE while resolveName fell back to the caller's
+// exception class. A credential-less `{"type":"error","error":{"type":"…"}}` chose the
+// stored `name` — fifty distinct values per request, and on a published-site host in a
+// real org's partition.
+//
+// This walks the whole composition a handler does (admitPublic → foldException →
+// normalize) rather than resolveName alone, because the projection and the naming are
+// two halves of one rule: what the wire carries must not reach `name` through EITHER.
+// The class is not lost — it is the fault's `class`, which is what fingerprint() groups
+// on, and that is asserted here so the fix cannot be read as dropping the fact.
+func TestAnonError_NameIsNeverTheExceptionClass(t *testing.T) {
+	chosen := "AttackerChosen::Cardinality#" + strings.Repeat("x", 40)
+	out, dropped := admitPublic([]CaptureEvent{{
+		Type:  "error",
+		Error: &Exception{Type: chosen, Message: "boom"},
+	}})
+	if len(out) != 1 || dropped != 0 {
+		t.Fatalf("an anonymous error is admitted: got %d admitted, %d dropped", len(out), dropped)
+	}
+	f, ok := normalize("acme", time.Now(), foldException(out[0]))
+	if !ok {
+		t.Fatal("normalize dropped an admitted anonymous error")
+	}
+	if f.name != "error" {
+		t.Fatalf("stored name = %q, want %q — the caller's class reached the name column", f.name, "error")
+	}
+	if f.fault == nil || f.fault.class != chosen {
+		t.Fatalf("the class is still the fault's own fact: got %+v", f.fault)
+	}
+}
+
+// TestAnonSubject_NamespacedNotTheCallersName: nobody signed for an anonymous row, so the
+// id it carries may not be a name that identifies a person. An unattested
+// `victim@corp.com` must not land as the SAME distinct_id the org's identified rows use —
+// that is what would pin fabricated interactions on a named user in every person-level
+// lens. The visitor is still counted: one browser is still one id.
+func TestAnonSubject_NamespacedNotTheCallersName(t *testing.T) {
+	const victim = "victim@corp.com"
+	out, _ := admitPublic([]CaptureEvent{{
+		Type: "event", Event: "$click", DistinctID: victim, AnonymousID: victim,
+	}})
+	if len(out) != 1 {
+		t.Fatalf("want 1 admitted, got %d", len(out))
+	}
+	if out[0].DistinctID == victim || out[0].AnonymousID == victim {
+		t.Fatalf("an unattested caller pinned a row on %q verbatim: distinct=%q anonymous=%q",
+			victim, out[0].DistinctID, out[0].AnonymousID)
+	}
+	want := anonymousSubject + victim
+	if out[0].DistinctID != want || out[0].AnonymousID != want {
+		t.Fatalf("subject = (%q,%q), want both %q", out[0].DistinctID, out[0].AnonymousID, want)
+	}
+	// The reserved prefix is the disjointness proof: an IAM subject and an app's person
+	// id are never spelled with it, so no join can cross.
+	if !strings.HasPrefix(out[0].DistinctID, "$") {
+		t.Fatalf("an anonymous subject must lie outside the identified namespace, got %q", out[0].DistinctID)
+	}
+	// Two browsers stay two visitors — the count uniqExact(distinct_id) reads is intact.
+	two, _ := admitPublic([]CaptureEvent{
+		{Type: "pageview", DistinctID: "a-1"},
+		{Type: "pageview", DistinctID: "a-2"},
+	})
+	if two[0].DistinctID == two[1].DistinctID {
+		t.Fatalf("namespacing collapsed two visitors into one: %q", two[0].DistinctID)
+	}
+}
+
+// TestAnonSubject_EmptyAndOversized: empty in, empty out — a beacon from a browser with
+// no storage carries no subject, and a bare prefix would be a subject naming nothing. An
+// over-long one is not an id at all: distinct_id is what uniqExact counts, so its bytes
+// are bounded like every other value this lane stores.
+func TestAnonSubject_EmptyAndOversized(t *testing.T) {
+	out, _ := admitPublic([]CaptureEvent{
+		{Type: "pageview"},
+		{Type: "pageview", DistinctID: "   "},
+		{Type: "pageview", DistinctID: strings.Repeat("x", maxSubject+1)},
+		{Type: "pageview", DistinctID: strings.Repeat("x", maxSubject)},
+	})
+	if len(out) != 4 {
+		t.Fatalf("want 4 admitted, got %d", len(out))
+	}
+	for i, e := range out[:3] {
+		if e.DistinctID != "" {
+			t.Fatalf("case %d: want no subject, got %q", i, truncate(e.DistinctID))
+		}
+	}
+	if out[3].DistinctID != anonymousSubject+strings.Repeat("x", maxSubject) {
+		t.Fatalf("an id at the bound is kept, got %q", truncate(out[3].DistinctID))
+	}
+}
+
+// TestAttribute_StillOwnsTheSignedIdentity: the signed lane is unchanged. attribute runs
+// AFTER the projection, so a workspace token's own subject replaces the namespaced one
+// and the alias is cleared — the reduced-capability contract the door documents.
+func TestAttribute_StillOwnsTheSignedIdentity(t *testing.T) {
+	out, _ := admitPublic([]CaptureEvent{{Type: "pageview", DistinctID: "victim@corp.com", AnonymousID: "a-1"}})
+	got := attribute(out, "signer@corp.com")
+	if got[0].DistinctID != "signer@corp.com" || got[0].AnonymousID != "" {
+		t.Fatalf("signed identity = (%q,%q), want (signer@corp.com, \"\")", got[0].DistinctID, got[0].AnonymousID)
+	}
+}

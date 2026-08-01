@@ -767,10 +767,17 @@ func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
 	}
 }
 
-// TestAnonymousLaneIdentityIsUntouched: the two genuinely anonymous callers have no
-// signed identity to substitute, so attribute() must not reach them. A credential-less
-// beacon keeps the distinct_id it sent (into $public, where it means nothing).
-func TestAnonymousLaneIdentityIsUntouched(t *testing.T) {
+// TestAnonymousLaneIdentityIsNamespacedNotSubstituted: the two genuinely anonymous
+// callers have no signed identity to substitute, so attribute() must not reach them — a
+// credential-less beacon keeps the id it sent, which is what keeps one browser one
+// visitor. What it does NOT keep is the identified namespace: publicSubject files the id
+// under the reserved prefix, so the bytes survive and the collision does not.
+//
+// This test used to assert the id verbatim, on the reasoning that it lands in $public
+// "where it means nothing". That is true of THIS door and false of the published-site
+// carve, which runs the same projection into a REAL org — so the lane had a rule and an
+// exception. It now has a rule.
+func TestAnonymousLaneIdentityIsNamespacedNotSubstituted(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	roomyRate(t)
 	w := fakeWarehouse(t)
@@ -782,7 +789,8 @@ func TestAnonymousLaneIdentityIsUntouched(t *testing.T) {
 	if got := w.tenants(t); len(got) != 1 || got[0] != publicTenant {
 		t.Fatalf("anonymous tenant = %v, want [%s]", got, publicTenant)
 	}
-	if got := w.facts[0].distinct; got != "visitor-7" {
-		t.Errorf("anonymous distinct_id = %v, want visitor-7 (nobody signed for it, so there is nothing to substitute)", got)
+	if got := w.facts[0].distinct; got != anonymousSubject+"visitor-7" {
+		t.Errorf("anonymous distinct_id = %v, want %q — the caller's id, kept but namespaced",
+			got, anonymousSubject+"visitor-7")
 	}
 }
