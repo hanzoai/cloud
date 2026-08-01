@@ -16,16 +16,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
-	zip.Describe("GET /v1/books/balance-sheet", zip.Doc{
-		Description: "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the\nAssets == Liabilities + Equity equation proof.",
-		Fields: map[string]string{
-			"BalanceLine.amount":    "cents, display sign",
-			"BalanceSheet.balanced": "TotalAssets == TotalLiabilities + TotalEquity",
-			"asOfIn.sandbox":        "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
-			"asOfIn.to":             "To is the RFC3339 instant the statement is struck as of. Empty means all time.",
-		},
-		Example: json.RawMessage(`{"to":"2026-03-31T23:59:59Z"}`),
-	})
 	zip.Describe("GET /v1/books/bank/transactions", zip.Doc{
 		Description: "ListBankTransactions returns the org's normalized bank transactions, newest first —\nevery row the import and connector paths have ingested, with its amount in exact cents,\nits direction, and whether it has been matched to a voucher yet.",
 		Fields: map[string]string{
@@ -119,6 +109,16 @@ func init() {
 		},
 		Example: json.RawMessage(`{"from":"2026-01-01T00:00:00Z","to":"2026-03-31T23:59:59Z"}`),
 	})
+	zip.Describe("GET /v1/books/position", zip.Doc{
+		Description: "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the\nAssets == Liabilities + Equity equation proof.",
+		Fields: map[string]string{
+			"BalanceLine.amount":    "cents, display sign",
+			"BalanceSheet.balanced": "TotalAssets == TotalLiabilities + TotalEquity",
+			"asOfIn.sandbox":        "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+			"asOfIn.to":             "To is the RFC3339 instant the statement is struck as of. Empty means all time.",
+		},
+		Example: json.RawMessage(`{"to":"2026-03-31T23:59:59Z"}`),
+	})
 	zip.Describe("GET /v1/books/questions", zip.Doc{
 		Description: "ListQuestions returns the clarifying questions the caller's own recent GL raises — the\nunusual postings a founder should look at (outliers, reversals, round-offs, uncosted\nrevenue, an overdrawn wallet), sharpest first. An empty list means the books look clean;\nthe detector is deterministic over the ledger and invents nothing.",
 		Fields: map[string]string{
@@ -156,7 +156,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"category":"software","limit":50}`),
 	})
-	zip.Describe("GET /v1/books/trial-balance", zip.Doc{
+	zip.Describe("GET /v1/books/trial", zip.Doc{
 		Description: "TrialBalance returns the org's trial balance over an optional [from, to] window of\nRFC3339 posting times, including the opening/closing columns and the\nTotalDebit == TotalCredit proof that the books balance.",
 		Fields: map[string]string{
 			"TrialBalanceRow.credit": "period movement",
@@ -187,7 +187,7 @@ func init() {
 			"AskResponse.answer":    "Answer is one or two sentences answering the question, every number in it taken\nfrom Figures.",
 			"AskResponse.figures":   "Figures are the grounded numbers the answer states, each already formatted.",
 			"AskResponse.followups": "Followups are sharper questions to ask next, chosen from the same intent.",
-			"AskResponse.sources":   "Sources name the books reports the figures were computed from — \"pnl\",\n\"balance-sheet\", \"trial-balance\".",
+			"AskResponse.sources":   "Sources name the books reports the figures were computed from — \"pnl\",\n\"position\", \"trial\".",
 			"Figure.label":          "Label names the metric, e.g. \"MRR\" or \"Runway\".",
 			"Figure.period":         "Period is the window the figure covers, e.g. \"2026-07\" or \"all-time\".",
 			"Figure.value":          "Value is the figure already formatted through books' own money formatter, so a\nconsumer never re-derives it.",

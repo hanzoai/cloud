@@ -60,7 +60,7 @@ type AskResponse struct {
 	// Followups are sharper questions to ask next, chosen from the same intent.
 	Followups []string `json:"followups"`
 	// Sources name the books reports the figures were computed from — "pnl",
-	// "balance-sheet", "trial-balance".
+	// "position", "trial".
 	Sources []string `json:"sources"`
 }
 
@@ -193,14 +193,14 @@ func buildAnswer(q string, m Metrics) AskResponse {
 			Answer:    "You recognized " + formatUSD(m.Revenue) + " of revenue in " + p + ", of which " + formatUSD(m.MRR) + " is recurring (MRR).",
 			Figures:   []Figure{fig("Revenue", formatUSD(m.Revenue)), fig("MRR", formatUSD(m.MRR))},
 			Followups: []string{"What was gross margin on that revenue?", "How much of revenue is recurring?"},
-			Sources:   []string{"pnl", "trial-balance"},
+			Sources:   []string{"pnl", "trial"},
 		}
 	case intentRunway:
 		return AskResponse{
 			Answer:    runwaySentence(m, p),
 			Figures:   []Figure{fig("Runway", runwayValue(m)), fig("Cash", formatUSD(m.Cash)), fig("Monthly burn", formatUSD(m.MonthlyBurn))},
 			Followups: []string{"What is driving my burn?", "How would runway change if revenue grew 20%?"},
-			Sources:   []string{"balance-sheet", "pnl"},
+			Sources:   []string{"position", "pnl"},
 		}
 	case intentBurn:
 		return AskResponse{
@@ -228,14 +228,14 @@ func buildAnswer(q string, m Metrics) AskResponse {
 			Answer:    "You have " + formatUSD(m.Cash) + " in cash as of " + p + " (bank + processor clearing).",
 			Figures:   []Figure{fig("Cash", formatUSD(m.Cash)), fig("Runway", runwayValue(m))},
 			Followups: []string{"How many months of runway is that?"},
-			Sources:   []string{"balance-sheet", "trial-balance"},
+			Sources:   []string{"position", "trial"},
 		}
 	case intentDeferred:
 		return AskResponse{
 			Answer:    "Deferred revenue (unspent customer wallet credits you still owe as service) is " + formatUSD(m.DeferredRevenue) + " as of " + p + ".",
 			Figures:   []Figure{fig("Deferred revenue", formatUSD(m.DeferredRevenue))},
 			Followups: []string{"How fast are credits being consumed into revenue?"},
-			Sources:   []string{"balance-sheet"},
+			Sources:   []string{"position"},
 		}
 	case intentProfit:
 		return AskResponse{
@@ -249,7 +249,7 @@ func buildAnswer(q string, m Metrics) AskResponse {
 			Answer:    "For " + p + ": " + formatUSD(m.Revenue) + " revenue (" + formatUSD(m.MRR) + " MRR), " + formatUSD(m.Burn) + " burn, " + formatUSD(m.Cash) + " cash, and " + runwayValue(m) + " of runway.",
 			Figures:   []Figure{fig("Revenue", formatUSD(m.Revenue)), fig("MRR", formatUSD(m.MRR)), fig("Cash", formatUSD(m.Cash)), fig("Runway", runwayValue(m))},
 			Followups: []string{"What's my MRR?", "How long is my runway?", "What is my gross margin?"},
-			Sources:   []string{"pnl", "balance-sheet"},
+			Sources:   []string{"pnl", "position"},
 		}
 	}
 }

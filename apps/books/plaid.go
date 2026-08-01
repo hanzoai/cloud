@@ -180,7 +180,7 @@ type linkTokenResp struct {
 // LinkToken creates a short-lived link_token for the org's browser Link session (products:
 // transactions, country: US — the Bank of America OAuth path). The token is safe to return to
 // the client; it authorizes ONLY the Link UI, never account access. Wire it from
-// POST /v1/books/bank/link-token (see followup — the handler lives in bank_api.go).
+// POST /v1/books/bank/token (see followup — the handler lives in bank_api.go).
 func (c *plaidConn) LinkToken(ctx context.Context, org string) (string, string, error) {
 	clientID, secret, err := c.creds(ctx)
 	if err != nil {

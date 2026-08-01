@@ -5,7 +5,7 @@ package books
 // books on first open, never edited by a request. Porting ERPNext's Accounts SEMANTICS
 // (not its dynamic tree) to Go means the chart is a value, not a table an admin mutates
 // — one and only one chart, identical across orgs, so a rule map (ingest.go) and a
-// report (trial-balance) can reference an account by its stable number.
+// report (the trial) can reference an account by its stable number.
 //
 // THE ONE MONEY-MODEL DECISION. Prepaid credits a customer buys are a LIABILITY, not
 // income: the money is the customer's until it is SPENT. So a top-up CREDITS the
