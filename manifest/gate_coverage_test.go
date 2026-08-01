@@ -64,7 +64,7 @@ func TestTheDriftGateSeesEveryApp(t *testing.T) {
 
 	// By LOCATION: each apps/<dir>/Makefile names the app(s) it backs. The name is
 	// read from APPS rather than from the directory, because four packages are not
-	// named after their app (apps/zt → zero-trust, eval → evals, auditlog → audit,
+	// named after their app (eval → evals, auditlog → audit,
 	// plugin → plugins) and mk/plugin.mk says so in as many words.
 	covered := map[string]string{} // app -> where the gate finds it
 	for _, f := range makefiles {

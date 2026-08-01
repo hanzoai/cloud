@@ -48,7 +48,6 @@ var pkgOf = map[string]string{
 	"audit":      "auditlog",
 	"evals":      "eval",
 	"plugins":    "plugin",
-	"zero-trust": "zt",
 }
 
 // notApps are the plugin/ directories that are tools, not fleet subsystems: the
