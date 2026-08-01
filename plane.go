@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"net"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -70,14 +69,9 @@ func bindRuntimeDir() {
 	if cur := strings.TrimSpace(os.Getenv("ZIP_RUNTIME_DIR")); cur != "" && cur != boundRuntimeDir {
 		return // set by someone other than us: always wins, for both halves alike
 	}
-	dir := "/run/hanzo"
-	if v := strings.TrimSpace(os.Getenv(runDirEnv)); v != "" {
-		dir = v
-	} else if v := strings.TrimSpace(os.Getenv("CLOUD_DATA_DIR")); v != "" {
-		dir = filepath.Join(v, "run")
-	}
-	boundRuntimeDir = dir
-	_ = os.Setenv("ZIP_RUNTIME_DIR", dir)
+	// ONE rule, in the leaf both halves import — a caller that resolved the directory
+	// differently from a callee would miss it silently (see plane.BindRuntimeDir).
+	boundRuntimeDir = plane.BindRuntimeDir()
 }
 
 var planeApp struct {

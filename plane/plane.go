@@ -35,7 +35,11 @@
 // one value is how books reconcile to a rounding difference nobody can find.
 package plane
 
-import "strings"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+)
 
 // The op names. A caller and a callee that spell a name differently fail at the
 // call rather than at compile time, so both ends read them from here.
@@ -501,4 +505,36 @@ type StartIn struct {
 type Started struct {
 	Addr  string `json:"addr"`
 	Known bool   `json:"known"`
+}
+
+// ---- the runtime directory both halves must agree on ------------------------
+
+// BindRuntimeDir points zip's socket resolution at the SHARED runtime directory and
+// returns it.
+//
+// It lives in this leaf because both halves need it and neither may import the other:
+// a callee resolves where to LISTEN and a caller resolves where to DIAL, from the same
+// rule, or they miss each other in a way nothing reports. That is not hypothetical —
+// with the binding done only on the caller's side, plugins listened on private temp
+// paths (/tmp/zip-commerce-*/commerce.sock) while callers dialed
+// /var/lib/cloud/run/commerce.sock, and a stale socket file at the shared path turned
+// the miss into "connection refused" — which reads like the callee is DOWN rather than
+// somewhere else. Every cross-process call was unreachable, and because the money ops
+// are fail-closed, every AI completion answered 503 on a healthy fleet.
+//
+// Idempotent, and an externally-set ZIP_RUNTIME_DIR always wins — the operator's
+// choice is not ours to overwrite, and both halves read the same one either way.
+func BindRuntimeDir() string {
+	if cur := strings.TrimSpace(os.Getenv("ZIP_RUNTIME_DIR")); cur != "" {
+		return cur
+	}
+	dir := "/run/hanzo"
+	// CLOUD_RUN_DIR overrides where app sockets live; default {CLOUD_DATA_DIR}/run.
+	if v := strings.TrimSpace(os.Getenv("CLOUD_RUN_DIR")); v != "" {
+		dir = v
+	} else if v := strings.TrimSpace(os.Getenv("CLOUD_DATA_DIR")); v != "" {
+		dir = filepath.Join(v, "run")
+	}
+	_ = os.Setenv("ZIP_RUNTIME_DIR", dir)
+	return dir
 }
