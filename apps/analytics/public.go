@@ -60,6 +60,15 @@
 //     `identify` and `group` (which name a person and a group) and every OTHER custom
 //     event — the whole commerce/billing/metering surface — are dropped, counted in the
 //     honest receipt, never stored.
+//
+//     THE KIND HALF WAS UNTRUE UNTIL RECENTLY, and it is worth saying why rather than
+//     just asserting the rule again. resolveName is shared with the credentialed lane,
+//     and its error branch fell back to naming a row after the caller's exception class.
+//     So an anonymous `{"type":"error","error":{"type":"…"}}` put 60 KiB of chosen bytes
+//     into `name`, fifty distinct per request, and on a published-site host into a REAL
+//     org — while this comment claimed it could not. The fix is in resolveName, because
+//     the class was never `name`'s fact to hold; a special case here would have left the
+//     lane with a rule and an exception instead of a rule.
 //   - FIELDS are a PROJECTION, not a filter: admitPublic builds a fresh CaptureEvent
 //     from the fields it names, so a field it does not name — personId, groupId,
 //     revenue, productId, quantity, currency, refCode, channel, signupWeek — cannot
@@ -67,11 +76,23 @@
 //     argument (publicProps): the @hanzo/observe annotation and NOTHING else. So an
 //     anonymous row's attributes still hold exactly what the SERVER put there — the
 //     folded $exception and the write core's $source.
+//     A FIELD IS ALSO PROJECTED BY FAMILY, not only by name: an exception is carried on
+//     the error kind and nowhere else (publicException). It has to be, because the
+//     projection runs BEFORE the fold — foldException stamps `attributes['$exception']`
+//     on whatever ingestDecoded hands it — so carrying Error onto a `$click` put the
+//     caller's message and stack, measured at 32 KiB, into an interaction row's
+//     attributes dictionary. The invariant two bullets up says an anonymous row's
+//     attributes hold only what the SERVER put there; this is the other half of making
+//     that true.
+//   - BYTES and COUNT are bounded first, and REFUSED rather than truncated. Bounding the
+//     REQUEST is not bounding a stored VALUE, so the two fields an anonymous caller can
+//     spend a whole request on — the annotation and the exception's class — carry their
+//     own bounds (publicProps, publicException). Both are read off what the real client
+//     emits, and both DROP the offending field rather than clip it.
 //   - IDENTITY is NAMESPACED, because nobody signed for it (publicSubject). The ids an
 //     anonymous caller supplies are its own browser's, and they are stored under a
 //     reserved prefix that no identified subject can carry — so an unattested row can
 //     never join, in any lens, to a person the org actually knows.
-//   - BYTES and COUNT are bounded first, and REFUSED rather than truncated.
 //   - RATE is capped per client IP and, independently, per socket peer.
 //   - DNT / Sec-GPC on the wire is honored: nothing is stored and the receipt says so.
 //
@@ -120,6 +141,13 @@ const (
 // admitPublic drops the caller's `event` string and resolveName supplies page_viewed /
 // error. `identify` and `group` bind an event to a named person and a named group, and
 // are refused here for that reason.
+//
+// Delegating the name to resolveName is only sound because resolveName has no
+// caller-bytes path left. It HAD one: its error branch fell back to e.Error.Type, so this
+// table admitted a kind whose name an anonymous caller then chose — 60 KiB of it, fifty
+// distinct per request, in a real org on a published-site host. That is fixed where it
+// was wrong (fact.go) rather than worked around here, so this stays a plain allowlist and
+// the lane keeps ONE name rule instead of a rule and an exception.
 var publicKinds = map[string]bool{"pageview": true, "error": true}
 
 // publicNames is the other half of the same rule, for the ONE kind whose name is
@@ -275,10 +303,15 @@ func optedOut(c *zip.Ctx) bool {
 // IT WITHOUT READING THE CALLER'S NAME.
 //
 // ok=false ⇒ dropped. ok=true with an EMPTY name ⇒ the route names itself downstream
-// (resolveName's server-chosen default), which is how pageview and error have always
-// been named on this lane — admitPublic rebuilds without the caller's `event`, so the
-// empty string is not a gap in the decision but the whole of it. A non-empty name is a
-// publicNames value, and nothing else can be.
+// (resolveName's server-chosen default), which is how pageview and error are named on
+// this lane — admitPublic rebuilds without the caller's `event`, so the empty string is
+// not a gap in the decision but the whole of it. A non-empty name is a publicNames value,
+// and nothing else can be.
+//
+// The empty case is only as strong as resolveName's defaults, and that is where this rule
+// was once broken rather than here: resolveName named an error after its exception class,
+// so "the route names it" was false for exactly one admitted kind. Both halves have to
+// hold for the sentence above to be true, which is why the fix went there.
 func publicName(e CaptureEvent) (string, bool) {
 	kind := canonicalType(e.Type)
 	if publicKinds[kind] {
@@ -306,12 +339,19 @@ func publicName(e CaptureEvent) (string, bool) {
 // verbatim: an anonymous row's attributes hold the folded $exception and the write
 // core's $source, and nothing a caller sent.
 //
-// VALUES ARE NOT BOUNDED HERE, deliberately. maxPublicBytes is the ONE bound on how
-// many caller bytes an anonymous request may store, applied once at the door, and it
-// already governs every other caller string this projection carries (url, path,
-// referrer, distinctId, the UTM tuple). A second, per-value bound on this family alone
-// would be a second mechanism for a job the first one already does — and would have to
-// explain why $el is clipped and url is not.
+// A value is projected only when it is WITHIN BOUNDS (maxAnnotation / maxAnnotationPath);
+// an out-of-bounds value is simply not carried. That is this same projection with a
+// complete predicate rather than a second mechanism bolted beside it — the function
+// already answers "may this key be stored", and a key whose value cannot be stored
+// safely is a key that may not be stored.
+//
+// The bound is necessary because maxPublicBytes does NOT subsume it. That cap bounds a
+// REQUEST; it does not bound one stored VALUE, and inside 64 KiB a caller can spend
+// nearly all of it on a single $el or a 6000-element $path. Those land in the `el`
+// tuple, and cloud cannot narrow that column: this package is forbidden from declaring
+// schema at all (capture_test.go enforces it — cloud writes and reads the plane, o11y
+// owns its shape). When the writer cannot narrow the column, the writer must narrow the
+// value.
 func publicProps(p map[string]any) map[string]any {
 	if len(p) == 0 {
 		return nil
@@ -321,7 +361,11 @@ func publicProps(p map[string]any) map[string]any {
 	// instead of by remembering to spell the set a second time.
 	out := make(map[string]any, len(annotationKeys))
 	for _, k := range annotationKeys {
-		if v, ok := p[k]; ok {
+		v, ok := p[k]
+		if !ok {
+			continue
+		}
+		if v, ok := boundedAnnotation(v); ok {
 			out[k] = v
 		}
 	}
@@ -329,6 +373,98 @@ func publicProps(p map[string]any) map[string]any {
 		return nil
 	}
 	return out
+}
+
+// maxAnnotation / maxAnnotationPath bound ONE stored annotation value on the anonymous
+// lane. They are READ OFF THE CLIENT rather than invented, so no real annotation can hit
+// them: @hanzo/observe walks at most maxDepth=12 ancestors (annotate.ts) and clips every
+// accessible name to MAX_NAME=80, which puts a genuine $el label — twelve `role[name]`
+// steps joined by '/' — around 1.4 KiB at its very worst. 2 KiB clears that with room to
+// spare while cutting the demonstrated 60 KiB value by thirty times, and 32 path elements
+// is 2.6x the client's own depth.
+//
+// A caller mounting this attack is not running the client at all, which is exactly why
+// the server keeps its own copy of the bound.
+const (
+	maxAnnotation     = 2 << 10
+	maxAnnotationPath = 32
+)
+
+// boundedAnnotation reports whether one annotation value is within bounds, and yields the
+// value to store. It is a FILTER, never a truncator: a clipped label would be a different
+// element identity than the one the visitor touched, and a heatmap drawn on silently
+// altered identities is worse than one with a gap. Over the bound, the key is dropped and
+// the event still lands — the annotation is enrichment, so losing it costs context, never
+// the interaction.
+//
+// The shapes are the two the annotation actually has: $path is a list of steps, every
+// other key is a string. Anything else (an object, a number, a nested array) is not an
+// annotation and is refused, so the `el` tuple's six fixed fields are the only thing this
+// can ever produce.
+func boundedAnnotation(v any) (any, bool) {
+	switch t := v.(type) {
+	case string:
+		return t, len(t) <= maxAnnotation
+	case []any:
+		if len(t) > maxAnnotationPath {
+			return nil, false
+		}
+		for _, el := range t {
+			s, ok := el.(string)
+			if !ok || len(s) > maxAnnotation {
+				return nil, false
+			}
+		}
+		return t, true
+	default:
+		return nil, false
+	}
+}
+
+// maxClass bounds an anonymous exception's CLASS. A class is an identifier — TypeError,
+// ReferenceError, java.lang.IllegalStateException — so 256 bytes is far past anything a
+// runtime emits, and a value beyond it is not a class.
+const maxClass = 256
+
+// publicException decides whether an anonymous exception may be carried at all, and
+// then bounds the one field of it a caller can spend real cardinality on.
+//
+// AN EXCEPTION IS THE ERROR FAMILY'S FIELD, so it is carried on the error kind and
+// nowhere else. Every other admitted kind returns nil. This is not defensive tidying:
+// the projection ran BEFORE the fold, and foldException (publishable.go, called from
+// ingestDecoded) stamps `attributes['$exception']` on whatever it is handed — so
+// carrying Error onto a `$click` put the caller's whole exception, message and stack
+// included, into the attributes dictionary of an autocapture row. Measured at 32 KiB
+// from one request. The class bound below does not help there, because the bytes are in
+// Message and Stack.
+//
+// It is closed by ASKING WHICH FAMILY THE ROW IS rather than by bounding two more
+// fields, because the fields were never the problem: an interaction is not a fault, and
+// a `$click` carrying an exception is not a bounded version of a real thing — it is a
+// row with a field that has no meaning on it. Bounding Message and Stack here would have
+// kept the meaningless field and merely made it smaller, and would owe an explanation
+// for why a click may carry a stack trace at all.
+//
+// On the error kind, Type is bounded and Message and Stack are deliberately left alone:
+// Type is not free text — it lands in the fault's `class` column and is the first thing
+// fingerprint() hashes into `group`, which leads event.error's ORDER BY — while Message
+// and Stack ARE free text, a real stack is legitimately long, they are redacted by
+// scrubException, and maxPublicBytes is the right bound for text nobody keys on.
+//
+// An over-long class is DROPPED, not clipped, and the exception still lands: fingerprint
+// already falls back to the message's shape when it has no class, so grouping degrades
+// to the designed fallback instead of grouping two unrelated failures under a shared
+// prefix.
+func publicException(kind string, e *Exception) *Exception {
+	if e == nil || kind != "error" {
+		return nil
+	}
+	if len(e.Type) <= maxClass {
+		return e
+	}
+	c := *e
+	c.Type = ""
+	return &c
 }
 
 // anonymousSubject is the namespace an UNATTESTED subject is stored under, and maxSubject
@@ -389,9 +525,13 @@ func admitPublic(evs []CaptureEvent) ([]CaptureEvent, int) {
 			dropped++
 			continue
 		}
+		// ONE canonical kind per row, read once: it is the stored Type AND the
+		// question publicException answers, and computing it twice would let the
+		// projection and the exception decision drift apart.
+		kind := canonicalType(e.Type)
 		out = append(out, CaptureEvent{
 			MessageID:   e.MessageID,
-			Type:        canonicalType(e.Type),
+			Type:        kind,
 			Event:       name,
 			Timestamp:   e.Timestamp,
 			DistinctID:  publicSubject(e.DistinctID),
@@ -404,7 +544,7 @@ func admitPublic(evs []CaptureEvent) ([]CaptureEvent, int) {
 			UTM:         e.UTM,
 			Library:     e.Library,
 			LibraryVer:  e.LibraryVer,
-			Error:       e.Error,
+			Error:       publicException(kind, e.Error),
 			Properties:  publicProps(e.Properties),
 		})
 	}
