@@ -606,11 +606,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          # CREDENTIAL: FLEET_DISPATCH_TOKEN — a fine-grained token carrying
-          # `contents:write` (a client repo's lane commits its regenerated
-          # projection and pushes a tag) and `metadata:read` on the nine repos
-          # below. From KMS, like every other secret this fleet uses; the repo
-          # holds only KMS_CLIENT_ID/SECRET.
+          # CREDENTIAL: FLEET_DISPATCH_TOKEN — carries `contents:write` (a client
+          # repo's lane commits its regenerated projection and pushes a tag) and
+          # `metadata:read` on the nine repos below. From KMS, like every other
+          # secret this fleet uses; the repo holds only KMS_CLIENT_ID/SECRET.
+          #
+          # IT CANNOT BE A FINE-GRAINED PAT, and that is a fact about where the
+          # projections live rather than a preference. A fine-grained token is
+          # scoped to ONE owner; these nine sit in SIX — hanzoai, hanzo-go,
+          # hanzo-rs, hanzo-kotlin, hanzo-cpp, hanzo-docs. So it is a classic PAT
+          # with `repo`, or a GitHub App installed on all six. Naming it wrong
+          # would have produced a token that works for four repos and 404s on
+          # five, which is worse than none.
           #
           # It does not exist yet. Wiring the car and naming the credential is
           # the honest state — a release that cannot fan out fails HERE, loudly,
@@ -627,7 +634,7 @@ jobs:
             "${KMS_ENDPOINT}/v1/kms/orgs/${KMS_ORG}/secrets/deploy/FLEET_DISPATCH_TOKEN?env=${KMS_SECRET_ENV}" \
             -H "Authorization: Bearer ${KMS_TOKEN}" | jq -r '.secret.value // empty')
           if [ -z "$TOKEN" ]; then
-            echo "::error::FLEET_DISPATCH_TOKEN missing in KMS at ${KMS_ORG}/deploy (env ${KMS_SECRET_ENV}). Create it as a GitHub fine-grained PAT with contents:write + metadata:read on hanzoai/{python-sdk,js-sdk,go-sdk,rust-sdk,java-sdk,kotlin-sdk,cpp-sdk,cli,docs}. Until it exists, every cloud release ships a document no client is regenerated from — which is the failure this car was built to end, so it fails rather than skipping."
+            echo "::error::FLEET_DISPATCH_TOKEN missing in KMS at ${KMS_ORG}/deploy (env ${KMS_SECRET_ENV}). Create it with contents:write + metadata:read on hanzoai/{python-sdk,js-sdk,java-sdk,cli} hanzo-go/sdk hanzo-rs/sdk hanzo-kotlin/sdk hanzo-cpp/sdk hanzo-docs/docs — six owners, so a fine-grained PAT cannot carry it; use a classic PAT with repo scope or a GitHub App installed on all six. Until it exists, every cloud release ships a document no client is regenerated from — which is the failure this car was built to end, so it fails rather than skipping."
             exit 1
           fi
           echo "::add-mask::${TOKEN}"
@@ -641,17 +648,40 @@ jobs:
           # ONE EVENT TYPE for every projection — SDKs, the CLI and the docs
           # alike. A second name for "the document moved" would be a second
           # thing to keep in step.
+          #
+          # EACH PROJECTION BY ITS OWN ADDRESS. Five of the nine no longer live
+          # under hanzoai/: go, rust, kotlin and cpp each moved to a per-language
+          # org, and docs to hanzo-docs. Measured against api.github.com rather
+          # than assumed — POST .../dispatches with an event nothing listens for:
+          #
+          #   hanzoai/go-sdk     307      hanzo-go/sdk       204
+          #   hanzoai/rust-sdk   307      hanzo-rs/sdk       204
+          #   hanzoai/kotlin-sdk 307      hanzo-kotlin/sdk   204
+          #   hanzoai/cpp-sdk    307      hanzo-cpp/sdk      204
+          #   hanzoai/docs       307      hanzo-docs/docs    204
+          #
+          # A redirect is not a delivery. GitHub follows a repo rename for GET,
+          # but a dispatch POST answers 307 and drops the body, so this loop
+          # would have failed five of nine on its first real run — five clients
+          # silently describing the previous release. Curl is deliberately NOT
+          # given -L: a projection is addressed where it lives, and a redirect
+          # that has to be followed means this list is stale and should say so.
           ok=0; bad=""
-          for repo in python-sdk js-sdk go-sdk rust-sdk java-sdk kotlin-sdk cpp-sdk cli docs; do
+          for repo in hanzoai/python-sdk hanzoai/js-sdk hanzo-go/sdk hanzo-rs/sdk \
+                      hanzoai/java-sdk hanzo-kotlin/sdk hanzo-cpp/sdk hanzoai/cli \
+                      hanzo-docs/docs; do
             CODE=$(curl -s -o /tmp/d.json -w '%{http_code}' -X POST \
               -H "Authorization: Bearer ${TOKEN}" \
               -H 'Accept: application/vnd.github+json' \
-              "https://api.github.com/repos/hanzoai/${repo}/dispatches" \
+              "https://api.github.com/repos/${repo}/dispatches" \
               -d "{\"event_type\":\"spec-update\",\"client_payload\":${PAYLOAD}}")
             if [ "$CODE" = "204" ]; then
-              echo "  dispatched  hanzoai/${repo}"; ok=$((ok+1))
+              echo "  dispatched  ${repo}"; ok=$((ok+1))
+            elif [ "$CODE" = "301" ] || [ "$CODE" = "307" ] || [ "$CODE" = "308" ]; then
+              echo "  MOVED ${CODE}  ${repo} — this repo was renamed or transferred; put its new address in this list"
+              bad="${bad} ${repo}"
             else
-              echo "  FAILED ${CODE}  hanzoai/${repo}"; cat /tmp/d.json; bad="${bad} ${repo}"
+              echo "  FAILED ${CODE}  ${repo}"; cat /tmp/d.json; bad="${bad} ${repo}"
             fi
           done
 
