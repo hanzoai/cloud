@@ -61,8 +61,14 @@ const (
 
 	IAMMailable = "iam_mailable"
 
+	// AgentsDeclared answers whether a reference names an agent in the CALLER's
+	// own org. It is on the plane because the registry is the agents PROCESS's
+	// own store: a peer cannot see it, and a peer that trusted the caller's word
+	// instead would be treating a request field as an attestation.
+	AgentsDeclared = "agents_declared"
+
 	GitFiles   = "git_files"
-	GitImport = "git_import"
+	GitImport  = "git_import"
 	GitInbound = "git_inbound"
 	GitPublish = "git_publish"
 
@@ -300,6 +306,28 @@ type Recipient struct {
 // Roster is who an org may mail.
 type Roster struct {
 	Recipients []Recipient `json:"recipients"` // everyone in the org who may be mailed; empty is a real answer, not an error
+}
+
+// ---- agents.declared -------------------------------------------------------
+
+// AgentRef names an agent by the handle its own org addresses it by — the id or
+// the name, which is the one lookup every path-addressed agents route uses.
+//
+// There is no org field, as everywhere on this plane: the org rides the caller,
+// so a reference can only ever be resolved against the asking org's registry.
+type AgentRef struct {
+	Ref string `json:"ref"` // the id or name to resolve, as the caller's own org spells it
+}
+
+// AgentDeclared is what the registry answers about a reference: whether it names
+// an agent this org actually registered.
+//
+// It is deliberately a BOOLEAN and not the agent record. The question is "did
+// this org declare this agent", and answering it with the model, instructions
+// and tool list would put an org's whole agent design on the wire to settle a
+// yes/no — and would make the answer's size a side channel on the record.
+type AgentDeclared struct {
+	Declared bool `json:"declared"` // true when the reference resolves in the caller's own registry
 }
 
 // ---- git -------------------------------------------------------------------

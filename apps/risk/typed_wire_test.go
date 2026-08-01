@@ -164,7 +164,7 @@ func TestTheSurfaceIsWhatWasPromised(t *testing.T) {
 		"POST /v1/ml/train",
 		"GET /v1/ml/state", "PUT /v1/ml/state/appetite",
 		"GET /v1/ml/features",
-		"POST /v1/ml/search", "GET /v1/ml/search/{id}",
+		"POST /v1/ml/search", "GET /v1/ml/search/{id}", "DELETE /v1/ml/search/{id}",
 		"POST /v1/ml/snapshot", "POST /v1/ml/restore",
 	}
 	for _, w := range want {

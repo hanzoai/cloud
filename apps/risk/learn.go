@@ -23,8 +23,12 @@ package risk
 //  2. PER TENANT INCLUDING THE GEOMETRY. The seed is mix(cfg.Seed, orgID), so two
 //     tenants do not merely hold different counters — they hold DIFFERENT TREES.
 //     Probing one reveals nothing about where another's regions lie.
-//  3. BOUNDED. 336 KB per tenant at the defaults, MaxOrgs 256, LRU eviction. A
-//     tenant that goes idle costs nothing and one that comes back re-warms.
+//  3. BOUNDED, AND BOUNDED PER TENANT. A measured 336 KB per tenant at the
+//     defaults, in a store that holds exactly ONE tenant (bound.go: forest
+//     forces MaxOrgs to 1), so the engine's cross-tenant LRU is unreachable — one
+//     org can never evict another's learned model. A tenant that goes idle has
+//     its model written down and its memory reclaimed; one that comes back has
+//     it restored, not re-warmed.
 //  4. ATTRIBUTION IS A COUNTERFACTUAL ON THE MODEL THAT RAISED THE ALERT. Move
 //     one coordinate to its neutral value, rescore, and the drop IS that
 //     feature's contribution. No second explainer model, and therefore no second
@@ -51,61 +55,31 @@ import (
 
 	"github.com/luxfi/aml/pkg/anomaly"
 	"github.com/luxfi/aml/pkg/types"
-	"github.com/luxfi/aml/pkg/velocity"
 )
 
 // snapshotKey names the row a tenant's learned state is kept under. One row: a
 // tenant has one model, and a second row would be a second answer to one
 // question.
+//
+// Writing it is what makes a rollout survivable. cloud is strategy Recreate at
+// one replica, so every deploy drops the process — and with it every warming
+// model and the appetite threshold it had computed. Without the snapshot, every
+// deploy silently resets every tenant to warming, and a warming model REFUSES to
+// score, which reads as "clean" to anything that does not check Refusal. See
+// resident.go for the read side, which is also the ONE place the reload happens.
 const snapshotKey = "anomaly"
 
-// saveModel writes a tenant's learned state into its own encrypted file.
-//
-// This is what makes a rollout survivable. cloud is strategy Recreate at one
-// replica, so every deploy drops the process — and with it every warming model
-// and the appetite threshold it had computed. Without this, every deploy
-// silently resets every tenant to warming, and a warming model REFUSES to score,
-// which reads as "clean" to anything that does not check Refusal.
-func saveModel(s *shelf, model *anomaly.Store, t Tenant) error {
-	snap, ok := model.Snapshot(t.String())
-	if !ok {
-		return nil // nothing learned for this tenant; nothing to keep
-	}
-	body, err := json.Marshal(snap)
-	if err != nil {
-		return err
-	}
-	db, err := s.open(t)
-	if err != nil {
-		return err
-	}
-	return putModel(db, snapshotKey, body)
-}
+// encodeSnapshot and decodeSnapshot are the snapshot's storage form, named so
+// the two halves are one edit. A snapshot whose shape does not match the running
+// inventory is REFUSED by the engine on restore, not coerced: state the model
+// would treat as its own memory has to have come from this algorithm over this
+// feature set.
+func encodeSnapshot(s anomaly.Snapshot) ([]byte, error) { return json.Marshal(s) }
 
-// loadModel restores a tenant's learned state on first touch after a restart.
-// A snapshot whose shape does not match the running inventory is REFUSED by the
-// engine, not coerced: state the model would treat as its own memory has to have
-// come from this algorithm over this feature set.
-func loadModel(s *shelf, model *anomaly.Store, t Tenant) error {
-	db, err := s.open(t)
-	if err != nil {
-		return err
-	}
-	body, err := getModel(db, snapshotKey)
-	if err != nil {
-		return nil // no snapshot is the normal first-run state, not a failure
-	}
-	var snap anomaly.Snapshot
-	if err := json.Unmarshal(body, &snap); err != nil {
-		return err
-	}
-	// The snapshot's tenant must be the tenant asking for it. The engine checks
-	// this too; checking here as well means a restore of A's file into B's
-	// request is refused at the boundary that knows who asked.
-	if snap.OrgID != t.String() {
-		return fmt.Errorf("risk: snapshot belongs to another tenant")
-	}
-	return model.Restore(snap)
+func decodeSnapshot(body []byte) (anomaly.Snapshot, error) {
+	var s anomaly.Snapshot
+	err := json.Unmarshal(body, &s)
+	return s, err
 }
 
 // ── exhaustive search ───────────────────────────────────────────────────────
@@ -232,7 +206,7 @@ func searchRun(ctx context.Context, t Tenant, history []observation) (searchRepo
 		}
 		w := tr.Candidate
 		rep.Winner = &w
-		rep.Curve = curve(t, w, history)
+		rep.Curve = curve(ctx, t, w, history)
 		break
 	}
 	if rep.Winner == nil {
@@ -264,12 +238,17 @@ func candidates() []candidate {
 }
 
 // replayCandidate runs one topology over the history in a sandbox.
+//
+// The sandbox's aggregates carry the SAME per-tenant bound the live plane does
+// (aggregates()), so a search over five thousand distinct subjects costs what one
+// tenant is allowed to cost and not a multiple of it. A sandbox that could
+// allocate without a ceiling would be the memory bomb again, reachable by an op
+// that answers 202 and then runs for minutes.
 func replayCandidate(t Tenant, c candidate, history []observation) (trial, error) {
-	vel := velocity.New(velocity.Config{})
-	model, err := anomaly.New(anomaly.Config{
+	vel := aggregates()
+	model, err := forest(anomaly.Config{
 		Trees: c.Trees, Depth: c.Depth, Window: c.Window, Blend: c.Blend,
 		Appetite: anomaly.Appetite{Review: c.Review, Sample: 0.001},
-		Shadow:   true, // a sandbox never alerts for real
 	}, vel)
 	if err != nil {
 		return trial{}, err
@@ -313,9 +292,18 @@ func replayCandidate(t Tenant, c candidate, history []observation) (trial, error
 // curve is the winner's separation as a function of how much history it had
 // seen. Ten steps: enough to see whether the model is still improving, few
 // enough that the answer is a chart and not a data set.
-func curve(t Tenant, c candidate, history []observation) []float64 {
+//
+// It polls the deadline like the grid above does. Ten more replays after the
+// grid finished is the same work again, and an op that stops honouring its
+// budget on the last step is an op with no budget.
+func curve(ctx context.Context, t Tenant, c candidate, history []observation) []float64 {
 	out := make([]float64, 0, 10)
 	for i := 1; i <= 10; i++ {
+		select {
+		case <-ctx.Done():
+			return out
+		default:
+		}
 		n := len(history) * i / 10
 		if n == 0 {
 			out = append(out, 0)

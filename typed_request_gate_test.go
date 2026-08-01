@@ -347,6 +347,18 @@ var allowedRequestUses = map[string]string{
 		"principal.OrgFrom and never through the request. Off the HTTP path it answers " +
 		"principal.DefaultProject — the whole-org view, which is the honest answer where there is no " +
 		"request rather than a refusal.",
+	"apps/risk/tenant.go": "tenantOf — ONE seam, and the only reader of a request in this app. A risk " +
+		"decision is BILLED and ATTRIBUTED, so beyond the tenant it needs four facts the principal " +
+		"carries and principal.OrgFrom does not: the project SUB-SCOPE and whether it is a validated " +
+		"claim (a project-scoped spend cap may hard-enforce only when it is), the validated user id " +
+		"(the actor on every label, suppression and control this app writes, and the fact that tells a " +
+		"live person from a machine credential when the decision classifies agency), the request id " +
+		"and the client IP (both are meter arguments). Every one of them is resolved HERE, into the " +
+		"scope value every op is handed, so nothing downstream reads a request: agency classification " +
+		"and the actor attribution each take the user as a VALUE. The TENANT itself is " +
+		"principal.OrgFrom, folded through the brand-qualified mint. It fails closed off the HTTP path " +
+		"— a CLI LocalInvoke has no validated principal, and a fraud plane must not act for a tenant " +
+		"nobody attested.",
 	"apps/usage/account.go": "caller / noStore — the usage plane is scoped to (org, SUBJECT): the " +
 		"account board carries the caller's OWN linked provider accounts, so it needs the validated user id " +
 		"(c.User()) as well as the tenant, and principal.OrgFrom carries only the tenant. noStore is the " +

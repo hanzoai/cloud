@@ -37,21 +37,22 @@ import (
 )
 
 // Agency is what kind of actor this is. It is the differentiator: we run the
-// agents, so we can tell a declared, credentialed, metered agent from an
-// anonymous script, and nobody who does not run agents can compute it.
+// agents, so we can ask the org's OWN registry whether the agent a decision
+// names is one it registered — a fact nobody who does not run agents holds. See
+// agency.go, which is where it is derived and where the registry is asked.
 const (
-	// AgencyAgent is a declared agent: it named an agent reference, it
-	// authenticated with a principal-bearing credential, and its traffic is
-	// metered on this org's own ledger.
+	// AgencyAgent is an agent the org registered: the reference on the
+	// observation RESOLVED in this org's own agent registry.
 	AgencyAgent = "agent"
-	// AgencyHuman is a browser session bound to a validated user.
+	// AgencyHuman is a live session bound to a validated user, naming no agent.
 	AgencyHuman = "human"
-	// AgencyBot is undeclared automation: no agent reference, and either no
-	// credential or a publishable key, which by construction identifies a tenant
-	// and authenticates nobody.
+	// AgencyBot is undeclared automation: something named an agent reference
+	// this org's registry does not know. A claim the registry can disprove is
+	// the strongest signal available here.
 	AgencyBot = "bot"
-	// AgencyUnknown is credentialed but undeclared. Scored normally — an honest
-	// "we cannot tell" is worth more than a guess in either direction.
+	// AgencyUnknown names nothing to check, or nothing checkable. Scored
+	// normally — an honest "we cannot tell" is worth more than a guess in either
+	// direction.
 	AgencyUnknown = "unknown"
 )
 
@@ -62,6 +63,16 @@ const (
 	// RefusalWarming means the model has not learned enough of this tenant's
 	// behaviour for its scores to mean anything. Rules still ran.
 	RefusalWarming = "warming"
+	// RefusalDisarmed means this tenant HAD learned state and this process does
+	// not have it: the snapshot was unreadable, or the engine refused it. It is
+	// warming's opposite, not its synonym — warming is a control coming up, and
+	// this is a control that is off. Named separately because reporting a
+	// disarmed model as "warming" is exactly how one stays off unnoticed.
+	RefusalDisarmed = "disarmed"
+	// RefusalUnverified means the actor's claimed agency could not be checked
+	// against the org's registry, because the registry could not be reached. The
+	// classification on this decision is a gap, not a verdict.
+	RefusalUnverified = "unverified"
 	// RefusalUnidentified means the observation named no subject the aggregates
 	// can be keyed on.
 	RefusalUnidentified = "unidentified"
@@ -104,6 +115,11 @@ type observation struct {
 	signals   map[string]string
 	agent     string
 	session   string
+	// refusal is what was already short BEFORE scoring — today, an agency the
+	// registry could not confirm. It rides the observation rather than being a
+	// parameter of its own because it is derived from the observation, in the
+	// same call that derives agency.
+	refusal string
 }
 
 // outcome is the decision, before it is rendered onto the wire.
@@ -206,49 +222,49 @@ func observe(vel *velocity.Store, t Tenant, o observation, modelScore float64, w
 	return f
 }
 
-// classify derives agency from four facts cloud already holds, and from NO
-// user-agent string. A user agent is a caller-supplied claim, so sniffing it
-// classifies whoever is honest and misses whoever is not.
+// bench is everything a decision is made AGAINST: the tenant's two in-memory
+// planes, its governance, and how to grade the model's own refusal.
 //
-//	credential  a publishable key resolves an ORG and no principal, so it cannot
-//	            be an agent; a secret key or a bearer resolves a principal.
-//	declared    does actor.agentRef resolve in THIS org's agent registry?
-//	session     is there a live agent session for it?
-//	metered     does this account have priced rows on the org's own ledger?
-//
-// declared AND credentialed => agent, and the org's agent policy applies.
-// undeclared AND anonymous  => bot, and the anonymous lane's bounds apply.
-// Anything else is unknown and is scored normally.
-func classify(credentialed, publishable, declared, humanSession bool) string {
-	switch {
-	case declared && credentialed && !publishable:
-		return AgencyAgent
-	case !declared && (!credentialed || publishable):
-		return AgencyBot
-	case humanSession && !declared:
-		return AgencyHuman
-	default:
-		return AgencyUnknown
-	}
+// It is a VALUE, so decide can be exercised without a store — which is what
+// makes the ordering above testable rather than assertable — and it is ONE
+// value, so the next thing a decision must read arrives as a named field rather
+// than as a tenth positional argument nobody reads at the call site.
+type bench struct {
+	// t is the tenant. It leads every velocity key and every model entity, so it
+	// is what makes two tenants' counters disjoint.
+	t Tenant
+	// vel and model are THIS tenant's own aggregates and forest. Nothing here is
+	// shared with another tenant; see bound.go.
+	vel   *velocity.Store
+	model *anomaly.Store
+	// rules is this tenant's rule set, already loaded.
+	rules []rule
+	// lists answers whether a value is in one of this tenant's named lists.
+	lists func(name, value string) bool
+	// mute answers whether a suppression covers this hit. A muted hit is still
+	// recorded; see step 5.
+	mute func(h hit, o observation) bool
+	// shadow is the tenant observing rather than acting.
+	shadow bool
+	// grade turns the model's own refusal into the word that is true of it —
+	// `warming` for a control coming up, `disarmed` for one that is off. Nil
+	// grades nothing, which is what a test without a store wants.
+	grade func(reason string) string
 }
 
-// decide is the whole path. It takes the tenant's rules, lists and suppressions
-// as values so it can be exercised without a store, which is what makes the
-// ordering above testable rather than assertable.
-func decide(
-	ctx context.Context,
-	vel *velocity.Store,
-	model *anomaly.Store,
-	t Tenant,
-	o observation,
-	rules []rule,
-	lists func(name, value string) bool,
-	suppressed func(h hit, o observation) bool,
-	shadow bool,
-) outcome {
+// gradeOf applies the bench's grader, if it has one.
+func (b bench) gradeOf(reason string) string {
+	if b.grade == nil {
+		return reason
+	}
+	return b.grade(reason)
+}
+
+// decide is the whole path.
+func decide(ctx context.Context, b bench, o observation) outcome {
 	_ = ctx
 
-	out := outcome{id: o.id, shadow: shadow, agency: o.agency, action: ActionAllow}
+	out := outcome{id: o.id, shadow: b.shadow, agency: o.agency, action: ActionAllow, refusal: o.refusal}
 	if strings.TrimSpace(o.subject) == "" {
 		out.refusal = RefusalUnidentified
 		return out
@@ -256,13 +272,13 @@ func decide(
 
 	// 1. Record first: everything after reads these rings, and the numbers in the
 	// decision must be the ones an investigator sees on the subject.
-	record(vel, t, o)
+	record(b.vel, b.t, o)
 
 	// 2. Score the model. Assess LEARNS; the tenant's own traffic is its training
 	// set and there is no separate training pass.
 	tx := types.Transaction{
 		ID:                o.id,
-		OrgID:             t.String(),
+		OrgID:             b.t.String(),
 		UserID:            o.subject,
 		AccountID:         o.subject,
 		Currency:          o.currency,
@@ -273,9 +289,10 @@ func decide(
 		Timestamp:         o.at,
 		USD:               nanoUSD(o.amount),
 	}
-	assessment := model.Inspect(tx, types.Entity{ID: o.subject, OrgID: t.String()})
+	entity := types.Entity{ID: o.subject, OrgID: b.t.String()}
+	assessment := b.model.Inspect(tx, entity)
 	var modelHit *hit
-	if mh, ok := model.Assess(tx, types.Entity{ID: o.subject, OrgID: t.String()}); ok {
+	if mh, ok := b.model.Assess(tx, entity); ok {
 		action := mh.Rule.Action
 		if actionRank(action) > actionRank(modelCeiling) {
 			action = modelCeiling
@@ -286,14 +303,17 @@ func decide(
 		}
 		out.causes = mh.Causes
 	}
+	// GRADED HERE, where the model's own reason is produced and still the only
+	// thing being named. Grading the merged word instead would let any
+	// higher-ranked reason hide a model that is off.
 	if !assessment.Scored && assessment.Reason != "" {
-		out.refusal = assessment.Reason
+		out.refusal = worse(out.refusal, b.gradeOf(assessment.Reason))
 	}
 
 	// 3. Rules, over the recorded aggregates plus the model's score.
-	f := observe(vel, t, o, assessment.Score, !assessment.Scored)
-	f.lists = lists
-	hits := evaluate(rules, o.stage, f)
+	f := observe(b.vel, b.t, o, assessment.Score, !assessment.Scored)
+	f.lists = b.lists
+	hits := evaluate(b.rules, o.stage, f)
 	if modelHit != nil {
 		hits = append(hits, *modelHit)
 	}
@@ -302,7 +322,7 @@ func decide(
 	// it appears in the record and contributes nothing to the action.
 	scoring := make([]hit, 0, len(hits))
 	for i := range hits {
-		if suppressed != nil && suppressed(hits[i], o) {
+		if b.mute != nil && b.mute(hits[i], o) {
 			hits[i].Suppressed = true
 			continue
 		}
@@ -320,15 +340,68 @@ func decide(
 	out.hits, out.score = hits, round4(score)
 
 	// 6. Shadow. Everything above ran, everything is recorded, nothing acts.
-	if shadow {
+	if b.shadow {
 		out.action = ActionAllow
-		if out.refusal == "" {
-			out.refusal = RefusalShadow
-		}
+		out.refusal = worse(out.refusal, RefusalShadow)
 		return out
 	}
 	out.action = action
 	return out
+}
+
+// worse keeps the refusal a reader most needs to see.
+//
+// A decision can be short of more than one thing at once and the wire carries ONE
+// word, so the word is chosen by a stated precedence rather than by whichever
+// line happened to run last.
+//
+// THE ORDER IS "WHAT WILL NOT FIX ITSELF", most consequential first:
+//
+//	unidentified  the observation named nobody, so there was nothing to key on.
+//	disarmed      a control that WAS on is off. Nothing this tenant does next
+//	              turns it back on; an operator has to.
+//	unverified    a check that was supposed to happen did not, because another
+//	              process could not answer. Also nobody's own traffic to fix.
+//	unusable      the engine says its own output is not usable yet.
+//	warming       the model is coming up. ORDINARY — it is the state of every new
+//	              tenant, and the tenant's own next requests resolve it.
+//	shadow        the tenant chose to observe. Not a shortfall at all, and also
+//	              published as its own boolean.
+//
+// warming ranking BELOW unverified is deliberate and was a defect the other way
+// round: warming is the common case, so letting it win meant a registry outage
+// was reported as a model that is merely young, on the majority of decisions.
+//
+// A refusal this table does not name still outranks silence: an unnamed reason
+// is one the engine added and this file has not met, and dropping it would be
+// exactly the silent gap the whole vocabulary exists to prevent.
+func worse(a, b string) string {
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	case rank(b) > rank(a):
+		return b
+	default:
+		return a
+	}
+}
+
+func rank(refusal string) int {
+	if r, named := refusalRank[refusal]; named {
+		return r
+	}
+	return refusalRank[anomaly.ReasonUnusable]
+}
+
+var refusalRank = map[string]int{
+	RefusalShadow:          1,
+	RefusalWarming:         2,
+	anomaly.ReasonUnusable: 3,
+	RefusalUnverified:      4,
+	RefusalDisarmed:        5,
+	RefusalUnidentified:    6,
 }
 
 // round4 trims a score to four places. A score is a judgement, not a

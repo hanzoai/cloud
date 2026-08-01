@@ -21,10 +21,8 @@ import (
 	"errors"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/zap-proto/zip"
 )
@@ -53,7 +51,15 @@ CREATE TABLE IF NOT EXISTS decision (
 	digest      TEXT NOT NULL DEFAULT '',
 	label       TEXT NOT NULL DEFAULT '',
 	label_by    TEXT NOT NULL DEFAULT '',
-	label_at    TEXT NOT NULL DEFAULT ''
+	label_at    TEXT NOT NULL DEFAULT '',
+	-- The COVERAGE of the aggregates this decision read. since is the instant
+	-- this tenant's rings started, so a 30-day count computed from ten minutes of
+	-- rings is readable as exactly that; strained says the tenant was at its own
+	-- cardinality bound, so a count may be short of its own traffic. Both are
+	-- stored rather than computed on read, because a retry under one idempotency
+	-- key must answer with the original decision and not with today's coverage.
+	since       TEXT NOT NULL DEFAULT '',
+	strained    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS decision_at ON decision(at DESC);
 CREATE INDEX IF NOT EXISTS decision_subject ON decision(kind, subject, at DESC);
@@ -122,64 +128,9 @@ CREATE TABLE IF NOT EXISTS setting (
 );
 `
 
-// shelf holds the lazily-opened per-tenant handles. A file is opened, migrated
-// and seeded once on first touch and cached by tenant key. Opens are serialised
-// so a concurrent first touch opens exactly once.
-type shelf struct {
-	dataDir string
-
-	mu  sync.Mutex
-	dbs map[Tenant]*sql.DB
-}
-
-func newShelf(dataDir string) *shelf { return &shelf{dataDir: dataDir, dbs: map[Tenant]*sql.DB{}} }
-
-// open resolves the tenant's file. The ORG half is what cloud.OrgDB takes — it
-// does its own brand scoping through DataDir and the deployment, so handing it
-// the qualified key would put the brand in the path twice.
-func (s *shelf) open(t Tenant) (*sql.DB, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if db, ok := s.dbs[t]; ok {
-		return db, nil
-	}
-	db, err := cloud.OrgDB(s.dataDir, t.org(), "", "risk")
-	if err != nil {
-		return nil, err
-	}
-	if _, err := db.Exec(schema); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if err := seed(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	s.dbs[t] = db
-	return db, nil
-}
-
-func (s *shelf) close() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for k, db := range s.dbs {
-		_ = db.Close()
-		delete(s.dbs, k)
-	}
-}
-
-// tenants lists the tenants this process currently holds open. Used by the
-// shutdown path to snapshot every resident model — a rollout must not silently
-// reset every tenant to warming.
-func (s *shelf) tenants() []Tenant {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := make([]Tenant, 0, len(s.dbs))
-	for t := range s.dbs {
-		out = append(out, t)
-	}
-	return out
-}
+// The tenant's file is opened, migrated and seeded by residency.open — one
+// registry owns every per-tenant lifetime, so there is one place a file is
+// opened and one place it is closed. This file owns the STATEMENTS.
 
 // seed installs the starter rule set and the two lists the starter rules name,
 // once, on a file that has none. A tenant whose rules are all deleted stays
@@ -233,8 +184,12 @@ func unstamp(s string) time.Time {
 
 // ── rules ───────────────────────────────────────────────────────────────────
 
+// loadRules reads the tenant's whole rule set — BOUNDED, because it is read on
+// the authorization path and every row it returns is evaluated on every
+// decision. The cap is enforced at the write (putRule); the LIMIT here is the
+// second half of the same bound, for rows that arrived by any other route.
 func loadRules(db *sql.DB) ([]rule, error) {
-	rows, err := db.Query(`SELECT body FROM rule ORDER BY id`)
+	rows, err := db.Query(`SELECT body FROM rule ORDER BY id LIMIT ?`, ruleCap)
 	if err != nil {
 		return nil, err
 	}
@@ -259,10 +214,42 @@ func putRule(db *sql.DB, r rule) error {
 	if err != nil {
 		return err
 	}
+	// The cap is a WRITE-time refusal and not a read-time truncation, because a
+	// truncated rule set is a tenant's controls silently switching off. Replacing
+	// an existing rule is always allowed: it adds nothing.
+	if err := room(db, "rule", "rules", ruleCap, r.ID); err != nil {
+		return err
+	}
 	_, err = db.Exec(`INSERT INTO rule (id, body, at) VALUES (?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET body = excluded.body, at = excluded.at`,
 		r.ID, string(body), stamp(time.Now()))
 	return err
+}
+
+// room refuses a write that would take a plane past its cap.
+//
+// `id` is the row being written: an UPDATE to a row that already exists is not a
+// growth and is never refused, which is what keeps a tenant at its cap able to
+// fix a rule rather than only able to delete one. Written once and taken by every
+// capped plane, so a new plane cannot get a subtly different rule.
+func room(db *sql.DB, table, what string, cap int, id string) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
+		return err
+	}
+	if n < cap {
+		return nil
+	}
+	if id != "" {
+		var exists int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE id = ?`, id).Scan(&exists); err != nil {
+			return err
+		}
+		if exists > 0 {
+			return nil
+		}
+	}
+	return zip.Errorf(409, "%s", errCap(what, cap).Error())
 }
 
 func getRule(db *sql.DB, id string) (rule, error) {
@@ -295,8 +282,13 @@ func dropRule(db *sql.DB, id string) error {
 // per decision into a map rather than queried per term, because a rule set can
 // name the same list many times and the authorization window is not the place to
 // find that out.
+// It is also BOUNDED. Every entry becomes a map key on the authorization path,
+// so an unbounded SELECT here is an unbounded read AND an unbounded allocation
+// on every decision. The cap is enforced at the write (addEntries); the LIMIT is
+// its second half. The order is stable so a truncation, if a row ever arrives by
+// another route, is deterministic rather than whatever the page cache offered.
 func loadLists(db *sql.DB) (map[string]map[string]bool, error) {
-	rows, err := db.Query(`SELECT list, value FROM entry`)
+	rows, err := db.Query(`SELECT list, value FROM entry ORDER BY list, value LIMIT ?`, listCap)
 	if err != nil {
 		return nil, err
 	}
@@ -354,6 +346,24 @@ func addEntries(db *sql.DB, name string, values []string, by string) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	// The cap is over the tenant's WHOLE entry plane, not per list, because the
+	// authorization path loads all of them into one map — a per-list cap would be
+	// a bound on nothing, reachable by creating more lists.
+	//
+	// Checked ONCE, up front, against the batch's full length, and deliberately
+	// pessimistic: a batch of duplicates counts as new. The alternative is a
+	// membership query per value, which turns one write into N reads on the same
+	// path the cap exists to keep cheap — and a bound that costs O(N) queries to
+	// enforce is a second denial-of-service wearing the first one's clothes.
+	// Counted INSIDE the transaction, so two concurrent adds cannot both see room
+	// for the last slot.
+	var held int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM entry`).Scan(&held); err != nil {
+		return err
+	}
+	if held+len(values) > listCap {
+		return zip.Errorf(409, "%s", errCap("list entries", listCap).Error())
+	}
 	now := stamp(time.Now())
 	for _, v := range values {
 		v = strings.TrimSpace(v)
@@ -392,8 +402,10 @@ type suppression struct {
 	At      time.Time
 }
 
+// Bounded like the other two, and for the same reason: every suppression is
+// matched against every hit of every decision.
 func loadSuppressions(db *sql.DB) ([]suppression, error) {
-	rows, err := db.Query(`SELECT id, rule, kind, subject, until, reason, by, at FROM suppression ORDER BY at DESC`)
+	rows, err := db.Query(`SELECT id, rule, kind, subject, until, reason, by, at FROM suppression ORDER BY at DESC LIMIT ?`, suppressionCap)
 	if err != nil {
 		return nil, err
 	}
@@ -412,6 +424,9 @@ func loadSuppressions(db *sql.DB) ([]suppression, error) {
 }
 
 func putSuppression(db *sql.DB, s suppression) error {
+	if err := room(db, "suppression", "suppressions", suppressionCap, s.ID); err != nil {
+		return err
+	}
 	_, err := db.Exec(`INSERT INTO suppression (id, rule, kind, subject, until, reason, by, at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		s.ID, s.Rule, s.Kind, s.Subject, stamp(s.Until), s.Reason, s.By, stamp(s.At))
@@ -476,7 +491,8 @@ func loadControls(db *sql.DB, kind, subject string) ([]control, error) {
 		q += ` WHERE kind = ? AND subject = ?`
 		args = append(args, kind, subject)
 	}
-	q += ` ORDER BY at DESC`
+	q += ` ORDER BY at DESC LIMIT ?`
+	args = append(args, controlCap)
 	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, err
@@ -496,6 +512,9 @@ func loadControls(db *sql.DB, kind, subject string) ([]control, error) {
 }
 
 func putControl(db *sql.DB, c control) error {
+	if err := room(db, "control", "controls", controlCap, c.ID); err != nil {
+		return err
+	}
 	_, err := db.Exec(`INSERT INTO control (id, kind, subject, control, rate, until, reason, by, at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.ID, c.Kind, c.Subject, c.Control, c.Rate, stamp(c.Until), c.Reason, c.By, stamp(c.At))
@@ -526,18 +545,18 @@ func dropControl(db *sql.DB, id string) error {
 // exists, and the caller reads the winner's answer back. Which is what an
 // idempotency key promises: one decision, one set of counters moved.
 //
-// The unique index is PARTIAL (`WHERE idem != ''`), so decisions made without a
+// The unique index is PARTIAL (`WHERE idem != ”`), so decisions made without a
 // key do not collide with each other.
-func putDecision(db *sql.DB, o observation, out outcome, digest, idem string) error {
+func putDecision(db *sql.DB, o observation, out outcome, digest, idem string, since time.Time, strained bool) error {
 	hits, _ := json.Marshal(out.hits)
 	causes, _ := json.Marshal(out.causes)
 	signals, _ := json.Marshal(o.signals)
 	_, err := db.Exec(`INSERT INTO decision
-		(id, at, stage, kind, subject, action, score, agency, shadow, refusal, amount, currency, direction, idem, hits, causes, signals, digest)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(id, at, stage, kind, subject, action, score, agency, shadow, refusal, amount, currency, direction, idem, hits, causes, signals, digest, since, strained)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		out.id, stamp(o.at), o.stage, o.kind, o.subject, out.action, out.score, out.agency,
 		boolInt(out.shadow), out.refusal, o.amount, o.currency, o.direction,
-		idem, string(hits), string(causes), string(signals), digest)
+		idem, string(hits), string(causes), string(signals), digest, stamp(since), boolInt(strained))
 	if err != nil && idem != "" && isUnique(err) {
 		return errIdemTaken
 	}
@@ -589,7 +608,7 @@ func decisionsPage(db *sql.DB, kind, subject, action, stage string, limit int) (
 			args = append(args, f.val)
 		}
 	}
-	q := `SELECT id, at, stage, kind, subject, action, score, agency, shadow, refusal, label FROM decision`
+	q := `SELECT id, at, stage, kind, subject, action, score, agency, shadow, refusal, label, since, strained FROM decision`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -604,21 +623,21 @@ func decisionsPage(db *sql.DB, kind, subject, action, stage string, limit int) (
 	var out []decisionRow
 	for rows.Next() {
 		var d decisionRow
-		var shadow int
+		var shadow, strained int
 		if err := rows.Scan(&d.ID, &d.At, &d.Stage, &d.Kind, &d.Subject, &d.Action, &d.Score,
-			&d.Agency, &shadow, &d.Refusal, &d.Label); err != nil {
+			&d.Agency, &shadow, &d.Refusal, &d.Label, &d.Since, &strained); err != nil {
 			return nil, err
 		}
-		d.Shadow = shadow != 0
+		d.Shadow, d.Strained = shadow != 0, strained != 0
 		out = append(out, d)
 	}
 	return out, rows.Err()
 }
 
 type decisionRow struct {
-	ID, At, Stage, Kind, Subject, Action, Agency, Refusal, Label string
-	Score                                                        float64
-	Shadow                                                       bool
+	ID, At, Stage, Kind, Subject, Action, Agency, Refusal, Label, Since string
+	Score                                                               float64
+	Shadow, Strained                                                    bool
 }
 
 // replayed is one recorded decision, reconstituted enough to re-evaluate a
@@ -721,19 +740,19 @@ func seenSignals(db *sql.DB) ([]string, error) {
 
 func decisionDetail(db *sql.DB, id string) (decisionRow, []hit, []byte, string, error) {
 	var d decisionRow
-	var shadow int
+	var shadow, strained int
 	var hitsJSON, causesJSON, digest string
-	err := db.QueryRow(`SELECT id, at, stage, kind, subject, action, score, agency, shadow, refusal, label, hits, causes, digest
+	err := db.QueryRow(`SELECT id, at, stage, kind, subject, action, score, agency, shadow, refusal, label, hits, causes, digest, since, strained
 		FROM decision WHERE id = ?`, id).
 		Scan(&d.ID, &d.At, &d.Stage, &d.Kind, &d.Subject, &d.Action, &d.Score, &d.Agency,
-			&shadow, &d.Refusal, &d.Label, &hitsJSON, &causesJSON, &digest)
+			&shadow, &d.Refusal, &d.Label, &hitsJSON, &causesJSON, &digest, &d.Since, &strained)
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, nil, nil, "", zip.ErrNotFound("no such decision")
 	}
 	if err != nil {
 		return d, nil, nil, "", err
 	}
-	d.Shadow = shadow != 0
+	d.Shadow, d.Strained = shadow != 0, strained != 0
 	var hits []hit
 	_ = json.Unmarshal([]byte(hitsJSON), &hits)
 	return d, hits, []byte(causesJSON), digest, nil

@@ -113,6 +113,11 @@ type scope struct {
 	org      string
 	project  string
 	validate bool
+	// user is the VALIDATED user id, empty for a machine credential. It is the
+	// actor on every attribution this app writes and the one fact that tells a
+	// live person from a key, so it is resolved HERE with everything else the
+	// principal carries rather than by a second reader of the raw request.
+	user     string
 	request  string
 	clientIP string
 }
@@ -141,6 +146,7 @@ func tenantOf(ctx context.Context, brand string) (scope, error) {
 		org:      org,
 		project:  project,
 		validate: validated,
+		user:     c.User(),
 		request:  c.RequestID(),
 		clientIP: cloud.ClientIP(c),
 	}, nil

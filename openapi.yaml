@@ -17664,6 +17664,190 @@ components:
             stripped.
           type: string
       type: object
+    mlAppetite:
+      properties:
+        review:
+          description: |-
+            Review is the share of the stream that may be sent for examination. The
+            alert threshold is derived from it as a quantile of the scores actually
+            observed, rather than fixed at a number someone liked — so an alert level
+            is governed rather than tuned, and a drifting distribution does not turn
+            it into silence or a flood.
+          type: number
+        sample:
+          description: |-
+            Sample is the share of NON-alerting traffic retained for review below the
+            line. It is the only instrument that can measure what the model missed,
+            because nothing in the stream is labelled.
+          type: number
+        warm:
+          description: Warm is how many observations the model must learn before it
+            may score.
+          type: integer
+      type: object
+    mlAppetiteIn:
+      properties:
+        review:
+          description: Review is the share of the stream that may be examined, in
+            (0, 0.5].
+          type: number
+        sample:
+          description: Sample is the share of non-alerting traffic retained, in [0,
+            1].
+          type: number
+      type: object
+    mlCandidate:
+      properties:
+        blend:
+          description: Blend is how much of a closing window folds into the reference.
+          type: number
+        depth:
+          description: Depth is how deep each tree splits.
+          type: integer
+        review:
+          description: Review is the share of the stream this topology may examine.
+          type: number
+        trees:
+          description: Trees is how many half-space trees the model holds.
+          type: integer
+        window:
+          description: Window is how many observations make up one reference window.
+          type: integer
+      type: object
+    mlFeature:
+      properties:
+        citation:
+          description: Citation is where those words come from, so the claim is checkable.
+          type: string
+        indicator:
+          description: Indicator is the supervisor's own words for what is being looked
+            for.
+          type: string
+        name:
+          description: Name is the dimension.
+          type: string
+        neutral:
+          description: |-
+            Neutral is the value at which this feature is unremarkable — the
+            coordinate the counterfactual moves it to.
+          type: number
+        severity:
+          description: Severity is the grading a hit on this feature carries.
+          type: string
+        typology:
+          description: Typology is the pattern it expresses.
+          type: string
+        unit:
+          description: Unit is how to read the raw number.
+          type: string
+        window:
+          description: Window is the span it is measured over, when it has one.
+          type: string
+      type: object
+    mlFeatureInventory:
+      properties:
+        digest:
+          description: Digest is the identity of this shape.
+          type: string
+        items:
+          description: |-
+            Items is every dimension, in coordinate order. The ORDER is part of the
+            model's identity: adding, removing or reordering one invalidates learned
+            state, which the digest enforces.
+          items:
+            $ref: '#/components/schemas/mlFeature'
+          type: array
+      type: object
+    mlModelState:
+      properties:
+        alerted:
+          description: Alerted is how many of those it alerted on — the numerator
+            of Realised.
+          type: integer
+        appetite:
+          $ref: '#/components/schemas/mlAppetite'
+          description: Appetite is the stated share of the stream that may be examined.
+        blind:
+          additionalProperties:
+            type: integer
+          description: |-
+            Blind counts, per feature, how often it took its neutral value for want of
+            data.
+          type: object
+        digest:
+          description: Digest is the model identity an auditor pins.
+          type: string
+        distribution:
+          description: |-
+            Distribution is the score distribution the threshold is cut from, in 32
+            bands.
+          items:
+            type: number
+          type: array
+        inventory:
+          description: |-
+            Inventory is the feature set, so the state and the shape are read
+            together.
+          items:
+            $ref: '#/components/schemas/mlFeature'
+          type: array
+        learned:
+          description: Learned is how many observations this tenant's model has taken
+            in.
+          type: integer
+        realised:
+          description: |-
+            Realised is the share that ACTUALLY alerted. Stated against realised is
+            the governance report — an appetite is a measured commitment or it is
+            nothing.
+          type: number
+        refusals:
+          additionalProperties:
+            type: integer
+          description: |-
+            Refusals counts what the model declined to score, by reason. None of these
+            was examined by the model; all of them were examined by the rules.
+          type: object
+        saturated:
+          description: |-
+            Saturated means the appetite cannot be honoured by any threshold because
+            too much of the stream scores in the top band. It is the one state that
+            must never be mistaken for quiet.
+          type: boolean
+        scored:
+          description: |-
+            Scored is how many observations the model was able to score — the
+            denominator of Realised.
+          type: integer
+        threshold:
+          description: |-
+            Threshold is the score cut currently in force, recomputed each window as
+            the quantile that admits the stated share.
+          type: number
+        warming:
+          description: |-
+            Warming is true while the model has not learned enough to score. A warming
+            model REFUSES rather than scoring low, and the refusal is counted below.
+          type: boolean
+      type: object
+    mlObservation:
+      properties:
+        amount:
+          $ref: '#/components/schemas/riskAmount'
+          description: Amount is the money involved, if any.
+        at:
+          description: At is when it happened, RFC 3339. Absent means now.
+          type: string
+        signals:
+          additionalProperties:
+            type: string
+          description: 'Signals are the observations: ip, device, counterparty and
+            the rest.'
+          type: object
+        subject:
+          $ref: '#/components/schemas/riskSubject'
+          description: Subject is whose behaviour this is.
+      type: object
     mlResource:
       properties:
         createdAt:
@@ -17698,6 +17882,172 @@ components:
             $ref: '#/components/schemas/mlResource'
           type: array
       type: object
+    mlScoreIn:
+      properties:
+        observation:
+          $ref: '#/components/schemas/mlObservation'
+          description: Observation is what to score.
+      type: object
+    mlScoreOut:
+      properties:
+        alert:
+          description: Alert is whether this would become evidence.
+          type: boolean
+        causes:
+          description: Causes is the per-feature attribution, ordered by contribution.
+          items:
+            $ref: '#/components/schemas/riskCause'
+          type: array
+        cut:
+          description: Cut is the threshold in force, derived from the appetite.
+          type: number
+        model:
+          description: Model is the digest of the model that produced this.
+          type: string
+        refusal:
+          description: 'Refusal names the decline: warming or unidentified.'
+          type: string
+        score:
+          description: |-
+            Score is the anomaly score in [0,1]: 0 where this tenant's recent
+            behaviour is densest, 1 where there is none of it.
+          type: number
+        scored:
+          description: Scored is false when the model declined; Refusal says which
+            refusal.
+          type: boolean
+        shadow:
+          description: Shadow is whether the model is observing rather than contributing.
+          type: boolean
+        values:
+          description: Values is every coordinate, including the blind ones.
+          items:
+            $ref: '#/components/schemas/mlValue'
+          type: array
+      type: object
+    mlSearchIn:
+      properties:
+        limit:
+          description: |-
+            Limit bounds how many recorded observations are replayed, 1..5000. The
+            grid itself is closed and needs no bound from the caller.
+          type: integer
+      type: object
+    mlSearchReport:
+      properties:
+        curve:
+          description: |-
+            Curve is the winner's separation as a function of how much history it had
+            seen, in ten steps — the learning curve.
+          items:
+            type: number
+          type: array
+        events:
+          description: Events is how many historical observations were replayed.
+          type: integer
+        id:
+          description: ID identifies the run.
+          type: string
+        refusal:
+          description: |-
+            Refusal names why the report is empty when it is. An empty history is
+            refused rather than reported as zero alerts, because a quiet model and an
+            unrun model produce the same number.
+          type: string
+        status:
+          description: Status is "running", "done" or "refused".
+          type: string
+        trials:
+          description: Trials is every candidate tried, best-separating first.
+          items:
+            $ref: '#/components/schemas/mlTrial'
+          type: array
+        winner:
+          $ref: '#/components/schemas/mlCandidate'
+          description: |-
+            Winner is the best-separating topology that also honoured its stated
+            appetite. Absent when no candidate did both.
+      type: object
+    mlSearchRun:
+      properties:
+        candidates:
+          description: Candidates is how many topologies will be tried.
+          type: integer
+        id:
+          description: ID identifies the run; read it back at GET /v1/ml/search/{id}.
+          type: string
+        status:
+          description: Status is "running" or "done".
+          type: string
+      type: object
+    mlSnapshotOut:
+      properties:
+        at:
+          description: At is when it was pinned, RFC 3339 in UTC.
+          type: string
+        digest:
+          description: Digest is the model identity that was pinned.
+          type: string
+        learned:
+          description: Learned is how many observations that state had taken in.
+          type: integer
+      type: object
+    mlTrainIn:
+      properties:
+        observations:
+          description: |-
+            Observations are what to learn from. They are this tenant's own data and
+            nothing else: there is no cross-tenant training input and no way to
+            express one, because the model is indexed by the tenant key and its tree
+            GEOMETRY is seeded from it.
+          items:
+            $ref: '#/components/schemas/mlObservation'
+          type: array
+      type: object
+    mlTrainOut:
+      properties:
+        learned:
+          description: Learned is how many observations were incorporated.
+          type: integer
+        model:
+          description: Model is the digest of the model that learned them.
+          type: string
+        refused:
+          additionalProperties:
+            type: integer
+          description: Refused is how many were not, by reason.
+          type: object
+        warm:
+          description: |-
+            Warm is true once the model has learned enough of this tenant's behaviour
+            to score at all.
+          type: boolean
+      type: object
+    mlTrial:
+      properties:
+        alerted:
+          description: Alerted is how many of those it would have alerted on.
+          type: integer
+        candidate:
+          $ref: '#/components/schemas/mlCandidate'
+          description: Candidate is the topology tried.
+        realised:
+          description: Realised is Alerted over Scored, against the Review share intended.
+          type: number
+        scored:
+          description: Scored is how many observations it was able to score.
+          type: integer
+        separation:
+          description: |-
+            Separation is the mean score of the alerted set minus the mean of the
+            rest. It is the ranking objective: a topology that separates the tail from
+            the body is doing the job whatever its absolute scores look like.
+          type: number
+        warm:
+          description: Warm is how many observations passed before it would score
+            at all.
+          type: integer
+      type: object
     mlTrials:
       properties:
         experiment:
@@ -17709,6 +18059,30 @@ components:
           items:
             $ref: '#/components/schemas/mlResource'
           type: array
+      type: object
+    mlValue:
+      properties:
+        baseline:
+          description: Baseline is what is unremarkable here.
+          type: number
+        blind:
+          description: |-
+            Blind is true when this feature had no usable coordinate, so it took its
+            neutral value. A feature blind on most traffic is not contributing
+            whatever the inventory claims for it.
+          type: boolean
+        feature:
+          description: Feature is the dimension.
+          type: string
+        observed:
+          description: Observed is the raw number behind it.
+          type: number
+        unit:
+          description: Unit is how to read Observed and Baseline.
+          type: string
+        x:
+          description: X is the coordinate the model used, in [0,1].
+          type: number
       type: object
     moduleList:
       properties:
@@ -20934,6 +21308,844 @@ components:
           description: |-
             Type is the key class that was revoked, resolved — so a caller that named
             nothing can see it revoked the secret key.
+          type: string
+      type: object
+    riskActivityRule:
+      properties:
+        activations:
+          description: Activations is how many of the sampled decisions it fired on.
+          type: integer
+        name:
+          description: Name is its detection name.
+          type: string
+        rule:
+          description: Rule is the rule that fired.
+          type: string
+        suppressed:
+          description: Suppressed is how many of those were muted.
+          type: integer
+      type: object
+    riskActivityView:
+      properties:
+        actions:
+          additionalProperties:
+            type: integer
+          description: Actions is how many decisions reached each action.
+          type: object
+        agency:
+          additionalProperties:
+            type: integer
+          description: Agency is how many decisions were of each actor class.
+          type: object
+        refusals:
+          additionalProperties:
+            type: integer
+          description: Refusals is how many decisions the model declined to score,
+            by reason.
+          type: object
+        rules:
+          description: Rules is per-rule activation, most active first.
+          items:
+            $ref: '#/components/schemas/riskActivityRule'
+          type: array
+        sampled:
+          description: Sampled is how many recent decisions this summarises.
+          type: integer
+        shadow:
+          description: Shadow is whether this tenant is observing rather than acting.
+          type: boolean
+      type: object
+    riskActor:
+      properties:
+        agent:
+          description: |-
+            Agent is the agent reference the caller claims to be acting as. It is
+            resolved against THIS org's agent registry; an unresolvable reference is
+            simply not a declaration.
+          type: string
+        session:
+          description: Session is the session reference this action belongs to.
+          type: string
+      type: object
+    riskAmount:
+      properties:
+        currency:
+          description: Currency is the ISO 4217 code.
+          type: string
+        direction:
+          description: |-
+            Direction is whether value came in or went out: "in" or "out". Without it
+            the model cannot see funds passing through, which is the layering shape.
+          type: string
+        nano:
+          description: Nano is the amount in billionths of one unit of Currency.
+          type: integer
+      type: object
+    riskBaseline:
+      properties:
+        day:
+          description: Day is the period the band covers, YYYY-MM-DD.
+          type: string
+        feature:
+          description: Feature is what is being compared.
+          type: string
+        observations:
+          description: Observations is how many measurements the band was cut from.
+          type: integer
+        orgs:
+          description: |-
+            Orgs is how many distinct organisations contributed to this band. It is
+            reported so a reader can see the k-anonymity floor was met rather than
+            take it on trust.
+          type: integer
+        q10:
+          description: Q10 is the tenth percentile across the platform for this subject
+            kind.
+          type: number
+        q50:
+          description: Q50 is the median.
+          type: number
+        q90:
+          description: Q90 is the ninetieth percentile.
+          type: number
+        q99:
+          description: |-
+            Q99 is the ninety-ninth — where the tail this product is looking for
+            begins.
+          type: number
+      type: object
+    riskCause:
+      properties:
+        baseline:
+          description: Baseline is what is unremarkable for this subject.
+          type: number
+        citation:
+          description: Citation is where those words come from.
+          type: string
+        feature:
+          description: Feature is the model dimension.
+          type: string
+        indicator:
+          description: Indicator is the supervisor's own words for what is being looked
+            for.
+          type: string
+        observed:
+          description: Observed is this subject's value.
+          type: number
+        share:
+          description: Share is this feature's part of the score, in [0,1].
+          type: number
+        typology:
+          description: Typology is the pattern the feature expresses.
+          type: string
+        unit:
+          description: Unit is how to read Observed and Baseline.
+          type: string
+        without:
+          description: |-
+            Without is the score the model would have produced with this feature
+            neutral, holding everything else.
+          type: number
+      type: object
+    riskControl:
+      properties:
+        at:
+          description: At is when, RFC 3339 in UTC.
+          type: string
+        by:
+          description: By is who declared it, taken from the validated principal.
+          type: string
+        control:
+          description: Control is which one.
+          type: string
+        id:
+          description: ID identifies the control.
+          type: string
+        rate:
+          description: Rate is the reserve fraction, for a reserve.
+          type: number
+        reason:
+          description: Reason is why it was declared.
+          type: string
+        subject:
+          $ref: '#/components/schemas/riskSubject'
+          description: Subject is what it applies to.
+        until:
+          description: Until is when it lapses, RFC 3339. Absent means it does not.
+          type: string
+      type: object
+    riskControlIn:
+      properties:
+        control:
+          description: 'Control is which one: reserve, payout-hold or block.'
+          type: string
+        rate:
+          description: Rate is the reserve fraction, in [0,1], for a reserve.
+          type: number
+        reason:
+          description: Reason is why.
+          type: string
+        subject:
+          $ref: '#/components/schemas/riskSubject'
+          description: Subject is what the control applies to.
+        until:
+          description: Until is when it lapses, RFC 3339. Absent means it does not.
+          type: string
+      type: object
+    riskControlPage:
+      properties:
+        items:
+          description: Items is every control, newest first.
+          items:
+            $ref: '#/components/schemas/riskControl'
+          type: array
+      type: object
+    riskDecideIn:
+      properties:
+        actor:
+          $ref: '#/components/schemas/riskActor'
+          description: Actor is who is acting, if the caller knows.
+        amount:
+          $ref: '#/components/schemas/riskAmount'
+          description: Amount is the money involved, for the stages where there is
+            any.
+        idem:
+          description: |-
+            Idem makes a re-decide idempotent: the same key returns the same decision
+            rather than scoring twice and moving the counters twice.
+          type: string
+        signals:
+          additionalProperties:
+            type: string
+          description: |-
+            Signals are the observations the caller can supply: ip, email,
+            emaildomain, device, bin, asn, country, counterparty. Unknown keys are
+            carried and are readable by a rule as signal.<key>, so a tenant can score
+            on facts only it has.
+          type: object
+        stage:
+          description: |-
+            Stage is the lifecycle moment being judged: signup, payment, session,
+            usage, payout or dispute. It selects the feature window and the rule set;
+            it does NOT select a different tenant gate.
+          type: string
+        subject:
+          $ref: '#/components/schemas/riskSubject'
+          description: Subject is what is being judged.
+      type: object
+    riskDecision:
+      properties:
+        action:
+          description: 'Action is what to do: allow, challenge, review, restrict or
+            block.'
+          type: string
+        agency:
+          description: |-
+            Agency is what kind of actor this was: agent, human, bot or unknown.
+            RESOLVED server-side: an agent reference on the observation is looked up in
+            YOUR OWN agent registry, and it is `agent` only when that lookup succeeds.
+            A reference the registry does not know is `bot` — a claim we can disprove
+            is the strongest signal there is — and a lookup that could not be made
+            leaves this `unknown` with Refusal set to `unverified`. It is never read
+            off a user-agent string, which is a claim rather than a fact.
+          type: string
+        causes:
+          description: Causes is the model's per-feature attribution, when the model
+            contributed.
+          items:
+            $ref: '#/components/schemas/riskCause'
+          type: array
+        hits:
+          description: Hits is the evidence, strongest first.
+          items:
+            $ref: '#/components/schemas/riskHit'
+          type: array
+        id:
+          description: |-
+            ID identifies this decision for the whole of its life: the label, the
+            evidence read and the dispute packet all key on it.
+          type: string
+        model:
+          description: |-
+            Model is the digest of the model that produced this, so an auditor can pin
+            the exact geometry that raised an alert.
+          type: string
+        refusal:
+          description: "Refusal names what this decision was short of, when it was
+            short of\nanything. It is present precisely so that silence never reads
+            as a clean\nresult. ONE word, and when more than one applies it is the
+            one that will\nnot fix itself, in this order:\n\n\tunidentified  nothing
+            to key the aggregates on.\n\tdisarmed      learned state existed and this
+            process does not have it.\n\t              A control that is OFF, and
+            never reported as `warming`.\n\tunverified    a claimed agent reference
+            could not be checked against your\n\t              registry, so the Agency
+            on this decision is a gap.\n\twarming       the model is still building
+            this tenant's baseline. Ordinary,\n\t              and resolved by your
+            own traffic.\n\tshadow        this tenant is observing; nothing acted."
+          type: string
+        score:
+          description: Score is the weight-of-evidence score in [0,1].
+          type: number
+        shadow:
+          description: |-
+            Shadow is true when this tenant is observing rather than acting. In shadow
+            Action is always allow and everything else is computed and recorded.
+          type: boolean
+        since:
+          description: |-
+            Since is when the sliding aggregates behind this decision started, RFC 3339
+            in UTC. A velocity count over a 30-day window computed from ten minutes of
+            aggregates is a true number about the wrong period, so the period is
+            published rather than assumed: this app is deployed at one replica with a
+            recreate rollout, and a reclaim of an idle tenant restarts them too.
+          type: string
+        strained:
+          description: |-
+            Strained is true when this tenant's aggregates were at their own
+            cardinality bound, so a count may be short of this tenant's own traffic.
+            Only this tenant's activity can cause it, and only this tenant's counts are
+            affected.
+          type: boolean
+      type: object
+    riskDecisionBrief:
+      properties:
+        action:
+          description: Action is what was decided.
+          type: string
+        agency:
+          description: Agency is the actor class.
+          type: string
+        at:
+          description: At is when it was made, RFC 3339 in UTC.
+          type: string
+        id:
+          description: ID identifies the decision.
+          type: string
+        kind:
+          description: Kind is the subject kind.
+          type: string
+        label:
+          description: Label is what a human later concluded, when anyone has.
+          type: string
+        refusal:
+          description: |-
+            Refusal names what the decision was short of, when it was short of
+            anything.
+          type: string
+        score:
+          description: Score is the weight-of-evidence score.
+          type: number
+        shadow:
+          description: Shadow is whether the decision acted.
+          type: boolean
+        since:
+          description: |-
+            Since is when the aggregates this decision read had started, RFC 3339 in
+            UTC — the period its velocity numbers actually cover.
+          type: string
+        stage:
+          description: Stage is the lifecycle moment.
+          type: string
+        strained:
+          description: |-
+            Strained is true when the aggregates were at this tenant's own cardinality
+            bound when the decision was made.
+          type: boolean
+        subject:
+          description: Subject is the subject identifier.
+          type: string
+      type: object
+    riskDecisionPage:
+      properties:
+        items:
+          description: Items is the page, newest first.
+          items:
+            $ref: '#/components/schemas/riskDecisionBrief'
+          type: array
+      type: object
+    riskDecisionView:
+      properties:
+        causes:
+          description: Causes is the model's attribution.
+          items:
+            $ref: '#/components/schemas/riskCause'
+          type: array
+        decision:
+          $ref: '#/components/schemas/riskDecisionBrief'
+          description: Decision is the row.
+        hits:
+          description: Hits is the evidence.
+          items:
+            $ref: '#/components/schemas/riskHit'
+          type: array
+        model:
+          description: Model is the digest of the model that produced it.
+          type: string
+      type: object
+    riskDictionaryView:
+      properties:
+        actions:
+          description: Actions are the outcomes, weakest first.
+          items:
+            type: string
+          type: array
+        axes:
+          description: Axes are the velocity axes.
+          items:
+            type: string
+          type: array
+        fields:
+          description: Fields is every scalar fact.
+          items:
+            $ref: '#/components/schemas/riskField'
+          type: array
+        lists:
+          description: Lists are this tenant's own lists, which an inlist term may
+            name.
+          items:
+            type: string
+          type: array
+        signals:
+          description: |-
+            Signals are the signal keys this tenant has actually sent, which is the
+            half of the catalogue that is the tenant's own rather than the product's.
+          items:
+            type: string
+          type: array
+        stages:
+          description: Stages are the lifecycle moments.
+          items:
+            type: string
+          type: array
+        windows:
+          description: Windows are the velocity spans.
+          items:
+            type: string
+          type: array
+      type: object
+    riskField:
+      properties:
+        field:
+          description: Field is how a rule names it.
+          type: string
+        kind:
+          description: 'Kind is what sort of value it holds: "string" or "number".'
+          type: string
+        note:
+          description: Note says what it means.
+          type: string
+        ops:
+          description: Ops are the comparisons that make sense on it.
+          items:
+            type: string
+          type: array
+      type: object
+    riskHistory:
+      properties:
+        bucket:
+          description: Bucket is the five-minute period, RFC 3339 in UTC.
+          type: string
+        values:
+          additionalProperties:
+            type: number
+          description: |-
+            Values is each counted feature over that period, keyed by the names
+            GET /v1/risk/dictionary publishes.
+          type: object
+      type: object
+    riskHit:
+      properties:
+        action:
+          description: Action is what this evidence alone asked for.
+          type: string
+        name:
+          description: Name is the detection's human-readable name.
+          type: string
+        rule:
+          description: Rule is the identifier of the rule or model that produced this
+            evidence.
+          type: string
+        severity:
+          description: Severity is the reviewer-facing grading.
+          type: string
+        suppressed:
+          description: |-
+            Suppressed marks evidence a suppression muted. It is reported and
+            contributes nothing — a muted control that left no trace would be
+            indistinguishable from one that was never running.
+          type: boolean
+        weight:
+          description: Weight is how much it contributed, in [0,1].
+          type: number
+      type: object
+    riskLabelIn:
+      properties:
+        id:
+          description: ID is the decision, from the path.
+          type: string
+        verdict:
+          description: |-
+            Verdict is what it turned out to be: fraud, legitimate, chargeback, abuse
+            or unknown. It is the only supervision this product has, and it is what
+            turns a false-positive rate from a guess into a measurement.
+          type: string
+      type: object
+    riskListEntriesIn:
+      properties:
+        name:
+          description: Name is the list, from the path.
+          type: string
+        values:
+          description: |-
+            Values are the values to add. They are folded to lower case, so a value
+            added in one case matches a signal in another.
+          items:
+            type: string
+          type: array
+      type: object
+    riskListIn:
+      properties:
+        kind:
+          description: Kind is whether membership allows or denies.
+          type: string
+        name:
+          description: Name is the list's identifier.
+          type: string
+      type: object
+    riskListPage:
+      properties:
+        items:
+          description: Items is every list.
+          items:
+            $ref: '#/components/schemas/riskListView'
+          type: array
+      type: object
+    riskListView:
+      properties:
+        createdAt:
+          description: CreatedAt is when it was created, RFC 3339 in UTC.
+          type: string
+        entries:
+          description: Entries is how many values it holds.
+          type: integer
+        kind:
+          description: 'Kind is whether membership allows or denies: "allow" or "deny".'
+          type: string
+        name:
+          description: Name is the list's identifier, which a rule names in an inlist
+            term.
+          type: string
+      type: object
+    riskModeIn:
+      properties:
+        mode:
+          description: |-
+            Mode is "shadow" or "live". Shadow is the default and the default is not
+            configurable: a model that quietly went live and started declining
+            payments is the worst failure available here, so going live is an act
+            somebody performs and can be asked about.
+          type: string
+      type: object
+    riskModeView:
+      properties:
+        mode:
+          description: Mode is "shadow" or "live".
+          type: string
+        since:
+          description: Since is when it was last changed, RFC 3339 in UTC. Empty means
+            never.
+          type: string
+      type: object
+    riskRule:
+      properties:
+        action:
+          description: Action is what the rule asks for when it holds.
+          type: string
+        all:
+          description: |-
+            All is the conjunction. An empty conjunction is refused: a rule that holds
+            on everything is not a detection.
+          items:
+            $ref: '#/components/schemas/riskTerm'
+          type: array
+        enabled:
+          description: |-
+            Enabled governs the live path. A disabled rule still replays, because the
+            question a simulation asks is what happens ON activation.
+          type: boolean
+        id:
+          description: ID is the rule's identifier within this tenant.
+          type: string
+        name:
+          description: Name is what a reviewer reads in an alert.
+          type: string
+        severity:
+          description: 'Severity is the reviewer-facing grading: low, medium, high
+            or critical.'
+          type: string
+        stage:
+          description: Stage narrows the rule to one lifecycle moment; empty means
+            every stage.
+          type: string
+        weight:
+          description: Weight is how much a hit contributes, in [0,1].
+          type: number
+      type: object
+    riskRuleIn:
+      properties:
+        id:
+          description: |-
+            ID is the rule to replace, from the path on a PATCH. Ignored on create,
+            where the server mints one.
+          type: string
+        rule:
+          $ref: '#/components/schemas/riskRule'
+          description: Rule is the detection.
+      type: object
+    riskRuleList:
+      properties:
+        items:
+          description: Items is every rule, by identifier.
+          items:
+            $ref: '#/components/schemas/riskRule'
+          type: array
+      type: object
+    riskSimulateIn:
+      properties:
+        candidate:
+          $ref: '#/components/schemas/riskRule'
+          description: |-
+            Candidate is the rule to try. It is evaluated as activated whatever its
+            enabled flag says: the question is what happens on activation.
+        incumbent:
+          description: |-
+            Incumbent is the rule the candidate would replace, when it replaces one.
+            Naming it is what turns a report into a justification for a retirement.
+          type: string
+        limit:
+          description: Limit bounds how many recorded decisions are replayed, 1..5000.
+          type: integer
+      type: object
+    riskSimulateReport:
+      properties:
+        added:
+          description: |-
+            Added is what the candidate catches and the incumbent does not — the new
+            coverage, and the new volume.
+          items:
+            type: string
+          type: array
+        alerts:
+          description: Alerts is how many the candidate would have fired on.
+          type: integer
+        dropped:
+          description: |-
+            Dropped is what the incumbent catches and the candidate does not — the
+            coverage being given up, which is what a retirement has to justify.
+          items:
+            type: string
+          type: array
+        events:
+          description: Events is how many recorded decisions were replayed.
+          type: integer
+        falsePositive:
+          description: |-
+            FalsePositive is the share of judged alerts a human called legitimate. It
+            is ABSENT rather than zero when nothing was judged: an unmeasured
+            proportion reported as 0.0 reads as a perfect rule.
+          type: number
+        judged:
+          description: |-
+            Judged is how many of the candidate's alerts fall on decisions a human has
+            labelled.
+          type: integer
+        kept:
+          description: Kept is what both catch.
+          items:
+            type: string
+          type: array
+        refusal:
+          description: |-
+            Refusal names why a report is empty when it is. An empty history is
+            refused rather than reported as zero alerts, because a quiet rule and an
+            unrun rule produce the same number.
+          type: string
+      type: object
+    riskSubject:
+      properties:
+        id:
+          description: |-
+            ID is the subject's identifier within the caller's own org. It is never
+            interpreted, only aggregated on, so it may be any stable string.
+          type: string
+        kind:
+          description: |-
+            Kind is the sort of thing this is: account, transaction, session, agent,
+            merchant or payout. It selects the aggregation axes, not the tenant gate.
+          type: string
+      type: object
+    riskSubjectView:
+      properties:
+        controls:
+          description: Controls is what is currently declared on the subject.
+          items:
+            $ref: '#/components/schemas/riskControl'
+          type: array
+        decisions:
+          description: Decisions is the subject's recent decision history, newest
+            first.
+          items:
+            $ref: '#/components/schemas/riskDecisionBrief'
+          type: array
+        gap:
+          description: |-
+            Gap names what could not be read, when something could not be. It is
+            present precisely so that a missing History or Network is legible as a
+            gap rather than as an answer.
+          type: string
+        history:
+          description: |-
+            History is the subject's activity over the last thirty days from the
+            warehouse. Absent when the warehouse is unreachable — an absent history is
+            an honest gap, where a zeroed one would say the subject did nothing.
+          items:
+            $ref: '#/components/schemas/riskHistory'
+          type: array
+        network:
+          description: |-
+            Network is where this subject kind sits across the platform, as quantiles
+            only. Absent when no band has met the k-anonymity floor.
+          items:
+            $ref: '#/components/schemas/riskBaseline'
+          type: array
+        since:
+          description: |-
+            Since is when those aggregates started, RFC 3339 in UTC. A window wider
+            than the interval since this instant is only partly covered, and saying so
+            is the difference between a small count and a wrong one.
+          type: string
+        strained:
+          description: |-
+            Strained is true when this tenant's aggregates are at their own cardinality
+            bound, so a count may be short of this tenant's own traffic.
+          type: boolean
+        subject:
+          $ref: '#/components/schemas/riskSubject'
+          description: Subject is what this describes.
+        velocity:
+          description: Velocity is every live aggregate the subject has.
+          items:
+            $ref: '#/components/schemas/riskVelocity'
+          type: array
+      type: object
+    riskSuppressIn:
+      properties:
+        kind:
+          description: Kind narrows the suppression to one subject kind.
+          type: string
+        reason:
+          description: |-
+            Reason is why. It is required, because a mute nobody can explain later is
+            a control that quietly stopped.
+          type: string
+        rule:
+          description: |-
+            Rule is the rule to mute. At least one of Rule, Kind or Subject must be
+            given — a suppression that names nothing would mute everything.
+          type: string
+        subject:
+          description: Subject narrows it to one subject.
+          type: string
+        until:
+          description: |-
+            Until is when it expires, RFC 3339. Absent means it does not, which is a
+            choice somebody should be able to be asked about.
+          type: string
+      type: object
+    riskSuppression:
+      properties:
+        at:
+          description: At is when it was applied, RFC 3339 in UTC.
+          type: string
+        by:
+          description: |-
+            By is who applied it, taken from the validated principal and never from
+            the request body.
+          type: string
+        id:
+          description: ID identifies the suppression.
+          type: string
+        kind:
+          description: Kind is the subject kind muted, when it names one.
+          type: string
+        reason:
+          description: Reason is why it was applied.
+          type: string
+        rule:
+          description: Rule is the rule muted, when it names one.
+          type: string
+        subject:
+          description: Subject is the subject muted, when it names one.
+          type: string
+        until:
+          description: Until is when it expires, RFC 3339. Absent means it does not.
+          type: string
+      type: object
+    riskSuppressionPage:
+      properties:
+        items:
+          description: Items is every suppression, newest first.
+          items:
+            $ref: '#/components/schemas/riskSuppression'
+          type: array
+      type: object
+    riskTerm:
+      properties:
+        field:
+          description: |-
+            Field is the fact to read: one of the closed vocabulary, or signal.<name>,
+            or velocity.<axis>.<window>.<stat>. GET /v1/risk/dictionary lists them.
+          type: string
+        number:
+          description: Number is the numeric operand.
+          type: number
+        op:
+          description: |-
+            Op is the comparison: eq, ne, gt, gte, lt, lte, in, notin, inlist,
+            notinlist, exists, absent, contains, prefix or suffix.
+          type: string
+        value:
+          description: Value is the string operand.
+          type: string
+        values:
+          description: Values is the set operand, for in and notin.
+          items:
+            type: string
+          type: array
+      type: object
+    riskVelocity:
+      properties:
+        axis:
+          description: |-
+            Axis is what is being aggregated over: account, device, ip, pair, email or
+            bin.
+          type: string
+        count:
+          description: Count is how many observations fell in the window.
+          type: integer
+        days:
+          description: Days is how many distinct calendar days contributed.
+          type: integer
+        near:
+          description: |-
+            Near is how many fell just below the reporting threshold — the structuring
+            signal.
+          type: integer
+        sum:
+          description: Sum is their total value, in units of currency.
+          type: number
+        window:
+          description: 'Window is the span: 1h, 24h, 7d or 30d.'
           type: string
       type: object
     roleList:
@@ -56917,6 +58129,28 @@ paths:
       tags:
       - metrics
       x-app: metrics
+  /v1/ml/features:
+    get:
+      description: |-
+        Features is the typology-to-feature inventory the model is built on: what each
+        dimension measures, the risk indicator it serves, and the published source
+        those words come from.
+
+        It is code rather than a document because a mapping kept beside the model
+        cannot drift away from what the model actually reads — and the attributability
+        it makes possible is why this is a tree and not a net.
+      operationId: mlFeatures
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlFeatureInventory'
+          description: ok
+      summary: Read the typology-to-feature inventory the model is built on
+      tags:
+      - ml
+      x-app: risk
   /v1/ml/health:
     get:
       description: |-
@@ -57051,6 +58285,247 @@ paths:
       tags:
       - ml
       x-app: ml
+  /v1/ml/restore:
+    post:
+      description: |-
+        Restore reinstates this tenant's learned state from its pinned snapshot.
+
+        A snapshot whose shape does not match the running inventory is REFUSED, not
+        coerced, and a snapshot belonging to another tenant is refused twice — here,
+        by the tenant that asked, and again inside the engine. State the model would
+        treat as its own memory has to have come from this algorithm over this feature
+        set for this tenant.
+      operationId: mlRestore
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlModelState'
+          description: ok
+      summary: Restore this tenant's learned state from its pinned snapshot
+      tags:
+      - ml
+      x-app: risk
+  /v1/ml/score:
+    post:
+      description: |-
+        Score scores one observation and LEARNS NOTHING from it. It is how a candidate
+        is tried against a tenant's real behaviour before anything depends on the
+        answer, and it is the model's analogue of testing a rule: because it records
+        nothing, the aggregates it reads do not include the candidate.
+      operationId: mlScore
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/mlScoreIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlScoreOut'
+          description: ok
+      summary: Score an observation without learning from it
+      tags:
+      - ml
+      x-app: risk
+  /v1/ml/search:
+    post:
+      description: |-
+        Search exhaustively tries the model topology over this tenant's own history
+        and returns the learning curve and the winning shape.
+
+        The grid is CLOSED — trees x depth x window x blend x appetite — because an
+        unbounded grid is an unbounded amount of a shared pod's CPU reachable by
+        anyone with a key. Each candidate runs in a sandbox over fresh counters
+        carrying the SAME per-tenant memory bound the live plane does, so a search can
+        never move the live model, can never cost more than a tenant is allowed to
+        cost, and can never see another tenant's history because the replay reads this
+        tenant's own file.
+
+        IT IS QUEUED, AND THE QUEUE IS THE BOUND. One run per tenant (a second answers
+        409 naming the one already going), a fixed number of workers for the whole
+        process, a short backlog beyond which a start answers 429, and a deadline every
+        candidate polls. Priced before the work and metered after it, on the caller's
+        own ledger. See search.go.
+
+        It answers 202 with a run identifier; read the report back at
+        GET /v1/ml/search/{id} and stop it at DELETE /v1/ml/search/{id}.
+      operationId: mlSearch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/mlSearchIn'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlSearchRun'
+          description: accepted
+      summary: Exhaustively search the model topology over this tenant's own history
+      tags:
+      - ml
+      x-app: risk
+  /v1/ml/search/{id}:
+    delete:
+      description: |-
+        Stops a search this tenant started.
+
+        An expensive op that cannot be stopped is an expensive op a caller cannot take
+        back — and the run holds a worker every other tenant is queued behind. It is
+        idempotent: cancelling a search that has already answered is not an error, and
+        the reply says which happened.
+      operationId: mlCancelSearch
+      parameters:
+      - description: ID is the record to read, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlSearchRun'
+          description: ok
+      summary: Stop a running exhaustive search
+      tags:
+      - ml
+      x-app: risk
+    get:
+      description: |-
+        Reads an exhaustive search's report: every candidate tried, the
+        winner, and the winner's learning curve.
+      operationId: mlSearchResult
+      parameters:
+      - description: ID is the record to read, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlSearchReport'
+          description: ok
+      summary: Read an exhaustive search's report
+      tags:
+      - ml
+      x-app: risk
+  /v1/ml/snapshot:
+    post:
+      description: |-
+        Snapshot pins this tenant's learned state into its own encrypted file.
+
+        It is what an auditor asks for: the exact model that raised an alert, kept so
+        that the same input can be scored again a year later. It is also what makes a
+        rollout survivable — the shutdown path snapshots every resident tenant,
+        because cloud deploys Recreate at one replica and a model that comes back with
+        nothing learned refuses to score for its whole warm period.
+      operationId: mlSnapshot
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlSnapshotOut'
+          description: created
+      summary: Pin this tenant's learned state
+      tags:
+      - ml
+      x-app: risk
+  /v1/ml/state:
+    get:
+      description: |-
+        ModelState is what a review of the model reads: the appetite it was given, the
+        threshold that appetite produced, and the share it ACTUALLY reached.
+
+        Stated against realised is the whole governance report. An appetite is a
+        measured commitment or it is nothing, and a fixed threshold on a drifting
+        distribution silently becomes either silence or a flood.
+      operationId: mlState
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlModelState'
+          description: ok
+      summary: Read the model's governance state
+      tags:
+      - ml
+      x-app: risk
+  /v1/ml/state/appetite:
+    put:
+      description: |-
+        Sets how much of the stream the model may examine.
+
+        Review is the lever, and the threshold is derived from it as a quantile of the
+        scores actually observed rather than fixed at a number someone liked. That is
+        what makes an alert level governed rather than tuned, and it is why the level
+        cannot be set to fit the size of the review team.
+      operationId: mlSetAppetite
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/mlAppetiteIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlModelState'
+          description: ok
+      summary: Set the share of the stream the model may examine
+      tags:
+      - ml
+      x-app: risk
+  /v1/ml/train:
+    post:
+      description: |-
+        Train teaches this tenant's model from this tenant's own observations.
+
+        It is online: there is no job, no queue and no window in which the tenant is
+        protected by a stale model, because the half-space geometry is built before
+        any data arrives and the model IS a set of mass counters. One observation is
+        one increment.
+
+        THERE IS NO CROSS-TENANT TRAINING INPUT AND NO WAY TO EXPRESS ONE. The model
+        is indexed by the tenant key and its tree GEOMETRY is seeded from it, so two
+        tenants do not merely hold different counters — they hold different trees.
+        Any cross-org learning in this product is aggregate-only, lives in a table
+        with no tenant column, and is published only above a k-anonymity floor.
+      operationId: mlTrain
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/mlTrainIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlTrainOut'
+          description: ok
+      summary: Train this tenant's model on its own observations
+      tags:
+      - ml
+      x-app: risk
   /v1/models:
     get:
       description: |-
@@ -63019,6 +64494,676 @@ paths:
       tags:
       - responses
       x-app: github.com/hanzoai/ai
+  /v1/risk/activity:
+    get:
+      description: |-
+        Activity is the watcher: what is firing right now, what is being muted, and
+        which way the decisions are going.
+
+        It reads the DECISION LOG rather than a second bus. The log is already the
+        record and the analytics copies already reach the platform stream; a dedicated
+        activation bus would be a third representation of one fact and a third thing
+        that can be behind.
+      operationId: riskActivity
+      parameters:
+      - description: Limit bounds how many recent decisions are summarised, 1..500.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskActivityView'
+          description: ok
+      summary: Watch live rule activations and their disposition
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/controls:
+    get:
+      description: |-
+        Controls lists the platform controls declared on this tenant's subjects:
+        reserves, payout holds and blocks.
+
+        They are DECLARATIONS the money plane reads. Risk never moves money —
+        hanzoai/commerce owns payouts, disputes and balances — so a marketplace reads
+        this before a payout and calls decide at authorization, and risk touches no
+        processor. That is what "processor-agnostic" is: a structural property, not a
+        feature.
+      operationId: riskControls
+      parameters:
+      - description: Kind narrows to one subject kind.
+        in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+      - description: Subject narrows to one subject.
+        in: query
+        name: subject
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskControlPage'
+          description: ok
+      summary: List the platform controls declared on subjects
+      tags:
+      - risk
+      x-app: risk
+    post:
+      description: Declares a reserve, a payout hold or a block on a subject.
+      operationId: riskSetControl
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskControlIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskControl'
+          description: created
+      summary: Declare a reserve, a payout hold or a block on a subject
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/controls/{id}:
+    delete:
+      description: |-
+        Lifts a control. Answers 204, or 404 for an identifier this
+        tenant does not own.
+      operationId: riskReleaseControl
+      parameters:
+      - description: ID is the record to act on, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Release a control
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/decide:
+    post:
+      description: |-
+        Decide scores one entity or event and answers what to do about it: allow,
+        challenge, review, restrict or block, with the evidence behind it.
+
+        One op, not three. "Score this thing" is one verb, and a stage-specific op per
+        lifecycle moment would be three places for the tenant gate to drift. The stage
+        selects the feature window and the rule set and nothing else.
+
+        It is METERED AFTER the work, never gated before it. A pre-work balance gate
+        would have to render its refusal in the fleet's nested error contract, which a
+        typed op cannot do — so the hot path stays typed, the screen is billed on the
+        decision that was actually produced, and no funded client's 402 parsing is
+        affected. Overage lands on the caller's OWN ledger: Meter sends the org as
+        both the commerce identity and the org header, which is the anti-cross-org
+        property.
+      operationId: riskDecide
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskDecideIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDecision'
+          description: ok
+      summary: Score an entity or event and return a decision
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/decisions:
+    get:
+      description: |-
+        Decisions lists this tenant's recent decisions, newest first. Every filter is
+        an equality on a column the tenant's own file owns, so a filter can narrow the
+        caller's own log and can never widen it.
+      operationId: riskDecisions
+      parameters:
+      - description: Kind narrows to one subject kind.
+        in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+      - description: Subject narrows to one subject.
+        in: query
+        name: subject
+        required: false
+        schema:
+          type: string
+      - description: Action narrows to one outcome.
+        in: query
+        name: action
+        required: false
+        schema:
+          type: string
+      - description: Stage narrows to one lifecycle moment.
+        in: query
+        name: stage
+        required: false
+        schema:
+          type: string
+      - description: Limit bounds the page, 1..500, default 100.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDecisionPage'
+          description: ok
+      summary: List recent decisions
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/decisions/{id}:
+    get:
+      description: |-
+        Reads one decision with everything behind it: the evidence, the
+        model's per-feature attribution and the digest of the model that produced it.
+        That set IS the dispute packet — what was decided, on what, by which model.
+
+        A decision another tenant owns answers 404, exactly as an unknown identifier
+        does, because the tenant's file is the only place looked in: there is no query
+        that could reach another tenant's row, so a probe learns nothing.
+      operationId: riskDecisionDetail
+      parameters:
+      - description: ID is the record to act on, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDecisionView'
+          description: ok
+      summary: Read one decision with its evidence
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/decisions/{id}/label:
+    post:
+      description: |-
+        Label records what a human concluded about a decision — fraud, legitimate,
+        chargeback, abuse or unknown.
+
+        THE DECIDER IS SERVER-SET. It comes from the validated principal and never
+        from the request body: the engine's own resolutions carry an unauthenticated
+        `by`, and importing that gap into a product that bills on the decision would
+        make the attribution worthless the moment anyone asked who cleared what.
+
+        This is also the only supervision this product has. Everything the model knows
+        about its own miss rate comes from these labels against the below-the-line
+        sample.
+      operationId: riskLabel
+      parameters:
+      - description: ID is the decision, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskLabelIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDecisionView'
+          description: ok
+      summary: Record what a human concluded about a decision
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/dictionary:
+    get:
+      description: |-
+        Dictionary is the vocabulary a rule may be written in: every fact, every
+        operator, every velocity axis and window, this tenant's own lists, and the
+        signal keys this tenant has actually sent.
+
+        Two lenses on one catalogue. The product half is closed and is what admission
+        checks against. The tenant half — the signals — is the tenant's own, read back
+        off its recent decisions, which is what makes a rule builder able to offer the
+        fields that exist here rather than the fields that exist in general.
+      operationId: riskDictionary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskDictionaryView'
+          description: ok
+      summary: Read the field catalogue a rule may name
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/health:
+    get:
+      description: |-
+        Answers 200 with a report of what is up, or 503 CARRYING THE SAME REPORT as its body — which is the whole point of a real probe, and the reason this one route is not a typed op: a typed op reaches a non-2xx only by returning an error, and that renders as an envelope with the report dropped.
+
+        The report names the model digest in force, how many tenants this process holds resident, whether the feature warehouse is reachable, and whether metering is configured. Only the first is load-bearing for a decision: the rings are in memory, the rules and lists are the tenant's own file, and the model is in process, so a decision does NOT need the warehouse and the probe stays green without it. A warehouse that is down costs the field dictionary and the search sandbox, and is reported as exactly that rather than as a failure of the authorization path.
+      operationId: get_v1_risk_health
+      summary: Report whether the decision plane can decide
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/lists:
+    get:
+      description: |-
+        Lists shows this tenant's allow and deny lists and how many values each holds.
+
+        These are the TENANT's operational lists. Sanctions and PEP designations are
+        not here and are never merged into them: a tenant may add to its own deny
+        list, and a tenant may not edit OFAC.
+      operationId: riskLists
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskListPage'
+          description: ok
+      summary: List this tenant's allow and deny lists
+      tags:
+      - risk
+      x-app: risk
+    post:
+      description: Creates an allow or deny list a rule can name in an inlist term.
+      operationId: riskCreateList
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskListIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskListView'
+          description: created
+      summary: Create an allow or deny list
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/lists/{name}/entries:
+    post:
+      description: |-
+        Adds values to a list. Values are folded to lower case so a
+        value added in one case matches a signal sent in another.
+      operationId: riskAddListEntries
+      parameters:
+      - description: Name is the list, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskListEntriesIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskListView'
+          description: ok
+      summary: Add values to a list
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/lists/{name}/entries/{value}:
+    delete:
+      description: |-
+        Removes one value from a list. Answers 204, or 404 when the
+        list does not hold it.
+      operationId: riskRemoveListEntry
+      parameters:
+      - description: Name is the list, from the path.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Value is the value to remove, from the path.
+        in: path
+        name: value
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Remove one value from a list
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/mode:
+    get:
+      description: Mode reports whether this tenant's decisions act or only observe.
+      operationId: riskMode
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskModeView'
+          description: ok
+      summary: Read whether this tenant's decisions act or only observe
+      tags:
+      - risk
+      x-app: risk
+    put:
+      description: |-
+        Takes this tenant live, or returns it to shadow.
+
+        SHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every
+        rule runs, the model scores and learns, every decision is recorded, and the
+        action is always allow — so what would have happened is readable over real
+        traffic before anyone depends on it. A model that quietly went live and
+        started declining payments is the worst failure available here.
+      operationId: riskSetMode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskModeIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskModeView'
+          description: ok
+      summary: Take this tenant live, or return it to shadow
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/rules:
+    get:
+      description: |-
+        Rules lists this tenant's detections. A tenant starts with a starter set
+        covering the lifecycle the product names — signup burst, shared device,
+        disposable email, card testing, denied address, spend spike, payout velocity,
+        undeclared automation — all of which it may read, copy, edit and retire.
+      operationId: riskRules
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskRuleList'
+          description: ok
+      summary: List this tenant's rules
+      tags:
+      - risk
+      x-app: risk
+    post:
+      description: |-
+        Admits a new detection. Admission is strict on purpose: a rule with
+        no terms holds on everything, a rule naming a field that does not exist holds
+        on nothing, and both read as a working control from the outside.
+      operationId: riskCreateRule
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskRuleIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskRule'
+          description: created
+      summary: Create a rule
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/rules/{id}:
+    delete:
+      description: |-
+        Retires a detection. Answers 204, or 404 for an identifier this
+        tenant does not own.
+      operationId: riskDeleteRule
+      parameters:
+      - description: ID is the record to act on, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Retire a rule
+      tags:
+      - risk
+      x-app: risk
+    patch:
+      description: |-
+        Replaces a detection whole. There is no partial update: a rule is a
+        conjunction of terms, and merging a partial term list into an existing one is
+        a change nobody can read off the request.
+      operationId: riskUpdateRule
+      parameters:
+      - description: |-
+          ID is the rule to replace, from the path on a PATCH. Ignored on create,
+          where the server mints one.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskRuleIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskRule'
+          description: ok
+      summary: Replace a rule
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/simulate:
+    post:
+      description: |-
+        Simulate replays a candidate rule over this tenant's OWN recorded decisions
+        and reports what it would have caught, what it would have given up, and how
+        much of that a human has already judged.
+
+        It is a gate and not a nicety: a new typology has to be tested before live
+        activation, and a retirement has to be justified against the outgoing rule's
+        performance. Nothing is written — the replay reads the decision log and
+        evaluates in memory.
+
+        An EMPTY history is REFUSED rather than reported as zero alerts. "No alerts"
+        is exactly what a quiet rule looks like, and being unable to tell the two
+        apart is the failure a sandbox exists to prevent.
+
+        BOUNDED AND SYNCHRONOUS, AND DELIBERATELY NOT PRICED. The work is ONE rule
+        over at most 5,000 of the tenant's own recorded decisions, evaluated in memory
+        with no model and no writes, and the caller holds its own request open for all
+        of it — so the cost is bounded per call and self-throttling across calls, which
+        is what the search plane needed a queue to achieve. Not priced because this is
+        the op a tenant runs BEFORE activating a rule, and charging for the rehearsal
+        is how you teach people to skip it.
+      operationId: riskSimulate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskSimulateIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskSimulateReport'
+          description: ok
+      summary: Replay a candidate rule over this tenant's own history
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/subjects/{kind}/{id}:
+    get:
+      description: |-
+        Reads one subject's current risk state: every live velocity
+        aggregate it has, its recent decisions, whatever controls are declared on it,
+        its thirty-day history, and where this KIND of subject sits across the
+        platform. This is the continuous-monitoring read — a merchant, an account or
+        an agent, on one page.
+
+        The last two come from the warehouse and are BEST EFFORT: an unreachable
+        warehouse omits them and names the gap, because a zeroed history would say the
+        subject did nothing and a zeroed baseline would say the platform did.
+
+        The network comparison is the only cross-org value this API returns and it is
+        aggregate BY CONSTRUCTION: the table has no tenant column, so there is no
+        query — here or anywhere — that could return another tenant's rows.
+      operationId: riskSubjectState
+      parameters:
+      - description: Kind is the subject kind, from the path.
+        in: path
+        name: kind
+        required: true
+        schema:
+          type: string
+      - description: ID is the subject identifier, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskSubjectView'
+          description: ok
+      summary: Read one subject's current risk state
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/suppressions:
+    get:
+      description: |-
+        Suppressions lists the active mutes. A suppression that has expired is not
+        listed and mutes nothing — a forgotten mute stops muting instead of quietly
+        staying on forever.
+      operationId: riskSuppressions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskSuppressionPage'
+          description: ok
+      summary: List active suppressions
+      tags:
+      - risk
+      x-app: risk
+    post:
+      description: |-
+        Suppress mutes a rule's activations for a subject, a subject kind, or
+        everywhere that rule fires.
+
+        A suppressed hit is RECORDED with suppressed set and contributes nothing to
+        the action. It is never dropped, for the same reason the model counts its
+        refusals: silence must never read as a clean result, and a compliance record
+        that can be silently muted by an operational knob is not a record.
+      operationId: riskSuppress
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskSuppressIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskSuppression'
+          description: created
+      summary: Suppress a rule's activations
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/suppressions/{id}:
+    delete:
+      description: |-
+        Unsuppress lifts a mute. Answers 204, or 404 for an identifier this tenant
+        does not own.
+      operationId: riskUnsuppress
+      parameters:
+      - description: ID is the record to act on, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Lift a suppression
+      tags:
+      - risk
+      x-app: risk
   /v1/router/artifact-meta:
     delete:
       description: |-
@@ -70892,6 +73037,10 @@ tags:
     a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
     cannot INSTALL.
   name: responses
+- description: 'Package risk is Hanzo Risk: the scoring and decision plane for any
+    entity a tenant has — an account, a transaction, a session, an agent, a merchant,
+    a payout — and the shared model plane both it and the compliance face read.'
+  name: risk
 - description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
     /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
     a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but

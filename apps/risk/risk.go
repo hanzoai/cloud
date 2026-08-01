@@ -32,7 +32,6 @@ package risk
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
 	"sync"
@@ -42,14 +41,19 @@ import (
 	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/luxfi/aml/pkg/anomaly"
-	"github.com/luxfi/aml/pkg/velocity"
 	"github.com/zap-proto/zip"
 )
 
-// state is everything the surface reads. Three of the four members are
-// SINGLE-WRITER by nature — the model's counters, the velocity rings and the
-// per-tenant SQLite file — which is why this app must run under the shard
-// router that pins an org to one pod, and why Shutdown must snapshot.
+// state is everything the surface reads. Every per-tenant plane it can reach —
+// the model's counters, the velocity rings, the SQLite file and the governance
+// cache — lives inside ONE resident per tenant (resident.go) and is SINGLE-WRITER
+// by nature, which is why this app must run under the shard router that pins an
+// org to one pod, and why Shutdown must snapshot.
+//
+// NOTHING PER-TENANT IS HELD HERE. A field on this struct is a field every tenant
+// shares, and a shared store with a global cap is how one org silently evicts
+// another's fraud controls. The residency is the only tenant-indexed thing in the
+// app and it holds cells, never rows.
 type state struct {
 	// brand is the deployment's brand, the half of the tenant key that never
 	// comes from a header.
@@ -57,25 +61,28 @@ type state struct {
 	// dataDir is where the per-tenant files live.
 	dataDir string
 
-	// vel holds the in-memory sliding aggregates every decision reads. Constant
-	// time, fixed memory per key, bounded cardinality with LRU eviction.
-	vel *velocity.Store
-	// model holds one half-space-tree forest per tenant, geometry included.
-	model *anomaly.Store
-	// shelf holds the per-tenant record planes.
-	shelf *shelf
+	// res is the bounded set of live tenants: each one's own aggregates, own
+	// model, own file, own cached rules.
+	res *residency
+	// runs is the process's bounded search queue.
+	runs *runner
+	// reg answers whether an agent reference is one the asking org registered.
+	// An interface so the wire is one implementation and a test is another, with
+	// no flag in production choosing between them.
+	reg registry
+
+	// digest names the model SHAPE in force. It is a pure function of the
+	// configuration, identical for every tenant, so it is computed once here
+	// rather than read off whichever tenant's store came to hand.
+	digest string
 
 	// bill is the shared per-org gate and meter, on the "risk" product.
 	bill *cloud.ResourceMeter
 
 	// warehouse records whether the feature tables were created. A false value
 	// is an honest gap on the dictionary and the backfill, never a zero.
+	mu        sync.Mutex
 	warehouse bool
-
-	// restored tracks which tenants have had their snapshot loaded, so the
-	// restore happens once per tenant per process and not once per request.
-	mu       sync.Mutex
-	restored map[Tenant]bool
 }
 
 // Mount wires /v1/risk and the native /v1/ml leaves onto app.
@@ -113,11 +120,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// that is down at boot must not stop the decision plane from mounting. The
 	// tables are ensured once, in the background, and the honest gap is recorded.
 	go warehouse(s)
+	// Memory comes back from a SILENT tenant on a timer, never under another
+	// tenant's pressure — that ordering is what makes it reclaim and not
+	// eviction. See residency.reclaimLocked.
+	go reclaim(s)
 
 	mount(s, app)
 	s.Log.Info("risk surface mounted",
 		"brand", deps.Brand, "env", deps.Env,
-		"billing", s.State.bill.Enabled(), "model", s.State.model.Digest())
+		"billing", s.State.bill.Enabled(), "model", s.State.digest,
+		"tenant_bytes", velBytes(), "tenant_keys", maxKeys(),
+		"tenant_max", tenantMax(), "reclaim_idle", idleReclaim().String())
 
 	// Shutdown is registered by the plugin (plugin/risk/main.go) and calls back
 	// here; holding the service in a package var would be a second owner of the
@@ -163,6 +176,29 @@ func warehouse(s *stateService) {
 // numbers, and anything slower lets a day go unpublished after a restart.
 const baselineEvery = 6 * time.Hour
 
+// reclaim returns memory from tenants that have gone SILENT.
+//
+// It runs on a timer rather than on admission pressure, and that is the whole
+// design: a reclaim triggered by a NEW tenant's arrival would make one tenant's
+// traffic the reason another tenant's aggregates went away, which is the
+// cross-tenant eviction this app exists without. Here the only input is the
+// reclaimed tenant's own silence.
+func reclaim(s *stateService) {
+	for {
+		time.Sleep(sweepEvery)
+		s.State.res.sweep(s.Log)
+	}
+}
+
+// sweepEvery is how often idleness is checked. A fraction of idleReclaim, so a
+// tenant is reclaimed near its own threshold rather than up to a threshold later.
+const sweepEvery = 5 * time.Minute
+
+// capacityAlarm is how long a refusal keeps the probe degraded. Longer than the
+// sweep, so an operator sees the alarm across at least one chance for the node to
+// free itself; short enough that a resolved event stops paging.
+const capacityAlarm = 3 * sweepEvery
+
 // build constructs the state. Separate from Mount because Mount also starts the
 // background work and installs the routes, and a test wants the state without
 // either — the same split apps/ml makes for the same reason.
@@ -177,28 +213,27 @@ func build(deps cloud.Deps) (*stateService, error) {
 		return nil, fmt.Errorf("risk.Mount: no brand, so no tenant key can be minted")
 	}
 
-	vel := velocity.New(velocity.Config{})
-	model, err := anomaly.New(anomaly.Config{
-		// SHADOW IS THE DEFAULT AT THE ENGINE TOO, and the per-tenant switch in
-		// the record plane is what turns a tenant live. Two gates in series
-		// rather than one: a deployment-wide flag flipped by mistake still
-		// cannot make a tenant act.
-		Shadow: true,
-	}, vel)
+	// The model SHAPE, from a store that will never hold a tenant. The digest is
+	// a pure function of the configuration — the inventory in order and the
+	// geometry parameters — so it can be settled once at boot, and reading it
+	// off a throwaway is better than keeping a spare store around that something
+	// could later be tempted to score with.
+	shape, err := forest(anomaly.Config{}, aggregates())
 	if err != nil {
 		return nil, fmt.Errorf("risk.Mount: %w", err)
 	}
 
+	base := cloud.NewBase(deps, "risk")
 	return &cloud.Service[state]{
-		Base: cloud.NewBase(deps, "risk"),
+		Base: base,
 		State: state{
-			brand:    deps.Brand,
-			dataDir:  deps.DataDir,
-			vel:      vel,
-			model:    model,
-			shelf:    newShelf(deps.DataDir),
-			bill:     cloud.NewResourceMeter(deps, "risk"),
-			restored: map[Tenant]bool{},
+			brand:   deps.Brand,
+			dataDir: deps.DataDir,
+			res:     newResidency(deps.DataDir),
+			runs:    newRunner(base.Log),
+			reg:     peerRegistry{},
+			digest:  shape.Digest(),
+			bill:    cloud.NewResourceMeter(deps, "risk"),
 		},
 	}, nil
 }
@@ -227,16 +262,11 @@ func Shutdown(ctx context.Context) error {
 }
 
 func teardown(s *stateService) error {
-	var kept, failed int
-	for _, t := range s.State.shelf.tenants() {
-		if err := saveModel(s.State.shelf, s.State.model, t); err != nil {
-			failed++
-			s.Log.Error("risk: a tenant's learned state was not kept", "tenant", t.String(), "err", err)
-			continue
-		}
-		kept++
-	}
-	s.State.shelf.close()
+	// Stop the search queue FIRST: a worker holds a tenant's file handle, and
+	// closing under it would turn a rollout into a write error on a durable
+	// report. Every in-flight run is cancelled and its row says so.
+	s.State.runs.stop()
+	kept, failed := s.State.res.close(s.Log)
 	s.Log.Info("risk surface down", "models_kept", kept, "models_lost", failed)
 	if failed > 0 {
 		return fmt.Errorf("risk: %d tenant model(s) could not be snapshotted", failed)
@@ -244,11 +274,13 @@ func teardown(s *stateService) error {
 	return nil
 }
 
-// tenantState resolves the caller's scope, opens its record plane, and restores
-// its model the first time this process sees it. Every typed op starts here, so
-// there is one place the tenant is established and one place the restore
-// happens.
-func tenantState(ctx context.Context, s *stateService) (scope, *sql.DB, error) {
+// tenantState resolves the caller's scope and its resident — the tenant's own
+// aggregates, model, file and cached governance, armed and restored if this
+// process does not already hold them.
+//
+// Every typed op starts here, so there is ONE place the tenant is established,
+// ONE place the bound is applied, and ONE place the learned state is reloaded.
+func tenantState(ctx context.Context, s *stateService) (scope, *resident, error) {
 	sc, err := tenantOf(ctx, s.State.brand)
 	if err != nil {
 		return scope{}, nil, err
@@ -259,21 +291,11 @@ func tenantState(ctx context.Context, s *stateService) (scope, *sql.DB, error) {
 	if !qualified(s.State.brand, sc.tenant) {
 		return scope{}, nil, zip.ErrForbidden("the tenant key is not qualified")
 	}
-	db, err := s.State.shelf.open(sc.tenant)
+	r, err := s.State.res.of(sc.tenant, s.Log)
 	if err != nil {
 		return scope{}, nil, err
 	}
-	s.State.mu.Lock()
-	first := !s.State.restored[sc.tenant]
-	s.State.restored[sc.tenant] = true
-	s.State.mu.Unlock()
-	if first {
-		if err := loadModel(s.State.shelf, s.State.model, sc.tenant); err != nil {
-			s.Log.Warn("risk: a tenant's learned state could not be restored; it starts warming",
-				"tenant", sc.tenant.String(), "err", err)
-		}
-	}
-	return sc, db, nil
+	return sc, r, nil
 }
 
 // health is the app's real, fail-closed probe.
@@ -287,21 +309,41 @@ func health(s *stateService) func(*zip.Ctx) error {
 		s.State.mu.Lock()
 		warehouse := s.State.warehouse
 		s.State.mu.Unlock()
+		tenants, refused, refusedAt := s.State.res.count()
 
 		report := map[string]any{
-			"status":    "ok",
-			"model":     s.State.model.Digest(),
-			"tenants":   len(s.State.shelf.tenants()),
-			"warehouse": warehouse || datastore.Ready(),
-			"billing":   s.State.bill.Enabled(),
+			"status":     "ok",
+			"model":      s.State.digest,
+			"tenants":    tenants,
+			"tenant_max": tenantMax(),
+			"refused":    refused,
+			"warehouse":  warehouse || datastore.Ready(),
+			"billing":    s.State.bill.Enabled(),
 		}
 		// The DECISION plane is what this app promises, and it does not need the
 		// warehouse: rings are in memory, rules and lists are the tenant's own
 		// file, the model is in process. The probe is degraded only when
 		// something the hot path actually needs is missing.
-		if s.State.model == nil || s.State.vel == nil || s.State.dataDir == "" {
+		if s.State.res == nil || s.State.runs == nil || s.State.dataDir == "" {
 			report["status"] = "degraded"
 			report["error"] = "the decision plane is not constructed"
+			return c.JSON(http.StatusServiceUnavailable, report)
+		}
+		// A node that has REFUSED a tenant is out of room, and the tenants it
+		// turned away are unprotected. That is a capacity event an operator must
+		// be paged for, not a counter someone finds later — so the probe goes
+		// degraded while it stands, and the reason names itself.
+		//
+		// WHILE IT STANDS, not forever. The counter is monotone, so latching on
+		// it would leave the pod unready for the rest of its life over one
+		// refusal — turning a capacity event for ONE tenant into an outage for
+		// every tenant the node is serving perfectly well, which is a worse
+		// version of the same defect. The alarm clears once the node has gone
+		// capacityAlarm without turning anyone away; the count stays on the
+		// report either way, so nothing is hidden.
+		if !refusedAt.IsZero() && time.Since(refusedAt) < capacityAlarm {
+			report["status"] = "degraded"
+			report["error"] = "this node is at its tenant capacity and has refused admissions; it will not evict a tenant to make room"
 			return c.JSON(http.StatusServiceUnavailable, report)
 		}
 		return c.JSON(http.StatusOK, report)

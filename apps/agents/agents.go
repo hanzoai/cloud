@@ -397,6 +397,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// ends where the product starts (provenance.go).
 	mountProvenance(s)
 
+	// The registry's yes/no, for a subsystem in ANOTHER process (declared_rpc.go).
+	// ListForOrg serves the in-binary readers; this serves the risk plane, whose
+	// agent-versus-bot decision would otherwise have to trust a request field.
+	exposeDeclared()
+
 	log.Info("agents mounted", "ai", s.State.ai != nil, "billing", s.State.bill.Enabled(),
 		"scheduler", s.State.sched != nil, "brand", deps.Brand)
 	return nil

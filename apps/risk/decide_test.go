@@ -13,15 +13,14 @@ import (
 	"time"
 
 	"github.com/luxfi/aml/pkg/anomaly"
-	"github.com/luxfi/aml/pkg/velocity"
 )
 
 // TestRecordHappensBeforeScoring pins step 1. Everything after reads the rings,
 // so the numbers quoted in a decision must be the ones an investigator sees when
 // they look at the subject — including THIS observation.
 func TestRecordHappensBeforeScoring(t *testing.T) {
-	vel := velocity.New(velocity.Config{})
-	model, err := anomaly.New(anomaly.Config{Shadow: true}, vel)
+	vel := aggregates()
+	model, err := forest(anomaly.Config{}, vel)
 	if err != nil {
 		t.Fatalf("anomaly.New: %v", err)
 	}
@@ -31,14 +30,14 @@ func TestRecordHappensBeforeScoring(t *testing.T) {
 	rules := []rule{{
 		ID: "r1", Name: "counted", Stage: StagePayment, Action: ActionReview,
 		Weight: 0.5, Enabled: true,
-		All:    []term{{Field: "velocity.ip.1h.count", Op: OpGte, Number: 1}},
+		All: []term{{Field: "velocity.ip.1h.count", Op: OpGte, Number: 1}},
 	}}
 	o := observation{
 		id: "d1", at: time.Now(), stage: StagePayment, kind: "transaction", subject: "tx1",
 		amount: 1_000_000_000, currency: "USD", direction: "in",
 		signals: map[string]string{"ip": "203.0.113.1"},
 	}
-	out := decide(context.Background(), vel, model, tn, o, rules, nil, nil, false)
+	out := decide(context.Background(), bench{t: tn, vel: vel, model: model, rules: rules}, o)
 	if len(out.hits) != 1 {
 		t.Fatalf("hits = %v; the rule did not see this observation in the ring, so the record ran after the read", out.hits)
 	}
@@ -63,18 +62,18 @@ func TestModelEvidenceCannotExceedTheCeiling(t *testing.T) {
 // TestShadowActsOnNothing pins the default. In shadow every rule runs, the model
 // scores and learns, every decision is recorded, and the action is always allow.
 func TestShadowActsOnNothing(t *testing.T) {
-	vel := velocity.New(velocity.Config{})
-	model, _ := anomaly.New(anomaly.Config{Shadow: true}, vel)
+	vel := aggregates()
+	model, _ := forest(anomaly.Config{}, vel)
 	rules := []rule{{
 		ID: "block-all", Name: "would block", Stage: StagePayment, Action: ActionBlock,
 		Weight: 1, Enabled: true,
-		All:    []term{{Field: "subject.kind", Op: OpEq, Value: "transaction"}},
+		All: []term{{Field: "subject.kind", Op: OpEq, Value: "transaction"}},
 	}}
 	o := observation{
 		id: "d1", at: time.Now(), stage: StagePayment, kind: "transaction", subject: "tx1",
 		signals: map[string]string{},
 	}
-	out := decide(context.Background(), vel, model, Tenant("hanzo/acme"), o, rules, nil, nil, true)
+	out := decide(context.Background(), bench{t: Tenant("hanzo/acme"), vel: vel, model: model, rules: rules, shadow: true}, o)
 	if out.action != ActionAllow {
 		t.Fatalf("shadow produced action %q — a shadow tenant acted", out.action)
 	}
@@ -98,25 +97,81 @@ func TestShadowActsOnNothing(t *testing.T) {
 	}
 	// Live, the same input blocks. Without this the test above would pass on a
 	// rule that simply never fires.
-	out = decide(context.Background(), vel, model, Tenant("hanzo/acme"), o, rules, nil, nil, false)
+	out = decide(context.Background(), bench{t: Tenant("hanzo/acme"), vel: vel, model: model, rules: rules}, o)
 	if out.action != ActionBlock {
 		t.Fatalf("live produced %q, want block — the shadow assertion proves nothing if the rule cannot fire", out.action)
+	}
+}
+
+// TestADisarmedModelIsNamedEvenWhenSomethingElseIsAlsoShort.
+//
+// THE DEFECT: the model's refusal was graded AFTER every reason had been merged
+// into the single word the wire carries. Grading only fired on the literal word
+// `warming`, so a decision that was ALSO short of something else — an agency the
+// registry could not confirm, a tenant in shadow — went out under that other
+// reason's name and the disarmed model was never said out loud. A grader that
+// stops working as soon as anything else goes wrong is a grader that stops
+// working exactly when a reader most needs it.
+//
+// THE FIX IS ORDER: the model's own reason is graded where it is produced, before
+// the merge, so the merge chooses between TRUE words.
+func TestADisarmedModelIsNamedEvenWhenSomethingElseIsAlsoShort(t *testing.T) {
+	vel := aggregates()
+	model, err := forest(anomaly.Config{}, vel)
+	if err != nil {
+		t.Fatalf("forest: %v", err)
+	}
+	o := observation{
+		id: "d1", at: time.Now(), stage: StageSignup, kind: "account", subject: "a1",
+		signals: map[string]string{},
+		// The agency claim could not be checked — a second, independently true
+		// shortfall that outranks warming.
+		refusal: RefusalUnverified,
+	}
+	// A grader standing in for a tenant whose learned state is gone.
+	disarm := func(reason string) string {
+		if reason == RefusalWarming {
+			return RefusalDisarmed
+		}
+		return reason
+	}
+
+	out := decide(context.Background(), bench{
+		t: Tenant("hanzo/acme"), vel: vel, model: model, grade: disarm,
+	}, o)
+	if out.refusal != RefusalDisarmed {
+		t.Fatalf("refusal = %q, want %q — a control that is OFF was hidden behind another reason, which is the silent disarm in one word",
+			out.refusal, RefusalDisarmed)
+	}
+
+	// The control: with no grader the same decision reports the reason the engine
+	// actually gave, so the assertion above is about grading and not about rank.
+	plain := decide(context.Background(), bench{
+		t: Tenant("hanzo/acme"), vel: vel, model: model,
+	}, o)
+	if plain.refusal == RefusalDisarmed {
+		t.Fatal("an ungraded decision reported disarmed, so the test above proves nothing")
+	}
+	if plain.refusal != RefusalUnverified {
+		t.Fatalf("ungraded refusal = %q, want %q — an unchecked agency must outrank a model that is merely young", plain.refusal, RefusalUnverified)
 	}
 }
 
 // TestSuppressedEvidenceIsRecordedNotDropped pins the doctrine: a muted control
 // that leaves no trace is indistinguishable from one that was never running.
 func TestSuppressedEvidenceIsRecordedNotDropped(t *testing.T) {
-	vel := velocity.New(velocity.Config{})
-	model, _ := anomaly.New(anomaly.Config{Shadow: true}, vel)
+	vel := aggregates()
+	model, _ := forest(anomaly.Config{}, vel)
 	rules := []rule{{
 		ID: "r1", Name: "noisy", Stage: StageSignup, Action: ActionBlock, Weight: 1, Enabled: true,
 		All: []term{{Field: "subject.kind", Op: OpEq, Value: "account"}},
 	}}
 	o := observation{id: "d1", at: time.Now(), stage: StageSignup, kind: "account", subject: "a1", signals: map[string]string{}}
 
-	out := decide(context.Background(), vel, model, Tenant("hanzo/acme"), o, rules, nil,
-		func(h hit, _ observation) bool { return h.Rule == "r1" }, false)
+	out := decide(context.Background(), bench{
+		t: Tenant("hanzo/acme"), vel: vel, model: model, rules: rules,
+		mute: func(h hit, _ observation) bool { return h.Rule == "r1" },
+	}, o)
 
 	if len(out.hits) != 1 {
 		t.Fatalf("the suppressed hit was DROPPED (%d hits) — the record no longer says the rule fired", len(out.hits))
@@ -129,28 +184,6 @@ func TestSuppressedEvidenceIsRecordedNotDropped(t *testing.T) {
 	}
 	if out.score != 0 {
 		t.Fatalf("a suppressed hit contributed %v to the score", out.score)
-	}
-}
-
-// TestAgencyIsDerivedNotDeclared pins the differentiator. The classification
-// turns on facts we hold — the credential class and this org's own agent
-// registry — and never on a user-agent string, which is a claim.
-func TestAgencyIsDerivedNotDeclared(t *testing.T) {
-	for _, tc := range []struct {
-		name                                          string
-		credentialed, publishable, declared, humanSes bool
-		want                                          string
-	}{
-		{"declared agent on a secret key", true, false, true, false, AgencyAgent},
-		{"declared agent on a publishable key", true, true, true, false, AgencyUnknown},
-		{"anonymous script", false, false, false, false, AgencyBot},
-		{"publishable-key script", true, true, false, false, AgencyBot},
-		{"browser session", true, false, false, true, AgencyHuman},
-		{"credentialed but undeclared", true, false, false, false, AgencyUnknown},
-	} {
-		if got := classify(tc.credentialed, tc.publishable, tc.declared, tc.humanSes); got != tc.want {
-			t.Errorf("%s: agency = %q, want %q", tc.name, got, tc.want)
-		}
 	}
 }
 
@@ -406,14 +439,16 @@ func TestTrainIsOnlineAndPerTenant(t *testing.T) {
 	if out.Learned != 20 {
 		t.Fatalf("learned %d of 20", out.Learned)
 	}
-	if s.State.model.State("hanzo/acme").Learned == 0 {
+	_, mine, _ := resOf(t, s, Tenant("hanzo/acme")).arms()
+	if mine.State("hanzo/acme").Learned == 0 {
 		t.Fatal("the caller's model learned nothing")
 	}
-	if s.State.model.State("hanzo/beta").Learned != 0 {
+	_, theirs, _ := resOf(t, s, Tenant("hanzo/beta")).arms()
+	if theirs.State("hanzo/beta").Learned != 0 {
 		t.Fatal("another tenant's model learned from this tenant's data")
 	}
 	// And the tenant key really is qualified, not bare.
-	if s.State.model.State("acme").Learned != 0 {
+	if mine.State("acme").Learned != 0 {
 		t.Fatal("the model is indexed on the BARE org — two brands' same-named orgs would share it")
 	}
 }

@@ -99,7 +99,7 @@
       "post": {
         "operationId": "mlSearch",
         "summary": "Exhaustively search the model topology over this tenant's own history",
-        "description": "Search exhaustively tries the model topology over this tenant's own history\nand returns the learning curve and the winning shape.\n\nThe grid is CLOSED — trees x depth x window x blend x appetite — because an\nunbounded grid is an unbounded amount of a shared pod's CPU reachable by\nanyone with a key. Each candidate runs in a sandbox over fresh counters, so a\nsearch can never move the live model, and no candidate can see another\ntenant's history because the replay reads this tenant's own file.\n\nIt answers 202 with a run identifier; read the report back at\nGET /v1/ml/search/{id}.",
+        "description": "Search exhaustively tries the model topology over this tenant's own history\nand returns the learning curve and the winning shape.\n\nThe grid is CLOSED — trees x depth x window x blend x appetite — because an\nunbounded grid is an unbounded amount of a shared pod's CPU reachable by\nanyone with a key. Each candidate runs in a sandbox over fresh counters\ncarrying the SAME per-tenant memory bound the live plane does, so a search can\nnever move the live model, can never cost more than a tenant is allowed to\ncost, and can never see another tenant's history because the replay reads this\ntenant's own file.\n\nIT IS QUEUED, AND THE QUEUE IS THE BOUND. One run per tenant (a second answers\n409 naming the one already going), a fixed number of workers for the whole\nprocess, a short backlog beyond which a start answers 429, and a deadline every\ncandidate polls. Priced before the work and metered after it, on the caller's\nown ledger. See search.go.\n\nIt answers 202 with a run identifier; read the report back at\nGET /v1/ml/search/{id} and stop it at DELETE /v1/ml/search/{id}.",
         "tags": [
           "ml"
         ],
@@ -128,10 +128,41 @@
       }
     },
     "/v1/ml/search/{id}": {
+      "delete": {
+        "operationId": "mlCancelSearch",
+        "summary": "Stop a running exhaustive search",
+        "description": "Stops a search this tenant started.\n\nAn expensive op that cannot be stopped is an expensive op a caller cannot take\nback — and the run holds a worker every other tenant is queued behind. It is\nidempotent: cancelling a search that has already answered is not an error, and\nthe reply says which happened.",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the record to read, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlSearchRun"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
       "get": {
         "operationId": "mlSearchResult",
         "summary": "Read an exhaustive search's report",
-        "description": "SearchResult reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
+        "description": "Reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
         "tags": [
           "ml"
         ],
@@ -208,7 +239,7 @@
       "put": {
         "operationId": "mlSetAppetite",
         "summary": "Set the share of the stream the model may examine",
-        "description": "SetAppetite sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
+        "description": "Sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
         "tags": [
           "ml"
         ],
@@ -345,7 +376,7 @@
       "post": {
         "operationId": "riskSetControl",
         "summary": "Declare a reserve, a payout hold or a block on a subject",
-        "description": "SetControl declares a reserve, a payout hold or a block on a subject.",
+        "description": "Declares a reserve, a payout hold or a block on a subject.",
         "tags": [
           "risk"
         ],
@@ -377,7 +408,7 @@
       "delete": {
         "operationId": "riskReleaseControl",
         "summary": "Release a control",
-        "description": "ReleaseControl lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
+        "description": "Lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
         "tags": [
           "risk"
         ],
@@ -504,7 +535,7 @@
       "get": {
         "operationId": "riskDecisionDetail",
         "summary": "Read one decision with its evidence",
-        "description": "DecisionDetail reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
+        "description": "Reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
         "tags": [
           "risk"
         ],
@@ -632,7 +663,7 @@
       "post": {
         "operationId": "riskCreateList",
         "summary": "Create an allow or deny list",
-        "description": "CreateList creates an allow or deny list a rule can name in an inlist term.",
+        "description": "Creates an allow or deny list a rule can name in an inlist term.",
         "tags": [
           "risk"
         ],
@@ -664,7 +695,7 @@
       "post": {
         "operationId": "riskAddListEntries",
         "summary": "Add values to a list",
-        "description": "AddListEntries adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
+        "description": "Adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
         "tags": [
           "risk"
         ],
@@ -707,7 +738,7 @@
       "delete": {
         "operationId": "riskRemoveListEntry",
         "summary": "Remove one value from a list",
-        "description": "RemoveListEntry removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
+        "description": "Removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
         "tags": [
           "risk"
         ],
@@ -762,7 +793,7 @@
       "put": {
         "operationId": "riskSetMode",
         "summary": "Take this tenant live, or return it to shadow",
-        "description": "SetMode takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
+        "description": "Takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
         "tags": [
           "risk"
         ],
@@ -814,7 +845,7 @@
       "post": {
         "operationId": "riskCreateRule",
         "summary": "Create a rule",
-        "description": "CreateRule admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
+        "description": "Admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
         "tags": [
           "risk"
         ],
@@ -846,7 +877,7 @@
       "delete": {
         "operationId": "riskDeleteRule",
         "summary": "Retire a rule",
-        "description": "DeleteRule retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
+        "description": "Retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
         "tags": [
           "risk"
         ],
@@ -870,7 +901,7 @@
       "patch": {
         "operationId": "riskUpdateRule",
         "summary": "Replace a rule",
-        "description": "UpdateRule replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
+        "description": "Replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
         "tags": [
           "risk"
         ],
@@ -913,7 +944,7 @@
       "post": {
         "operationId": "riskSimulate",
         "summary": "Replay a candidate rule over this tenant's own history",
-        "description": "Simulate replays a candidate rule over this tenant's OWN recorded decisions\nand reports what it would have caught, what it would have given up, and how\nmuch of that a human has already judged.\n\nIt is a gate and not a nicety: a new typology has to be tested before live\nactivation, and a retirement has to be justified against the outgoing rule's\nperformance. Nothing is written — the replay reads the decision log and\nevaluates in memory.\n\nAn EMPTY history is REFUSED rather than reported as zero alerts. \"No alerts\"\nis exactly what a quiet rule looks like, and being unable to tell the two\napart is the failure a sandbox exists to prevent.",
+        "description": "Simulate replays a candidate rule over this tenant's OWN recorded decisions\nand reports what it would have caught, what it would have given up, and how\nmuch of that a human has already judged.\n\nIt is a gate and not a nicety: a new typology has to be tested before live\nactivation, and a retirement has to be justified against the outgoing rule's\nperformance. Nothing is written — the replay reads the decision log and\nevaluates in memory.\n\nAn EMPTY history is REFUSED rather than reported as zero alerts. \"No alerts\"\nis exactly what a quiet rule looks like, and being unable to tell the two\napart is the failure a sandbox exists to prevent.\n\nBOUNDED AND SYNCHRONOUS, AND DELIBERATELY NOT PRICED. The work is ONE rule\nover at most 5,000 of the tenant's own recorded decisions, evaluated in memory\nwith no model and no writes, and the caller holds its own request open for all\nof it — so the cost is bounded per call and self-throttling across calls, which\nis what the search plane needed a queue to achieve. Not priced because this is\nthe op a tenant runs BEFORE activating a rule, and charging for the rehearsal\nis how you teach people to skip it.",
         "tags": [
           "risk"
         ],
@@ -945,7 +976,7 @@
       "get": {
         "operationId": "riskSubjectState",
         "summary": "Read one subject's current risk state",
-        "description": "SubjectState reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
+        "description": "Reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
         "tags": [
           "risk"
         ],
@@ -1565,10 +1596,6 @@
             "description": "Agent is the agent reference the caller claims to be acting as. It is\nresolved against THIS org's agent registry; an unresolvable reference is\nsimply not a declaration.",
             "type": "string"
           },
-          "credential": {
-            "description": "Credential is the credential class the caller believes it presented.\nAdvisory only — the server reads the credential it actually verified.",
-            "type": "string"
-          },
           "session": {
             "description": "Session is the session reference this action belongs to.",
             "type": "string"
@@ -1784,7 +1811,7 @@
             "type": "string"
           },
           "agency": {
-            "description": "Agency is what kind of actor this was: agent, human, bot or unknown.\nDerived server-side from the credential class, this org's agent registry,\nthe live agent session and the account's metered shape — never from a\nuser-agent string, which is a claim rather than a fact.",
+            "description": "Agency is what kind of actor this was: agent, human, bot or unknown.\nRESOLVED server-side: an agent reference on the observation is looked up in\nYOUR OWN agent registry, and it is `agent` only when that lookup succeeds.\nA reference the registry does not know is `bot` — a claim we can disprove\nis the strongest signal there is — and a lookup that could not be made\nleaves this `unknown` with Refusal set to `unverified`. It is never read\noff a user-agent string, which is a claim rather than a fact.",
             "type": "string"
           },
           "causes": {
@@ -1810,7 +1837,7 @@
             "type": "string"
           },
           "refusal": {
-            "description": "Refusal names why the model declined to score, when it did: warming,\nunidentified or shadow. It is present precisely so that silence never\nreads as a clean result.",
+            "description": "Refusal names what this decision was short of, when it was short of\nanything. It is present precisely so that silence never reads as a clean\nresult. ONE word, and when more than one applies it is the one that will\nnot fix itself, in this order:\n\n\tunidentified  nothing to key the aggregates on.\n\tdisarmed      learned state existed and this process does not have it.\n\t              A control that is OFF, and never reported as `warming`.\n\tunverified    a claimed agent reference could not be checked against your\n\t              registry, so the Agency on this decision is a gap.\n\twarming       the model is still building this tenant's baseline. Ordinary,\n\t              and resolved by your own traffic.\n\tshadow        this tenant is observing; nothing acted.",
             "type": "string"
           },
           "score": {
@@ -1819,6 +1846,14 @@
           },
           "shadow": {
             "description": "Shadow is true when this tenant is observing rather than acting. In shadow\nAction is always allow and everything else is computed and recorded.",
+            "type": "boolean"
+          },
+          "since": {
+            "description": "Since is when the sliding aggregates behind this decision started, RFC 3339\nin UTC. A velocity count over a 30-day window computed from ten minutes of\naggregates is a true number about the wrong period, so the period is\npublished rather than assumed: this app is deployed at one replica with a\nrecreate rollout, and a reclaim of an idle tenant restarts them too.",
+            "type": "string"
+          },
+          "strained": {
+            "description": "Strained is true when this tenant's aggregates were at their own\ncardinality bound, so a count may be short of this tenant's own traffic.\nOnly this tenant's activity can cause it, and only this tenant's counts are\naffected.",
             "type": "boolean"
           }
         },
@@ -1851,7 +1886,7 @@
             "type": "string"
           },
           "refusal": {
-            "description": "Refusal names why the model declined, when it did.",
+            "description": "Refusal names what the decision was short of, when it was short of\nanything.",
             "type": "string"
           },
           "score": {
@@ -1862,9 +1897,17 @@
             "description": "Shadow is whether the decision acted.",
             "type": "boolean"
           },
+          "since": {
+            "description": "Since is when the aggregates this decision read had started, RFC 3339 in\nUTC — the period its velocity numbers actually cover.",
+            "type": "string"
+          },
           "stage": {
             "description": "Stage is the lifecycle moment.",
             "type": "string"
+          },
+          "strained": {
+            "description": "Strained is true when the aggregates were at this tenant's own cardinality\nbound when the decision was made.",
+            "type": "boolean"
           },
           "subject": {
             "description": "Subject is the subject identifier.",
@@ -2306,6 +2349,14 @@
               "$ref": "#/components/schemas/riskBaseline"
             },
             "type": "array"
+          },
+          "since": {
+            "description": "Since is when those aggregates started, RFC 3339 in UTC. A window wider\nthan the interval since this instant is only partly covered, and saying so\nis the difference between a small count and a wrong one.",
+            "type": "string"
+          },
+          "strained": {
+            "description": "Strained is true when this tenant's aggregates are at their own cardinality\nbound, so a count may be short of this tenant's own traffic.",
+            "type": "boolean"
           },
           "subject": {
             "$ref": "#/components/schemas/riskSubject",

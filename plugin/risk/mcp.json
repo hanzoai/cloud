@@ -1,5 +1,18 @@
 [
   {
+    "description": "Stops a search this tenant started.\n\nAn expensive op that cannot be stopped is an expensive op a caller cannot take\nback — and the run holds a worker every other tenant is queued behind. It is\nidempotent: cancelling a search that has already answered is not an error, and\nthe reply says which happened.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to read, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlCancelSearch"
+  },
+  {
     "description": "Features is the typology-to-feature inventory the model is built on: what each\ndimension measures, the risk indicator it serves, and the published source\nthose words come from.\n\nIt is code rather than a document because a mapping kept beside the model\ncannot drift away from what the model actually reads — and the attributability\nit makes possible is why this is a tree and not a net.",
     "inputSchema": {
       "properties": {},
@@ -85,7 +98,7 @@
     "name": "mlScore"
   },
   {
-    "description": "Search exhaustively tries the model topology over this tenant's own history\nand returns the learning curve and the winning shape.\n\nThe grid is CLOSED — trees x depth x window x blend x appetite — because an\nunbounded grid is an unbounded amount of a shared pod's CPU reachable by\nanyone with a key. Each candidate runs in a sandbox over fresh counters, so a\nsearch can never move the live model, and no candidate can see another\ntenant's history because the replay reads this tenant's own file.\n\nIt answers 202 with a run identifier; read the report back at\nGET /v1/ml/search/{id}.",
+    "description": "Search exhaustively tries the model topology over this tenant's own history\nand returns the learning curve and the winning shape.\n\nThe grid is CLOSED — trees x depth x window x blend x appetite — because an\nunbounded grid is an unbounded amount of a shared pod's CPU reachable by\nanyone with a key. Each candidate runs in a sandbox over fresh counters\ncarrying the SAME per-tenant memory bound the live plane does, so a search can\nnever move the live model, can never cost more than a tenant is allowed to\ncost, and can never see another tenant's history because the replay reads this\ntenant's own file.\n\nIT IS QUEUED, AND THE QUEUE IS THE BOUND. One run per tenant (a second answers\n409 naming the one already going), a fixed number of workers for the whole\nprocess, a short backlog beyond which a start answers 429, and a deadline every\ncandidate polls. Priced before the work and metered after it, on the caller's\nown ledger. See search.go.\n\nIt answers 202 with a run identifier; read the report back at\nGET /v1/ml/search/{id} and stop it at DELETE /v1/ml/search/{id}.",
     "inputSchema": {
       "properties": {
         "limit": {
@@ -98,7 +111,7 @@
     "name": "mlSearch"
   },
   {
-    "description": "SearchResult reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
+    "description": "Reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -111,7 +124,7 @@
     "name": "mlSearchResult"
   },
   {
-    "description": "SetAppetite sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
+    "description": "Sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
     "inputSchema": {
       "properties": {
         "review": {
@@ -229,7 +242,7 @@
     "name": "riskActivity"
   },
   {
-    "description": "AddListEntries adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
+    "description": "Adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -266,7 +279,7 @@
     "name": "riskControls"
   },
   {
-    "description": "CreateList creates an allow or deny list a rule can name in an inlist term.",
+    "description": "Creates an allow or deny list a rule can name in an inlist term.",
     "inputSchema": {
       "properties": {
         "kind": {
@@ -283,7 +296,7 @@
     "name": "riskCreateList"
   },
   {
-    "description": "CreateRule admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
+    "description": "Admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
     "inputSchema": {
       "$defs": {
         "riskRule": {
@@ -379,10 +392,6 @@
               "description": "Agent is the agent reference the caller claims to be acting as. It is\nresolved against THIS org's agent registry; an unresolvable reference is\nsimply not a declaration.",
               "type": "string"
             },
-            "credential": {
-              "description": "Credential is the credential class the caller believes it presented.\nAdvisory only — the server reads the credential it actually verified.",
-              "type": "string"
-            },
             "session": {
               "description": "Session is the session reference this action belongs to.",
               "type": "string"
@@ -455,7 +464,7 @@
     "name": "riskDecide"
   },
   {
-    "description": "DecisionDetail reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
+    "description": "Reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -497,7 +506,7 @@
     "name": "riskDecisions"
   },
   {
-    "description": "DeleteRule retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
+    "description": "Retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -551,7 +560,7 @@
     "name": "riskMode"
   },
   {
-    "description": "ReleaseControl lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
+    "description": "Lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -564,7 +573,7 @@
     "name": "riskReleaseControl"
   },
   {
-    "description": "RemoveListEntry removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
+    "description": "Removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -589,7 +598,7 @@
     "name": "riskRules"
   },
   {
-    "description": "SetControl declares a reserve, a payout hold or a block on a subject.",
+    "description": "Declares a reserve, a payout hold or a block on a subject.",
     "inputSchema": {
       "$defs": {
         "riskSubject": {
@@ -633,7 +642,7 @@
     "name": "riskSetControl"
   },
   {
-    "description": "SetMode takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
+    "description": "Takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
     "inputSchema": {
       "properties": {
         "mode": {
@@ -646,7 +655,7 @@
     "name": "riskSetMode"
   },
   {
-    "description": "Simulate replays a candidate rule over this tenant's OWN recorded decisions\nand reports what it would have caught, what it would have given up, and how\nmuch of that a human has already judged.\n\nIt is a gate and not a nicety: a new typology has to be tested before live\nactivation, and a retirement has to be justified against the outgoing rule's\nperformance. Nothing is written — the replay reads the decision log and\nevaluates in memory.\n\nAn EMPTY history is REFUSED rather than reported as zero alerts. \"No alerts\"\nis exactly what a quiet rule looks like, and being unable to tell the two\napart is the failure a sandbox exists to prevent.",
+    "description": "Simulate replays a candidate rule over this tenant's OWN recorded decisions\nand reports what it would have caught, what it would have given up, and how\nmuch of that a human has already judged.\n\nIt is a gate and not a nicety: a new typology has to be tested before live\nactivation, and a retirement has to be justified against the outgoing rule's\nperformance. Nothing is written — the replay reads the decision log and\nevaluates in memory.\n\nAn EMPTY history is REFUSED rather than reported as zero alerts. \"No alerts\"\nis exactly what a quiet rule looks like, and being unable to tell the two\napart is the failure a sandbox exists to prevent.\n\nBOUNDED AND SYNCHRONOUS, AND DELIBERATELY NOT PRICED. The work is ONE rule\nover at most 5,000 of the tenant's own recorded decisions, evaluated in memory\nwith no model and no writes, and the caller holds its own request open for all\nof it — so the cost is bounded per call and self-throttling across calls, which\nis what the search plane needed a queue to achieve. Not priced because this is\nthe op a tenant runs BEFORE activating a rule, and charging for the rehearsal\nis how you teach people to skip it.",
     "inputSchema": {
       "$defs": {
         "riskRule": {
@@ -737,7 +746,7 @@
     "name": "riskSimulate"
   },
   {
-    "description": "SubjectState reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
+    "description": "Reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -804,7 +813,7 @@
     "name": "riskUnsuppress"
   },
   {
-    "description": "UpdateRule replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
+    "description": "Replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
     "inputSchema": {
       "$defs": {
         "riskRule": {
