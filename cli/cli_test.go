@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // TestMain restores stdout (quiet.go redirected it to stderr at init) so go
@@ -253,15 +255,93 @@ func TestConfigFieldGetSet(t *testing.T) {
 	}
 }
 
-func TestIsControlVerb(t *testing.T) {
-	for _, v := range []string{"login", "apps", "deploy", "clusters", "build", "k8s", "config", "auth", "whoami", "logout"} {
+// servedVerbs is every command name and alias `hanzo` runs itself, written out
+// independently of newRootCmd so that adding or deleting a command without
+// updating this list fails here instead of in a user's shell.
+var servedVerbs = []string{
+	"agent", "apps", "auth", "bot", "build", "cluster", "clusters", "completion",
+	"config", "deploy", "engine", "help", "link", "login", "logout", "run",
+	"runner", "security", "status", "unlink", "version", "whoami",
+}
+
+// delegatedVerbs is what belongs to the Rust fabric CLI. `code` and `k8s` are
+// the ones that hurt: both stayed in the router's old hand-kept verb list after
+// their commands were deleted, so `hanzo code` died with `unknown command
+// "code" for "hanzo"` instead of reaching the fabric CLI that implements it.
+var delegatedVerbs = []string{
+	"code", "k8s", "node", "dev", "wallet", "network",
+	"iam", "kms", "cloud", "gateway", "datastore", "nope",
+}
+
+// runVerb executes verb against a real root command with `--help`, which reaches
+// cobra's command resolution and then short-circuits before any RunE, config
+// load or network call. It answers the only question that matters: would cobra
+// actually run this verb?
+func runVerb(verb string) error {
+	root := newRootCmd()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{verb, "--help"})
+	return root.Execute()
+}
+
+// TestRouterMatchesCommandTree holds the router and the command tree in
+// bijection. cmd/hanzo asks IsControlVerb whether to run a verb here or hand it
+// to the fabric CLI, so a name claimed by one and unknown to the other is a
+// user-facing break in whichever direction it drifts: claiming a verb cobra does
+// not have turns a working fabric command into `unknown command`, and failing to
+// claim one cobra does have hands a local command away to a binary that has
+// never heard of it (which is how shell completion broke).
+func TestRouterMatchesCommandTree(t *testing.T) {
+	// Claimed ⇒ runnable.
+	for _, v := range servedVerbs {
 		if !IsControlVerb(v) {
-			t.Errorf("%q should be a control verb", v)
+			t.Errorf("%q is served here but the router does not claim it — it would be handed to the fabric CLI", v)
+			continue
+		}
+		if err := runVerb(v); err != nil {
+			t.Errorf("router claims %q but cobra cannot run it: %v", v, err)
 		}
 	}
-	for _, v := range []string{"iam", "kms", "cloud", "gateway", "datastore", "nope"} {
+
+	// Not claimed ⇒ not runnable. Both halves matter: the router must say no,
+	// and cobra must agree it has nothing to offer, so delegation is right.
+	for _, v := range delegatedVerbs {
 		if IsControlVerb(v) {
-			t.Errorf("%q must NOT be a control verb (server mode)", v)
+			t.Errorf("%q must NOT be claimed — it belongs to the fabric CLI", v)
+		}
+		if err := runVerb(v); err == nil {
+			t.Errorf("%q is registered in cobra, so it must be in servedVerbs, not delegated", v)
+		}
+	}
+
+	// The tree itself is the source of truth: every command and alias in it is
+	// accounted for above, and nothing above is stale.
+	served := map[string]bool{}
+	for _, v := range servedVerbs {
+		served[v] = true
+	}
+	for _, c := range newRootCmd().Commands() {
+		for _, name := range append([]string{c.Name()}, c.Aliases...) {
+			if !served[name] {
+				t.Errorf("%q is registered but missing from servedVerbs", name)
+			}
+			delete(served, name)
+		}
+	}
+	for name := range served {
+		t.Errorf("%q is in servedVerbs but is not registered in the command tree", name)
+	}
+
+	// The completion request commands cobra registers during Execute are served
+	// here too — the scripts `hanzo completion <shell>` emits invoke them, so
+	// delegating them would break completion at the moment a user presses TAB.
+	for _, v := range []string{cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd} {
+		if !IsControlVerb(v) {
+			t.Errorf("%q must be served here: the completion scripts this binary emits call it", v)
+		}
+		if err := runVerb(v); err != nil {
+			t.Errorf("router claims %q but cobra cannot run it: %v", v, err)
 		}
 	}
 }

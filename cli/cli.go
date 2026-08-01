@@ -1,15 +1,15 @@
 // Package cli is the Hanzo cloud-control CLI — the client half of the `hanzo`
 // binary: one command tree over the Hanzo Cloud.
 //
-// `hanzo <subsystem>` SERVES a subsystem (server mode, cmd/hanzo dispatch);
-// `hanzo <verb>` MANAGES the Hanzo Cloud (client mode, this package):
+// Every verb registered in newRootCmd MANAGES the Hanzo Cloud from here; every
+// other verb cmd/hanzo hands to the Rust fabric CLI (IsControlVerb draws that
+// line off this tree). What runs here:
 //
 //	hanzo login | auth        identity against hanzo.id (IAM)
 //	hanzo apps  list|get      the platform apps board (declared/running/drift)
 //	hanzo deploy              drive a platform redeploy (rolling, zero-downtime)
 //	hanzo clusters …          provision/list/select dedicated DOKS clusters
 //	hanzo build               enqueue a platform-native build (runner fabric)
-//	hanzo k8s …               current deploy target helpers
 //	hanzo config …            ~/.hanzo/config preferences
 //
 // It is a THIN client over surfaces that already exist — Hanzo IAM
@@ -48,41 +48,26 @@ const (
 	defaultClientID = "hanzo-console"
 )
 
-// controlCommands maps every client-mode verb to its one-line help. cmd/hanzo
-// reads this both to ROUTE (a first token in here means client mode) and to
-// list the commands in `hanzo help`, so the verb set is defined exactly once.
-var controlCommands = map[string]string{
-	"login":    "authenticate against Hanzo IAM (hanzo.id) and store a token",
-	"logout":   "remove stored credentials",
-	"whoami":   "show the current identity from the stored token",
-	"auth":     "manage authentication + stored identities (login, logout, whoami, list, switch, token)",
-	"apps":     "list/get the platform apps board (declared/running/drift)",
-	"deploy":   "drive a platform redeploy (rolling restart, zero-downtime)",
-	"clusters": "provision/list/select dedicated DOKS clusters",
-	"build":    "enqueue a platform-native build (runner fabric)",
-	"k8s":      "deploy-target helpers (current target)",
-	"config":   "view/edit ~/.hanzo/config preferences",
-	"security": "scan files for hardcoded secrets (local guardrail; no server/auth)",
-	"link":     "bring this machine into the Hanzo cloud fleet as a node (fabric + compute worker)",
-	"unlink":   "take this machine out of the fleet (deregister + stop hanzod)",
-	"status":   "show the org's fleet — every node with each of its GPUs",
-	"engine":   "run a local hanzo-engine (OpenAI + Anthropic model server)",
-	"code":     "launch a coding agent (claude, codex, dev) on a Hanzo cloud model",
-	"runner":   "run this machine as a JIT CI runner for your org (GitHub Actions)",
-	"run":      "launch a workload on Hanzo compute (container or function)",
-	"agent":    "invoke a managed Hanzo agent to run a task (headless)",
-	"bot":      "launch a computer-using agent (booted desktop or terminal)",
-}
-
-// IsControlVerb reports whether sub is a client-mode command (and therefore
-// must be routed to this package, not the server dispatcher).
+// IsControlVerb reports whether sub names a command this binary serves, and so
+// must run here rather than being handed to the fabric CLI. It asks the command
+// tree itself — cobra's own name and alias resolution over newRootCmd — so the
+// router and the command set are one fact and cannot drift apart.
+//
+// A hand-kept verb list was the previous answer, and it drifted both ways: it
+// still claimed `code` and `k8s` after those commands were deleted, so cobra
+// answered `unknown command` for verbs the fabric CLI implements, and it never
+// listed `completion`, so a command registered right here was handed away.
 func IsControlVerb(sub string) bool {
-	_, ok := controlCommands[sub]
-	return ok
+	// The shell-completion request commands are cobra's own, registered during
+	// Execute: the scripts `hanzo completion <shell>` emits invoke them, so this
+	// binary serves them exactly like every command in the tree.
+	if sub == cobra.ShellCompRequestCmd || sub == cobra.ShellCompNoDescRequestCmd {
+		return true
+	}
+	root := newRootCmd()
+	cmd, _, _ := root.Find([]string{sub})
+	return cmd != root
 }
-
-// ControlCommands returns the verb→description map for `hanzo help`.
-func ControlCommands() map[string]string { return controlCommands }
 
 // Execute runs the control CLI with args (already stripped of "hanzo"). It is
 // the single entrypoint cmd/hanzo calls for client-mode verbs.
@@ -596,6 +581,13 @@ func newRootCmd() *cobra.Command {
 		newAgentCmd(envOf, &f),
 		newBotCmd(envOf, &f),
 	)
+
+	// help and completion are part of this tree. Execute adds them anyway, at
+	// which point it is too late for the router to see them; adding them here
+	// means IsControlVerb answers over exactly the set a user can run. Both are
+	// idempotent, so Execute's own call is a no-op.
+	root.InitDefaultHelpCmd()
+	root.InitDefaultCompletionCmd()
 	return root
 }
 
