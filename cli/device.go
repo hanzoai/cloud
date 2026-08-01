@@ -33,13 +33,6 @@ type deviceAuthResp struct {
 
 const deviceGrantType = "urn:ietf:params:oauth:grant-type:device_code"
 
-// defaultDeviceClientID is the first-party client the device grant runs as.
-// hanzo-app is the one Hanzo client IAM seeds with device_code enabled
-// (iam cmd/iam/cli/init_apps.go brandGrantTypes); hanzo-console stays the
-// password-grant client. hanzo-dev's live device flow uses the same pair of
-// endpoints and this client, so the two CLIs share one server-side config.
-const defaultDeviceClientID = "hanzo-app"
-
 // rawForm posts a form to an oauth endpoint and returns the decoded token
 // response WITHOUT mapping OAuth errors to Go errors — the device poll must
 // inspect authorization_pending / slow_down itself.
@@ -137,13 +130,12 @@ func (c *iamClient) pollDeviceToken(ctx context.Context, da *deviceAuthResp) (*t
 // runDeviceLogin drives the interactive device sign-in and returns credentials.
 func runDeviceLogin(cmd *cobra.Command, env *Env, scope string) (*Credentials, error) {
 	out := cmd.OutOrStdout()
-	// An explicit --client-id/HANZO_CLIENT_ID override wins; otherwise the
-	// device grant runs as hanzo-app (see defaultDeviceClientID).
-	clientID := env.ClientID
-	if clientID == "" || clientID == defaultClientID {
-		clientID = defaultDeviceClientID
-	}
-	iam := newIAMClient(env.IAMIssuer, clientID)
+	// The device grant runs as the SAME client as every other flow (defaultClientID,
+	// overridable by --client-id/HANZO_CLIENT_ID/config). No per-flow client id:
+	// a device-minted refresh token has to be redeemable by the refresh path,
+	// and the token endpoint rejects a device_code presented under a client it
+	// was not issued to.
+	iam := newIAMClient(env.IAMIssuer, env.ClientID)
 	da, err := iam.deviceAuth(cmd.Context(), scope)
 	if err != nil {
 		return nil, err

@@ -42,10 +42,17 @@ const (
 	defaultIAMIssuer   = "https://hanzo.id"
 	defaultPlatformURL = "https://platform.hanzo.ai"
 	defaultCloudURL    = "https://api.hanzo.ai"
-	// hanzo-console is the only live IAM client that accepts the password
-	// grant today; a dedicated `hanzo-cli` client is a one-line IAM seed
-	// follow-up. Override with `--client-id` / HANZO_CLIENT_ID / config.
-	defaultClientID = "hanzo-console"
+	// hanzo-cli is this binary's own IAM client (<org>-<app>, HIP-0111), and the
+	// ONE client id every flow here runs as — device, code exchange, refresh.
+	// It is PUBLIC: a CLI ships to users' machines, so it holds no secret and
+	// proves itself with PKCE (code flow) or a human's approval (device flow).
+	//
+	// It must stay one id across flows. Borrowing a different client per flow is
+	// what broke sign-in: the device grant ran as a client registered with a
+	// secret this binary could never present, so IAM answered `invalid_client`,
+	// and a refresh token minted under one id was later presented under another.
+	// Override with `--client-id` / HANZO_CLIENT_ID / config.
+	defaultClientID = "hanzo-cli"
 )
 
 // IsControlVerb reports whether sub names a command this binary serves, and so
