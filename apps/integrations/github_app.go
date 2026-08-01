@@ -553,7 +553,13 @@ func spawnImport(org string, items []githubImportItem) {
 						log.Warn("github import panic", "org", org, "repo", it.Name, "recover", r)
 					}
 				}()
-				rctx, rcancel := context.WithTimeout(ctx, importRepoTimeout)
+				// The import runs DETACHED, so there is no request to forward and the
+				// plane call would arrive anonymous — the callee reads the tenant
+				// from the caller identity and refuses one it cannot see. cloud.For
+				// states the org this job acts for; an inbound request always wins
+				// over a stated one, so a job can supply an identity where there is
+				// none and can never launder one.
+				rctx, rcancel := context.WithTimeout(cloud.For(ctx, org), importRepoTimeout)
 				defer rcancel()
 				tok, err := InstallationToken(rctx, org, it.Owner)
 				if err != nil {
