@@ -310,7 +310,7 @@ func (o ops) orgStore(ctx context.Context) (*store, string, error) {
 	if !ok {
 		return nil, "", zip.ErrForbidden("X-Org-Id required")
 	}
-	st, err := o.s.State.stores.For(org, "")
+	st, err := storeFor(o.s.State.stores, org)
 	if err != nil {
 		o.s.Log.Error("research store open failed", "org", org, "err", err)
 		return nil, "", zip.Errorf(http.StatusInternalServerError, "research store unavailable")
@@ -337,7 +337,7 @@ func project(ctx context.Context) string {
 // trivially, so the call is a harmless no-op there. Returns nil to proceed, or a
 // written error response to return.
 func (o ops) shipDurable(org string) error {
-	acked, err := o.s.State.stores.Sync(org, "")
+	acked, err := shipFor(o.s.State.stores, org)
 	if err != nil {
 		o.s.Log.Warn("research durable ship failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusServiceUnavailable, "research store failover in progress; retry")
@@ -710,7 +710,7 @@ func getArtifactBlob(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return errJSON(c, http.StatusForbidden, "X-Org-Id required")
 	}
-	st, err := s.State.stores.For(org, "")
+	st, err := storeFor(s.State.stores, org)
 	if err != nil {
 		s.Log.Error("research store open failed", "org", org, "err", err)
 		return errJSON(c, http.StatusInternalServerError, "research store unavailable")

@@ -107,13 +107,28 @@ type state struct {
 // mounted is the active service so Shutdown can release the stores.
 var mounted *cloud.Service[state]
 
-// storeFor resolves the caller's project-scoped tracker store, opening the
-// per-(org,project) file ({DataDir}/orgs/{orgSlug}/projects/{projectSlug}/
-// tracker.db) once via the shared cache. tracker is project-scoped: the IAM
-// project (principal.Project, "default" when none is selected) is the physical
-// tenant boundary — the tracker's own KEY-based projects are rows WITHIN it.
-func storeFor(s *cloud.Service[state], c *zip.Ctx, org string) (*Store, error) {
-	return s.State.stores.For(org, principal.Project(c))
+// storeFor is the ONE way this package reaches a tracker store. It names the
+// database through cloud.OrgNamespace — the single door a validated org walks
+// through — and asks the registry for that name, so "which file does this
+// request touch" has one answer derived from one input.
+//
+// tracker is project-scoped: the IAM project (principal.Project, "default" when
+// none is selected) is the physical tenant boundary — the tracker's own
+// KEY-based projects are rows WITHIN it. org and project MUST already be
+// validated: principal.Org/principal.Project for a request, or the caller's own
+// server-side resolution for an in-process seam.
+func storeFor(s *cloud.Service[state], org, project string) (*Store, error) {
+	ns, err := cloud.OrgNamespace(org, project)
+	if err != nil {
+		return nil, err
+	}
+	return s.State.stores.For(ns)
+}
+
+// requestStore is storeFor for a request: the project is the one the gateway
+// validated, never a value the handler names itself.
+func requestStore(s *cloud.Service[state], c *zip.Ctx, org string) (*Store, error) {
+	return storeFor(s, org, principal.Project(c))
 }
 
 // Mount wires the tracker surface onto app per HIP-0106. Complex flavour: it
@@ -299,7 +314,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := storeFor(s, c, org)
+	store, err := requestStore(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -379,7 +394,7 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := storeFor(s, c, org)
+	store, err := requestStore(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}

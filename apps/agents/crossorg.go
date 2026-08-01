@@ -3,6 +3,8 @@ package agents
 import (
 	"context"
 	"sort"
+
+	"github.com/hanzoai/namespace"
 )
 
 // crossorg.go holds the only two reads in this package that legitimately span
@@ -36,7 +38,7 @@ import (
 func (st *state) allLongRunning(ctx context.Context) ([]Agent, []error) {
 	var out []Agent
 	var errs []error
-	ferr := st.eachStore(func(_ string, sto *Store, err error) {
+	ferr := st.eachStore(func(_ namespace.Namespace, sto *Store, err error) {
 		if err != nil {
 			errs = append(errs, err)
 			return
@@ -85,7 +87,7 @@ func (st *state) allPublishedBuilds(ctx context.Context, limit int) ([]published
 		limit = 100
 	}
 	var out []publishedBuild
-	err := st.eachStore(func(_ string, sto *Store, err error) {
+	err := st.eachStore(func(_ namespace.Namespace, sto *Store, err error) {
 		if err != nil {
 			return // an org whose file will not open publishes nothing
 		}

@@ -34,7 +34,7 @@ func newTestDispatcher(t *testing.T) *dispatcher {
 // seedEndpoint inserts an endpoint directly into org's store (bypassing the HTTP layer).
 func seedEndpoint(t *testing.T, d *dispatcher, org string, e Endpoint) {
 	t.Helper()
-	st, err := d.stores.For(org, "")
+	st, err := d.stores.For(cloud.MustOrgNamespace(org, ""))
 	if err != nil {
 		t.Fatalf("open store for %s: %v", org, err)
 	}
@@ -282,7 +282,7 @@ func TestBusEndToEnd(t *testing.T) {
 	defer func() { _ = stores.CloseAll() }()
 	d := newDispatcher(stores, luxlog.New("test"))
 	// Seed an active subscriber for org "acme".
-	st, err := stores.For("acme", "")
+	st, err := stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +357,7 @@ func TestDeliverRecordsPerAttempt(t *testing.T) {
 	job := deliveryJob{org: "acme", endpointID: "wh_log", url: srv.URL, secret: "sk", subject: "commerce.order.created", delivery: deliv, body: []byte("{}")}
 	d.deliver(context.Background(), job)
 
-	st, err := d.stores.For("acme", "")
+	st, err := d.stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestDeliverRecordsPerAttempt(t *testing.T) {
 // maxDeliveryRowsPerEndpoint, keeping the newest rows and pruning the oldest on insert.
 func TestDeliveryRetentionPrune(t *testing.T) {
 	d := newTestDispatcher(t)
-	st, err := d.stores.For("acme", "")
+	st, err := d.stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

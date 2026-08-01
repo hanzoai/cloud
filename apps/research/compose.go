@@ -21,6 +21,32 @@ import (
 // writes — one evidence store, not a second.
 var mountedStores *cloud.OrgStore[*store]
 
+// storeFor is the ONE way this package reaches a store: it names the database
+// through cloud.OrgNamespace — the single door a validated org walks through —
+// and asks the registry for that name. Nothing else here resolves a store, so
+// "which file does this request touch" has one answer from one input.
+//
+// org MUST already be validated: principal.Org for a request, or the caller's
+// own server-side resolution for an in-process seam.
+func storeFor(stores *cloud.OrgStore[*store], org string) (*store, error) {
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return stores.For(ns)
+}
+
+// shipFor is the ship-before-ack step: it names the same database the write went
+// to and ships THAT one, so a write and its ship can never address different
+// files.
+func shipFor(stores *cloud.OrgStore[*store], org string) (acked bool, err error) {
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return false, err
+	}
+	return stores.Sync(ns)
+}
+
 // Record writes experiment evidence rows for (org, project) idempotently into the
 // org's durable research plane (latest-run-canonical, exactly as POST
 // /v1/research/experiments) AND ships them fenced before returning. It is the
@@ -42,14 +68,14 @@ func Record(ctx context.Context, org, project string, exps []Experiment) error {
 	if len(exps) == 0 {
 		return nil
 	}
-	st, err := mountedStores.For(org, "")
+	st, err := storeFor(mountedStores, org)
 	if err != nil {
 		return err
 	}
 	if _, _, err = st.ingest(ctx, project, exps, nil); err != nil {
 		return err
 	}
-	acked, err := mountedStores.Sync(org, "")
+	acked, err := shipFor(mountedStores, org)
 	if err != nil {
 		return err
 	}
@@ -67,7 +93,7 @@ func List(ctx context.Context, org, project, kind string) ([]Experiment, error) 
 	if mountedStores == nil {
 		return nil, fmt.Errorf("research: not mounted")
 	}
-	st, err := mountedStores.For(org, "")
+	st, err := storeFor(mountedStores, org)
 	if err != nil {
 		return nil, err
 	}

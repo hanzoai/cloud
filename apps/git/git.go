@@ -87,7 +87,11 @@ type state struct {
 // is org-scoped (not project-scoped) so /v1/git/usage stays a single org-wide
 // rollup across every project sub-scope.
 func storeFor(s *cloud.Service[state], org string) (*Store, error) {
-	return s.State.stores.For(org, "")
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return s.State.stores.For(ns)
 }
 
 // mounted is the active service so Shutdown can release the store. It is read by
