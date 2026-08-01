@@ -3128,13 +3128,36 @@ The org an inbound webhook belongs to comes from the App INSTALLATION id via the
 acked `200 {"ignored":"unknown installation"}` and silently does nothing — a 200 on
 that path is not evidence it worked; check for sync/build activity.
 
-## The `hanzo` CLI is Rust and GENERATED — one contract, one IAM login
+## The `hanzo` name is TWO binaries — the Rust CLI, and cmd/hanzo's control half
 
-The `hanzo` CLI is the RUST binary at `~/work/hanzo/cli`. It is the only one. This
-module has shipped no CLI since `cmd/hanzo` was deleted (22f4fc64) — it serves `/v1`
-and ships plugins. Its control-plane verbs speak the routes THIS process serves,
-authorized off a plain `hanzo auth login` (the IAM access token is the final bearer
-fallback — no `--platform-token`).
+The `hanzo` fabric CLI is the RUST binary at `~/work/hanzo/cli`. Its control-plane
+verbs speak the routes THIS process serves, authorized off a plain `hanzo auth login`
+(the IAM access token is the final bearer fallback — no `--platform-token`).
+
+This module also builds `cmd/hanzo` (restored in 59c6dbd5 after the 22f4fc64
+deletion): a CLIENT-ONLY control binary that links `cli` and nothing else. It runs
+the verbs `cli.newRootCmd` registers and hands EVERY other verb to the Rust CLI,
+resolved as `hanzo-node` (or `HANZO_FABRIC_CLI`), so the one `hanzo` name is a
+superset of both. It cannot mount a subsystem — serving is `cmd/cloud`'s job.
+
+`cli.IsControlVerb` draws that line, and it must keep drawing it off the cobra tree
+(`newRootCmd().Find`, cobra's own name+alias resolution). It used to be a
+hand-maintained map of verbs — a SECOND source of truth for a fact the tree already
+holds — and it drifted both ways and broke users. `code` and `k8s` stayed on the map
+after their commands were deleted, so `hanzo code`, which the Rust CLI implements,
+died with `unknown command "code" for "hanzo"` and never delegated. `completion`,
+`help`, `version` and the `clusters` alias `cluster` were registered but missing from
+the map, so cobra's own commands were handed to a binary that has never heard of
+them. Do not reintroduce a list: adding a command to `newRootCmd` IS the whole
+registration, and `TestRouterMatchesCommandTree` fails the moment the two disagree.
+
+Four names come from cobra rather than from our `AddCommand`. `help` and `completion`
+are added in `newRootCmd` (`InitDefaultHelpCmd` / `InitDefaultCompletionCmd`, both
+idempotent) because otherwise Execute adds them too late for the router to see them.
+`__complete` / `__completeNoDesc` are registered inside ExecuteC with no public hook,
+so IsControlVerb claims them by cobra's own exported constants — they are what the
+emitted completion scripts invoke, so delegating them kills TAB completion even when
+`hanzo completion bash` prints a perfect script.
 
 The CLI does not import this module and never will: its cloud surface is GENERATED
 from a spec. `genspec` joins the authored master (`hanzoai/openapi` `hanzo.yaml`)
