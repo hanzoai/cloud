@@ -500,10 +500,11 @@ require (
 	github.com/luxfi/cache v1.3.1 // indirect
 	github.com/luxfi/consensus v1.36.11
 	github.com/luxfi/container v0.2.1 // indirect
+	github.com/luxfi/aml v0.3.5
 	github.com/luxfi/corona v0.10.4 // indirect
 	github.com/luxfi/crypto v1.20.2
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
-	github.com/luxfi/fhe v1.8.2 // indirect
+	github.com/luxfi/fhe v1.8.8 // indirect
 	github.com/luxfi/geth v1.20.1
 	github.com/luxfi/ids v1.3.2
 	github.com/luxfi/kms v1.12.9
