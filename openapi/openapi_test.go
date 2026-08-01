@@ -339,3 +339,35 @@ func TestFoldRefusesATypedOpWithNoLiveRoute(t *testing.T) {
 		t.Fatal("Fold accepted an operation the router does not serve")
 	}
 }
+
+// A legacy ADDRESS is a fact only the serving code knows: `/v1/iam/get-users`
+// and `/v1/iam/users` are two live routes with no relation the route table can
+// see. So the serving code declares it with the `compat` tag, and the fold has to
+// carry that declaration out — hanzoai/openapi's merge reads it to keep the old
+// spelling out of the published document, and without it the customer surface
+// carries two of everything: two SDK methods, two docs entries, two CLI commands.
+//
+// The product tag stays FIRST, because that is the axis a generator files an
+// operation under. `compat` rides second.
+func TestFoldCarriesTheCompatDeclarationOutOfTheRegistry(t *testing.T) {
+	app := newApp()
+	zip.Get(app, "/v1/kms/keys", func(ctx context.Context, in *secretIn) (*secretOut, error) {
+		return &secretOut{}, nil
+	}, zip.WithOperationID("kmsListKeys"), zip.WithSummary("List keys"))
+	zip.Get(app, "/v1/kms/get-keys", func(ctx context.Context, in *secretIn) (*secretOut, error) {
+		return &secretOut{}, nil
+	}, zip.WithOperationID("kmsGetKeys"), zip.WithSummary("List keys (legacy verb)"), zip.WithTags(Compat))
+
+	doc, err := Spec(app, Info{Title: "Hanzo Cloud", Version: "v1"})
+	if err != nil {
+		t.Fatalf("Spec: %v", err)
+	}
+	canonical := doc.Paths["/v1/kms/keys"]["get"]
+	if len(canonical.Tags) != 1 || canonical.Tags[0] != "kms" {
+		t.Errorf("canonical tags = %v, want the product tag alone [kms]", canonical.Tags)
+	}
+	legacy := doc.Paths["/v1/kms/get-keys"]["get"]
+	if len(legacy.Tags) != 2 || legacy.Tags[0] != "kms" || legacy.Tags[1] != Compat {
+		t.Errorf("legacy tags = %v, want [kms compat] — product first, the declaration second", legacy.Tags)
+	}
+}
