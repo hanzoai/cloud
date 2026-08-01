@@ -29,6 +29,7 @@
 package finance
 
 import (
+	"github.com/hanzoai/cloud/cek"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -146,7 +147,8 @@ func (f *ledgerFinance) storeFor(org string, test bool) (*sqlstore.Store, error)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("finance: create org dir %q: %w", dir, err)
 	}
-	s, err := sqlstore.Open(path)
+	// This ledger belongs to ONE org, and its key says so (cek-rewrap bound it).
+	s, err := sqlstore.Open(cek.Org(org), path)
 	if err != nil {
 		return nil, fmt.Errorf("finance: open %q: %w", path, err)
 	}
