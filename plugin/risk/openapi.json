@@ -19,6 +19,48 @@
     }
   ],
   "paths": {
+    "/v1/ml/drift": {
+      "get": {
+        "operationId": "mlDrift",
+        "summary": "Measure whether the deciding model still fits the world it was estimated on",
+        "description": "Drift measures whether the deciding model still fits the world it was\nestimated on: the distribution of every feature it reads, the distribution of\nthe scores it produces, the alert share against the appetite it states, and\nthe judgement rate against the one it measured.\n\nEvery reference is the version's OWN, stored when it was estimated. A report\nthat recomputed its baseline from recent data would be comparing the present\nto the present, which is a number that is always small and always reassuring.",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "fit",
+            "in": "query",
+            "required": false,
+            "description": "Fit is the version to measure. Absent takes the champion, which is the one\nwhose drift actually costs anything.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds how many recent observations the live profile is built from,\n1..5000. Default 1000.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlDriftOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/ml/features": {
       "get": {
         "operationId": "mlFeatures",
@@ -41,6 +83,229 @@
         }
       }
     },
+    "/v1/ml/fits": {
+      "get": {
+        "operationId": "mlFits",
+        "summary": "List this tenant's model versions",
+        "description": "Fits lists this tenant's model versions, newest first, and names which one is\ndeciding, which is on trial and which is being estimated.",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page, 1..200, default 50.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlFitPage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "mlFit",
+        "summary": "Estimate a new version of this tenant's model",
+        "description": "Fit estimates a new version of this tenant's model from its own recorded\nbehaviour, and answers 202 with the queued record.\n\nIt never runs in the request. The estimation replays up to five thousand rows\nthrough a fresh forest — seconds to minutes on a pod that is also serving\nauthorisations — so it is queued behind four bounds: one in flight per tenant,\ntwo across the whole deployment, a ten-minute ceiling, and the row cap. The\nfifth is the caller's own ledger, debited here, before any of it is queued.",
+        "tags": [
+          "ml"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "horizon": 120,
+                "note": "quarterly refresh",
+                "window": 365
+              },
+              "schema": {
+                "$ref": "#/components/schemas/mlFitIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlFitRecord"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        }
+      }
+    },
+    "/v1/ml/fits/{id}": {
+      "get": {
+        "operationId": "mlFitDetail",
+        "summary": "Read one model version with its lineage and role history",
+        "description": "Reads one version with its lineage, its whole role history, any open\ndrift recorded against it, and whether its learned state can be served right\nnow. Answers 404 for an identifier this tenant does not own — never 403, which\nwould distinguish \"exists and is not yours\" from \"does not exist\" and let a\nneighbour enumerate.",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the record to read, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlFitDetailOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/ml/fits/{id}/cancel": {
+      "post": {
+        "operationId": "mlCancelFit",
+        "summary": "Cancel an estimation that is queued or running",
+        "description": "Stops an estimation that is queued or running. The record stays and\nsays it was cancelled: a queue entry that vanishes leaves nobody able to tell\na cancelled fit from one that was never asked for.",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the record to read, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlFitRecord"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/ml/fits/{id}/role": {
+      "put": {
+        "operationId": "mlSetFitRole",
+        "summary": "Promote a version, put it on trial, roll back to it, or retire it",
+        "description": "Moves a version between candidate, challenger, champion and\nretired. It is the ONE operation that changes which model decides.\n\nPromotion to champion has a precondition and it is the point of the whole\nplane: the version must already be the challenger, or must have decided real\ntraffic before, or there must be no incumbent. So a new model reaches the\ndecision path only after it has scored the live stream alongside the one it\nreplaces — and a ROLLBACK, which is promoting a version that has served,\npasses immediately and always. The failure this prevents is the one worth\npreventing: the emergency where a rollback is refused by the same gate that\nshould have stopped the promotion.\n\nThe displaced champion keeps its learned state, which is why rolling back is\ninstant rather than a re-warm.",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the version, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "reason": "beat the incumbent over 14 days",
+                "role": "champion"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/mlFitRoleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlFitRecord"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/ml/fits/{id}/tally": {
+      "get": {
+        "operationId": "mlFitTally",
+        "summary": "Read how a challenger answered the same stream as the champion",
+        "description": "Reads how a challenger answered the same stream as the champion:\nsame decisions, same rings, same feature vector, two verdicts.",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the version, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds how many recent comparisons are counted, 1..5000.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlTallyOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/ml/restore": {
       "post": {
         "operationId": "mlRestore",
@@ -55,6 +320,63 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/mlModelState"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/ml/schedule": {
+      "get": {
+        "operationId": "mlSchedule",
+        "summary": "Read when this tenant's model is re-estimated",
+        "description": "Schedule reads when this tenant's model is re-estimated, and what the\nautomatic trigger is currently waiting for.",
+        "tags": [
+          "ml"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlScheduleOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "put": {
+        "operationId": "mlSetSchedule",
+        "summary": "Set when this tenant's model is re-estimated",
+        "description": "Sets when this tenant's model is re-estimated.\n\nA schedule may enrol its versions as candidates or as challengers and NEVER as\nchampions: the trigger decides that a new estimation is owed, and a person\ndecides which model gets to answer a customer.",
+        "tags": [
+          "ml"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "every": 168,
+                "labels": 50,
+                "role": "challenger"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/mlScheduleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlScheduleOut"
                 }
               }
             },
@@ -131,7 +453,7 @@
       "get": {
         "operationId": "mlSearchResult",
         "summary": "Read an exhaustive search's report",
-        "description": "SearchResult reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
+        "description": "Reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
         "tags": [
           "ml"
         ],
@@ -208,7 +530,7 @@
       "put": {
         "operationId": "mlSetAppetite",
         "summary": "Set the share of the stream the model may examine",
-        "description": "SetAppetite sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
+        "description": "Sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
         "tags": [
           "ml"
         ],
@@ -345,7 +667,7 @@
       "post": {
         "operationId": "riskSetControl",
         "summary": "Declare a reserve, a payout hold or a block on a subject",
-        "description": "SetControl declares a reserve, a payout hold or a block on a subject.",
+        "description": "Declares a reserve, a payout hold or a block on a subject.",
         "tags": [
           "risk"
         ],
@@ -377,7 +699,7 @@
       "delete": {
         "operationId": "riskReleaseControl",
         "summary": "Release a control",
-        "description": "ReleaseControl lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
+        "description": "Lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
         "tags": [
           "risk"
         ],
@@ -504,7 +826,7 @@
       "get": {
         "operationId": "riskDecisionDetail",
         "summary": "Read one decision with its evidence",
-        "description": "DecisionDetail reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
+        "description": "Reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
         "tags": [
           "risk"
         ],
@@ -632,7 +954,7 @@
       "post": {
         "operationId": "riskCreateList",
         "summary": "Create an allow or deny list",
-        "description": "CreateList creates an allow or deny list a rule can name in an inlist term.",
+        "description": "Creates an allow or deny list a rule can name in an inlist term.",
         "tags": [
           "risk"
         ],
@@ -664,7 +986,7 @@
       "post": {
         "operationId": "riskAddListEntries",
         "summary": "Add values to a list",
-        "description": "AddListEntries adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
+        "description": "Adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
         "tags": [
           "risk"
         ],
@@ -707,7 +1029,7 @@
       "delete": {
         "operationId": "riskRemoveListEntry",
         "summary": "Remove one value from a list",
-        "description": "RemoveListEntry removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
+        "description": "Removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
         "tags": [
           "risk"
         ],
@@ -762,7 +1084,7 @@
       "put": {
         "operationId": "riskSetMode",
         "summary": "Take this tenant live, or return it to shadow",
-        "description": "SetMode takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
+        "description": "Takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
         "tags": [
           "risk"
         ],
@@ -814,7 +1136,7 @@
       "post": {
         "operationId": "riskCreateRule",
         "summary": "Create a rule",
-        "description": "CreateRule admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
+        "description": "Admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
         "tags": [
           "risk"
         ],
@@ -846,7 +1168,7 @@
       "delete": {
         "operationId": "riskDeleteRule",
         "summary": "Retire a rule",
-        "description": "DeleteRule retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
+        "description": "Retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
         "tags": [
           "risk"
         ],
@@ -870,7 +1192,7 @@
       "patch": {
         "operationId": "riskUpdateRule",
         "summary": "Replace a rule",
-        "description": "UpdateRule replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
+        "description": "Replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
         "tags": [
           "risk"
         ],
@@ -945,7 +1267,7 @@
       "get": {
         "operationId": "riskSubjectState",
         "summary": "Read one subject's current risk state",
-        "description": "SubjectState reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
+        "description": "Reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
         "tags": [
           "risk"
         ],
@@ -1119,6 +1441,118 @@
         },
         "type": "object"
       },
+      "mlDimDrift": {
+        "properties": {
+          "dim": {
+            "description": "Dim is the feature.",
+            "type": "string"
+          },
+          "index": {
+            "description": "Index is the population-stability index against this version's own\nreference distribution. Below 0.1 is stable, 0.1 to 0.25 has moved, above\n0.25 is a different world.",
+            "type": "number"
+          },
+          "moved": {
+            "description": "Moved marks an index past 0.1 — reported without alarming, because a\nfeature moving is ordinary and only a shifted one is a finding.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "mlDriftAlarm": {
+        "properties": {
+          "at": {
+            "description": "At is when it was first recorded.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Rows is how many observations the finding rests on.",
+            "type": "integer"
+          },
+          "says": {
+            "description": "Says is what degraded.",
+            "type": "string"
+          },
+          "scored": {
+            "description": "Scored is how many of them the model was warm enough to score — the number\nthat decides whether the finding is a measurement or noise.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "mlDriftOut": {
+        "properties": {
+          "dims": {
+            "description": "Dims is the population-stability index per feature, worst first. This is\nthe INPUT side: has the distribution of what the model reads moved away\nfrom the one it was estimated on.",
+            "items": {
+              "$ref": "#/components/schemas/mlDimDrift"
+            },
+            "type": "array"
+          },
+          "drifted": {
+            "description": "Drifted is whether any measure left its band.",
+            "type": "boolean"
+          },
+          "fit": {
+            "description": "Fit is the version measured.",
+            "type": "string"
+          },
+          "from": {
+            "description": "From is the first instant in the window measured, RFC 3339.",
+            "type": "string"
+          },
+          "open": {
+            "description": "Open is every degradation already recorded against this version, so the\nreading says when it started and not only that it is true now.",
+            "items": {
+              "$ref": "#/components/schemas/mlDriftAlarm"
+            },
+            "type": "array"
+          },
+          "rate": {
+            "description": "Rate is the productive share of the judged rows in the window. Absent when\nnothing in range is judged, which is itself the finding.",
+            "type": "number"
+          },
+          "realised": {
+            "description": "Realised is the alert share the live model actually reached over the\nwindow. Far under the stated appetite is a control alerting on nothing,\nand that reads exactly like a quiet week. Absent when too little of the\nstream has been scored for the share to mean anything.",
+            "type": "number"
+          },
+          "refusal": {
+            "description": "Refusal says why nothing was measured, when nothing was.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Rows is how many recent observations the live profile was built from.",
+            "type": "integer"
+          },
+          "says": {
+            "description": "Says names which measures left their band, in words an operator can act\non. Empty when nothing did.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "score": {
+            "description": "Score is the same index over the score distribution — the OUTPUT side.\nAbsent when the version recorded no reference distribution.",
+            "type": "number"
+          },
+          "scored": {
+            "description": "Scored is how many of those rows the model was warm enough to score. A\nreading over too little scored traffic refuses rather than reporting a\nsmall index, because a small index over forty rows is not evidence of\nstability — it is the absence of a measurement wearing one's clothes.",
+            "type": "integer"
+          },
+          "stated": {
+            "description": "Stated is the alert share this version's shape declared. It is the one\nnumber in the whole reading somebody committed to, which is why the alarm\nhangs off the gap between it and Realised rather than off feature drift.",
+            "type": "number"
+          },
+          "to": {
+            "description": "To is the last instant in the window measured, RFC 3339.",
+            "type": "string"
+          },
+          "was": {
+            "description": "Was is the productive share this version measured when it was estimated —\nwhat Rate is compared against. Absent when the version judged nothing.",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
       "mlFeature": {
         "properties": {
           "citation": {
@@ -1168,6 +1602,306 @@
               "$ref": "#/components/schemas/mlFeature"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "mlFitDetailOut": {
+        "properties": {
+          "drift": {
+            "description": "Drift is every open degradation recorded against this version.",
+            "items": {
+              "$ref": "#/components/schemas/mlDriftAlarm"
+            },
+            "type": "array"
+          },
+          "fit": {
+            "$ref": "#/components/schemas/mlFitRecord",
+            "description": "Fit is the record."
+          },
+          "moves": {
+            "description": "Moves is every role transition, oldest first. Appended and never amended:\na model that changed and cannot say who changed it is a control nobody owns.",
+            "items": {
+              "$ref": "#/components/schemas/mlFitMove"
+            },
+            "type": "array"
+          },
+          "refusal": {
+            "description": "Refusal says why it is not servable, when it is not.",
+            "type": "string"
+          },
+          "servable": {
+            "description": "Servable reports whether this version's learned state is present and\nrestorable RIGHT NOW. A version that cannot be served cannot be promoted,\nand knowing that before the promotion is the point.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "mlFitIn": {
+        "properties": {
+          "algo": {
+            "description": "Algo is the estimator. \"forest\" is the streaming half-space forest the\ndecision path runs, and today it is the only one this plane can estimate;\nanything else is refused by name rather than silently substituted.",
+            "type": "string"
+          },
+          "horizon": {
+            "description": "Horizon is how many days a row must have aged before it may be admitted.\nIt is what keeps a judgement that did not exist at scoring time out of the\nset: a dispute lands 30 to 120 days after the payment it judges, so 120 is\nthe default and a shorter one is a deliberate statement about a faster lane.",
+            "type": "integer"
+          },
+          "note": {
+            "description": "Note is why this estimation was asked for. It is kept on the record\nbecause \"who asked for this model and why\" is the first question anyone\nreviewing a decline asks.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Rows caps how many recorded observations are replayed, 1..5000.",
+            "type": "integer"
+          },
+          "shape": {
+            "$ref": "#/components/schemas/mlCandidate",
+            "description": "Shape is the detector's geometry. Absent takes the shape currently\nrunning, which is what makes \"re-estimate what I already have on fresher\ndata\" the default rather than a thing to spell out."
+          },
+          "window": {
+            "description": "Window is how many days of this tenant's own history to read. Default 365.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "mlFitMetrics": {
+        "properties": {
+          "alerted": {
+            "description": "Alerted is how many scored rows crossed the threshold.",
+            "type": "integer"
+          },
+          "auc": {
+            "description": "AUC is the probability the model ranks a productive row above an\nunproductive one. Absent unless both classes are present.",
+            "type": "number"
+          },
+          "judged": {
+            "description": "Judged is how many scored rows carry a matured judgement.",
+            "type": "integer"
+          },
+          "lift": {
+            "description": "Lift is precision in the alerted slice divided by prevalence: how many\ntimes better than chance the rows an analyst actually looks at are.",
+            "type": "number"
+          },
+          "prevalence": {
+            "description": "Prevalence is the productive share of the judged rows. An AUC without it is\nuninterpretable on a one-in-ten-thousand problem.",
+            "type": "number"
+          },
+          "realised": {
+            "description": "Realised is Alerted over Scored against the appetite the shape states.",
+            "type": "number"
+          },
+          "rows": {
+            "description": "Rows is how many held-out rows were replayed.",
+            "type": "integer"
+          },
+          "scored": {
+            "description": "Scored is how many of them the model was warm enough to score. Everything\nbelow is measured over these rows and no others.",
+            "type": "integer"
+          },
+          "separation": {
+            "description": "Separation is the mean score of the alerted set minus the mean of the rest\n— the same objective the exhaustive search ranks its candidates on, so a\nversion and a search trial are comparable rather than merely adjacent.",
+            "type": "number"
+          },
+          "warm": {
+            "description": "Warm is how many passed before the model would score at all. A shape that\nwarms slowly costs real coverage, and the cost is reported rather than\namortised away.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "mlFitMove": {
+        "properties": {
+          "at": {
+            "description": "At is when it happened, RFC 3339.",
+            "type": "string"
+          },
+          "by": {
+            "description": "By is who decided, taken from the identity the edge validated and never\nfrom the request body. A control that changed hands and cannot name who\nmoved it is a control nobody owns.",
+            "type": "string"
+          },
+          "now": {
+            "description": "Now is the role held after it.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is why. It is required on a promotion because a control changing\nhands with no stated reason is a change nobody can review.",
+            "type": "string"
+          },
+          "stood": {
+            "description": "Stood is the version this one displaced, or the one that displaced it.",
+            "type": "string"
+          },
+          "was": {
+            "description": "Was is the role held before the transition.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "mlFitPage": {
+        "properties": {
+          "challenger": {
+            "description": "Challenger is the version on trial beside it, if there is one.",
+            "type": "string"
+          },
+          "champion": {
+            "description": "Champion is the identifier of the version deciding right now, empty when\nthe tenant runs the shipped default shape.",
+            "type": "string"
+          },
+          "estimating": {
+            "description": "Estimating is the version currently being fitted, if any. One per tenant:\na second request is refused rather than queued.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items are the versions.",
+            "items": {
+              "$ref": "#/components/schemas/mlFitRecord"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "mlFitRecord": {
+        "properties": {
+          "algo": {
+            "description": "Algo is the estimator that produced it.",
+            "type": "string"
+          },
+          "at": {
+            "description": "At is when it was asked for, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "by": {
+            "description": "By is who asked for it — the note the request carried, or the trigger's own\nname when the schedule asked. \"Who wanted this model\" is the first question\nanyone reviewing a decline asks.",
+            "type": "string"
+          },
+          "digest": {
+            "description": "Digest fingerprints the artefact: the estimator, the geometry, the rows and\ntheir split, and the feature inventory read. It does not move once the fit\nis ready, which is what \"immutable\" means here and what a test asserts.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID identifies the version.",
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/mlFitMetrics",
+            "description": "Metrics are measured on the held-out split."
+          },
+          "refusal": {
+            "description": "Refusal says why there is no artefact when there is none. It is stated\nrather than returned as a fit with an invented score — most often it is\nthat too little of the window had matured for a measurement to mean\nanything, which is a fact about the data and not a failure of the plane.",
+            "type": "string"
+          },
+          "retired": {
+            "description": "Retired is when it was last stood down.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Role is candidate, challenger, champion or retired. Exactly one champion\nand at most one challenger per tenant.",
+            "type": "string"
+          },
+          "served": {
+            "description": "Served is when it first decided real traffic, empty when it never has.",
+            "type": "string"
+          },
+          "shape": {
+            "$ref": "#/components/schemas/mlCandidate",
+            "description": "Shape is the geometry it was estimated at."
+          },
+          "source": {
+            "$ref": "#/components/schemas/mlFitSource",
+            "description": "Source is the window it was estimated over."
+          },
+          "status": {
+            "description": "Status is queued, fitting, ready, refused or cancelled.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "mlFitRoleIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the version, from the path.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is why. Required for champion and challenger.",
+            "type": "string"
+          },
+          "role": {
+            "description": "Role is candidate, challenger, champion or retired.\n\nReaching champion requires the version to have earned it: it must already\nbe the challenger, or it must be a version that has decided real traffic\nbefore (which is what makes a rollback instant), or there must be no\nincumbent to displace. An unproven model put straight into the decision\npath is the failure this whole plane exists to prevent.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "mlFitSource": {
+        "properties": {
+          "cut": {
+            "description": "Cut is where the split fell. It is a point in TIME, and every row of one\nsubject then goes wholly to one side: a random split puts the same account\non both sides and the model memorises the account instead of the behaviour.",
+            "type": "string"
+          },
+          "digest": {
+            "description": "Digest fingerprints the admitted rows and their split assignment.",
+            "type": "string"
+          },
+          "dims": {
+            "description": "Dims is the feature set, in the order the model reads it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "from": {
+            "description": "From is the start of the window read, RFC 3339.",
+            "type": "string"
+          },
+          "horizon": {
+            "description": "Horizon is how many days a row had aged before it was admitted.",
+            "type": "integer"
+          },
+          "inventory": {
+            "description": "Inventory is the engine's own shape digest. State estimated under one\ninventory cannot be restored into another, and this is the value that\ndecides it — so a fit whose inventory no longer matches the running one is\nvisibly unservable rather than silently wrong.",
+            "type": "string"
+          },
+          "judged": {
+            "description": "Judged is how many held-out rows carry a matured judgement. It is the\nnumber that decides whether any of the metrics below exist at all.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the surface read: this tenant's own recorded decisions.",
+            "type": "string"
+          },
+          "productive": {
+            "description": "Productive is how many judged rows were confirmed as the thing being\nlooked for. Reported beside Unproductive so imbalance is visible before\nanyone reads a metric.",
+            "type": "integer"
+          },
+          "rows": {
+            "description": "Rows is how many observations were admitted after the horizon.",
+            "type": "integer"
+          },
+          "test": {
+            "description": "Test is how many were held out for the measurement.",
+            "type": "integer"
+          },
+          "to": {
+            "description": "To is the end of the window read, half-open, RFC 3339.",
+            "type": "string"
+          },
+          "train": {
+            "description": "Train is how many of them the model learned from.",
+            "type": "integer"
+          },
+          "unproductive": {
+            "description": "Unproductive is how many judged rows were confirmed as ordinary.",
+            "type": "integer"
+          },
+          "version": {
+            "description": "Version is monotone per tenant per surface, so two versions can always be\nordered and neither can claim the other's number.",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1261,6 +1995,84 @@
           "subject": {
             "$ref": "#/components/schemas/riskSubject",
             "description": "Subject is whose behaviour this is."
+          }
+        },
+        "type": "object"
+      },
+      "mlScheduleIn": {
+        "properties": {
+          "every": {
+            "description": "Every is hours between re-estimations. Zero turns automatic estimation\noff, which is the default: a model that starts re-estimating itself\nbecause a default said so is a control nobody chose to run.",
+            "type": "integer"
+          },
+          "horizon": {
+            "description": "Horizon is how many days a row must have aged before an automatic\nestimation may admit it. Default 120, the far side of the card dispute\nwindows.",
+            "type": "integer"
+          },
+          "labels": {
+            "description": "Labels is how many NEW MATURED judgements must have arrived since the last\nversion before another is owed. It counts matured rows, never raw label\narrivals: a burst of fresh disputes is exactly the moment not to\nre-estimate, because their horizon has not run and the set they would form\nis the tail of an argument rather than a conclusion.",
+            "type": "integer"
+          },
+          "role": {
+            "description": "Role is where an automatic version lands: candidate, or challenger to put\nit straight on trial. Champion is REFUSED — a model that took over the\ndecision path because a timer fired is a change whose author is a clock.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Rows caps how many recorded observations an automatic estimation replays,\n1..5000. It is the same bound an explicit request takes, because it is the\nsame work on the same shared pod.",
+            "type": "integer"
+          },
+          "window": {
+            "description": "Window is how many days of this tenant's own history each automatic\nestimation reads. Default 365.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "mlScheduleOut": {
+        "properties": {
+          "due": {
+            "description": "Due reports whether a re-estimation is owed right now.",
+            "type": "boolean"
+          },
+          "estimating": {
+            "description": "Estimating names the version being fitted, if one is.",
+            "type": "string"
+          },
+          "every": {
+            "description": "Every is hours between automatic re-estimations, zero when they are off.",
+            "type": "integer"
+          },
+          "horizon": {
+            "description": "Horizon is how many days a row must have aged to be admitted.",
+            "type": "integer"
+          },
+          "labels": {
+            "description": "Labels is how many new matured judgements must arrive before another\nversion is owed, zero when only the clock triggers.",
+            "type": "integer"
+          },
+          "last": {
+            "description": "Last is when a version was last estimated, empty when none ever has been.",
+            "type": "string"
+          },
+          "matured": {
+            "description": "Matured is how many new matured judgements have arrived since then — the\nnumber the Labels trigger is waiting on.",
+            "type": "integer"
+          },
+          "role": {
+            "description": "Role is where an automatic version lands: candidate, or challenger to put\nit straight on trial. Never champion.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Rows caps how many observations each automatic estimation replays.",
+            "type": "integer"
+          },
+          "says": {
+            "description": "Says is why it is owed, or what the trigger is still waiting for. It is\nhere so \"why has nothing been re-estimated\" is answerable without reading\ntwo more endpoints and doing the arithmetic by hand.",
+            "type": "string"
+          },
+          "window": {
+            "description": "Window is how many days of history each automatic estimation reads.",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1398,6 +2210,43 @@
           },
           "learned": {
             "description": "Learned is how many observations that state had taken in.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "mlTallyOut": {
+        "properties": {
+          "agreed": {
+            "description": "Agreed is how often the two reached the same verdict.",
+            "type": "integer"
+          },
+          "alerted": {
+            "description": "Alerted is how many decisions the challenger would have alerted on.",
+            "type": "integer"
+          },
+          "champion": {
+            "description": "Champion is the version it ran beside — the one whose answer was actually\nreturned to the caller on every one of these decisions.",
+            "type": "string"
+          },
+          "fit": {
+            "description": "Fit is the challenger being tallied.",
+            "type": "string"
+          },
+          "incumbent": {
+            "description": "Incumbent is how many the champion's recorded score crosses the\nchallenger's own threshold on — the same line applied to both models,\nwhich is the comparison an operator wants.",
+            "type": "integer"
+          },
+          "refusal": {
+            "description": "Refusal says why there is nothing to report, when there is nothing.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Rows is how many decisions both models saw.",
+            "type": "integer"
+          },
+          "scored": {
+            "description": "Scored is how many the challenger was warm enough to score. A challenger\nwell below Rows here is still warming and its shares mean nothing yet.",
             "type": "integer"
           }
         },

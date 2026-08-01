@@ -228,6 +228,12 @@ func mount(s *stateService, app cloud.Router) {
 		zip.WithOperationID("mlRestore"),
 		zip.WithSummary("Restore this tenant's learned state from its pinned snapshot"),
 		zip.WithTags("ml"))
+
+	// The lifecycle leaves — the registry, the schedule and drift — declare
+	// themselves, on the same prefix and AFTER the Bridge installed above. They
+	// are in fit.go rather than here because cmd/zipdoc resolves a route's path
+	// from the group assignment in the file that registers it.
+	mountFit(app, o)
 }
 
 // ── the shapes ──────────────────────────────────────────────────────────────
@@ -1223,7 +1229,13 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	}
 	shadow := mode(db) != "live"
 
-	out := decide(ctx, o.s.State.vel, o.s.State.model, sc.tenant, obs, rules,
+	// WHICH MODEL DECIDES. The champion's store, which is the shipped shape until
+	// this tenant promotes a fit of its own. A champion whose geometry cannot be
+	// housed yields no store, and the decision is then made on rules alone with
+	// the model refusing — never silently on a shape nobody promoted.
+	store, championFit := champion(o.s, sc.tenant, db)
+
+	out := decide(ctx, o.s.State.vel, store, sc.tenant, obs, rules,
 		func(name, value string) bool { return lists[name][strings.ToLower(value)] },
 		func(h hit, ob observation) bool {
 			now := time.Now()
@@ -1239,6 +1251,10 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	// DURABLE FIRST. The decision is the record; the analytics copy comes after
 	// and is best-effort. Wired the other way, a bus hiccup loses evidence.
 	//
+	// A CHALLENGER, IF THERE IS ONE, SCORES THIS SAME OBSERVATION — after the
+	// record, off the rings decide() already advanced exactly once, and
+	// contributing nothing to what was returned. See lifecycle.go's challenge.
+	//
 	// The idempotency key is claimed IN the insert, so a concurrent retry loses
 	// the race at the index rather than after a second decision exists — and the
 	// loser reads back the winner's answer, which is what the key promised.
@@ -1252,6 +1268,8 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 		}
 		return nil, err
 	}
+
+	challenge(o.s, sc, db, obs, out, championFit)
 
 	// METER the screen on the caller's own ledger, after the work.
 	o.s.State.bill.Meter(sc.org, sc.project, "screen", screenCents, sc.request, sc.clientIP)

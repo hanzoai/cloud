@@ -120,6 +120,71 @@ CREATE TABLE IF NOT EXISTS setting (
 	key     TEXT PRIMARY KEY,
 	value   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS fit (
+	id      TEXT PRIMARY KEY,
+	at      TEXT NOT NULL,
+	by      TEXT NOT NULL DEFAULT '',
+	algo    TEXT NOT NULL,
+	shape   TEXT NOT NULL DEFAULT '{}',
+	source  TEXT NOT NULL DEFAULT '{}',
+	metrics TEXT NOT NULL DEFAULT '{}',
+	profile TEXT NOT NULL DEFAULT '{}',
+	digest  TEXT NOT NULL DEFAULT '',
+	role    TEXT NOT NULL DEFAULT 'candidate',
+	status  TEXT NOT NULL DEFAULT 'queued',
+	refusal TEXT NOT NULL DEFAULT '',
+	served  TEXT NOT NULL DEFAULT '',
+	retired TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS fit_at ON fit(at DESC);
+-- ONE champion and at most ONE challenger, enforced at the index and not in the
+-- code that writes it. Two concurrent promotions then lose at the index rather
+-- than both succeeding, and there is no path — a bug, a retry, a race — that can
+-- leave a tenant with two models both believing they decide.
+CREATE UNIQUE INDEX IF NOT EXISTS fit_champion ON fit(role) WHERE role = 'champion';
+CREATE UNIQUE INDEX IF NOT EXISTS fit_challenger ON fit(role) WHERE role = 'challenger';
+
+CREATE TABLE IF NOT EXISTS fit_move (
+	id      TEXT PRIMARY KEY,
+	fit     TEXT NOT NULL,
+	at      TEXT NOT NULL,
+	by      TEXT NOT NULL DEFAULT '',
+	was     TEXT NOT NULL,
+	now     TEXT NOT NULL,
+	reason  TEXT NOT NULL DEFAULT '',
+	stood   TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS fit_move_fit ON fit_move(fit, at);
+
+-- The challenger's answer to a decision the champion already made. It is its own
+-- table and not a column on the decision, because the decision is the RECORD of
+-- what was decided, and amending a record after the fact with what something
+-- else would have decided makes it a record that can be rewritten.
+CREATE TABLE IF NOT EXISTS challenge (
+	decision  TEXT PRIMARY KEY,
+	at        TEXT NOT NULL,
+	champion  TEXT NOT NULL DEFAULT '',
+	incumbent REAL NOT NULL DEFAULT 0,
+	fit       TEXT NOT NULL,
+	score     REAL NOT NULL DEFAULT 0,
+	cut       REAL NOT NULL DEFAULT 0,
+	alert     INTEGER NOT NULL DEFAULT 0,
+	scored    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS challenge_fit ON challenge(fit, at DESC);
+
+CREATE TABLE IF NOT EXISTS drift (
+	id      TEXT PRIMARY KEY,
+	fit     TEXT NOT NULL,
+	at      TEXT NOT NULL,
+	says    TEXT NOT NULL,
+	rows    INTEGER NOT NULL DEFAULT 0,
+	scored  INTEGER NOT NULL DEFAULT 0,
+	stated  REAL NOT NULL DEFAULT 0,
+	cleared TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS drift_fit ON drift(fit, cleared);
 `
 
 // shelf holds the lazily-opened per-tenant handles. A file is opened, migrated
@@ -134,16 +199,25 @@ type shelf struct {
 
 func newShelf(dataDir string) *shelf { return &shelf{dataDir: dataDir, dbs: map[Tenant]*sql.DB{}} }
 
-// open resolves the tenant's file. The ORG half is what cloud.OrgDB takes — it
-// does its own brand scoping through DataDir and the deployment, so handing it
-// the qualified key would put the brand in the path twice.
+// open resolves the tenant's file. The ORG half is what cloud.OrgNamespace
+// takes — cloud does its own brand scoping through DataDir and the deployment,
+// so handing it the qualified key would put the brand in the path twice.
+//
+// The namespace is minted here and nowhere else in this package, through the
+// one door cloud publishes: a namespace is the only thing OrgDB accepts, and the
+// only way to build one is from a validated org, so a file this app opens cannot
+// be addressed by anything a caller sent.
 func (s *shelf) open(t Tenant) (*sql.DB, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if db, ok := s.dbs[t]; ok {
 		return db, nil
 	}
-	db, err := cloud.OrgDB(s.dataDir, t.org(), "", "risk")
+	ns, err := cloud.OrgNamespace(t.org(), "")
+	if err != nil {
+		return nil, err
+	}
+	db, err := cloud.OrgDB(s.dataDir, ns, "risk")
 	if err != nil {
 		return nil, err
 	}
@@ -631,21 +705,59 @@ type replayed struct {
 	label string
 }
 
-// replayHistory reads the tenant's recent decisions back into replayable form.
+// replayHistory reads the tenant's OLDEST recorded decisions back into
+// replayable form — a model's life from the beginning, which is what a sandbox
+// replay wants. For the most recent ones, see replaySince.
+func replayHistory(db *sql.DB, limit int) ([]replayed, error) {
+	if limit <= 0 || limit > 5000 {
+		limit = 1000
+	}
+	rows, err := db.Query(replayColumns+` FROM decision ORDER BY at ASC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanReplayed(rows)
+}
+
+// replaySince reads the tenant's MOST RECENT decisions after an instant, back in
+// chronological order.
+//
+// It exists because replayHistory takes the OLDEST rows, which is right for a
+// sandbox that wants a model's whole life and wrong for anything asking "what
+// has happened lately": on a tenant with more history than the cap, the oldest
+// page can be entirely before the instant asked about, and the answer is then
+// permanently empty. Drift reads through here for exactly that reason.
+func replaySince(db *sql.DB, since time.Time, limit int) ([]replayed, error) {
+	if limit <= 0 || limit > 5000 {
+		limit = 1000
+	}
+	rows, err := db.Query(replayColumns+` FROM decision WHERE at > ? ORDER BY at DESC LIMIT ?`,
+		stamp(since), limit)
+	if err != nil {
+		return nil, err
+	}
+	out, err := scanReplayed(rows)
+	if err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, nil
+}
+
+// replayColumns is the one column list both readers take, so a column added to
+// the decode cannot reach one reader and not the other.
+const replayColumns = `SELECT id, at, stage, kind, subject, agency, score, amount, currency,
+		direction, signals, hits, label`
+
+// scanReplayed decodes rows into replayable form. ONE decoder for both readers.
 //
 // The facts are reconstituted from what was STORED, not recomputed from today's
 // rings: a replay that re-read live aggregates would score a year-old
 // transaction against this morning's velocity, which answers a question nobody
 // asked. Everything the live path could see is on the row.
-func replayHistory(db *sql.DB, limit int) ([]replayed, error) {
-	if limit <= 0 || limit > 5000 {
-		limit = 1000
-	}
-	rows, err := db.Query(`SELECT id, at, stage, kind, subject, agency, score, amount, currency,
-		direction, signals, hits, label FROM decision ORDER BY at ASC LIMIT ?`, limit)
-	if err != nil {
-		return nil, err
-	}
+func scanReplayed(rows *sql.Rows) ([]replayed, error) {
 	defer func() { _ = rows.Close() }()
 
 	var out []replayed

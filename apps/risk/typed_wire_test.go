@@ -166,6 +166,12 @@ func TestTheSurfaceIsWhatWasPromised(t *testing.T) {
 		"GET /v1/ml/features",
 		"POST /v1/ml/search", "GET /v1/ml/search/{id}",
 		"POST /v1/ml/snapshot", "POST /v1/ml/restore",
+		// the model's lifecycle: the registry, the schedule and drift
+		"POST /v1/ml/fits", "GET /v1/ml/fits", "GET /v1/ml/fits/{id}",
+		"POST /v1/ml/fits/{id}/cancel", "PUT /v1/ml/fits/{id}/role",
+		"GET /v1/ml/fits/{id}/tally",
+		"GET /v1/ml/schedule", "PUT /v1/ml/schedule",
+		"GET /v1/ml/drift",
 	}
 	for _, w := range want {
 		if !served[w] {

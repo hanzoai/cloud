@@ -36,6 +36,8 @@ var theOps = []string{
 	"riskDictionary", "riskMode", "riskSetMode",
 	"mlScore", "mlTrain", "mlState", "mlSetAppetite", "mlFeatures",
 	"mlSearch", "mlSearchResult", "mlSnapshot", "mlRestore",
+	"mlFit", "mlFits", "mlFitDetail", "mlCancelFit", "mlSetFitRole", "mlFitTally",
+	"mlSchedule", "mlSetSchedule", "mlDrift",
 }
 
 func repoRoot(t *testing.T) string {
@@ -110,6 +112,9 @@ func TestFleetDocumentCarriesEveryPath(t *testing.T) {
 		"/v1/ml/score", "/v1/ml/train", "/v1/ml/state", "/v1/ml/state/appetite",
 		"/v1/ml/features", "/v1/ml/search", "/v1/ml/search/{id}",
 		"/v1/ml/snapshot", "/v1/ml/restore",
+		"/v1/ml/fits", "/v1/ml/fits/{id}", "/v1/ml/fits/{id}/cancel",
+		"/v1/ml/fits/{id}/role", "/v1/ml/fits/{id}/tally",
+		"/v1/ml/schedule", "/v1/ml/drift",
 	} {
 		if !strings.Contains(body, "\n  "+p+":") {
 			t.Errorf("%s is absent from the woven openapi.yaml — the SDK repos pull this file, so no "+

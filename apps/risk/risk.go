@@ -60,8 +60,18 @@ type state struct {
 	// vel holds the in-memory sliding aggregates every decision reads. Constant
 	// time, fixed memory per key, bounded cardinality with LRU eviction.
 	vel *velocity.Store
-	// model holds one half-space-tree forest per tenant, geometry included.
+	// model holds one half-space-tree forest per tenant, geometry included. It is
+	// the SHIPPED shape — the one a tenant runs before it has promoted a fit of
+	// its own — and the stable below holds the rest.
 	model *anomaly.Store
+	// stable holds one store per promoted GEOMETRY. anomaly.Store carries a
+	// single geometry for every tenant in it, so a champion and a challenger of
+	// different shapes cannot share one; see lifecycle.go.
+	stable *stable
+	// bench is the bounded, cancellable estimation queue. An estimation replays
+	// thousands of rows through a fresh forest on the pod that is also serving
+	// authorisations, so it is never run in a request.
+	bench *bench
 	// shelf holds the per-tenant record planes.
 	shelf *shelf
 
@@ -72,10 +82,8 @@ type state struct {
 	// is an honest gap on the dictionary and the backfill, never a zero.
 	warehouse bool
 
-	// restored tracks which tenants have had their snapshot loaded, so the
-	// restore happens once per tenant per process and not once per request.
-	mu       sync.Mutex
-	restored map[Tenant]bool
+	// mu guards the fields above that are written after mount.
+	mu sync.Mutex
 }
 
 // Mount wires /v1/risk and the native /v1/ml leaves onto app.
@@ -113,6 +121,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// that is down at boot must not stop the decision plane from mounting. The
 	// tables are ensured once, in the background, and the honest gap is recorded.
 	go warehouse(s)
+
+	// The second loop: re-estimate a tenant's model when its schedule says so,
+	// and record the champion's drift when it degrades. It walks only the tenants
+	// this process holds open, so it costs nothing on a quiet deployment. See
+	// lifecycle.go.
+	go lifecycle(s)
 
 	mount(s, app)
 	s.Log.Info("risk surface mounted",
@@ -192,13 +206,14 @@ func build(deps cloud.Deps) (*stateService, error) {
 	return &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "risk"),
 		State: state{
-			brand:    deps.Brand,
-			dataDir:  deps.DataDir,
-			vel:      vel,
-			model:    model,
-			shelf:    newShelf(deps.DataDir),
-			bill:     cloud.NewResourceMeter(deps, "risk"),
-			restored: map[Tenant]bool{},
+			brand:   deps.Brand,
+			dataDir: deps.DataDir,
+			vel:     vel,
+			model:   model,
+			stable:  newStable(model, vel),
+			bench:   newBench(),
+			shelf:   newShelf(deps.DataDir),
+			bill:    cloud.NewResourceMeter(deps, "risk"),
 		},
 	}, nil
 }
@@ -229,7 +244,16 @@ func Shutdown(ctx context.Context) error {
 func teardown(s *stateService) error {
 	var kept, failed int
 	for _, t := range s.State.shelf.tenants() {
-		if err := saveModel(s.State.shelf, s.State.model, t); err != nil {
+		db, err := s.State.shelf.open(t)
+		if err != nil {
+			failed++
+			s.Log.Error("risk: a tenant's record plane could not be opened to keep its state", "tenant", t.String(), "err", err)
+			continue
+		}
+		// Every resident geometry, not only the shipped one: a tenant running a
+		// promoted fit keeps its state under that fit, and a champion that comes
+		// back with nothing learned declines to score for its whole warm period.
+		if err := keepAll(s, t, db); err != nil {
 			failed++
 			s.Log.Error("risk: a tenant's learned state was not kept", "tenant", t.String(), "err", err)
 			continue
@@ -263,16 +287,17 @@ func tenantState(ctx context.Context, s *stateService) (scope, *sql.DB, error) {
 	if err != nil {
 		return scope{}, nil, err
 	}
-	s.State.mu.Lock()
-	first := !s.State.restored[sc.tenant]
-	s.State.restored[sc.tenant] = true
-	s.State.mu.Unlock()
-	if first {
-		if err := loadModel(s.State.shelf, s.State.model, sc.tenant); err != nil {
-			s.Log.Warn("risk: a tenant's learned state could not be restored; it starts warming",
-				"tenant", sc.tenant.String(), "err", err)
-		}
-	}
+	// The shipped model AND every promoted version's state, in one place. cloud
+	// deploys Recreate at one replica, so this is the whole answer to a rollout:
+	// whatever this tenant was running comes back, or it comes back warming and
+	// declines to score.
+	//
+	// EVERY REQUEST, not only the first. A once-per-process restore is correct
+	// until something drops the state, and something does — the engine evicts the
+	// least recently used tenant when a store fills, and a tenant restored once
+	// then never reloads. It costs two map reads when there is nothing to do. See
+	// lifecycle.go's hydrate.
+	hydrate(s, sc.tenant, db)
 	return sc, db, nil
 }
 

@@ -4178,3 +4178,99 @@ Ingress still points that path at `service: aml` (the amld pod holding the live
 5-year retention plane), and claiming it in cloud without deleting that rule in
 the SAME commit gives a compliance surface answering from a store that is not the
 record.
+
+## The model registry and its lifecycle (`apps/risk` — `/v1/ml/fits`, `/v1/ml/schedule`, `/v1/ml/drift`)
+
+What keeps scoring good over time, in the same binary that scores. Five new files
+in `apps/risk`: `fit.go` (the registry), `lifecycle.go` (serving, the queue, the
+schedule), `drift.go` (degradation). Twelve typed zip ops on the existing `risk`
+manifest row.
+
+**The noun is `fit`, not `model`, and the reason is a build error.** `/v1/ml/models`
+belongs to `apps/ml` (kserve InferenceService) and zip refuses two owners for one
+prefix at compose time. `fit` is also already the engine's word — `pkg/models.Fit`,
+`pkg/topology.Fit` — for exactly this thing: the parameters produced by fitting one
+shape to one window.
+
+**What is immutable and what is not.** The ARTEFACT — estimator, geometry, the
+window with its digest, the feature inventory read, the metrics measured on the
+held-out split — is written once by `sealFit`, whose `WHERE status = 'fitting'`
+guard makes the immutability a property of the store rather than of the code that
+writes it. The ROLE is not immutable and could not be; every transition is
+APPENDED to `fit_move` with its decider and reason. **Rollback is not a second
+mechanism:** a fit is immutable and champion is a role, so rolling back is
+promoting a prior id — the same op, the same record. Promotion to champion is
+EARNED (already the challenger, or has served before, or there is no incumbent),
+and a rollback passes that gate immediately and always, because the emergency
+where the rollback is refused by the gate that should have stopped the promotion
+is the one worth designing out.
+
+**No label may be knowable after the fact.** A chargeback lands 30–120 days after
+the payment it judges. Every fit carries a maturity `Horizon` (120 days by
+default, past both card dispute windows) and `matured()` admits a row only once it
+has aged past it. The split is TEMPORAL and then whole-subject: the cut is an
+instant, and any subject straddling it is pulled entirely to the side its first
+row fell on — a hash split puts one account on both sides and the model then
+memorises the account. Both are pinned by tests that fail when the check is
+removed.
+
+**Two shapes means two stores, ONE TENANT PER STORE.** `anomaly.Store` carries one
+geometry for every tenant it holds AND evicts the least recently used TENANT when
+it fills, so a store shared across tenants is a place where one tenant's traffic
+silently unseats another's champion. The stable keys on `(tenant, geometry)` with
+`MaxOrgs: 1`: the only key a store can ever be asked for is the tenant it was made
+for. Bounds are per-tenant first (`seatsPerTenant`, 2 — the two roles that serve)
+and the deployment's second (`stableSeats`, 512 ≈ 172 MB at the measured 336 KB
+per model).
+
+**`hydrate` runs on EVERY request, not the first.** Restoring once per process is
+correct until something drops the state, and something does. An evicted tenant
+restored once never reloads: its champion comes back empty and scores nothing for
+the life of the process, which reads as a clean world. On-demand reload makes an
+eviction cost one file read. It costs two map reads when there is nothing to do —
+the role pair is cached in-process and invalidated by the one function that moves
+a role (one replica, so there is no second process to tell; the manifest row says
+why training and scoring may not be split).
+
+**Champion–challenger is over ONE feature vector.** Both read the same velocity
+rings in the same request, after the single `record()` the decision already made.
+The challenger's answer lands in its own `challenge` table and never on the
+decision row — amending a record with what something else would have decided makes
+it a record that can be rewritten. The tally reports agreement and the two alert
+shares and NOT a winner: a winner needs judged rows, and a challenger declared
+better for agreeing with the incumbent has measured which model reproduces the
+incumbent's policy.
+
+**Estimation is queued, bounded and cancellable — five bounds.** One in flight per
+tenant (a second is 409), two across the deployment, a ten-minute ceiling, a 5000
+row cap, and the caller's own ledger debited before any of it is queued. It never
+runs in the request: it replays thousands of rows through a fresh forest on the
+pod that is also serving authorisations.
+
+**Both retrain triggers are ONE predicate.** `due()` reads the clock and the
+matured-judgement count together, so there is no way for "scheduled" and
+"event-driven" to disagree about whether a fit is owed. It counts MATURED
+judgements, never raw label arrivals — a burst of fresh disputes is precisely the
+moment not to retrain. **Neither trigger promotes:** an automatic fit lands as a
+candidate or a challenger, refused at the setter for champion, because a control
+that took over the decision path because a timer fired is a change whose author is
+a clock.
+
+**Drift is measured against the fit's OWN stored profile**, never against a
+baseline recomputed from recent data — that compares the present to the present
+and is always reassuring. Four measures, one index (population stability over
+fixed bins): feature distributions, the score distribution, the realised alert
+share against the appetite the shape STATES, and the realised judgement rate. The
+alarm hangs off the alert share because it is the only one with a number somebody
+committed to. Alarms are durable, deduplicated per measure, and CLOSED rather than
+deleted when the model is stood down.
+
+**Online update: the forest already is one** (`cur` folds into `ref` at window
+close) and nothing supervised is updated online here. An online-updated supervised
+model sitting on its own blocks as labels is the amplification failure, not a
+feature.
+
+**Every rate is a POINTER.** An unmeasured proportion reported as `0.0` reads as a
+perfect model. AUC is absent unless both classes are present; prevalence is
+reported beside it because an AUC on a one-in-ten-thousand problem is
+uninterpretable without it.

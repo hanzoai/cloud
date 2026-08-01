@@ -1,5 +1,35 @@
 [
   {
+    "description": "Stops an estimation that is queued or running. The record stays and\nsays it was cancelled: a queue entry that vanishes leaves nobody able to tell\na cancelled fit from one that was never asked for.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to read, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlCancelFit"
+  },
+  {
+    "description": "Drift measures whether the deciding model still fits the world it was\nestimated on: the distribution of every feature it reads, the distribution of\nthe scores it produces, the alert share against the appetite it states, and\nthe judgement rate against the one it measured.\n\nEvery reference is the version's OWN, stored when it was estimated. A report\nthat recomputed its baseline from recent data would be comparing the present\nto the present, which is a number that is always small and always reassuring.",
+    "inputSchema": {
+      "properties": {
+        "fit": {
+          "description": "Fit is the version to measure. Absent takes the champion, which is the one\nwhose drift actually costs anything.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Limit bounds how many recent observations the live profile is built from,\n1..5000. Default 1000.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlDrift"
+  },
+  {
     "description": "Features is the typology-to-feature inventory the model is built on: what each\ndimension measures, the risk indicator it serves, and the published source\nthose words come from.\n\nIt is code rather than a document because a mapping kept beside the model\ncannot drift away from what the model actually reads — and the attributability\nit makes possible is why this is a tree and not a net.",
     "inputSchema": {
       "properties": {},
@@ -8,12 +38,123 @@
     "name": "mlFeatures"
   },
   {
+    "description": "Fit estimates a new version of this tenant's model from its own recorded\nbehaviour, and answers 202 with the queued record.\n\nIt never runs in the request. The estimation replays up to five thousand rows\nthrough a fresh forest — seconds to minutes on a pod that is also serving\nauthorisations — so it is queued behind four bounds: one in flight per tenant,\ntwo across the whole deployment, a ten-minute ceiling, and the row cap. The\nfifth is the caller's own ledger, debited here, before any of it is queued.",
+    "inputSchema": {
+      "$defs": {
+        "mlCandidate": {
+          "properties": {
+            "blend": {
+              "description": "Blend is how much of a closing window folds into the reference.",
+              "type": "number"
+            },
+            "depth": {
+              "description": "Depth is how deep each tree splits.",
+              "type": "integer"
+            },
+            "review": {
+              "description": "Review is the share of the stream this topology may examine.",
+              "type": "number"
+            },
+            "trees": {
+              "description": "Trees is how many half-space trees the model holds.",
+              "type": "integer"
+            },
+            "window": {
+              "description": "Window is how many observations make up one reference window.",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "algo": {
+          "description": "Algo is the estimator. \"forest\" is the streaming half-space forest the\ndecision path runs, and today it is the only one this plane can estimate;\nanything else is refused by name rather than silently substituted.",
+          "type": "string"
+        },
+        "horizon": {
+          "description": "Horizon is how many days a row must have aged before it may be admitted.\nIt is what keeps a judgement that did not exist at scoring time out of the\nset: a dispute lands 30 to 120 days after the payment it judges, so 120 is\nthe default and a shorter one is a deliberate statement about a faster lane.",
+          "type": "integer"
+        },
+        "note": {
+          "description": "Note is why this estimation was asked for. It is kept on the record\nbecause \"who asked for this model and why\" is the first question anyone\nreviewing a decline asks.",
+          "type": "string"
+        },
+        "rows": {
+          "description": "Rows caps how many recorded observations are replayed, 1..5000.",
+          "type": "integer"
+        },
+        "shape": {
+          "$ref": "#/$defs/mlCandidate",
+          "description": "Shape is the detector's geometry. Absent takes the shape currently\nrunning, which is what makes \"re-estimate what I already have on fresher\ndata\" the default rather than a thing to spell out."
+        },
+        "window": {
+          "description": "Window is how many days of this tenant's own history to read. Default 365.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlFit"
+  },
+  {
+    "description": "Reads one version with its lineage, its whole role history, any open\ndrift recorded against it, and whether its learned state can be served right\nnow. Answers 404 for an identifier this tenant does not own — never 403, which\nwould distinguish \"exists and is not yours\" from \"does not exist\" and let a\nneighbour enumerate.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to read, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlFitDetail"
+  },
+  {
+    "description": "Reads how a challenger answered the same stream as the champion:\nsame decisions, same rings, same feature vector, two verdicts.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the version, from the path.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Limit bounds how many recent comparisons are counted, 1..5000.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlFitTally"
+  },
+  {
+    "description": "Fits lists this tenant's model versions, newest first, and names which one is\ndeciding, which is on trial and which is being estimated.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit bounds the page, 1..200, default 50.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlFits"
+  },
+  {
     "description": "Restore reinstates this tenant's learned state from its pinned snapshot.\n\nA snapshot whose shape does not match the running inventory is REFUSED, not\ncoerced, and a snapshot belonging to another tenant is refused twice — here,\nby the tenant that asked, and again inside the engine. State the model would\ntreat as its own memory has to have come from this algorithm over this feature\nset for this tenant.",
     "inputSchema": {
       "properties": {},
       "type": "object"
     },
     "name": "mlRestore"
+  },
+  {
+    "description": "Schedule reads when this tenant's model is re-estimated, and what the\nautomatic trigger is currently waiting for.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "mlSchedule"
   },
   {
     "description": "Score scores one observation and LEARNS NOTHING from it. It is how a candidate\nis tried against a tenant's real behaviour before anything depends on the\nanswer, and it is the model's analogue of testing a rule: because it records\nnothing, the aggregates it reads do not include the candidate.",
@@ -98,7 +239,7 @@
     "name": "mlSearch"
   },
   {
-    "description": "SearchResult reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
+    "description": "Reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -111,7 +252,7 @@
     "name": "mlSearchResult"
   },
   {
-    "description": "SetAppetite sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
+    "description": "Sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
     "inputSchema": {
       "properties": {
         "review": {
@@ -126,6 +267,60 @@
       "type": "object"
     },
     "name": "mlSetAppetite"
+  },
+  {
+    "description": "Moves a version between candidate, challenger, champion and\nretired. It is the ONE operation that changes which model decides.\n\nPromotion to champion has a precondition and it is the point of the whole\nplane: the version must already be the challenger, or must have decided real\ntraffic before, or there must be no incumbent. So a new model reaches the\ndecision path only after it has scored the live stream alongside the one it\nreplaces — and a ROLLBACK, which is promoting a version that has served,\npasses immediately and always. The failure this prevents is the one worth\npreventing: the emergency where a rollback is refused by the same gate that\nshould have stopped the promotion.\n\nThe displaced champion keeps its learned state, which is why rolling back is\ninstant rather than a re-warm.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the version, from the path.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Reason is why. Required for champion and challenger.",
+          "type": "string"
+        },
+        "role": {
+          "description": "Role is candidate, challenger, champion or retired.\n\nReaching champion requires the version to have earned it: it must already\nbe the challenger, or it must be a version that has decided real traffic\nbefore (which is what makes a rollback instant), or there must be no\nincumbent to displace. An unproven model put straight into the decision\npath is the failure this whole plane exists to prevent.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlSetFitRole"
+  },
+  {
+    "description": "Sets when this tenant's model is re-estimated.\n\nA schedule may enrol its versions as candidates or as challengers and NEVER as\nchampions: the trigger decides that a new estimation is owed, and a person\ndecides which model gets to answer a customer.",
+    "inputSchema": {
+      "properties": {
+        "every": {
+          "description": "Every is hours between re-estimations. Zero turns automatic estimation\noff, which is the default: a model that starts re-estimating itself\nbecause a default said so is a control nobody chose to run.",
+          "type": "integer"
+        },
+        "horizon": {
+          "description": "Horizon is how many days a row must have aged before an automatic\nestimation may admit it. Default 120, the far side of the card dispute\nwindows.",
+          "type": "integer"
+        },
+        "labels": {
+          "description": "Labels is how many NEW MATURED judgements must have arrived since the last\nversion before another is owed. It counts matured rows, never raw label\narrivals: a burst of fresh disputes is exactly the moment not to\nre-estimate, because their horizon has not run and the set they would form\nis the tail of an argument rather than a conclusion.",
+          "type": "integer"
+        },
+        "role": {
+          "description": "Role is where an automatic version lands: candidate, or challenger to put\nit straight on trial. Champion is REFUSED — a model that took over the\ndecision path because a timer fired is a change whose author is a clock.",
+          "type": "string"
+        },
+        "rows": {
+          "description": "Rows caps how many recorded observations an automatic estimation replays,\n1..5000. It is the same bound an explicit request takes, because it is the\nsame work on the same shared pod.",
+          "type": "integer"
+        },
+        "window": {
+          "description": "Window is how many days of this tenant's own history each automatic\nestimation reads. Default 365.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlSetSchedule"
   },
   {
     "description": "Snapshot pins this tenant's learned state into its own encrypted file.\n\nIt is what an auditor asks for: the exact model that raised an alert, kept so\nthat the same input can be scored again a year later. It is also what makes a\nrollout survivable — the shutdown path snapshots every resident tenant,\nbecause cloud deploys Recreate at one replica and a model that comes back with\nnothing learned refuses to score for its whole warm period.",
@@ -229,7 +424,7 @@
     "name": "riskActivity"
   },
   {
-    "description": "AddListEntries adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
+    "description": "Adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -266,7 +461,7 @@
     "name": "riskControls"
   },
   {
-    "description": "CreateList creates an allow or deny list a rule can name in an inlist term.",
+    "description": "Creates an allow or deny list a rule can name in an inlist term.",
     "inputSchema": {
       "properties": {
         "kind": {
@@ -283,7 +478,7 @@
     "name": "riskCreateList"
   },
   {
-    "description": "CreateRule admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
+    "description": "Admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
     "inputSchema": {
       "$defs": {
         "riskRule": {
@@ -455,7 +650,7 @@
     "name": "riskDecide"
   },
   {
-    "description": "DecisionDetail reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
+    "description": "Reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -497,7 +692,7 @@
     "name": "riskDecisions"
   },
   {
-    "description": "DeleteRule retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
+    "description": "Retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -551,7 +746,7 @@
     "name": "riskMode"
   },
   {
-    "description": "ReleaseControl lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
+    "description": "Lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -564,7 +759,7 @@
     "name": "riskReleaseControl"
   },
   {
-    "description": "RemoveListEntry removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
+    "description": "Removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -589,7 +784,7 @@
     "name": "riskRules"
   },
   {
-    "description": "SetControl declares a reserve, a payout hold or a block on a subject.",
+    "description": "Declares a reserve, a payout hold or a block on a subject.",
     "inputSchema": {
       "$defs": {
         "riskSubject": {
@@ -633,7 +828,7 @@
     "name": "riskSetControl"
   },
   {
-    "description": "SetMode takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
+    "description": "Takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
     "inputSchema": {
       "properties": {
         "mode": {
@@ -737,7 +932,7 @@
     "name": "riskSimulate"
   },
   {
-    "description": "SubjectState reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
+    "description": "Reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
     "inputSchema": {
       "properties": {
         "id": {
@@ -804,7 +999,7 @@
     "name": "riskUnsuppress"
   },
   {
-    "description": "UpdateRule replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
+    "description": "Replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
     "inputSchema": {
       "$defs": {
         "riskRule": {

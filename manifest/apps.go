@@ -126,8 +126,9 @@ var Apps = []App{
 	// time, which is the gate under all of this.
 	{Name: "risk", Prefixes: []string{
 		"/v1/risk",
-		"/v1/ml/features", "/v1/ml/restore", "/v1/ml/score", "/v1/ml/search",
-		"/v1/ml/snapshot", "/v1/ml/state", "/v1/ml/train",
+		"/v1/ml/drift", "/v1/ml/features", "/v1/ml/fits", "/v1/ml/restore",
+		"/v1/ml/schedule", "/v1/ml/score", "/v1/ml/search", "/v1/ml/snapshot",
+		"/v1/ml/state", "/v1/ml/train",
 	}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},

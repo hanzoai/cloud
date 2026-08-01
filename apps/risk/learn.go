@@ -227,7 +227,7 @@ func searchRun(ctx context.Context, t Tenant, history []observation) (searchRepo
 		if tr.Scored == 0 || tr.Realised == 0 {
 			continue
 		}
-		if tr.Realised > 2*tr.Candidate.Review {
+		if tr.Realised > appetiteBand*tr.Candidate.Review {
 			continue
 		}
 		w := tr.Candidate
