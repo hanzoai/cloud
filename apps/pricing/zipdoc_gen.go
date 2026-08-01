@@ -39,9 +39,6 @@ func init() {
 	zip.Describe("GET /v1/pricing", zip.Doc{
 		Description: "GetPricing returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing. Every model and provider it names is filtered to what\nthe caller's org may see — the same gate the leaf routes apply, so this can\nnever be an un-gated second source for what they hide.",
 	})
-	zip.Describe("GET /v1/pricing-policy", zip.Doc{
-		Description: "GetPricingPolicyAlias returns the pricing policy document at its top-level\naddress. It is the same document GET /v1/pricing/policy returns, byte for\nbyte, at the shorter address the marketing surface links to.",
-	})
 	zip.Describe("GET /v1/pricing/base", zip.Doc{
 		Description: "ListBasePlans returns the Hanzo Base plans — the managed-instance tiers,\neach with its monthly and annual price, storage and request allowances and\nfeature list.",
 		Fields: map[string]string{
