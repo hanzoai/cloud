@@ -151,6 +151,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// this subsystem serves and nothing else; Serve installs the same bridge for the
 	// whole binary and nesting is harmless, which keeps these ops scoped even in a
 	// test app that never calls Serve.
+	app.Use(cloud.Bridge())
+
 	// The ops are declared on the APP with absolute paths rather than on a group,
 	// because one of them IS the prefix: GET /v1/world has no leaf, and a group
 	// cannot express it — zip.Get(g, "") composes to "/v1/world/", a different
@@ -161,8 +163,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("world.Mount: router is not backed by a zip app — typed ops have no registry to declare into")
 	}
-	app.Use(cloud.Bridge())
-
 	zip.Get(zapp, "/v1/world", s.index)
 	zip.Get(zapp, "/v1/world/news", s.news)
 	zip.Get(zapp, "/v1/world/pipeline", s.pipeline)
