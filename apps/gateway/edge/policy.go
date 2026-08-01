@@ -75,6 +75,11 @@ type Policy struct {
 	// Methods is the allowlist of HTTP methods the edge accepts for this org. Empty
 	// means all are accepted.
 	Methods []string `json:"methods,omitempty"`
+	// Mode is the abuse gate's posture for this org: "shadow" scores traffic and
+	// records the verdict without acting on it, "live" enforces it. Unset means
+	// shadow — a statistical judgement never starts refusing an org's traffic
+	// because the feature shipped, only because the org turned it on.
+	Mode string `json:"mode,omitempty"`
 
 	// UpdatedAt is the unix second this policy row was last written. Server-stamped;
 	// a client-supplied value is ignored.
@@ -131,8 +136,21 @@ func (p Policy) Validate() error {
 			return fmt.Errorf("cors_origins must not contain empty entries")
 		}
 	}
+	if p.Mode != "" && p.Mode != ModeShadow && p.Mode != ModeLive {
+		return fmt.Errorf("mode must be %q or %q", ModeShadow, ModeLive)
+	}
 	return nil
 }
+
+// The abuse gate's two postures. They are values, not booleans, because "off"
+// and "watching" are different states and a deployment must be able to tell
+// which one it is in.
+const (
+	// ModeShadow scores and records; it never refuses. The DEFAULT.
+	ModeShadow = "shadow"
+	// ModeLive enforces the scorer's action.
+	ModeLive = "live"
+)
 
 // merge overlays the non-zero fields of over onto base and returns the result.
 // A nil/empty slice or zero int in over means "keep base"; this is what makes a
@@ -159,6 +177,9 @@ func merge(base, over Policy) Policy {
 	}
 	if len(over.Methods) > 0 {
 		out.Methods = over.Methods
+	}
+	if over.Mode != "" {
+		out.Mode = over.Mode
 	}
 	if over.UpdatedAt > 0 {
 		out.UpdatedAt = over.UpdatedAt
@@ -305,8 +326,19 @@ func (s *Store) PutPlatform(ctx context.Context, p Policy) (Policy, error) {
 func (s *Store) Effective(org string) Policy {
 	p := s.Platform()
 	eo := s.effectiveOrg(org)
-	p.OrgRPM, p.CacheTTLSec, p.CachePaths, p.Methods = eo.OrgRPM, eo.CacheTTLSec, eo.CachePaths, eo.Methods
+	p.OrgRPM, p.CacheTTLSec, p.CachePaths, p.Methods, p.Mode = eo.OrgRPM, eo.CacheTTLSec, eo.CachePaths, eo.Methods, eo.Mode
 	return p
+}
+
+// Mode returns the abuse gate's posture for org: the org's own row wins, else the
+// platform default, else shadow. Cached with the same short TTL as every other
+// per-org resolver, and fail-soft to SHADOW — a policy-store outage must not be
+// the reason a tenant starts being refused.
+func (s *Store) Mode(org string) string {
+	if m := s.effectiveOrg(org).Mode; m == ModeLive {
+		return ModeLive
+	}
+	return ModeShadow
 }
 
 func (s *Store) invalidate() {
@@ -342,12 +374,12 @@ func (s *Store) effectiveOrg(org string) Policy {
 	}
 	return s.resolve(org, func() Policy {
 		plat := s.Platform()
-		base := Policy{OrgRPM: plat.OrgRPM, CacheTTLSec: plat.CacheTTLSec, CachePaths: plat.CachePaths, Methods: plat.Methods}
+		base := Policy{OrgRPM: plat.OrgRPM, CacheTTLSec: plat.CacheTTLSec, CachePaths: plat.CachePaths, Methods: plat.Methods, Mode: plat.Mode}
 		row, ok, err := s.Get(context.Background(), org)
 		if err != nil || !ok {
 			return base
 		}
-		return merge(base, Policy{OrgRPM: row.OrgRPM, CacheTTLSec: row.CacheTTLSec, CachePaths: row.CachePaths, Methods: row.Methods})
+		return merge(base, Policy{OrgRPM: row.OrgRPM, CacheTTLSec: row.CacheTTLSec, CachePaths: row.CachePaths, Methods: row.Methods, Mode: row.Mode})
 	})
 }
 

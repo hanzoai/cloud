@@ -120,8 +120,17 @@ func run() error {
 //
 // Installed BEFORE the mount because fiber runs middleware in registration order:
 // one added after the routes never runs.
+// AbuseGate for the same reason and by the same argument: this process answers
+// public requests, so it carries the lifecycle defense itself. Every scaffolded
+// app inherits it from cloud.Serve; nothing else in THIS process will install
+// it, and an app that opted out of the gate by being hand-written would be the
+// one prefix family a stolen credential could work against unwatched.
+//
+// Shadow per org by default, exactly as in the fused binary, so this is a sensor
+// here until an operator arms the org — not a second policy.
 func newApp(deps cloud.Deps) *zip.App {
 	app := zip.New(zip.Config{AppName: "o11y", Logger: deps.Logger})
 	app.Use(cloud.EdgeCORS(deps.GatewayPolicy))
+	app.Use(cloud.AbuseGate(deps, deps.Traffic))
 	return app
 }
