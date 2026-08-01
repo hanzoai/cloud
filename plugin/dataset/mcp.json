@@ -1,0 +1,145 @@
+[
+  {
+    "description": "Declares the next version of a dataset from a bound query over\nthis org's own feature surface.\n\nIt mints a VERSION and writes no rows: a version is declared, then materialised\nonce, then never rewritten. Version numbers are monotone and never reused, so\n\"version 3 of signups\" means one thing forever — which is the whole reason a\nmodel can cite one.\n\nThe window is bounded by the source's retention, the horizon by a year, the\nrows by the plane's cap, and the number of datasets and versions per org by\ntheir own limits. Every refusal names which bound it hit.",
+    "inputSchema": {
+      "properties": {
+        "cuts": {
+          "description": "Cuts are the two RFC 3339 instants dividing train | val | test. Omit them to\ntake 70% and 85% of the window by time. Splitting is TEMPORAL and then\ngrouped by subject — a random split puts one device on both sides of the\nline and the model memorises the entity instead of the behaviour.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dims": {
+          "description": "Dims are the coordinates to carry, by published name. Empty takes the whole\nsurface. They are stored in the plane's own order, never the order given, so\ntwo requests naming the same dims produce identical rows.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "from": {
+          "description": "From and To bound the event window, half-open, RFC 3339. The window may not\nbe longer than the source's own retention: past that, its older half is\nalready gone and the dataset would silently be shorter than it says.",
+          "type": "string"
+        },
+        "horizon": {
+          "description": "Horizon is how many days a row must have aged before it may be admitted. It\nis what keeps a fact that was not yet knowable at scoring time out of a\ntraining set: a chargeback lands 30 to 120 days after the transaction it\ncondemns, so 120 for the payment lane and 14 for signup abuse. Zero admits\nthe whole window and is honest only where the outcome is immediate.",
+          "type": "integer"
+        },
+        "kind": {
+          "description": "Kind narrows to one subject kind — person, session or account. Empty takes\nevery kind.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name identifies the dataset across its versions: lower-case letters, digits\nand hyphens, starting with a letter.",
+          "type": "string"
+        },
+        "rows": {
+          "description": "Rows caps the materialisation. Zero takes the plane's own bound.",
+          "type": "integer"
+        },
+        "seed": {
+          "description": "Seed decides WHICH subjects are admitted when the window holds more rows\nthan the cap allows. It is recorded on the version, so a capped dataset is\nreproducible rather than being whichever rows the store returned first.\nOmit it to seed from the dataset's name.",
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlCreateDataset"
+  },
+  {
+    "description": "Dataset describes every version of one dataset, newest first — the whole\nhistory, because the point of a version is that the older ones are still there\nand a model fitted last quarter cites one of them.\n\nA name this org does not own answers 404, exactly as an unknown name does, so a\nprobe learns nothing about another tenant's datasets.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the dataset, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlDataset"
+  },
+  {
+    "description": "Shows where a version's rows came from and whether that can\nstill be demonstrated.\n\nThe answer is MEASURED, not recalled: the plane asks the source the same\nbounded question again and compares it to the fingerprint taken when the\nversion was built. When the source has since expired the window, the dataset\nstill holds its own rows and this says plainly that they can no longer be\nre-derived — an admitted gap is actionable, an unfalsifiable claim is not.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the dataset, from the path.",
+          "type": "string"
+        },
+        "version": {
+          "description": "Version is the version to trace. Zero takes the newest published one.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlDatasetLineage"
+  },
+  {
+    "description": "Datasets lists this org's datasets, each with its newest version. An org that\nhas declared none gets an empty list; a store that cannot be reached gets a\nrefusal, never an empty list, because the two read identically and only one of\nthem is true.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "mlDatasets"
+  },
+  {
+    "description": "Disposes of one dataset and every version of it — the register\nrows and the bytes together.\n\nThis is the ONLY expiry in this plane. Neither table carries a TTL, deliberately:\na table TTL is a fleet-wide clock no tenant can hold longer or shorten, which is\nthe opposite of a retention decision belonging to the tenant whose records they\nare. Disposal is a partition drop on (org, name), so the tenant is the first\ncomponent of the thing being dropped and a disposal cannot be spelled across one.\n\nIt is not reversible and there is no soft state in between. A dataset a model\ncited is gone once this returns, which is exactly what a retention obligation\nasks for and exactly why the answer says what went.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the dataset, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlDeleteDataset"
+  },
+  {
+    "description": "Reads a published version's rows back, one bounded page at a\ntime, in the version's own stable row order.\n\nOnly a published version can be exported. Rows written by an attempt that never\ncompleted are inert — no register row names them — and they are disposed of with\nthe dataset.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit is how many rows to return. Zero and anything above the plane's bound\ntake the bound.",
+          "type": "integer"
+        },
+        "name": {
+          "description": "Name is the dataset, from the path.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "Offset is where the page starts, in the version's own row order (by id,\nwhich is derived from the row and therefore stable forever).",
+          "type": "integer"
+        },
+        "split": {
+          "description": "Split narrows to train, val or test. Empty reads every split.",
+          "type": "string"
+        },
+        "version": {
+          "description": "Version is the version to read. Zero takes the newest published one.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlExportDataset"
+  },
+  {
+    "description": "Builds the declared version into immutable rows and answers\n202 as soon as the attempt is on record.\n\nIt never holds the request open for the work: a materialisation is a bounded\nwarehouse scan, and letting an HTTP client's timeout be a data plane's timeout\nis how one tenant's retry loop becomes everyone's outage. ONE materialisation\nruns per org at a time; a second is refused rather than queued, because a queue\nadmits the same work later and the honest answer to \"again\" while one is\nrunning is that one is running.\n\nOnly a DECLARED version is admitted. A published version is immutable, and a\nversion whose earlier attempt did not complete is never re-attempted — that\nwould union two runs' rows under one number and make the digest a lie. In both\ncases the answer is to declare a new version, which is what a second run over a\nmoving source honestly is.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the dataset, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlMaterializeDataset"
+  }
+]
