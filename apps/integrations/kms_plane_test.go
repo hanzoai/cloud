@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -59,5 +60,26 @@ func TestReadinessIsAboutHavingAStore(t *testing.T) {
 	withNone := &cloud.Service[state]{State: state{}}
 	if kmsReady(withNone) {
 		t.Error("no store must not read as ready")
+	}
+}
+
+// The import runs detached, so there is no request to forward and a plane call
+// would arrive anonymous — the callee reads the tenant from the caller identity
+// and refuses one it cannot see. This is the second half of the cross-process
+// fix: the request travels, and it travels WITH an identity.
+func TestTheDetachedImportStatesItsTenant(t *testing.T) {
+	src, err := os.ReadFile("github_app.go")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	s := string(src)
+	if !strings.Contains(s, "cloud.For(ctx, org)") {
+		t.Error("the background import must state the org it acts for, or the plane call is anonymous")
+	}
+	// It states the org it was ASKED for, never one from the payload — an inbound
+	// request wins over a stated one, so a job supplies an identity and cannot
+	// launder one.
+	if strings.Contains(s, "cloud.For(ctx, it.") {
+		t.Error("the tenant must come from the authenticated request, not the work item")
 	}
 }
