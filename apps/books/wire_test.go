@@ -139,19 +139,19 @@ func TestAccountsAnswerTheSeededChartAsABareArray(t *testing.T) {
 func TestStatementsCarryTheirProof(t *testing.T) {
 	app := mountBooks(t)
 
-	_, _, tbBody := hit(t, app, http.MethodGet, "/v1/books/trial-balance", "acme", nil)
+	_, _, tbBody := hit(t, app, http.MethodGet, "/v1/books/trial", "acme", nil)
 	var tb TrialBalance
 	if err := json.Unmarshal(tbBody, &tb); err != nil {
-		t.Fatalf("trial-balance: %v (%s)", err, tbBody)
+		t.Fatalf("trial: %v (%s)", err, tbBody)
 	}
 	if !tb.Balanced {
 		t.Errorf("trial balance must report balanced: %s", tbBody)
 	}
 
-	_, _, bsBody := hit(t, app, http.MethodGet, "/v1/books/balance-sheet", "acme", nil)
+	_, _, bsBody := hit(t, app, http.MethodGet, "/v1/books/position", "acme", nil)
 	var bs BalanceSheet
 	if err := json.Unmarshal(bsBody, &bs); err != nil {
-		t.Fatalf("balance-sheet: %v (%s)", err, bsBody)
+		t.Fatalf("position: %v (%s)", err, bsBody)
 	}
 	if !bs.Balanced {
 		t.Errorf("balance sheet must report balanced: %s", bsBody)
@@ -197,10 +197,10 @@ func TestEveryRouteRefusesWithoutAValidatedPrincipal(t *testing.T) {
 	for _, r := range []struct{ method, path string }{
 		{http.MethodGet, "/v1/books/accounts"},
 		{http.MethodGet, "/v1/books/gl"},
-		{http.MethodGet, "/v1/books/trial-balance"},
+		{http.MethodGet, "/v1/books/trial"},
 		{http.MethodGet, "/v1/books/metrics"},
 		{http.MethodGet, "/v1/books/pnl"},
-		{http.MethodGet, "/v1/books/balance-sheet"},
+		{http.MethodGet, "/v1/books/position"},
 		{http.MethodGet, "/v1/books/export"},
 		{http.MethodGet, "/v1/books/questions"},
 		{http.MethodGet, "/v1/books/inbox"},
@@ -218,7 +218,7 @@ func TestEveryRouteRefusesWithoutAValidatedPrincipal(t *testing.T) {
 		{http.MethodPost, "/v1/books/rules"},
 		{http.MethodPost, "/v1/books/bank/import"},
 		{http.MethodPost, "/v1/books/bank/sync"},
-		{http.MethodPost, "/v1/books/bank/link-token"},
+		{http.MethodPost, "/v1/books/bank/token"},
 		{http.MethodPost, "/v1/books/bank/exchange"},
 	} {
 		var body []byte
@@ -516,7 +516,7 @@ func TestVendorAndRuleUpsertsEchoTheNormalizedRow(t *testing.T) {
 // publish a success schema for a response neither has ever sent.
 func TestBankLinkStubsStayHonest(t *testing.T) {
 	app := mountBooks(t)
-	for _, p := range []string{"/v1/books/bank/link-token", "/v1/books/bank/exchange"} {
+	for _, p := range []string{"/v1/books/bank/token", "/v1/books/bank/exchange"} {
 		if code, _, out := hit(t, app, http.MethodPost, p, "acme", []byte(`{}`)); code != http.StatusNotImplemented {
 			t.Errorf("POST %s: status %d, want 501 (%s)", p, code, out)
 		}
