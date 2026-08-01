@@ -76,8 +76,14 @@ func init() {
 // request is refused exactly as on every other /v1/o11y read; the composite payload +
 // query string ride through unchanged, so the request/response pair is byte-for-byte
 // what the v3 handler already serves at the leaked `/v1/o11y/api/v3/<resource>` form.
+// builderInternalPath names the engine route the flat public path resolves to.
+// Split out so the pin is assertable (query_test.go): it must name a route that
+// accepts the console's v3 composite, which the flat /v1/o11y/query_range — the
+// v5 querier — does not.
+func builderInternalPath(resource string) string { return "/api/v3/" + resource }
+
 func builderQueryHandler(resource string) zip.Handler {
-	internal := "/api/v3/" + resource
+	internal := builderInternalPath(resource)
 	return zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := runtimeHandler
 		if h == nil {
