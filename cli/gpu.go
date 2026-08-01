@@ -1286,9 +1286,19 @@ func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
 	}
 
 	if act.Type.Name == studioCap && !w.studioReady {
-		cause := "studio not ready on this node — declined so a render-capable worker takes it"
-		_, _ = w.call(ctx, http.MethodPost, w.actPath(wf, run, "fail"), map[string]any{"cause": cause, "identity": w.identity}, nil)
-		fmt.Fprintf(out, "  → declined (%s)\n", cause)
+		// DECLINE BY LEASE LAPSE — deliberately no terminal report. `fail` is
+		// terminal: it does not return the job to anyone, so declining with it
+		// KILLED the render it claimed to be handing on. Two workers that had both
+		// just restarted each claimed one render and each failed it, and the person
+		// who asked for it got nothing back.
+		//
+		// The engine's verbs are claim/complete/fail/heartbeat/cancel — there is no
+		// release. What there IS is the claim's LEASE (claimLeaseSecs): a claim that
+		// is neither completed nor failed nor heartbeated expires and the job goes
+		// back to pending for whoever can run it. So the way to hand a job back is
+		// to say NOTHING and let the lease lapse, which is what this branch always
+		// meant by "declined".
+		fmt.Fprintf(out, "  → declined (studio not ready on this node) — returning it to the queue by letting the %ds claim lease lapse\n", claimLeaseSecs)
 		return nil
 	}
 	h, ok := w.handlers[act.Type.Name]
