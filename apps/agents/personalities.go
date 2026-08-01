@@ -75,12 +75,9 @@ var personalities = []persona{
 // A subsystem that is not mounted also no-ops rather than erroring, so a caller on
 // the login path can call it best-effort without ever blocking a human.
 func SeedPersonalities(ctx context.Context, org string) (int, error) {
-	if mounted == nil || mounted.State.store == nil {
-		return 0, nil
-	}
-	org = strings.TrimSpace(org)
-	if org == "" {
-		return 0, nil
+	sto, _, serr := mountedStore(org)
+	if serr != nil {
+		return 0, nil // never mounted, or an org this deployment cannot place: no-op
 	}
 	model := strings.TrimSpace(mounted.State.defaultModel)
 	if model == "" {
@@ -105,7 +102,7 @@ func SeedPersonalities(ctx context.Context, org string) (int, error) {
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		}
-		err = mounted.State.store.Create(ctx, a)
+		err = sto.Create(ctx, a)
 		switch {
 		case err == nil:
 			created++

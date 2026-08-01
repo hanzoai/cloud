@@ -16,7 +16,7 @@ func mountInproc(t *testing.T) {
 	prev := mounted
 	mounted = &cloud.Service[state]{
 		Base:  cloud.Base{Log: luxlog.New("test")},
-		State: state{store: testSessionStore(t)},
+		State: state{stores: testStores(t)},
 	}
 	t.Cleanup(func() { mounted = prev })
 }
@@ -29,7 +29,7 @@ func TestInproc_OpenLogClose_Lifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	got, err := mounted.State.store.GetSession(ctx, "acme", id)
+	got, err := storeOf(t, &mounted.State, "acme").GetSession(ctx, "acme", id)
 	if err != nil || got.Status != StatusRunning || got.RootID != id {
 		t.Fatalf("session not running root: %+v (%v)", got, err)
 	}
@@ -40,14 +40,14 @@ func TestInproc_OpenLogClose_Lifecycle(t *testing.T) {
 	if err := LogSessionEvent(ctx, "acme", id, KindToolCall, "acme/u1", []byte(`{"step":"clone"}`)); err != nil {
 		t.Fatalf("log tool: %v", err)
 	}
-	if n, _ := mounted.State.store.CountEvents(ctx, "acme", id); n != 2 {
+	if n, _ := storeOf(t, &mounted.State, "acme").CountEvents(ctx, "acme", id); n != 2 {
 		t.Fatalf("want 2 events, got %d", n)
 	}
 
 	if err := CloseSession(ctx, "acme", id, StatusDone); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	got, _ = mounted.State.store.GetSession(ctx, "acme", id)
+	got, _ = storeOf(t, &mounted.State, "acme").GetSession(ctx, "acme", id)
 	if got.Status != StatusDone || got.EndedAt == 0 {
 		t.Fatalf("want terminal done with ended_at, got %+v", got)
 	}
@@ -55,7 +55,7 @@ func TestInproc_OpenLogClose_Lifecycle(t *testing.T) {
 	if err := CloseSession(ctx, "acme", id, StatusError); err != nil {
 		t.Fatalf("double close should be a no-op, got %v", err)
 	}
-	got, _ = mounted.State.store.GetSession(ctx, "acme", id)
+	got, _ = storeOf(t, &mounted.State, "acme").GetSession(ctx, "acme", id)
 	if got.Status != StatusDone {
 		t.Fatalf("terminal state must stay done, got %q", got.Status)
 	}
@@ -76,10 +76,10 @@ func TestInproc_TenantIsolation_ForeignOrgCannotTouchSession(t *testing.T) {
 		t.Fatal("foreign org must NOT close another org's session")
 	}
 	// acme's session is untouched (no stray events, still running).
-	if n, _ := mounted.State.store.CountEvents(ctx, "acme", id); n != 0 {
+	if n, _ := storeOf(t, &mounted.State, "acme").CountEvents(ctx, "acme", id); n != 0 {
 		t.Fatalf("foreign writes leaked in: %d events", n)
 	}
-	got, _ := mounted.State.store.GetSession(ctx, "acme", id)
+	got, _ := storeOf(t, &mounted.State, "acme").GetSession(ctx, "acme", id)
 	if got.Status != StatusRunning {
 		t.Fatalf("session should still be running, got %q", got.Status)
 	}
@@ -124,10 +124,10 @@ func TestResolveTarget_IdThenLabel_OrgScoped(t *testing.T) {
 	now := int64(1000)
 	acme := Target{ID: "tgt_acme1", Org: "acme", Label: "evo", Kind: TargetGPU, Status: TargetOnline, Host: "evo", CreatedAt: now, UpdatedAt: now}
 	evil := Target{ID: "tgt_evil1", Org: "evil", Label: "evo", Kind: TargetGPU, Status: TargetOnline, Host: "evo", CreatedAt: now, UpdatedAt: now}
-	if err := mounted.State.store.CreateTarget(ctx, acme); err != nil {
+	if err := storeOf(t, &mounted.State, "acme").CreateTarget(ctx, acme); err != nil {
 		t.Fatal(err)
 	}
-	if err := mounted.State.store.CreateTarget(ctx, evil); err != nil {
+	if err := storeOf(t, &mounted.State, "evil").CreateTarget(ctx, evil); err != nil {
 		t.Fatal(err)
 	}
 
