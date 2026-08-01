@@ -80,10 +80,7 @@ const (
 // A credential that was presented and did NOT validate is anonymous, not
 // secret: possession of a string that fails is possession of nothing.
 func credentialClass(c *zip.Ctx) string {
-	tok := bearerFromAuth(c.Header("Authorization"))
-	if tok == "" {
-		tok = strings.TrimSpace(c.Header("X-Api-Key"))
-	}
+	tok := callerCredential(c)
 	switch {
 	case tok == "":
 		return CredAnonymous
@@ -194,12 +191,25 @@ func Fingerprint(cred string) string {
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))[:fingerprintLen]
 }
 
+// callerCredential is the credential this request presented, in the SAME
+// precedence the identity boundary trusts — callerToken, the one token resolution
+// SanitizeIdentity and CallerBearer already share. Reading the Authorization
+// header directly would be a second, drifting answer to "which credential
+// identifies this caller": a client authenticating with X-Authorization or a
+// session cookie would validate upstream and then be counted here as anonymous,
+// so its traffic would be pooled under its address instead of under itself.
+//
+// X-Api-Key is checked after it, because that header is not part of the identity
+// boundary's precedence but IS a spelling several SDKs send; a caller the boundary
+// could not identify is still a caller this sensor must be able to tell apart from
+// the next one.
+func callerCredential(c *zip.Ctx) string {
+	if tok := callerToken(c); tok != "" {
+		return tok
+	}
+	return strings.TrimSpace(c.Header("X-Api-Key"))
+}
+
 // credentialOf returns the fingerprint of whatever credential a request
 // presented, and "" when it presented none.
-func credentialOf(c *zip.Ctx) string {
-	tok := bearerFromAuth(c.Header("Authorization"))
-	if tok == "" {
-		tok = strings.TrimSpace(c.Header("X-Api-Key"))
-	}
-	return Fingerprint(tok)
-}
+func credentialOf(c *zip.Ctx) string { return Fingerprint(callerCredential(c)) }
