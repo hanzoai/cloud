@@ -224,7 +224,20 @@ jobs:
 
           docker run --rm \
             --entrypoint /bin/sh \
-            --tmpfs /data:rw \
+            # mode=1777 is load-bearing. The image runs as USER 65532:65532 and
+            # a bare `--tmpfs /data:rw` lands root-owned 0755 on the runner's
+            # dind daemon, so EVERY /data write is refused — the gateway CEK
+            # lock, the audit sqlite, and `listen unix /data/credz.sock`. With
+            # the credz broker dead, kms/pubsub/kafka all fail to load and the
+            # smoke never reaches "zip listening". Sticky-world-writable like
+            # /tmp, not uid=65532, so it survives a USER change.
+            #
+            # Verify inside a runner, NOT on a laptop — Docker Desktop's tmpfs
+            # defaults differ and report this as already writable:
+            #   docker run --rm --tmpfs /data:rw --user 65532:65532 alpine:3 \
+            #     sh -c 'touch /data/x && echo WRITABLE || echo DENIED'
+            #   git-runner: DENIED      mode=1777: WRITABLE
+            --tmpfs /data:rw,mode=1777 \
             -e CLOUD_DATA_DIR=/data \
             -e CLOUD_ENV=smoke \
             -e CLOUD_KMS_MASTER_KEY_REF="$(head -c 32 /dev/urandom | base64 -w0)" \
