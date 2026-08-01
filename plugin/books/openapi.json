@@ -1040,7 +1040,7 @@
             "type": "array"
           },
           "sources": {
-            "description": "Sources name the books reports the figures were computed from — \"pnl\",\n\"balance-sheet\", \"trial-balance\".",
+            "description": "Sources name the books reports the figures were computed from — \"pnl\",\n\"position\", \"trial\".",
             "items": {
               "type": "string"
             },

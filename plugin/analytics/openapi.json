@@ -771,7 +771,7 @@
       "ModelRow": {
         "properties": {
           "model": {
-            "description": "Model is the model id, e.g. claude-opus-4.",
+            "description": "Model is the model id, e.g. zen5-coder.",
             "type": "string"
           },
           "pct": {

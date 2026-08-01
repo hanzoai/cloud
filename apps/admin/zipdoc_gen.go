@@ -19,10 +19,10 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"ok":true}}`),
 	})
 	zip.Describe("GET /v1/admin/aimetrics", zip.Doc{
-		Description: "Is the fleet AI board: O11yAI generations (count, cost, avg/p95 latency,\nper-model), per-model usage from the live cloud_usage ledger, and the eval plane\n(traces, scores, score names, runs, and the average-score trend).\n\nEvery signal degrades INDEPENDENTLY — a table that is absent or errors contributes its\nzero value and the read still succeeds. O11yAI latency is a SEPARATE query from\ngenerations and cost on purpose: a Nullable end_time or a column mismatch there must\nnot zero the two numbers that did read.",
+		Description: "Is the fleet AI board: LLM generations over gen_ai spans (count, cost,\navg/p95 latency, per-model), per-model usage from the live cloud_usage ledger, and\nthe eval plane (traces, scores, score names, runs, and the average-score trend).\n\nEvery signal degrades INDEPENDENTLY — a table that is absent or errors contributes its\nzero value and the read still succeeds. Generation latency is a SEPARATE query from\ngenerations and cost on purpose: a duration/attribute mismatch there must not zero\nthe two numbers that did read.",
 		Fields: map[string]string{
 			"aiMetrics.evalRuns":     "recent eval runs (progress)",
-			"aiMetrics.o11yAiModels": "o11y_ai per-model (honest-empty today)",
+			"aiMetrics.o11yAiModels": "gen_ai spans per-model",
 			"aiMetrics.scoreNames":   "eval_scores per score-name",
 			"aiMetrics.scoreSeries":  "avg eval score over time (progress trend)",
 			"aiMetrics.topModels":    "cloud_usage per-model (populated today)",
