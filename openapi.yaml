@@ -50906,6 +50906,49 @@ paths:
       summary: Run inference against one of your deployed models
       tags:
       - ml
+  /v1/models:
+    get:
+      description: |-
+        Returns the model catalogue as the CALLER sees it: the models the calling org is entitled to, with the identifier to send as `model` on a completion.
+
+        Scoped, not global. A limited-preview model appears only once the org has been granted access to it, so two orgs reading this address at the same moment correctly see different catalogues. It is deliberately NOT gated on balance — reading which models exist is how a caller decides what to buy, and refusing it to an org at zero balance would blank the console for every customer between top-ups.
+
+        For what a model COSTS, read /v1/pricing/models: this address answers availability, that one answers price.
+      operationId: get_v1_models
+      summary: List the models this org can call
+      tags:
+      - models
+  /v1/models/{model}/access:
+    get:
+      description: |-
+        Answers where the calling org stands on a limited-preview model — whether it already has access, has an outstanding request, or has never asked. `model` is the same identifier /v1/models lists and a completion sends.
+
+        Read your OWN standing. It reports the calling org's position, not another's, and it is the read half of the pair whose write half is the POST below.
+      operationId: get_v1_models_by_model_access
+      parameters:
+      - in: path
+        name: model
+        required: true
+        schema:
+          type: string
+      summary: Read this org's access standing for one model
+      tags:
+      - models
+    post:
+      description: |-
+        Files the calling org's request to use a model that is not open to everyone, and is the ONLY way to enter that queue. A granted request makes the model appear in /v1/models and callable on a completion; until then a completion naming it is refused.
+
+        Idempotent in effect: asking again while a request is outstanding does not create a second one. Granting is an administrative act and is not this address.
+      operationId: post_v1_models_by_model_access
+      parameters:
+      - in: path
+        name: model
+        required: true
+        schema:
+          type: string
+      summary: Request access to a limited-preview model
+      tags:
+      - models
   /v1/mq/health:
     get:
       description: Reports whether the message plane behind this surface answers.
@@ -62227,6 +62270,11 @@ tags:
 - description: 'Package ml is model serving and training: deploy a model behind an
     endpoint, run a training job, tune it with experiments.'
   name: ml
+- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
+    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
+    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
+    cannot INSTALL.
+  name: models
 - description: 'Package mq is queue and stream admin for your org: create them, watch
     them drain, ack what you pulled.'
   name: mq
