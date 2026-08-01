@@ -194,7 +194,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// Convenience aliases (the cleaner top-level surface from server.mjs).
 	// NOTE: the bare /v1/models alias is DELIBERATELY NOT mounted here. In the
-	// unified binary the AI subsystem owns the OpenAI-compatible /v1/models
+	// unified binary the AI subsystem owns the standard /v1/models
 	// (the {data:[{id,…}]} model list the api.hanzo.ai gateway forwards and
 	// clients like cowork's model picker consume). Pricing's annotated catalog
 	// already lives at /v1/pricing/models, so the bare alias would only shadow
@@ -302,7 +302,7 @@ type pricingBlob map[string]any
 // pricingModelRef addresses one catalog model.
 type pricingModelRef struct {
 	// Name is the model's name or its slugged id ("zen4",
-	// "anthropic/claude-opus-4.6"), matched case-insensitively. It comes from
+	// "acme/some-model-1"), matched case-insensitively. It comes from
 	// the path: the URL is the addressing authority.
 	Name string `json:"name"`
 }

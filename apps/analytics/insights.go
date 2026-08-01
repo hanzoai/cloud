@@ -2,7 +2,7 @@ package analytics
 
 // /v1/insights — the UNIFIED native insights surface on the SAME engine.
 //
-// This file is a WIRE ADAPTER, not a second pipeline: PostHog-shaped payloads
+// This file is a WIRE ADAPTER, not a second pipeline: third-party analytics payloads
 // (what @hanzo/insights and every PostHog-compatible SDK emit) are mapped onto
 // the native CaptureEvent and flow through the ONE capture path (normalize →
 // scrub → the event plane), and the console reads recent events back from

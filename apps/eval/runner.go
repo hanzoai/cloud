@@ -41,7 +41,7 @@ type EvalRunner interface {
 }
 
 // gatewayRunner is the default, workhorse EvalRunner: it drives the in-process
-// model gateway (the AI subsystem's OpenAI-compatible /v1/chat/completions over
+// model gateway (the AI subsystem's standard /v1/chat/completions over
 // loopback). It runs ANY model/endpoint the caller is entitled to, with no token
 // cap, no tier gate, and a caller-chosen judge — the capabilities DO's eval API
 // cannot offer (DO can't API-eval custom/fine-tuned weights, and its agent-eval
@@ -85,7 +85,7 @@ func (r *gatewayRunner) Judge(ctx context.Context, authz string, judge judgeSpec
 	return parseJudge(content)
 }
 
-// chat is one OpenAI-compatible /v1/chat/completions round-trip through the
+// chat is one standard /v1/chat/completions round-trip through the
 // gateway, at temperature 0 (deterministic scoring), non-streamed.
 func (r *gatewayRunner) chat(ctx context.Context, authz, model string, messages []map[string]any) (string, error) {
 	payload := map[string]any{"model": model, "messages": messages, "temperature": 0, "stream": false}

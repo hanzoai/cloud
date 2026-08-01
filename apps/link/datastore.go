@@ -17,7 +17,7 @@ import (
 // inference (our gateway's own ledger, cost of record). This table records
 // something different in kind: what a user's OWN provider account has consumed of
 // its OWN plan, metered by @hanzo/usage reading that provider's own login. Nobody
-// else can know that a Claude Max plan is 47% through its 6h window — no Hanzo
+// else can know that a subscription plan is 47% through its 6h window — no Hanzo
 // request produced it. The two are never conflated: they are separate tables, read
 // separately, and labelled by source wherever they appear together.
 //

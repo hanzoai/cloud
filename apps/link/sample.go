@@ -147,7 +147,7 @@ type Sample struct {
 	// hanzoai/plans catalog expresses `ai.requests_per_min` / `ai.tokens_per_min`
 	// — per-MINUTE rate limits, a different concept from a window quota — and in
 	// any case it is HANZO's own plan catalog, which cannot know what Anthropic
-	// grants a Claude Max plan. An always-zero quota_limit would read as "the
+	// grants a subscription plan. An always-zero quota_limit would read as "the
 	// limit is zero"; absent is honest. It lands as an additive column when a
 	// source for it exists.
 	UsedPct    float64
