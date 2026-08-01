@@ -151,6 +151,21 @@ func (s *state) engine(t Tier) Engine {
 
 var mounted *state
 
+// storeFor is the ONE way this package reaches a store: it names the database
+// through cloud.OrgNamespace — the single door a validated org walks through —
+// and asks the registry for that name. Nothing else here resolves a store, so
+// "which file does this request touch" has one answer from one input.
+//
+// org MUST already be validated: principal.Org for a request, or the caller's
+// own server-side resolution for an in-process seam.
+func storeFor(s *cloud.Service[*state], org string) (*memory, error) {
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return s.State.stores.For(ns)
+}
+
 // Mount wires the /v1/translate surface: the quality engine over the model plane
 // deps.AI already gates and meters, and the bulk engine over the MADLAD backend
 // named by TRANSLATE_BULK_URL (unset ⇒ the tier answers 503).
@@ -289,7 +304,7 @@ func serve(s *cloud.Service[*state], c *zip.Ctx) error {
 	}
 	glossary := version(in.Glossary)
 
-	mem, err := s.State.stores.For(org, "")
+	mem, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
 	}
@@ -429,7 +444,7 @@ func (o ops) list(ctx context.Context, in *MemoryQuery) (*MemoryPage, error) {
 	if in.Limit > 0 {
 		limit = min(in.Limit, maxListLimit)
 	}
-	mem, err := o.s.State.stores.For(org, "")
+	mem, err := storeFor(o.s, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
 	}
@@ -498,7 +513,7 @@ func (o ops) review(ctx context.Context, in *ReviewRequest) (*MemoryEntry, error
 	if err != nil {
 		return nil, zip.ErrBadRequest(err.Error())
 	}
-	mem, err := o.s.State.stores.For(org, "")
+	mem, err := storeFor(o.s, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "memory: %v", err)
 	}

@@ -78,7 +78,7 @@ func CreateAgentPR(ctx context.Context, in AgentPRInput) (AgentPR, error) {
 		assignee = assignee[:maxField]
 	}
 
-	store, err := mounted.State.stores.For(org, strings.TrimSpace(in.Project))
+	store, err := storeFor(mounted, org, strings.TrimSpace(in.Project))
 	if err != nil {
 		return AgentPR{}, fmt.Errorf("tracker: open store: %w", err)
 	}
