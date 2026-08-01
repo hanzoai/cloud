@@ -103,6 +103,14 @@ var unreachable = []string{
 	// than pick a winner between: the fleet document could not be woven at all until
 	// commerce dropped it. The published operation is identical from either app —
 	// same id, same tag, no declared body — so nothing moved but the ownership.
+	// iam /.well-known/{wildcard1} is no longer here, and it is the first entry this
+	// ledger has lost to a CHILD becoming describable rather than to a route moving.
+	// iam was relayed through a wildcard, so the only thing it could publish at the
+	// issuer root was /.well-known/{wildcard1} — and the only prefix that could have
+	// routed it was /.well-known, which owns the whole subtree and would have taken
+	// agentskills' with it. Grafted, iam declares the three exact documents its
+	// router holds (jwks, openid-configuration, oauth-authorization-server), so the
+	// host routes exactly those. A relying party's FIRST call reaches an app now.
 	"git / -> nothing",
 	"git /{org}/{project}/{repo}/git-receive-pack -> nothing",
 	"git /{org}/{project}/{repo}/git-upload-pack -> nothing",
@@ -114,7 +122,6 @@ var unreachable = []string{
 	"git /{org}/{repo}/git-upload-pack -> nothing",
 	"git /{org}/{repo}/info/refs -> nothing",
 	"git /{org}/{repo}/tree/{wildcard1} -> nothing",
-	"iam /.well-known/{wildcard1} -> nothing",
 }
 
 // oracle is the transport the probe mounts every app on. A mounted app is

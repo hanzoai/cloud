@@ -7,6 +7,19 @@ import (
 )
 
 func init() {
+	zip.Describe("GET /v1/world", zip.Doc{
+		Description: "Answers GET /v1/world — the product's front door, naming every wire this\nsurface answers on.\n\nIt exists because two of those wires are INVISIBLE to the generated document.\n/v1/world/mcp and /v1/world/zap are carved off the cloud catch-all by the\ningress and answered by world-gw, so the cloud router never serves them — and\nopenapi.Describe renders prose only for a route the router actually serves,\nwhich is the very property that keeps the document from being able to claim an\noperation nothing answers. Both addresses are real and public, so without this\nop the only way to learn they exist is to read the ingress config. This is\nwhere that fact lives, in the product's own surface.\n\nPublic on purpose: discovery precedes credentials. It reports addresses and\nprotocols only — never feed data, and never the caller's plan, which\nGET /v1/world/limits owns — so there is nothing here to leak.",
+		Fields: map[string]string{
+			"worldIndex.product": "Product is the product's name as customers know it.",
+			"worldIndex.summary": "Summary is one sentence naming what this surface serves.",
+			"worldIndex.wires":   "Wires is every protocol door onto World, REST first. It is deliberately NOT\na list of REST operations: GET /v1/openapi.json is the one enumeration of\nthose, and a second copy here would be a second thing to keep true.",
+			"worldWire.auth":     "Auth states what the wire asks of the caller, including which parts of it\nanswer without a token.",
+			"worldWire.name":     "Name is the wire's short id — rest, mcp or zap.",
+			"worldWire.path":     "Path is the address the wire answers on, under this same origin.",
+			"worldWire.protocol": "Protocol names what the wire speaks, so a caller knows which client to\npoint at it.",
+			"worldWire.spec":     "Spec is where this wire's operations are enumerated, when they are\nenumerated in a document at all. Empty for a wire that describes itself\nover its own protocol.",
+		},
+	})
 	zip.Describe("GET /v1/world/limits", zip.Doc{
 		Description: "Echoes a World plan's rate limits, alert quota and model-API grant, read\nstraight from the live @hanzo/plans catalog, so agents and dashboards configure\nthemselves against the catalog instead of hardcoding tier numbers.\n\nAn empty or unknown plan resolves world-free, and a catalog failure serves that\nsame free floor rather than erroring — so this always answers 200, and it can only\never under-grant. It reports the contract; it does not enforce it.",
 		Fields: map[string]string{

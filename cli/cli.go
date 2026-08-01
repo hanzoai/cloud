@@ -35,8 +35,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version is the binary version, set by cmd/hanzo from its -ldflags value so
-// the CLI and the server report one string. Used in the User-Agent.
+// Version is the binary version. cmd/hanzo RESOLVES it once (resolveVersion:
+// the -ldflags stamp, else the build metadata the toolchain embeds) and assigns
+// it here — this package holds the answer and never re-derives it. Reported by
+// `hanzo version` and sent as the User-Agent.
 var Version = "dev"
 
 // Default endpoints. Overridable per-field via config / env / flag.
@@ -629,20 +631,34 @@ func newVersionCmd() *cobra.Command {
 		Args:              cobra.NoArgs,
 		PersistentPreRunE: func(*cobra.Command, []string) error { return nil },
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "hanzo %s\n", Version)
-			// This binary owns a handful of verbs and hands every other one to
-			// the fabric CLI. That delegate is a SEPARATE artifact with its own
-			// version, and when it is stale nothing says so: the user types
-			// `hanzo`, gets delegated, and runs an old build whose command
-			// surface is not the one documented. Name it here, so the thing
-			// that actually answers is never invisible.
-			if p := fabricCLI(); p != "" {
-				if v := delegateVersion(p); v != "" {
-					fmt.Fprintf(out, "delegate: %s %s\n", p, v)
-				} else {
-					fmt.Fprintf(out, "delegate: %s (version unreadable)\n", p)
+			// STDOUT is the answer to the question asked — what am I running —
+			// and it is EXACTLY one line, always. It is also what a parent
+			// `hanzo` reads back out of a delegate (delegateVersion takes the
+			// first line's last token), so one line keeps that contract honest
+			// in both directions.
+			fmt.Fprintf(cmd.OutOrStdout(), "hanzo %s\n", Version)
+
+			// The delegate is a SEPARATE artifact with its own version, and a
+			// stale one silently answers every verb this binary hands over. That
+			// is worth saying — as a WARNING on stderr, where it cannot compete
+			// with the answer, and ONLY when there is something to act on.
+			// Agreement is the healthy case and says nothing at all.
+			p := fabricCLI()
+			if p == "" {
+				return nil
+			}
+			v, ours := delegateVersion(p), strings.TrimPrefix(Version, "v")
+			errOut := cmd.ErrOrStderr()
+			switch {
+			case v == "":
+				fmt.Fprintf(errOut, "warning: delegate %s is installed but would not report a version\n", p)
+			case v != ours:
+				self, err := os.Executable()
+				if err != nil {
+					self = "hanzo"
 				}
+				fmt.Fprintf(errOut, "warning: stale delegate — %s is %s, %s is %s;\n"+
+					"         verbs handed to `hanzo-node` run THAT build, not this one\n", p, v, self, ours)
 			}
 			return nil
 		},

@@ -17,6 +17,17 @@ export GOWORK := off
 DOCKER_IMAGE    ?= ghcr.io/hanzoai/cloud
 DOCKER_TAG      ?= dev
 LDFLAGS         ?= -s -w
+
+# What a binary REPORTS when asked. `git describe` is the source: the tag when
+# the build is one, the sha when it is not, `-dirty` when the tree is not
+# committed. It is APPENDED to LDFLAGS at each cmd/ target rather than folded
+# into the LDFLAGS default, so `make LDFLAGS=...` keeps overriding exactly what
+# it always did and still cannot produce an unstamped binary.
+#
+# Empty is a legitimate value — a release that builds from an export with no
+# .git has nothing to describe. Empty stamps nothing, and cmd/hanzo's
+# resolveVersion then answers from the metadata the toolchain embeds by itself.
+VERSION         ?= $(shell git describe --tags --always --dirty 2>/dev/null)
 # Path to a hanzoai/console checkout used to build the embedded console bundle.
 CONSOLE_DIR    ?= ../console
 # Path to a hanzoai/openapi checkout — the SOT the agent-skills catalog is generated from.
@@ -53,7 +64,7 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
 
-.PHONY: help webui deploy-ui agentskills build cloud ship apps $(APP_BINS) plugin generate describe run smoke test test-fast test-cgo test-codec vet tidy docker docker-push clean e2e
+.PHONY: help webui deploy-ui agentskills build cloud hanzo ship apps $(APP_BINS) plugin generate describe run smoke test test-fast test-cgo test-codec vet tidy docker docker-push clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -110,7 +121,7 @@ build: cloud ## FAST PATH (default): build the light host into ./bin/cloud. Then
 # named cloud — it IS the one real binary, and its ENTRYPOINT the image ships.
 cloud: ## Build the light host into ./bin/cloud (links zip + the manifest, none of the apps).
 	@mkdir -p bin
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$@ ./cmd/$@
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS) -X github.com/hanzoai/cloud.Version=$(VERSION)" -o bin/$@ ./cmd/$@
 	@echo ">> bin/cloud — $$(CGO_ENABLED=$(CGO_ENABLED) $(GO) list -deps ./cmd/cloud | wc -l) packages, $$(du -h bin/cloud | cut -f1)"
 
 # THE RELEASE LAYOUT: the light host plus one dedicated binary per app, all in
@@ -157,7 +168,16 @@ generate: ## Scaffold missing plugin/<app>/main.go and validate the manifest.App
 # over HTTP via its OpenAPI-generated command surface, and cmd/hanzo here, the
 # CLIENT-ONLY control binary over cli/ that delegates every verb it does not
 # register to that Rust CLI. cmd/hanzo links cli and nothing else — no app, no
-# host — so it is not part of the API build above: `go build ./cmd/hanzo`.
+# host — so it is not part of the API build above; it is its own target.
+#
+# That it had NO target is how it shipped reporting "dev": the version ldflag
+# was documented in cmd/hanzo/main.go and written nowhere, so every build — the
+# installed one included — answered `hanzo --version` with the placeholder. The
+# stamp lives here now, and resolveVersion covers whoever still runs a bare
+# `go build ./cmd/hanzo`.
+hanzo: ## Build the control CLI into ./bin/hanzo (links cli and nothing else).
+	@mkdir -p bin
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS) -X main.version=$(VERSION)" -o bin/$@ ./cmd/$@
 
 # Builds the host plus EXACTLY the plugins it is told to mount — not all 106.
 # The host resolves a plugin as a file beside itself (manifest.App.Plugin), so a

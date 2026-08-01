@@ -9,15 +9,6 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/iam/keys", zip.Doc{
-		Description: "RevokeKey revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
-		Fields: map[string]string{
-			"keyTypeIn.type":  "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
-			"revokedKey.ok":   "OK is true when the key was revoked. A failure is an error status, never a\nfalse here.",
-			"revokedKey.type": "Type is the key class that was revoked, resolved — so a caller that named\nnothing can see it revoked the secret key.",
-		},
-		Example: json.RawMessage(`{"type":"publishable"}`),
-	})
 	zip.Describe("DELETE /v1/keys", zip.Doc{
 		Description: "RevokeKey revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
 		Fields: map[string]string{
@@ -60,16 +51,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"app":"cms"}`),
 	})
-	zip.Describe("GET /v1/iam/keys", zip.Doc{
-		Description: "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
-		Fields: map[string]string{
-			"apiKey.createdAt": "CreatedAt is when the key last changed, as IAM records it.",
-			"apiKey.key":       "Key is the FULL value, and is present for a publishable key only: it is\npublic by construction and useless to its holder if it cannot be read back.",
-			"apiKey.prefix":    "Prefix is the recognizable, non-secret head of the key — enough to tell two\nkeys apart, never enough to use one.",
-			"apiKey.type":      "Type is the key class: secret (sk-) or publishable (pk-).",
-			"apiKeyList.keys":  "Keys is every key the caller holds, at most one per type.",
-		},
-	})
 	zip.Describe("GET /v1/keys", zip.Doc{
 		Description: "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
 		Fields: map[string]string{
@@ -93,27 +74,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"rail":"base-usdc","txHash":"0x0000000000000000000000000000000000000000000000000000000000000001"}`),
 	})
-	zip.Describe("POST /v1/iam/keys", zip.Doc{
-		Description: "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
-		Fields: map[string]string{
-			"keyTypeIn.type":      "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
-			"mintedKey.accessKey": "AccessKey is the same value under its predecessor name, carried so callers\nwritten against the older field keep working. One value, two names.",
-			"mintedKey.key":       "Key is the credential, returned ONCE — a secret key is unreadable afterwards.",
-			"mintedKey.type":      "Type is the class of key that was minted.",
-		},
-		Example: json.RawMessage(`{"type":"publishable"}`),
-	})
-	zip.Describe("POST /v1/iam/onboard", zip.Doc{
-		Description: "Onboard creates the caller's organization. Two flows, keyed on whether the caller\nalready has a home org (mirrors app/onboard/route.ts):\n\n  - FIRST-RUN (no owner): create + MOVE the user in as admin, so their next JWT\n    carries the new owner and the cloud scopes everything to it.\n  - ADDITIONAL (owner set): create the org but do NOT move the user — a move\n    changes their IAM owner (stripping a SuperAdmin's status + orphaning their\n    current org). They reach the new org via the OrgSwitcher, which re-scopes\n    X-Org-Id without touching IAM membership. A personal-org request from someone\n    who already has an org is meaningless → 409.",
-		Fields: map[string]string{
-			"onboardReq.name":         "Name is the organization's display name. Ignored when personal is true, which\nderives the name from the caller's own username instead.",
-			"onboardReq.personal":     "Personal asks for the caller's own workspace: the name is derived from their\nusername and the slug auto-suffixes to stay unique. Meaningless — and refused\n— for a caller who already has an organization.",
-			"onboardResp.additional":  "Additional is true when the caller already had an organization and this one\nwas created WITHOUT moving them into it — they reach it via the org switcher.",
-			"onboardResp.displayName": "DisplayName is the organization's human name.",
-			"onboardResp.org":         "Org is the created organization's slug, which is what X-Org-Id carries.",
-		},
-		Example: json.RawMessage(`{"name":"Acme"}`),
-	})
 	zip.Describe("POST /v1/keys", zip.Doc{
 		Description: "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
 		Fields: map[string]string{
@@ -123,5 +83,16 @@ func init() {
 			"mintedKey.type":      "Type is the class of key that was minted.",
 		},
 		Example: json.RawMessage(`{"type":"publishable"}`),
+	})
+	zip.Describe("POST /v1/orgs", zip.Doc{
+		Description: "Onboard creates the caller's organization. Two flows, keyed on whether the caller\nalready has a home org (mirrors app/onboard/route.ts):\n\n  - FIRST-RUN (no owner): create + MOVE the user in as admin, so their next JWT\n    carries the new owner and the cloud scopes everything to it.\n  - ADDITIONAL (owner set): create the org but do NOT move the user — a move\n    changes their IAM owner (stripping a SuperAdmin's status + orphaning their\n    current org). They reach the new org via the OrgSwitcher, which re-scopes\n    X-Org-Id without touching IAM membership. A personal-org request from someone\n    who already has an org is meaningless → 409.",
+		Fields: map[string]string{
+			"onboardReq.name":         "Name is the organization's display name. Ignored when personal is true, which\nderives the name from the caller's own username instead.",
+			"onboardReq.personal":     "Personal asks for the caller's own workspace: the name is derived from their\nusername and the slug auto-suffixes to stay unique. Meaningless — and refused\n— for a caller who already has an organization.",
+			"onboardResp.additional":  "Additional is true when the caller already had an organization and this one\nwas created WITHOUT moving them into it — they reach it via the org switcher.",
+			"onboardResp.displayName": "DisplayName is the organization's human name.",
+			"onboardResp.org":         "Org is the created organization's slug, which is what X-Org-Id carries.",
+		},
+		Example: json.RawMessage(`{"name":"Acme"}`),
 	})
 }

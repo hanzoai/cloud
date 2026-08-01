@@ -3,8 +3,8 @@
 #
 # NO images: lane HERE, and the reason changed. The cloud MAIN image and its v*
 # tags still have exactly ONE owner, and the tag-is-a-receipt invariant still
-# holds (main push → build → smoke → tag → pin). But that owner is now
-# .hanzo/workflows/deploy.yml, not apps/platform/release.go.
+# holds (main push → build → smoke → tag → pin → prove live). But that owner is
+# now the `image` job of .hanzo/workflows/cicd.yml, not apps/platform/release.go.
 #
 # release.go held it until a release could be shown to reliably kill itself: it
 # ran detached inside the single replica whose pin it moved, so its own last step
@@ -16,10 +16,16 @@
 # owner, in the one place the rest of the fleet already builds. No other artifact
 # in this repo is built as an image either — the prebuilt inputs cloud's
 # Dockerfile pulls (console-embed, agent-skills) are published by THEIR OWN repos.
-# So CI's only job here is the TEST GATE on every push/PR.
 #
-# NO deploy here either: deploy.yml ends in universe/charts/app/pin.sh, and
-# cd.hanzo.ai reconciles what that pin records.
+# So CI's job here is the TEST GATE — and the gate is now what the whole release
+# hangs off. The `test:` block below is car 0 of the train: every later job
+# (image, rollout, reach, fanout, receipt) declares `needs:` on it, which is the
+# edge that did not exist when the drift gate below was red on main through 87
+# commits and 6 releases. A gate with no edge to the thing it stops is a
+# decoration.
+#
+# NO deploy here either: the `rollout` job ends in universe/charts/app/pin.sh,
+# and cd.hanzo.ai reconciles what that pin records.
 
 # NO binaries: lane. Every subsystem now ships as its OWN plugin/<app> binary, and
 # the per-app binaries travel INSIDE the release image — the Dockerfile builds the
