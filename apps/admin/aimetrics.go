@@ -23,9 +23,10 @@ package admin
 // (datastore.Query), no second connection.
 //
 // Signals, each from its canonical table in the one datastore:
-//   - LLM generations → console.observations : generations, cost (USD), latency
-//                                                (fleet-wide; honest-empty until the
-//                                                O11yAI ingest lands rows)
+//   - LLM generations → event.span            : gen_ai spans — generations, cost
+//                                                (USD) and latency projected from
+//                                                span attributes; a gen_ai span IS
+//                                                the observation (see o11y.go)
 //   - Per-model usage → hanzo.cloud_usage      : requests, tokens, cost per model
 //                                                (the live usage ledger the ai gateway
 //                                                writes — populated today)
@@ -52,9 +53,9 @@ package admin
 // INDEPENDENTLY — a table that is absent or a column that differs contributes its
 // zero-value (the enclosing `if err == nil`), never a failure, so the board always
 // renders what the datastore actually holds. admin READS only; it owns and creates
-// NO table. Money from cloud_usage is USD cents, from o11y_ai is USD; latency is
-// milliseconds; time bounds are POSITIONAL parameters (never interpolated), and the
-// bucket interval is a server-side constant — injection-safe.
+// NO table. Money from cloud_usage is USD cents, from gen_ai spans is USD; latency
+// is milliseconds; time bounds are POSITIONAL parameters (never interpolated), and
+// the bucket interval is a server-side constant — injection-safe.
 
 import (
 	"context"
@@ -66,17 +67,16 @@ import (
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ai gateway owns
-// hanzo.cloud_usage, O11yAI owns the AI observations, and the eval telemetry
-// store (clients/eval) owns hanzo.eval_traces / hanzo.eval_scores.
+// hanzo.cloud_usage, the event plane (apps/analytics) owns event.span, and the
+// eval telemetry store (clients/eval) owns hanzo.eval_traces / hanzo.eval_scores.
 //
-// Same correction as apps/admin/o11y.go's o11yAIObs, which see for the full
-// reasoning: `o11y_ai` is not a database that exists, so every AI number on this
-// board read zero while 8,867 observations sat unread in `console`. Both consts
-// name the SAME table and must move together — they are one fact stated twice,
-// which is why they drifted into pointing at nothing without either being noticed.
+// There is deliberately NO AI-observations const here. This board and o11y.go
+// once each named the observation table — one fact stated twice — and the twins
+// drifted into pointing at a database that did not exist without either being
+// noticed. The projection now lives ONCE in o11y.go (o11yAIObs = event.span plus
+// the o11yGenAI* attribute consts; same package) and this file reads it there.
 const (
 	aimUsageTable = "hanzo.cloud_usage"
-	aimO11yAIObs  = "console.observations"
 	aimEvalTraces = "hanzo.eval_traces"
 	aimEvalScores = "hanzo.eval_scores"
 	aimTopN       = 12
@@ -91,14 +91,15 @@ type aiMetrics struct {
 	Usage        aimUsage         `json:"usage"`
 	Evals        aimEvals         `json:"evals"`
 	TopModels    []aimModelStat   `json:"topModels"`    // cloud_usage per-model (populated today)
-	O11yAIModels []aimLfModelStat `json:"o11yAiModels"` // o11y_ai per-model (honest-empty today)
+	O11yAIModels []aimLfModelStat `json:"o11yAiModels"` // gen_ai spans per-model
 	ScoreNames   []aimScoreStat   `json:"scoreNames"`   // eval_scores per score-name
 	EvalRuns     []aimRunStat     `json:"evalRuns"`     // recent eval runs (progress)
 	ScoreSeries  []aimScorePoint  `json:"scoreSeries"`  // avg eval score over time (progress trend)
 }
 
-// aimO11yAI is the fleet-wide O11yAI generation rollup (honest-empty today).
-// Cost is USD (O11yAI's native unit); latency is milliseconds (end_time-start_time).
+// aimO11yAI is the fleet-wide LLM generation rollup over gen_ai spans.
+// Cost is USD (the _o11y.gen_ai.total_cost attribute's native unit); latency is
+// milliseconds (span duration is nanoseconds; rendered /1e6).
 type aimO11yAI struct {
 	Generations  int64   `json:"generations"`
 	CostUsd      float64 `json:"costUsd"`
@@ -137,7 +138,7 @@ type aimModelStat struct {
 	CostCents int64  `json:"costCents"`
 }
 
-// aimLfModelStat is one row of the per-model O11yAI leaderboard (honest-empty today).
+// aimLfModelStat is one row of the per-model gen_ai-span leaderboard.
 type aimLfModelStat struct {
 	Model       string  `json:"model"`
 	Generations int64   `json:"generations"`
@@ -170,14 +171,14 @@ type aimScorePoint struct {
 	Count    int64   `json:"count"`
 }
 
-// aimetrics is the fleet AI board: O11yAI generations (count, cost, avg/p95 latency,
-// per-model), per-model usage from the live cloud_usage ledger, and the eval plane
-// (traces, scores, score names, runs, and the average-score trend).
+// aimetrics is the fleet AI board: LLM generations over gen_ai spans (count, cost,
+// avg/p95 latency, per-model), per-model usage from the live cloud_usage ledger, and
+// the eval plane (traces, scores, score names, runs, and the average-score trend).
 //
 // Every signal degrades INDEPENDENTLY — a table that is absent or errors contributes its
-// zero value and the read still succeeds. O11yAI latency is a SEPARATE query from
-// generations and cost on purpose: a Nullable end_time or a column mismatch there must
-// not zero the two numbers that did read.
+// zero value and the read still succeeds. Generation latency is a SEPARATE query from
+// generations and cost on purpose: a duration/attribute mismatch there must not zero
+// the two numbers that did read.
 //
 // Example: {"range":"7d"}
 // Response: {"status":"ok","msg":"","data":{"range":"7d","start":"2026-07-20T00:00:00Z",
@@ -206,23 +207,24 @@ func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
 		return &aimetricsOut{Status: core.OK, Data: &payload}, nil
 	}
 
-	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, observations.start_time, eval_*.ts
+	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, span.time, eval_*.ts
 	interval := o11yBucket(rangeLabel)
 
-	// ── O11yAI generations (fleet) — honest-empty until ingest lands rows ──
-	if rows, err := datastore.Query(ctx, aimO11yAITotalsSQL(), sinceTS); err == nil {
+	// ── LLM generations (fleet) over gen_ai spans — totals builder SHARED with the
+	// o11y board (o11y.go): one query, one builder, two boards ──
+	if rows, err := datastore.Query(ctx, o11yLLMSQL(), sinceTS); err == nil {
 		r := firstRowOr(rows)
 		payload.O11yAI.Generations = chInt64(r["gens"])
 		payload.O11yAI.CostUsd = chFloat64(r["cost"])
 	}
-	// O11yAI latency (separate query so a Nullable end_time / column mismatch never
+	// Generation latency (separate query so a duration/attribute mismatch never
 	// zeroes the proven generations+cost number above).
 	if rows, err := datastore.Query(ctx, aimO11yAILatencySQL(), sinceTS); err == nil {
 		r := firstRowOr(rows)
 		payload.O11yAI.LatencyMsAvg = chFloat64(r["lat_avg"])
 		payload.O11yAI.LatencyMsP95 = chFloat64(r["lat_p95"])
 	}
-	// O11yAI per-model.
+	// Generations per-model.
 	if rows, err := datastore.Query(ctx, aimO11yAIModelsSQL(), sinceTS); err == nil {
 		payload.O11yAIModels = lfModelsFromRows(rows)
 	}
@@ -264,20 +266,20 @@ type aimetricsOut struct {
 
 // ── pure SQL builders (static SQL + one positional time bound; unit-tested) ──
 
-func aimO11yAITotalsSQL() string {
-	return "SELECT count() AS gens, toFloat64(sum(total_cost)) AS cost FROM " + aimO11yAIObs +
-		" WHERE type = 'GENERATION' AND start_time >= ?"
-}
+// (Generation TOTALS come from o11yLLMSQL in o11y.go — the one shared builder.)
 
+// aimO11yAILatencySQL projects generation latency from the span's own duration
+// (UInt64 nanoseconds → ms). duration > 0 guards the unset/instant case the way
+// end_time > start_time guarded the old two-column store.
 func aimO11yAILatencySQL() string {
-	lat := "(toUnixTimestamp64Milli(end_time) - toUnixTimestamp64Milli(start_time))"
+	lat := "(duration / 1e6)"
 	return "SELECT round(avg(" + lat + "), 2) AS lat_avg, round(quantile(0.95)(" + lat + "), 2) AS lat_p95 " +
-		"FROM " + aimO11yAIObs + " WHERE type = 'GENERATION' AND start_time >= ? AND end_time > start_time"
+		"FROM " + o11yAIObs + " WHERE " + o11yGenAISpan + " AND time >= ? AND duration > 0"
 }
 
 func aimO11yAIModelsSQL() string {
-	return "SELECT provided_model_name AS model, count() AS gens, toFloat64(sum(total_cost)) AS cost " +
-		"FROM " + aimO11yAIObs + " WHERE type = 'GENERATION' AND start_time >= ? AND provided_model_name != '' " +
+	return "SELECT " + o11yGenAIModel + " AS model, count() AS gens, sum(" + o11yGenAICost + ") AS cost " +
+		"FROM " + o11yAIObs + " WHERE " + o11yGenAISpan + " AND time >= ? AND model != '' " +
 		"GROUP BY model ORDER BY gens DESC LIMIT " + strconv.Itoa(aimTopN)
 }
 
