@@ -19,7 +19,7 @@ import (
 // machine's capability. A run offered to target X is never reachable from a claim
 // for target Y, and a claim for another org's target 404s at the org boundary.
 //
-//	POST /v1/agents/targets/:id/claim-key            mint/rotate this target's claim key -> {claimKey}
+//	POST /v1/agents/targets/:id/key                  mint/rotate this target's claim key -> {claimKey}
 //	POST /v1/agents/targets/:id/claim                long-poll for the next routed run (X-Target-Key)
 //	POST /v1/agents/targets/:id/runs/:runId/report   report a routed run's terminal result (X-Target-Key)
 
@@ -42,7 +42,7 @@ func mountRouting(s *cloud.Service[state], app cloud.Router) {
 	assertSingleReplica(s.Log)
 	o := routingOps{s: s}
 	g := app.Group("/v1/agents")
-	zip.Post(g, "/targets/:id/claim-key", o.mintClaimKey)
+	zip.Post(g, "/targets/:id/key", o.mintClaimKey)
 	zip.Post(g, "/targets/:id/claim", o.claim)
 	zip.Post(g, "/targets/:id/runs/:runId/report", o.report)
 }
@@ -234,7 +234,7 @@ type reportOut struct {
 
 // ReportRoutedRun completes a claimed run: it delivers the terminal result to the
 // run's durable owner, which is what lets that workflow finish. Scoped to (org,
-// target, run) and claim-key-authenticated, so a machine can only ever report a
+// target, run) and claim-key authenticated, so a machine can only ever report a
 // run it legitimately holds. Idempotent — a report for an unknown or
 // already-finished run answers delivered:false rather than failing, because the
 // session's terminal state was already set by the machine's own stream.
