@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package product is the read-only inventory of the search and vector backends: /v1/search-docs/{indexes,stats} read from Meilisearch and /v1/vector/{collections,stats} from Qdrant, reshaped into the rows the console renders.",
+    "description": "Package product is the read-only inventory of the search and vector backends: /v1/search/{indexes,stats} read from Meilisearch and /v1/vector/{collections,stats} from Qdrant, reshaped into the rows the console renders.",
     "version": "v1"
   },
   "servers": [
@@ -12,7 +12,7 @@
   ],
   "tags": [
     {
-      "name": "search-docs"
+      "name": "search"
     },
     {
       "name": "vector"
@@ -25,7 +25,7 @@
         "summary": "Lists the search indexes with their document counts and timestamps.",
         "description": "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
         "tags": [
-          "search-docs"
+          "search"
         ],
         "responses": {
           "200": {
@@ -47,7 +47,7 @@
         "summary": "Totals the documents across every search index.",
         "description": "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
         "tags": [
-          "search-docs"
+          "search"
         ],
         "responses": {
           "200": {
