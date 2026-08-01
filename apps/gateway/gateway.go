@@ -1,12 +1,18 @@
-// Package gateway is live control of your API edge: CORS, rate limits, cache
-// TTL and allowed methods, changed without a redeploy.
+// Package gateway is live control of the policy your API applies to every
+// incoming request: CORS, rate limits, cache TTL and allowed methods, changed
+// without a redeploy.
 //
-// It is the runtime config plane for the cloud edge ("gateway role"), served at
-// /v1/gateway. It serves GET/PUT over the SAME
-// edge.Store the EdgeCORS/EdgeRateLimit middleware and ScopeRateLimit
-// read live, so an operator retunes the CORS allowlist, the pre-auth per-IP flood
-// cap, or a tenant's authenticated rate ceiling with NO redeploy — replacing the
-// gateway's baked-into-an-image KrakenD config.
+// THE GATEWAY IS PLUMBING, AND THIS IS ITS ONE PRODUCT DOOR. The gateway is the
+// trust boundary — validate the IAM JWT, strip client-supplied identity, re-mint
+// X-Org-Id — and it is not a network hop: it is compiled INTO the cloud binary as
+// gateway.Mount, and hanzoai/gateway's own routes.go states the law ("ONE routing
+// source of truth = cloud's mount table, not a second map here"). Plumbing earns no
+// prefix. What earns this one is the thing a customer actually calls: the runtime
+// config plane for that policy, at /v1/gateway/config, and nothing else. It serves
+// GET/PUT over the SAME edge.Store the EdgeCORS/EdgeRateLimit middleware and
+// ScopeRateLimit read live, so an operator retunes the CORS allowlist, the pre-auth
+// per-IP flood cap, or a tenant's authenticated rate ceiling with NO redeploy,
+// replacing config that used to be baked into an image.
 //
 // TWO IAM-gated scopes (mirrors apps/pricing/enablement.go: global state is
 // SuperAdmin-only, self-service is scoped to the validated tenant):

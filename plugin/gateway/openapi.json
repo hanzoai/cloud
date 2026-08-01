@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package gateway is live control of your API edge: CORS, rate limits, cache TTL and allowed methods, changed without a redeploy.",
+    "description": "Package gateway is live control of the policy your API applies to every incoming request: CORS, rate limits, cache TTL and allowed methods, changed without a redeploy.",
     "version": "v1"
   },
   "servers": [
