@@ -15,7 +15,7 @@
 # intact, so extraction is a move rather than a rewrite.
 #
 # APPS is a LIST and is never inferred from the directory name. Four packages
-# are not named after the app they back (apps/zt → zero-trust, eval → evals,
+# are not named after the app they back (eval → evals,
 # auditlog → audit, plugin → plugins), and it stays a LIST because a package
 # backing two mounts is a shape the fleet has had and will have again —
 # apps/account carried its self-service routes and the /v1/billing catch-all
