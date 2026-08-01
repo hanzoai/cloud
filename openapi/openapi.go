@@ -1,10 +1,20 @@
 // Package openapi projects the LIVE zip/fiber router into an OpenAPI 3.1
 // document. The spec is not a description of the router — it IS the router,
-// read through app.Fiber().GetRoutes() at request time. There is no checked-in
-// spec file and no second route registry, so the document cannot drift: the only
-// way to change it is to change the routes it is read from. (Register/Describe
-// add a registry of BODIES and PROSE, never of routes: a declaration renders
-// only on a route the router carries, so the paths remain the router's alone.)
+// read through app.Fiber().GetRoutes(). There is no second route registry, so a
+// document and the app that produced it cannot drift: the only way to change it
+// is to change the routes it is read from. (Register/Describe add a registry of
+// BODIES and PROSE, never of routes: a declaration renders only on a route the
+// router carries, so the paths remain the router's alone.)
+//
+// THAT GUARANTEE IS PER APP, AND IT ENDS AT THE APP. [Spec] and [Mount] read a
+// router that is right there. The FLEET document — what api.hanzo.ai serves —
+// cannot: the light host mounts no subsystem, so [MountFleet] weaves the
+// projections 116 app binaries wrote when they were BUILT (fleet.go). Between the
+// projection and the request sit two gaps no reading of any router closes: the
+// subset can be older than the code (mk/fleet.mk surface-check regenerates it
+// from source and refuses the diff), and the deployed front door can hand the
+// path to somebody else entirely (only a probe of the live host sees that). See
+// fleetInfo for what the published document may therefore claim.
 //
 // This mirrors the rule zapface/wire.go states for transports — two transports,
 // ONE dispatch path. ZAP and OpenAPI are two PROJECTIONS of one route table.
