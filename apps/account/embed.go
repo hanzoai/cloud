@@ -1,5 +1,6 @@
-// embed.go ports console's app/embed-status/route.ts into the unified binary at
-// GET /v1/embed-status (task #41). It answers ONE question for the console's
+// embed.go ports console's own embed-status route into the unified binary at
+// GET /v1/embed (task #41). The console route it replaced is gone, so this is
+// now the only implementation. It answers ONE question for the console's
 // data-product modules (Content Studio / ERP / Help Center): is this brand's shared
 // embedded app provisioned and reachable, so the module can decide embed-vs-provision
 // panel? A cross-origin browser can't read another origin's status (SOP + CORS), so

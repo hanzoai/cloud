@@ -13,7 +13,7 @@
 // the canonical /v1/* on its own origin and the already-mounted subsystems answer. The
 // routes ported HERE do REAL server work a static SPA cannot: keys/onboard run
 // privileged IAM logic as the confidential `hanzo-console` client, and
-// embed-status/topup do server-side verification. Each has no pure-proxy equivalent,
+// embed/topup do server-side verification. Each has no pure-proxy equivalent,
 // so it must be ported.
 //
 // The billing and store DATA are not among them, and the difference is the whole
@@ -39,7 +39,7 @@
 //	…      /v1/iam/keys              — DEPRECATED aliases of the three above (same handlers).
 //	POST   /v1/iam/onboard           — create the caller's org (+ move them in on first run).
 //	GET    /v1/csrf                  — mint the anti-CSRF token the SPA echoes on money writes (csrf.go).
-//	GET    /v1/embed-status          — brand-app embed entitlement + reachability probe (embed.go).
+//	GET    /v1/embed                 — brand-app embed entitlement + reachability probe (embed.go).
 //	POST   /v1/commerce/topup/wallet — HUSD on-chain verify → commerce credit (topup.go).
 //	GET    /v1/commerce/topup/rails  — the accepted on-chain rails the send UI renders (topup.go).
 //
@@ -229,7 +229,7 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	zip.Delete(aliasWrite, "/iam/keys", o.revokeKey)
 	zip.Post(guard, "/iam/onboard", o.onboard)
 	// Console module embed-entitlement + reachability probe (embed.go).
-	zip.Get(open, "/embed-status", o.embedStatus)
+	zip.Get(open, "/embed", o.embedStatus)
 	// HUSD wallet top-up (on-chain verify → commerce credit). A SPECIFIC commerce route
 	// that must beat the commerce embed (100), so it mounts here at 48, ahead of it.
 	zip.Post(write, "/commerce/topup/wallet", o.walletTopup)

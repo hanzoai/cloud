@@ -32,7 +32,7 @@ var Apps = []App{
 	// the bare "/v1" remainder, which serves none of them.
 	{Name: "metrics", Prefixes: []string{"/v1/logs", "/v1/metrics", "/v1/traces"}},
 	{Name: "ingress", Prefixes: []string{"/v1/ingress"}},
-	{Name: "account", Prefixes: []string{"/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed-status", "/v1/iam/keys", "/v1/iam/onboard", "/v1/keys"}},
+	{Name: "account", Prefixes: []string{"/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed", "/v1/iam/keys", "/v1/iam/onboard", "/v1/keys"}},
 	{Name: "iam", Prefixes: []string{"/login/oauth", "/v1/iam"}},
 	{Name: "base", Prefixes: []string{"/v1/base", "/v1/collections", "/v1/waitlist"}},
 	// /v1/summary is the PUBLIC platform status document (apps/o11y/summary.go),

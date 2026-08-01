@@ -52,7 +52,7 @@
       },
       "type": "object"
     },
-    "name": "get_v1_embed-status"
+    "name": "get_v1_embed"
   },
   {
     "description": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
