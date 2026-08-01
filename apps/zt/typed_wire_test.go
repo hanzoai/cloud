@@ -31,7 +31,7 @@ func ztOpsUnderTest(t *testing.T) (served map[string]bool, typed map[string]stri
 	}
 	ours := func(p string) bool {
 		return strings.HasPrefix(p, "/v1/networks") ||
-			strings.HasPrefix(p, "/v1/mesh") || strings.HasPrefix(p, "/v1/edge")
+			strings.HasPrefix(p, "/v1/mesh")
 	}
 	served, typed = map[string]bool{}, map[string]string{}
 	for path, item := range doc.Paths {
@@ -144,7 +144,7 @@ func TestBridgeIsInstalledOnEveryPrefix(t *testing.T) {
 	app := mountApp(t, f)
 
 	for _, path := range []string{
-		"/v1/networks", "/v1/networks/org-acme", "/v1/mesh/services", "/v1/edge/nodes",
+		"/v1/networks", "/v1/networks/routers", "/v1/networks/org-acme", "/v1/mesh/services",
 	} {
 		if code, body := do(t, app, http.MethodGet, path, "acme"); code != http.StatusOK {
 			t.Errorf("GET %s as a validated caller = %d (%s), want 200 — is cloud.Bridge installed on this prefix?",

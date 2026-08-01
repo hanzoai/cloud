@@ -186,22 +186,22 @@ func TestEdgeNodesTenantScopedShapeAndHealth(t *testing.T) {
 	}}
 	app := mountApp(t, f)
 
-	code, body := do(t, app, http.MethodGet, "/v1/edge/nodes", "acme")
+	code, body := do(t, app, http.MethodGet, "/v1/networks/routers", "acme")
 	if code != http.StatusOK {
-		t.Fatalf("edge nodes want 200, got %d (%s)", code, body)
+		t.Fatalf("routers want 200, got %d (%s)", code, body)
 	}
 	var out struct {
-		Nodes []edgeNodeView `json:"nodes"`
+		Routers []routerView `json:"routers"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatalf("shape: %v", err)
 	}
 	// acme's three routers, never org-other's.
-	if len(out.Nodes) != 3 {
-		t.Fatalf("acme want 3 edge nodes, got %d (%+v)", len(out.Nodes), out.Nodes)
+	if len(out.Routers) != 3 {
+		t.Fatalf("acme want 3 routers, got %d (%+v)", len(out.Routers), out.Routers)
 	}
-	byID := map[string]edgeNodeView{}
-	for _, n := range out.Nodes {
+	byID := map[string]routerView{}
+	for _, n := range out.Routers {
 		byID[n.ID] = n
 	}
 	if n := byID["er-1"]; n.Status != "online" || n.Region != "sfo3" {
@@ -305,7 +305,7 @@ func TestUnconfiguredFailsClosedExceptEmptyProjections(t *testing.T) {
 	// genuinely has no networks, and 503-ing every list turns a clean "nothing here
 	// yet" console into an error on every page load. Nothing is disclosed by an
 	// empty list, so this is presentation, not a relaxed gate.
-	for _, path := range []string{"/v1/networks", "/v1/edge/nodes"} {
+	for _, path := range []string{"/v1/networks", "/v1/networks/routers"} {
 		code, body := do(t, app, http.MethodGet, path, "acme")
 		if code != http.StatusOK {
 			t.Fatalf("unconfigured GET %s: want 200 empty, got %d", path, code)

@@ -1,28 +1,38 @@
 // Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant's Hanzo Zero
-// Trust footprint — overlay networks, mesh services and edge nodes — served as
+// Trust footprint — overlay networks, their routers and mesh services — served as
 // clean, org-scoped REST off the unified cloud binary and fronting the Hanzo Zero
 // Trust controller (hanzoai/zt, an OpenZiti-based fabric). It exists so the
-// console's Networks, Service Mesh and Edge pages read REAL per-org ZT state from
+// console's Networks, Service Mesh and Routers pages read REAL per-org ZT state from
 // ONE place (api.hanzo.ai/v1/*) instead of rendering "not connected".
 //
 // This subsystem OWNS no ZT state — the controller does. It is a thin, tenant-scoped
 // translator: it fronts the controller's Edge MANAGEMENT API (/edge/management/v1),
 // filters every resource to the caller's org by the "org-<org>" role attribute, and
 // re-shapes ZT objects into the exact JSON the console modules consume (types.go).
-// It never fabricates: a mesh row is a real ZT edge service, an edge node is a real
+// It never fabricates: a mesh row is a real ZT edge service, a router row is a real
 // edge-router with its real online status, and a network exists only when the org
 // actually has edge-routers on the fabric.
 //
 // Surface (every route org-scoped by the validated principal; HIP-0026):
 //
-//	GET /v1/networks         the org's ZT overlay network(s)   -> {networks:[networkView]}
-//	GET /v1/networks/:id     one overlay network by id         -> networkView (404 if absent)
-//	GET /v1/mesh/services    the org's ZT edge services        -> {services:[meshView]}
-//	GET /v1/edge/nodes       the org's ZT edge-routers          -> {nodes:[edgeNodeView]}
+//	GET /v1/networks          the org's ZT overlay network(s)  -> {networks:[networkView]}
+//	GET /v1/networks/routers  the org's ZT edge-routers        -> {routers:[routerView]}
+//	GET /v1/networks/:id      one overlay network by id        -> networkView (404 if absent)
+//	GET /v1/mesh/services     the org's ZT edge services       -> {services:[meshView]}
 //
-// Networks maps to the fabric overview (edge-routers are the overlay's nodes),
-// Service Mesh to ZT edge services, and Edge to ZT edge-routers — the three ZT
-// concepts the three console pages need.
+// Networks maps to the fabric overview, its routers to the ZT edge-routers that ARE
+// that overlay's nodes, and Service Mesh to ZT edge services — the three ZT concepts
+// the three console pages need.
+//
+// THE ROUTERS LIVE UNDER THE NETWORK, and this is the whole reason the route moved.
+// They were served at /v1/edge/nodes, which read as a top-level Hanzo product named
+// "edge" and was not one: hanzoai/edge is the on-device inference runtime, a binary
+// a customer runs on their own machine, and it has no cloud surface at all. Three
+// more unrelated things wore the same word — the public catalogue cache, the
+// gateway's CORS-and-rate-ceiling policy role, and a JWT audience list — so "edge"
+// named a POSITION, never a product, and a prefix belongs to a product a customer
+// calls. An edge-router is a node of an overlay network, so it is addressed as one.
+// /v1/edge now 404s at every depth, which is correct rather than a missing product.
 //
 // TENANT ISOLATION. The org (principal.Org, the validated IAM owner) selects the
 // "org-<org>" role attribute; the client lists the controller's resources and this
@@ -93,15 +103,18 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	ng := app.Group("/v1/networks")
 	ng.Use(cloud.Bridge())
 	zip.Get(zapp, "/v1/networks", o.listNetworks)
+	// The overlay's routers hang off the network they belong to, so they register on
+	// the SAME group — one Bridge, one subtree, no second top-level name. "routers" is
+	// a literal beside ":id" and goes first, per this function's rule. That ordering is
+	// a convention here, not a load-bearing accident: measured on this router, the
+	// static segment wins over its param sibling in EITHER registration order, so
+	// nothing has to be frozen by a test to keep /v1/networks/routers reachable.
+	zip.Get(ng, "/routers", o.listRouters)
 	zip.Get(ng, "/:id", o.getNetwork)
 
 	mg := app.Group("/v1/mesh")
 	mg.Use(cloud.Bridge())
 	zip.Get(mg, "/services", o.listMeshServices)
-
-	eg := app.Group("/v1/edge")
-	eg.Use(cloud.Bridge())
-	zip.Get(eg, "/nodes", o.listEdgeNodes)
 }
 
 // ztOps binds the service to the typed networking ops. A TypedHandler takes no
@@ -133,10 +146,10 @@ type meshServiceList struct {
 	Services []meshView `json:"services"`
 }
 
-// edgeNodeList is the GET /v1/edge/nodes envelope.
-type edgeNodeList struct {
-	// Nodes is one row per ZT edge-router tagged with the caller's org role.
-	Nodes []edgeNodeView `json:"nodes"`
+// routerList is the GET /v1/networks/routers envelope.
+type routerList struct {
+	// Routers is one row per ZT edge-router tagged with the caller's org role.
+	Routers []routerView `json:"routers"`
 }
 
 // tenant resolves the org — the tenant-isolation KEY, taken verbatim from the
@@ -237,7 +250,7 @@ func (o ztOps) getNetwork(ctx context.Context, in *networkRef) (*networkView, er
 // status is "active" because a listed service is a configured, dialable entry. A
 // service tagged for another org, or tagged for none, is invisible here.
 //
-// Unlike the network and edge-node reads this does NOT degrade: an unconfigured
+// Unlike the network and router reads this does NOT degrade: an unconfigured
 // deployment answers 503 and an unreachable controller surfaces the upstream's
 // status, so a mesh page never renders "no services" for a fabric it simply could
 // not read.
@@ -259,9 +272,9 @@ func (o ztOps) listMeshServices(ctx context.Context, _ *noIn) (*meshServiceList,
 	return &meshServiceList{Services: out}, nil
 }
 
-// ---- edge nodes (ZT edge-routers) ----
+// ---- routers (the overlay's ZT edge-routers) ----
 
-// listEdgeNodes returns the Zero Trust edge-routers the caller's org owns.
+// listRouters returns the Zero Trust routers the caller's org owns.
 //
 // One row per real ZT edge-router tagged with the org's "org-<org>" role attribute,
 // carrying the controller's own health signal: "online" when connected, "disabled"
@@ -271,12 +284,12 @@ func (o ztOps) listMeshServices(ctx context.Context, _ *noIn) (*meshServiceList,
 //
 // The read degrades rather than erroring: a deployment with no ZT credential, and a
 // controller that cannot be reached, both answer 200 with an empty list.
-func (o ztOps) listEdgeNodes(ctx context.Context, _ *noIn) (*edgeNodeList, error) {
+func (o ztOps) listRouters(ctx context.Context, _ *noIn) (*routerList, error) {
 	s := o.s
 	if !s.State.cl.configured() {
 		// Same as listNetworks: an unconfigured ZT deployment yields an honest-EMPTY
-		// edge-node list (200), not the gate's fail-closed 503. Writes stay fail-closed.
-		return &edgeNodeList{Nodes: []edgeNodeView{}}, nil
+		// router list (200), not the gate's fail-closed 503. Writes stay fail-closed.
+		return &routerList{Routers: []routerView{}}, nil
 	}
 	org, err := gate(s, ctx)
 	if err != nil {
@@ -285,20 +298,20 @@ func (o ztOps) listEdgeNodes(ctx context.Context, _ *noIn) (*edgeNodeList, error
 	routers, err := orgRouters(s, ctx, org)
 	if err != nil {
 		// Same graceful fold as listNetworks — an unreachable/unconfigured ZT controller
-		// yields an honest-EMPTY edge-node list (200), never a 503 page error.
-		s.Log.Warn("zt controller unreachable; returning empty edge-node list", "org", org, "err", err)
-		return &edgeNodeList{Nodes: []edgeNodeView{}}, nil
+		// yields an honest-EMPTY router list (200), never a 503 page error.
+		s.Log.Warn("zt controller unreachable; returning empty router list", "org", org, "err", err)
+		return &routerList{Routers: []routerView{}}, nil
 	}
-	out := make([]edgeNodeView, 0, len(routers))
+	out := make([]routerView, 0, len(routers))
 	for _, r := range routers {
-		out = append(out, toEdgeNodeView(r))
+		out = append(out, toRouterView(r))
 	}
-	return &edgeNodeList{Nodes: out}, nil
+	return &routerList{Routers: out}, nil
 }
 
 // orgRouters lists the controller's edge-routers and filters to the caller's org —
 // the ONE place routers are fetched+scoped, shared by /v1/networks and
-// /v1/edge/nodes so both derive from the identical tenant-filtered set.
+// /v1/networks/routers so both derive from the identical tenant-filtered set.
 func orgRouters(s *cloud.Service[state], ctx context.Context, org string) ([]ztEdgeRouter, error) {
 	all, err := listAll[ztEdgeRouter](s.State.cl, ctx, "/edge-routers")
 	if err != nil {
