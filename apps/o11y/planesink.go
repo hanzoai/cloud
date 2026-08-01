@@ -1,0 +1,415 @@
+// Copyright 2026 Hanzo AI Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+
+// planesink.go — the WRITE half of cloud's own telemetry, ON THE EVENT PLANE.
+//
+// Spans and logs that reach this binary land in event.span / event.log — the
+// same 15-column envelope every other signal shares (event.event, event.error,
+// event.metric) — never in the retired o11y_* databases. ONE shape for every
+// signal's write path, and it is the shape metrics.go already proved: a ZAP
+// receiver decodes the wire, a native writer appends a prepared batch over the
+// branded datastore client. No embedded otelcol pipeline, no pdata bridge, no
+// exporter fork — the previous path (ingest.go + zapingest.go + spanconv.go +
+// tracesink.go) existed to feed the SigNoz-schema exporters, and with the plane
+// as the store the entire translation layer is deleted rather than ported.
+//
+// Wire compatibility is exact: the same ZAP span wire on :4317 and log wire on
+// :4318 the embedded collector bound (zapreceiver / zaplogreceiver — the same
+// decoders it used), so no sender changes. The in-process trace sink keeps its
+// contract too: cloud.RegisterTraceSink receives the live SDK batch and this
+// file writes it as rows — one converter fewer than the pdata detour.
+//
+// Safety posture (this feeds a LIVE, SHARED telemetry store):
+//   - Bound by CAPABILITY, not by a flag: ingest runs exactly when a datastore
+//     DSN is configured, because the DSN is the thing it writes to (the same
+//     posture ingest.go held since 2026-07-25's connection-refused lesson).
+//   - Fail-soft: any construction error logs and returns nil — a bad telemetry
+//     config can never take cloud down.
+//   - The in-process trace sink stays OPT-IN (O11Y_TRACES_ZAP_INPROCESS), and
+//     shutdown deregisters it before the sink closes.
+//
+// Row identity: every table is a ReplacingMergeTree keyed on (…, id), so ids
+// are DERIVED — a span's id is its span_id; a log line's id is a hash of what
+// it says and when. Idempotency is structural, exactly as in the analytics
+// warehouse next door.
+
+package o11y
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
+
+	zaplogreceiver "github.com/hanzoai/o11y/pkg/zaplogreceiver"
+	zapreceiver "github.com/hanzoai/o11y/pkg/zapreceiver"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+	"github.com/hanzoai/cloud"
+)
+
+// The plane tables this sink appends to, and the exact column lists it states.
+// Columns the wire has no value for (session_id, distinct_id, url, el, …) are
+// omitted so the table's own defaults apply — the implsentry discipline.
+const (
+	planeSpanTable = "event.span"
+	planeLogTable  = "event.log"
+
+	// The ZAP wire addresses, unchanged from the embedded collector: 4317 is
+	// the canonical span wire every Hanzo service sends to, 4318 the log wire.
+	// This sink binds ONLY these two sockets — cloud owns its own HTTP and
+	// health listeners, so the :9090-class collision the old collector had to
+	// be configured around cannot exist here.
+	planeSpanListen = "0.0.0.0:4317"
+	planeLogListen  = "0.0.0.0:4318"
+
+	// platformOrg attributes a row that carries no tenant of its own: fleet
+	// infra telemetry belongs to the platform. A span stamped hanzo.org (the
+	// TracingMiddleware tenant) keeps its own org.
+	platformOrg = "hanzo"
+)
+
+var (
+	planeSpanColumns = []string{"org", "time", "id", "name", "kind", "service",
+		"trace_id", "span_id", "parent", "duration", "status", "attributes"}
+	planeLogColumns = []string{"org", "time", "id", "name", "kind", "service",
+		"severity_text", "severity_number", "body", "trace_id", "span_id", "attributes"}
+)
+
+// planeSink pins the ingest resources for the process life so shutdown can
+// stop the listeners and flush the connection, mirroring metricsIngest.
+type planeSink struct {
+	sink    *datastoreSink
+	spanRcv *zapreceiver.Receiver
+	logRcv  *zaplogreceiver.Receiver
+}
+
+var embeddedPlaneSink *planeSink
+
+// mountPlaneIngest starts the ZAP span+log receivers writing to the event
+// plane, and registers the in-process trace sink when its flag is on. Called
+// by mountO11y; order-independent (no Fiber route). Fail-soft at every branch.
+func mountPlaneIngest(deps cloud.Deps) error {
+	log := deps.Logger.New("subsystem", "o11y-plane-ingest")
+
+	dsn := embeddedDSN()
+	if dsn == "" {
+		log.Warn("plane ingest not started: no datastore DSN (needs O11Y_DATASTORE_DSN)")
+		return nil
+	}
+	sink, err := newDatastoreSink(context.Background(), dsn)
+	if err != nil {
+		log.Warn("plane ingest init failed; spans/logs stay unwritten", "err", err)
+		return nil // fail-soft
+	}
+	ps := &planeSink{sink: sink}
+
+	spanRcv, err := zapreceiver.New(zapreceiver.Config{
+		Listen: planeSpanListen,
+		NodeID: "cloud-o11y-plane",
+		OnBatch: func(ctx context.Context, b *zapreceiver.SpanBatch) error {
+			rows := spanRowsOf(b)
+			if len(rows) == 0 {
+				return nil
+			}
+			return ps.sink.Insert(ctx, planeSpanTable, planeSpanColumns, rows)
+		},
+	})
+	if err != nil {
+		log.Warn("plane span ingest failed to start", "listen", planeSpanListen, "err", err)
+	} else {
+		ps.spanRcv = spanRcv
+	}
+
+	logRcv, err := zaplogreceiver.New(zaplogreceiver.Config{
+		Listen: planeLogListen,
+		NodeID: "cloud-o11y-plane",
+		OnBatch: func(ctx context.Context, b *zaplogreceiver.LogBatch) error {
+			rows := logRowsOf(b)
+			if len(rows) == 0 {
+				return nil
+			}
+			return ps.sink.Insert(ctx, planeLogTable, planeLogColumns, rows)
+		},
+	})
+	if err != nil {
+		log.Warn("plane log ingest failed to start", "listen", planeLogListen, "err", err)
+	} else {
+		ps.logRcv = logRcv
+	}
+
+	// The in-process sink for cloud's OWN spans: the host hands the live SDK
+	// batch over (cloud/telemetry.go), this writes it as rows. Same opt-in
+	// flag, same fall-through-to-the-wire contract tracesink.go carried.
+	if cloud.TraceInprocEnabled() {
+		cloud.RegisterTraceSink(func(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+			rows := sdkSpanRowsOf(spans)
+			if len(rows) == 0 {
+				return nil
+			}
+			return ps.sink.Insert(ctx, planeSpanTable, planeSpanColumns, rows)
+		})
+		log.Info("in-process trace sink live: cloud's own spans -> event.span (Cost-0, no socket)")
+	}
+
+	embeddedPlaneSink = ps
+	log.Info("plane ingest running", "spans", planeSpanListen, "logs", planeLogListen,
+		"sink", planeSpanTable+" + "+planeLogTable)
+	return nil
+}
+
+// shutdownPlaneIngest deregisters the trace sink (a late export falls back to
+// the wire), stops the listeners, and closes the connection. Nil-safe.
+func shutdownPlaneIngest(context.Context) error {
+	cloud.RegisterTraceSink(nil)
+	ps := embeddedPlaneSink
+	if ps == nil {
+		return nil
+	}
+	if ps.spanRcv != nil {
+		ps.spanRcv.Stop()
+	}
+	if ps.logRcv != nil {
+		ps.logRcv.Stop()
+	}
+	return ps.sink.Close()
+}
+
+// ── pure row builders (unit-tested without a store or a socket) ─────────────
+
+// spanRowsOf renders one wire SpanBatch as event.span rows. One batch is one
+// service; resource attributes fold into each row's attribute map (the plane
+// carries no separate resource object — deployment.environment et al. ride
+// beside the span's own attributes, as the existing rows already do).
+func spanRowsOf(b *zapreceiver.SpanBatch) [][]any {
+	if b == nil || len(b.Spans) == 0 {
+		return nil
+	}
+	service := planeService(b.Resource, b.AppName)
+	rows := make([][]any, 0, len(b.Spans))
+	for _, s := range b.Spans {
+		attrs := make(map[string]string, len(b.Resource)+len(s.Attributes)+2)
+		for k, v := range b.Resource {
+			attrs[k] = v
+		}
+		if b.Version != "" {
+			attrs["service.version"] = b.Version
+		}
+		for k, v := range s.Attributes {
+			attrs[k] = attrString(v)
+		}
+		if s.StatusMsg != "" {
+			attrs["status.message"] = s.StatusMsg
+		}
+		var dur uint64
+		if s.EndUnixNs > s.StartUnixNs {
+			dur = uint64(s.EndUnixNs - s.StartUnixNs)
+		}
+		rows = append(rows, []any{
+			planeOrg(attrs),
+			time.Unix(0, s.StartUnixNs).UTC(),
+			s.SpanID,
+			s.Name,
+			planeSpanKind(s.Kind),
+			service,
+			s.TraceID,
+			s.SpanID,
+			s.ParentSpanID,
+			dur,
+			planeStatus(s.StatusCode),
+			attrs,
+		})
+	}
+	return rows
+}
+
+// logRowsOf renders one wire LogBatch as event.log rows.
+func logRowsOf(b *zaplogreceiver.LogBatch) [][]any {
+	if b == nil || len(b.Records) == 0 {
+		return nil
+	}
+	service := planeService(b.Resource, b.AppName)
+	rows := make([][]any, 0, len(b.Records))
+	for i, r := range b.Records {
+		attrs := make(map[string]string, len(b.Resource)+len(r.Attributes))
+		for k, v := range b.Resource {
+			attrs[k] = v
+		}
+		for k, v := range r.Attributes {
+			attrs[k] = attrString(v)
+		}
+		ns := r.TimeUnixNs
+		if ns == 0 {
+			ns = r.ObservedTimeUnixNs
+		}
+		ts := time.Unix(0, ns).UTC()
+		if ns == 0 {
+			ts = time.Now().UTC()
+		}
+		name := r.EventName
+		if name == "" {
+			name = "log"
+		}
+		rows = append(rows, []any{
+			planeOrg(attrs),
+			ts,
+			logRowID(service, ns, i, r),
+			name,
+			"log",
+			service,
+			r.SeverityText,
+			uint8(min(max(r.Severity, 0), 255)),
+			r.Body,
+			r.TraceID,
+			r.SpanID,
+			attrs,
+		})
+	}
+	return rows
+}
+
+// sdkSpanRowsOf renders the host's live SDK batch as event.span rows — the
+// in-process twin of spanRowsOf, one converter per input shape, one row shape.
+func sdkSpanRowsOf(spans []sdktrace.ReadOnlySpan) [][]any {
+	rows := make([][]any, 0, len(spans))
+	for _, s := range spans {
+		if s == nil {
+			continue
+		}
+		attrs := map[string]string{}
+		service := ""
+		if res := s.Resource(); res != nil {
+			for _, kv := range res.Attributes() {
+				attrs[string(kv.Key)] = kv.Value.Emit()
+			}
+			service = attrs["service.name"]
+		}
+		for _, kv := range s.Attributes() {
+			attrs[string(kv.Key)] = kv.Value.Emit()
+		}
+		if msg := s.Status().Description; msg != "" {
+			attrs["status.message"] = msg
+		}
+		sc := s.SpanContext()
+		parent := ""
+		if s.Parent().HasSpanID() {
+			parent = s.Parent().SpanID().String()
+		}
+		var dur uint64
+		if d := s.EndTime().Sub(s.StartTime()); d > 0 {
+			dur = uint64(d.Nanoseconds())
+		}
+		status := "ok"
+		if s.Status().Code.String() == "Error" {
+			status = "error"
+		}
+		rows = append(rows, []any{
+			planeOrg(attrs),
+			s.StartTime().UTC(),
+			sc.SpanID().String(),
+			s.Name(),
+			strings.ToLower(s.SpanKind().String()),
+			service,
+			sc.TraceID().String(),
+			sc.SpanID().String(),
+			parent,
+			dur,
+			status,
+			attrs,
+		})
+	}
+	return rows
+}
+
+// planeOrg is the row's tenant: the hanzo.org the TracingMiddleware stamped
+// when the telemetry belongs to a tenant, else the platform's own.
+func planeOrg(attrs map[string]string) string {
+	if org := attrs["hanzo.org"]; org != "" {
+		return org
+	}
+	return platformOrg
+}
+
+// planeService resolves the service column: the resource's own service.name,
+// else the wire batch's app name, else the resource's workload label.
+func planeService(resource map[string]string, appName string) string {
+	if s := resource["service.name"]; s != "" {
+		return s
+	}
+	if appName != "" {
+		return appName
+	}
+	return resource["app"]
+}
+
+// planeSpanKind normalizes the wire kind onto the plane's lowercase vocabulary
+// (server/client/producer/consumer/internal), defaulting internal — OTel's own
+// default for a span that states none.
+func planeSpanKind(k string) string {
+	switch k {
+	case "server", "SPAN_KIND_SERVER":
+		return "server"
+	case "client", "SPAN_KIND_CLIENT":
+		return "client"
+	case "producer", "SPAN_KIND_PRODUCER":
+		return "producer"
+	case "consumer", "SPAN_KIND_CONSUMER":
+		return "consumer"
+	default:
+		return "internal"
+	}
+}
+
+// planeStatus maps a wire status code onto event.span's status column: error
+// stays error, everything else (ok, unset) is ok — a span that completed
+// without declaring failure succeeded.
+func planeStatus(code string) string {
+	switch code {
+	case "error", "Error", "ERROR":
+		return "error"
+	default:
+		return "ok"
+	}
+}
+
+// logRowID derives a log row's ReplacingMergeTree identity from what the line
+// says and when it says it, salted by its position in the batch so two equal
+// lines in one batch stay two rows.
+func logRowID(service string, ns int64, i int, r zaplogreceiver.LogRecord) string {
+	h := sha256.New()
+	h.Write([]byte(service))
+	h.Write([]byte(strconv.FormatInt(ns, 10)))
+	h.Write([]byte(strconv.Itoa(i)))
+	h.Write([]byte(r.Body))
+	h.Write([]byte(r.TraceID))
+	h.Write([]byte(r.SpanID))
+	return hex.EncodeToString(h.Sum(nil))[:32]
+}
+
+// attrString renders a JSON-decoded attribute value for the Map(String,String)
+// column. JSON has one number type, so a whole float renders as its integer
+// form — http.response.status_code reads "502", never "502.0". Non-scalars
+// (arrays, objects) keep their JSON form.
+func attrString(v any) string {
+	switch n := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return n
+	case bool:
+		return strconv.FormatBool(n)
+	case float64:
+		return strconv.FormatFloat(n, 'f', -1, 64)
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return string(b)
+	}
+}

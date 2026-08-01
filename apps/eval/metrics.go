@@ -26,8 +26,8 @@ import (
 //     table ListObservations reads). Every production generation lands here, so it
 //     is the AUTHORITATIVE source for counts, tokens, cost, errors, model & user
 //     cardinality. count()/sum()/uniqExact() GROUP BY model / time bucket.
-//   - o11y_traces GenAI spans — the OTel gen_ai.* spans ai/object emits carry
-//     duration_nano + gen_ai.request.model + gen_ai.hanzo.org_id, so per-model and
+//   - event.span GenAI spans — the OTel gen_ai.* spans ai/object emits carry
+//     duration (ns) + gen_ai.request.model + gen_ai.hanzo.org_id, so per-model and
 //     overall latency percentiles come from here. This read is BEST-EFFORT: if the
 //     span store is unreachable or holds no GenAI spans, latency is honestly absent
 //     (Latency.Available=false, nil percentiles) while every ledger metric still
@@ -325,30 +325,31 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 	}, nil
 }
 
-// latency reads per-model + overall latency percentiles from the GenAI spans in
-// o11y_traces. Best-effort: an error (span store unreachable, table absent)
-// returns an empty per-model map and an unavailable overall — never an error —
-// so a latency miss cannot fail the dashboard. The org gate mirrors the ledger:
-// non-admin is pinned to gen_ai.hanzo.org_id; a SuperAdmin sees every org.
+// latency reads per-model + overall latency percentiles from the GenAI spans on
+// the plane (event.span — a gen_ai span IS the observation of record, HIP-0132).
+// Best-effort: an error (span store unreachable, table absent) returns an empty
+// per-model map and an unavailable overall — never an error — so a latency miss
+// cannot fail the dashboard. The org gate mirrors the ledger: non-admin is pinned
+// to gen_ai.hanzo.org_id; a SuperAdmin sees every org.
 func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]latPercentiles, LatencyStat) {
-	const spanTable = "o11y_traces.distributed_o11y_index_v3"
-	where := "attributes_string['gen_ai.system'] = 'hanzo' AND timestamp >= ? AND timestamp < ?"
+	const spanTable = "event.span"
+	where := "attributes['gen_ai.system'] = 'hanzo' AND time >= ? AND time < ?"
 	args := []any{chTime(f.Since), chTime(f.Until)}
 	if !f.AllOrgs {
-		where += " AND attributes_string['gen_ai.hanzo.org_id'] = ?"
+		where += " AND attributes['gen_ai.hanzo.org_id'] = ?"
 		args = append(args, f.Org)
 	}
 	if f.Project != "" {
 		// The ai emit path tags gen_ai.hanzo.project on the span; narrowing here
 		// keeps per-project latency consistent with the per-project ledger board.
-		where += " AND attributes_string['gen_ai.hanzo.project'] = ?"
+		where += " AND attributes['gen_ai.hanzo.project'] = ?"
 		args = append(args, f.Project)
 	}
 
 	perModel := map[string]latPercentiles{}
-	modelSQL := "SELECT attributes_string['gen_ai.request.model'] AS model, " +
-		"quantile(0.5)(duration_nano) AS p50, quantile(0.95)(duration_nano) AS p95, " +
-		"quantile(0.99)(duration_nano) AS p99, count() AS n " +
+	modelSQL := "SELECT attributes['gen_ai.request.model'] AS model, " +
+		"quantile(0.5)(duration) AS p50, quantile(0.95)(duration) AS p95, " +
+		"quantile(0.99)(duration) AS p99, count() AS n " +
 		"FROM " + spanTable + " WHERE " + where + " GROUP BY model"
 	if rows, err := datastore.Query(ctx, modelSQL, args...); err == nil {
 		for _, r := range rows {
@@ -365,8 +366,8 @@ func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]
 	}
 
 	overall := LatencyStat{Available: false}
-	overallSQL := "SELECT quantile(0.5)(duration_nano) AS p50, quantile(0.95)(duration_nano) AS p95, " +
-		"quantile(0.99)(duration_nano) AS p99, count() AS n " +
+	overallSQL := "SELECT quantile(0.5)(duration) AS p50, quantile(0.95)(duration) AS p95, " +
+		"quantile(0.99)(duration) AS p99, count() AS n " +
 		"FROM " + spanTable + " WHERE " + where
 	if rows, err := datastore.Query(ctx, overallSQL, args...); err == nil {
 		if r := firstRow(rows); asInt64(r["n"]) > 0 {

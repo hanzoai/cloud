@@ -9,11 +9,11 @@ import (
 )
 
 // metricsread.go serves GET /v1/o11y/metrics — REAL per-org RED (rate / errors /
-// latency) for a product, plus the org's LLM usage. The RED series come from
-// org-tagged request spans in o11y_traces (attributes_string['hanzo.org']), which
-// the cloud TracingMiddleware already stamps — so this is genuine per-tenant data,
-// not VictoriaMetrics infra metrics (those carry no org label). Usage comes from the
-// hanzo.cloud_usage ledger (organization=<org>).
+// latency) for a product, plus the org's LLM usage. The RED series come from the
+// tenant's request spans in event.span (org, the plane's first sort-key column —
+// stamped from the hanzo.org attribute cloud's TracingMiddleware writes) — so this
+// is genuine per-tenant data, not VictoriaMetrics infra metrics (those carry no org
+// label). Usage comes from the hanzo.cloud_usage ledger (organization=<org>).
 //
 // TENANT ISOLATION: org is the validated tenant, bound as a positional datastore
 // parameter (never interpolated), the FIRST predicate on every query. A tenant can
@@ -109,26 +109,27 @@ func queryMetrics(ctx context.Context, q metricsQuery) (metricsResponse, error) 
 	return resp, nil
 }
 
-// redSeries fills the rate/errors/latency buckets from org-tagged request spans.
-// A non-admin is pinned to its own org; an admin sees the whole product.
+// redSeries fills the rate/errors/latency buckets from the tenant's request spans
+// on the plane (event.span). A non-admin is pinned to its own org; an admin sees
+// the whole product.
 func redSeries(ctx context.Context, q metricsQuery, resp *metricsResponse) error {
 	routePrefix := "/v1/" + q.svc.ID
-	sql := "SELECT toStartOfInterval(timestamp, toIntervalSecond(?)) AS bucket, " +
+	sql := "SELECT toStartOfInterval(time, toIntervalSecond(?)) AS bucket, " +
 		"count() AS reqs, " +
-		// response_status_code is LowCardinality(String) in o11y; coerce before the
-		// numeric compare (a raw >= 500 raises NO_COMMON_TYPE). status_code is the
-		// numeric span status (2 = ERROR).
-		"countIf(toInt32OrZero(response_status_code) >= 500 OR status_code = 2) AS errs, " +
-		"quantile(0.5)(duration_nano) AS p50, " +
-		"quantile(0.95)(duration_nano) AS p95 " +
-		"FROM o11y_traces.distributed_o11y_index_v3 " +
-		"WHERE (httpRoute = ? OR startsWith(httpRoute, ?) OR serviceName = ?) " +
-		"AND timestamp > now64() - toIntervalSecond(?)"
+		// The HTTP status is a span attribute (Map values are strings); coerce
+		// before the numeric compare. status is the span's own status column.
+		"countIf(toInt32OrZero(attributes['http.response.status_code']) >= 500 OR status = 'error') AS errs, " +
+		"quantile(0.5)(duration) AS p50, " +
+		"quantile(0.95)(duration) AS p95 " +
+		"FROM event.span " +
+		"WHERE (attributes['http.route'] = ? OR startsWith(attributes['http.route'], ?) OR service = ?) " +
+		"AND time > now64(9) - toIntervalSecond(?)"
 	args := []any{q.stepSec, routePrefix, routePrefix + "/", q.svc.App, q.rangeSec}
-	// THE tenant gate. A non-admin is pinned to rows carrying its own org
-	// attribution; a validated SuperAdmin sees the whole product (no org predicate).
+	// THE tenant gate. A non-admin is pinned to its own org (the plane's first
+	// sort-key column); a validated SuperAdmin sees the whole product (no org
+	// predicate).
 	if !q.admin {
-		sql += " AND attributes_string['hanzo.org'] = ?"
+		sql += " AND org = ?"
 		args = append(args, q.org)
 	}
 	sql += " GROUP BY bucket ORDER BY bucket ASC"
