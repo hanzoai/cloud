@@ -118,6 +118,11 @@ func nsOnDisk(slug string) (namespace.Namespace, error) { return namespace.Org(s
 // KINDS, which no edit to a slugger can undo.
 func PlatformNamespace() namespace.Namespace { return namespace.System() }
 
+// orgsRoot is the single directory every namespace's files live under. It is
+// spelled once, here, so nsKey and the on-disk sweeps cannot disagree about
+// where a store is.
+const orgsRoot = "orgs"
+
 // reservedPlatformSlug is how the system namespace renders in the on-disk
 // layout that predates it. It is a rune SanitizeOrg never emits, so the
 // directory it names cannot collide with a tenant's — and it is spelled here,
@@ -142,12 +147,12 @@ func nsKey(ns namespace.Namespace, subsystem string) (string, error) {
 	}
 	switch ns.Kind() {
 	case namespace.KindSystem:
-		return path.Join("orgs", reservedPlatformSlug, subsystem+".db"), nil
+		return path.Join(orgsRoot, reservedPlatformSlug, subsystem+".db"), nil
 	case namespace.KindOrg:
 		if g := ns.Group().String(); g != "" {
-			return path.Join("orgs", ns.ID(), "projects", g, subsystem+".db"), nil
+			return path.Join(orgsRoot, ns.ID(), "projects", g, subsystem+".db"), nil
 		}
-		return path.Join("orgs", ns.ID(), subsystem+".db"), nil
+		return path.Join(orgsRoot, ns.ID(), subsystem+".db"), nil
 	case "":
 		return "", fmt.Errorf("cloud: the zero namespace names no database")
 	default:
