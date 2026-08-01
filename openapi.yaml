@@ -20964,9 +20964,9 @@ components:
           type: string
       type: object
 info:
-  description: 'Generated from the live router — every operation below is a route
-    the unified cloud binary actually serves. Tagged by product: the first path segment
-    after /v1/.'
+  description: 'Composed from each subsystem''s own projection of its router, in the
+    fleet''s mount order — every operation below is a route the subsystem that publishes
+    it registered. Tagged by product: the first path segment after /v1/.'
   title: Hanzo Cloud API
   version: v1
 openapi: 3.1.0
