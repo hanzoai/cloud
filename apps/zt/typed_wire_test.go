@@ -9,7 +9,7 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 )
 
-// untypedByDesign is the CLOSED list of zero-trust operations that are NOT typed
+// untypedByDesign is the CLOSED list of zt operations that are NOT typed
 // ops. It is EMPTY: all four routes are typed, and this list exists so that
 // dropping one back out takes a deliberate edit with a reason.
 var untypedByDesign = map[string]string{}
@@ -21,7 +21,7 @@ var untypedByDesign = map[string]string{}
 func ztOpsUnderTest(t *testing.T) (served map[string]bool, typed map[string]string, schemas map[string]any) {
 	t.Helper()
 	app := mountApp(t, &fakeZT{})
-	doc, err := openapi.Spec(app, openapi.Info{Title: "zero-trust", Version: "v1"})
+	doc, err := openapi.Spec(app, openapi.Info{Title: "zt", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
@@ -50,12 +50,12 @@ func ztOpsUnderTest(t *testing.T) (served map[string]bool, typed map[string]stri
 	return served, typed, reg.Schemas
 }
 
-// TestEveryRouteIsTypedOrNamed fails when a zero-trust operation is neither a
+// TestEveryRouteIsTypedOrNamed fails when a zt operation is neither a
 // typed op nor named above — so the next route added here is typed by default.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	served, typed, _ := ztOpsUnderTest(t)
 	if len(served) != 4 {
-		t.Errorf("zero-trust serves %d operations, expected 4 — update this gate deliberately", len(served))
+		t.Errorf("zt serves %d operations, expected 4 — update this gate deliberately", len(served))
 	}
 
 	var untyped []string
@@ -77,7 +77,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	}
 	for key := range untypedByDesign {
 		if !served[key] {
-			t.Errorf("untypedByDesign names %q, which zero-trust no longer serves", key)
+			t.Errorf("untypedByDesign names %q, which zt no longer serves", key)
 		}
 	}
 }
@@ -87,7 +87,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 func TestEveryTypedOpIsDescribed(t *testing.T) {
 	_, typed, _ := ztOpsUnderTest(t)
 	if len(typed) == 0 {
-		t.Fatal("no typed zero-trust ops in the registry at all")
+		t.Fatal("no typed zt ops in the registry at all")
 	}
 	for key, desc := range typed {
 		if strings.TrimSpace(desc) == "" {
@@ -101,7 +101,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	_, _, schemas := ztOpsUnderTest(t)
 	if len(schemas) == 0 {
-		t.Fatal("no zero-trust schemas in the typed registry at all")
+		t.Fatal("no zt schemas in the typed registry at all")
 	}
 	var bare []string
 	for name, raw := range schemas {
