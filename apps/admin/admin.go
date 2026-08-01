@@ -133,7 +133,7 @@ func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	zip.Get(z, "/v1/admin/applications", o.applications, op("adminApplications"))
 	zip.Get(z, "/v1/admin/products", products, op("adminProducts"))
 	zip.Get(z, "/v1/admin/compute", compute, op("adminCompute"))
-	zip.Get(z, "/v1/admin/block-storage", o.blockStorage, op("adminBlockStorage"))
+	zip.Get(z, "/v1/admin/volumes", o.volumes, op("adminVolumes"))
 	zip.Get(z, "/v1/admin/o11y", o11y, op("adminO11y"))
 	zip.Get(z, "/v1/admin/aimetrics", aimetrics, op("adminAIMetrics"))
 	// Per-subsystem lens on the one binary: the mount inventory (what is on/off) fused
@@ -165,7 +165,7 @@ func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	zip.Get(z, "/v1/admin/waitlist", waitlist, op("adminWaitlist"))
 	zip.Post(z, "/v1/admin/waitlist/boost", o.waitlistBoost, op("adminWaitlistBoost"))
 
-	// Usage-cap + promo control plane (promos platform-only; spend-caps org-scoped).
+	// Usage-cap + promo control plane (promos platform-only; caps org-scoped).
 	limitRoutes(z, o)
 
 	// ── Carved-out domains own their routes (audit/customer/revenue/finance +

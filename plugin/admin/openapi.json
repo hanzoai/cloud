@@ -391,13 +391,139 @@
         }
       }
     },
-    "/v1/admin/block-storage": {
+    "/v1/admin/caps": {
       "get": {
-        "operationId": "adminBlockStorage",
-        "summary": "Is the realtime block-storage board: the DigitalOcean volume fleet (count, capacity, monthly list cost, per-volume region and attachment) plus the analytics datastore's OWN fill, read from its system.disks.",
-        "description": "Is the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
+        "operationId": "adminCaps",
+        "summary": "Reads one org's usage caps: its spend alerts plus the derived period spend, over/warn state and reset time.",
+        "description": "Reads one org's usage caps: its spend alerts plus the derived period\nspend, over/warn state and reset time.\n\nThese are the SAME rows the customer edits in their own console — a platform override\nand a customer budget are one model, not two.",
         "tags": [
           "admin"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "description": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "acme"
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "enforce": true,
+                      "id": "cap_1",
+                      "limitCents": 100000,
+                      "over": false,
+                      "periodSpendCents": 42000,
+                      "resetsAt": "2026-08-01T00:00:00Z",
+                      "warn": false
+                    }
+                  ],
+                  "msg": "",
+                  "status": "ok",
+                  "total": 0
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/rawOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "adminCreateCap",
+        "summary": "Sets a usage cap on one org — a platform override of a customer budget, written to the customer's own spend-alert rows.",
+        "description": "Sets a usage cap on one org — a platform override of a customer budget,\nwritten to the customer's own spend-alert rows. The body is commerce's spend-alert\ncontract, forwarded byte-for-byte.",
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "enforce": true,
+                "limitCents": 100000,
+                "org": "acme"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/capIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "enforce": true,
+                    "id": "cap_1",
+                    "limitCents": 100000
+                  },
+                  "msg": "",
+                  "status": "ok",
+                  "total": 0
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/rawOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/admin/caps/{id}": {
+      "delete": {
+        "operationId": "adminDeleteCap",
+        "summary": "Removes one cap by id, lifting the ceiling entirely.",
+        "description": "Removes one cap by id, lifting the ceiling entirely.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cap_1"
+          },
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "description": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "acme"
+          }
         ],
         "responses": {
           "200": {
@@ -405,39 +531,69 @@
               "application/json": {
                 "example": {
                   "data": {
-                    "alerts": [],
-                    "datastore": {
-                      "mount": "/var/lib/datastore",
-                      "name": "default",
-                      "pct": 40.7,
-                      "sizeGiB": 200,
-                      "usedGiB": 81.4
-                    },
-                    "fleet": {
-                      "count": 2,
-                      "monthlyUsd": 30,
-                      "pct": null,
-                      "totalGiB": 300,
-                      "usedGiB": null
-                    },
-                    "volumes": [
-                      {
-                        "attached": true,
-                        "id": "v1",
-                        "name": "datastore-data",
-                        "pct": null,
-                        "region": "nyc3",
-                        "service": "",
-                        "sizeGiB": 200,
-                        "usedGiB": null
-                      }
-                    ]
+                    "ok": true
                   },
                   "msg": "",
                   "status": "ok"
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/blockStorageOut"
+                  "$ref": "#/components/schemas/rawOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "adminUpdateCap",
+        "summary": "Edits one cap by id — raise or lower the ceiling, flip enforcement.",
+        "description": "Edits one cap by id — raise or lower the ceiling, flip enforcement. The\nbody is commerce's spend-alert patch contract, forwarded byte-for-byte.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "enforce": false,
+                "limitCents": 250000,
+                "org": "acme"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/capIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "enforce": false,
+                    "id": "cap_1",
+                    "limitCents": 250000
+                  },
+                  "msg": "",
+                  "status": "ok",
+                  "total": 0
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/rawOut"
                 }
               }
             },
@@ -2344,217 +2500,6 @@
         }
       }
     },
-    "/v1/admin/spend-caps": {
-      "get": {
-        "operationId": "adminSpendCaps",
-        "summary": "Reads one org's usage caps: its spend alerts plus the derived period spend, over/warn state and reset time.",
-        "description": "Reads one org's usage caps: its spend alerts plus the derived period\nspend, over/warn state and reset time.\n\nThese are the SAME rows the customer edits in their own console — a platform override\nand a customer budget are one model, not two.",
-        "tags": [
-          "admin"
-        ],
-        "parameters": [
-          {
-            "name": "org",
-            "in": "query",
-            "required": false,
-            "description": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "acme"
-          },
-          {
-            "name": "id",
-            "in": "query",
-            "required": false,
-            "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "data": [
-                    {
-                      "enforce": true,
-                      "id": "cap_1",
-                      "limitCents": 100000,
-                      "over": false,
-                      "periodSpendCents": 42000,
-                      "resetsAt": "2026-08-01T00:00:00Z",
-                      "warn": false
-                    }
-                  ],
-                  "msg": "",
-                  "status": "ok",
-                  "total": 0
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/rawOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      },
-      "post": {
-        "operationId": "adminCreateSpendCap",
-        "summary": "Sets a usage cap on one org — a platform override of a customer budget, written to the customer's own spend-alert rows.",
-        "description": "Sets a usage cap on one org — a platform override of a customer budget,\nwritten to the customer's own spend-alert rows. The body is commerce's spend-alert\ncontract, forwarded byte-for-byte.",
-        "tags": [
-          "admin"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "enforce": true,
-                "limitCents": 100000,
-                "org": "acme"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/capIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "data": {
-                    "enforce": true,
-                    "id": "cap_1",
-                    "limitCents": 100000
-                  },
-                  "msg": "",
-                  "status": "ok",
-                  "total": 0
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/rawOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/admin/spend-caps/{id}": {
-      "delete": {
-        "operationId": "adminDeleteSpendCap",
-        "summary": "Removes one cap by id, lifting the ceiling entirely.",
-        "description": "Removes one cap by id, lifting the ceiling entirely.",
-        "tags": [
-          "admin"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "cap_1"
-          },
-          {
-            "name": "org",
-            "in": "query",
-            "required": false,
-            "description": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "acme"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "data": {
-                    "ok": true
-                  },
-                  "msg": "",
-                  "status": "ok"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/rawOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "adminUpdateSpendCap",
-        "summary": "Edits one cap by id — raise or lower the ceiling, flip enforcement.",
-        "description": "Edits one cap by id — raise or lower the ceiling, flip enforcement. The\nbody is commerce's spend-alert patch contract, forwarded byte-for-byte.",
-        "tags": [
-          "admin"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "enforce": false,
-                "limitCents": 250000,
-                "org": "acme"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/capIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "data": {
-                    "enforce": false,
-                    "id": "cap_1",
-                    "limitCents": 250000
-                  },
-                  "msg": "",
-                  "status": "ok",
-                  "total": 0
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/rawOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
     "/v1/admin/subscriptions": {
       "get": {
         "operationId": "adminSubscriptions",
@@ -2848,6 +2793,61 @@
                 },
                 "schema": {
                   "$ref": "#/components/schemas/usersOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/admin/volumes": {
+      "get": {
+        "operationId": "adminVolumes",
+        "summary": "Returns the realtime block-storage board: the DigitalOcean volume fleet (count, capacity, monthly list cost, per-volume region and attachment) plus the analytics datastore's OWN fill, read from its system.disks.",
+        "description": "Returns the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "alerts": [],
+                    "datastore": {
+                      "mount": "/var/lib/datastore",
+                      "name": "default",
+                      "pct": 40.7,
+                      "sizeGiB": 200,
+                      "usedGiB": 81.4
+                    },
+                    "fleet": {
+                      "count": 2,
+                      "monthlyUsd": 30,
+                      "pct": null,
+                      "totalGiB": 300,
+                      "usedGiB": null
+                    },
+                    "volumes": [
+                      {
+                        "attached": true,
+                        "id": "v1",
+                        "name": "datastore-data",
+                        "pct": null,
+                        "region": "nyc3",
+                        "service": "",
+                        "sizeGiB": 200,
+                        "usedGiB": null
+                      }
+                    ]
+                  },
+                  "msg": "",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/volumesOut"
                 }
               }
             },
@@ -5280,20 +5280,6 @@
         },
         "type": "object"
       },
-      "blockStorageOut": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/storageSnapshot"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "capIn": {
         "properties": {
           "id": {
@@ -6495,6 +6481,20 @@
           },
           "total": {
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "volumesOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/storageSnapshot"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
           }
         },
         "type": "object"

@@ -14,10 +14,12 @@
 
 package admin
 
-// blockStorage — GET /v1/admin/block-storage, the realtime DO block-storage fleet the
-// operator's Block Storage board (admin.hanzo.ai) watches to scale DO before it runs out.
-// (Named `block-storage`, not `storage`, so the operator's separate S3 object-buckets
-// view keeps /v1/admin/storage — two distinct storage concerns, two endpoints.)
+// volumes — GET /v1/admin/volumes, the realtime DO block-storage fleet the operator's
+// Block Storage board (admin.hanzo.ai) watches to scale DO before it runs out.
+// (`volumes`, because a volume is the thing this returns — one per row of the answer.
+// The operator's separate S3 object-buckets view keeps /v1/admin/storage, so the two
+// storage concerns are told apart by naming what each one holds, not by qualifying
+// the word "storage" twice.)
 // Two REAL sources, honest by construction:
 //   - The FLEET inventory (count · total capacity · monthly cost · per-volume region +
 //     attachment) from the DigitalOcean API (the same DO_API_TOKEN client the finance
@@ -97,7 +99,7 @@ type storageSnapshot struct {
 	Alerts    []storageAlert   `json:"alerts"`
 }
 
-// blockStorage is the realtime block-storage board: the DigitalOcean volume fleet
+// volumes returns the realtime block-storage board: the DigitalOcean volume fleet
 // (count, capacity, monthly list cost, per-volume region and attachment) plus the
 // analytics datastore's OWN fill, read from its system.disks.
 //
@@ -113,18 +115,18 @@ type storageSnapshot struct {
 // "sizeGiB":200,"usedGiB":81.4,"pct":40.7},"volumes":[{"id":"v1","name":"datastore-data",
 // "region":"nyc3","sizeGiB":200,"usedGiB":null,"pct":null,"attached":true,"service":""}],
 // "alerts":[]}}
-func (o ops) blockStorage(ctx context.Context, _ *core.None) (*blockStorageOut, error) {
+func (o ops) volumes(ctx context.Context, _ *core.None) (*volumesOut, error) {
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
 	}
 	vols, _ := o.s.State.DO.Volumes(ctx) // honest empty on not-configured / unreachable
 	fill := datastoreFill(ctx)           // nil unless system.disks answered
 	snap := buildStorageSnapshot(vols, fill)
-	return &blockStorageOut{Status: core.OK, Data: &snap}, nil
+	return &volumesOut{Status: core.OK, Data: &snap}, nil
 }
 
-// blockStorageOut is the GET /v1/admin/block-storage envelope.
-type blockStorageOut struct {
+// volumesOut is the GET /v1/admin/volumes envelope.
+type volumesOut struct {
 	Status string           `json:"status"`
 	Msg    string           `json:"msg"`
 	Data   *storageSnapshot `json:"data"`

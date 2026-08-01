@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/admin/spend-caps/:id", zip.Doc{
+	zip.Describe("DELETE /v1/admin/caps/:id", zip.Doc{
 		Description: "Removes one cap by id, lifting the ceiling entirely.",
 		Fields: map[string]string{
 			"capIn.id":  "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
@@ -63,9 +63,14 @@ func init() {
 		Description: "Lists the tenant Base instances in the caller's window — a SuperAdmin sees every\ntenant's, anyone else only their own subtree's.\n\nThe scope is enforced TWICE: the upstream is asked for the caller's org, AND every row\nit returns is re-checked against the resolved scope. An upstream that ignored the\nfilter therefore degrades to empty, never to a cross-tenant leak.\n\nThe Base engine is being embedded into cloud; until it lands this proxies\nBASE_ADMIN_URL and, when that is unset, answers 200 with an empty list and msg saying\nso — the honest not-yet state, never fabricated instances.",
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":[{"name":"acme-base","org":"acme","url":"https://acme.base.hanzo.ai","status":"running","plan":"pro","region":"nyc3","created":"2026-03-01T00:00:00Z"}],"total":1}`),
 	})
-	zip.Describe("GET /v1/admin/block-storage", zip.Doc{
-		Description: "Is the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
-		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"fleet":{"count":2,"totalGiB":300,"usedGiB":null,"pct":null,"monthlyUsd":30},"datastore":{"name":"default","mount":"/var/lib/datastore","sizeGiB":200,"usedGiB":81.4,"pct":40.7},"volumes":[{"id":"v1","name":"datastore-data","region":"nyc3","sizeGiB":200,"usedGiB":null,"pct":null,"attached":true,"service":""}],"alerts":[]}}`),
+	zip.Describe("GET /v1/admin/caps", zip.Doc{
+		Description: "Reads one org's usage caps: its spend alerts plus the derived period\nspend, over/warn state and reset time.\n\nThese are the SAME rows the customer edits in their own console — a platform override\nand a customer budget are one model, not two.",
+		Fields: map[string]string{
+			"capIn.id":  "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
+			"capIn.org": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
+		},
+		Example:  json.RawMessage(`{"org":"acme"}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"id":"cap_1","limitCents":100000,"enforce":true,"periodSpendCents":42000,"over":false,"warn":false,"resetsAt":"2026-08-01T00:00:00Z"}],"total":0}`),
 	})
 	zip.Describe("GET /v1/admin/compute", zip.Doc{
 		Description: "Rolls the fleet's compute usage up to one row per (org, app, project, kind):\nhow many distinct machines ran in the window, how many are still active, what they\nbilled, and when each group last emitted an event. The console folds these into its\norg → app → project tree.\n\nA machine counts as ACTIVE when its LATEST lifecycle event is not a terminal one\n(stop/destroy/terminate/delete/off/shutdown/expire and their past tenses) — the same\nfold the console applies, done in the warehouse so the count is over every machine and\nnot just the page.\n\nHonest-empty when the warehouse is not connected or hanzo.compute_usage is not\nprovisioned yet: an empty list, never a fabricated fleet.",
@@ -164,15 +169,6 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"services":[{"service":"chat","displayName":"Chat","description":"","hosts":["chat.hanzo.ai"],"waitlistMode":true}]}}`),
 	})
-	zip.Describe("GET /v1/admin/spend-caps", zip.Doc{
-		Description: "Reads one org's usage caps: its spend alerts plus the derived period\nspend, over/warn state and reset time.\n\nThese are the SAME rows the customer edits in their own console — a platform override\nand a customer budget are one model, not two.",
-		Fields: map[string]string{
-			"capIn.id":  "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
-			"capIn.org": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
-		},
-		Example:  json.RawMessage(`{"org":"acme"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"id":"cap_1","limitCents":100000,"enforce":true,"periodSpendCents":42000,"over":false,"warn":false,"resetsAt":"2026-08-01T00:00:00Z"}],"total":0}`),
-	})
 	zip.Describe("GET /v1/admin/subsystems", zip.Doc{
 		Description: "subsystems answers GET /v1/admin/subsystems. ?range=24h|7d|30d bounds the telemetry\nwindow (default 30d) — the same enum, and the same helpers, as the o11y board.",
 		Fields: map[string]string{
@@ -201,6 +197,10 @@ func init() {
 		Example:  json.RawMessage(`{"org":"acme","q":"ada","p":"1","pageSize":"50"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"owner":"acme","name":"ada","email":"ada@acme.com","displayName":"Ada","isAdmin":true,"isSuperAdmin":false,"tag":"","created":"2026-01-04T00:00:00Z","lastSignin":"2026-07-01T09:12:00Z","forbidden":false}],"total":222}`),
 	})
+	zip.Describe("GET /v1/admin/volumes", zip.Doc{
+		Description: "Returns the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
+		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"fleet":{"count":2,"totalGiB":300,"usedGiB":null,"pct":null,"monthlyUsd":30},"datastore":{"name":"default","mount":"/var/lib/datastore","sizeGiB":200,"usedGiB":81.4,"pct":40.7},"volumes":[{"id":"v1","name":"datastore-data","region":"nyc3","sizeGiB":200,"usedGiB":null,"pct":null,"attached":true,"service":""}],"alerts":[]}}`),
+	})
 	zip.Describe("GET /v1/admin/waitlist", zip.Doc{
 		Description: "Reads one waitlist's leaderboard from the Hanzo waitlist engine — position,\npoints and referral standing per entry — proxied server-authed with the engine secret,\nnever a client credential.\n\nThe engine's payload is forwarded VERBATIM as data; the console normalizes it. When\nthe engine is not configured on this deployment the read still succeeds, with an empty\nobject and a msg saying so, so the panel shows an honest not-wired state instead of an\nerror the operator would chase.",
 		Fields: map[string]string{
@@ -211,7 +211,7 @@ func init() {
 		Example:  json.RawMessage(`{"waitlist":"chat","page":"1","pageSize":"50"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"entries":[{"email":"ada@acme.com","points":120,"position":7}],"total":842}}`),
 	})
-	zip.Describe("PATCH /v1/admin/spend-caps/:id", zip.Doc{
+	zip.Describe("PATCH /v1/admin/caps/:id", zip.Doc{
 		Description: "Edits one cap by id — raise or lower the ceiling, flip enforcement. The\nbody is commerce's spend-alert patch contract, forwarded byte-for-byte.",
 		Fields: map[string]string{
 			"capIn.id":  "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
@@ -219,6 +219,15 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"org":"acme","limitCents":250000,"enforce":false}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cap_1","limitCents":250000,"enforce":false},"total":0}`),
+	})
+	zip.Describe("POST /v1/admin/caps", zip.Doc{
+		Description: "Sets a usage cap on one org — a platform override of a customer budget,\nwritten to the customer's own spend-alert rows. The body is commerce's spend-alert\ncontract, forwarded byte-for-byte.",
+		Fields: map[string]string{
+			"capIn.id":  "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
+			"capIn.org": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
+		},
+		Example:  json.RawMessage(`{"org":"acme","limitCents":100000,"enforce":true}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cap_1","limitCents":100000,"enforce":true},"total":0}`),
 	})
 	zip.Describe("POST /v1/admin/credits", zip.Doc{
 		Description: "Mints credit for one org. It is the ONE admin mint surface, and it\ndoes NOT mint in-process: it forwards the request to commerce's already-mint-gated\nPOST /v1/billing/credits, authenticated by the service token and scoped to the\ntarget org, then writes one tamper-evident compliance record. Commerce stays the sole\ncredit ledger; this is a thin, audited relay so there is exactly one place credit is\ncreated.\n\nThe body is commerce's OWN CreateCreditGrant contract, forwarded whole — every field\nit carries reaches commerce. The only two this layer reads are the target org (`org`,\nor `user` as the org-pool alias), which selects the namespace commerce's EdgeAuth\ntrusts, and `idempotencyKey`, which makes a double-clicked grant credit once.\n\nA FAILED grant is audited too, with the request body attached: an attempted mint is\nexactly as interesting to a compliance auditor as a successful one.",
@@ -242,15 +251,6 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"waitlistMode":false}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"service":{"service":"chat","displayName":"Chat","description":"Hanzo Chat","hosts":["chat.hanzo.ai"],"waitlistMode":false}}}`),
-	})
-	zip.Describe("POST /v1/admin/spend-caps", zip.Doc{
-		Description: "Sets a usage cap on one org — a platform override of a customer budget,\nwritten to the customer's own spend-alert rows. The body is commerce's spend-alert\ncontract, forwarded byte-for-byte.",
-		Fields: map[string]string{
-			"capIn.id":  "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
-			"capIn.org": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
-		},
-		Example:  json.RawMessage(`{"org":"acme","limitCents":100000,"enforce":true}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"id":"cap_1","limitCents":100000,"enforce":true},"total":0}`),
 	})
 	zip.Describe("POST /v1/admin/sync", zip.Doc{
 		Description: "Answers the operator's \"Sync now\" button. There is nothing to kick: admin\naggregates LIVE on every read, so the button is just a re-read. It acknowledges\nhonestly with started:true rather than pretending a batch job was queued.",

@@ -101,7 +101,7 @@ func TestScope_LuxAdminCannotReachDO(t *testing.T) {
 
 // TestScope_LuxAdminSpendCapWriteHardPinned pins the highest-value cross-tenant vector — a
 // STATE-CHANGING write. A Lux admin who tries to set a spend cap on Zoo (POST
-// /v1/admin/spend-caps?org=zoo) must have the write hard-pinned to owner=lux downstream:
+// /v1/admin/caps?org=zoo) must have the write hard-pinned to owner=lux downstream:
 // the ?org= is ignored for a non-super caller (targetOrg → sc.Orgs[0]). We record the
 // X-Org-Id commerce actually receives and assert it is lux, never zoo. The read-path pins
 // are covered above; this closes the write path.
@@ -122,9 +122,9 @@ func TestScope_LuxAdminSpendCapWriteHardPinned(t *testing.T) {
 	do, s, _ := mountService(t, "http://127.0.0.1:0", commerce.URL, "")
 	s.State.WLTenants = map[string]bool{"lux": true}
 
-	resp, body := do("POST", "/v1/admin/spend-caps?org=zoo", luxAdminHdr)
+	resp, body := do("POST", "/v1/admin/caps?org=zoo", luxAdminHdr)
 	if resp.StatusCode == http.StatusForbidden {
-		t.Fatalf("admitted Lux WL admin must reach the scoped spend-caps WRITE, got 403 (%s)", body)
+		t.Fatalf("admitted Lux WL admin must reach the scoped caps WRITE, got 403 (%s)", body)
 	}
 	mu.Lock()
 	org := wroteOrg
