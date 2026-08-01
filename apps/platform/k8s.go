@@ -926,45 +926,52 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 // the fabric, keyed inside by repository, so a new repo needs no provisioning.
 const cacheBucket = "buildcache"
 
-// cacheArgs points the layer cache at the OBJECT STORE rather than the registry.
+// cacheArgs points the layer cache at whichever backend this deployment can
+// actually reach.
 //
-// The cache has to live somewhere that scales independently of a build node, and
-// the registry backend does not: every build pulls the whole cache onto the node
-// before it can read any of it, and pushes it back afterwards, so the cache's
-// size lands on a 105GB disk that also holds the images, the snapshots and the
-// build's own working set. That is what filled the runner pool — 79GB of retained
-// layers with 26GB left, and a build evicted fifteen minutes in.
+// THE OBJECT STORE IS THE RIGHT HOME and is selected by setting
+// BUILD_CACHE_S3_ENDPOINT. A registry cache does not scale with the fabric:
+// buildkit pulls the WHOLE cache onto the node before it can read any of it and
+// pushes it back afterwards, so the cache's size lands on the same 105GB disk
+// that holds the images, the snapshots and the build's own working set. That is
+// what filled the runner pool — 79GB of retained layers with 26GB left — and
+// evicted builds fifteen minutes in. S3 is read ranged and per-blob: the node
+// holds the working set and nothing else.
 //
-// S3 is read RANGED and per-blob: buildkit fetches the manifest, then only the
-// blobs a build actually misses, and writes back only what changed. The node
-// holds the working set and nothing else. It is also the storage the rest of the
-// fabric already uses (artifact.go publishes binaries the same way), on the same
-// in-cluster endpoint and the same credential, so this adds a bucket and not a
-// dependency.
-//
-// Credentials are OPTIONAL by the same rule artifact publishing uses: absent, the
-// env is empty, buildkit reports a cache miss, and the build runs uncached rather
-// than the Job being unschedulable. A cache is an accelerator; it never gates.
+// It is not the default because it is not yet REACHABLE. The build namespace has
+// no network path to the object store on either endpoint (both time out), so
+// selecting S3 today would point every build at a cache it cannot open. Which
+// backend to use is therefore a deployment fact, not a code opinion: grant
+// hanzo-build ingress to the s3 service, set the endpoint, and the cache moves
+// with no code change. Until then the registry backend is what works.
 func cacheArgs(repo string) []string {
-	ref := "name=" + strings.ReplaceAll(strings.TrimPrefix(repo, "ghcr.io/"), "/", "-")
-	common := "type=s3,bucket=" + cacheBucket +
-		",region=" + getenv("S3_REGION", "us-east-1") +
-		",endpoint_url=" + s3CacheEndpoint() +
-		",use_path_style=true," + ref
-	return []string{
-		"--import-cache", common,
+	if ep := strings.TrimSpace(getenv("BUILD_CACHE_S3_ENDPOINT", "")); ep != "" {
+		common := "type=s3,bucket=" + getenv("BUILD_CACHE_S3_BUCKET", cacheBucket) +
+			",region=" + getenv("S3_REGION", "us-east-1") +
+			",endpoint_url=" + s3CacheEndpoint(ep) +
+			",use_path_style=true,name=" + cacheKey(repo)
 		// mode=max exports the intermediate stages too, which is where the Go
 		// compiles live; without it a multi-stage build caches only its final
 		// layers and the expensive steps rerun anyway.
-		"--export-cache", common + ",mode=max",
+		return []string{"--import-cache", common, "--export-cache", common + ",mode=max"}
+	}
+	ref := repo + ":buildcache"
+	return []string{
+		"--import-cache", "type=registry,ref=" + ref,
+		"--export-cache", "type=registry,ref=" + ref + ",mode=max",
 	}
 }
 
-// s3CacheEndpoint is the INTERNAL object-store address the build writes through —
-// the same split artifactPutBase makes, and for the same reason: the public host
-// is a CDN edge that does not accept writes.
-func s3CacheEndpoint() string {
-	ep := getenv("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000")
+// cacheKey names one repository's cache inside the shared bucket, so a new repo
+// needs no provisioning and two repos never read each other's layers.
+func cacheKey(repo string) string {
+	return strings.ReplaceAll(strings.TrimPrefix(repo, "ghcr.io/"), "/", "-")
+}
+
+// s3CacheEndpoint normalizes the configured address to a URL. A bare host takes
+// http unless S3_ADMIN_SECURE says otherwise — the same convention artifactPutBase
+// uses for the internal write path.
+func s3CacheEndpoint(ep string) string {
 	if strings.HasPrefix(ep, "http://") || strings.HasPrefix(ep, "https://") {
 		return ep
 	}
