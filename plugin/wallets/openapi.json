@@ -226,9 +226,56 @@
         }
       }
     },
-    "/v1/wallets/{id}/safe-tx": {
+    "/v1/wallets/{id}/sign": {
       "post": {
-        "operationId": "post_v1_wallets_id_safe-tx",
+        "operationId": "post_v1_wallets_id_sign",
+        "summary": "Produces a secp256k1 signature from one of the caller org's wallets over a 32-byte digest, through whichever custody backend that wallet uses.",
+        "description": "Produces a secp256k1 signature from one of the caller org's wallets over\na 32-byte digest, through whichever custody backend that wallet uses. Give it\neither a `digest` (32 bytes as hex, signed verbatim) or a `message` (hashed\nwith Keccak256 first) — exactly one is required. The private key never leaves\nits backend: KMS custody opens the sealed key in-process, MPC custody produces\na threshold signature on the ring. The answer carries the digest that was\nsigned alongside the signature, so a caller can verify what it got.",
+        "tags": [
+          "wallets"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "wal_4b1e77"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "wal_4b1e77",
+                "message": "approve withdrawal 42"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/signIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/signature"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/wallets/{id}/transactions": {
+      "post": {
+        "operationId": "post_v1_wallets_id_transactions",
         "summary": "Composes a Safe transaction on the MPC ring and answers its EIP-712 hash together with the owner approval the ring's threshold signature produced.",
         "description": "Composes a Safe transaction on the MPC ring and answers its\nEIP-712 hash together with the owner approval the ring's threshold signature\nproduced. Only a wallet whose custody is \"safe\" can do this — any other custody\nis a 400, because the backend itself is asked whether it can propose rather\nthan the kind being switched on. The ring computes the Safe-tx hash bound to\nthe Safe contract and the chain id, so the hash a caller gets back is the one\nthe Safe will verify. This PROPOSES: it does not execute the transaction.",
         "tags": [
@@ -269,53 +316,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/safeProposal"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/wallets/{id}/sign": {
-      "post": {
-        "operationId": "post_v1_wallets_id_sign",
-        "summary": "Produces a secp256k1 signature from one of the caller org's wallets over a 32-byte digest, through whichever custody backend that wallet uses.",
-        "description": "Produces a secp256k1 signature from one of the caller org's wallets over\na 32-byte digest, through whichever custody backend that wallet uses. Give it\neither a `digest` (32 bytes as hex, signed verbatim) or a `message` (hashed\nwith Keccak256 first) — exactly one is required. The private key never leaves\nits backend: KMS custody opens the sealed key in-process, MPC custody produces\na threshold signature on the ring. The answer carries the digest that was\nsigned alongside the signature, so a caller can verify what it got.",
-        "tags": [
-          "wallets"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "wal_4b1e77"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "wal_4b1e77",
-                "message": "approve withdrawal 42"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/signIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/signature"
                 }
               }
             },
