@@ -38,7 +38,7 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 	app := zip.New(zip.Config{})
 	// nil validator = the unauthenticated case: no JWKS, no principal established,
 	// but forgeable X-User-*/X-Org-* headers are still stripped (defense in depth).
-	app.Use(SanitizeIdentity(nil, "admin"))
+	app.Use(SanitizeIdentity(nil))
 	// DefaultPrice governs the IAM paths under test — that is the exemption being
 	// asserted — and it reads the price each surface DECLARED (price.go). Every real
 	// surface is Free or Metered, so the real table cannot supply a control: a 2xx on an

@@ -19,12 +19,23 @@ package cloud
 // catalog + /v1/pricing/sync, provisioning, ml, eval, plan) becomes
 // trustworthy without touching a single handler.
 //
-// ADMIN IS SUPERADMIN. The gateway writes X-User-IsAdmin from the JWT `isAdmin`
-// bool, which IAM also sets true for ORG admins (an org owner). The cloud admin
-// surfaces (global catalog writes, the literal "admin" org bucket) mean
-// SuperAdmin. So the admin authority here is granted ONLY to a validated
-// principal whose org IS the admin org (owner == adminOrg — IAM's IsSuperAdmin),
-// matching the gateway's admin-guard. An org admin gets NO admin authority.
+// ADMIN IS SUPERADMIN, AND SUPERADMIN IS MEMBERSHIP. The cloud admin surfaces
+// (global catalog writes, the literal "admin" org bucket, the CD plane) mean
+// platform sudo, not "admin of my own org". Both facts are decided here, from the
+// signed membership set, through the predicates authz publishes:
+//
+//	X-User-IsAdmin       ⟸ authz.Claims.PlatformSudo — a HUMAN who is a MEMBER of
+//	                       the reserved admin org, at ANY position in `orgs`.
+//	X-User-IsOrgAdmin    ⟸ authz.Claims.OrgAdmin(effOrg) — admin/owner role in the
+//	                       org the request ACTS in. Never platform authority.
+//
+// There is no `isAdmin` claim in this picture, in either direction. IAM mints one
+// into NEITHER token — internal/oidc/jwt.go's Claims struct has no such field, and
+// (*Signer).claims is the single place an Identity becomes a claim set, so the
+// access token and the id_token carry the same claims but for aud/tokenType/nonce.
+// The bit exists only as a user-row column that /v1/iam/userinfo and whoami report
+// in a RESPONSE BODY. Anything here that appeared to read it was reading a claim
+// that is never sent.
 
 import (
 	"log/slog"
@@ -134,12 +145,13 @@ var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id
 //   - ALWAYS delete every header in authorityHeaders (a client copy never
 //     survives — this alone kills X-User-IsAdmin forgery).
 //   - Validate a Bearer / Basic / session-cookie JWT, if present:
-//     SuperAdmin (homeOrg == adminOrg, human) — membership of the reserved admin
-//     org IS the predicate; the isAdmin bit is deliberately not a second term.
-//     This line previously read "claims.isAdmin && owner == adminOrg", which was
-//     wrong twice over: the code has never consulted isAdmin here (see
-//     TestSuperAdminGate_IsAdminOrgMembership), and `owner` named the APP's org,
-//     not the user's.
+//     SuperAdmin (authz.Claims.PlatformSudo — a human MEMBER of the reserved admin
+//     org, at any position in the signed `orgs` set). Membership IS the predicate;
+//     the isAdmin bit is deliberately not a second term, and IAM does not mint one.
+//     This test used to read `homeOrg == adminOrg`, i.e. `Orgs[0].Org` — a
+//     POSITIONAL read that IAM's own ordering (home org always first) made true
+//     only for a user whose ROW lives in the admin org, so every operator granted
+//     admin-org membership was silently refused.
 //     → X-User-IsAdmin=true; X-Org-Id = the requested org when present
 //     (admin org-switch), else the home org.
 //     any other principal (incl. org admins, normal users)
@@ -168,8 +180,17 @@ var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id
 // fails OPEN. The availability cost is bounded to COLD caches: the edge key cache is
 // stale-on-error (a warm cache keeps validating through a transient JWKS outage),
 // so only a from-cold JWKS failure degrades to anonymous-403.
-func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
-	adminOrg = strings.TrimSpace(adminOrg)
+// The reserved admin org is NOT a parameter. It is the ISSUER's constant — IAM
+// hardcodes it (store.IsSuperAdmin: `owner == "admin"`, and the reserved-org set
+// beneath it) and authz publishes it as authz.AdminOrg — so a consumer-side knob
+// could only ever let cloud DISAGREE with the token contract it is reading. That
+// was not hypothetical: this file's own test doc asserted "Hanzo pins it to
+// 'hanzo'", which, had anyone set IAM_ADMIN_ORG that way, would have handed
+// platform sudo to every member of the hanzo org while IAM considered none of
+// them a SuperAdmin. Production never set it, so the default carried the truth by
+// luck. A knob whose only reachable non-default setting is an estate-wide
+// escalation is not configuration; it is a loaded footgun, and it is now gone.
+func SanitizeIdentity(v *identityValidator) zip.Handler {
 	return func(c *zip.Ctx) error {
 		req := c.Fiber().Request()
 
@@ -263,42 +284,52 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// project; a project owned by neither is refused).
 			var effOrg string
 			switch {
-			case owner != "" && owner == adminOrg && isHuman(claims):
-				// SuperAdmin ⟺ the principal's HOME org IS the reserved admin org AND the
-				// principal is HUMAN.
+			case owner != "" && platformSudo(claims):
+				// SuperAdmin ⟺ a HUMAN who is a MEMBER of the reserved admin org — asked
+				// through authz.Claims.PlatformSudo, the predicate the ISSUER's own claim
+				// package publishes. cloud does not re-derive it, because cloud re-deriving
+				// it is what this arm got wrong.
 				//
-				// `owner` here is the USER's org (claims.homeOrg, from the signed `orgs`
-				// set) — NOT the `owner` claim. This predicate USED to read that claim,
-				// which IAM stamps with the APPLICATION's org, so any human token minted
-				// by an app belonging to the reserved admin org conferred platform admin
-				// regardless of who the user was. Only now, reading the user's own org, is
-				// this genuinely the equality IAM's User.IsSuperAdmin() uses (user.Owner ==
-				// conf.AdminOrg); the comment previously claimed that parity while
-				// comparing a different value, and a confidently wrong comment on a
-				// security predicate is how it survived unnoticed.
+				// IT USED TO READ `owner == adminOrg`, i.e. claims.homeOrg(), i.e.
+				// Claims.Orgs[0].Org — a POSITIONAL read. IAM's MemberOrgRefs always writes
+				// the user's OWN org at index 0 and appends every granted membership after
+				// it (iam internal/store/membership.go), so that test could only ever be
+				// true for someone whose USER ROW lives in the admin org. An operator
+				// provisioned into a brand org and then granted admin-org membership — the
+				// deliberate, signed, revocable way operators are actually made — was
+				// UNREACHABLE by it. z@hanzo.ai carries
+				// orgs:[{hanzo,admin},{admin,admin},{lux,admin},{pars,admin},{zoo,admin}]
+				// and was refused every platform surface, because `admin` sits at index 1.
+				//
+				// This WIDENS NOTHING. The authority was already signed by IAM and already
+				// guarded on the write side: memberships.mayGrant refuses to create a
+				// membership into a reserved org unless the caller is ALREADY a SuperAdmin,
+				// on the stated grounds that it "seeds admin-org (SuperAdmin) tenancy". IAM
+				// protects the grant as platform authority; this arm now honors it as
+				// platform authority. The two agreeing is the fix — a grant the issuer
+				// treats as sudo must not be inert at the resource server.
 				//
 				// Membership ALONE decides, deliberately — the isAdmin bit is NOT a second
-				// term. The admin org holds only SuperAdmins (provisioned in, never
-				// promoted), so admin-org membership IS the fact; adding isAdmin would deny
-				// every operator whose user row lacks the bit, which is a lockout, not a
-				// hardening. That contract is pinned by
-				// TestSuperAdminGate_IsAdminOrgMembership ("ONE predicate, no second
-				// signal") and relied on by TestMasqueradeSpendsOwnBooks, whose SuperAdmin
-				// carries isAdmin=false. Reading the USER's org is what closes the
-				// escalation; a second signal is not needed and is not free. The human gate
-				// (isHuman) is the necessary companion once the audience is no longer a gate —
-				// otherwise ANY admin-org client_credentials app, not just the KMS-sync one,
-				// would inherit platform-admin and read every org. A machine principal falls
-				// through to the owner-scoped case below (org-scoped, not super). Honored
-				// org-switch for the human admin.
+				// term (IAM mints no such claim into ANY token; internal/oidc/jwt.go's
+				// Claims struct has no such field, and one live token confirms it). The
+				// admin org holds only SuperAdmins, provisioned in and never promoted, so
+				// membership IS the fact; adding a role term would revoke sudo from an
+				// admin-org user whose row carries isAdmin=false, which is a lockout, not a
+				// hardening — TestMasqueradeSpendsOwnBooks pins exactly that principal.
 				//
-				// It is a POSITIVE human test rather than a negated machine one on purpose:
-				// this grants the only cross-tenant scope in the system, so an unidentifiable
-				// principal must be refused, not admitted by default. The org question just
-				// below answers with the opposite polarity — it GRANTS an org from an
-				// app-selected claim, so it needs a positively identified MACHINE — and one
-				// predicate serving both is how a legacy human token came to be handed the
-				// app's org instead of failing closed.
+				// The HUMAN narrowing lives inside PlatformSudo (Claims.Machine: an App
+				// principal, or an empty membership set — a client_credentials token, which
+				// IAM never mints `orgs` for). It is a POSITIVE human test, not a negated
+				// machine one: this grants the only cross-tenant scope in the system, so an
+				// unidentifiable principal must be refused rather than admitted by default.
+				// A machine falls through to the owner-scoped arm below (org-scoped, not
+				// super). Honored org-switch for the human admin.
+				//
+				// `owner != ""` stays as the ANCHOR guard, and is a separate question from
+				// authority: an identity whose home org is unrepresentable (a whitespace/
+				// control/format rune — OrgHasUnsafeRune) has no billing anchor and no
+				// effective org to fall back to, so it fails closed here exactly as it does
+				// in the arm below rather than acting with an empty X-Org-Id.
 				req.Header.Set(authz.HeaderUserAdmin, "true")
 				if cliOrg != "" {
 					effOrg = cliOrg
@@ -341,15 +372,25 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// path grants NEITHER global NOR org admin, and the audience widening can never
 			// be leveraged into an admin surface. Like every authorityHeader it is stripped
 			// on ingress and re-injected ONLY here from validated claims, unforgeable.
-			// The fact has TWO signed sources and needs both: `isAdmin` (the
-			// platform's own super-users) and the EFFECTIVE org's role in the signed
-			// membership set (`orgs[].role == "admin"` — how a normal org's admin
-			// carries their adminness, and the ONLY place it appears). Reading only
-			// isAdmin demoted every org admin to a plain member, so the org-scoped
-			// admin surfaces refused their own owner. Keyed on effOrg, not on the
-			// home org: the bit must describe the org the request ACTS in, so
-			// switching to an org you merely belong to never carries admin across.
-			if (claims.IsAdmin || isOrgAdmin(claims.Orgs, effOrg)) && isHuman(claims) {
+			// Asked through authz.Claims.OrgAdmin — the same published predicate, for
+			// the same reason: one reading of one claim, owned by the party that signs
+			// it. It answers from the EFFECTIVE org's role in the signed membership set
+			// (`orgs[].role`, folding owner into admin), and it SCOPES the legacy
+			// `isAdmin` bit to the HOME org (`c.IsAdmin && org == c.Home()`).
+			//
+			// That scoping is the fix this line needed. It read `claims.IsAdmin ||
+			// isOrgAdmin(...)` — an UNSCOPED disjunct, so a token carrying the bit would
+			// have been org-admin in whatever org it switched INTO, not just its own.
+			// The term is inert against IAM today (IAM mints no isAdmin claim at all),
+			// which is precisely why it could sit there reading wrong: a dead term
+			// cannot fail a test. Scoped to home, it is correct whether or not some
+			// issuer ever starts minting it — forward-safe rather than accidentally-safe.
+			//
+			// Keyed on effOrg, not the home org: the bit must describe the org the
+			// request ACTS in, so switching to an org you merely belong to never carries
+			// admin across. The machine exclusion is inside OrgAdmin (Claims.Machine),
+			// so a client_credentials identity is granted neither admin scope.
+			if orgAdmin(claims, effOrg) {
 				req.Header.Set(authz.HeaderUserOrgAdmin, "true")
 			}
 			sanitizeSubScopes(c, effOrg, claims.renderProject(), cliApp, claims.renderBillingAccount())
@@ -384,7 +425,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 // for the boundary, so Serve and integration tests wire it identically — no second
 // copy of the validator-construction glue to drift.
 func IdentityMiddleware(cfg *Config) zip.Handler {
-	return SanitizeIdentity(newIdentityValidator(cfg.IAMIssuer, cfg.JWKSURL, 0), cfg.AdminOrg)
+	return SanitizeIdentity(newIdentityValidator(cfg.IAMIssuer, cfg.JWKSURL, 0))
 }
 
 // sanitizeSubScopes re-injects the org SUB-SCOPES (X-Project-Id, X-App-Id) for a

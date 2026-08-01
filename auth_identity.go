@@ -298,38 +298,39 @@ func isKMSMachinePrincipal(claims *idClaims) bool {
 	return false
 }
 
-// isHuman reports whether a validated token positively identifies a PERSON. It is
-// the gate on both admin scopes: SuperAdmin and the org-admin signal are granted
-// only to a principal that answers yes.
+// platformSudo and orgAdmin are cloud's reading of the two admin scopes. Each is
+// the PUBLISHED predicate (authz.Claims — the issuer's own statement of what its
+// claims mean) narrowed by the one denial only cloud can make.
 //
-// The signal is the MEMBERSHIP SET, because that is the one IAM guarantees. Every
-// USER token carries at least the home org — store.MemberOrgRefs opens with
-// {user.Owner, HomeRole(user)} before it appends anything else. A
-// client_credentials token carries none, and IAM says why at the call that mints
-// it: "a machine token has no user and therefore no membership set", so "an app
-// token can never carry a tenancy it did not earn". Authority here IS membership,
-// so an identity holding no memberships holds none of it. Same predicate as
-// authz.Claims.Machine, so this side of the boundary and the edge agree.
+// The grant is never restated here, and that is the point. cloud used to derive
+// both scopes itself; the derivation drifted from the contract in the direction
+// that matters. Platform sudo asked `homeOrg == adminOrg` — Orgs[0], a POSITIONAL
+// read — while IAM always writes the user's own org at index 0, so an operator
+// granted admin-org membership (the deliberate, signed, revocable way operators
+// are made) could never satisfy it. authz.Claims.PlatformSudo asks the question
+// that was meant: is the reserved org anywhere in the signed set.
 //
-// WHAT THIS REPLACES: `type == "application"`. The IAM line this cloud runs against
-// stamps that value NOWHERE — `tokenType` takes exactly "access-token" and
-// "id-token" (internal/oidc/jwt.go), and the object/token_oauth.go the old comment
-// cited is not in it. So the check could not fire, every machine fell through to the
-// KMS-audience clause, and that clause matches ONE identity in the estate. A generic
-// admin-org client_credentials token therefore read as a HUMAN and took the
-// SuperAdmin arm: cross-tenant reads, and the org-switch that decides which ledger
-// pays. The repo's own probe (TestRedIso_C_AdminCrossOrg) reproduces it.
-//
-// The KMS machine is excluded on its own owner-bound audience as well, so that one
-// identity is denied the admin scopes by two independent signals.
+// THE NARROWING is the per-org KMS-sync machine, named by its owner-bound
+// audience. authz decides machine-ness from the membership set — a
+// client_credentials token carries none, which is correct for every machine IAM
+// mints today — so a machine that DID carry memberships would read as a person
+// there. cloud can name that identity and therefore denies it explicitly, on both
+// scopes. It is a DENIAL layered over the grant, never a second route to one:
+// removing it can only ever refuse more, never admit more.
 //
 // FAIL-CLOSED, and it costs something. A human token carrying no `orgs` — minted
-// before that claim shipped — is not positively a person and loses the two admin
+// before that claim shipped — is not positively a person and loses both admin
 // scopes. That is an availability cost bounded by the token TTL, taken deliberately
 // over the alternative: admitting an unidentifiable principal to the only
 // cross-tenant scope in the system.
-func isHuman(claims *idClaims) bool {
-	return len(claims.Orgs) > 0 && !isKMSMachinePrincipal(claims)
+func platformSudo(claims *idClaims) bool {
+	return claims.PlatformSudo() && !isKMSMachinePrincipal(claims)
+}
+
+// orgAdmin reports whether claims administer the org the request ACTS in. See
+// platformSudo for why the grant is authz's and the denial is cloud's.
+func orgAdmin(claims *idClaims, org string) bool {
+	return claims.OrgAdmin(org) && !isKMSMachinePrincipal(claims)
 }
 
 // isMember reports whether org is in the token's signed membership set — the
@@ -343,51 +344,15 @@ func isHuman(claims *idClaims) bool {
 // selection leaves the caller in their home org. An empty set (a legacy token, an
 // opaque key, a machine principal — IAM never mints `orgs` for a client_credentials
 // token) admits nothing, which is exactly the pre-claim behavior.
-// isOrgAdmin reports whether the token's signed membership set names the caller an
-// ADMIN of org — the role side of the same `orgs` claim isMember reads for the org
-// side. One claim, one parser, two questions.
-//
-// It exists because the top-level `isAdmin` claim is NOT the org-admin fact. IAM
-// mints `isAdmin` for the platform's own super-users; a normal org's admin carries
-// their adminness in `orgs[].role`, and nowhere else. Minting X-User-IsOrgAdmin from
-// `isAdmin` alone therefore demoted EVERY org admin to a plain member — the whole
-// org-scoped admin surface (the platform fleet board, the org admin panels) refused
-// its own owner with "admin required". Verified against production: z@hanzo.ai's
-// token carries orgs:[{org:hanzo,role:admin}] and no isAdmin, and
-// GET /v1/paas/apps answered 403.
-//
-// VERBATIM org comparison for isMember's reason (a fold would let a member of
-// "acme" claim "ACME"); the ROLE is folded, because a role is a closed vocabulary
-// IAM controls, not a tenant-chosen identifier. An empty set — a legacy token, an
-// opaque hk-/sk- key, a machine principal — admits nothing, so this can only ever
-// restate a membership IAM already signed.
-// "owner" counts, and leaving it out reproduced the very failure described above
-// one role-name deeper. IAM's coarse membership vocabulary is exactly three values
-// — owner, admin, member (iam internal/store/membership.go) — and `owner` is the
-// one it assigns to whoever CREATES an org: self-service provisioning writes
-// EnsureMembership(..., RoleOwner) so "a self-service org is born with nobody on
-// it" cannot happen (iam internal/oidc/provision.go). Matching only "admin"
-// therefore refused every self-serve org founder from their own org's admin
-// surface — the strictly worse version of the bug this function was written to
-// fix, because an owner cannot escalate themselves out of it.
-//
-// IAM's own money path already treats the two as one (billingAccountFor admits
-// {RoleOwner, RoleAdmin}); this is the authz half of that same fact.
-func isOrgAdmin(orgs []authz.Membership, org string) bool {
-	if org == "" {
-		return false
-	}
-	for _, o := range orgs {
-		if o.Org != org {
-			continue
-		}
-		// Role.Admits folds owner into admin, in the one place that vocabulary is
-		// defined. This used to lower-case and trim the role string here, which is a
-		// second reading of the same enum.
-		return o.Role.Admits(authz.Write)
-	}
-	return false
-}
+// The org-admin fact is authz.Claims.OrgAdmin's to state (see orgAdmin above).
+// cloud used to re-derive it here, folding the role vocabulary itself; that
+// derivation is deleted rather than kept beside the published one, because two
+// readings of one claim is exactly the condition this package exists to end.
+// Its history is worth keeping: matching only "admin" once locked every
+// self-serve founder out of their own org, since IAM writes RoleOwner for
+// whoever CREATES an org (EnsureMembership(..., RoleOwner), so a new org is not
+// "born with nobody on it"). Role.Admits folds owner into admin, in the one
+// place that vocabulary is defined. TestOrgAdminAdmitsOwner pins it end to end.
 
 func isMember(orgs []authz.Membership, org string) bool {
 	if org == "" {
