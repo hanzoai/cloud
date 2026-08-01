@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
@@ -28,20 +29,96 @@ type stmt struct {
 	Args []any
 }
 
+// emitted is one row of a SOURCE plane, as the ingest door would have written
+// it: product events in event.event, captured failures in event.error, metered
+// inference in hanzo.cloud_usage. It is filed under the BARE org, because that is
+// the tenant column those planes actually carry.
+//
+// It exists so the moat can be tested END TO END rather than in halves: an
+// organisation emits, the rollup folds, the surface is read back. A fake that
+// only records statements can prove a predicate is bound and cannot prove the
+// loop closes.
+type emitted struct {
+	// Plane is which rollup reads it, by [rollupStmt.Name].
+	Plane   string
+	Subject string
+	At      time.Time
+	Spend   int64
+}
+
 // warehouse is the recording store.
 type warehouse struct {
 	mu    sync.Mutex
 	up    bool
 	sent  []stmt
-	table map[string][]map[string]any // rows keyed by the bound org
+	table map[string][]map[string]any // risk_feature rows keyed by the bound QUALIFIED key
+	src   map[string][]emitted        // source-plane rows keyed by the BARE org
 }
 
-var probe = &warehouse{up: true, table: map[string][]map[string]any{}}
+var probe = &warehouse{up: true, table: map[string][]map[string]any{}, src: map[string][]emitted{}}
 
 func (w *warehouse) reset(up bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.up, w.sent, w.table = up, nil, map[string][]map[string]any{}
+	w.up, w.sent = up, nil
+	w.table, w.src = map[string][]map[string]any{}, map[string][]emitted{}
+}
+
+// emit files source-plane rows under the BARE org, the way the ingest door does.
+func (w *warehouse) emit(org string, evs ...emitted) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.src[org] = append(w.src[org], evs...)
+}
+
+// fold executes a rollup INSERT the way the warehouse would: it reads the source
+// plane under the BOUND bare org, within the BOUND window, and writes feature
+// rows under the BOUND qualified key.
+//
+// It is deliberately faithful about which value goes where. If the statement ever
+// bound the qualified key to the read or the bare org to the write, this fake
+// would file the rows under a key no read uses and every loop test would fail —
+// which is the point of modelling it rather than stubbing it.
+func (w *warehouse) fold(sql string, args []any) {
+	var name string
+	for _, r := range rollups {
+		if r.SQL == sql {
+			name = r.Name
+			break
+		}
+	}
+	if name == "" || len(args) < 4 {
+		return
+	}
+	qualified, _ := args[0].(string)
+	bare, _ := args[1].(string)
+	from, ferr := time.Parse("2006-01-02 15:04:05", args[2].(string))
+	to, terr := time.Parse("2006-01-02 15:04:05", args[3].(string))
+	if ferr != nil || terr != nil {
+		return
+	}
+	for _, e := range w.src[bare] {
+		if e.Plane != name || e.At.Before(from) || !e.At.Before(to) {
+			continue
+		}
+		bucket := e.At.UTC().Truncate(5 * time.Minute)
+		row := map[string]any{"subject": e.Subject, "bucket": bucket}
+		switch name {
+		case "person":
+			row["subject_kind"] = kindPerson
+			row["events"], row["sessions"], row["distincts"], row["paths"] = uint32(1), uint32(1), uint32(1), uint32(1)
+		case "session":
+			row["subject_kind"] = kindSession
+			row["events"], row["sessions"] = uint32(1), uint32(1)
+		case "fault":
+			row["subject_kind"] = kindPerson
+			row["errors"] = uint32(1)
+		case "account":
+			row["subject_kind"] = kindAccount
+			row["calls"], row["tokens"], row["spend_nano"], row["ips"] = uint32(1), uint64(100), e.Spend, uint32(1)
+		}
+		w.table[qualified] = append(w.table[qualified], row)
+	}
 }
 
 // hold files rows under an org key. A read binds an org; only rows filed under
@@ -80,7 +157,17 @@ func (w *warehouse) exec(sql string, args []any) error {
 	if !w.up {
 		return errStore
 	}
+	w.fold(sql, args)
 	return nil
+}
+
+// rowsFor is how many feature rows are filed under a qualified key. Re-running a
+// rollup over one window would double them, which is what the watermark exists to
+// prevent and what [TestRollup_RollsEachWindowOnce] measures.
+func (w *warehouse) rowsFor(key string) int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.table[key])
 }
 
 // reads returns every recorded statement that touched the feature table.
@@ -158,4 +245,32 @@ func newTestPlane(t *testing.T) *plane {
 	}
 	t.Cleanup(func() { _ = p.close() })
 	return p
+}
+
+// holdFolds takes every fold ticket, so the plane starts no background fold for
+// the duration of the test.
+//
+// A test that DRIVES a fold and then measures what it read is otherwise racing
+// the fold the plane arms the moment a tenant becomes resident: whichever runs
+// first advances the watermarks, and the other correctly reads nothing — which
+// looks exactly like the defect. The tickets are the plane's own admission
+// mechanism, so holding them is the real thing being quiet rather than a hook cut
+// into production code for the tests.
+func holdFolds(t *testing.T, p *plane) {
+	t.Helper()
+	for i := 0; i < maxFolds; i++ {
+		select {
+		case p.folds <- struct{}{}:
+		default:
+			t.Fatalf("only %d of %d fold tickets were free", i, maxFolds)
+		}
+	}
+	t.Cleanup(func() {
+		for i := 0; i < maxFolds; i++ {
+			select {
+			case <-p.folds:
+			default:
+			}
+		}
+	})
 }

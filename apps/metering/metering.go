@@ -607,6 +607,34 @@ type Usage struct {
 	ClientIP         string `json:"clientIp,omitempty"`
 }
 
+// Clone returns a Usage that OWNS every string it carries.
+//
+// A Usage assembled inside a request handler routinely carries zero-copy views
+// into the server's reused request arena: c.User(), c.RequestID() and the
+// forwarded client IP are header reads that alias fasthttp's buffer, and that
+// buffer is handed to the NEXT request on the same connection the instant the
+// handler returns. Retaining such a Usage past its handler is a use-after-free
+// whose symptom is not a crash — it is another caller's bytes marshalled onto
+// this caller's debit, on a connection two tenants took turns on.
+//
+// So anything that retains a Usage clones it first. [ResourceMeter.MeterUsage]
+// records on a background goroutine and clones there, once, rather than each of
+// its callers having to remember.
+func (u Usage) Clone() Usage {
+	u.User = strings.Clone(u.User)
+	u.Actor = strings.Clone(u.Actor)
+	u.Org = strings.Clone(u.Org)
+	u.Currency = strings.Clone(u.Currency)
+	u.Model = strings.Clone(u.Model)
+	u.Provider = strings.Clone(u.Provider)
+	u.Project = strings.Clone(u.Project)
+	u.Service = strings.Clone(u.Service)
+	u.RequestID = strings.Clone(u.RequestID)
+	u.Status = strings.Clone(u.Status)
+	u.ClientIP = strings.Clone(u.ClientIP)
+	return u
+}
+
 // amount returns the canonical typed charge this gate weighs. Amount wins;
 // otherwise the int64 wire field is reconstructed, so a caller that has not got
 // a typed value still gates. Zero means "any positive balance", the gate's
