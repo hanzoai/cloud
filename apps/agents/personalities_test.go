@@ -16,7 +16,7 @@ func mountSeedTest(t *testing.T, defaultModel string) {
 	prev := mounted
 	mounted = &cloud.Service[state]{
 		Base:  cloud.Base{Log: luxlog.New("test")},
-		State: state{store: testStore(t), defaultModel: defaultModel},
+		State: state{stores: testStores(t), defaultModel: defaultModel},
 	}
 	t.Cleanup(func() { mounted = prev })
 }

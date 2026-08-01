@@ -38,7 +38,7 @@ func TestStopSessions_ActorScoped(t *testing.T) {
 
 	t.Run("provider wildcard stops only the caller's own sessions", func(t *testing.T) {
 		mountInproc(t)
-		st := mounted.State.store
+		st := storeOf(t, &mounted.State, "acme")
 		// One org, three users; Alice + Bob overlap on host AND provider so an
 		// org-only match (the pre-fix behavior) would sweep every claude session.
 		mkLive(t, st, "alice", "acme", "acme/alice", "box1", "claude", "alice@x")
@@ -65,7 +65,7 @@ func TestStopSessions_ActorScoped(t *testing.T) {
 
 	t.Run("host forge cannot reach a co-tenant on the same device", func(t *testing.T) {
 		mountInproc(t)
-		st := mounted.State.store
+		st := storeOf(t, &mounted.State, "acme")
 		// Alice and Bob both have a live session on the SAME host. Alice forges her
 		// link Host to that shared box and revokes it.
 		mkLive(t, st, "alice", "acme", "acme/alice", "shared", "claude", "alice@x")
@@ -85,7 +85,7 @@ func TestStopSessions_ActorScoped(t *testing.T) {
 
 	t.Run("a match with no actor fails closed (stops nothing)", func(t *testing.T) {
 		mountInproc(t)
-		st := mounted.State.store
+		st := storeOf(t, &mounted.State, "acme")
 		mkLive(t, st, "alice", "acme", "acme/alice", "box1", "claude", "alice@x")
 		mkLive(t, st, "bob", "acme", "acme/bob", "box1", "claude", "bob@x")
 
@@ -107,7 +107,7 @@ func TestStopSessions_ActorScoped(t *testing.T) {
 
 	t.Run("count is actor scoped too", func(t *testing.T) {
 		mountInproc(t)
-		st := mounted.State.store
+		st := storeOf(t, &mounted.State, "acme")
 		mkLive(t, st, "alice", "acme", "acme/alice", "box1", "claude", "alice@x")
 		mkLive(t, st, "bob", "acme", "acme/bob", "box1", "claude", "bob@x")
 
@@ -127,7 +127,7 @@ func TestStopSessions_ActorScoped(t *testing.T) {
 
 	t.Run("caller still stops their OWN matching session", func(t *testing.T) {
 		mountInproc(t)
-		st := mounted.State.store
+		st := storeOf(t, &mounted.State, "acme")
 		// The fix must not over-restrict: Alice logging out her claude account DOES
 		// tear down her matching session (the intended teardown).
 		mkLive(t, st, "alice", "acme", "acme/alice", "box1", "claude", "alice@x")
