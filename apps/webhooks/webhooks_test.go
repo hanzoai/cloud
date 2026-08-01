@@ -368,7 +368,7 @@ func TestTestSendDeliversAndRecords(t *testing.T) {
 	}
 }
 
-// TestRotateSecretInvalidatesOld proves rotate-secret reveals a NEW secret once, and that
+// TestRotateSecretInvalidatesOld proves POST /:id/secret reveals a NEW secret once, and that
 // after rotation deliveries sign with the new secret while the old one no longer verifies.
 func TestRotateSecretInvalidatesOld(t *testing.T) {
 	app := mountApp(t)
@@ -396,7 +396,7 @@ func TestRotateSecretInvalidatesOld(t *testing.T) {
 	}
 
 	// Rotate: a NEW secret is revealed once.
-	code, body := do(t, app, http.MethodPost, "/v1/webhooks/"+ep.ID+"/rotate-secret", "acme", nil)
+	code, body := do(t, app, http.MethodPost, "/v1/webhooks/"+ep.ID+"/secret", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("rotate want 200, got %d (%s)", code, body)
 	}

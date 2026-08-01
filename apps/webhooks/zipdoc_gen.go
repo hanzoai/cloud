@@ -47,7 +47,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"url":"https://acme.example/hooks/hanzo","events":["commerce.order.>"],"description":"order pipeline"}`),
 	})
-	zip.Describe("POST /v1/webhooks/:id/rotate-secret", zip.Doc{
+	zip.Describe("POST /v1/webhooks/:id/secret", zip.Doc{
 		Description: "Mints a NEW HMAC signing secret for the endpoint and answers the\nendpoint WITH it — the only other response besides create that ever carries a\nsecret. The old secret stops working the instant this returns: every subsequent\ndelivery signs with the new one, with no overlap window. Call it when the\nsubscriber is ready to swap the value on its side, not before.",
 		Fields: map[string]string{
 			"Endpoint.deliveries7d": "Deliveries7d / Failures7d are cheap usage counters computed from the delivery log\nover usageWindow (not stored columns) and populated ONLY on list/get. They are 0\nwhen there is no delivery history — never omitempty, so the console always sees them.",
@@ -59,7 +59,7 @@ func init() {
 		Example:     json.RawMessage(`{"id":"wh_9f8c1d2e"}`),
 	})
 	zip.Describe("PUT /v1/webhooks/:id", zip.Doc{
-		Description: "Replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhooks/{id}/rotate-secret.",
+		Description: "Replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhooks/{id}/secret.",
 		Fields: map[string]string{
 			"Endpoint.deliveries7d":        "Deliveries7d / Failures7d are cheap usage counters computed from the delivery log\nover usageWindow (not stored columns) and populated ONLY on list/get. They are 0\nwhen there is no delivery history — never omitempty, so the console always sees them.",
 			"updateEndpointIn.description": "Description is a free-text label for the console. Optional, clipped to 1024 bytes.",
