@@ -53747,7 +53747,7 @@ paths:
       summary: Resolve your org's active storefront without naming an id
       tags:
       - store
-  /v1/store/storefront-token:
+  /v1/store/token:
     post:
       description: 'Answers a freshly minted token carrying ONLY the published-read
         permission — enough for a logged-out shopper''s storefront to read your published
@@ -53758,7 +53758,7 @@ paths:
         immediately, so re-minting is how you revoke. Admin is enforced by the handler
         as well as the route, because the route''s token gate does not apply on the
         identity path and a plain member must not be able to mint their org''s key.'
-      operationId: post_v1_store_storefront-token
+      operationId: post_v1_store_token
       summary: Mint your org's least-privilege storefront read key
       tags:
       - store
