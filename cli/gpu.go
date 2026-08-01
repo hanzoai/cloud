@@ -100,9 +100,10 @@ const (
 	fnCap     = "fn.run" // ephemeral script execution (uv-run) on this node
 )
 
-// The node-level command surface — `hanzo link | unlink | status` — is wired in
-// link.go. It composes the worker machinery below (runConnect / runDisconnect /
-// runFleetStatus) with the fabric verbs (`hanzo node up|stop`).
+// The node-level command surface — `hanzo link | unlink` — is wired in link.go.
+// It composes the worker machinery below (runConnect / runDisconnect) with the
+// fabric verbs (`hanzo node up|stop`). Reading the fleet back is `hanzo status`,
+// which this binary does not serve; the router hands it to the fabric CLI.
 
 // ---------------------------------------------------------------------------
 // worker — the connect loop's state.
@@ -1394,9 +1395,12 @@ type claimedActivity struct {
 }
 
 // ---------------------------------------------------------------------------
-// status / disconnect.
+// disconnect.
 // ---------------------------------------------------------------------------
 
+// fleetWorker is one row of GET /v1/fleet/workers — what the org's fleet reports
+// back about a machine that linked in. Rendering it is the fabric CLI's `status`;
+// here it is the shape this binary's registration must round-trip to.
 type fleetWorker struct {
 	ID            string               `json:"id"`
 	Hostname      string               `json:"hostname"`
@@ -1411,67 +1415,6 @@ type fleetWorker struct {
 	LastHeartbeat string               `json:"lastHeartbeat"`
 	Capabilities  []string             `json:"capabilities,omitempty"`
 	Engine        *engineAdvertisement `json:"engine,omitempty"`
-}
-
-// runFleetStatus renders the org's fleet: every node with its CPU inventory and
-// each GPU shown distinctly, this box highlighted with `*`. This is the `hanzo
-// status` view; --output=json emits the raw worker list.
-func runFleetStatus(cmd *cobra.Command, env *Env) error {
-	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
-	defer cancel()
-	if _, err := env.ensureToken(ctx); err != nil {
-		return err
-	}
-	w, _ := newWorker(env, "")
-	var resp struct {
-		Workers []fleetWorker `json:"workers"`
-	}
-	if _, err := w.call(ctx, http.MethodGet, "/v1/fleet/workers", nil, &resp); err != nil {
-		return err
-	}
-	return env.emit(resp.Workers, func(out io.Writer) {
-		if len(resp.Workers) == 0 {
-			fmt.Fprintln(out, "no nodes linked. Run `hanzo link` on a machine to bring it into the fleet.")
-			return
-		}
-		online := 0
-		for _, fw := range resp.Workers {
-			if fw.Status == "online" {
-				online++
-			}
-		}
-		fmt.Fprintf(out, "fleet — org %s · %d node(s), %d online\n\n", orgOf(env), len(resp.Workers), online)
-		for _, fw := range resp.Workers {
-			marker := ""
-			if fw.ID == w.identity {
-				marker = " *"
-			}
-			fmt.Fprintf(out, "%s %s%s\n", statusDot(fw.Status), fw.Hostname, marker)
-			fmt.Fprintf(out, "    status    %s (%s)\n", fw.Status, dashIfEmpty(fw.Provider))
-			fmt.Fprintf(out, "    cpu       %s\n", cpuSummary(fw.Arch, fw.CPUs, fw.CPUModel))
-			fmt.Fprintf(out, "    memory    %s\n", humanBytes(fw.Memory))
-			if len(fw.GPUs) == 0 {
-				fmt.Fprintf(out, "    gpu       (none — CPU-only node)\n")
-			}
-			for i, g := range fw.GPUs {
-				fmt.Fprintf(out, "    gpu[%d]    %s\n", i, describeGPUs([]gpuInfo{g}))
-			}
-			if fw.Engine != nil {
-				fmt.Fprintf(out, "    engine    %s — %s\n", fw.Engine.URL, describeEngine(fw.Engine))
-			}
-			if fw.LastHeartbeat != "" {
-				fmt.Fprintf(out, "    heartbeat %s\n", fw.LastHeartbeat)
-			}
-		}
-	})
-}
-
-// statusDot renders a filled/hollow dot for a node's liveness.
-func statusDot(status string) string {
-	if status == "online" {
-		return "●"
-	}
-	return "○"
 }
 
 // cpuSummary renders a node's CPU as "<cores> cores · <arch> · <model>", omitting
