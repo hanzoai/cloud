@@ -140,7 +140,7 @@
     "inputSchema": {
       "properties": {
         "name": {
-          "description": "Name is the model's name or its slugged id (\"zen4\",\n\"anthropic/claude-opus-4.6\"), matched case-insensitively. It comes from\nthe path: the URL is the addressing authority.",
+          "description": "Name is the model's name or its slugged id (\"zen4\",\n\"acme/some-model-1\"), matched case-insensitively. It comes from\nthe path: the URL is the addressing authority.",
           "type": "string"
         }
       },

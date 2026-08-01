@@ -38,7 +38,7 @@
     "name": "get_v1_usage_analytics_access"
   },
   {
-    "description": "Is the PER-PROVIDER view: one connected account's own consumption of its\nown plan — \"my Claude Max plan is 47% through its 6h window, resets at 14:20\".\n\n`current` is the newest instance of each lane (the headline); `windows` is the\nhistory behind it. Both come from ONE deduped read, so they can never disagree.\nThe rows are the caller's OWN linked accounts, scoped to the validated principal\nand its subject — never another user's, and never another org's.",
+    "description": "Is the PER-PROVIDER view: one connected account's own consumption of its\nown plan — \"my plan is 47% through its 6h window, resets at 14:20\".\n\n`current` is the newest instance of each lane (the headline); `windows` is the\nhistory behind it. Both come from ONE deduped read, so they can never disagree.\nThe rows are the caller's OWN linked accounts, scoped to the validated principal\nand its subject — never another user's, and never another org's.",
     "inputSchema": {
       "properties": {
         "account": {
@@ -134,7 +134,7 @@
               "type": "integer"
             },
             "plan": {
-              "description": "Plan is the provider plan the account is on, e.g. a Claude Max plan.",
+              "description": "Plan is the subscription plan the account is on, as the provider names it.",
               "type": "string"
             },
             "provider": {
@@ -223,7 +223,7 @@
           "type": "integer"
         },
         "plan": {
-          "description": "Plan is the provider plan the account is on, e.g. a Claude Max plan.",
+          "description": "Plan is the subscription plan the account is on, as the provider names it.",
           "type": "string"
         },
         "provider": {

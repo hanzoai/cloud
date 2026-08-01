@@ -13,7 +13,7 @@
     "name": "get_v1_engine_model"
   },
   {
-    "description": "Models lists the models the engine serves, each with its load state — the\nserver's own model table (its OpenAI-style list envelope, load status\nincluded), relayed verbatim.",
+    "description": "Models lists the models the engine serves, each with its load state — the\nserver's own model table (its standard list envelope, load status\nincluded), relayed verbatim.",
     "inputSchema": {
       "properties": {},
       "type": "object"
