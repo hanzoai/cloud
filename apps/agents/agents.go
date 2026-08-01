@@ -306,10 +306,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// deps.AI may be nil when no gateway is configured; run() degrades honestly.
 	// agents is a "complex" mount (package-global `mounted`, a background scheduler,
 	// a shutdown teardown), so it builds the Service value directly.
+	b := cloud.NewBase(deps, "agents")
 	s := &cloud.Service[state]{
-		Base: cloud.NewBase(deps, "agents"),
+		Base: b,
 		State: state{
-			stores: cloud.NewOrgStore[*Store](deps.DataDir, "agents", openStore),
+			stores: cloud.NewOrgStore[*Store](b, "agents", openStore),
 			ai:     deps.AI,
 			// cloud.ZenModel guards the CONFIG boundary: an operator who points
 			// CLOUD_AI_DEFAULT_MODEL at an upstream name still gets the Hanzo name

@@ -69,7 +69,7 @@ func TestFanOutLegacyCarriesEveryOrgForward(t *testing.T) {
 	seedLegacy(t, dir, "acme", "globex")
 	ctx := context.Background()
 
-	st := &state{stores: cloud.NewOrgStore[*Store](dir, "agents", openStore)}
+	st := &state{stores: cloud.NewOrgStore[*Store](cloud.Base{DataDir: dir}, "agents", openStore)}
 	t.Cleanup(func() { _ = st.stores.CloseAll() })
 	if err := fanOutLegacy(ctx, dir, st); err != nil {
 		t.Fatalf("fan-out: %v", err)
@@ -132,7 +132,7 @@ func TestFanOutLegacyIsIdempotent(t *testing.T) {
 	path := seedLegacy(t, dir, "acme")
 	ctx := context.Background()
 
-	st := &state{stores: cloud.NewOrgStore[*Store](dir, "agents", openStore)}
+	st := &state{stores: cloud.NewOrgStore[*Store](cloud.Base{DataDir: dir}, "agents", openStore)}
 	t.Cleanup(func() { _ = st.stores.CloseAll() })
 	if err := fanOutLegacy(ctx, dir, st); err != nil {
 		t.Fatalf("fan-out 1: %v", err)
@@ -184,7 +184,7 @@ func TestFanOutLegacyIsIdempotent(t *testing.T) {
 // no legacy file means nothing to carry, and nothing is created looking for it.
 func TestFanOutLegacyNoopsWithoutALegacyFile(t *testing.T) {
 	dir := t.TempDir()
-	st := &state{stores: cloud.NewOrgStore[*Store](dir, "agents", openStore)}
+	st := &state{stores: cloud.NewOrgStore[*Store](cloud.Base{DataDir: dir}, "agents", openStore)}
 	t.Cleanup(func() { _ = st.stores.CloseAll() })
 	if err := fanOutLegacy(context.Background(), dir, st); err != nil {
 		t.Fatalf("fresh install fan-out: %v", err)

@@ -99,6 +99,19 @@ const (
 	acctWallet  = "wallet"           // the org pool wallet; a per-user subject is "wallet:<user>"
 )
 
+// orgPattern is a SECOND physical name for an org, and it stays that way for
+// now because this is the money path and unifying it is a file move.
+//
+// The pattern is character-for-character namespace's own segment rule, which is
+// the best evidence the primitive is right. But cloud.OrgNamespace folds the org
+// through SanitizeOrg first, and the two disagree on every org that is not a
+// short clean label: "acme_corp" is accepted verbatim here and becomes
+// "acme-corp-cca8c7942f8c15a2" there, and a 40-character legal org is kept whole
+// here and truncated-plus-hashed there. Both write under <dataDir>/orgs/, so
+// switching the encoder would point the wallet at a different, empty file while
+// the funded one sat next to it. That is a migration with money in it, not a
+// rename, and it is not something to do as a side effect of a refactor.
+//
 // orgPattern is the safe file-path shape for an org directory — the SAME allowlist
 // sqlstore's per-tenant opener guards with (a leading alphanumeric then [a-z0-9_-]; no
 // path separators, no dots, no traversal). An org is used verbatim as a directory name

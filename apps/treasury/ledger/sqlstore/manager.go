@@ -54,6 +54,21 @@ const maxTenantLen = 128
 // disjoint (two distinct tenants can never resolve to the same file).
 const hashMarker = "h-"
 
+// tenantSlug is a THIRD physical name for a tenant, and it stays that way for
+// two reasons.
+//
+// It lives under a different root — {DataDir}/finance/{slug}.db, not
+// {DataDir}/orgs/{slug}/ — so cloud's org-DB layout does not describe it at all;
+// and like finance's, its slug disagrees with SanitizeOrg for any tenant that is
+// not a short clean label. Unifying both would relocate live reserve and customer
+// ledgers, which is a migration with money in it.
+//
+// There is also a deliberate boundary: this package is the storage adapter the
+// ledger engine travels with when it is lifted to hanzoai/finance, and it does
+// not import cloud on purpose. Reaching for cloud.OrgNamespace here would couple
+// the engine to this deployment. When the fleet's namespace primitive is what
+// the engine takes, this becomes a parameter rather than a slugger.
+//
 // tenantSlugPattern is the safe file-stem shape — IDENTICAL to the ledger's
 // per-tenant opener guard: a leading alphanumeric then [a-z0-9_-], no path
 // separators, no dots, no traversal, at most 64 chars. A tenant that already

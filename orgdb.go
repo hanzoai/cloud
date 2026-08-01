@@ -17,8 +17,8 @@ import (
 	"github.com/hanzoai/cloud/cek"
 
 	// internal/org is the HA-durable substrate: ha election (WHO writes) + vfs
-	// FencedStore ship/hydrate (HOW it ships) + envelope Cipher (at rest). An
-	// OrgStore configured WithDurable routes every per-org file through it.
+	// FencedStore ship/hydrate (HOW it ships) + envelope Cipher (at rest). Every
+	// per-org file routes through it when the deployment has one.
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
@@ -32,35 +32,17 @@ import (
 	_ "github.com/hanzoai/sqlite"
 )
 
-// Durability wires an OrgStore's per-org files through the HA-durable path
-// (github.com/hanzoai/cloud/internal/org): each store is owned by the ha-elected
-// single writer for its org, hydrated from the object store on open, and its writes
-// shipped back fenced by the lease round. It is the per-deployment factory (one
-// election+fence over one object store); a possibly-nil value means local-only
-// (dev/single-node), the open path unchanged.
-type Durability = org.Durability
-
-// OrgStoreOption configures optional OrgStore behavior. With no options an OrgStore
-// is exactly the local-only cache it has always been (cek open, no ship).
-type OrgStoreOption func(*orgStoreOpts)
-
-type orgStoreOpts struct {
-	dur *Durability
-	log luxlog.Logger
-}
-
-// WithDurable routes every per-org file through the HA-durable path. A nil dur is a
-// no-op (local-only), so a caller passes its deployment's possibly-nil Durability
-// directly and the store degrades to local on a deployment without an object store.
-func WithDurable(dur *Durability) OrgStoreOption {
-	return func(o *orgStoreOpts) { o.dur = dur }
-}
-
-// WithStoreLogger sets the logger used to report a degraded hydrate (the store still
-// opens; the message is the operator's signal that a durable open ran read-only).
-func WithStoreLogger(log luxlog.Logger) OrgStoreOption {
-	return func(o *orgStoreOpts) { o.log = log }
-}
+// Durability answers a question namespace does not ask, and keeping the two
+// apart is the point. A namespace says WHICH database; org.Durability says who
+// is allowed to write it (the ha-elected single owner), how its bytes reach the
+// object store (a fenced ship at the lease round) and how they are sealed on the
+// way (the per-org envelope). Braiding them would make "name a database" and
+// "own a database" one decision, and they are made by different things at
+// different times — the name by the request, the ownership by an election.
+//
+// The type is org.Durability and is spelled that way everywhere. It used to have
+// a second name here — `type Durability = org.Durability` — which bought nothing
+// and cost the reader a hop to find out the two were the same thing.
 
 // OrgDB is the ONE way any cloud subsystem opens a per-entity SQLite file
 // (HIP-0302 physical isolation). It resolves the namespace to its path, creates
@@ -154,7 +136,13 @@ type OrgStore[T io.Closer] struct {
 	// dur (when non-nil) makes every per-org file HA-durable: forNS hydrates it
 	// from the object store before opening and binds a Durable that Sync ships
 	// fenced. nil ⇒ local-only, byte-identical to the pre-durability cache.
-	dur *Durability
+	//
+	// It is READ from the deployment (Base.Durable), never chosen here. Whether
+	// this deployment has an object store it can fence against is a fact about
+	// the deployment, discovered once at boot by buildDurability; a subsystem
+	// that got to answer it per store was answering a question it cannot know,
+	// and eleven of the fifteen answered it by omission.
+	dur *org.Durability
 	log luxlog.Logger
 
 	mu       sync.Mutex
@@ -180,22 +168,25 @@ type openState[T io.Closer] struct {
 	err  error
 }
 
-// NewOrgStore builds a per-org store cache for subsystem under dataDir.
-// open wraps a freshly-opened *sql.DB (already pragma'd by OrgDB) into the
-// subsystem's store handle, running its migration; it is called once per org
-// file. Pass WithDurable to route every file through the HA-durable path; with no
-// options the cache is exactly the local-only one it has always been.
-func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, error), opts ...OrgStoreOption) *OrgStore[T] {
-	var o orgStoreOpts
-	for _, fn := range opts {
-		fn(&o)
-	}
+// NewOrgStore builds a per-org store cache for subsystem, in the deployment b
+// describes. open wraps a freshly-opened *sql.DB (already pragma'd by OrgDB)
+// into the subsystem's store handle, running its migration; it is called once
+// per org file.
+//
+// It takes the DEPLOYMENT and not three loose parameters because all three —
+// where files live, whether there is an object store to fence against, where a
+// degraded hydrate is reported — are facts of the deployment that Base already
+// holds together. Handed to the store as options, they became a subsystem's
+// opinion: eleven of the fifteen stores simply never passed WithDurable, so
+// their files were local-only on a deployment whose whole point is that they are
+// not. An option that every caller should pass identically is not an option.
+func NewOrgStore[T io.Closer](b Base, subsystem string, open func(*sql.DB) (T, error)) *OrgStore[T] {
 	return &OrgStore[T]{
-		dataDir:   dataDir,
+		dataDir:   b.DataDir,
 		subsystem: subsystem,
 		open:      open,
-		dur:       o.dur,
-		log:       o.log,
+		dur:       b.Durable,
+		log:       b.Log,
 		byNS:      map[namespace.Namespace]T{},
 		durables:  map[namespace.Namespace]*org.Durable{},
 		inflight:  map[namespace.Namespace]*openState[T]{},
@@ -418,6 +409,16 @@ func (c *OrgStore[T]) Sync(ns namespace.Namespace) (acked bool, err error) {
 // missing orgs root (a writer with no stores yet) is not an error. Under horizontal
 // sharding each writer's PVC holds only the orgs routed to it, so Each on a given
 // writer enumerates exactly that writer's orgs.
+//
+// This is the one thing here that hanzoai/orm/db.Namespaces cannot do and that
+// is not an oversight. That registry's whole surface is With, Open, Close: it
+// resolves a name you already have to a handle, and deliberately knows nothing
+// about which names exist, because knowing would mean holding a directory that
+// can drift from the filesystem. Each answers the opposite question — WHICH
+// entities have a store — and it answers it by reading the disk every time, so
+// there is nothing to drift. A reconciler needs that question answered; until a
+// shared registry offers it without keeping a second copy of the truth, this
+// stays here rather than being pushed upstream as a convenience.
 func (c *OrgStore[T]) Each(fn func(ns namespace.Namespace, st T, err error)) error {
 	var zero T
 	root := filepath.Join(c.dataDir, orgsRoot)
@@ -531,9 +532,18 @@ func (c *OrgStore[T]) CloseAll() error {
 // slug, and since the whole org→bucket/DB/namespace hashes THIS slug, that was
 // a cross-org collision.
 //
+// It is NOT superseded by hanzoai/namespace and must not be deleted when the
+// last database stops calling it. A namespace names a DATABASE; SanitizeOrg
+// names an org's PHYSICAL identity everywhere the fleet writes one — the k8s
+// namespace, the S3 bucket, the image ref, the KMS key path, the knowledge index
+// and the shard router's hash. Those are not databases and namespace has nothing
+// to say about them. What it does say is what a database may be named after, and
+// SanitizeOrg is the function that turns a validated org into a legal one, so it
+// is namespace's INPUT rather than its competitor.
+//
 // This is the ONE org-slug normalizer for the cloud org layer; it lives in
 // the root package beside OrgHasUnsafeRune (the identity-middleware twin) and
-// OrgDB (which folds every org DB path through it). provisioning.SanitizeOrg
+// OrgNamespace (which every org DB name is built by). provisioning.SanitizeOrg
 // (shared with S3/KMS/knowledge) delegates here, so the slug is byte-identical
 // across every physical namespace an org touches.
 //

@@ -35,6 +35,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -273,9 +274,10 @@ func init() {
 // Registered as cloud's KMS client factory (init) so BuildDeps can populate
 // deps.KMS before MountAll. A store-open failure returns the error; build.go then
 // fails closed to the disabled stub rather than crashing the binary.
-func newEmbeddedClient(cfg *cloud.Config, log luxlog.Logger) (cloud.KMSClient, error) {
+func newEmbeddedClient(cfg *cloud.Config, dur *org.Durability, log luxlog.Logger) (cloud.KMSClient, error) {
 	c, err := New(Config{
 		DataDir:      cfg.DataDir,
+		Durable:      dur,
 		MasterKeyB64: cfg.KMSMasterKeyRef,
 		MPCAddr:      cfg.KMSMPCAddr,
 		MPCVaultID:   cfg.KMSMPCVaultID,

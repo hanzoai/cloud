@@ -336,9 +336,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("admission.Mount: empty deps.DataDir")
 	}
-	log := deps.Logger.New("subsystem", "admission")
+	b := cloud.NewBase(deps, "admission")
+	log := b.Log
 	mounted = &registryState{
-		store: cloud.NewOrgStore[*waitlistStore](deps.DataDir, "waitlist", openWaitlistStore),
+		store: cloud.NewOrgStore[*waitlistStore](b, "waitlist", openWaitlistStore),
 		brand: deps.Brand,
 	}
 	n := seedRegistry(deps.Brand, log)

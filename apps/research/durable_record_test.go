@@ -146,7 +146,7 @@ func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
 	const orgID = "acme"
 
 	ownerDur := org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipCheckpoint())
-	ownerStore := cloud.NewOrgStore(t.TempDir(), "research", openStore, cloud.WithDurable(ownerDur))
+	ownerStore := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: ownerDur}, "research", openStore)
 	t.Cleanup(func() { _ = ownerStore.CloseAll() })
 	mountedStores = ownerStore
 	t.Cleanup(func() { mountedStores = nil })
@@ -161,7 +161,7 @@ func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
 	// dir that did not exist), then reads the evidence back. A logger surfaces a
 	// degraded hydrate as a test failure rather than a silent empty store.
 	succDur := org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint())
-	succStore := cloud.NewOrgStore(t.TempDir(), "research", openStore, cloud.WithDurable(succDur), cloud.WithStoreLogger(luxlog.New("succ")))
+	succStore := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: succDur, Log: luxlog.New("succ")}, "research", openStore)
 	t.Cleanup(func() { _ = succStore.CloseAll() })
 	st, err := succStore.For(cloud.MustOrgNamespace(orgID, ""))
 	if err != nil {
@@ -183,7 +183,7 @@ func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
 func TestDurableForDedupsConcurrentOpens(t *testing.T) {
 	cas := newMemCAS()
 	dur := org.NewDurability(cas, soleMembership(t, "pod-a"), nil, shipCheckpoint())
-	stores := cloud.NewOrgStore(t.TempDir(), "research", openStore, cloud.WithDurable(dur))
+	stores := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: dur}, "research", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
 
 	const n = 8
@@ -224,7 +224,7 @@ func TestRecordOnNonOwnerFailsClosed(t *testing.T) {
 	}
 	t.Cleanup(m.Stop)
 
-	store := cloud.NewOrgStore(t.TempDir(), "research", openStore, cloud.WithDurable(org.NewDurability(cas, m, nil)))
+	store := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: org.NewDurability(cas, m, nil)}, "research", openStore)
 	t.Cleanup(func() { _ = store.CloseAll() })
 	mountedStores = store
 	t.Cleanup(func() { mountedStores = nil })

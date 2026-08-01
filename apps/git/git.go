@@ -223,7 +223,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "git")
 	s := &cloud.Service[state]{Base: b, State: state{
-		stores:  cloud.NewOrgStore(deps.DataDir, "git", openStore),
+		stores:  cloud.NewOrgStore(b, "git", openStore),
 		storage: st,
 		dataDir: deps.DataDir,
 		sshHost: gitSSHHost(deps.Domain),

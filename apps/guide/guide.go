@@ -73,7 +73,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("guide.Mount: empty DataDir")
 	}
-	stores := cloud.NewOrgStore(deps.DataDir, "guide", openStore)
+	b := cloud.NewBase(deps, "guide")
+	stores := cloud.NewOrgStore(b, "guide", openStore)
 
 	// Open the SHARED brand-blueprint store (one file for the deployment) and SEED it
 	// idempotently: the embedded fixtures (base + each brand) are seeded-if-absent, so
@@ -92,7 +93,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("guide.Mount: seed blueprints: %w", err)
 	}
 
-	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "guide"), State: state{
+	s := &cloud.Service[state]{Base: b, State: state{
 		stores:       stores,
 		blueprints:   blueprints,
 		brand:        deps.Brand,

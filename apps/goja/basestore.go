@@ -59,6 +59,19 @@ const (
 	defaultIdleTTL = 5 * time.Minute // close a tenant DB idle at least this long
 )
 
+// stores is a hand-rolled hanzoai/orm/db.Namespaces — the same design (bound on
+// open handles, idle sweep, never evict while pinned, single-flighted opens)
+// arrived at independently — and it is not collapsed onto it yet, deliberately.
+//
+// Two things block it, and neither is about this file being wrong. The keys are
+// TenantSegment, a base32 of the raw org bytes, which shares no output with
+// SanitizeOrg for any tenant at all; every gojabase file and every dataroom
+// object key is named by it, so adopting the fleet name relocates all of them at
+// once. And orm/db.Namespaces takes its own string-typed db.Namespace rather
+// than a namespace.Namespace, so adopting it today would bring a THIRD naming
+// type into cloud — adding a way rather than removing one. When orm/db takes the
+// value, this pool is the first thing that should go.
+//
 // stores is the per-tenant SQLite manager: ONE database FILE per tenant
 // ({DataDir}/{name}/{TenantSegment}.db), the "Prod = SQLite per tenant" rule
 // (HIP-0302). Files open lazily on first use, migrate once (the subsystem's Schema

@@ -67,7 +67,7 @@ func closingOf(tb TrialBalance, account string) (debit, credit int64) {
 
 func newBookStore(t *testing.T, subsystem string) *store {
 	t.Helper()
-	stores := cloud.NewOrgStore[*store](t.TempDir(), subsystem, openStore)
+	stores := cloud.NewOrgStore[*store](cloud.Base{DataDir: t.TempDir()}, subsystem, openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
 	st, err := stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {

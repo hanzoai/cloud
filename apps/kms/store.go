@@ -59,12 +59,12 @@ type secretStore struct {
 	stores   *cloud.OrgStore[*sql.DB]
 }
 
-func newSecretStore(dataDir string, readOnly bool) *secretStore {
+func newSecretStore(b cloud.Base, readOnly bool) *secretStore {
 	return &secretStore{
 		readOnly: readOnly,
 		// A reader performs no DDL: the writer already migrated the file it
 		// hydrated, and a reader must never fork the authoritative state.
-		stores: cloud.NewOrgStore(dataDir, "kms", func(db *sql.DB) (*sql.DB, error) {
+		stores: cloud.NewOrgStore(b, "kms", func(db *sql.DB) (*sql.DB, error) {
 			if readOnly {
 				return db, nil
 			}
