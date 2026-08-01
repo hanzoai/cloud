@@ -28544,38 +28544,6 @@ paths:
         ledger, never a guessed number.
       tags:
       - books
-  /v1/books/balance-sheet:
-    get:
-      description: |-
-        BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the
-        Assets == Liabilities + Equity equation proof.
-      operationId: get_v1_books_balance-sheet
-      parameters:
-      - description: Sandbox reads the org's SANDBOX ledger when it is exactly "true".
-        in: query
-        name: sandbox
-        required: false
-        schema:
-          type: string
-      - description: To is the RFC3339 instant the statement is struck as of. Empty
-          means all time.
-        example: "2026-03-31T23:59:59Z"
-        in: query
-        name: to
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BalanceSheet'
-          description: ok
-      summary: BalanceSheet returns the org's Balance Sheet as of `to` (empty = all
-        time), with the Assets == Liabilities + Equity equation proof.
-      tags:
-      - books
   /v1/books/bank/exchange:
     post:
       description: |-
@@ -28613,18 +28581,6 @@ paths:
       summary: Import a bank statement file into your books
       tags:
       - books
-  /v1/books/bank/link-token:
-    post:
-      description: |-
-        ANSWERS 501 UNCONDITIONALLY. It is the intended first hop of the bank-linking handshake — mint the short-lived session token a browser hands to the provider's link widget — and nothing on the HTTP path reaches an implementation today.
-
-        The connectors behind it are written and tested; only the wiring is missing, so an org cannot connect a bank through the API at all. Until that lands, bank data reaches the books by statement import.
-
-        It is documented as refusing rather than declared with a success body precisely because it has never sent one. A response schema here would be invention: every generated SDK would carry a return type for a call that has only ever failed. A caller with no principal gets 401 before the 501.
-      operationId: post_v1_books_bank_link-token
-      summary: Begin connecting a bank account (not yet available)
-      tags:
-      - books
   /v1/books/bank/sync:
     post:
       description: |-
@@ -28648,6 +28604,18 @@ paths:
         org, maps each fetched transaction to a posting and books it idempotently,
         then advances that connector's cursor so the next sync resumes where this
         one stopped.
+      tags:
+      - books
+  /v1/books/bank/token:
+    post:
+      description: |-
+        ANSWERS 501 UNCONDITIONALLY. It is the intended first hop of the bank-linking handshake — mint the short-lived session token a browser hands to the provider's link widget — and nothing on the HTTP path reaches an implementation today.
+
+        The connectors behind it are written and tested; only the wiring is missing, so an org cannot connect a bank through the API at all. Until that lands, bank data reaches the books by statement import.
+
+        It is documented as refusing rather than declared with a success body precisely because it has never sent one. A response schema here would be invention: every generated SDK would carry a return type for a call that has only ever failed. A caller with no principal gets 401 before the 501.
+      operationId: post_v1_books_bank_token
+      summary: Begin connecting a bank account (not yet available)
       tags:
       - books
   /v1/books/bank/transactions:
@@ -28948,6 +28916,38 @@ paths:
         matched cost, and the net.'
       tags:
       - books
+  /v1/books/position:
+    get:
+      description: |-
+        BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the
+        Assets == Liabilities + Equity equation proof.
+      operationId: get_v1_books_position
+      parameters:
+      - description: Sandbox reads the org's SANDBOX ledger when it is exactly "true".
+        in: query
+        name: sandbox
+        required: false
+        schema:
+          type: string
+      - description: To is the RFC3339 instant the statement is struck as of. Empty
+          means all time.
+        example: "2026-03-31T23:59:59Z"
+        in: query
+        name: to
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceSheet'
+          description: ok
+      summary: BalanceSheet returns the org's Balance Sheet as of `to` (empty = all
+        time), with the Assets == Liabilities + Equity equation proof.
+      tags:
+      - books
   /v1/books/questions:
     get:
       description: |-
@@ -29183,13 +29183,13 @@ paths:
         category, source and amount in exact cents.'
       tags:
       - books
-  /v1/books/trial-balance:
+  /v1/books/trial:
     get:
       description: |-
         TrialBalance returns the org's trial balance over an optional [from, to] window of
         RFC3339 posting times, including the opening/closing columns and the
         TotalDebit == TotalCredit proof that the books balance.
-      operationId: get_v1_books_trial-balance
+      operationId: get_v1_books_trial
       parameters:
       - description: Sandbox reads the org's SANDBOX ledger when it is exactly "true".
         in: query

@@ -13,23 +13,6 @@
     "name": "get_v1_books_accounts"
   },
   {
-    "description": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the\nAssets == Liabilities + Equity equation proof.",
-    "inputSchema": {
-      "properties": {
-        "sandbox": {
-          "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
-          "type": "string"
-        },
-        "to": {
-          "description": "To is the RFC3339 instant the statement is struck as of. Empty means all time.",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "get_v1_books_balance-sheet"
-  },
-  {
     "description": "ListBankTransactions returns the org's normalized bank transactions, newest first —\nevery row the import and connector paths have ingested, with its amount in exact cents,\nits direction, and whether it has been matched to a voucher yet.",
     "inputSchema": {
       "properties": {
@@ -161,6 +144,23 @@
     "name": "get_v1_books_pnl"
   },
   {
+    "description": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the\nAssets == Liabilities + Equity equation proof.",
+    "inputSchema": {
+      "properties": {
+        "sandbox": {
+          "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+          "type": "string"
+        },
+        "to": {
+          "description": "To is the RFC3339 instant the statement is struck as of. Empty means all time.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_books_position"
+  },
+  {
     "description": "ListQuestions returns the clarifying questions the caller's own recent GL raises — the\nunusual postings a founder should look at (outliers, reversals, round-offs, uncosted\nrevenue, an overdrawn wallet), sharpest first. An empty list means the books look clean;\nthe detector is deterministic over the ledger and invents nothing.",
     "inputSchema": {
       "properties": {
@@ -238,7 +238,7 @@
       },
       "type": "object"
     },
-    "name": "get_v1_books_trial-balance"
+    "name": "get_v1_books_trial"
   },
   {
     "description": "ListVendors returns the org's vendor book: each canonical vendor, the alias spellings a\nreceipt may print it under, and the expense account new bills from it default to. A\nvendor here is what makes a scanned bill self-classify instead of asking again.",

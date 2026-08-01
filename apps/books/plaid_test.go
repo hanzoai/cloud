@@ -32,6 +32,10 @@ func (k *plaidKMS) PutSecret(_ context.Context, ref string, value []byte) error 
 	k.m[ref] = append([]byte(nil), value...)
 	return nil
 }
+func (k *plaidKMS) DeleteSecret(_ context.Context, ref string) error {
+	delete(k.m, ref)
+	return nil
+}
 func (k *plaidKMS) Sign(_ context.Context, _ string, _ []byte) ([]byte, error) { return nil, nil }
 
 // plaidEnv wires the two credential references to the fake KMS-sealed values.
@@ -283,7 +287,7 @@ func TestPlaidIdempotentReSync(t *testing.T) {
 	}
 }
 
-// TestPlaidLinkToken proves link-token creation forwards the org as client_user_id, requests
+// TestPlaidLinkToken proves bank-token creation forwards the org as client_user_id, requests
 // the transactions product, and returns the token from a mocked /link/token/create.
 func TestPlaidLinkToken(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -292,11 +296,11 @@ func TestPlaidLinkToken(t *testing.T) {
 		}
 		req := readReq(t, r)
 		if req["client_id"] != "test-client-id" || req["secret"] != "test-secret" {
-			t.Fatalf("link-token must carry KMS-resolved credentials")
+			t.Fatalf("bank token must carry KMS-resolved credentials")
 		}
 		user, _ := req["user"].(map[string]any)
 		if user["client_user_id"] != "acme" {
-			t.Fatalf("link-token must scope to the org, got %v", user["client_user_id"])
+			t.Fatalf("bank token must scope to the org, got %v", user["client_user_id"])
 		}
 		_, _ = io.WriteString(w, `{"link_token":"link-sandbox-123","expiration":"2026-07-21T00:00:00Z"}`)
 	}))
@@ -309,7 +313,7 @@ func TestPlaidLinkToken(t *testing.T) {
 		t.Fatalf("link token: %v", err)
 	}
 	if tok != "link-sandbox-123" || exp == "" {
-		t.Fatalf("link-token must be returned, got tok=%q exp=%q", tok, exp)
+		t.Fatalf("bank token must be returned, got tok=%q exp=%q", tok, exp)
 	}
 }
 

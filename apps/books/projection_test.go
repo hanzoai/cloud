@@ -48,9 +48,9 @@ type booksOp struct {
 var typedBooksOps = []booksOp{
 	{http.MethodGet, "/v1/books/accounts", "get_v1_books_accounts", "accounts-list"},
 	{http.MethodGet, "/v1/books/gl", "get_v1_books_gl", "gl-get"},
-	{http.MethodGet, "/v1/books/trial-balance", "get_v1_books_trial-balance", "trial-balance-get"},
+	{http.MethodGet, "/v1/books/trial", "get_v1_books_trial", "trial-get"},
 	{http.MethodGet, "/v1/books/pnl", "get_v1_books_pnl", "pnl-get"},
-	{http.MethodGet, "/v1/books/balance-sheet", "get_v1_books_balance-sheet", "balance-sheet-get"},
+	{http.MethodGet, "/v1/books/position", "get_v1_books_position", "position-get"},
 	{http.MethodGet, "/v1/books/export", "get_v1_books_export", "export-get"},
 	{http.MethodGet, "/v1/books/questions", "get_v1_books_questions", "questions-list"},
 	{http.MethodGet, "/v1/books/metrics", "get_v1_books_metrics", "metrics-list"},
@@ -100,7 +100,7 @@ var untypedBooksRoutes = []struct {
 	{http.MethodPost, "/v1/books/scan", "body is raw document bytes (PDF/image/text)"},
 	{http.MethodPost, "/v1/books/inbox", "body is raw document bytes (PDF/image/text)"},
 	{http.MethodPost, "/v1/books/bank/import", "body is a raw OFX/QFX/CSV statement"},
-	{http.MethodPost, "/v1/books/bank/link-token", "answers 501 unconditionally — no success to declare"},
+	{http.MethodPost, "/v1/books/bank/token", "answers 501 unconditionally — no success to declare"},
 	{http.MethodPost, "/v1/books/bank/exchange", "answers 501 unconditionally — no success to declare"},
 }
 
@@ -327,7 +327,7 @@ func TestTheRawBodyRoutesDeclareBytesInAndAShapeOut(t *testing.T) {
 	// The 501 stubs declare nothing — asserted, so a later "let's document these too"
 	// has to argue with a test instead of quietly inventing a contract.
 	for _, key := range []string{
-		"POST /v1/books/bank/link-token",
+		"POST /v1/books/bank/token",
 		"POST /v1/books/bank/exchange",
 	} {
 		method, path, _ := strings.Cut(key, " ")

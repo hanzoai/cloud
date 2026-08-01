@@ -33,11 +33,11 @@ func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	// UNTYPED, each for a stated reason. import takes RAW statement bytes (OFX/QFX/CSV)
 	// as its body: zip's typed decoder unmarshals the body as JSON, so an OFX upload
 	// would answer 400 instead of importing — there is no JSON In that names a file.
-	// link-token and exchange always answer 501, and a typed op publishes a SUCCESS
+	// token and exchange always answer 501, and a typed op publishes a SUCCESS
 	// response (its Out schema, or the 204 a void op declares) that neither has ever
 	// sent — an invented contract every generated SDK would carry a return type for.
 	app.Post("/v1/books/bank/import", cloud.Handle(s, bankImportHandler))
-	app.Post("/v1/books/bank/link-token", cloud.Handle(s, bankLinkTokenHandler))
+	app.Post("/v1/books/bank/token", cloud.Handle(s, bankTokenHandler))
 	app.Post("/v1/books/bank/exchange", cloud.Handle(s, bankExchangeHandler))
 }
 
@@ -48,7 +48,7 @@ func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
 // takes neither, so every generated SDK offered a statement import with nowhere to put
 // the statement.
 //
-// link-token and exchange are declared NOWHERE, deliberately: they answer 501
+// token and exchange are declared NOWHERE, deliberately: they answer 501
 // unconditionally (see below), so there is no success body to state and no request they
 // read. A declaration for either would be invention, not description.
 //
@@ -79,7 +79,7 @@ func init() {
 			"empty body is a 400, and a file the parser cannot read is a 400 carrying the "+
 			"parser's reason rather than a partial import. On a deployment whose import "+
 			"parser is not built, this answers 501 rather than mishandling the file.")
-	openapi.Describe("/v1/books/bank/link-token", http.MethodPost,
+	openapi.Describe("/v1/books/bank/token", http.MethodPost,
 		"Begin connecting a bank account (not yet available)",
 		"ANSWERS 501 UNCONDITIONALLY. It is the intended first hop of the bank-linking "+
 			"handshake — mint the short-lived session token a browser hands to the provider's "+
@@ -226,11 +226,11 @@ func (o booksOps) syncBank(ctx context.Context, _ *syncIn) (*BankTally, error) {
 // start answering 200 with a body nothing has specified), which is why these two are the
 // books routes left untyped: a typed op must state what it answers on success, and the
 // honest answer today is that neither ever succeeds.
-func bankLinkTokenHandler(s *cloud.Service[*state], c *zip.Ctx) error {
+func bankTokenHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	if _, ok := principal.Org(c); !ok {
 		return zip.ErrUnauthorized("sign in to link a bank")
 	}
-	return zip.Errorf(http.StatusNotImplemented, "bank link-token not yet available")
+	return zip.Errorf(http.StatusNotImplemented, "bank token not yet available")
 }
 
 func bankExchangeHandler(s *cloud.Service[*state], c *zip.Ctx) error {

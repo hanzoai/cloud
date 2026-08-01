@@ -10,7 +10,7 @@ package books
 //
 // FLOW vs STOCK. Revenue/COGS/burn/MRR are FLOW — movement over the (from, to] period,
 // exactly the P&L window. Cash and deferred revenue are STOCK — a cumulative balance AS OF
-// `to`, exactly the balance-sheet convention. Reading each from its natural window is what
+// `to`, exactly the balance sheet convention. Reading each from its natural window is what
 // makes runway (a stock over a flow) correct.
 
 import (
@@ -50,7 +50,7 @@ func computeMetrics(ctx context.Context, s *store, from, to string) (Metrics, er
 	if err != nil {
 		return Metrics{}, err
 	}
-	cumulative, err := s.sums(ctx, "", to) // posting_at <= to (balance-sheet window)
+	cumulative, err := s.sums(ctx, "", to) // posting_at <= to (balance sheet window)
 	if err != nil {
 		return Metrics{}, err
 	}
@@ -59,7 +59,7 @@ func computeMetrics(ctx context.Context, s *store, from, to string) (Metrics, er
 
 // metricsFrom is the PURE core: period sums drive the flows, cumulative sums the stocks,
 // months normalizes the run-rates. It computes nothing the statements would not — Revenue
-// is the P&L income total, Cash is the balance-sheet asset cash — so a figure the Ask brain
+// is the P&L income total, Cash is the balance sheet asset cash — so a figure the Ask brain
 // narrates always ties back to a report the founder can open.
 func metricsFrom(period, cumulative sums, months int, from, to string) Metrics {
 	if months < 1 {

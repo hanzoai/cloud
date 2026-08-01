@@ -88,49 +88,6 @@
         }
       }
     },
-    "/v1/books/balance-sheet": {
-      "get": {
-        "operationId": "get_v1_books_balance-sheet",
-        "summary": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the Assets == Liabilities + Equity equation proof.",
-        "description": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the\nAssets == Liabilities + Equity equation proof.",
-        "tags": [
-          "books"
-        ],
-        "parameters": [
-          {
-            "name": "sandbox",
-            "in": "query",
-            "required": false,
-            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "to",
-            "in": "query",
-            "required": false,
-            "description": "To is the RFC3339 instant the statement is struck as of. Empty means all time.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "2026-03-31T23:59:59Z"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BalanceSheet"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
     "/v1/books/bank/exchange": {
       "post": {
         "operationId": "post_v1_books_bank_exchange",
@@ -173,16 +130,6 @@
         }
       }
     },
-    "/v1/books/bank/link-token": {
-      "post": {
-        "operationId": "post_v1_books_bank_link-token",
-        "summary": "Begin connecting a bank account (not yet available)",
-        "description": "ANSWERS 501 UNCONDITIONALLY. It is the intended first hop of the bank-linking handshake — mint the short-lived session token a browser hands to the provider's link widget — and nothing on the HTTP path reaches an implementation today.\n\nThe connectors behind it are written and tested; only the wiring is missing, so an org cannot connect a bank through the API at all. Until that lands, bank data reaches the books by statement import.\n\nIt is documented as refusing rather than declared with a success body precisely because it has never sent one. A response schema here would be invention: every generated SDK would carry a return type for a call that has only ever failed. A caller with no principal gets 401 before the 501.",
-        "tags": [
-          "books"
-        ]
-      }
-    },
     "/v1/books/bank/sync": {
       "post": {
         "operationId": "post_v1_books_bank_sync",
@@ -203,6 +150,16 @@
             "description": "ok"
           }
         }
+      }
+    },
+    "/v1/books/bank/token": {
+      "post": {
+        "operationId": "post_v1_books_bank_token",
+        "summary": "Begin connecting a bank account (not yet available)",
+        "description": "ANSWERS 501 UNCONDITIONALLY. It is the intended first hop of the bank-linking handshake — mint the short-lived session token a browser hands to the provider's link widget — and nothing on the HTTP path reaches an implementation today.\n\nThe connectors behind it are written and tested; only the wiring is missing, so an org cannot connect a bank through the API at all. Until that lands, bank data reaches the books by statement import.\n\nIt is documented as refusing rather than declared with a success body precisely because it has never sent one. A response schema here would be invention: every generated SDK would carry a return type for a call that has only ever failed. A caller with no principal gets 401 before the 501.",
+        "tags": [
+          "books"
+        ]
       }
     },
     "/v1/books/bank/transactions": {
@@ -573,6 +530,49 @@
         }
       }
     },
+    "/v1/books/position": {
+      "get": {
+        "operationId": "get_v1_books_position",
+        "summary": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the Assets == Liabilities + Equity equation proof.",
+        "description": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the\nAssets == Liabilities + Equity equation proof.",
+        "tags": [
+          "books"
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the RFC3339 instant the statement is struck as of. Empty means all time.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-03-31T23:59:59Z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceSheet"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/books/questions": {
       "get": {
         "operationId": "get_v1_books_questions",
@@ -858,9 +858,9 @@
         }
       }
     },
-    "/v1/books/trial-balance": {
+    "/v1/books/trial": {
       "get": {
-        "operationId": "get_v1_books_trial-balance",
+        "operationId": "get_v1_books_trial",
         "summary": "TrialBalance returns the org's trial balance over an optional [from, to] window of RFC3339 posting times, including the opening/closing columns and the TotalDebit == TotalCredit proof that the books balance.",
         "description": "TrialBalance returns the org's trial balance over an optional [from, to] window of\nRFC3339 posting times, including the opening/closing columns and the\nTotalDebit == TotalCredit proof that the books balance.",
         "tags": [
