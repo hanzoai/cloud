@@ -89,8 +89,8 @@ func ownsTarget(c *zip.Ctx, t Target) bool {
 // collapsing every failure — cross-org, unknown, or not-owned — to the SAME
 // errTargetNotFound so the machine surface never distinguishes them (no oracle). The
 // resolved target is returned for the caller to use (avoids a second read).
-func authorizeTargetManage(ctx context.Context, s *cloud.Service[state], org, id string) (Target, error) {
-	t, err := s.State.store.GetTarget(ctx, org, id)
+func authorizeTargetManage(ctx context.Context, sto *Store, org, id string) (Target, error) {
+	t, err := sto.GetTarget(ctx, org, id)
 	if err != nil {
 		return Target{}, errTargetNotFound // unknown / cross-org -> no oracle
 	}
@@ -118,7 +118,7 @@ type claimKeyOut struct {
 // Example: {"id": "tgt_1"}
 func (o routingOps) mintClaimKey(ctx context.Context, in *targetRef) (*claimKeyOut, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -127,14 +127,14 @@ func (o routingOps) mintClaimKey(ctx context.Context, in *targetRef) (*claimKeyO
 	// admin) before it can (re)mint a capability — minting rotates the key, so an
 	// un-scoped mint would let any org member strand a victim's daemon and steal its
 	// runs. Every failure collapses to the same not-found (no oracle).
-	if _, err := authorizeTargetManage(ctx, s, org, id); err != nil {
+	if _, err := authorizeTargetManage(ctx, sto, org, id); err != nil {
 		return nil, zip.ErrNotFound("target not found")
 	}
 	key, err := newClaimKey()
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	if err := s.State.store.UpsertClaimKeyHash(ctx, org, id, hashClaimKey(key), time.Now().Unix()); err != nil {
+	if err := sto.UpsertClaimKeyHash(ctx, org, id, hashClaimKey(key), time.Now().Unix()); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
 	return &claimKeyOut{TargetID: id, ClaimKey: key}, nil
@@ -173,7 +173,7 @@ type routedRunOut struct {
 // Example: {"id": "tgt_1"}
 func (o routingOps) claim(ctx context.Context, in *targetRef) (*routedRunOut, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -183,15 +183,15 @@ func (o routingOps) claim(ctx context.Context, in *targetRef) (*routedRunOut, er
 	// ownership gate is defense in depth — with mint owner-scoped an attacker cannot
 	// obtain a valid key for a victim's machine, but a claim still refuses a
 	// non-owner outright rather than resting solely on the capability.
-	if _, err := authorizeTargetManage(ctx, s, org, id); err != nil {
+	if _, err := authorizeTargetManage(ctx, sto, org, id); err != nil {
 		return nil, claimAuthError(errTargetNotFound)
 	}
-	if err := s.State.store.verifyClaimKey(ctx, org, id, claimKeyOf(ctx)); err != nil {
+	if err := sto.verifyClaimKey(ctx, org, id, claimKeyOf(ctx)); err != nil {
 		return nil, claimAuthError(err)
 	}
 	// The poll itself is the runner's liveness proof — stamp it so the dispatch
 	// gate (TargetDispatchable) sees a live runner. Best-effort.
-	_ = s.State.store.StampServing(ctx, org, id, time.Now().Unix())
+	_ = sto.StampServing(ctx, org, id, time.Now().Unix())
 
 	poll, cancel := context.WithTimeout(ctx, claimLongPoll)
 	defer cancel()
@@ -242,7 +242,7 @@ type reportOut struct {
 // Example: {"id": "tgt_1", "runId": "run_1", "ok": true, "changed": true, "branch": "hanzo/fix"}
 func (o routingOps) report(ctx context.Context, in *reportRunIn) (*reportOut, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -250,10 +250,10 @@ func (o routingOps) report(ctx context.Context, in *reportRunIn) (*reportOut, er
 	runID := strings.TrimSpace(in.RunID)
 	// Same two proofs as claim: own the machine (or org admin) AND hold its key, so a
 	// non-owner can neither fabricate a report nor complete a victim's run. No oracle.
-	if _, err := authorizeTargetManage(ctx, s, org, id); err != nil {
+	if _, err := authorizeTargetManage(ctx, sto, org, id); err != nil {
 		return nil, claimAuthError(errTargetNotFound)
 	}
-	if err := s.State.store.verifyClaimKey(ctx, org, id, claimKeyOf(ctx)); err != nil {
+	if err := sto.verifyClaimKey(ctx, org, id, claimKeyOf(ctx)); err != nil {
 		return nil, claimAuthError(err)
 	}
 	res := RoutedResult{
