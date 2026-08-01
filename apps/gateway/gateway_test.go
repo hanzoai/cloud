@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -221,5 +222,79 @@ func TestPut_ValidatesPerOrgConfig(t *testing.T) {
 		if code, _ := call(t, app, http.MethodPut, "/v1/gateway/config", body, orgAdmin("acme")); code != 400 {
 			t.Fatalf("invalid body %s must be 400, got %d", body, code)
 		}
+	}
+}
+
+// REGRESSION — the abuse gate must not be disarmable by the account it polices.
+// Mode used to sit in the self-service branch, gated only on being a validated
+// principal, so an org admin — or anyone holding an org-admin credential, which is
+// what a stolen key buys — could PUT {"mode":"shadow"} and switch the control off
+// for exactly the account it was watching. Setting it is the platform's decision
+// now, whichever row it lands on.
+func TestOrgAdmin_CannotSetItsOwnMode(t *testing.T) {
+	app, st := mountApp(t)
+
+	// Arm acme as the platform would.
+	if _, err := st.Put(t.Context(), "acme", edge.Policy{Mode: edge.ModeLive}); err != nil {
+		t.Fatalf("arm: %v", err)
+	}
+	if got := st.Mode("acme"); got != edge.ModeLive {
+		t.Fatalf("precondition: acme = %q, want live", got)
+	}
+
+	// The subject of the control tries to turn it off, and then to turn it on.
+	for _, body := range []string{`{"mode":"shadow"}`, `{"mode":"live"}`} {
+		code, msg := call(t, app, http.MethodPut, "/v1/gateway/config", body, orgAdmin("acme"))
+		if code != 403 {
+			t.Fatalf("org admin PUT %s must be 403, got %d (%s)", body, code, msg)
+		}
+	}
+	if got := st.Mode("acme"); got != edge.ModeLive {
+		t.Fatalf("acme disarmed itself: mode = %q", got)
+	}
+
+	// A per-org write that carries no mode still works — the refusal is about the
+	// one field, not about the surface.
+	if code, _ := call(t, app, http.MethodPut, "/v1/gateway/config", `{"org_rpm":60}`, orgAdmin("acme")); code != 200 {
+		t.Fatalf("an ordinary self-service write must still succeed, got %d", code)
+	}
+	if got := st.Mode("acme"); got != edge.ModeLive {
+		t.Fatalf("an unrelated write changed the mode: %q", got)
+	}
+}
+
+// A SuperAdmin sets the mode, on the tenant it names — the one authority that may.
+// Guarded by the scorer check, so arming a deployment with no scorer installed is
+// refused rather than turning every privileged grant into a 403.
+func TestSuperAdmin_SetsModeOnATargetedTenant(t *testing.T) {
+	app, st := mountApp(t)
+	cloud.SetRiskScorer(func(ctx context.Context, org string, q cloud.RiskQuery) (cloud.RiskVerdict, error) {
+		return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
+	})
+	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
+
+	if code, msg := call(t, app, http.MethodPut, "/v1/gateway/config?org=acme", `{"mode":"live"}`, superAdmin("admin")); code != 200 {
+		t.Fatalf("SuperAdmin mode write: got %d (%s)", code, msg)
+	}
+	if got := st.Mode("acme"); got != edge.ModeLive {
+		t.Fatalf("acme = %q after the operator armed it, want live", got)
+	}
+	// And only that tenant.
+	if got := st.Mode("globex"); got != edge.ModeShadow {
+		t.Fatalf("arming acme reached globex: %q", got)
+	}
+}
+
+// Arming while no scorer is installed is refused: live makes a privileged grant
+// fail CLOSED when the scorer cannot answer, which is right for a scorer that is
+// momentarily down and an outage for one that was never there.
+func TestSuperAdmin_CannotArmWithoutAScorer(t *testing.T) {
+	app, st := mountApp(t)
+	cloud.SetRiskScorer(nil)
+	if code, _ := call(t, app, http.MethodPut, "/v1/gateway/config?org=acme", `{"mode":"live"}`, superAdmin("admin")); code != 400 {
+		t.Fatalf("arming with no scorer must be 400, got %d", code)
+	}
+	if got := st.Mode("acme"); got != edge.ModeShadow {
+		t.Fatalf("acme armed with no scorer: %q", got)
 	}
 }

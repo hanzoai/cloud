@@ -24,17 +24,56 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/gateway/edge"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
 // abuseApp mounts the gate in front of a trivial handler, with a fresh sensor and
 // a policy store forced to mode. A nil store means "no policy configured", which
 // must behave as shadow.
+//
+// The gate reads the identity boundary's OWN attestation, never a header, so the
+// app installs `attest` in front of it — the stand-in for SanitizeIdentity. That
+// is not test scaffolding around a gap: it is the property under test. An app
+// WITHOUT it (abuseAppUnattested below) must see every caller as anonymous no
+// matter what headers arrive.
 func abuseApp(t *testing.T, mode string) (*zip.App, *edge.Traffic) {
+	t.Helper()
+	return abuseAppWith(t, mode, withBoundary)
+}
+
+// The two deployment shapes a middleware can find itself in. They are the same
+// app apart from whether the identity boundary ran, which is exactly the fact the
+// gate must turn on.
+const (
+	withBoundary    = true
+	withoutBoundary = false
+)
+
+// attest is the test's identity boundary: it mints the principal from the same
+// headers SanitizeIdentity mints it from, and parks it where only a boundary can.
+func attest() zip.Handler {
+	return func(c *zip.Ctx) error {
+		if u := c.User(); u != "" {
+			principal.Mint(c, principal.Principal{Org: c.Org(), User: u})
+		} else {
+			principal.Mint(c, principal.Principal{})
+		}
+		return c.Next()
+	}
+}
+
+// abuseAppWith mounts the gate with or without the identity boundary in front of
+// it. Without it — the shape a hand-written plugin process has — every caller is
+// anonymous by construction, whatever headers arrive.
+func abuseAppWith(t *testing.T, mode string, boundary bool) (*zip.App, *edge.Traffic) {
 	t.Helper()
 	tr := edge.NewTraffic()
 	deps := Deps{GatewayPolicy: staticModeStore(t, mode), Traffic: tr}
 	app := zip.New(zip.Config{})
+	if boundary {
+		app.Use(attest())
+	}
 	app.Use(AbuseGate(deps, tr))
 	h := func(c *zip.Ctx) error { return c.JSON(http.StatusOK, map[string]string{"ok": "1"}) }
 	app.Get("/v1/models", h)
@@ -50,9 +89,11 @@ func abuseApp(t *testing.T, mode string) (*zip.App, *edge.Traffic) {
 	return app, tr
 }
 
-// staticModeStore builds a real edge.Store whose PLATFORM row carries mode, so
-// every org inherits it. Using the real store rather than a fake keeps the test
-// honest about how Mode actually resolves (platform default → org row → shadow).
+// staticModeStore builds a real edge.Store armed to mode — on the platform row
+// (the anonymous lane) and on each tenant these tests drive, BY NAME. Mode does
+// not inherit: arming one scope arms exactly that scope, which is the property
+// TestPolicy_ArmingThePlatformRowDoesNotArmTenants pins. Using the real store
+// rather than a fake keeps the test honest about how Mode actually resolves.
 func staticModeStore(t *testing.T, mode string) *edge.Store {
 	t.Helper()
 	s, err := edge.New(t.TempDir(), "admin", edge.Policy{Mode: mode})
@@ -60,6 +101,13 @@ func staticModeStore(t *testing.T, mode string) *edge.Store {
 		t.Fatalf("edge.New: %v", err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
+	if mode != "" {
+		for _, org := range []string{"acme", "globex"} {
+			if _, err := s.Put(t.Context(), org, edge.Policy{Mode: mode}); err != nil {
+				t.Fatalf("arm %s: %v", org, err)
+			}
+		}
+	}
 	return s
 }
 
@@ -344,6 +392,7 @@ func TestAbuseGate_ClassesAgentTrafficApartFromBots(t *testing.T) {
 	// the credential, not the client's self-description.
 	req := httptest.NewRequest("GET", "/v1/models", nil)
 	req.Header.Set("X-Org-Id", "acme")
+	req.Header.Set("X-User-Id", "u-acme")
 	req.Header.Set("Authorization", "Bearer sk-live-2")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh) Chrome/126")
 	req.Header.Set("X-Forwarded-For", "203.0.113.5")
@@ -429,6 +478,7 @@ func TestAbuseGate_ALapsedHoldForcesTheQuestionAgain(t *testing.T) {
 	tr := edge.NewTraffic()
 	deps := Deps{GatewayPolicy: staticModeStore(t, edge.ModeLive), Traffic: tr}
 	app := zip.New(zip.Config{})
+	app.Use(attest())
 	app.Use(AbuseGate(deps, tr))
 	app.Get("/v1/models", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "1"}) })
 
@@ -473,5 +523,96 @@ func TestAbuseGate_ALapsedHoldForcesTheQuestionAgain(t *testing.T) {
 	abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "203.0.113.9")
 	if asked != cleared {
 		t.Fatalf("a released hold must stop forcing screens: asked %d, want %d", asked, cleared)
+	}
+}
+
+// ------------------------------------------------------- the forgery regressions
+
+// REGRESSION — the differentiator must not be settable by the caller. The lane
+// used to turn on `c.Org() != "" || c.User() != ""`, and BOTH disjuncts are
+// header reads: X-Org-Id survives the boundary on the anonymous path by design,
+// and in a process with no boundary installed nothing strips either header. So
+// two headers plus an sk--shaped string that never validated moved a bad bot into
+// the AGENT lane — the lane whose entire meaning is "a credential WE minted, to a
+// named tenant, that we can revoke".
+//
+// Here the gate runs with NO identity boundary in front of it, which is exactly
+// the plugin-process shape. Every header the caller can write is written, and it
+// must still be judged as anonymous.
+func TestAbuseGate_HeadersAloneDoNotBuyTheAgentLane(t *testing.T) {
+	resetScorer(t)
+	var lanes, orgs []string
+	SetRiskScorer(func(_ context.Context, org string, q RiskQuery) (RiskVerdict, error) {
+		lanes, orgs = append(lanes, q.Agency), append(orgs, org)
+		return RiskVerdict{ID: "d", Action: ActionAllow}, nil
+	})
+	app, tr := abuseAppWith(t, edge.ModeLive, withoutBoundary)
+
+	req := httptest.NewRequest("GET", "/v1/models", nil)
+	req.Header.Set("X-Org-Id", "acme")       // forged: no boundary minted it
+	req.Header.Set("X-User-Id", "u-acme")    // forged
+	req.Header.Set("X-User-IsAdmin", "true") // forged
+	req.Header.Set("Authorization", "Bearer sk-live-forged")
+	req.Header.Set("X-Forwarded-For", "203.0.113.66")
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(lanes) == 0 {
+		t.Fatal("the anonymous lane must still be screened — it is the lane a bad bot calls from")
+	}
+	if lanes[0] == AgencyAgent {
+		t.Fatal("two headers moved an unattributable caller into the agent lane")
+	}
+	// And the tenant is not the one the header named: an unverified caller must
+	// not be able to write into — or read the posture of — someone else's org.
+	if orgs[0] != "" {
+		t.Fatalf("the scorer was asked about %q, which no boundary attested", orgs[0])
+	}
+	if v := tr.View("acme", edge.ModeLive, abuseNow()); v.Requests != 0 || len(v.Callers) != 0 {
+		t.Fatalf("a forged X-Org-Id wrote into acme's sensor state: %+v", v)
+	}
+}
+
+// The same request WITH a boundary in front is the agent lane — so the test above
+// is pinning the forgery, not merely a gate that never classes anything.
+func TestAbuseGate_AVerifiedMachineCredentialIsTheAgentLane(t *testing.T) {
+	resetScorer(t)
+	var lanes, orgs []string
+	SetRiskScorer(func(_ context.Context, org string, q RiskQuery) (RiskVerdict, error) {
+		lanes, orgs = append(lanes, q.Agency), append(orgs, org)
+		return RiskVerdict{ID: "d", Action: ActionAllow}, nil
+	})
+	app, _ := abuseAppWith(t, edge.ModeLive, withBoundary)
+	abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "203.0.113.5")
+
+	if len(lanes) == 0 || lanes[0] != AgencyAgent {
+		t.Fatalf("a verified machine credential must be the agent lane, got %v", lanes)
+	}
+	if orgs[0] != "acme" {
+		t.Fatalf("the scorer was asked about %q, want the attested acme", orgs[0])
+	}
+}
+
+// REGRESSION — one capital letter used to flip fail-closed to fail-OPEN. The
+// grant list is compared with strings.HasPrefix against the raw c.Path(), while
+// fiber routes case-INSENSITIVELY and ignores a trailing slash: `/V1/KMS/...`
+// reaches the key store and missed every prefix, so the scorer's silence ALLOWED
+// a read of the key store instead of refusing it.
+func TestAbuseGate_AGrantIsAGrantHoweverItIsSpelled(t *testing.T) {
+	for _, path := range []string{
+		"/v1/kms/orgs/acme/secrets/db",
+		"/V1/KMS/orgs/acme/secrets/db",
+		"/v1/KMS/orgs/acme/secrets/db",
+		"/v1/kms/orgs/acme/secrets/db/",
+	} {
+		t.Run(path, func(t *testing.T) {
+			resetScorer(t) // no scorer: the fail policy answers.
+			app, _ := abuseApp(t, edge.ModeLive)
+			got := abuseHit(app, "GET", path, "acme", "sk-live-1", "203.0.113.9").StatusCode
+			if got != 403 {
+				t.Fatalf("%s → %d; an unscored read of the key store must be refused", path, got)
+			}
+		})
 	}
 }

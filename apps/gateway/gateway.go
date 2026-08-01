@@ -27,6 +27,11 @@
 //     row of self-service edge config. An org admin writes its own (org from
 //     principal.Org, never a raw header); a SuperAdmin may target any tenant with
 //     ?org=<slug>.
+//   - MODE, the abuse gate's posture, lives on a tenant's row but is NOT
+//     self-service: a control's subject may not switch the control off, so writing
+//     it requires SuperAdmin whichever row it lands on. It is the one field on this
+//     surface whose scope (which org it applies to) and whose authority (who may
+//     set it) are different questions.
 //
 // The store is owned by BuildDeps (deps.GatewayPolicy) and shared; this subsystem
 // does not open or close it (serve.go closes it once at shutdown), so there is one
@@ -165,7 +170,9 @@ func (o ops) read(ctx context.Context, _ *noArgs) (*edge.Policy, error) {
 // platform write and requires SuperAdmin; otherwise it is a per-org write (org_rpm,
 // cache_ttl_sec, cache_paths, methods) scoped to the caller's own org — or, for a
 // SuperAdmin, the tenant named by ?org=<slug>. A body that sets nothing is a 400.
-// updated_at and updated_by are server-stamped; a client-supplied value is ignored.
+// The abuse gate's mode is an OPERATOR field: setting it requires SuperAdmin,
+// whichever organization it lands on. updated_at and updated_by are
+// server-stamped; a client-supplied value is ignored.
 //
 // Example: {"org_rpm": 120, "cache_ttl_sec": 30, "methods": ["GET", "POST"]}
 func (o ops) write(ctx context.Context, in *edge.Policy) (*edge.Policy, error) {
@@ -176,6 +183,23 @@ func (o ops) write(ctx context.Context, in *edge.Policy) (*edge.Policy, error) {
 	in.UpdatedBy = c.User() // server-stamped; a client-supplied value is ignored.
 
 	in.Normalize()
+
+	// MODE IS NOT SELF-SERVICE. Every other field on this route is a tenant's own
+	// preference about its own traffic: how fast it may call, what it caches, which
+	// methods it accepts. Mode is not a preference — it is whether the platform's
+	// abuse control ENFORCES against this tenant, and the tenant is the subject of
+	// that control. Leaving it in the self-service branch meant an org admin, or
+	// anyone holding an org-admin credential, could PUT {"mode":"shadow"} and turn
+	// the defense off for exactly the account it was defending against; a stolen
+	// key's first useful call is the one that disarms the thing watching it.
+	//
+	// Checked BEFORE the scope split, so it holds for the platform row and for a
+	// tenant row alike, and stated as its own refusal so the answer names the actual
+	// rule rather than "not found" or "nothing to set".
+	if in.Mode != "" && !c.IsAdmin() {
+		return nil, zip.ErrForbidden("mode is set by the platform, not by the organization it governs")
+	}
+
 	platformWrite := len(in.CORSOrigins) > 0 || in.PerIPRPM > 0 || in.WindowSec > 0
 	if platformWrite {
 		if !c.IsAdmin() {
@@ -195,9 +219,10 @@ func (o ops) write(ctx context.Context, in *edge.Policy) (*edge.Policy, error) {
 	}
 
 	// Per-org scope: the tenant's OWN edge config — rate ceiling, cache policy,
-	// method allowlist. Only the per-org fields are forwarded, so a tenant can never
-	// smuggle a platform knob into its own row. Scoped to the caller's org (never a
-	// body-supplied org); a SuperAdmin may target a specific tenant with ?org=<slug>.
+	// method allowlist, plus the operator-only mode already gated above. Only these
+	// fields are forwarded, so a tenant can never smuggle a platform knob into its
+	// own row. Scoped to the caller's org (never a body-supplied org); a SuperAdmin
+	// may target a specific tenant with ?org=<slug>.
 	orgCfg := edge.Policy{
 		OrgRPM:      in.OrgRPM,
 		CacheTTLSec: in.CacheTTLSec,

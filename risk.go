@@ -82,6 +82,9 @@ const (
 	RefusalSilent = "scorer-silent"
 	// RefusalUnknown — the scorer answered with an action outside the vocabulary.
 	RefusalUnknown = "scorer-unknown"
+	// RefusalBusy — the scorer was already answering as many questions at once as
+	// it is allowed to. The question was not asked.
+	RefusalBusy = "scorer-busy"
 )
 
 // RiskBudget bounds how long a decision may take. The gate sits on the request
@@ -180,9 +183,29 @@ func loadRiskScorer() RiskScorer {
 // It never returns an error. A gate needs an action, and "I could not tell you"
 // IS an action — stated by q.Privileged and carried in Refusal.
 func Decide(ctx context.Context, org string, q RiskQuery) RiskVerdict {
+	return decide(scorerSlots, ctx, org, q)
+}
+
+// decide is Decide with its ceiling passed in — the whole of the logic, over the
+// one piece of process state it holds. Decide supplies the process ceiling; a
+// test supplies its own, so the bound is asserted without mutating a global that
+// another test's parked goroutine is still reading.
+func decide(sem semaphore, ctx context.Context, org string, q RiskQuery) RiskVerdict {
 	fn := loadRiskScorer()
 	if fn == nil {
 		return riskUnavailable(q, RefusalAbsent)
+	}
+
+	// BOUNDED, always. Every ask costs a goroutine that lives until the scorer
+	// returns — which, for a scorer stuck on a lock, a model load or a stalled
+	// socket, is longer than the budget below. Without a ceiling those goroutines
+	// accumulate one per screened request for as long as the stall lasts, so a
+	// slow scorer becomes an out-of-memory in the process it was installed to
+	// protect. Past the ceiling the question is not asked at all and the fail
+	// policy answers, which is the same answer a timeout gives and reaches it
+	// without allocating anything.
+	if !sem.take() {
+		return riskUnavailable(q, RefusalBusy)
 	}
 
 	// The budget is the gate's, not the scorer's: a scorer that ignores its
@@ -197,6 +220,11 @@ func Decide(ctx context.Context, org string, q RiskQuery) RiskVerdict {
 	}
 	ch := make(chan answer, 1)
 	go func() {
+		// The slot is released by the goroutine that holds it, when the scorer
+		// actually returns — NOT when the budget expires. Releasing it at the
+		// timeout would let the ceiling be exceeded without bound by exactly the
+		// scorer it exists to contain.
+		defer sem.give()
 		defer func() {
 			// A panicking scorer is a scorer that did not answer. Contained here
 			// so a model bug cannot take down the request path.
@@ -223,6 +251,33 @@ func Decide(ctx context.Context, org string, q RiskQuery) RiskVerdict {
 		return a.v
 	}
 }
+
+// MaxScorerCalls is how many questions may be in flight at once, process-wide.
+// It is a bound on the COST of asking, not a rate limit: a healthy in-process
+// score returns in microseconds, so this ceiling is never reached by real load —
+// it is reached only when the scorer has stopped answering, which is exactly when
+// asking it again is worthless.
+const MaxScorerCalls = 256
+
+// scorerSlots is the ceiling. A counting semaphore over a buffered channel: take
+// never blocks (a full channel means "busy", and busy is an answer), give always
+// succeeds because only a taker gives.
+var scorerSlots = slots(MaxScorerCalls)
+
+type semaphore chan struct{}
+
+func slots(n int) semaphore { return make(semaphore, n) }
+
+func (s semaphore) take() bool {
+	select {
+	case s <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s semaphore) give() { <-s }
 
 // errScorerPanic is the error a contained panic reports as. Unexported and
 // never returned to a caller — Decide converts it to a refusal like any other.
@@ -281,6 +336,42 @@ var (
 	}
 )
 
+// RoutePath is a request path in the form THE ROUTER MATCHES IT, and it is the
+// only form a security comparison may use.
+//
+// fiber resolves a route against its "detection path": the request path
+// lower-cased (CaseSensitive is off) with trailing slashes stripped
+// (StrictRouting is off). c.Path() is the raw spelling the client sent. So
+// `/V1/KMS/secret` and `/v1/kms/` reach exactly the handlers `/v1/kms/...` and
+// `/v1/kms` do, while a prefix test over the raw path matches neither — one
+// capital letter turned a fail-CLOSED grant surface into a fail-OPEN one.
+//
+// The rule here is the ROUTER'S rule, not an approximation of it: any other
+// normalization would be a second opinion about what a path means, and the
+// router's is the one that decides which handler runs. Percent-encoding is
+// deliberately NOT decoded, for the same reason — fiber does not decode it
+// either (UnescapePath is off), so `/v1/%6bms` routes nowhere and is not a
+// bypass; decoding it here would make this function match a route that does not
+// exist.
+func RoutePath(path string) string {
+	path = strings.ToLower(path)
+	for len(path) > 1 && path[len(path)-1] == '/' {
+		path = path[:len(path)-1]
+	}
+	return path
+}
+
+// underPrefix reports whether a NORMALIZED path is at or below prefix, on
+// SEGMENT boundaries. Both sides are compared slash-terminated, so "/v1/kms"
+// matches the "/v1/kms/" subtree (the router treats the two as one route) while
+// "/v1/kmsx" does not match either — a prefix test on the bare strings would
+// have said yes to the second, which is a rule about spelling rather than about
+// routes.
+func underPrefix(path, prefix string) bool {
+	prefix = strings.TrimSuffix(prefix, "/")
+	return path == prefix || strings.HasPrefix(path, prefix+"/")
+}
+
 // Probe reports whether a request is a liveness/readiness check. A probe is
 // never a grant and is never screened — a health endpoint a risk decision can
 // fail is not a health endpoint, and a kubelet is not a customer.
@@ -289,10 +380,13 @@ var (
 // two can never disagree about what a probe is. Read-only methods only: a POST
 // to something ending in "/health" is not a probe, so an attacker cannot name a
 // mutating route into the exemption.
+//
+// path is normalized here rather than by the caller, so a caller cannot forget.
 func Probe(method, path string) bool {
 	if method != http.MethodGet && method != http.MethodHead {
 		return false
 	}
+	path = RoutePath(path)
 	switch path {
 	case "/health", "/healthz", "/readyz", "/livez", "/metrics":
 		return true
@@ -302,12 +396,17 @@ func Probe(method, path string) bool {
 
 // Privileged reports whether a request grants standing authority, and therefore
 // whether the scorer's silence must deny it.
+//
+// It normalizes the path FIRST and compares nothing before it has. That order is
+// the whole fix: the grant lists below describe ROUTES, and a route is what the
+// router says it is.
 func Privileged(method, path string) bool {
 	if Probe(method, path) {
 		return false
 	}
+	path = RoutePath(path)
 	for _, p := range grantPaths {
-		if strings.HasPrefix(path, p) {
+		if underPrefix(path, p) {
 			return true
 		}
 	}
@@ -315,7 +414,7 @@ func Privileged(method, path string) bool {
 		return false
 	}
 	for _, p := range grantMutations {
-		if strings.HasPrefix(path, p) {
+		if underPrefix(path, p) {
 			return true
 		}
 	}

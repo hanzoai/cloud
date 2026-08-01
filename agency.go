@@ -42,6 +42,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/gateway/edge"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -97,10 +98,44 @@ func credentialClass(c *zip.Ctx) string {
 	}
 }
 
-// principalValidated reports whether the identity boundary minted a principal
-// for this request. Read through the sanitized header the boundary writes, which
-// a client cannot forge — the raw copy is deleted on ingress.
-func principalValidated(c *zip.Ctx) bool { return c.Org() != "" || c.User() != "" }
+// principalValidated reports whether the identity boundary VERIFIED a principal
+// for this request — read from the boundary's own attestation (principal.Minted),
+// never from a header.
+//
+// It used to read `c.Org() != "" || c.User() != ""`, and both disjuncts were
+// forgeable:
+//
+//   - X-Org-Id survives the boundary on the anonymous path by design (the Phase-1
+//     data passthrough, documented in middleware_identity.go), so ANY caller can
+//     make c.Org() non-empty by sending the header;
+//   - in a process where the boundary is not installed at all — a hand-written
+//     plugin main — nothing strips either header, so X-User-Id is the client's
+//     too.
+//
+// Either one, plus an sk--shaped string in Authorization that never validated,
+// moved a caller from the anonymous lane into the AGENT lane: the lane whose
+// whole meaning is "we minted this credential to a named tenant and can revoke
+// it". A differentiator a client can set is not a differentiator.
+//
+// The attestation is absent when no boundary ran, which resolves to anonymous —
+// the fail-closed direction for a classifier: unattributable traffic is judged on
+// its shape, and only a credential WE resolved buys the agent lane.
+func principalValidated(c *zip.Ctx) bool {
+	p, ok := principal.Minted(c)
+	return ok && p.User != ""
+}
+
+// verifiedOrg is the tenant the identity boundary resolved for this request, and
+// "" for an anonymous caller or a process with no boundary. It is the sensor's
+// keyspace index, so it must be the SERVER's answer: an org taken from a header
+// would let one caller write into — and evict from — another tenant's state.
+func verifiedOrg(c *zip.Ctx) string {
+	p, ok := principal.Minted(c)
+	if !ok || p.User == "" {
+		return ""
+	}
+	return p.Org
+}
 
 // agency classes a request into a lane from its credential class and the pattern
 // its caller has been showing. Pure and total: same inputs, same lane, no clock,

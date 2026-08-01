@@ -151,17 +151,26 @@ type abuseGate struct {
 }
 
 func (g *abuseGate) handle(c *zip.Ctx) error {
-	path := c.Path()
+	// ONE normalization, at the top, and every comparison below is against it —
+	// the exemptions, the grant test, the path-spread key. c.Path() is the raw
+	// spelling the client sent; RoutePath is the form the router matches, so a
+	// difference in case or a trailing slash cannot put a request on one side of a
+	// security test and the other side of the routing table (see cloud.RoutePath).
+	path := RoutePath(c.Path())
 	if Probe(c.Method(), path) {
 		return c.Next()
 	}
 	for _, p := range exemptPrefixes {
-		if strings.HasPrefix(path, p) {
+		if underPrefix(path, p) {
 			return c.Next()
 		}
 	}
 
-	org, _ := principal.Org(c)
+	// The tenant is the identity boundary's OWN answer, not a header — see
+	// verifiedOrg. It is the sensor's keyspace index and the policy row this
+	// request is judged under, so a caller that could choose it could write into
+	// another tenant's state and read another tenant's posture.
+	org := verifiedOrg(c)
 	now := time.Now()
 	sig := edge.Signal{
 		Org:  org,
