@@ -233,6 +233,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := cron.Mount(app, deps); err != nil {
 		return err
 	}
+
+	// The engine this process owns, readable by the processes that do not own one.
+	// See activities_rpc.go: the BYO fleet is written through the surface above and
+	// rendered by visor, which embeds a different engine entirely.
+	exposeActivities()
 	return nil
 }
 
