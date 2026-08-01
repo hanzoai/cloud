@@ -1063,6 +1063,19 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 			"ttlSecondsAfterFinished": int64(600),
 			"template": map[string]any{
 				"metadata": map[string]any{
+					// A Job copies only its POD TEMPLATE's labels onto the pod — the four
+					// on the Job above stay on the Job, where countActiveBuilds reads them.
+					// So the build pod carried no label of ours at all, and hanzo-build's
+					// Cilium policy selects PODS: build-egress-deny-internal denies every
+					// internal CIDR and artifact-publish-egress reopens s3:9000 only for
+					// hanzo.ai/publish=artifact. Unlabelled, the pod could not reach the
+					// object store — which is where its layer cache belongs. Without it the
+					// cache is a registry blob pulled WHOLE onto the node's 105GB disk
+					// beside the images, the snapshots and the build's own working set, and
+					// builds are evicted mid-run.
+					"labels": map[string]any{
+						"hanzo.ai/publish": "artifact",
+					},
 					// AppArmor unconfined for the rootless worker. The beta annotation is
 					// honored on older nodes; securityContext.appArmorProfile (below) is the
 					// GA form on k8s ≥1.30 — both set so ONE spec is correct across versions.
