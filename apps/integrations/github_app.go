@@ -479,28 +479,54 @@ func reachableRepos(ctx context.Context, org string) ([]githubRepo, error) {
 	if !githubConfigured() {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "github integration is not configured on this deployment")
 	}
+	// The accounts are read CONCURRENTLY. Each is an independent installation with
+	// its own token and its own pagination, so reading them in series made the wall
+	// clock their SUM — 816 repos across three accounts is ten sequential pages,
+	// about seven seconds, and under load the largest account exceeded the request
+	// deadline and dropped out of the union. Degrading to the accounts that
+	// answered is right (below), but an account should not fail merely for being
+	// listed last.
+	type result struct {
+		owner string
+		repos []githubRepo
+		err   error
+	}
+	out := make([]result, len(conns))
+	var wg sync.WaitGroup
+	for i, c := range conns {
+		wg.Add(1)
+		go func(i int, owner string) {
+			defer wg.Done()
+			out[i] = result{owner: owner}
+			tok, err := InstallationToken(ctx, org, owner)
+			if err != nil {
+				out[i].err = err
+				return
+			}
+			out[i].repos, out[i].err = installationRepos(ctx, tok)
+		}(i, c.Owner)
+	}
+	wg.Wait()
+
+	// Merged in CONNECTION order, not completion order, so the same set of
+	// accounts always yields the same list — a caller paging this cannot have rows
+	// reshuffle because one account happened to answer first.
 	var (
 		all      []githubRepo
 		failures []string
 	)
 	seen := map[string]bool{}
-	for _, c := range conns {
-		tok, err := InstallationToken(ctx, org, c.Owner)
-		if err != nil {
-			failures = append(failures, c.Owner)
+	for _, r := range out {
+		if r.err != nil {
+			failures = append(failures, r.owner)
 			continue
 		}
-		repos, err := installationRepos(ctx, tok)
-		if err != nil {
-			failures = append(failures, c.Owner)
-			continue
-		}
-		for _, r := range repos {
-			if seen[r.FullName] {
+		for _, repo := range r.repos {
+			if seen[repo.FullName] {
 				continue
 			}
-			seen[r.FullName] = true
-			all = append(all, r)
+			seen[repo.FullName] = true
+			all = append(all, repo)
 		}
 	}
 	if len(all) == 0 && len(failures) > 0 {
