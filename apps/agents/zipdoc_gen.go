@@ -257,7 +257,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"tgt_1"}`),
 	})
-	zip.Describe("POST /v1/agents/targets/:id/claim-key", zip.Doc{
+	zip.Describe("POST /v1/agents/targets/:id/key", zip.Doc{
 		Description: "MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve`\ndaemon presents to claim work for this machine, and returns it ONCE: only its\nSHA-256 hash is stored. Rotating supersedes any prior daemon, so only the\nmachine's owner — or an org admin — may call it; every other caller gets the\nsame not-found an unknown id gets, and learns nothing about what exists.",
 		Fields: map[string]string{
 			"claimKeyOut.claimKey": "ClaimKey is the capability itself. It is returned ONCE and never again — only\nits SHA-256 hash is stored — so a daemon that loses it mints a new one.",
@@ -267,7 +267,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"tgt_1"}`),
 	})
 	zip.Describe("POST /v1/agents/targets/:id/runs/:runId/report", zip.Doc{
-		Description: "ReportRoutedRun completes a claimed run: it delivers the terminal result to the\nrun's durable owner, which is what lets that workflow finish. Scoped to (org,\ntarget, run) and claim-key-authenticated, so a machine can only ever report a\nrun it legitimately holds. Idempotent — a report for an unknown or\nalready-finished run answers delivered:false rather than failing, because the\nsession's terminal state was already set by the machine's own stream.",
+		Description: "ReportRoutedRun completes a claimed run: it delivers the terminal result to the\nrun's durable owner, which is what lets that workflow finish. Scoped to (org,\ntarget, run) and claim-key authenticated, so a machine can only ever report a\nrun it legitimately holds. Idempotent — a report for an unknown or\nalready-finished run answers delivered:false rather than failing, because the\nsession's terminal state was already set by the machine's own stream.",
 		Fields: map[string]string{
 			"reportOut.delivered": "Delivered is true when a waiting durable owner received this result. False\nmeans there was none to deliver to — an unknown or already-finished run — which\nis a clean no-op, not an error.",
 			"reportRunIn.branch":  "Branch, CommitSha and Diffstat describe what the run produced; Error is the\nfailure when OK is false. Each is clamped, never rejected.",
