@@ -53,7 +53,19 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"wal_4b1e77"}`),
 	})
-	zip.Describe("POST /v1/wallets/:id/safe-tx", zip.Doc{
+	zip.Describe("POST /v1/wallets/:id/sign", zip.Doc{
+		Description: "Produces a secp256k1 signature from one of the caller org's wallets over\na 32-byte digest, through whichever custody backend that wallet uses. Give it\neither a `digest` (32 bytes as hex, signed verbatim) or a `message` (hashed\nwith Keccak256 first) — exactly one is required. The private key never leaves\nits backend: KMS custody opens the sealed key in-process, MPC custody produces\na threshold signature on the ring. The answer carries the digest that was\nsigned alongside the signature, so a caller can verify what it got.",
+		Fields: map[string]string{
+			"signIn.digest":       "Digest is a pre-computed 32-byte digest as hex, with or without the 0x\nprefix. When present it is signed verbatim and message is ignored.",
+			"signIn.message":      "Message is arbitrary text to hash with Keccak256 and sign. Used only when\ndigest is empty.",
+			"signature.address":   "Address is the wallet's on-chain address, the one this signature recovers to.",
+			"signature.digest":    "Digest is the 32-byte digest that was signed, hex with an 0x prefix.",
+			"signature.signature": "Signature is the 65-byte secp256k1 signature, hex with an 0x prefix.",
+			"signature.walletId":  "WalletID is the wallet that signed.",
+		},
+		Example: json.RawMessage(`{"id":"wal_4b1e77","message":"approve withdrawal 42"}`),
+	})
+	zip.Describe("POST /v1/wallets/:id/transactions", zip.Doc{
 		Description: "Composes a Safe transaction on the MPC ring and answers its\nEIP-712 hash together with the owner approval the ring's threshold signature\nproduced. Only a wallet whose custody is \"safe\" can do this — any other custody\nis a 400, because the backend itself is asked whether it can propose rather\nthan the kind being switched on. The ring computes the Safe-tx hash bound to\nthe Safe contract and the chain id, so the hash a caller gets back is the one\nthe Safe will verify. This PROPOSES: it does not execute the transaction.",
 		Fields: map[string]string{
 			"safeProposal.r":           "R is the r component of the MPC threshold signature over the Safe-tx hash.",
@@ -68,18 +80,6 @@ func init() {
 			"safeTxIn.value":           "Value is the native-token amount to send, as a decimal string in wei.",
 		},
 		Example: json.RawMessage(`{"id":"wal_4b1e77","to":"0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984","value":"0","data":"0x","chainId":36963,"nonce":7}`),
-	})
-	zip.Describe("POST /v1/wallets/:id/sign", zip.Doc{
-		Description: "Produces a secp256k1 signature from one of the caller org's wallets over\na 32-byte digest, through whichever custody backend that wallet uses. Give it\neither a `digest` (32 bytes as hex, signed verbatim) or a `message` (hashed\nwith Keccak256 first) — exactly one is required. The private key never leaves\nits backend: KMS custody opens the sealed key in-process, MPC custody produces\na threshold signature on the ring. The answer carries the digest that was\nsigned alongside the signature, so a caller can verify what it got.",
-		Fields: map[string]string{
-			"signIn.digest":       "Digest is a pre-computed 32-byte digest as hex, with or without the 0x\nprefix. When present it is signed verbatim and message is ignored.",
-			"signIn.message":      "Message is arbitrary text to hash with Keccak256 and sign. Used only when\ndigest is empty.",
-			"signature.address":   "Address is the wallet's on-chain address, the one this signature recovers to.",
-			"signature.digest":    "Digest is the 32-byte digest that was signed, hex with an 0x prefix.",
-			"signature.signature": "Signature is the 65-byte secp256k1 signature, hex with an 0x prefix.",
-			"signature.walletId":  "WalletID is the wallet that signed.",
-		},
-		Example: json.RawMessage(`{"id":"wal_4b1e77","message":"approve withdrawal 42"}`),
 	})
 	zip.Describe("POST /v1/wallets/accounts", zip.Doc{
 		Description: "Opens a named wallet account for the caller's org. An account is\na GROUPING of wallets, not a key or a balance: wallets are created under one\nand can be listed by it. The org is stamped by the server from the validated\nprincipal, so a request can never open an account in another tenant.",

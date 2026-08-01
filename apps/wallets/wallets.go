@@ -147,7 +147,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 	zip.Get(g, "/:id", o.getWallet)
 	zip.Post(g, "/:id/keys", o.rotateKeys)
 	zip.Post(g, "/:id/sign", o.sign)
-	zip.Post(g, "/:id/safe-tx", o.proposeSafeTx)
+	zip.Post(g, "/:id/transactions", o.proposeTransaction)
 	return nil
 }
 
@@ -679,7 +679,7 @@ func (o ops) sign(ctx context.Context, in *signIn) (*signature, error) {
 	}, nil
 }
 
-// proposeSafeTx composes a Safe transaction on the MPC ring and answers its
+// proposeTransaction composes a Safe transaction on the MPC ring and answers its
 // EIP-712 hash together with the owner approval the ring's threshold signature
 // produced. Only a wallet whose custody is "safe" can do this — any other custody
 // is a 400, because the backend itself is asked whether it can propose rather
@@ -688,7 +688,7 @@ func (o ops) sign(ctx context.Context, in *signIn) (*signature, error) {
 // the Safe will verify. This PROPOSES: it does not execute the transaction.
 //
 // Example: {"id": "wal_4b1e77", "to": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984", "value": "0", "data": "0x", "chainId": 36963, "nonce": 7}
-func (o ops) proposeSafeTx(ctx context.Context, in *safeTxIn) (*safeProposal, error) {
+func (o ops) proposeTransaction(ctx context.Context, in *safeTxIn) (*safeProposal, error) {
 	s := o.s
 	org, err := tenant(ctx)
 	if err != nil {

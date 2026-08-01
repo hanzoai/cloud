@@ -173,10 +173,10 @@ func TestSafeCustody(t *testing.T) {
 	}
 
 	// Safe-tx propose mints a valid ring JWT and returns the EIP-712 hash + sig.
-	code, respBody := req(t, app, http.MethodPost, "/v1/wallets/"+w.ID+"/safe-tx", "acme",
+	code, respBody := req(t, app, http.MethodPost, "/v1/wallets/"+w.ID+"/transactions", "acme",
 		map[string]any{"to": mpcEOA, "value": "0", "chainId": 36963})
 	if code != http.StatusOK {
-		t.Fatalf("safe-tx status = %d, body=%s", code, respBody)
+		t.Fatalf("transactions status = %d, body=%s", code, respBody)
 	}
 	var out struct {
 		SafeTxHash string `json:"safeTxHash"`
@@ -184,10 +184,10 @@ func TestSafeCustody(t *testing.T) {
 		S          string `json:"s"`
 	}
 	if err := json.Unmarshal(respBody, &out); err != nil {
-		t.Fatalf("decode safe-tx resp: %v", err)
+		t.Fatalf("decode transactions resp: %v", err)
 	}
 	if out.SafeTxHash != safeTxHash || out.R != sigR || out.S != sigS {
-		t.Fatalf("safe-tx result = %+v, want hash/r/s = %s/%s/%s", out, safeTxHash, sigR, sigS)
+		t.Fatalf("transactions result = %+v, want hash/r/s = %s/%s/%s", out, safeTxHash, sigR, sigS)
 	}
 }
 
