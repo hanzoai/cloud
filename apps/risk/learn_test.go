@@ -53,10 +53,8 @@ func itoa(i int) string {
 
 func teach(t *testing.T, p *plane, k tenant, evs []observation) {
 	t.Helper()
-	for _, o := range evs {
-		if _, err := p.learn(k, o); err != nil {
-			t.Fatalf("learn: %v", err)
-		}
+	if _, err := p.learn(k, evs...); err != nil {
+		t.Fatalf("learn: %v", err)
 	}
 }
 
@@ -282,7 +280,7 @@ func TestSearch_RefusesAnEmptyHistory(t *testing.T) {
 	}
 	// And the accepting path refuses too, rather than starting a run that proves
 	// nothing.
-	if _, err := p.begin(context.Background(), k, 24*time.Hour); err == nil {
+	if _, err := p.begin(context.Background(), k, 24*time.Hour, nil); err == nil {
 		t.Fatal("begin accepted a search over an empty surface")
 	}
 }
@@ -302,7 +300,7 @@ func TestSearch_ReadsOnlyItsOwnHistory(t *testing.T) {
 			"events": uint32(3), "spend_nano": int64(250_000_000 + i),
 		})
 	}
-	run, err := p.begin(context.Background(), k, 24*time.Hour)
+	run, err := p.begin(context.Background(), k, 24*time.Hour, nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
@@ -322,6 +320,7 @@ func TestSearch_ReadsOnlyItsOwnHistory(t *testing.T) {
 func TestWarm_FoldsOnlyThisOrganisationsSurface(t *testing.T) {
 	probe.reset(true)
 	p := newTestPlane(t)
+	holdFolds(t, p) // this test drives the fold; the plane must not also be folding
 	a, b := key(t, brandA, orgA), key(t, brandA, orgB)
 	now := time.Now().UTC()
 	for i := 0; i < 30; i++ {
@@ -354,6 +353,7 @@ func TestWarm_ReportsTheGapRatherThanZero(t *testing.T) {
 	probe.reset(false)
 	defer probe.reset(true)
 	p := newTestPlane(t)
+	holdFolds(t, p)
 	k := key(t, brandA, orgA)
 	if _, err := p.warm(context.Background(), k); err == nil {
 		t.Fatal("a fold against an unreachable warehouse reported success")

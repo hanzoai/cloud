@@ -236,7 +236,7 @@ func TestBaseline_TheFloorIsBoundIntoTheStatement(t *testing.T) {
 			continue
 		}
 		wrote++
-		if !strings.Contains(s.SQL, "HAVING uniqExact(org) >= ? AND count() >= ?") {
+		if !strings.Contains(s.SQL, "HAVING uniqExact(org) >= ? AND sum(subjects) >= ?") {
 			t.Errorf("the populate statement carries no k-anonymity floor:\n%s", s.SQL)
 		}
 		if len(s.Args) != 5 {
@@ -248,6 +248,82 @@ func TestBaseline_TheFloorIsBoundIntoTheStatement(t *testing.T) {
 	}
 	if wrote != len(dims) {
 		t.Fatalf("recompute wrote %d dimension(s), want %d", wrote, len(dims))
+	}
+}
+
+// TestBaseline_NoOrganisationCanDominate is the k-anonymity defect stated as an
+// experiment, and it is a defect about WEIGHT rather than about counting.
+//
+// The floor asked for twenty-five contributors and a thousand rows. One tenant
+// with ten thousand subjects and twenty-four with one each satisfies both — and
+// then the published "network" median is that one tenant's median, its own
+// distribution republished under a name that says it is everyone's. Any
+// competitor of theirs can read it.
+//
+// One organisation, one vote fixes it, and the fix is measurable: the same
+// contributions reduced per organisation FIRST give the quiet majority's answer,
+// and each contributor's share is 1/orgs ≤ [maxShare].
+//
+// Mutation proof: pool the subjects instead of voting (the commented line) and
+// the assertion below reports the dominant tenant's own number.
+func TestBaseline_NoOrganisationCanDominate(t *testing.T) {
+	const dominant, quiet = 10_000.0, 1.0
+	contributions := map[string][]float64{}
+	contributions["whale"] = make([]float64, 10_000)
+	for i := range contributions["whale"] {
+		contributions["whale"][i] = dominant
+	}
+	for i := 0; i < kAnonOrgs-1; i++ {
+		contributions["small_"+itoa(i)] = []float64{quiet}
+	}
+
+	// What the published band is computed over: ONE value per organisation.
+	votes := make([]float64, 0, len(contributions))
+	var pooled []float64 // what it used to be: every subject, unweighted
+	for _, subjects := range contributions {
+		votes = append(votes, vote(subjects))
+		pooled = append(pooled, subjects...)
+	}
+	if got := vote(votes); got != quiet {
+		t.Fatalf("the published median is %.0f — one organisation with %d of the %d subjects moved it. "+
+			"Counting contributors is not bounding weight.", got, len(contributions["whale"]), len(pooled))
+	}
+	// The control: without the per-organisation reduction the same data publishes
+	// the whale's own number, which is the defect this test refutes.
+	if got := vote(pooled); got != dominant {
+		t.Fatalf("the unweighted median is %.0f, want %.0f — the control does not reproduce the defect, "+
+			"so the assertion above proves nothing", got, dominant)
+	}
+	if share := 1.0 / float64(len(votes)); share > maxShare {
+		t.Fatalf("one contributor holds %.3f of the band, above the stated ceiling %.3f", share, maxShare)
+	}
+}
+
+// TestBaseline_TheStatementVotesPerOrganisation holds the SQL to the reduction
+// [vote] models. Without the middle stage the quantiles are a weighted average in
+// which the largest tenant is the answer, and no amount of prose about
+// k-anonymity changes that.
+//
+// Mutation proof: delete the `GROUP BY b, subject_kind, org` stage from populate
+// and this fails.
+func TestBaseline_TheStatementVotesPerOrganisation(t *testing.T) {
+	for _, d := range dims {
+		stmt := populate(d)
+		// One value per subject, then one per organisation, then the quantile.
+		perSubject := strings.Index(stmt, "GROUP BY b, subject_kind, org, subject")
+		perOrg := strings.Index(stmt, "GROUP BY b, subject_kind, org\n")
+		perDay := strings.Index(stmt, "GROUP BY b, subject_kind\n")
+		if perSubject < 0 || perOrg < 0 || perDay < 0 {
+			t.Fatalf("populate(%q) is missing one of the three reduction stages:\n%s", d.Name, stmt)
+		}
+		if !(perSubject < perOrg && perOrg < perDay) {
+			t.Fatalf("populate(%q) reduces in the wrong order — the organisation stage must sit between "+
+				"the subject stage and the quantile:\n%s", d.Name, stmt)
+		}
+		// The quantile reads the per-organisation value, never the per-subject one.
+		if !strings.Contains(stmt, "quantileExact(0.50)(x)") || !strings.Contains(stmt, "quantileExact(0.50)(sx) AS x") {
+			t.Fatalf("populate(%q) does not take the published quantile over one value per organisation:\n%s", d.Name, stmt)
+		}
 	}
 }
 
@@ -298,6 +374,10 @@ var sqlWord = map[string]bool{
 	"group": true, "by": true, "having": true, "order": true, "limit": true, "and": true,
 	"as": true, "sum": true, "count": true, "uniqexact": true, "todate": true,
 	"quantileexact": true, "b": true, "x": true, "bucket": true, "subject": true,
+	// The aliases of the three-stage reduction: `sx` is one subject's day, `x` the
+	// organisation's single vote over its subjects, `subjects` how many went into
+	// it. They are code in the same way `b` and `x` are.
+	"sx": true, "subjects": true,
 	"subject_kind": true, "org": true, "dim": true, "q10": true, "q50": true,
 	"q90": true, "q99": true, "n": true, "hanzo": true, "risk_baseline": true,
 	"risk_feature": true, "tostartoffiveminute": true, "time": true,
@@ -327,7 +407,7 @@ func TestBaseline_ExcludesTheAnonymousLane(t *testing.T) {
 		if _, err := rows(context.Background(), bad, query{start: end.Add(-time.Hour), end: end}); err == nil {
 			t.Errorf("a feature read accepted %q", string(bad))
 		}
-		if _, err := rollup(context.Background(), bad, end.Add(-time.Hour), end); err == nil {
+		if err := rollup(context.Background(), bad, rollups[0], end.Add(-time.Hour), end); err == nil {
 			t.Errorf("a rollup accepted %q", string(bad))
 		}
 	}

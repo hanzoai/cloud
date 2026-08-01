@@ -44,6 +44,8 @@ package risk
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -193,9 +195,16 @@ const (
 // filter over the whole store, because the read amplification of the second
 // shape is what takes a single-pod warehouse down.
 //
-// SummingMergeTree, because every column is an additive count over a bucket:
-// re-running a rollup for a window that already landed converges instead of
-// double-counting on merge, so idempotency is structural rather than hand-rolled.
+// SummingMergeTree, because every column is an additive count over a bucket and
+// four source planes each contribute a DIFFERENT subset of the columns for the
+// same (org, kind, subject, bucket) key — addition is what merges those four
+// partial rows into one.
+//
+// It is emphatically NOT idempotent, and that is the reason the watermark below
+// exists: re-inserting a window that already landed does not replace it, the two
+// rows merge by addition and the organisation's own history doubles. Idempotency
+// cannot come from the engine here, so it comes from [plane.roll] rolling each
+// window exactly once.
 const featureDDL = `
 	CREATE TABLE IF NOT EXISTS hanzo.risk_feature (
 		org           String,
@@ -504,36 +513,208 @@ func ensure(ctx context.Context) error {
 	return nil
 }
 
-// rollup folds one tenant's window of the source planes into its feature
-// surface. It is the ONLY writer of hanzo.risk_feature.
+// rollup folds ONE source plane's window into one tenant's feature surface. It is
+// the ONLY writer of hanzo.risk_feature — one statement, one place, so the values
+// that decide which tenant is read and which is written are bound in exactly one
+// line of code.
 //
-// It reports what it managed rather than failing the whole fold on one plane: a
-// deployment where event.error does not exist still gets its usage features, and
-// the dictionary reports the missing plane as blind instead of the model reading
-// zero for it.
-func rollup(ctx context.Context, t tenant, start, end time.Time) (map[string]error, error) {
+// One plane and one window rather than all four and the whole backlog, because
+// each plane advances under its OWN watermark ([plane.roll]): a deployment where
+// event.error does not exist still gets its usage features, and its own watermark
+// does not move.
+func rollup(ctx context.Context, t tenant, r rollupStmt, start, end time.Time) error {
 	if !t.qualified() {
-		return nil, fmt.Errorf("risk: unqualified tenant key %q", string(t))
+		return fmt.Errorf("risk: unqualified tenant key %q", string(t))
 	}
 	if !storeReady() {
-		return nil, errStore
+		return errStore
+	}
+	// The WRITE is the qualified key, the READ is the bare org. They are two
+	// different values of one tenant and confusing them in either direction is a
+	// cross-tenant read, which is why they are bound here and nowhere else.
+	if err := storeExec(ctx, r.SQL, string(t), t.org(), tsLiteral(start), tsLiteral(end), maxRows); err != nil {
+		return fmt.Errorf("risk: roll %q: %w", r.Name, err)
+	}
+	return nil
+}
+
+// ── the watermark: rolling each window exactly once ──────────────────────────
+//
+// [rollup] is the only writer of the feature surface and it is a plain INSERT
+// into a SummingMergeTree, so running it twice over one window DOUBLES that
+// organisation's history rather than converging on it. The surface therefore
+// cannot be kept current by a timer alone: something has to remember how far each
+// source plane has been folded, per tenant, across restarts.
+//
+// That is the watermark, and it lives on the tenant's OWN shelf — the same
+// physically isolated file its model state does. One tenant's progress is not a
+// row in a table another tenant's progress is also in.
+
+// rolledDDL remembers how far each source plane has been folded into THIS
+// tenant's feature surface. The tenant is in the key because a shelf file is
+// named for the bare org slug and two brands' identically named organisations
+// share one.
+const rolledDDL = `CREATE TABLE IF NOT EXISTS rolled (
+	tenant TEXT NOT NULL,
+	plane  TEXT NOT NULL,
+	upto   INTEGER NOT NULL,
+	PRIMARY KEY (tenant, plane)
+)`
+
+// rollSpan is the widest window one rollup statement covers, so a tenant idle for
+// a year is caught up in bounded steps rather than in one scan of a source plane.
+//
+// rollLag is how far behind the present a rollup stops. The source planes are
+// written by an asynchronous consumer, so the newest minutes are not complete —
+// folding them would roll up a partial window and, because the watermark then
+// says it is done, never revisit it.
+//
+// rollFloor bounds how far back a tenant with no watermark starts. It is the warm
+// window, because a fold exists to give a model the history the warm window reads
+// and rolling up more would cost the warehouse a scan nothing reads back.
+//
+// rollSteps bounds how many windows ONE fold advances a plane through, and it is
+// DERIVED from the two above rather than picked: a fold must be able to catch a
+// brand-new tenant up across its whole floor, or its most recent — and most
+// useful — window is the one that never lands. So the worst case is a tenant's
+// first fold issuing four planes × rollSteps bounded statements, once, and one or
+// two per fold from then on.
+const (
+	rollSpan  = 24 * time.Hour
+	rollLag   = 10 * time.Minute
+	rollFloor = warmWindow
+	rollSteps = int(rollFloor/rollSpan) + 2
+)
+
+// featureBucket is the grain the surface is written at — every rollup statement
+// buckets with toStartOfFiveMinute — and therefore the grain every roll window
+// must be aligned to.
+//
+// A WINDOW THAT SPLITS A BUCKET IS WRONG, not merely inefficient, and the reason
+// is the distinct columns. The additive ones (events, calls, tokens, spend) sum
+// correctly across two partial inserts, which is what a SummingMergeTree is for.
+// `distincts`, `paths`, `sessions` and `ips` are uniqExact over the window: split
+// a bucket at 12:03 and a subject active in both halves contributes 1 twice, so
+// the surface reports two distinct addresses where there was one. Every velocity
+// and diversity feature reads those columns, so the inflation is not cosmetic —
+// it is a model trained on numbers no traffic produced.
+//
+// Aligning also bounds the write rate for free: a second roll inside the same
+// bucket finds the watermark already at the edge and issues no statement at all,
+// so a surface read can bring itself current without becoming a write amplifier.
+const featureBucket = 5 * time.Minute
+
+// rolled reads how far a source plane has been folded for this tenant. A tenant
+// with no watermark starts at the floor rather than at the epoch.
+func (p *plane) rolled(t tenant, name string) (time.Time, error) {
+	sh, err := p.for_(t)
+	if err != nil {
+		return time.Time{}, err
+	}
+	floor := p.now().UTC().Add(-rollFloor).Truncate(featureBucket)
+	var upto int64
+	err = sh.db.QueryRow(`SELECT upto FROM rolled WHERE tenant = ? AND plane = ?`, string(t), name).Scan(&upto)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return floor, nil
+	case err != nil:
+		return time.Time{}, fmt.Errorf("risk: read rollup watermark: %w", err)
+	}
+	if at := time.Unix(upto, 0).UTC(); at.After(floor) {
+		return at, nil
+	}
+	return floor, nil
+}
+
+// mark advances a source plane's watermark for this tenant. It is written AFTER
+// the insert it describes, so the failure mode of a crash between the two is
+// re-rolling one window — a bounded over-count of at most rollSpan — rather than
+// losing that window forever, which no later run would ever notice.
+func (p *plane) mark(t tenant, name string, upto time.Time) error {
+	sh, err := p.for_(t)
+	if err != nil {
+		return err
+	}
+	_, err = sh.db.Exec(
+		`INSERT INTO rolled (tenant, plane, upto) VALUES (?, ?, ?)
+		 ON CONFLICT(tenant, plane) DO UPDATE SET upto = excluded.upto`,
+		string(t), name, upto.UTC().Unix())
+	if err != nil {
+		return fmt.Errorf("risk: save rollup watermark: %w", err)
+	}
+	return nil
+}
+
+// roll brings this tenant's feature surface up to date from its own source
+// planes, and is the PRODUCTION CALLER of [rollup] — the thing that makes the
+// per-org feature surface exist rather than merely be declarable.
+//
+// Each source plane advances independently under its own watermark, so a
+// deployment where event.error does not exist still gets its usage features and
+// its own watermark does not move. It returns how many windows it folded, which
+// is what the fold report quotes.
+func (p *plane) roll(ctx context.Context, t tenant) (int, error) {
+	if !t.qualified() {
+		return 0, fmt.Errorf("risk: unqualified tenant key %q", string(t))
+	}
+	if !storeReady() {
+		return 0, errStore
 	}
 	if err := ensure(ctx); err != nil {
-		return nil, err
+		return 0, err
 	}
-	out := make(map[string]error, len(rollups))
-	var ok int
+	// ONE AT A TIME for this tenant, for the same reason the warm is: the watermark
+	// is what makes rolling idempotent, and two concurrent rolls both read it, both
+	// insert and both advance it — after which the surface holds that window twice
+	// and a SummingMergeTree will never converge back.
+	res, err := p.resident(t)
+	if err != nil {
+		return 0, err
+	}
+	release, err := res.hold(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	// The edge is aligned DOWN to the surface's own grain, and every watermark is
+	// therefore an aligned instant too, so no window this issues can ever split a
+	// bucket. See [featureBucket].
+	edge := p.now().UTC().Add(-rollLag).Truncate(featureBucket)
+	var folded int
+	var first error
 	for _, r := range rollups {
-		err := storeExec(ctx, r.SQL, string(t), t.org(), tsLiteral(start), tsLiteral(end), maxRows)
-		out[r.Name] = err
-		if err == nil {
-			ok++
+		from, err := p.rolled(t, r.Name)
+		if err != nil {
+			if first == nil {
+				first = err
+			}
+			continue
+		}
+		for step := 0; step < rollSteps && from.Before(edge); step++ {
+			if err := ctx.Err(); err != nil {
+				return folded, err
+			}
+			to := from.Add(rollSpan)
+			if to.After(edge) {
+				to = edge
+			}
+			if err := rollup(ctx, t, r, from, to); err != nil {
+				if first == nil {
+					first = err
+				}
+				break // this plane stays where it was; the others are unaffected
+			}
+			if err := p.mark(t, r.Name, to); err != nil {
+				if first == nil {
+					first = err
+				}
+				break
+			}
+			folded++
+			from = to
 		}
 	}
-	if ok == 0 {
-		return out, fmt.Errorf("risk: no source plane could be rolled up")
-	}
-	return out, nil
+	return folded, first
 }
 
 // ── the dictionary: what THIS org's surface actually carries ─────────────────

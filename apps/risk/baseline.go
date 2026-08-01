@@ -15,7 +15,7 @@ package risk
 // tenant. The leak is UNCOMPUTABLE rather than merely disallowed, which is the
 // same argument the qualified tenant key makes one layer down.
 //
-// Two further gates, because "aggregate" alone is not anonymity:
+// Three further gates, because "aggregate" alone is not anonymity:
 //
 //   - k-ANONYMITY. A bucket only one organisation contributed to is that
 //     organisation's data wearing a quantile's clothes. A bucket is published
@@ -23,6 +23,17 @@ package risk
 //     buckets went into it, and the gate is enforced TWICE: in the statement's
 //     HAVING (bound, never interpolated) and again on read, so a row written
 //     before the gate existed is still refused.
+//
+//   - ONE ORGANISATION, ONE VOTE. Counting CONTRIBUTORS is not the same as
+//     bounding WEIGHT, and only the second is anonymity. Twenty-five
+//     organisations satisfy the floor while one of them supplies a million of the
+//     million-and-twenty-four values, and then the published median IS that
+//     organisation's median — its own distribution, republished under a name that
+//     says it is everyone's. So each organisation is reduced to ONE number, its
+//     own median for the day, BEFORE any quantile is taken over organisations.
+//     Every contributor's share is then exactly 1/orgs, which the floor bounds at
+//     1/[kAnonOrgs] = 4%: a dominant tenant cannot move the aggregate, and a
+//     colluding group has to actually be a majority of the contributors.
 //
 //   - THE ANONYMOUS LANE CONTRIBUTES NOTHING. The reserved `$public` tenant is
 //     not an organisation; [qualify] refuses it, so no rollup can ever write it
@@ -36,6 +47,7 @@ package risk
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -74,13 +86,20 @@ const baselineDDL = `
 // a median you must outnumber the rest, and to READ one you must know every
 // other contributor's value.
 //
-// kAnonRows is the number of underlying buckets, which bounds the other
-// direction: twenty-five organisations each contributing one bucket is
+// kAnonRows is the number of underlying subject-days, which bounds the other
+// direction: twenty-five organisations each contributing one subject is
 // twenty-five readable numbers, not a distribution.
 const (
 	kAnonOrgs = 25
 	kAnonRows = 1000
 )
+
+// maxShare is the largest share of a published band any single organisation can
+// hold, and it is arithmetic rather than an aspiration: each organisation
+// contributes exactly one value ([populate] reduces it to its own median before
+// the quantile), so its share is 1/orgs and the floor bounds that at 1/kAnonOrgs.
+// [TestBaseline_NoOrganisationCanDominate] holds the property this number states.
+const maxShare = 1.0 / float64(kAnonOrgs)
 
 // publishable is the k-anonymity gate as a PURE PREDICATE, used by both the
 // statement that writes a bucket and the reader that returns one. One definition,
@@ -91,7 +110,18 @@ func publishable(orgs uint32, n uint64) bool {
 
 // populate is the ONE statement that writes the baseline, rendered per dim from
 // the allowlist. Its placeholders bind, in order: the dim's published name, the
-// window start, the window end, the organisation floor and the bucket floor.
+// window start, the window end, the organisation floor and the subject-day floor.
+//
+// THREE STAGES, and the middle one is the weight bound. The innermost reduces the
+// surface to one value per SUBJECT per day. The middle reduces each ORGANISATION
+// to one value — its own median over its own subjects — so every contributor
+// enters the aggregate with weight one however many subjects it has. Only then is
+// the quantile taken, over organisations. Without that middle stage the quantiles
+// are a weighted average in which the largest tenant is the answer.
+//
+// `n` stays the count of underlying subject-days rather than the number of votes,
+// because the floor it is checked against means "enough data", not "enough
+// voters" — the voter floor is uniqExact(org), the other half of the HAVING.
 //
 // %s is filled ONLY from dim.Column — a package constant reached through
 // [dimBy]. There is no path by which a caller's string becomes an identifier
@@ -99,16 +129,41 @@ func publishable(orgs uint32, n uint64) bool {
 func populate(d dim) string {
 	return fmt.Sprintf(`INSERT INTO %s (bucket, subject_kind, dim, q10, q50, q90, q99, orgs, n)
 		SELECT b, subject_kind, ?, quantileExact(0.10)(x), quantileExact(0.50)(x),
-		       quantileExact(0.90)(x), quantileExact(0.99)(x), uniqExact(org), count()
+		       quantileExact(0.90)(x), quantileExact(0.99)(x), uniqExact(org), sum(subjects)
 		FROM (
-		  SELECT toDate(bucket) AS b, subject_kind, org, sum(%s) AS x
-		  FROM %s
-		  WHERE bucket >= ? AND bucket < ?
-		  GROUP BY b, subject_kind, org, subject
+		  SELECT b, subject_kind, org, quantileExact(0.50)(sx) AS x, count() AS subjects
+		  FROM (
+		    SELECT toDate(bucket) AS b, subject_kind, org, subject, sum(%s) AS sx
+		    FROM %s
+		    WHERE bucket >= ? AND bucket < ?
+		    GROUP BY b, subject_kind, org, subject
+		  )
+		  GROUP BY b, subject_kind, org
 		)
 		GROUP BY b, subject_kind
-		HAVING uniqExact(org) >= ? AND count() >= ?`,
+		HAVING uniqExact(org) >= ? AND sum(subjects) >= ?`,
 		baselineTable, d.Column, featureTable)
+}
+
+// vote reduces one organisation's day to the ONE value it contributes to a
+// published band: the median over its own subjects.
+//
+// It is the Go statement of the middle stage of [populate] — the reduction that
+// makes every contributor's weight exactly one — and it exists so the property
+// can be MEASURED ([TestBaseline_NoOrganisationCanDominate]) rather than only
+// read off a SQL string. The two are held to each other by
+// [TestBaseline_TheStatementVotesPerOrganisation], which fails if the SQL loses
+// the stage this function models.
+func vote(subjects []float64) float64 {
+	if len(subjects) == 0 {
+		return 0
+	}
+	xs := append([]float64(nil), subjects...)
+	sort.Float64s(xs)
+	// quantileExact(0.5) over n values takes the element at floor(0.5*n), which is
+	// the upper of the two middles on an even count. Stated rather than assumed:
+	// a model of a statement that rounds the other way is not a model of it.
+	return xs[len(xs)/2]
 }
 
 // band is one published bucket of the network baseline: four quantiles of one
