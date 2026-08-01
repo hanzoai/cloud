@@ -325,9 +325,21 @@ func normalize(org string, now time.Time, e CaptureEvent) (fact, bool) {
 
 // resolveName picks the stored event name. A tracked product event MUST name itself
 // (an unnamed one is unroutable and dropped — the pre-existing rule); every other route
-// has a server-chosen default, so the anonymous lane's name space stays closed and an
-// unattested caller can introduce neither a new name into the read lenses nor unbounded
-// cardinality into a table's ORDER BY key.
+// has a server-chosen default, so a caller that names nothing cannot leave the row
+// unnamed AND cannot choose what it is called.
+//
+// AN ERROR IS NAMED `error`, NEVER ITS EXCEPTION CLASS. This branch used to fall back to
+// e.Error.Type, and that was a caller string on the one function the ANONYMOUS lane
+// leans on for its whole name rule: `{"type":"error","error":{"type":"…"}}` with no
+// credential wrote chosen bytes into `name`, fifty distinct per request, and on a
+// published-site host into a REAL org's partition — unbounded cardinality in a column
+// every signal here treats as low-cardinality, from a caller nobody vouched for.
+//
+// Dropping the fallback costs nothing, which is why the fix belongs here rather than in
+// a per-lane special case: the class was never this column's fact to hold. It is stored
+// in the fault's own `class`, it is the first thing fingerprint() hashes into `group`,
+// and the error lens reads it back from attributes['$exception']. Naming the row after
+// it was a third copy of one fact under a third spelling.
 //
 // The defaults are plain verb-object names. The old sentinels ($pageview, $error) were
 // PostHog jargon standing in for a discriminator the schema now has: a page view is
@@ -339,9 +351,6 @@ func resolveName(r route, e CaptureEvent) string {
 	}
 	switch r.signal {
 	case signalError:
-		if e.Error != nil && trim(e.Error.Type) != "" {
-			return trim(e.Error.Type)
-		}
 		return "error"
 	case signalLog:
 		return "log_record"
