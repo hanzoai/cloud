@@ -24,6 +24,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -476,6 +477,45 @@ type riskVelocity struct {
 	Days int `json:"days"`
 }
 
+// riskHistory is one bucket of a subject's activity as the warehouse holds it —
+// the long horizon the in-memory rings cannot keep.
+type riskHistory struct {
+	// Bucket is the five-minute period, RFC 3339 in UTC.
+	Bucket string `json:"bucket"`
+	// Values is each counted feature over that period, keyed by the names
+	// GET /v1/risk/dictionary publishes.
+	Values map[string]float64 `json:"values"`
+}
+
+// riskBaseline is one NETWORK quantile band.
+//
+// This is the ONLY cross-org value this API returns, and it is aggregate by
+// construction rather than by policy: the table it comes from has no tenant
+// column, no subject and no pseudonym, and a band is published only once at
+// least 25 distinct orgs and 1000 observations contributed to it. There is no
+// query that returns another tenant's numbers, because those rows do not exist.
+type riskBaseline struct {
+	// Feature is what is being compared.
+	Feature string `json:"feature"`
+	// Q10 is the tenth percentile across the platform for this subject kind.
+	Q10 float64 `json:"q10"`
+	// Q50 is the median.
+	Q50 float64 `json:"q50"`
+	// Q90 is the ninetieth percentile.
+	Q90 float64 `json:"q90"`
+	// Q99 is the ninety-ninth — where the tail this product is looking for
+	// begins.
+	Q99 float64 `json:"q99"`
+	// Orgs is how many distinct organisations contributed to this band. It is
+	// reported so a reader can see the k-anonymity floor was met rather than
+	// take it on trust.
+	Orgs uint64 `json:"orgs"`
+	// Observations is how many measurements the band was cut from.
+	Observations uint64 `json:"observations"`
+	// Day is the period the band covers, YYYY-MM-DD.
+	Day string `json:"day"`
+}
+
 // riskSubjectView is one subject's current state.
 type riskSubjectView struct {
 	// Subject is what this describes.
@@ -486,6 +526,17 @@ type riskSubjectView struct {
 	Decisions []riskDecisionBrief `json:"decisions"`
 	// Controls is what is currently declared on the subject.
 	Controls []riskControl `json:"controls"`
+	// History is the subject's activity over the last thirty days from the
+	// warehouse. Absent when the warehouse is unreachable — an absent history is
+	// an honest gap, where a zeroed one would say the subject did nothing.
+	History []riskHistory `json:"history,omitempty"`
+	// Network is where this subject kind sits across the platform, as quantiles
+	// only. Absent when no band has met the k-anonymity floor.
+	Network []riskBaseline `json:"network,omitempty"`
+	// Gap names what could not be read, when something could not be. It is
+	// present precisely so that a missing History or Network is legible as a
+	// gap rather than as an answer.
+	Gap string `json:"gap,omitempty"`
 }
 
 // riskTerm is one comparison in a rule.
@@ -1139,15 +1190,7 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	if id, found, err := byIdem(db, in.Idem); err != nil {
 		return nil, err
 	} else if found {
-		view, err := o.decisionView(db, id)
-		if err != nil {
-			return nil, err
-		}
-		return &riskDecision{
-			ID: view.Decision.ID, Action: view.Decision.Action, Score: view.Decision.Score,
-			Agency: view.Decision.Agency, Hits: view.Hits, Causes: view.Causes,
-			Shadow: view.Decision.Shadow, Refusal: view.Decision.Refusal, Model: view.Model,
-		}, nil
+		return o.decided(db, id)
 	}
 
 	obs := observation{
@@ -1195,10 +1238,18 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	digest := o.s.State.model.Digest()
 	// DURABLE FIRST. The decision is the record; the analytics copy comes after
 	// and is best-effort. Wired the other way, a bus hiccup loses evidence.
-	if err := putDecision(db, obs, out, digest); err != nil {
-		return nil, err
-	}
-	if err := claimIdem(db, out.id, in.Idem); err != nil {
+	//
+	// The idempotency key is claimed IN the insert, so a concurrent retry loses
+	// the race at the index rather than after a second decision exists — and the
+	// loser reads back the winner's answer, which is what the key promised.
+	if err := putDecision(db, obs, out, digest, in.Idem); err != nil {
+		if errors.Is(err, errIdemTaken) {
+			id, found, ferr := byIdem(db, in.Idem)
+			if ferr != nil || !found {
+				return nil, err
+			}
+			return o.decided(db, id)
+		}
 		return nil, err
 	}
 
@@ -1258,6 +1309,21 @@ func (o ops) decision(ctx context.Context, in *riskRef) (*riskDecisionView, erro
 	return o.decisionView(db, in.ID)
 }
 
+// decided renders an ALREADY-RECORDED decision as the decide answer. Both
+// idempotency paths go through it, so a retry cannot get a differently-shaped
+// body from the original.
+func (o ops) decided(db *sql.DB, id string) (*riskDecision, error) {
+	view, err := o.decisionView(db, id)
+	if err != nil {
+		return nil, err
+	}
+	return &riskDecision{
+		ID: view.Decision.ID, Action: view.Decision.Action, Score: view.Decision.Score,
+		Agency: view.Decision.Agency, Hits: view.Hits, Causes: view.Causes,
+		Shadow: view.Decision.Shadow, Refusal: view.Decision.Refusal, Model: view.Model,
+	}, nil
+}
+
 func (o ops) decisionView(db *sql.DB, id string) (*riskDecisionView, error) {
 	row, hits, causesJSON, digest, err := decisionDetail(db, id)
 	if err != nil {
@@ -1298,9 +1364,18 @@ func (o ops) label(ctx context.Context, in *riskLabelIn) (*riskDecisionView, err
 }
 
 // SubjectState reads one subject's current risk state: every live velocity
-// aggregate it has, its recent decisions and whatever controls are declared on
-// it. This is the continuous-monitoring read — a merchant, an account or an
-// agent, on one page.
+// aggregate it has, its recent decisions, whatever controls are declared on it,
+// its thirty-day history, and where this KIND of subject sits across the
+// platform. This is the continuous-monitoring read — a merchant, an account or
+// an agent, on one page.
+//
+// The last two come from the warehouse and are BEST EFFORT: an unreachable
+// warehouse omits them and names the gap, because a zeroed history would say the
+// subject did nothing and a zeroed baseline would say the platform did.
+//
+// The network comparison is the only cross-org value this API returns and it is
+// aggregate BY CONSTRUCTION: the table has no tenant column, so there is no
+// query — here or anywhere — that could return another tenant's rows.
 func (o ops) subject(ctx context.Context, in *riskSubjectRef) (*riskSubjectView, error) {
 	sc, db, err := tenantState(ctx, o.s)
 	if err != nil {
@@ -1326,6 +1401,34 @@ func (o ops) subject(ctx context.Context, in *riskSubjectRef) (*riskSubjectView,
 	}
 	for _, c := range cs {
 		view.Controls = append(view.Controls, wireControl(c))
+	}
+
+	// The warehouse reads. Both take the MINTED tenant (the history) or no
+	// tenant at all (the baseline, which has none to take) — the two shapes the
+	// isolation argument rests on.
+	now := time.Now().UTC()
+	buckets, err := window(ctx, sc.tenant, kind, in.ID, now.AddDate(0, 0, -30), now)
+	if err != nil {
+		view.Gap = err.Error()
+	} else {
+		for _, r := range buckets {
+			view.History = append(view.History, riskHistory{
+				Bucket: r.bucket.UTC().Format(time.RFC3339), Values: r.values,
+			})
+		}
+	}
+	bands, err := baseline(ctx, kind, now.AddDate(0, 0, -1))
+	if err != nil {
+		if view.Gap == "" {
+			view.Gap = err.Error()
+		}
+	} else {
+		for _, b := range bands {
+			view.Network = append(view.Network, riskBaseline{
+				Feature: b.feature, Q10: b.q10, Q50: b.q50, Q90: b.q90, Q99: b.q99,
+				Orgs: b.orgs, Observations: b.n, Day: b.bucket.UTC().Format("2006-01-02"),
+			})
+		}
 	}
 	return view, nil
 }

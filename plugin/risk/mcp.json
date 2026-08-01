@@ -737,7 +737,7 @@
     "name": "riskSimulate"
   },
   {
-    "description": "SubjectState reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions and whatever controls are declared on\nit. This is the continuous-monitoring read — a merchant, an account or an\nagent, on one page.",
+    "description": "SubjectState reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
     "inputSchema": {
       "properties": {
         "id": {

@@ -67,9 +67,6 @@ type state struct {
 
 	// bill is the shared per-org gate and meter, on the "risk" product.
 	bill *cloud.ResourceMeter
-	// deps is kept for the logger and the brand; nothing else is read from it
-	// on a request path.
-	deps cloud.Deps
 
 	// warehouse records whether the feature tables were created. A false value
 	// is an honest gap on the dictionary and the backfill, never a zero.
@@ -115,17 +112,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// The warehouse is not on any request path this app serves, so a warehouse
 	// that is down at boot must not stop the decision plane from mounting. The
 	// tables are ensured once, in the background, and the honest gap is recorded.
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := ensureTables(ctx); err != nil {
-			s.Log.Warn("risk: feature tables unavailable; the dictionary and the search sandbox will report an honest gap", "err", err)
-			return
-		}
-		s.State.mu.Lock()
-		s.State.warehouse = true
-		s.State.mu.Unlock()
-	}()
+	go warehouse(s)
 
 	mount(s, app)
 	s.Log.Info("risk surface mounted",
@@ -138,6 +125,43 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	shutdown = func(context.Context) error { return teardown(s) }
 	return nil
 }
+
+// warehouse creates the two feature planes and then keeps the NETWORK BASELINE
+// current. It is the only background work this app does and it never touches a
+// request path.
+//
+// The baseline recompute is here, on a timer, rather than on any route — which
+// is what makes the cross-org surface unreachable by a caller. Nobody can time
+// it, steer it, or observe its cost, and the statement it runs is a package
+// constant with no placeholder, so nothing a caller sends reaches it. What it
+// writes carries no tenant, no subject and no pseudonym: quantiles over a
+// k-anonymous set of contributing orgs, and nothing else.
+func warehouse(s *stateService) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := ensureTables(ctx); err != nil {
+		cancel()
+		s.Log.Warn("risk: feature tables unavailable; the dictionary, the peer comparison and the search sandbox will report an honest gap", "err", err)
+		return
+	}
+	cancel()
+	s.State.mu.Lock()
+	s.State.warehouse = true
+	s.State.mu.Unlock()
+
+	for {
+		bg, stop := context.WithTimeout(context.Background(), 10*time.Minute)
+		if err := publishBaseline(bg); err != nil {
+			s.Log.Warn("risk: the network baseline was not recomputed; peer comparison holds its last published day", "err", err)
+		}
+		stop()
+		time.Sleep(baselineEvery)
+	}
+}
+
+// baselineEvery is how often the network quantiles are recomputed. Six hours:
+// the statement covers whole days, so anything faster republishes the same
+// numbers, and anything slower lets a day go unpublished after a restart.
+const baselineEvery = 6 * time.Hour
 
 // build constructs the state. Separate from Mount because Mount also starts the
 // background work and installs the routes, and a test wants the state without
@@ -174,7 +198,6 @@ func build(deps cloud.Deps) (*stateService, error) {
 			model:    model,
 			shelf:    newShelf(deps.DataDir),
 			bill:     cloud.NewResourceMeter(deps, "risk"),
-			deps:     deps,
 			restored: map[Tenant]bool{},
 		},
 	}, nil

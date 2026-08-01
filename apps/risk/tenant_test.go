@@ -481,6 +481,69 @@ func TestTenantIsolationOnEveryPlane(t *testing.T) {
 	}
 }
 
+// TestSubjectViewReportsAnHonestGap pins the warehouse-backed halves of the
+// subject read. This box has no warehouse, which is exactly the case that
+// matters: a zeroed history would say the subject did nothing and a zeroed
+// baseline would say the platform did. Both must be ABSENT and the gap NAMED.
+//
+// It also pins that the gap does not take the decision plane with it — the
+// velocity, decisions and controls come from memory and the tenant's own file,
+// so the read still answers 200 with everything it can actually know.
+func TestSubjectViewReportsAnHonestGap(t *testing.T) {
+	app, _ := wireApp(t)
+	mustOK(t, app, http.MethodPost, "/v1/risk/decide", "acme", "u_acme",
+		`{"stage":"signup","subject":{"kind":"account","id":"a-1"},"signals":{"ip":"192.0.2.44"}}`,
+		http.StatusOK)
+
+	code, body := req(t, app, http.MethodGet, "/v1/risk/subjects/account/a-1", "acme", "u_acme", "")
+	if code != http.StatusOK {
+		t.Fatalf("subject read = %d %s — a missing warehouse took the decision plane with it", code, body)
+	}
+	var v riskSubjectView
+	if err := json.Unmarshal(body, &v); err != nil {
+		t.Fatalf("unmarshal %s: %v", body, err)
+	}
+	if v.Gap == "" {
+		t.Error("no warehouse, and no gap reported — the empty history reads as a quiet subject")
+	}
+	if len(v.History) != 0 || len(v.Network) != 0 {
+		t.Errorf("history=%d network=%d with no warehouse; both must be absent, not zeroed",
+			len(v.History), len(v.Network))
+	}
+	// The parts that do not need the warehouse must still be there, or the
+	// assertion above proves nothing.
+	if len(v.Velocity) == 0 {
+		t.Error("no velocity on a subject that was just decided on — the in-memory rings are not being read")
+	}
+	if len(v.Decisions) != 1 {
+		t.Errorf("%d decisions on the subject, want 1", len(v.Decisions))
+	}
+}
+
+// TestNetworkReadTakesNoTenant is the counterpart to the DDL test: the FUNCTION
+// that reads the baseline has no tenant parameter, so no call site — present or
+// future — can scope it to one org, correctly or incorrectly.
+func TestNetworkReadTakesNoTenant(t *testing.T) {
+	fn := reflect.TypeOf(baseline)
+	for i := 0; i < fn.NumIn(); i++ {
+		if fn.In(i) == reflect.TypeOf(Tenant("")) {
+			t.Fatal("baseline() takes a Tenant — the network plane would be scopeable to one org, " +
+				"which is the exact thing that makes it aggregate-only")
+		}
+	}
+	// And the per-tenant read is the mirror image: it MUST take one.
+	fn = reflect.TypeOf(window)
+	var tenanted bool
+	for i := 0; i < fn.NumIn(); i++ {
+		if fn.In(i) == reflect.TypeOf(Tenant("")) {
+			tenanted = true
+		}
+	}
+	if !tenanted {
+		t.Fatal("window() takes no Tenant — a feature read could be spelled without one")
+	}
+}
+
 func mustOK(t *testing.T, app *zip.App, method, path, org, user, body string, want int) {
 	t.Helper()
 	code, got := req(t, app, method, path, org, user, body)
