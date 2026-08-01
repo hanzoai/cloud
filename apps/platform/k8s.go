@@ -915,13 +915,63 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 	// does today. Skipped for a digest-pinned ref, which names no tag to hang the
 	// cache off.
 	if repo, tag := splitImageRef(image); tag != "" && !strings.Contains(tag, ":") {
-		cacheRef := repo + ":buildcache"
-		cmd = append(cmd,
-			"--import-cache", "type=registry,ref="+cacheRef,
-			"--export-cache", "type=registry,ref="+cacheRef+",mode=max",
-		)
+		for _, a := range cacheArgs(repo) {
+			cmd = append(cmd, a)
+		}
 	}
 	return append(cmd, "--output", "type=image,name="+image+",push=true")
+}
+
+// cacheBucket is the object-store bucket the layer cache lives in. One bucket for
+// the fabric, keyed inside by repository, so a new repo needs no provisioning.
+const cacheBucket = "buildcache"
+
+// cacheArgs points the layer cache at the OBJECT STORE rather than the registry.
+//
+// The cache has to live somewhere that scales independently of a build node, and
+// the registry backend does not: every build pulls the whole cache onto the node
+// before it can read any of it, and pushes it back afterwards, so the cache's
+// size lands on a 105GB disk that also holds the images, the snapshots and the
+// build's own working set. That is what filled the runner pool — 79GB of retained
+// layers with 26GB left, and a build evicted fifteen minutes in.
+//
+// S3 is read RANGED and per-blob: buildkit fetches the manifest, then only the
+// blobs a build actually misses, and writes back only what changed. The node
+// holds the working set and nothing else. It is also the storage the rest of the
+// fabric already uses (artifact.go publishes binaries the same way), on the same
+// in-cluster endpoint and the same credential, so this adds a bucket and not a
+// dependency.
+//
+// Credentials are OPTIONAL by the same rule artifact publishing uses: absent, the
+// env is empty, buildkit reports a cache miss, and the build runs uncached rather
+// than the Job being unschedulable. A cache is an accelerator; it never gates.
+func cacheArgs(repo string) []string {
+	ref := "name=" + strings.ReplaceAll(strings.TrimPrefix(repo, "ghcr.io/"), "/", "-")
+	common := "type=s3,bucket=" + cacheBucket +
+		",region=" + getenv("S3_REGION", "us-east-1") +
+		",endpoint_url=" + s3CacheEndpoint() +
+		",use_path_style=true," + ref
+	return []string{
+		"--import-cache", common,
+		// mode=max exports the intermediate stages too, which is where the Go
+		// compiles live; without it a multi-stage build caches only its final
+		// layers and the expensive steps rerun anyway.
+		"--export-cache", common + ",mode=max",
+	}
+}
+
+// s3CacheEndpoint is the INTERNAL object-store address the build writes through —
+// the same split artifactPutBase makes, and for the same reason: the public host
+// is a CDN edge that does not accept writes.
+func s3CacheEndpoint() string {
+	ep := getenv("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000")
+	if strings.HasPrefix(ep, "http://") || strings.HasPrefix(ep, "https://") {
+		return ep
+	}
+	if strings.EqualFold(getenv("S3_ADMIN_SECURE", "false"), "true") {
+		return "https://" + ep
+	}
+	return "http://" + ep
 }
 
 // gitTokenSecret is the Secret (same namespace as the build Jobs) whose `token`
@@ -1069,6 +1119,18 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 							// cluster without the Secret builds public repos exactly as before.
 							map[string]any{"name": "GIT_AUTH_TOKEN", "valueFrom": map[string]any{
 								"secretKeyRef": map[string]any{"name": gitTokenSecret, "key": "token", "optional": true},
+							}},
+							// Object-store credential for the layer cache (cacheArgs).
+							// buildkit reads the S3 backend's keys from the environment, so
+							// they never appear on argv or in a log line. OPTIONAL by the
+							// same rule the artifact publisher uses: absent, buildkit reports
+							// a cache miss and the build runs uncached rather than the Job
+							// being unschedulable — a cache accelerates, it never gates.
+							map[string]any{"name": "AWS_ACCESS_KEY_ID", "valueFrom": map[string]any{
+								"secretKeyRef": map[string]any{"name": artifactS3Secret, "key": "access-key", "optional": true},
+							}},
+							map[string]any{"name": "AWS_SECRET_ACCESS_KEY", "valueFrom": map[string]any{
+								"secretKeyRef": map[string]any{"name": artifactS3Secret, "key": "secret-key", "optional": true},
 							}},
 						},
 						"volumeMounts": []any{
