@@ -75,10 +75,23 @@ type Policy struct {
 	// Methods is the allowlist of HTTP methods the edge accepts for this org. Empty
 	// means all are accepted.
 	Methods []string `json:"methods,omitempty"`
-	// Mode is the abuse gate's posture for this org: "shadow" scores traffic and
+	// Mode is the abuse gate's posture for THIS scope: "shadow" scores traffic and
 	// records the verdict without acting on it, "live" enforces it. Unset means
-	// shadow — a statistical judgement never starts refusing an org's traffic
-	// because the feature shipped, only because the org turned it on.
+	// shadow.
+	//
+	// It is the one per-org field that does NOT inherit. Every other field here
+	// layers a platform default under the org's own value, which is right for a
+	// default: a tenant that sets no rate ceiling should get the platform's. Mode
+	// is not a default, it is an ARMING DECISION — it is what makes a statistical
+	// judgement start refusing real traffic — and inheriting it means arming one
+	// scope arms every tenant that never asked for it, without a write to their
+	// row and without anything in their config changing. So a tenant is live only
+	// if that tenant's OWN row says live, and the platform row's mode governs
+	// exactly one scope: the anonymous lane, which has no tenant of its own.
+	//
+	// It is also not self-service. Writing it requires SuperAdmin (see the
+	// /v1/gateway config op): the subject of an abuse control does not get to
+	// switch the control off.
 	Mode string `json:"mode,omitempty"`
 
 	// UpdatedAt is the unix second this policy row was last written. Server-stamped;
@@ -330,33 +343,46 @@ func (s *Store) Effective(org string) Policy {
 	return p
 }
 
-// Mode returns the abuse gate's posture for org: the org's own row wins, else the
-// platform default, else shadow. Cached with the same short TTL as every other
-// per-org resolver, and fail-soft to SHADOW — a policy-store outage must not be
-// the reason a tenant starts being refused.
+// Mode returns the abuse gate's posture for org: THAT ORG'S OWN ROW, else shadow.
+// Cached with the same short TTL as every other per-org resolver, and fail-soft to
+// SHADOW — a policy-store outage must not be the reason a tenant starts being
+// refused.
 //
-// An EMPTY org is the anonymous lane, and it resolves to the PLATFORM row. That
-// is the same shape PerIPRPM already has and for the same reason: a caller with
-// no tenant still has to be governed by something, and the platform scope is what
-// governs a request that has no tenant at evaluation time. Without this the one
-// lane a bad bot actually calls from could never be armed, because there would be
-// no org to arm.
+// IT DOES NOT INHERIT, and that is the point. It used to fall back to the platform
+// row, so arming the one lane that has no tenant — the anonymous lane, which is
+// where a bad bot calls from — armed every tenant in the estate at the same time:
+// one PUT, and a statistical judgement began enforcing against customers whose own
+// config still said nothing and whose operators were never asked. An arming
+// decision that reaches a tenant it was not written for is not a default, it is an
+// accident waiting for a scorer to have a bad day.
 //
-// A SuperAdmin arms it the same way any org is armed, by targeting the reserved
-// admin org — PUT /v1/gateway/config?org=<adminOrg> {"mode":"live"} — since the
-// admin org's row IS the platform row. One mechanism, not a second one for the
-// case that has no tenant.
+// An EMPTY org is the anonymous lane, and it resolves to the PLATFORM row — which
+// is that lane's OWN row, not an inherited one: a caller with no tenant still has
+// to be governed by something, and the platform scope is what governs a request
+// that has no tenant at evaluation time. A SuperAdmin arms it by targeting the
+// reserved admin org (PUT /v1/gateway/config?org=<adminOrg> {"mode":"live"}), since
+// the admin org's row IS the platform row. One mechanism, one scope per write.
 func (s *Store) Mode(org string) string {
 	var m string
 	if org == "" {
 		m = s.Platform().Mode
 	} else {
-		m = s.effectiveOrg(org).Mode
+		m = s.orgMode(org)
 	}
 	if m == ModeLive {
 		return ModeLive
 	}
 	return ModeShadow
+}
+
+// orgMode reads the org's OWN stored mode and nothing else — no platform layer,
+// no static default. Cached under the same per-org entry every other resolver
+// shares, and fail-soft to "" (⇒ shadow).
+func (s *Store) orgMode(org string) string {
+	if s == nil || org == "" {
+		return ""
+	}
+	return s.effectiveOrg(org).Mode
 }
 
 func (s *Store) invalidate() {
@@ -382,17 +408,22 @@ func (s *Store) Platform() Policy {
 }
 
 // effectiveOrg resolves org's per-org edge config — its own row overlaid on the
-// platform per-org defaults — cached under key=org with a short TTL, fail-open to
+// platform per-org DEFAULTS — cached under key=org with a short TTL, fail-open to
 // the platform defaults. Every per-org resolver (OrgRPM / CacheTTL / Methods) and
 // the Effective read-back share this ONE value, so an org has exactly one resolved
 // config and one cache entry.
+//
+// Mode is deliberately absent from the inherited base: it is an arming decision,
+// not a default (see Policy.Mode and Store.Mode). The org's own row is its only
+// source, so the value below is "" — hence shadow — for every org that has not
+// been armed by name.
 func (s *Store) effectiveOrg(org string) Policy {
 	if s == nil || org == "" {
 		return Policy{}
 	}
 	return s.resolve(org, func() Policy {
 		plat := s.Platform()
-		base := Policy{OrgRPM: plat.OrgRPM, CacheTTLSec: plat.CacheTTLSec, CachePaths: plat.CachePaths, Methods: plat.Methods, Mode: plat.Mode}
+		base := Policy{OrgRPM: plat.OrgRPM, CacheTTLSec: plat.CacheTTLSec, CachePaths: plat.CachePaths, Methods: plat.Methods}
 		row, ok, err := s.Get(context.Background(), org)
 		if err != nil || !ok {
 			return base

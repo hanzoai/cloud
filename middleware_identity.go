@@ -45,6 +45,7 @@ import (
 	"unicode"
 
 	"github.com/hanzoai/authz"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -394,6 +395,11 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 				req.Header.Set(authz.HeaderUserOrgAdmin, "true")
 			}
 			sanitizeSubScopes(c, effOrg, claims.renderProject(), cliApp, claims.renderBillingAccount())
+			// The boundary's own attestation, parked where no client can reach it
+			// (principal.Mint). The headers above are the contract everything
+			// DOWNSTREAM reads; this is the fact a middleware reads when it cannot
+			// prove it is downstream — see principal.Mint.
+			principal.Mint(c, principal.Principal{Org: effOrg, User: claims.userID()})
 			return c.Continue()
 		}
 
@@ -415,6 +421,12 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 		if cliOrg != "" {
 			req.Header.Set(authz.HeaderOrg, cliOrg)
 		}
+		// The boundary RAN and found nobody. Recorded as such — an EMPTY attestation,
+		// which is a different fact from no attestation at all. The org restored just
+		// above is deliberately not in it: that value is the client's, kept for the
+		// Phase-1 data path, and the whole point of this slot is that nothing a client
+		// wrote ever enters it.
+		principal.Mint(c, principal.Principal{})
 		return c.Continue()
 	}
 }

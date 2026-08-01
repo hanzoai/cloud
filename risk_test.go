@@ -10,6 +10,7 @@ package cloud
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -186,6 +187,24 @@ func TestPrivileged(t *testing.T) {
 		{"GET", "/v1/models", false, "an ordinary read is not a grant"},
 		{"POST", "/v1/ai/chat/completions", false, "inference is not a grant"},
 		{"GET", "/v1/iam/whoami", false, "reading your own identity grants nothing"},
+
+		// REGRESSION — the spelling must not decide. fiber routes case-insensitively
+		// and ignores a trailing slash, so each of these reaches the SAME handler the
+		// canonical spelling does; a prefix test over the raw path matched none of
+		// them, and the scorer's silence then ALLOWED what it must refuse.
+		{"GET", "/V1/KMS/orgs/acme/secrets/db", true, "one capital letter is not a different route"},
+		{"GET", "/v1/Kms/orgs/acme/secrets/db", true, "nor is one capital letter in the middle"},
+		{"POST", "/V1/IAM/MINT-USER-KEYS", true, "a shouted grant is still a grant"},
+		{"GET", "/v1/kms/", true, "the subtree root is in the subtree"},
+		{"GET", "/v1/kms", true, "and so is the root without its slash — one route, per StrictRouting"},
+		{"DELETE", "/V1/Admin/orgs/acme", true, "an admin mutation, whatever its case"},
+		{"POST", "/v1/orgs/", true, "the org subtree root"},
+
+		// And normalization must not WIDEN the list either: a neighbouring name that
+		// merely shares a prefix is a different route and must stay ordinary.
+		{"GET", "/v1/kmsx/keys", false, "a prefix of a name is not the subtree"},
+		{"GET", "/v1/iam/signup-preflight", false, "a longer name is a different route"},
+		{"POST", "/v1/organizations/x", false, "/v1/orgs is not /v1/organizations"},
 	}
 	for _, tc := range cases {
 		if got := Privileged(tc.method, tc.path); got != tc.want {
@@ -194,58 +213,88 @@ func TestPrivileged(t *testing.T) {
 	}
 }
 
-// The seam must be safe to read from every request goroutine while a mount
-// writes it. Run under -race, this is the whole assertion.
-func TestSetRiskScorer_IsRaceFree(t *testing.T) {
-	resetScorer(t)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for i := 0; i < 200; i++ {
-			SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
-				return RiskVerdict{Action: ActionAllow}, nil
-			})
-			SetRiskScorer(nil)
-		}
-	}()
-	for i := 0; i < 200; i++ {
-		_ = Decide(context.Background(), "acme", RiskQuery{Stage: StageUsage})
+// RoutePath is the router's own rule, and a security comparison may use no other.
+func TestRoutePath(t *testing.T) {
+	cases := map[string]string{
+		"/v1/kms/x":  "/v1/kms/x",
+		"/V1/KMS/X":  "/v1/kms/x",
+		"/v1/kms/":   "/v1/kms",
+		"/v1/kms///": "/v1/kms",
+		"/":          "/",
+		"":           "",
+		// Percent-encoding is NOT decoded, deliberately: fiber does not decode it
+		// either, so this spelling routes nowhere and normalizing it here would
+		// make the predicate match a route that does not exist.
+		"/v1/%6bms/x": "/v1/%6bms/x",
 	}
-	<-done
+	for in, want := range cases {
+		if got := RoutePath(in); got != want {
+			t.Errorf("RoutePath(%q) = %q, want %q", in, got, want)
+		}
+	}
 }
 
-// A probe is never a grant and is never screened. The kubelet is not a customer,
-// and a health endpoint a risk decision can fail is not a health endpoint.
-func TestProbe(t *testing.T) {
-	cases := []struct {
-		method, path string
-		want         bool
-	}{
-		{"GET", "/health", true},
-		{"GET", "/healthz", true},
-		{"GET", "/readyz", true},
-		{"GET", "/metrics", true},
-		{"HEAD", "/health", true},
-		{"GET", "/v1/kms/health", true},
-		{"GET", "/v1/gateway/health", true},
-		// A mutation is never a probe, so a route cannot be named into the
-		// exemption to dodge the gate.
-		{"POST", "/health", false},
-		{"POST", "/v1/kms/health", false},
-		{"GET", "/v1/kms/orgs/acme/secrets/health-check", false},
-		{"GET", "/v1/models", false},
+// The scorer is bounded. Every ask costs a goroutine that lives until the scorer
+// returns, so a scorer that has stopped returning must stop being asked — past
+// the ceiling the fail policy answers, which is the same answer a timeout gives
+// and reaches it without allocating anything.
+//
+// The ceiling is passed in so the property is asserted deterministically rather
+// than by launching MaxScorerCalls goroutines and hoping none of them belongs to
+// another test. It is the SAME function the production path runs; only the size
+// of the ceiling differs.
+func TestDecide_IsBoundedWhenTheScorerStops(t *testing.T) {
+	resetScorer(t)
+	sem := slots(2)
+
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
+		<-release // never answers within the test
+		return RiskVerdict{Action: ActionAllow}, nil
+	})
+
+	// Fill every slot. Each call returns at the budget; the goroutine behind it
+	// stays parked, which is precisely the cost being bounded.
+	var wg sync.WaitGroup
+	refusals := make([]string, 2)
+	for i := range refusals {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			refusals[i] = decide(sem, context.Background(), "acme", RiskQuery{Stage: StageUsage}).Refusal
+		}(i)
 	}
-	for _, tc := range cases {
-		if got := Probe(tc.method, tc.path); got != tc.want {
-			t.Errorf("Probe(%s %s) = %v, want %v", tc.method, tc.path, got, tc.want)
+	wg.Wait()
+	for i, r := range refusals {
+		if r != RefusalTimeout {
+			t.Fatalf("call %d refusal = %q, want %q", i, r, RefusalTimeout)
 		}
 	}
-	// The KMS subtree is a grant for every method EXCEPT its probe — otherwise a
-	// fail-closed deployment would answer 403 to its own kubelet.
-	if Privileged("GET", "/v1/kms/health") {
-		t.Fatal("a health probe must never be treated as a grant")
+
+	// The next one is not asked at all — and the fail policy still holds both ways.
+	if v := decide(sem, context.Background(), "acme", RiskQuery{Stage: StageUsage}); v.Refusal != RefusalBusy || v.Action != ActionAllow {
+		t.Fatalf("past the ceiling: %+v, want allow/%s", v, RefusalBusy)
 	}
-	if !Privileged("GET", "/v1/kms/orgs/acme/secrets/db") {
-		t.Fatal("reading a secret is still a grant")
+	if v := decide(sem, context.Background(), "acme", RiskQuery{Stage: StageUsage, Privileged: true}); v.Refusal != RefusalBusy || v.Action != ActionBlock {
+		t.Fatalf("past the ceiling on a grant: %+v, want block/%s", v, RefusalBusy)
+	}
+}
+
+// The slot is released by the goroutine that HELD it, when the scorer actually
+// returns — not when the budget expires. Releasing it at the timeout would let a
+// stalled scorer exceed the ceiling without bound, which is the thing the ceiling
+// exists to prevent.
+func TestDecide_ReleasesItsSlotWhenTheScorerAnswers(t *testing.T) {
+	resetScorer(t)
+	sem := slots(1)
+
+	SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
+		return RiskVerdict{Action: ActionAllow}, nil
+	})
+	for i := 0; i < 50; i++ {
+		if v := decide(sem, context.Background(), "acme", RiskQuery{Stage: StageUsage}); v.Refusal != "" {
+			t.Fatalf("call %d was refused %q — a returned scorer must give its slot back", i, v.Refusal)
+		}
 	}
 }

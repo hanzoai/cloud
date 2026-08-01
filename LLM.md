@@ -2620,9 +2620,33 @@ is REFUSED while no scorer is installed: fail-closed on a component that was nev
 wired is an outage, not a defense, and this is what makes the distinction real.
 Only live mode reaches the scorer, meters a screen, or fails closed.
 
+Mode is the one field on that route whose SCOPE and whose AUTHORITY are different
+questions, and both were wrong once:
+
+- **It does not inherit.** Every other per-org field layers a platform default
+  under the org's own value. Mode is not a default, it is an arming decision, so
+  seeding it from the platform row meant the single PUT that arms the anonymous
+  lane (the reserved admin org — the only way to arm the lane that has no tenant)
+  silently armed every tenant in the estate. `Store.Mode` reads the org's OWN row
+  and nothing else; the platform row governs exactly one scope, the empty org.
+- **It is not self-service.** It lives on a tenant's row but writing it requires
+  SuperAdmin, whichever row it lands on. The subject of an abuse control does not
+  get to switch the control off — and an org-admin credential is what a stolen key
+  buys, so leaving it in the self-service branch made the gate disarmable by the
+  account it was watching.
+
 **Agency — the differentiator.** `agency(class, pattern)` is pure and total, and
 reads OUR issuance, never the client's self-description (there is no user-agent
-heuristic and there must not be one). An attributable machine credential is the
+heuristic and there must not be one) and never a REQUEST HEADER. "We minted this
+credential" is a fact only the identity boundary can state, so the boundary states
+it: `SanitizeIdentity` parks the principal it resolved with `principal.Mint`, a
+request-local slot no client can write, and the classifier reads `principal.Minted`.
+Reading `c.Org()`/`c.User()` instead was forgeable twice over — X-Org-Id survives
+the boundary on the anonymous path by design, and a hand-written plugin process may
+have no boundary in front of it at all — so two headers plus an `sk-`-shaped string
+that never validated bought the agent lane. Absent attestation resolves to
+anonymous, which is the fail-closed direction: only a credential we resolved buys
+the lane. An attributable machine credential is the
 `agent` lane whatever it claims to be; a browser session is `human`; an
 unattributable caller is `unknown` until it shows an abuse SHAPE — many
 credentials from one address, a wall of refusals, a path sweep — and only then
@@ -2631,10 +2655,34 @@ credentials from one address, a wall of refusals, a path sweep — and only then
 **The sensor** (`edge.Traffic`, a LEAF package so the middleware and the app share
 ONE object) counts requests, 401/403 failures, path spread and peer spread per
 (org, credential) over a rolling minute. Bounded by construction: a fixed ring
-plus two 64-bit population-count words per key, a capped and swept table.
-Credentials appear only as a keyed per-process fingerprint — never a bare digest,
-so a published fingerprint cannot be tested against a candidate key off-box.
-Every key leads with org; `View` cannot contain another tenant's rows.
+plus two 64-bit population-count words per key. Credentials appear only as a keyed
+per-process fingerprint — never a bare digest, so a published fingerprint cannot be
+tested against a candidate key off-box.
+
+**TENANCY IS THE DATA STRUCTURE AND THE BOUND IS PER TENANT.** One org's callers,
+hosts and lane counters live in that org's OWN tables, reached only by indexing
+`tenants[org]`; there is no shared map with org-prefixed keys, so a cross-tenant
+read or eviction is unwritable rather than merely refused. Each tenant has its own
+ceiling and reclaims only its own keys — a process-wide cap over a shared table is
+a cross-tenant denial of service, because the org that fills it evicts whoever was
+quietest and that victim's controls then go silent with no error. A tenant at its
+ceiling degrades exactly one tenant, itself, and says so: `TrafficView.Saturated`
+is its own count of its own reclaims. The one reclaim policy lives in `table[V]`
+(unexported map, cap as a constructor argument, a pinned live verdict is never
+dropped) so the wrong shape is unrepresentable rather than discouraged.
+
+**The client address is `cloud.ClientIP`, and it is the only one.** The peer is the
+truth: a caller that is not one of our own proxies IS the client, and no header it
+sent is read. When the peer IS ours, the forwarded chain is walked from the RIGHT —
+the end each hop appends to — and the first entry that is not one of ours is the
+answer; everything to its left was written before our infrastructure saw the
+request. A chain that is entirely ours is an in-cluster caller with no client
+address (`""`), which is what keeps sibling services out of the public rate limiter.
+Our own hops are a CIDR set (`CLOUD_TRUSTED_PROXIES`, defaulting to private space)
+rather than a hop count, because a count is a promise about topology that nothing
+enforces. Reading the LEFT-most entry — the one the client writes — let one host
+present a million clients: it defeated the per-IP limit keyed on it, put a chosen
+address in an audit row, and fed the sensor's address table without bound.
 
 `GET /v1/gateway/traffic` (`gatewayTraffic`) reports the caller's own org: lane
 split, denials, screens, and its busiest credentials by fingerprint. Screens are
@@ -2642,6 +2690,19 @@ counted there from the first request AND metered on the org's usage ledger —
 `ResourceMeter.Meter` is a no-op while `CLOUD_RISK_SCREEN_CENTS` is unset (0),
 because the price belongs to the pricing catalog and inventing one here would be
 a fabricated number.
+
+**A path is what the ROUTER says it is.** `cloud.RoutePath` normalizes to fiber's
+own detection path — lower-cased, trailing slashes stripped — and every security
+comparison (`Privileged`, `Probe`, the gate's exemptions) runs against it, on
+segment boundaries. `strings.HasPrefix` over the raw `c.Path()` meant one capital
+letter routed to the key store while matching no grant prefix, so the scorer's
+silence ALLOWED what the fail-closed branch exists to refuse.
+
+**Asking is bounded.** Each ask costs a goroutine that lives until the scorer
+returns, so `Decide` holds `MaxScorerCalls` in flight and answers `RefusalBusy`
+past the ceiling — the same fail policy a timeout gets, reached without allocating.
+A scorer stuck on a lock cannot become an out-of-memory in the process it was
+installed to protect.
 
 The other enforcement point is in `hanzoai/iam` (`internal/risk` +
 `internal/oidc/signup_gate.go`), which calls `POST /v1/risk/decide` over the wire
