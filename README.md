@@ -15,7 +15,8 @@ The same artifact serves `api.hanzo.ai`, `api.lux.cloud`, `api.zoo.cloud`, `api.
 # Run the unified binary (pin a released version)
 docker run -p 8080:8080 ghcr.io/hanzoai/cloud:v1.801.206
 
-# The `hanzo` CLI is a separate Rust binary (hanzoai/cli) — this module ships no CLI
+# The `hanzo` fabric CLI is a separate Rust binary (hanzoai/cli); this module
+# builds only the control half of that name, cmd/hanzo (see below)
 curl hanzo.sh | sh
 brew install hanzoai/tap/hanzo
 ```
@@ -28,12 +29,16 @@ Open <http://localhost:8080> for the embedded console; the API is served under `
 
 ## `hanzo` — cloud control CLI
 
-The same binary is also the control CLI for the Hanzo Cloud. The first token selects the mode:
+`cmd/hanzo` is the **client-only** control binary: a thin client over Hanzo IAM
+(`hanzo.id`), the platform control plane (`platform.hanzo.ai/v1`) and the cloud
+`/v1` API, inventing no parallel API. It cannot serve a subsystem — that is
+`cmd/cloud`'s job.
 
-- `hanzo <subsystem>` — **server mode**: serve a subsystem (`hanzo iam`, `hanzo cloud`, …).
-- `hanzo <verb>` — **client mode**: manage the Hanzo Cloud. A thin client over
-  Hanzo IAM (`hanzo.id`), the platform control plane (`platform.hanzo.ai/v1`),
-  and the cloud `/v1` API — it invents no parallel API.
+The first token selects who runs it. The verbs below run here; every other verb
+— `code`, `node`, `dev`, `wallet`, … — is handed to the Rust fabric CLI
+installed alongside as `hanzo-node`, so the single `hanzo` name is a superset of
+both. `cli.IsControlVerb` draws that line off the cobra command tree itself, so
+the two halves cannot drift apart.
 
 ```bash
 hanzo login                       # IAM password grant against hanzo.id → token in ~/.hanzo (0600)
@@ -43,8 +48,8 @@ hanzo apps get <org>/<app>/<env>  # one app row
 hanzo deploy <container> --project <p> --env <e>   # rolling, zero-downtime redeploy
 hanzo clusters list|get|create|select|target       # dedicated DOKS cluster lifecycle
 hanzo build <repo> --sha <sha> --image <img>       # platform-native (arcd/Kaniko) build, no GitHub builders
-hanzo k8s target                  # the org's resolved deploy target (kubeconfig never returned)
 hanzo config set <k> <v>          # ~/.hanzo/config preferences
+hanzo completion bash|zsh|fish    # shell completion for every verb above
 ```
 
 Global flags: `--org`, `-o/--output table|json`, `--platform-url`, `--iam-issuer`,
@@ -54,8 +59,9 @@ authed (it cannot validate user tokens), so `apps`/`deploy`/`clusters` use
 `--platform-token` / `HANZO_PLATFORM_TOKEN` / `PLATFORM_SERVICE_TOKEN`, and
 `build` uses `HANZO_BUILD_TOKEN` / `PLATFORM_BUILD_CALLBACK_TOKEN`.
 
-Install the CLI: `curl hanzo.sh | sh`, or `brew install hanzoai/tap/hanzo`. It is the
-Rust binary in `hanzoai/cli`; this module serves `/v1` and ships plugins, not a CLI.
+Install the fabric CLI: `curl hanzo.sh | sh`, or `brew install hanzoai/tap/hanzo`.
+It is the Rust binary in `hanzoai/cli`; this module serves `/v1`, ships plugins,
+and builds the control half above (`go build ./cmd/hanzo`).
 
 ## Subsystems mounted
 
