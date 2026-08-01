@@ -110,6 +110,24 @@ func Describe(dir string, app *zip.App) error {
 	if err != nil {
 		return fmt.Errorf("openapi: %w", err)
 	}
+	// The gap is refused HERE, at the one producer, and nowhere downstream.
+	//
+	// This is the file that mints the artifact eight SDKs, the MCP tool list, the
+	// CLI and docs.hanzo.ai are all projections of, so an operation that says
+	// nothing about itself becomes a call nobody can explain in every one of them
+	// at once — and each of those consumers is a place where the sentence cannot
+	// be written. A projection that copes (a placeholder, or the route printed
+	// where the description belongs) does not report the gap, it disguises it. So
+	// the document is simply not written: the failure names the app, the route and
+	// the remedy, in the repo that holds the handler.
+	//
+	// Refused at the artifact, not in [openapi.Spec], because the two have opposite
+	// duties. A deployment's own /v1/openapi.json must answer with what it serves
+	// even if a subsystem it mounts is behind on its prose; a COMMITTED artifact is
+	// the fleet's contract and has no such excuse.
+	if err := openapi.Complete(doc); err != nil {
+		return fmt.Errorf("%s: %w", filepath.Base(dir), err)
+	}
 	// A subset describes ONE app, so it says what that app is — the synopsis of
 	// the package its binary mounts, read from the source the app is built from
 	// (openapi.Synopsis). The fleet identity FleetSpec carries is the fallback and

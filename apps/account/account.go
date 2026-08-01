@@ -36,8 +36,7 @@
 //	GET    /v1/keys                  — the caller's keys: { keys: [{ type, prefix, createdAt }] }; no secret.
 //	POST   /v1/keys                  — create/rotate a key of { type: publishable | secret }; returns it ONCE.
 //	DELETE /v1/keys                  — revoke the key of that type.
-//	…      /v1/iam/keys              — DEPRECATED aliases of the three above (same handlers).
-//	POST   /v1/iam/onboard           — create the caller's org (+ move them in on first run).
+//	POST   /v1/orgs                  — create the caller's org (+ move them in on first run).
 //	GET    /v1/csrf                  — mint the anti-CSRF token the SPA echoes on money writes (csrf.go).
 //	GET    /v1/embed                 — brand-app embed entitlement + reachability probe (embed.go).
 //	POST   /v1/commerce/topup/wallet — HUSD on-chain verify → commerce credit (topup.go).
@@ -182,12 +181,9 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// The trailing Group is the path prefix these routes share, and each op's
 	// identity is that prefix composed with its leaf.
 	limit, csrf := rateLimit(s.State.writesRL), requireCSRF(s)
-	deprecated := deprecatedFor("/v1/keys")
-	open := app.Group("/v1")                                      // reads: no gate
-	write := zapp.With(limit, csrf).Group("/v1")                  // money writes
-	guard := zapp.With(csrf).Group("/v1")                         // a write that is not rate-limited
-	alias := zapp.With(deprecated).Group("/v1")                   // deprecated read alias
-	aliasWrite := zapp.With(deprecated, limit, csrf).Group("/v1") // deprecated write alias
+	open := app.Group("/v1")                     // reads: no gate
+	write := zapp.With(limit, csrf).Group("/v1") // money writes
+	guard := zapp.With(csrf).Group("/v1")        // a write that is not rate-limited
 
 	// GET /v1/csrf issues the anti-CSRF token the embedded SPA echoes as X-CSRF-Token on
 	// every money write (csrf.go). Safe (read-only), same-origin.
@@ -217,17 +213,17 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// the wire whole: dropping it would silently revoke a body-selecting caller's
 	// SECRET key in place of the publishable one they named.
 	zip.Delete(write, "/keys", o.revokeKey)
-	// DEPRECATED alias of /v1/keys, kept because the go:embed console addresses it
-	// directly (src/lib/api/keys.ts, IS_EMBED build) against cloud's own origin,
-	// where it is not shadowed by the edge. The SAME handlers — an alias, never a
-	// second implementation — plus a Deprecation header naming the replacement.
-	// These SPECIFIC routes MUST register before clients/iam's /v1/iam/* wildcard
-	// (order 50 > 48) so Fiber's first-match scan hits the native handler
-	// (TestIAMKeysBeatsWildcard).
-	zip.Get(alias, "/iam/keys", o.getKey)
-	zip.Post(aliasWrite, "/iam/keys", o.mintKey)
-	zip.Delete(aliasWrite, "/iam/keys", o.revokeKey)
-	zip.Post(guard, "/iam/onboard", o.onboard)
+	// Creating the caller's organization, named for the RESOURCE — the same rule
+	// that moved the key surface off /v1/iam/keys, applied to the one route it had
+	// not reached. It was POST /v1/iam/onboard, which put a cloud handler inside
+	// IAM's prefix, and api.hanzo.ai routes /v1/iam/* to IAM: this handler answered
+	// nothing in production, measurably (that address returns IAM's own
+	// {"status":401,"error":"authentication required"} from server: zip, with no
+	// Deprecation header and no x-api-version — it never reached cloud). IAM owns
+	// /v1/iam/onboard and serves its own first-run onboarding there. This is the
+	// richer operation and it is now reachable for the first time: it also creates
+	// an ADDITIONAL org for a caller who already has one, without moving them.
+	zip.Post(guard, "/orgs", o.onboard)
 	// Console module embed-entitlement + reachability probe (embed.go).
 	zip.Get(open, "/embed", o.embedStatus)
 	// HUSD wallet top-up (on-chain verify → commerce credit). A SPECIFIC commerce route
@@ -564,25 +560,6 @@ func (o ops) revokeKey(ctx context.Context, in *keyTypeIn) (*revokedKey, error) 
 		return nil, zip.Errorf(http.StatusBadGateway, "could not revoke the API key: %v", err)
 	}
 	return &revokedKey{OK: true, Type: typ}, nil
-}
-
-// deprecatedFor gates a route served at a superseded path: it answers exactly as
-// the canonical path does — the SAME handler, so there is one implementation — and
-// says so on the wire (RFC 8594 Deprecation + a Link naming the successor), which is
-// how a caller finds out without reading a changelog.
-//
-// It is a zip.Middleware, which is what lets ONE definition serve every method of
-// the alias: `With` carries it into the typed registration, so the announcement is
-// a property of the GROUP the ops sit on rather than a wrapper somebody has to
-// remember around each handler.
-func deprecatedFor(canonical string) zip.Middleware {
-	return func(next zip.Handler) zip.Handler {
-		return func(c *zip.Ctx) error {
-			c.SetHeader("Deprecation", "true")
-			c.SetHeader("Link", "<"+canonical+`>; rel="successor-version"`)
-			return next(c)
-		}
-	}
 }
 
 // ── onboard (create the caller's org) ────────────────────────────────────────
