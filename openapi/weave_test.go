@@ -41,9 +41,10 @@ import (
 // into the golden. Without the flag the same weave is the drift gate.
 var weaveOut = flag.String("weave", "", "write the woven document to this path (regenerate the golden)")
 
-// goldenPath and specDir are relative to this package's directory.
+// goldenPath, floorPath and specDir are relative to this package's directory.
 const (
 	goldenPath = "../openapi.yaml"
+	floorPath  = "floor.json"
 	specDir    = "../plugin"
 )
 
@@ -85,6 +86,18 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 		t.Fatalf("weave: %v", err)
 	}
 
+	// THE RATCHET, before anything is written: a regeneration that publishes less
+	// than the committed floor is refused in BOTH modes, so `make openapi` cannot
+	// be the thing that lands a shrunken document. See openapi/floor.go.
+	was, err := openapi.ReadFloor(floorPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raised, err := was.Raise(openapi.Measure(woven))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	j, err := json.Marshal(woven)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -102,7 +115,10 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 		if err := os.WriteFile(*weaveOut, got, 0o644); err != nil {
 			t.Fatalf("write %s: %v", *weaveOut, err)
 		}
-		t.Logf("wrote %s (%d paths)", *weaveOut, len(woven.Paths))
+		if err := raised.Write(floorPath); err != nil {
+			t.Fatalf("write %s: %v", floorPath, err)
+		}
+		t.Logf("wrote %s (%d paths) and %s (%d products)", *weaveOut, len(woven.Paths), floorPath, len(raised.Products))
 		return
 	}
 
@@ -189,6 +205,64 @@ func TestWeaveRefusesCollidingOperationIDs(t *testing.T) {
 	}
 	if _, err := openapi.Weave([]openapi.Part{fixed("a", "/v1/a"), fixed("b", "/v1/b")}); err == nil {
 		t.Fatal("Weave accepted a duplicate operationId — a generator would mis-consume the document")
+	}
+}
+
+// PROVENANCE: every operation names the registry that registered it, so a
+// misplaced one names a repo to file against instead of costing a bisect of 116
+// subsets. Written where it is known and never overwritten — an operation that
+// arrived through a door already knows better than the part it arrived in.
+func TestWeaveNamesTheRegistryBehindEachOperation(t *testing.T) {
+	doc, err := openapi.Weave([]openapi.Part{
+		{App: "ai", Doc: &openapi.Document{Paths: map[string]openapi.PathItem{
+			"/v1/ai/health":        {"get": {OperationID: "a"}},
+			"/v1/chat/completions": {"post": {OperationID: "b", App: "github.com/hanzoai/ai"}},
+		}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := doc.Paths["/v1/ai/health"]["get"].App; got != "ai" {
+		t.Errorf("x-app = %q, want the app that contributed the part", got)
+	}
+	if got := doc.Paths["/v1/chat/completions"]["post"].App; got != "github.com/hanzoai/ai" {
+		t.Errorf("x-app = %q, want the module behind the door — the weave overwrote a registry that had already named itself", got)
+	}
+}
+
+// A DOOR YIELDS TO A SPECIFIC ROUTE, because that is what the matcher does. This
+// is the one overlap Weave resolves, and it resolves it by reading the router's
+// rule off the data — a relayed operation names its own registry, a direct one
+// does not — rather than by preferring an app.
+func TestWeaveGivesTheSpecificRouteWhatTheMatcherGivesIt(t *testing.T) {
+	specific := openapi.Part{App: "provisioning", Doc: &openapi.Document{Paths: map[string]openapi.PathItem{
+		"/v1/search": {"post": {OperationID: "provisioningSearch"}},
+	}}}
+	relayed := openapi.Part{App: "ai", Doc: &openapi.Document{Paths: map[string]openapi.PathItem{
+		"/v1/search": {"post": {OperationID: "aiSearch", App: "github.com/hanzoai/ai"}},
+	}}}
+	for _, order := range [][]openapi.Part{{specific, relayed}, {relayed, specific}} {
+		doc, err := openapi.Weave(order)
+		if err != nil {
+			t.Fatalf("%s first: %v", order[0].App, err)
+		}
+		if got := doc.Paths["/v1/search"]["post"].OperationID; got != "provisioningSearch" {
+			t.Errorf("%s first: operationId = %q, want the specific route — the relay's handler never runs at that address",
+				order[0].App, got)
+		}
+	}
+
+	// Two DOORS at one address is still a refusal: two wildcards overlapping is a
+	// bug at the composition root and there is no rule that picks between them.
+	both := func(app, src string) openapi.Part {
+		return openapi.Part{App: app, Doc: &openapi.Document{Paths: map[string]openapi.PathItem{
+			"/v1/x": {"get": {OperationID: "get_" + app, App: src}},
+		}}}
+	}
+	_, err := openapi.Weave([]openapi.Part{both("ai", "github.com/hanzoai/ai"), both("iam", "github.com/hanzoai/iam")})
+	var c *openapi.Conflict
+	if !errors.As(err, &c) || c.Kind != "operation" {
+		t.Fatalf("Weave = %v, want an operation Conflict between two doors", err)
 	}
 }
 
