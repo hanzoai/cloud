@@ -17,6 +17,8 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -29,9 +31,14 @@ import (
 // usage read). It returns (body, true, nil) with the commerce-shaped
 // {user,count,usage:[...]} envelope — enriched + optionally ?product=filtered /
 // ?groupBy=product-reduced exactly like the proxied path — or (nil, false, nil) when
-// finance is not co-resident (split deploy), so the caller falls back to the commerce
+// this deployment runs no commerce at all, so the caller falls back to the commerce
 // S2S read. This is what keeps /v1/billing/usage off the self-dispatching commerce transport
 // hop; a real read failure surfaces as a non-nil error (never a masked-empty ledger).
+//
+// Absence is the ROUTER's word (cloud.ErrNoPeer), never an inference from a failed
+// call: a dead peer read as an absent one falls back to a URL that is unset in exactly
+// the deployments where the plane is the real path, and the customer is told billing is
+// not configured on a fleet whose ledger is one socket away.
 func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte, bool, error) {
 	fin := finance.Current()
 	if fin == nil {
@@ -43,8 +50,19 @@ func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte,
 		defer cancel()
 		reply, err := cloud.Ask[struct{}, plane.UsageRows](cloud.For(ctx, org), "commerce",
 			plane.FinanceUsage, &struct{}{})
-		if err != nil || reply == nil {
-			return nil, false, nil // no peer either → the configured S2S read
+		if err != nil {
+			if errors.Is(err, cloud.ErrNoPeer) {
+				return nil, false, nil // no commerce in this fleet → the configured S2S read
+			}
+			// The peer is here and the read failed. Ask's contract names ErrNoPeer as
+			// the ONE error a caller may read as "fall back"; every other one is an
+			// outage, and reading them all as absence is what turned a dead commerce
+			// into a phantom split deploy and a 501 on a customer's usage page.
+			return nil, true, fmt.Errorf("usage: commerce ledger read: %w", err)
+		}
+		if reply == nil {
+			// A void reply is not an empty ledger. Nothing was read, so nothing is known.
+			return nil, true, errors.New("usage: commerce answered nothing")
 		}
 		rows := make([]finance.UsageRow, 0, len(reply.Rows))
 		for _, r := range reply.Rows {

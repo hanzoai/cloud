@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	luxlog "github.com/luxfi/log"
@@ -182,6 +184,11 @@ const (
 	// wakeTimeout bounds one start request to the router. A cold child pays its
 	// whole startup inside this, so it is the host's own plugin-start budget.
 	wakeTimeout = 90 * time.Second
+	// probeWait bounds the liveness probe reach() makes before every plane call. A
+	// unix socket with a listener accepts from the backlog whether or not the app is
+	// between requests, so this is a ceiling for a host that has run out of
+	// descriptors — not a cost anyone pays in the steady state.
+	probeWait = 250 * time.Millisecond
 )
 
 // Peer opens a call to another app. The socket is resolved per call, so an app
@@ -201,10 +208,10 @@ func Peer(app string) (*zip.Conn, error) {
 
 // reach makes app's socket resolvable, or says why it cannot be.
 //
-// Bound already ⇒ nothing to do, which is the steady state and costs one stat.
-// Unbound ⇒ ask the router to start it, and let the router's answer decide which
-// fact it is: it owns the manifest, so "no plugin named x" is "not deployed here"
-// and a failed start is an outage.
+// Listening already ⇒ nothing to do, which is the steady state.
+// Not listening ⇒ ask the router to start it, and let the router's answer decide
+// which fact it is: it owns the manifest, so "no plugin named x" is "not deployed
+// here" and a failed start is an outage.
 //
 // The CALLER's deadline governs. wakeTimeout is a ceiling — the host's own
 // plugin-start budget — never a floor: a gate that gave itself ten seconds must
@@ -212,10 +219,20 @@ func Peer(app string) (*zip.Conn, error) {
 // budget expires mid-start still fails closed, and the child it asked for keeps
 // coming up (the host single-flights the start), so the next call finds it.
 func reach(ctx context.Context, app string) error {
-	if exists(zip.SocketPath(app)) {
+	up, err := listening(zip.SocketPath(app))
+	if err != nil {
+		return fmt.Errorf("reach %s: %w", app, err)
+	}
+	if up {
 		return nil
 	}
-	if !exists(zip.SocketPath(plane.HostApp)) {
+	host, err := listening(zip.SocketPath(plane.HostApp))
+	if err != nil {
+		// The router's door is there and unusable. That is an outage, and the same
+		// fail-open argument as below applies: it may never read as absence.
+		return fmt.Errorf("wake %s: the router's start door is unusable: %w", app, err)
+	}
+	if !host {
 		if underRouter() {
 			// We were SPAWNED by a router and its door is gone. That is an outage,
 			// and reading it as "not deployed here" would be the fail-open this
@@ -256,8 +273,8 @@ func reach(ctx context.Context, app string) error {
 		// The router looked in its own plugin table and there is no such app here.
 		return fmt.Errorf("%w: %s (the router runs no such app)", ErrNoPeer, app)
 	}
-	if !exists(zip.SocketPath(app)) {
-		// The router started it and its plane socket is still not there. ServePlane
+	if up, err := listening(zip.SocketPath(app)); err != nil || !up {
+		// The router started it and its plane socket still answers nobody. ServePlane
 		// binds before the app's own listener and the router waits on that listener,
 		// so this cannot be a race — it is an app that serves no plane.
 		return fmt.Errorf("wake %s: started, but it binds no plane socket", app)
@@ -274,14 +291,41 @@ func reach(ctx context.Context, app string) error {
 // ever be read as free.
 func underRouter() bool { return strings.TrimSpace(os.Getenv("ZIP_ADDR")) != "" }
 
-// exists is the HOT-PATH question — "is there a socket to dial" — and it is a
-// stat, because it runs before every plane call and a connect does not. A stale
-// file left by a crash passes it; that is correct, because "the app is here and
-// broken" is an outage, and the caller must learn it from the failed CALL rather
-// than from an absence it would be entitled to fall back on.
-func exists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
+// listening reports whether path has a LISTENER behind it.
+//
+// It CONNECTS, because the FILE does not answer the question. This was a stat, on
+// the argument that a connect is too dear for the hot path and that a stale file
+// left by a crash is "the app is here and broken" — a fact the failed call would
+// then carry. Both halves were wrong for a LAZY app, and the fleet runs 106 of them.
+//
+// A socket file outlives the process that bound it wherever the run directory is a
+// volume, so by stat a pod that died last night is indistinguishable from an app
+// that is up. For a lazy app that difference is the entire answer: the file
+// suppresses the wake that would have PUT a listener there, so the peer is never
+// started, and no number of failed calls changes that — "here and broken" is
+// learnable from the call, "here and never coming up" is not. Prod ran that shape
+// for three days: /var/lib/cloud/run/commerce.sock left by a previous pod, commerce
+// never woken, every prepaid-balance read refused, and the balance gate being
+// fail-CLOSED, every paid completion in the fleet answering 503.
+//
+// It removes nothing. The listener already unlinks a stale path before it binds
+// (zaphttp.Server.ListenAndServe), so the wake this returns to repairs the run
+// directory as a side effect of doing its job and the directory keeps ONE writer.
+//
+// ENOENT (never bound here) and ECONNREFUSED (a file with nobody behind it) are the
+// same fact — there is no listener — and both are the wake path's business. Any
+// OTHER dial error is a socket that is present and unusable: an outage, returned as
+// one, never laundered into an absence a caller would be entitled to fall back on.
+func listening(path string) (bool, error) {
+	c, err := net.DialTimeout("unix", path, probeWait)
+	if err == nil {
+		_ = c.Close()
+		return true, nil
+	}
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED) {
+		return false, nil
+	}
+	return false, err
 }
 
 // awaitSocket blocks until path ACCEPTS, or the listener gives up, or the deadline

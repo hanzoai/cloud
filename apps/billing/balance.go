@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/hanzoai/cloud"
@@ -45,10 +46,15 @@ import (
 func subjectFor(c *zip.Ctx, org string) string { return principal.Subject(c, org) }
 
 // availableCents returns the caller's spendable prepaid balance from the co-resident
-// finance ledger. ok is false when no finance ledger is published (split deploy) and the
-// caller must fall back to the commerce S2S read; a non-nil err is a REAL read failure and
-// must be surfaced, never rendered as a zero balance — a balance that cannot be read is
-// unknown, and unknown is not "broke".
+// finance ledger. ok is false ONLY when this deployment runs no commerce at all (split
+// deploy) and the caller must fall back to the commerce S2S read; a non-nil err is a REAL
+// read failure and must be surfaced, never rendered as a zero balance — a balance that
+// cannot be read is unknown, and unknown is not "broke".
+//
+// "No commerce here" is a fact only the ROUTER can state (cloud.ErrNoPeer), never one
+// inferred from a call that failed. A dead peer read as an absent one is a silent
+// downgrade to a fallback that is unconfigured in exactly the deployments where the plane
+// is the real path — an outage wearing a working deployment's answer.
 func availableCents(ctx context.Context, org, subject string) (cents int64, ok bool, err error) {
 	if fin := finance.Current(); fin != nil {
 		bal, err := fin.Balance(ctx, org, subject, "usd", false)
@@ -69,12 +75,25 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 	out, err := cloud.Ask[plane.BalanceIn, plane.Balance](cloud.For(ctx, org), "commerce",
 		plane.FinanceBalance, &plane.BalanceIn{Subject: subject, Currency: "usd"})
 	if err != nil {
-		// No ledger in this process AND no peer serving one. That is the SPLIT
-		// DEPLOY, which already has an answer: the caller reads commerce over its
-		// configured URL. Reporting "not resolved here" hands it back rather than
-		// making the socket the only path — which would 502 a deployment that is
-		// working exactly as designed.
-		return 0, false, nil
+		if errors.Is(err, cloud.ErrNoPeer) {
+			// The router ANSWERED, from the manifest it owns: this deployment runs
+			// no commerce. That is the SPLIT DEPLOY, which already has an answer —
+			// the caller reads commerce over its configured URL. Handing it back
+			// rather than making the socket the only path is what keeps a
+			// deployment working exactly as designed off a 502.
+			return 0, false, nil
+		}
+		// The peer is HERE and the read failed. Ask's contract names ErrNoPeer as
+		// the only error a caller may read as "fall back"; every other one is an
+		// outage. Reading them all as absence is what hid this outage for three
+		// days: a stale socket meant commerce was never woken, the Ask failed, the
+		// error was dropped on this line, and balance() fell into the commerce
+		// proxy — which is unconfigured in this deployment, so the customer saw
+		// "billing is not configured" and ai's fail-CLOSED gate saw a refusal and
+		// answered 503 balance_unavailable for every paid completion in the fleet.
+		// Nothing logged the reason, because nothing had it. ok=true routes it to
+		// balance()'s warn + 502, which names it.
+		return 0, true, fmt.Errorf("balance: commerce ledger read: %w", err)
 	}
 	if out == nil {
 		// A void reply is not a zero balance. Nothing was read, so nothing is known.
