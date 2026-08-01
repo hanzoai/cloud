@@ -653,7 +653,7 @@ func mountTargets(s *cloud.Service[state], app cloud.Router) {
 	zip.Get(g, "/targets/:id", o.getTarget)
 	zip.Patch(g, "/targets/:id", o.patchTarget)
 	zip.Delete(g, "/targets/:id", o.deleteTarget)
-	// The #48 route-work machine surface (claim-key, claim long-poll, report)
+	// The #48 route-work machine surface (key, claim long-poll, report)
 	// lives on the same target routes; register after the CRUD so the
 	// extra-segment paths are unambiguous.
 	mountRouting(s, app)
