@@ -22,14 +22,38 @@ edge worker that intercepts the prefix and 404s makes the address exactly as
 uncallable as a missing route. The responder is reported (`server:`) because it
 names the OWNER to fix, but it never changes the verdict.
 
-WHAT IS PROBED, and why the shape of the probe is the measurement. Only LITERAL
-(param-free) path keys, and only GET/HEAD. A parameterised path probed with a
-made-up value returns a correct resource-404 from a working handler — that
-mistake produced five "dead routes" that were all fine — and a POST with no body
-either mutates or 400s, so neither answers the routing question. 401 and 403 are
-proof the route exists: authorization ran, which means routing reached a
-handler. So it needs NO credential: a token would only change which of
-{200,401,403} comes back, and none of that is the question.
+WHAT IS PROBED, and why the shape of the probe is the measurement. GET and HEAD
+only: a POST with no body either mutates or 400s, so it never answers the routing
+question. 401 and 403 are proof the route exists — authorization ran, which means
+routing reached a handler — so this needs NO credential. A token would only change
+which of {200,401,403} comes back, and none of that is the question.
+
+BOTH LITERAL AND PARAMETERISED addresses, which is new and is most of the
+document: 776 of the 1208 path keys are literal, so probing only those left 432
+path keys — 36% of everything published — checked by nothing at all. They were
+skipped for a real reason: a parameterised path probed with a made-up value
+returns a correct resource-404 from a working handler, and mistaking those for
+dead routes produced five "defects" that were all fine. But a resource-404 and a
+router miss are DISTINGUISHABLE, so the reason to skip them does not survive
+contact with the discriminator:
+
+  zip/fiber's router-miss body is exactly `404 page not found`. Anything else —
+  JSON, or a handler's own string — proves a HANDLER RAN, which proves the route
+  exists and only the made-up id did not.
+
+So the verdict rule has two branches, because a literal address and a
+parameterised one are asked the same question with different evidence available:
+
+  literal        ANY 404 is dark. There is no made-up value to blame, and the
+                 stricter rule is the one that caught the edge worker — whose
+                 404 carried a JSON body and would pass a body test.
+  parameterised  Only the router-miss body is dark. A handler's 404 is the route
+                 working.
+
+WILDCARDS ARE NOT PROBED. A `{wildcardN}` key is a catch-all, so filling it with
+a sentinel asks about a path nothing was ever meant to serve — the answer is a
+router miss by construction and says nothing about the catch-all. Measured: they
+are the ONLY two "misses" a naive parameterised sweep reports.
 
   reach.py <openapi.yaml> <base-url> <ratchet-file>
 
@@ -43,27 +67,41 @@ what is wrong instead of hiding that anything is.
 """
 
 import concurrent.futures as futures
+import re
 import sys
 import urllib.error
 import urllib.request
 
 TIMEOUT = 20
 
+# The value substituted for every {param}. Deliberately unmistakable: whatever
+# comes back, a reader can tell the id was the probe's and not a real one.
+SENTINEL = "zzz-reach-probe"
 
-def literal_ops(doc):
-    """(METHOD, path) for every path key with no {param} and no wildcard."""
+# zip/fiber's router-miss body, exactly. This one string is the whole reason a
+# parameterised address can be probed at all.
+ROUTER_MISS = b"404 page not found"
+
+
+def probed_ops(doc):
+    """(METHOD, published-path, url-to-probe) for every address worth asking about.
+
+    Wildcard keys are dropped, not filled: see the module docstring.
+    """
     out = []
     for path, item in (doc.get("paths") or {}).items():
-        if "{" in path or not path.startswith("/"):
+        if not path.startswith("/") or "{wildcard" in path:
             continue
         for method in item or {}:
             if method.lower() in ("get", "head"):
-                out.append((method.upper(), path))
+                out.append(
+                    (method.upper(), path, re.sub(r"\{[^}]+\}", SENTINEL, path))
+                )
     return sorted(set(out))
 
 
-def probe(base, method, path):
-    req = urllib.request.Request(base.rstrip("/") + path, method=method)
+def probe(base, method, url):
+    req = urllib.request.Request(base.rstrip("/") + url, method=method)
     req.add_header("accept", "application/json")
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
@@ -74,9 +112,48 @@ def probe(base, method, path):
         return 0, str(e).encode()[:200], ""
 
 
+def is_dark(published, code, body):
+    """Did this answer prove the address is UNROUTED?
+
+    The two branches are the docstring's, and the asymmetry is deliberate: a
+    literal address has no made-up value to blame, so any 404 condemns it — the
+    rule that caught an edge worker whose 404 carried a JSON body.
+    """
+    if code != 404:
+        return False
+    if "{" not in published:
+        return True
+    return body.strip() == ROUTER_MISS
+
+
+def check_instrument():
+    """Prove the oracle before trusting it. Runs on every real run, costs nothing.
+
+    The whole gate now rests on one string, so the string gets a test — and it
+    lives HERE rather than in a test file nobody runs, because a measuring
+    instrument that is not checked at the moment of measuring is an instrument
+    nobody checks. The case that matters most is row 2: an edge worker's 404
+    carried a JSON body, and a body-only rule would have called it healthy.
+    """
+    doc = {"paths": {"/v1/lit": {"get": {}}, "/v1/x/{wildcard1}": {"get": {}}}}
+    assert probed_ops(doc) == [("GET", "/v1/lit", "/v1/lit")], "wildcards must drop"
+
+    handler_404 = b'{"status":404,"error":"no such repository"}'
+    for published, code, body, want, why in (
+        ("/v1/lit", 404, ROUTER_MISS, True, "literal, router miss"),
+        ("/v1/lit", 404, handler_404, True, "literal, ANY 404 is dark"),
+        ("/v1/lit", 401, b"", False, "401 proves routing reached a handler"),
+        ("/v1/t/{id}", 404, ROUTER_MISS + b"\n", True, "parameterised, router miss"),
+        ("/v1/t/{id}", 404, handler_404, False, "parameterised, the id was made up"),
+    ):
+        got = is_dark(published, code, body)
+        assert got is want, f"is_dark({why}) = {got}, want {want}"
+
+
 def main():
     if len(sys.argv) != 4:
         sys.exit(__doc__)
+    check_instrument()
     spec, base, ratchet_path = sys.argv[1:]
 
     try:
@@ -88,7 +165,7 @@ def main():
 
         doc = json.load(open(spec))
 
-    ops = literal_ops(doc)
+    ops = probed_ops(doc)
     ratchet = {
         line.strip()
         for line in open(ratchet_path)
@@ -97,17 +174,21 @@ def main():
 
     dark = {}
     with futures.ThreadPoolExecutor(max_workers=16) as pool:
-        jobs = {pool.submit(probe, base, m, p): (m, p) for m, p in ops}
+        jobs = {pool.submit(probe, base, m, u): (m, p) for m, p, u in ops}
         for job in futures.as_completed(jobs):
             m, p = jobs[job]
             code, body, server = job.result()
-            if code == 404:
+            if is_dark(p, code, body):
                 dark[f"{m} {p}"] = server or "?"
 
     new = sorted(set(dark) - ratchet)
     healed = sorted(ratchet - set(dark))
 
-    print(f"reach: {len(ops)} literal addresses probed against {base}")
+    literal = sum(1 for _, p, _ in ops if "{" not in p)
+    print(
+        f"reach: {len(ops)} addresses probed against {base} "
+        f"({literal} literal, {len(ops) - literal} parameterised)"
+    )
     print(f"reach: {len(dark)} dark, {len(ratchet)} on the ratchet")
 
     for line in healed:
