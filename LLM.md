@@ -4067,3 +4067,114 @@ SDK and every MCP tool list that answer 404 in production: the same dark hole th
 `api-hanzo-ai-catalog` router opened under `/v1/models` and `/v1/pricing`, which
 cost 17 documented-but-uncallable operations. Re-home that surface only after the
 upstream ships it, and prove the upstream answers before declaring anything.
+## Hanzo Risk (`apps/risk`) — `/v1/risk` + the native `/v1/ml` leaves
+
+One app, two prefix families, one core. `/v1/risk` is the DECISION plane for any
+entity (account, transaction, session, agent, merchant, payout); `/v1/ml` is the
+MODEL plane it is built on. Fraud is a USE of `/v1/risk` — so is abuse, so are
+bots, account takeover, spam and pay-as-you-go abuse. **There is no `/v1/fraud`.**
+
+**The ml leaves are on THIS row, not on `ml`'s, and that is the load-bearing
+decision.** A manifest row is a BINARY, and the model is in-process MUTABLE state
+(one half-space forest per tenant, held as mass counters). If `plugin/ml` trained
+and `plugin/risk` scored, the two processes would hold different counters and
+there would be NO error — just two different answers to one question. `ml`'s row
+is unchanged and nothing moves: it never claimed bare `/v1/ml`, so longest-prefix
+match separates `/v1/ml/models` (ml) from `/v1/ml/score` (risk), exactly as it
+already separates `storage`'s `/v1/s3/buckets` from `provisioning`'s `/v1/s3`.
+
+**The engine is a MODULE DEP, and only part of it is linked.** `github.com/luxfi/aml`
+enters the way `luxfi/kms` and `hanzoai/o11y` do — no source vendored. Only four
+packages are linked: `types`, `velocity`, `anomaly`, `replay`.
+
+**MEASURED CORRECTION, worth not re-learning: `pkg/engine` is NOT base-free.**
+A grep for `hanzoai/base` inside its own files finds nothing, which is how the
+claim gets made. `go list -deps` finds the truth:
+
+    pkg/engine -> pkg/history -> pkg/store -> github.com/hanzoai/base/core
+                                           -> github.com/hanzoai/tasks (Temporal SDK)
+
+Same for `pkg/measure` and `pkg/history`. Linking them would drag an application
+framework and a workflow engine into a payment-authorization path. So the risk
+rule plane is a CLOSED ALGEBRA declared cloud-side (`rule.go`): a fixed field
+vocabulary, a fixed operator set, conjunction only. That is injection-safe by
+construction, is a TYPED wire shape (so it reaches the SDKs, the CLI and the MCP
+tools as a schema instead of an opaque expression string), and replays without an
+interpreter. The upstream fix — split `pkg/history`'s Base-backed store into its
+own package — is owed and would let `pkg/engine` in later without a rewrite here.
+
+**The hot path never reads the warehouse.** A payment decide sits inside a
+processor's authorization window and the datastore is one StatefulSet pod that has
+taken api.hanzo.ai down before. `POST /v1/risk/decide` reads in-memory velocity
+rings, the tenant's own SQLite, and the in-process model. ClickHouse
+(`hanzo.risk_feature`) is the BACKFILL that warms the rings and the read behind
+the dictionary and the search sandbox. Measure p50/p99 with the warehouse DOWN; a
+decide that needs analytics up is a payment plane that fails when analytics does.
+
+**Cross-org learning is AGGREGATE-ONLY and the boundary is three layers deep:**
+
+    type level   apps/risk/feature.go is the ONLY file that reads a feature table,
+                 and every function there takes a minted `Tenant`. Tenant has no
+                 exported constructor and no json tags, so it cannot arrive off the
+                 wire; tenantOf(ctx) is the only source and it reads the VALIDATED
+                 principal cloud.Bridge parked.
+    value level  hanzo.risk_baseline has NO tenant column, no subject, no id and no
+                 pseudonym — quantiles only. There is no query that returns one
+                 org's rows because the rows do not exist. The populate statement
+                 is a package CONSTANT with no placeholder and a HAVING clause
+                 carrying the k-anonymity floor (25 orgs, 1000 observations).
+    key level    the tenant key is `<brand>/<org>` (tenant.go qualify), minted in
+                 ONE place, and the brand half comes from deps.Brand and NEVER a
+                 header. It is the store index, the engine's org column AND the
+                 seed of the per-tenant tree geometry — so two tenants do not
+                 merely hold different counters, they hold different TREES.
+
+`$public` — the reserved anonymous lane the event door files credential-less
+writes under — is refused at the mint AND excluded from the baseline statement.
+
+**Shadow is the default and the default is not configurable.** Two gates in
+series: the engine store is constructed `Shadow: true`, and a tenant's own record
+plane holds `mode` (shadow|live, `PUT /v1/risk/mode`). In shadow every rule runs,
+the model scores and learns, every decision is recorded, and the action is always
+allow. Statistical evidence is capped at `review` (`modelCeiling`) and that cap is
+NOT weakened for the payment stage: a model can put a transaction in front of a
+person; it cannot decline one.
+
+**Durable first, analytics after.** Every decision lands in the tenant's own
+encrypted SQLite before `analytics.PublishEvents` emits the copy. `/v1/event` is
+best-effort by design — it answers `{accepted, dropped}` and the anonymous lane
+drops on purpose — so a record that rode it would be lost by a bus hiccup,
+invisibly.
+
+**Shutdown is not housekeeping.** cloud deploys `strategy: Recreate` at 1 replica,
+so every rollout drops every in-memory model. `Plugin.Shutdown` snapshots every
+resident tenant and `tenantState` restores on first touch. Without it every deploy
+returns every tenant to warming — and a warming model REFUSES to score, which
+reads as "clean" to anything that does not check `Refusal`.
+
+**Metering: `decide` meters AFTER, `train` and `search` gate BEFORE.**
+`cloud.DenyResource` writes the fleet's NESTED `{"error":{...}}` 402 in band and a
+typed op's error renders FLAT, so a pre-work gate on the hot path would either
+move the 402 body every balance-aware client parses or force the route untyped.
+The screen is billed on the decision that was actually produced. `train` and
+`search` are real CPU and ARE gated — they are new routes, so no client parses a
+nested body from them and a typed 402 costs nothing.
+
+**Untyped by design: exactly one route.** `GET /v1/risk/health` answers 503
+carrying the degraded REPORT as its body. `apps/risk/typed_wire_test.go` holds the
+closed list, and it also pins the whole served surface as a diffable list —
+34 operations, 33 MCP tools.
+
+**Build:** `-tags sqlite_math_functions` under CGO (hanzoai/base's gate).
+`modernc.org/sqlite` is NOT in the risk graph, so the image's SQLITE-GATE stays
+green — verify with
+`CGO_ENABLED=1 go list -tags 'libsqlite3 sqlite_fts5 sqlite_math_functions' -deps ./plugin/risk | grep modernc`.
+
+**No chart change is needed to serve it.** `api.hanzo.ai/` already routes to
+cloud, `CLOUD_ENABLE` is unset in `charts/app/values/hanzo/cloud.yaml` (so every
+manifest app is enabled), and the image builds one binary per `plugin/<app>`.
+Landing it is an image pin. **`/v1/aml` is deliberately NOT claimed here** — the
+Ingress still points that path at `service: aml` (the amld pod holding the live
+5-year retention plane), and claiming it in cloud without deleting that rule in
+the SAME commit gives a compliance surface answering from a store that is not the
+record.

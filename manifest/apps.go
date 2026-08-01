@@ -106,6 +106,29 @@ var Apps = []App{
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
 	{Name: "webhooks", Prefixes: []string{"/v1/webhooks"}},
 	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models", "/v1/train/experiments", "/v1/train/health", "/v1/train/jobs"}},
+	// risk owns THREE things that are one thing: the decision plane (/v1/risk)
+	// and the NATIVE leaves of the model plane (/v1/ml/*), which the decision
+	// plane's own state backs.
+	//
+	// The ml leaves are on THIS row and not on ml's, and that is the sharpest
+	// structural point in the design. A manifest row is a BINARY, and the model
+	// is in-process MUTABLE state: one half-space forest per tenant, held as mass
+	// counters that every score reads and every train writes. If plugin/ml
+	// trained and plugin/risk scored, the two processes would hold DIFFERENT
+	// counters and there would be no error, no log and no 404 — just two
+	// different answers to one question. One owner of the state, one row.
+	//
+	// ml's row is unchanged and there is no conflict: it never claimed bare
+	// "/v1/ml", so /v1/ml/health and /v1/ml/models still reach it and
+	// /v1/train/* is untouched. Longest-prefix match separates the two exactly
+	// as it already separates storage's /v1/s3/buckets from provisioning's
+	// /v1/s3 — no route moves. zip refuses two owners for one prefix at compose
+	// time, which is the gate under all of this.
+	{Name: "risk", Prefixes: []string{
+		"/v1/risk",
+		"/v1/ml/features", "/v1/ml/restore", "/v1/ml/score", "/v1/ml/search",
+		"/v1/ml/snapshot", "/v1/ml/state", "/v1/ml/train",
+	}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},
