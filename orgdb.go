@@ -285,6 +285,26 @@ func (c *OrgStore[T]) durKey(orgID, project string) (slug, dbKey string) {
 	return slug, org.DBPath(slug, scope, c.subsystem)
 }
 
+// Has reports whether (org, project) ALREADY has a store for this subsystem on
+// disk, without opening or creating anything.
+//
+// It exists for reads whose org is named by an UNAUTHENTICATED caller — a public
+// gallery route addressed as /{org}/{project}, say. For calls MkdirAll and opens,
+// so asking it about a name a stranger supplied would let that stranger mint an
+// empty directory and an open handle per name they invent. Has answers the
+// question that route actually has ("is there anything here?") without the side
+// effect, so the caller can 404 a name that names nothing.
+//
+// An authenticated, org-scoped caller does NOT want this: its org is real by
+// construction and its store must be created on first touch.
+func (c *OrgStore[T]) Has(orgID, project string) bool {
+	path, _, err := orgDBPath(c.dataDir, orgID, project, c.subsystem)
+	if err != nil {
+		return false
+	}
+	return cek.Exists(path)
+}
+
 // forPath opens (and migrates on first use) the store at an already-resolved DB
 // path, caching by path. It is the shared core of For and Each: the cache key is
 // the path, so an org reached via For(org) and the SAME file reached via Each's
