@@ -67,6 +67,10 @@
 //     argument (publicProps): the @hanzo/observe annotation and NOTHING else. So an
 //     anonymous row's attributes still hold exactly what the SERVER put there — the
 //     folded $exception and the write core's $source.
+//   - IDENTITY is NAMESPACED, because nobody signed for it (publicSubject). The ids an
+//     anonymous caller supplies are its own browser's, and they are stored under a
+//     reserved prefix that no identified subject can carry — so an unattested row can
+//     never join, in any lens, to a person the org actually knows.
 //   - BYTES and COUNT are bounded first, and REFUSED rather than truncated.
 //   - RATE is capped per client IP and, independently, per socket peer.
 //   - DNT / Sec-GPC on the wire is honored: nothing is stored and the receipt says so.
@@ -327,6 +331,42 @@ func publicProps(p map[string]any) map[string]any {
 	return out
 }
 
+// anonymousSubject is the namespace an UNATTESTED subject is stored under, and maxSubject
+// bounds one. The '$' is the same reserved marker publicTenant carries and holds by the
+// same argument: an identified subject is an IAM subject or the app's own person id, and
+// neither is spelled with a leading '$', so a namespaced id lies outside the identified
+// space and cannot collide with a person a real org knows.
+//
+// 256 bytes is far past any minted id (@hanzo/event's is a uuid, 36) and the value is
+// keyed — uniqExact(distinct_id) is how every lens counts visitors — so an over-long one
+// is not an id at all.
+const (
+	anonymousSubject = "$anon:"
+	maxSubject       = 256
+)
+
+// publicSubject namespaces the ONE identity an anonymous caller supplies. NOBODY SIGNED
+// FOR IT, so it may not be stored as a name that identifies a person.
+//
+// The signed lane's answer is attribute(): the token's own subject REPLACES whatever the
+// caller sent, "so a `distinctId` in the body cannot pin events on a colleague". This
+// lane has no token to substitute, and a bare drop is not the answer either — distinct_id
+// is what uniqExact counts, so an empty one collapses every anonymous visitor into one.
+// Namespacing keeps the count (one browser, one id, unchanged bytes after the prefix) and
+// takes away the collision: `victim@corp.com` off the wire lands as `$anon:victim@corp.com`
+// and joins nothing that org's identified rows hold.
+//
+// Empty in, empty out — an anonymous row legitimately carries no subject at all (a
+// sendBeacon from a browser with no storage), and a bare prefix would be a subject that
+// names nothing pretending to be one.
+func publicSubject(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" || len(id) > maxSubject {
+		return ""
+	}
+	return anonymousSubject + id
+}
+
 // admitPublic is the anonymous lane's WHOLE capability decision, and it is PURE over
 // the decoded batch: it returns the events that may be stored and how many were
 // dropped. It decides WHAT, never WHERE — it takes no *zip.Ctx AND no org, so neither
@@ -336,9 +376,10 @@ func publicProps(p map[string]any) map[string]any {
 // returned for the request's host.
 //
 // Each admitted event is REBUILT from the allowlisted fields rather than edited, so a
-// field this function does not name cannot reach the row. Both caller-controlled
-// vocabularies come back through a server-owned decision on the way in — the name from
-// publicName, the property keys from publicProps — so neither is copied across.
+// field this function does not name cannot reach the row. Every caller-controlled
+// vocabulary comes back through a server-owned decision on the way in — the name from
+// publicName, the property keys from publicProps, the subject from publicSubject — so
+// none of them is copied across.
 func admitPublic(evs []CaptureEvent) ([]CaptureEvent, int) {
 	out := make([]CaptureEvent, 0, len(evs))
 	dropped := 0
@@ -353,8 +394,8 @@ func admitPublic(evs []CaptureEvent) ([]CaptureEvent, int) {
 			Type:        canonicalType(e.Type),
 			Event:       name,
 			Timestamp:   e.Timestamp,
-			DistinctID:  e.DistinctID,
-			AnonymousID: e.AnonymousID,
+			DistinctID:  publicSubject(e.DistinctID),
+			AnonymousID: publicSubject(e.AnonymousID),
 			SessionID:   e.SessionID,
 			Product:     e.Product,
 			URL:         e.URL,

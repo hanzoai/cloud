@@ -137,7 +137,7 @@ func init() {
 		Example: json.RawMessage(`{"limit":100}`),
 	})
 	zip.Describe("GET /v1/insights/events", zip.Doc{
-		Description: "InsightsEvents returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
+		Description: "Returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
 		Fields: map[string]string{
 			"eventList.data":          "Data is the events, newest first. Empty rather than absent when there are none.",
 			"limitQuery.limit":        "Limit is how many rows to return, newest first. Default 50, maximum 200; a\nvalue at or below zero, or one that is not a number, takes the default.",
@@ -155,7 +155,7 @@ func init() {
 		Example: json.RawMessage(`{"limit":100}`),
 	})
 	zip.Describe("GET /v1/insights/health", zip.Doc{
-		Description: "InsightsHealth reports that the unified insights surface is serving. It reads no\ntenant data and consults no dependency, so it answers 200 unconditionally and needs\nno principal — liveness must be probe-able. The warehouse-connectivity probe is a\ndifferent question and lives at GET /v1/analytics/health.",
+		Description: "Reports that the unified insights surface is serving. It reads no\ntenant data and consults no dependency, so it answers 200 unconditionally and needs\nno principal — liveness must be probe-able. The warehouse-connectivity probe is a\ndifferent question and lives at GET /v1/analytics/health.",
 		Fields: map[string]string{
 			"insightsStatus.engine":  "Engine names the engine serving the surface: hanzo-analytics.",
 			"insightsStatus.ok":      "OK is always true — reaching this route is the liveness fact it reports.",
