@@ -2,6 +2,8 @@ package sync
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +97,27 @@ func TestGitTokenFallback(t *testing.T) {
 	t.Setenv(gitMirrorTokenEnv, "mirror-tok")
 	if tok, err := gitToken(ctx, provGitLab, "acme", "", ""); err != nil || tok != "" {
 		t.Fatalf("gitlab want no minted token, got (%q,%v)", tok, err)
+	}
+}
+
+// The reconcile runs on a SCHEDULE, so there is no request to forward. Both
+// cross-process calls it makes — the import and the inbound advance — must state
+// the org they act for, or they reach the git app anonymous and are refused. This
+// is what stalled the GitHub→forge mirror: "import: git import: org required".
+func TestTheScheduledReconcileStatesItsTenant(t *testing.T) {
+	src, err := os.ReadFile("git_provider.go")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	s := string(src)
+	for _, call := range []string{"cloud.ImportGitRepo(cloud.For(ctx, owner)", "cloud.InboundGitSync(cloud.For(ctx, owner)"} {
+		if !strings.Contains(s, call) {
+			t.Errorf("%s… does not state a tenant; the plane call arrives anonymous", call[:34])
+		}
+	}
+	// The org is the SYNC's own, never a field of the event being processed — an
+	// inbound request wins over a stated one, so a job cannot launder an identity.
+	if strings.Contains(s, "cloud.For(ctx, ev.") {
+		t.Error("the tenant must come from the sync, not the event")
 	}
 }

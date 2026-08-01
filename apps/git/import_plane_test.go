@@ -56,3 +56,36 @@ func TestAnonymousImportIsRefused(t *testing.T) {
 		t.Error("an anonymous import must be refused")
 	}
 }
+
+// A push advancing a branch crosses the same boundary an import does: the app
+// that RECEIVES the webhook (or runs the scheduled reconcile) is not the app that
+// holds the repos.
+func TestInboundIsPublishedOnThePlane(t *testing.T) {
+	src, _ := os.ReadFile("import_plane.go")
+	s := string(src)
+	if !strings.Contains(s, `"/git/inbound"`) {
+		t.Error("no plane route: a push from another process cannot advance a ref")
+	}
+	if !strings.Contains(s, `zip.ErrForbidden("git inbound: org required")`) {
+		t.Error("an anonymous push must be refused, not applied somewhere")
+	}
+	if !strings.Contains(s, "Org: who.Org") {
+		t.Error("the ref must be advanced for the CALLER's org")
+	}
+}
+
+// A divergence is an ANSWER, not an error: native is canonical and was left
+// untouched, and the caller needs to know that rather than retry into an
+// overwrite. Conflict must survive the trip as a field.
+func TestADivergenceCrossesThePlaneAsAnAnswer(t *testing.T) {
+	src, _ := os.ReadFile("import_plane.go")
+	s := string(src)
+	if !strings.Contains(s, "Conflict: res.Conflict") {
+		t.Error("a conflict must come back as a value; as an error it reads as a retryable failure")
+	}
+	for _, f := range []string{"Applied:", "NoOp:", "Before:", "After:"} {
+		if !strings.Contains(s, f) {
+			t.Errorf("the reply drops %s, so the caller cannot tell what happened", f)
+		}
+	}
+}
