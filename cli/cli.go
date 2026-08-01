@@ -1,5 +1,5 @@
-// Package cli is the Hanzo cloud-control CLI — the gcloud/doctl-class client
-// half of the `hanzo` binary.
+// Package cli is the Hanzo cloud-control CLI — the client half of the `hanzo`
+// binary: one command tree over the whole live estate.
 //
 // `hanzo <subsystem>` SERVES a subsystem (server mode, cmd/hanzo dispatch);
 // `hanzo <verb>` CONTROLS the live estate (client mode, this package):
@@ -544,7 +544,7 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "hanzo",
 		Short:         "Hanzo cloud control — manage the live Hanzo estate",
-		Long:          "hanzo — gcloud/doctl-class control for the Hanzo platform (IAM, apps, deploys, clusters, builds).",
+		Long:          "hanzo — one command tree over the live Hanzo platform: identities, apps, deploys, clusters and builds.",
 		SilenceUsage:  true,
 		SilenceErrors: false,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {

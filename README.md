@@ -28,7 +28,7 @@ Open <http://localhost:8080> for the embedded console; the API is served under `
 
 ## `hanzo` — cloud control CLI
 
-The same binary is also a gcloud/doctl-class CLI. The first token selects the mode:
+The same binary is also the control CLI for the live estate. The first token selects the mode:
 
 - `hanzo <subsystem>` — **server mode**: serve a subsystem (`hanzo iam`, `hanzo cloud`, …).
 - `hanzo <verb>` — **client mode**: control the live estate. A thin client over
