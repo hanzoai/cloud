@@ -2587,6 +2587,67 @@ migration silently strips request shapes from every generated CLI and SDK.
   983/692/109. Every number in this file is tagged with how to re-measure it;
   keep it that way.
 
+## Lifecycle defense: ONE scorer seam, ONE fail policy, a sensor at the edge
+
+`risk.go` · `agency.go` · `middleware_abuse.go` · `apps/gateway/edge/traffic.go`
+
+**`cloud.Decide` is the only door to `/v1/risk`.** The app that owns `/v1/risk`
+hands its scoring function to the core with `cloud.SetRiskScorer` — the same
+inversion `SetObsEventIngest` uses, because package `cloud` cannot import an app.
+Nothing in cloud scores; a second scorer would be a second answer to one question
+and the two would disagree silently.
+
+**The fail policy is `riskUnavailable`, and it is the only copy.** A scorer that
+is absent, erroring, silent, out-of-vocabulary, panicking or past `RiskBudget`
+(150ms, enforced by the caller) ALLOWS an ordinary request and BLOCKS a
+`Privileged` one. Every answer carries a `Refusal`, so an allow-because-nobody-
+was-listening is never recorded as clean. `Privileged(method, path)` is the
+data list of grants: credential minting/revocation, identity provisioning,
+sign-up, onboarding, the key store (all methods), and admin/org MUTATIONS.
+
+**`AbuseGate` sits `AuditTrail → ScopeRateLimit → AbuseGate → StarterGrant →
+BillingGate`.** It keys on the CREDENTIAL, which neither existing limiter can see
+— EdgeRateLimit keys on IP pre-auth, ScopeRateLimit on (org, project, service) —
+so a stolen key inside its org's normal ceiling is invisible to both. It counts,
+classifies, asks and enforces; it never scores. A non-allow verdict is HELD for a
+minute so an attack costs one screen, not one per request. A refusal is a 401/403,
+which AuditTrail already puts in the tamper-evident trail — there is no second
+audit write, because one event must not have two records.
+
+**SHADOW PER ORG BY DEFAULT** (`edge.Policy.Mode`, the one new knob). Shadow
+senses and records and enforces nothing. `PUT /v1/gateway/config {"mode":"live"}`
+is REFUSED while no scorer is installed: fail-closed on a component that was never
+wired is an outage, not a defense, and this is what makes the distinction real.
+Only live mode reaches the scorer, meters a screen, or fails closed.
+
+**Agency — the differentiator.** `agency(class, pattern)` is pure and total, and
+reads OUR issuance, never the client's self-description (there is no user-agent
+heuristic and there must not be one). An attributable machine credential is the
+`agent` lane whatever it claims to be; a browser session is `human`; an
+unattributable caller is `unknown` until it shows an abuse SHAPE — many
+credentials from one address, a wall of refusals, a path sweep — and only then
+`bot`. Anonymous is not malicious.
+
+**The sensor** (`edge.Traffic`, a LEAF package so the middleware and the app share
+ONE object) counts requests, 401/403 failures, path spread and peer spread per
+(org, credential) over a rolling minute. Bounded by construction: a fixed ring
+plus two 64-bit population-count words per key, a capped and swept table.
+Credentials appear only as a keyed per-process fingerprint — never a bare digest,
+so a published fingerprint cannot be tested against a candidate key off-box.
+Every key leads with org; `View` cannot contain another tenant's rows.
+
+`GET /v1/gateway/traffic` (`gatewayTraffic`) reports the caller's own org: lane
+split, denials, screens, and its busiest credentials by fingerprint. Screens are
+counted there from the first request AND metered on the org's usage ledger —
+`ResourceMeter.Meter` is a no-op while `CLOUD_RISK_SCREEN_CENTS` is unset (0),
+because the price belongs to the pricing catalog and inventing one here would be
+a fabricated number.
+
+The other enforcement point is in `hanzoai/iam` (`internal/risk` +
+`internal/oidc/signup_gate.go`), which calls `POST /v1/risk/decide` over the wire
+at sign-up. Its arming signal is `RISK_URL` rather than a per-org mode; the
+semantic is identical — fail closed once armed, allow before.
+
 ## Cross-subsystem seams that are values, not places
 
 - **AN AGGREGATOR CALLS; IT DOES NOT IMPORT.** Apps are separate binaries, so a Go

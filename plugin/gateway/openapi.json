@@ -75,6 +75,28 @@
           }
         }
       }
+    },
+    "/v1/gateway/traffic": {
+      "get": {
+        "operationId": "gatewayTraffic",
+        "summary": "Report who is calling this org's API right now",
+        "description": "Traffic reports who is calling this organization's API right now: the request\ncount for the last minute split by AGENCY LANE — agent, human, bot, unknown —\nand the busiest credentials behind it, each with its request count, its\nauthentication-failure count, how many distinct paths it touched, and any\nverdict currently held against it.\n\nThe lane split is the answer to the question a generic bot filter cannot\nanswer: which of this traffic is the customer's own automation and which is\nsomebody working through a list. It is computed from credentials we issued, not\nfrom the client's self-description, so a scraper cannot move itself into the\nagent lane by editing a header.\n\nA credential appears as a FINGERPRINT — a one-way, per-process digest. It is\nstable enough to recognise the same caller across a minute and cannot be turned\nback into a key, so this report is safe to read, screenshot and paste.\n\nScoped to the caller's own validated organization. A SuperAdmin may inspect a\nspecific tenant with ?org=\u003cslug\u003e.",
+        "tags": [
+          "gateway"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrafficView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -106,6 +128,10 @@
             },
             "type": "array"
           },
+          "mode": {
+            "description": "Mode is the abuse gate's posture for this org: \"shadow\" scores traffic and\nrecords the verdict without acting on it, \"live\" enforces it. Unset means\nshadow — a statistical judgement never starts refusing an org's traffic\nbecause the feature shipped, only because the org turned it on.",
+            "type": "string"
+          },
           "org_rpm": {
             "description": "OrgRPM is the org's OWN authenticated rate ceiling, requests per minute, as\nScopeRateLimit enforces it. Unset inherits the platform default, then the\nstatic boot default.",
             "type": "integer"
@@ -124,6 +150,82 @@
           },
           "window_sec": {
             "description": "WindowSec is the window PerIPRPM is counted over, in seconds. SuperAdmin-only.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "TrafficCaller": {
+        "properties": {
+          "action": {
+            "description": "Action is the verdict currently held against it, if any.",
+            "type": "string"
+          },
+          "cred": {
+            "description": "Cred is the credential fingerprint — a per-process one-way digest, not a key.",
+            "type": "string"
+          },
+          "failures": {
+            "description": "Failures is how many ended 401 or 403.",
+            "type": "integer"
+          },
+          "held_until": {
+            "description": "HeldUntil is when the held verdict lapses, unix seconds.",
+            "type": "integer"
+          },
+          "paths": {
+            "description": "Paths is the approximate number of distinct paths it touched (max 64).",
+            "type": "integer"
+          },
+          "reason": {
+            "description": "Reason is why that verdict was reached.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is its request count in the window.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "TrafficView": {
+        "properties": {
+          "callers": {
+            "description": "Callers is the org's busiest credentials this window, by fingerprint. The\nfingerprint is a per-process one-way digest: enough to recognise the same\ncaller across requests, never enough to reconstruct the credential.",
+            "items": {
+              "$ref": "#/components/schemas/TrafficCaller"
+            },
+            "type": "array"
+          },
+          "denied": {
+            "description": "Denied is how many of them the gate refused.",
+            "type": "integer"
+          },
+          "lanes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Lanes is the request count per agency lane — agent, human, bot, unknown.\nThis is the split that separates a customer's automation from a scraper.",
+            "type": "object"
+          },
+          "mode": {
+            "description": "Mode is the abuse gate's posture for this org: \"shadow\" records the scorer's\naction without enforcing it, \"live\" enforces it.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the tenant this view was taken for — the validated principal's own,\nnever a value the caller supplied.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is how many requests this org made in the window.",
+            "type": "integer"
+          },
+          "screens": {
+            "description": "Screens is how many of them were put to the scorer — the billable unit of\nthe risk product. Counted from the first request, whatever the SKU costs.",
+            "type": "integer"
+          },
+          "window_sec": {
+            "description": "WindowSec is the span the counts cover, in seconds.",
             "type": "integer"
           }
         },

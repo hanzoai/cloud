@@ -150,6 +150,15 @@ type Deps struct {
 	// SAME store. Never nil — New always returns a working (static-only on store
 	// error) *Store, so the edge is never blocked. See clients/edge.
 	GatewayPolicy *edge.Store
+
+	// Traffic is the edge's live sensor: per-credential request cadence, path
+	// spread, auth-failure rate and the verdict currently held against a caller.
+	// BuildDeps constructs it once; AbuseGate (middleware_abuse.go) writes it on
+	// every request and the /v1/gateway/traffic op reads the caller's OWN org's
+	// slice of it. In-memory and bounded by construction — it is a sensor, not a
+	// record, and it is rebuilt from live traffic within one window after a
+	// restart. Nil makes the gate a no-op passthrough.
+	Traffic *edge.Traffic
 }
 
 // Per-subsystem client interfaces live in cloud/types so the
