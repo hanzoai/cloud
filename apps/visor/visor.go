@@ -416,7 +416,7 @@ func (o ops) listMachines(ctx context.Context, _ *noArgs) (*machineList, error) 
 	}
 	// Fold in the org's BYO machines (provider="byo") so the console's Machines
 	// page shows dialed-in GPUs next to Visor-provisioned ones.
-	for _, w := range byoWorkers(org) {
+	for _, w := range byoWorkers(ctx, org) {
 		out = append(out, byoMachineView(w))
 	}
 	return &machineList{Machines: out}, nil
@@ -656,7 +656,7 @@ func (o ops) listGPUs(ctx context.Context, _ *noArgs) (*gpuList, error) {
 	}
 	// Fold in the org's BYO accelerators (provider="byo") so the console's GPUs
 	// page lists dialed-in cards with their real model + VRAM.
-	for _, w := range byoWorkers(org) {
+	for _, w := range byoWorkers(ctx, org) {
 		out = append(out, byoGPUViews(w)...)
 	}
 	return &gpuList{GPUs: out}, nil
