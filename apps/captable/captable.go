@@ -151,8 +151,8 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
 	zip.Get(g, "/company", o.getCompany)
 	zip.Get(g, "/stakeholders", o.listStakeholders)
-	zip.Get(g, "/share-classes", o.listShareClasses)
-	zip.Get(g, "/equity-plans", o.listEquityPlans)
+	zip.Get(g, "/classes", o.listShareClasses)
+	zip.Get(g, "/plans", o.listEquityPlans)
 	zip.Get(g, "/shares", o.listShares)
 	zip.Get(g, "/options", o.listOptions)
 	zip.Get(g, "/safes", o.listSafes)
@@ -189,12 +189,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// shareClasses.create: `initialSharesAuthorized`, `votesPerShare`, `parValue`,
 	// `pricePerShare`, `seniority` and both multiples go through num/intNum, which
 	// accept a numeric STRING.
-	g.Post("/share-classes", route(s, "shareClasses.create", nil, true))
+	g.Post("/classes", route(s, "shareClasses.create", nil, true))
 	// shareClasses.update: same coercing validator as create.
-	g.Patch("/share-classes/:id", routeID(s, "shareClasses.update", true))
+	g.Patch("/classes/:id", routeID(s, "shareClasses.update", true))
 	// equityPlans.create: `initialSharesReserved` goes through intNum (numeric
 	// string accepted), `comments` through optString.
-	g.Post("/equity-plans", route(s, "equityPlans.create", nil, true))
+	g.Post("/plans", route(s, "equityPlans.create", nil, true))
 	// shares.add: `quantity`, `pricePerShare` and `capitalContribution` are coerced
 	// numbers; `companyLegends` is validated per element, not per array type.
 	g.Post("/shares", route(s, "shares.add", nil, true))
@@ -250,7 +250,7 @@ func init() {
 			"makes re-running an import safe. Validation is all-or-nothing across the batch: one "+
 			"bad entry refuses the whole array."+common)
 
-	openapi.Describe("/v1/captable/share-classes", http.MethodPost,
+	openapi.Describe("/v1/captable/classes", http.MethodPost,
 		"Define a share class",
 		"Creates a class of stock — its authorized share count, votes per share, par and issue "+
 			"price, seniority, conversion rights and liquidation/participation multiples — which "+
@@ -260,7 +260,7 @@ func init() {
 			"type (CS for COMMON, PS for anything else), so a prefix in the body is ignored."+
 			common)
 
-	openapi.Describe("/v1/captable/share-classes/:id", http.MethodPatch,
+	openapi.Describe("/v1/captable/classes/:id", http.MethodPatch,
 		"Amend a share class",
 		"Rewrites one share class — the amendment path for a class whose authorized count, "+
 			"price, seniority or preference terms have changed.\n\n"+
@@ -269,7 +269,7 @@ func init() {
 			"current value. Send the full class. The index and the derived prefix are unchanged "+
 			"by an amendment. An id that is not this company's is not found."+common)
 
-	openapi.Describe("/v1/captable/equity-plans", http.MethodPost,
+	openapi.Describe("/v1/captable/plans", http.MethodPost,
 		"Open an equity incentive plan",
 		"Reserves a pool of shares out of a share class for option grants, with the board "+
 			"approval and effective dates and what happens to cancelled options.\n\n"+
