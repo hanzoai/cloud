@@ -109,10 +109,31 @@ jobs:
             "https://ghcr.io/token?scope=repository:hanzoai/cloud:pull&service=ghcr.io" | jq -r .token)
 
           # What has been PUBLISHED.
-          REG=$(curl -fsSL -H "Authorization: Bearer $TOKEN" \
-            "https://ghcr.io/v2/hanzoai/cloud/tags/list?n=10000" \
-            | jq -r '.tags[]? | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' \
-            | sed 's/^v//')
+          #
+          # GHCR IGNORES n> 1000 AND PAGES VIA `Link: rel="next"`. Asking for
+          # n=10000 returns exactly 1000 tags and a Link header; a reader that
+          # drops the header sees one page. This repo has ~1700 tags, and that
+          # page topped out at v1.799.5 — so REG, the half this file calls "the
+          # authority on what has been USED", was blind to every recent
+          # release and the whole max() leaned on git tags alone.
+          #
+          # The failure is not loud: LAST still resolves, NEXT is still one
+          # past it, and the 404 probe then refuses a tag that IS published —
+          # "refusing to push v1.801.351 — manifest probe returned 200",
+          # forever, because the list can never learn about it.
+          #
+          # So follow the header to exhaustion. Relative URL, ghcr.io host.
+          REG=""
+          page="https://ghcr.io/v2/hanzoai/cloud/tags/list?n=1000"
+          while [ -n "$page" ]; do
+            hdr=$(mktemp)
+            body=$(curl -fsSL -D "$hdr" -H "Authorization: Bearer $TOKEN" "$page")
+            REG="${REG}
+          $(printf '%s' "$body" | jq -r '.tags[]? | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' | sed 's/^v//')"
+            nxt=$(tr -d '\r' < "$hdr" | sed -n 's/^[Ll]ink: *<\([^>]*\)>.*rel="next".*/\1/p' | head -1)
+            rm -f "$hdr"
+            [ -n "$nxt" ] && page="https://ghcr.io${nxt}" || page=""
+          done
 
           # What has been TAGGED. ls-remote rather than /repos/../tags because the
           # REST list paginates at 100 and this repo carries ~1700 refs; a page
