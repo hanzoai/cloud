@@ -32,13 +32,17 @@ Any machine with a GPU joins the fleet with an outbound, NAT-safe worker — not
 listens for inbound connections.
 
 ```sh
-hanzo login
+hanzo login          # cmd/hanzo, this repo's Go control binary
 hanzo link
 ```
 
+Both verbs here belong to `cmd/hanzo` (`go build ./cmd/hanzo`). If your `hanzo` came
+from `curl -fsSL https://hanzo.sh | sh` it is the Rust CLI, where the sign-in verb is
+`hanzo auth login` — `hanzo login` there is read as a task for the coding agent.
+
 Or flip the toggle in **Hanzo Desktop → Settings → Cloud GPU → "Connect this device's
-GPU to Hanzo Cloud."** (The toggle spawns the light open `hanzo-fleet-worker` sidecar \u2014 the same
-claim loop \u2014 bridging the desktop's IAM token via `HANZO_TOKEN`.)
+GPU to Hanzo Cloud."** (The toggle spawns the light open `hanzo-fleet-worker` sidecar — the same
+claim loop — bridging the desktop's IAM token via `HANZO_TOKEN`.)
 
 The machine registers a heartbeating presence record and shows up on
 `console.hanzo.ai` **GPUs** and **Machines** pages with a **BYO** badge
