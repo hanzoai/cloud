@@ -1,7 +1,7 @@
 package cli
 
-// link.go — `hanzo link | unlink | status`: bring THIS machine into the Hanzo
-// cloud fleet AS A NODE, take it back out, and view the fleet.
+// link.go — `hanzo link | unlink`: bring THIS machine into the Hanzo cloud fleet
+// AS A NODE, and take it back out.
 //
 // A node is two orthogonal memberships, composed under one verb:
 //
@@ -18,8 +18,9 @@ package cli
 //     from `gpu-jobs`. That machinery lives in gpu.go (runConnect); `link` runs it.
 //
 // `unlink` reverses both: it deregisters the worker (drops the fleet row), then
-// stops the fabric (`hanzo node stop`). `status` is the fleet view — every machine
-// with each of its GPUs shown distinctly, this box highlighted.
+// stops the fabric (`hanzo node stop`). `status` is NOT here — the fleet view is
+// one verb the fabric CLI serves, composing clusters + applications + workers, so
+// this binary does not claim it and the router hands it over.
 //
 // One identity: the IAM token `hanzo login` mints authorizes every cloud call; the
 // server derives the tenant from the token. No secrets on the box.
@@ -51,7 +52,8 @@ func newLinkCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 			"hanzod on hanzo.network) and register as a compute worker — advertising this\n" +
 			"host's CPU (cores + model), memory, and each GPU as its own resource, then\n" +
 			"heartbeating and claiming jobs from your org's queue. The node shows up in the\n" +
-			"console (Machines + GPUs) and on `hanzo status`. Works on a CPU-only box.\n" +
+			"console (Machines + GPUs) and in the fleet view `hanzo status` (served by the\n" +
+			"fabric CLI). Works on a CPU-only box.\n" +
 			"Authentication reuses the `hanzo login` token; the org is taken from its claims.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -92,15 +94,6 @@ func newUnlinkCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 			stopFabric(cmd)
 			return derr
 		},
-	}
-}
-
-func newStatusCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "status",
-		Short: "Show the org's fleet — every machine with each of its GPUs (this box highlighted)",
-		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, _ []string) error { return runFleetStatus(cmd, envOf()) },
 	}
 }
 
