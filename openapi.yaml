@@ -37290,25 +37290,6 @@ paths:
       summary: Decline to sign, with an optional reason
       tags:
       - esign
-  /v1/evals/dataset-items:
-    get:
-      description: |-
-        Lists the examples of ONE dataset as `{data:[…]}` — `datasetName` is a required query parameter, and its absence is 400, because this collection is only meaningful per set. Archived examples are included, so the caller sees the whole set rather than only what a run would use. `limit` defaults to 100 and is capped at 500.
-
-        Requires a validated principal; 403 without one, and the read is filtered on the validated org, so naming another tenant's dataset returns nothing rather than its contents.
-      operationId: get_v1_evals_dataset-items
-      summary: The examples in one of your datasets
-      tags:
-      - evals
-    post:
-      description: |-
-        Writes one example — its `input`, its `expectedOutput`, free-form metadata and a status — into a dataset the caller's org owns, and answers 201 with it. `datasetName` is required and the dataset MUST already exist for this org: an unknown one is 404, never a silent create, so an example can never be attached to a set the caller does not own.
-
-        Supply `id` to make the write idempotent — re-posting the same id replaces that example in place — or omit it and one is generated. An id that already exists in a DIFFERENT dataset is 409 rather than a move. `status` is `ACTIVE` (the default) or `ARCHIVED`; only ACTIVE examples are fed to a run, which is how an example is retired without deleting it. `input` and `expectedOutput` are stored as raw JSON exactly as sent. Requires a validated principal; 403 without one.
-      operationId: post_v1_evals_dataset-items
-      summary: Add a graded example to one of your datasets
-      tags:
-      - evals
   /v1/evals/datasets:
     get:
       description: |-
@@ -37360,6 +37341,37 @@ paths:
       summary: One dataset, with how many examples it holds
       tags:
       - evals
+  /v1/evals/datasets/{name}/items:
+    get:
+      description: |-
+        Lists the examples of ONE dataset as `{data:[…]}` — the set is named in the path, because this collection only exists inside one. Archived examples are included, so the caller sees the whole set rather than only what a run would use. `limit` defaults to 100 and is capped at 500.
+
+        Requires a validated principal; 403 without one, and the read is filtered on the validated org, so naming another tenant's dataset returns nothing rather than its contents.
+      operationId: get_v1_evals_datasets_by_name_items
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      summary: The examples in one of your datasets
+      tags:
+      - evals
+    post:
+      description: |-
+        Writes one example — its `input`, its `expectedOutput`, free-form metadata and a status — into the dataset named in the path, and answers 201 with it. That dataset MUST already exist for this org: an unknown one is 404, never a silent create, so an example can never be attached to a set the caller does not own.
+
+        Supply `id` to make the write idempotent — re-posting the same id replaces that example in place — or omit it and one is generated. An id that already exists in a DIFFERENT dataset is 409 rather than a move. `status` is `ACTIVE` (the default) or `ARCHIVED`; only ACTIVE examples are fed to a run, which is how an example is retired without deleting it. `input` and `expectedOutput` are stored as raw JSON exactly as sent. Requires a validated principal; 403 without one.
+      operationId: post_v1_evals_datasets_by_name_items
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      summary: Add a graded example to one of your datasets
+      tags:
+      - evals
   /v1/evals/evaluators:
     get:
       description: Lists the caller org's evaluators as `{data:[…]}`, each with its
@@ -37391,6 +37403,27 @@ paths:
       summary: Your org's AI overview board
       tags:
       - evals
+  /v1/evals/rubrics:
+    get:
+      description: Lists the caller org's rubrics as `{data:[…]}` — each name's data
+        type, its numeric bounds and its allowed categories. `limit` defaults to 100
+        and is capped at 500. Requires a validated principal; 403 without one, and
+        the listing is filtered on the validated org.
+      operationId: get_v1_evals_rubrics
+      summary: The score shapes your org has declared
+      tags:
+      - evals
+    post:
+      description: |-
+        Defines the shape of one score name for the caller's org — `NUMERIC` (the default, optionally bounded by `minValue`/`maxValue`), `CATEGORICAL` (a closed set of `categories`) or `BOOLEAN` — and answers 201 with it. The NAME is the key, so re-posting a name replaces its rules.
+
+        This is the integrity contract, not documentation: once a config exists for a name, every score recorded under that name is checked against it and the config's data type is AUTHORITATIVE — a caller cannot claim a different one. Out-of-range values, unlisted labels and non-finite numbers are refused at write time.
+
+        A `CATEGORICAL` config with no categories is 400, as is a non-finite bound or a `minValue` above `maxValue`. Requires a validated principal; 403 without one.
+      operationId: post_v1_evals_rubrics
+      summary: Declare what a score named X is allowed to be
+      tags:
+      - evals
   /v1/evals/runs:
     get:
       description: |-
@@ -37412,27 +37445,6 @@ paths:
         Bounded and honest about it: an org may have at most 4 runs in flight and the fifth is 429 rather than queued, and the whole run is capped at 10 minutes — items past the deadline come back with an error instead of a score, and `scored` counts only real successes. A run where NOTHING scored answers 502, not a 200 that looks like an evaluation. A run must be able to persist what it produces, so a deployment with no datastore wired is 503 up front. Requires a validated principal; 403 without one.
       operationId: post_v1_evals_runs
       summary: Score a dataset through a model and a judge, now
-      tags:
-      - evals
-  /v1/evals/score-configs:
-    get:
-      description: Lists the caller org's score configs as `{data:[…]}` — each name's
-        data type, its numeric bounds and its allowed categories. `limit` defaults
-        to 100 and is capped at 500. Requires a validated principal; 403 without one,
-        and the listing is filtered on the validated org.
-      operationId: get_v1_evals_score-configs
-      summary: The score shapes your org has declared
-      tags:
-      - evals
-    post:
-      description: |-
-        Defines the shape of one score name for the caller's org — `NUMERIC` (the default, optionally bounded by `minValue`/`maxValue`), `CATEGORICAL` (a closed set of `categories`) or `BOOLEAN` — and answers 201 with it. The NAME is the key, so re-posting a name replaces its rules.
-
-        This is the integrity contract, not documentation: once a config exists for a name, every score recorded under that name is checked against it and the config's data type is AUTHORITATIVE — a caller cannot claim a different one. Out-of-range values, unlisted labels and non-finite numbers are refused at write time.
-
-        A `CATEGORICAL` config with no categories is 400, as is a non-finite bound or a `minValue` above `maxValue`. Requires a validated principal; 403 without one.
-      operationId: post_v1_evals_score-configs
-      summary: Declare what a score named X is allowed to be
       tags:
       - evals
   /v1/evals/scores:

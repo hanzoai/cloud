@@ -6,7 +6,7 @@
 //
 // Storage split (CTO directive), two orthogonal stores this package composes:
 //   - metastore  (store.go)     — Hanzo Base/SQLite, per-org config/metadata:
-//     datasets, dataset-items, evaluators, score-configs, dataset-run defs.
+//     datasets, dataset items, evaluators, rubrics, dataset-run defs.
 //   - telemetry  (telemetry.go) — apps/datastore, append-only event stream:
 //     traces + scores-as-events (all AI observability). Optional at Mount; when
 //     no datastore is wired the run still scores, but trace/score persistence is
@@ -31,12 +31,12 @@
 //	GET    /v1/evals/datasets         list the org's datasets            -> {data:[…]}
 //	GET    /v1/evals/datasets/:name   dataset detail + item count        -> Dataset
 //	DELETE /v1/evals/datasets/:name   delete a dataset (+ its items)
-//	POST   /v1/evals/dataset-items    create/upsert an item              -> DatasetItem
-//	GET    /v1/evals/dataset-items    list items (datasetName, limit)    -> {data:[…]}
+//	POST   /v1/evals/datasets/:name/items  create/upsert an item         -> DatasetItem
+//	GET    /v1/evals/datasets/:name/items  list a dataset's items (limit) -> {data:[…]}
 //	POST   /v1/evals/evaluators       create/upsert an evaluator         -> Evaluator
 //	GET    /v1/evals/evaluators       list the org's evaluators          -> {data:[…]}
-//	POST   /v1/evals/score-configs    create/upsert a score config       -> ScoreConfig
-//	GET    /v1/evals/score-configs    list the org's score configs       -> {data:[…]}
+//	POST   /v1/evals/rubrics          create/upsert a rubric             -> ScoreConfig
+//	GET    /v1/evals/rubrics          list the org's rubrics             -> {data:[…]}
 //	POST   /v1/evals/scores           record a score event               -> ScoreView
 //	GET    /v1/evals/scores           list score events (filters+limit)  -> {data:[…]}
 //	GET    /v1/evals/traces           list traces (filters+limit)        -> {data:[…]}
@@ -199,14 +199,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	g.Get("/datasets/:name", s.getDataset)
 	g.Delete("/datasets/:name", s.deleteDataset)
 
-	g.Post("/dataset-items", s.createItem)
-	g.Get("/dataset-items", s.listItems)
+	g.Post("/datasets/:name/items", s.createItem)
+	g.Get("/datasets/:name/items", s.listItems)
 
 	g.Post("/evaluators", s.createEvaluator)
 	g.Get("/evaluators", s.listEvaluators)
 
-	g.Post("/score-configs", s.createScoreConfig)
-	g.Get("/score-configs", s.listScoreConfigs)
+	g.Post("/rubrics", s.createScoreConfig)
+	g.Get("/rubrics", s.listScoreConfigs)
 
 	g.Post("/scores", s.createScore)
 	g.Get("/scores", s.listScores)
@@ -272,12 +272,12 @@ func init() {
 			"org. Requires a validated principal; 403 without one. Runs and scores already recorded "+
 			"against the dataset are telemetry events and are NOT deleted with it.")
 
-	openapi.Describe("/v1/evals/dataset-items", http.MethodPost,
+	openapi.Describe("/v1/evals/datasets/:name/items", http.MethodPost,
 		"Add a graded example to one of your datasets",
 		"Writes one example — its `input`, its `expectedOutput`, free-form metadata and a status — "+
-			"into a dataset the caller's org owns, and answers 201 with it. `datasetName` is "+
-			"required and the dataset MUST already exist for this org: an unknown one is 404, never "+
-			"a silent create, so an example can never be attached to a set the caller does not own."+
+			"into the dataset named in the path, and answers 201 with it. That dataset MUST "+
+			"already exist for this org: an unknown one is 404, never a silent create, so an "+
+			"example can never be attached to a set the caller does not own."+
 			"\n\n"+
 			"Supply `id` to make the write idempotent — re-posting the same id replaces that "+
 			"example in place — or omit it and one is generated. An id that already exists in a "+
@@ -286,11 +286,11 @@ func init() {
 			"without deleting it. `input` and `expectedOutput` are stored as raw JSON exactly as "+
 			"sent. Requires a validated principal; 403 without one.")
 
-	openapi.Describe("/v1/evals/dataset-items", http.MethodGet,
+	openapi.Describe("/v1/evals/datasets/:name/items", http.MethodGet,
 		"The examples in one of your datasets",
-		"Lists the examples of ONE dataset as `{data:[…]}` — `datasetName` is a required query "+
-			"parameter, and its absence is 400, because this collection is only meaningful per "+
-			"set. Archived examples are included, so the caller sees the whole set rather than only "+
+		"Lists the examples of ONE dataset as `{data:[…]}` — the set is named in the path, "+
+			"because this collection only exists inside one. Archived examples are included, so "+
+			"the caller sees the whole set rather than only "+
 			"what a run would use. `limit` defaults to 100 and is capped at 500.\n\n"+
 			"Requires a validated principal; 403 without one, and the read is filtered on the "+
 			"validated org, so naming another tenant's dataset returns nothing rather than its "+
@@ -312,7 +312,7 @@ func init() {
 			"a validated principal; 403 without one, and the listing is filtered on the validated "+
 			"org.")
 
-	openapi.Describe("/v1/evals/score-configs", http.MethodPost,
+	openapi.Describe("/v1/evals/rubrics", http.MethodPost,
 		"Declare what a score named X is allowed to be",
 		"Defines the shape of one score name for the caller's org — `NUMERIC` (the default, "+
 			"optionally bounded by `minValue`/`maxValue`), `CATEGORICAL` (a closed set of "+
@@ -325,9 +325,9 @@ func init() {
 			"A `CATEGORICAL` config with no categories is 400, as is a non-finite bound or a "+
 			"`minValue` above `maxValue`. Requires a validated principal; 403 without one.")
 
-	openapi.Describe("/v1/evals/score-configs", http.MethodGet,
+	openapi.Describe("/v1/evals/rubrics", http.MethodGet,
 		"The score shapes your org has declared",
-		"Lists the caller org's score configs as `{data:[…]}` — each name's data type, its numeric "+
+		"Lists the caller org's rubrics as `{data:[…]}` — each name's data type, its numeric "+
 			"bounds and its allowed categories. `limit` defaults to 100 and is capped at 500. "+
 			"Requires a validated principal; 403 without one, and the listing is filtered on the "+
 			"validated org.")
@@ -636,7 +636,6 @@ func (s *service) deleteDataset(c *zip.Ctx) error {
 
 type itemReq struct {
 	ID       string          `json:"id"`
-	Dataset  string          `json:"datasetName"`
 	Input    json.RawMessage `json:"input"`
 	Expected json.RawMessage `json:"expectedOutput"`
 	Metadata map[string]any  `json:"metadata"`
@@ -652,10 +651,7 @@ func (s *service) createItem(c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	dataset := strings.TrimSpace(body.Dataset)
-	if dataset == "" {
-		return zip.ErrBadRequest("datasetName is required")
-	}
+	dataset := strings.TrimSpace(c.Param("name"))
 	// The dataset MUST exist for THIS org — an item can never be attached to a
 	// dataset the caller doesn't own (a real 404, not a silent create).
 	if _, err := s.store.GetDataset(c.Context(), org, dataset); err == errNotFound {
@@ -709,10 +705,7 @@ func (s *service) listItems(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	dataset := strings.TrimSpace(c.Query("datasetName"))
-	if dataset == "" {
-		return zip.ErrBadRequest("datasetName query param is required")
-	}
+	dataset := strings.TrimSpace(c.Param("name"))
 	items, err := s.store.ListItems(c.Context(), org, dataset, false, listLimit(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
