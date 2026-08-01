@@ -57676,7 +57676,9 @@ tags:
 - description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
     namespace — builds, releases, environments, logs, custom domains.'
   name: pipelines
-- name: plans
+- description: 'Package plan is the plan catalog: every tier you can buy, what it
+    costs, and what it grants.'
+  name: plans
 - description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
     namespace — builds, releases, environments, logs, custom domains.'
   name: platform
@@ -57715,14 +57717,18 @@ tags:
 - description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
     namespace — builds, releases, environments, logs, custom domains.'
   name: runner
-- name: s3
+- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
+    document, vector, search or object store, wired straight into your app.'
+  name: s3
 - description: 'Package sbom is what is inside a container image: every component,
     resolvable by digest or image ref.'
   name: sbom
 - description: Package websearch is a web search and a page fetch your agents can
     call.
   name: scrape
-- name: search
+- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
+    document, vector, search or object store, wired straight into your app.'
+  name: search
 - description: 'Package security is secret scanning for your code: submit sources,
     get findings, masked never raw.'
   name: security
@@ -57787,7 +57793,9 @@ tags:
 - description: 'Package validators is one-click validator onboarding: prove your Genesis
     NFT, get a node provisioned, queue its registration.'
   name: validators
-- name: vector
+- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
+    document, vector, search or object store, wired straight into your app.'
+  name: vector
 - description: Package do is the org-scoped private-network surface — /v1/vpcs and
     /v1/balancers — carved out of Hanzo's OWN house DigitalOcean account.
   name: vpcs
