@@ -683,6 +683,10 @@ type clusterList struct {
 	// Clusters is the merged fleet — kind "managed" for Visor-provisioned, "byo"
 	// for an attached kubeconfig.
 	Clusters []clusterView `json:"clusters"`
+	// Degraded names any source that did not answer, so an empty Clusters means
+	// "you have none" only when this is absent. Omitted when everything answered,
+	// so a healthy response is unchanged. See degraded.go.
+	Degraded []sourceFailure `json:"degraded,omitempty"`
 }
 
 // listClusters returns the caller org's clusters from both sources: the managed
@@ -698,7 +702,9 @@ func (o ops) listClusters(ctx context.Context, _ *noArgs) (*clusterList, error) 
 		return nil, err
 	}
 	var pools []visorNodePool
+	var down []sourceFailure
 	if err := o.State.cl.call(c, http.MethodGet, "/v1/get-node-pools", q("owner", org), nil, &pools); err != nil {
+		down = visorDown(err)
 		// Visor unreachable — same graceful fold as listMachines/listGpus: a down
 		// optional provider must NOT 502 the Clusters/GPUs page (it surfaced as a
 		// console error on every load where Visor isn't deployed). Log and fall
@@ -710,7 +716,7 @@ func (o ops) listClusters(ctx context.Context, _ *noArgs) (*clusterList, error) 
 	// the latter sharded by the caller's project sub-scope.
 	clusters := clustersFromPools(pools)
 	clusters = append(clusters, byoClusters(o.Service, org, project(c))...)
-	return &clusterList{Clusters: clusters}, nil
+	return &clusterList{Clusters: clusters, Degraded: down}, nil
 }
 
 // poolCreate is the add-a-node-pool request. clusterId comes from the URL and

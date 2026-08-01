@@ -119,16 +119,17 @@ func (o ops) listK8sClusters(ctx context.Context, _ *noArgs) (*clusterList, erro
 		return nil, err
 	}
 	var clusters []visorKubernetesCluster
+	var down []sourceFailure
 	if err := o.State.cl.call(c, http.MethodGet, "/v1/k8s/clusters", q("owner", org), nil, &clusters); err != nil {
 		o.Log.Warn("visor k8s clusters failed; returning BYO-only cluster list", "org", org, "err", err)
-		clusters = nil
+		clusters, down = nil, visorDown(err)
 	}
 	out := make([]clusterView, 0, len(clusters))
 	for _, kc := range clusters {
 		out = append(out, k8sClusterView(kc))
 	}
 	out = append(out, byoClusters(o.Service, org, project(c))...)
-	return &clusterList{Clusters: out}, nil
+	return &clusterList{Clusters: out, Degraded: down}, nil
 }
 
 // getK8sCluster returns one cluster's detail: node pools + worker nodes. Visor scopes
