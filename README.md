@@ -2,7 +2,7 @@
 
 # Hanzo Cloud
 
-**The Open AI Cloud as one Go binary.** Identity, secrets, data, AI, gateway, observability, and the console — every Hanzo-native subsystem mounted into a single multi-org process. Per [HIP-0106](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0106-unified-hanzo-cloud-binary.md).
+**The Open AI Cloud as one deployment.** Identity, secrets, data, AI, gateway, observability, and the console — 116 Hanzo-native subsystems behind one origin and one `/v1`, each its own binary, composed by a light host router through the plugin contract in [HIP-0106](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0106-hanzo-plugin-contract.md).
 
 [![Status](https://img.shields.io/badge/status-beta-blue)]()
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)]()
@@ -12,20 +12,38 @@ The same artifact serves `api.hanzo.ai`, `api.lux.cloud`, `api.zoo.cloud`, `api.
 ## Quick start
 
 ```bash
-# Run the unified binary (pin a released version)
-docker run -p 8080:8080 ghcr.io/hanzoai/cloud:v1.801.206
-
-# The `hanzo` fabric CLI is a separate Rust binary (hanzoai/cli); this module
-# builds only the control half of that name, cmd/hanzo (see below)
-curl hanzo.sh | sh
-brew install hanzoai/tap/hanzo
+# Run the unified binary. `:latest` to try it; pin a v1.x.y tag for anything real
+# — the tags are cut per build, so any number written here is stale by tomorrow.
+docker run -p 8080:8080 ghcr.io/hanzoai/cloud:latest
 ```
 
 Open <http://localhost:8080> for the embedded console; the API is served under `/v1` on the same origin.
 
+Build this repo's own client binary with `go build ./cmd/hanzo` — see below for what it
+serves and what it delegates. It is NOT what `curl -fsSL https://hanzo.sh | sh` installs;
+that gets the Rust CLI (`hanzoai/cli`), which is the primary `hanzo` on a developer's
+machine and whose verbs are different.
+
 ## What this is
 
-`hanzoai/cloud` is one Go binary that mounts every Hanzo subsystem (iam, kms, base, gateway, ai, commerce, vfs, mq, dns, amqp, mcp, o11y, tasks, …) into a single multi-org process. The same artifact serves `api.hanzo.ai`, `api.osage.cloud`, `api.lux.cloud`, `api.zoo.cloud`, and every white-label reseller. Brand, enabled subsystems, and org scope are deployment configuration.
+`hanzoai/cloud` serves the whole API from one origin. `cmd/cloud` is the front door: it
+links `zip`, the app manifest and the console embed — and nothing else. It knows only
+where each app lives and what path it answers, never what the app does. Each subsystem
+(iam, kms, base, gateway, ai, commerce, vfs, mq, dns, amqp, mcp, o11y, tasks, …) is its
+own `plugin/<name>` binary serving its own prefixes through the same `cloud.Serve`
+middleware it would serve standalone.
+
+Apps start **lazily**, on the first request that reaches their prefix; the four that own
+a listener or a background loop (`pubsub`, `kafka`, `o11y`, `catalogsync`) say so and
+start with the host. That is what makes 116 subsystems affordable — an app nobody calls
+costs a route entry and a struct, not a process and a resident set.
+
+This was one fused process once, and that binary is gone: it linked every subsystem's
+graph into a ~3105-package build, and `apps.Wire()` went with it.
+
+The same deployment serves `api.hanzo.ai`, `api.osage.cloud`, `api.lux.cloud`,
+`api.zoo.cloud`, and every white-label reseller. Brand, enabled subsystems, and org
+scope are deployment configuration.
 
 ## `hanzo` — cloud control CLI
 
@@ -34,21 +52,36 @@ Open <http://localhost:8080> for the embedded console; the API is served under `
 `/v1` API, inventing no parallel API. It cannot serve a subsystem — that is
 `cmd/cloud`'s job.
 
-The first token selects who runs it. The verbs below run here; every other verb
-— `code`, `node`, `dev`, `wallet`, … — is handed to the Rust fabric CLI
-installed alongside as `hanzo-node`, so the single `hanzo` name is a superset of
-both. `cli.IsControlVerb` draws that line off the cobra command tree itself, so
-the two halves cannot drift apart.
+**Two different programs answer to `hanzo`, and this is the one almost nobody has.**
+A developer installs the Rust CLI (`hanzoai/cli`) from `hanzo.sh`; it becomes their
+`hanzo`, and it writes `hanzo-node` as a symlink to itself. THIS binary is the Go
+control CLI, built from this repo. When it is the `hanzo` on a machine, a verb it does
+not own is handed to whatever `hanzo-node` resolves to (`cli.Passthrough`), so the
+single name is a superset of both — but that delegation runs in this direction only.
+Read the verbs below as `cmd/hanzo`'s, not as "what `hanzo` does": on a normal
+developer machine `hanzo login` and `hanzo deploy` reach the Rust CLI, which has
+neither, and it reads them as a task for the coding agent.
+
+`cli.IsControlVerb` draws the line off the cobra command tree itself, so the router and
+the tree cannot drift apart. The complete set it owns:
 
 ```bash
 hanzo login                       # IAM password grant against hanzo.id → token in ~/.hanzo (0600)
+hanzo logout
 hanzo whoami                      # identity from the stored token (--verify hits IAM userinfo)
+hanzo auth …                      # token / switch / status
 hanzo apps list                   # platform apps board: declared/running/latest tag + drift + health
 hanzo apps get <org>/<app>/<env>  # one app row
 hanzo deploy <container> --project <p> --env <e>   # rolling, zero-downtime redeploy
-hanzo clusters list|get|create|select|target       # dedicated DOKS cluster lifecycle
+hanzo clusters …                  # dedicated DOKS cluster lifecycle
 hanzo build <repo> --sha <sha> --image <img>       # platform-native (arcd/Kaniko) build, no GitHub builders
+hanzo run <task>                  # one-off task on the platform
+hanzo agent … | hanzo bot …       # managed agents and bot nodes
+hanzo engine … | hanzo runner …   # local engine, and this machine as a CI runner
+hanzo link | hanzo unlink         # attach this machine to the fleet (`hanzo gpu connect` rides here)
+hanzo security …                  # rules / scan
 hanzo config set <k> <v>          # ~/.hanzo/config preferences
+hanzo version
 hanzo completion bash|zsh|fish    # shell completion for every verb above
 ```
 
@@ -59,13 +92,17 @@ authed (it cannot validate user tokens), so `apps`/`deploy`/`clusters` use
 `--platform-token` / `HANZO_PLATFORM_TOKEN` / `PLATFORM_SERVICE_TOKEN`, and
 `build` uses `HANZO_BUILD_TOKEN` / `PLATFORM_BUILD_CALLBACK_TOKEN`.
 
-Install the fabric CLI: `curl hanzo.sh | sh`, or `brew install hanzoai/tap/hanzo`.
-It is the Rust binary in `hanzoai/cli`; this module serves `/v1`, ships plugins,
-and builds the control half above (`go build ./cmd/hanzo`).
+Install the Rust CLI: `curl -fsSL https://hanzo.sh | sh`, or
+`brew install hanzoai/tap/hanzo`. It is `hanzoai/cli`; this module serves `/v1`, ships
+plugins, and builds the control half above (`go build ./cmd/hanzo`).
 
 ## Subsystems mounted
 
-Each subsystem exposes `func Mount(app *zip.App, deps cloud.Deps) error` and wires its own `/v1/<name>/*` routes onto the shared app.
+`manifest/apps.go` is the source of truth: every app that ships as its own binary, in
+mount order — which IS the routing order, first matching prefix wins. Three facts per
+row and no more (name, the paths it answers, whether it must already be running), because
+that is the whole of what the light host needs to know. What an app DOES it states once
+in its own `plugin/<name>/main.go`.
 
 - `iam` — identity & access (users, orgs, roles, OIDC/JWKS per HIP-0026)
 - `base` — per-org SQLite + in-process extension runtimes (HIP-0105)
@@ -76,11 +113,11 @@ Each subsystem exposes `func Mount(app *zip.App, deps cloud.Deps) error` and wir
 - `o11y` — metrics / traces / logs
 - `vfs` — virtual filesystem / object-store abstraction
 - `mq` — message queue
-- `dns`, `amqp`, `mcp`, `auto`, `tasks`, … — full list per HIP-0106
+- `dns`, `amqp`, `mcp`, `auto`, `tasks`, … — the other 107 rows are in `manifest/apps.go`
 
 ## Deployment modes
 
-Same binary; different startup configuration:
+Same artifact; different startup configuration:
 
 ```bash
 cloud --enable=iam,base,kms,commerce,ai,gateway,o11y --brand=hanzo  --domain=hanzo.ai
@@ -94,35 +131,46 @@ cloud --enable=iam,base,kms,commerce,ai,gateway,o11y --brand=zoo    --domain=zoo
 ```
                  api.{org}.{brand}
                           |
-                   hanzoai/cloud (one Go binary)
+              cmd/cloud — the host router
+              (links zip + manifest + webui, nothing else)
                           |
    +----------+----------+----------+----------+----------+
    |    iam   |   base   |   kms    |    ai    | gateway  | ...
-   |  Mount() |  Mount() |  Mount() |  Mount() |  Mount() |
+   |  its own |  its own |  its own |  its own |  its own |
+   |  process |  process |  process |  process |  process |
    +----------+----------+----------+----------+----------+
    per-org SQLite (HIP-0302)   |   Hanzo IAM JWKS (HIP-0026)
    replicate -> S3 (HIP-0107)  |   ZAP inter-subsystem RPC
 ```
 
-Every subsystem mounts through the same `Mount(app, deps)` seam. Cross-subsystem calls ride a narrow in-process interface; no subsystem reaches into another's store.
+Every app is loaded through the same `Mount` seam and answers on its own prefix; the
+host takes the first prefix that matches and starts the app if it is not up yet. The
+console is registered LAST so no app prefix can be shadowed. Cross-subsystem calls ride
+ZAP; no subsystem reaches into another's store.
+
+The host owns three things no app can: it serves the white-labelled console at `/`, it
+threads the deployment's operator flags to the children as `CLOUD_*` env, and it SCOPES
+CREDENTIALS — it scrubs the KMS root key from its own environment so no child inherits
+it, and hands it to the kms broker child alone.
 
 ## White-label fork pattern
 
-Customers fork `hanzoai/cloud` to launch their own ecosystem in one binary. Brand
-detection, enabled subsystems, and ZAP endpoints (payments / vault backends) are all
-deployment configuration.
+Customers fork `hanzoai/cloud` to launch their own ecosystem. Brand detection, enabled
+subsystems, and ZAP endpoints (payments / vault backends) are all deployment
+configuration.
 
 ## Web framework
 
-[hanzoai/zip](https://github.com/hanzoai/zip) — Sinatra-style Go web framework
-built on Fiber v3. The ONE Go web framework. No `.Fast` escape hatch.
+[zap-proto/zip](https://github.com/zap-proto/zip) — Sinatra-style Go web framework built
+on Fiber v3. The ONE Go web framework. No `.Fast` escape hatch. That is the module path
+this repo imports (`github.com/zap-proto/zip`, currently v1.18.22); `hanzoai/zip` is the
+old home and is not what `go.mod` resolves.
 
-## Console UI — embedded in the ONE binary
+## Console UI — embedded in the host
 
-The same `hanzoai/cloud` binary serves the [console](https://github.com/hanzoai/console)
-(`@hanzo/gui`) UI at the web root AND the `/v1` API from one process — one
-artifact, one origin, no separate console Service. The UI is compiled in via
-`//go:embed` (see `webui.go`).
+The host binary serves the console (`@hanzo/gui`, `hanzoai/console` — private) UI at the
+web root AND routes `/v1` — one origin, no separate console Service. The UI is compiled
+in via `//go:embed` (see `webui.go`).
 
 Pipeline (in the `Dockerfile`, before `go build`):
 
@@ -156,30 +204,31 @@ calls same-origin), wraps the client catch-all pages for `output: 'export'`,
 neutralizes the root layout's request-time `headers()` read, and emits a real
 static export at `out/` (a ~360 KB `index.html` + `_next/` chunks). The image
 build (and `make webui`) run it and overlay `webui/dist`, so `//go:embed` bakes
-the FULL `@hanzo/gui` console into the ONE binary. The Dockerfile console stage
+the FULL `@hanzo/gui` console into the host binary. The Dockerfile console stage
 FAILS HARD if that bundle is missing or degenerate — the placeholder shell can
 never silently ship to prod (escape hatch: `--build-arg ALLOW_PLACEHOLDER=1` for a
 pure-Go dev image).
 
 ## Specs
 
-Implements:
-- HIP-0014 Application Deployment
-- HIP-0026 IAM
-- HIP-0027 KMS
-- HIP-0037 AI Cloud Platform
-- HIP-0105 In-Process Extension Runtime
-- HIP-0106 Unified Cloud Binary
-- HIP-0129 Open Cloud Planes
-- HIP-0302 Encrypted SQLite + ZapDB Durability
+Implements, by the filenames in [hanzoai/HIPs](https://github.com/hanzoai/HIPs/tree/main/HIPs):
+
+- [HIP-0014](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0014-application-deployment-standard.md) Application Deployment
+- [HIP-0026](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0026-identity-access-management-standard.md) Identity & Access Management
+- [HIP-0027](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0027-secrets-management-standard.md) Secrets Management
+- [HIP-0105](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0105-in-process-extension-runtime-standard.md) In-Process Extension Runtime
+- [HIP-0106](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0106-hanzo-plugin-contract.md) Hanzo Plugin Contract
+- [HIP-0107](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0107-streaming-replication-over-vfs.md) Streaming Replication over VFS
+- [HIP-0129](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0129-eval-the-judgment-plane.md) Eval — the Judgment Plane
+- [HIP-0302](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0302-encrypted-sqlite-replication-standard.md) Encrypted SQLite Replication
 
 ## Status
 
-In production. The unified binary serves `api.hanzo.ai` and the white-label cloud
-surfaces today, with per-org SQLite (HIP-0302) and the embedded console. Subsystems
-continue to land per HIP-0106's migration phases; `apps/apps.go:Wire()` is the one
-ordered list of everything mounted. For repo-level engineering doctrine (module
-graph, route-table projections, cross-subsystem seams), see [`LLM.md`](./LLM.md).
+In production. It serves `api.hanzo.ai` and the white-label cloud surfaces today, with
+per-org SQLite (HIP-0302) and the embedded console. `manifest/apps.go` is the one ordered
+list of everything mounted — 116 apps, 4 of them eager. For repo-level engineering
+doctrine (module graph, route-table projections, cross-subsystem seams), see
+[`LLM.md`](./LLM.md).
 
 ## Hanzo — the Open AI Cloud
 
