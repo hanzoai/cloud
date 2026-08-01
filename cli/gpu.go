@@ -64,6 +64,11 @@ const (
 	heartbeatEvery = 30 * time.Second
 	claimPoll      = 2 * time.Second
 	claimLeaseSecs = 120
+	// registerAttempts/registerBackoff let the presence write ride out a control
+	// plane that is rolling. ~30s of cover, which is longer than a pod replacement
+	// and far shorter than a real outage.
+	registerAttempts = 6
+	registerBackoff  = 5 * time.Second
 	// renderWindow matches the dispatch cap (studio gpu_dispatch sets
 	// startToCloseTimeout 14400s). The old 10m local poll undercut it and
 	// marked live renders failed while they kept sampling (observed 8-70m).
@@ -1085,14 +1090,41 @@ func (w *worker) register(ctx context.Context) error {
 			fmt.Fprintf(os.Stderr, "ensure namespace %q (continuing): %v\n", ns, err)
 		}
 	}
-	_, err := w.call(ctx, http.MethodPost, "/v1/tasks/namespaces/"+fleetNS+"/activities", map[string]any{
-		"activityId":       w.identity,
-		"runId":            w.identity,
-		"activityType":     map[string]any{"name": "fleet.worker"},
-		"taskQueue":        fleetNS,
-		"heartbeatTimeout": "120s",
-		"input":            w.buildRegistration(),
-	}, nil)
+	// The presence write RIDES OUT a rolling control plane. It is the call whose
+	// error ends the process, and systemd restarts us — which kills the studio this
+	// worker supervises, and with it whatever render was sampling at the time. So a
+	// cloud deploy destroyed renders on every BYO box: api.hanzo.ai answered
+	// "503 no available server" for the few seconds its pod was replaced, three
+	// restarts landed in that window, and a compose that had been running for
+	// minutes was gone.
+	//
+	// A blip is not an outage. Retry with backoff and only then report; a genuinely
+	// missing namespace or a real rejection still surfaces, just later.
+	var err error
+	for attempt := 0; attempt < registerAttempts; attempt++ {
+		if _, err = w.call(ctx, http.MethodPost, "/v1/tasks/namespaces/"+fleetNS+"/activities", map[string]any{
+			"activityId":       w.identity,
+			"runId":            w.identity,
+			"activityType":     map[string]any{"name": "fleet.worker"},
+			"taskQueue":        fleetNS,
+			"heartbeatTimeout": "120s",
+			"input":            w.buildRegistration(),
+		}, nil); err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return err
+		}
+		if attempt < registerAttempts-1 {
+			fmt.Fprintf(os.Stderr, "register (attempt %d/%d, retrying in %s): %v\n",
+				attempt+1, registerAttempts, registerBackoff, err)
+			select {
+			case <-ctx.Done():
+				return err
+			case <-time.After(registerBackoff):
+			}
+		}
+	}
 	return err
 }
 
