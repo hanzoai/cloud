@@ -486,7 +486,7 @@ func describeStore() {
 			"context, or provisioning fails, does it fall back to a placeholder store literally "+
 			"named default, which a storefront edge should treat as unconfigured.")
 
-	openapi.Describe("/v1/store/token", http.MethodPost,
+	openapi.Describe("/v1/store/storefront-token", http.MethodPost,
 		"Mint your org's least-privilege storefront read key",
 		"Answers a freshly minted token carrying ONLY the published-read permission — enough for "+
 			"a logged-out shopper's storefront to read your published catalog and nothing more, "+
