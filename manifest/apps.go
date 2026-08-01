@@ -123,7 +123,15 @@ var Apps = []App{
 	{Name: "venue", Prefixes: []string{"/v1/cloud"}},
 	{Name: "captable", Prefixes: []string{"/v1/captable"}},
 	{Name: "code", Prefixes: []string{"/v1/code"}},
-	{Name: "zt", Prefixes: []string{"/v1/edge/nodes", "/v1/mesh/services", "/v1/networks"}},
+	// zt held "/v1/edge/nodes" — a top-level name for something that was never a
+	// product. Four unrelated things wore "edge": the on-device inference runtime
+	// (hanzoai/edge, a binary a customer runs on their own machine, so it has no cloud
+	// prefix and never should), the public catalogue cache, the gateway's policy role,
+	// and THESE — ZT fabric edge-routers, which are the nodes of an overlay network and
+	// are now addressed as such at "/v1/networks/routers". A prefix belongs to a product
+	// a customer calls, so "edge" gets none: /v1/edge 404s at every depth, and that is
+	// the right answer rather than a missing product.
+	{Name: "zt", Prefixes: []string{"/v1/mesh/services", "/v1/networks"}},
 	{Name: "share", Prefixes: []string{"/v1/share"}},
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}},
 	{Name: "graph", Prefixes: []string{"/v1/indexers", "/v1/oracles"}},

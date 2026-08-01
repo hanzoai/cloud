@@ -2730,6 +2730,34 @@ image to a prior semver and `/{name}/sync` requests a reconcile. SUPERADMIN-only
 `gitops-engine` (`hanzoai/deploy/gitops-engine` v0.7.2, no replace) in-process for the
 reconcile half behind `DEPLOY_ENGINE_ENABLED` (default off), with a prune-safety fuse.
 
+## "edge" is a position, not a product, so it owns no prefix
+
+Four unrelated things wore the word, which is why it read like a missing product:
+
+| called "edge" | what it is | prefix |
+|---|---|---|
+| `hanzoai/edge` | on-device inference runtime (Rust; candle + GGUF + WASM). A binary the customer runs on their OWN machine. | **none, forever** |
+| `hanzoai/catalog` | the public catalogue cache (Cloudflare Worker, `catalog.hanzo.ai`) | none — a cache is not a product |
+| `apps/gateway/edge` | the CORS allowlist + per-IP flood cap + per-org rate ceiling store | it IS the gateway role; `/v1/gateway/config` |
+| `/v1/edge/nodes` (`apps/zt`) | ZT fabric **edge-routers** — the nodes of an overlay network | now `/v1/networks/routers` |
+
+**A prefix belongs to a product a customer calls.** Edge names a *position* in
+every one of those senses, so it gets none. `hanzoai/edge` keeps the repo name —
+it is the one honest use of the word, because it genuinely runs at the edge of
+the network, the user's device — and it gets no cloud prefix for the same reason
+the CLI has none. **`/v1/edge` 404s at every depth and that is CORRECT, not a
+gap.**
+
+`apps/zt`'s routers moved to `/v1/networks/routers`, under the prefix zt already
+owned, because an edge-router IS a node of the overlay — the resource belongs
+where its parent lives. The envelope moved with the address (`{routers:[…]}`,
+not `{nodes:[…]}`): an address and its payload naming one thing two ways is the
+same defect one level down. `routers` is a literal beside `/:id`; **measured on
+this router, a static segment beats its param sibling in EITHER registration
+order**, so unlike the `/v1/s3` order-118-vs-120 case there is no ordering to
+freeze with a test. The `edge` tag is gone from the woven document (149 → 148
+tags) and no longer inherits zt's package sentence.
+
 ## The index (`apps/index`, `/v1/index`)
 
 The in-binary index, speaking the Meilisearch REST dialect so a Meilisearch client

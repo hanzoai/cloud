@@ -7,18 +7,8 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/edge/nodes", zip.Doc{
-		Description: "Returns the Zero Trust edge-routers the caller's org owns.\n\nOne row per real ZT edge-router tagged with the org's \"org-<org>\" role attribute,\ncarrying the controller's own health signal: \"online\" when connected, \"disabled\"\nwhen administratively disabled, \"offline\" otherwise. region is filled only from a\n\"region-<slug>\" role attribute and omitted when the router carries none, so the\ncolumn renders \"—\" rather than a guess.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list.",
-		Fields: map[string]string{
-			"edgeNodeList.nodes":  "Nodes is one row per ZT edge-router tagged with the caller's org role.",
-			"edgeNodeView.id":     "ID is the ZT edge-router's id.",
-			"edgeNodeView.name":   "Name is the edge-router's name, falling back to its id when it has none.",
-			"edgeNodeView.region": "Region comes from a \"region-<slug>\" role attribute and is omitted when the\nrouter carries none, so the column renders \"—\" rather than a guess.",
-			"edgeNodeView.status": "Status is the controller's own health signal: \"online\" when connected,\n\"disabled\" when administratively disabled, \"offline\" otherwise.",
-		},
-	})
 	zip.Describe("GET /v1/mesh/services", zip.Doc{
-		Description: "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-<org>\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and edge-node reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
+		Description: "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-<org>\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and router reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
 		Fields: map[string]string{
 			"meshServiceList.services": "Services is one row per ZT edge service tagged with the caller's org role.",
 			"meshView.id":              "ID is the ZT edge service's id.",
@@ -45,6 +35,16 @@ func init() {
 			"networkView.name":   "Name is the org the overlay belongs to.",
 			"networkView.nodes":  "Nodes is how many edge-routers the org has on the fabric.",
 			"networkView.status": "Status is \"connected\" once at least one of the org's edge-routers is\nonline, else \"provisioning\" (routers exist but none has dialed home).",
+		},
+	})
+	zip.Describe("GET /v1/networks/routers", zip.Doc{
+		Description: "Returns the Zero Trust routers the caller's org owns.\n\nOne row per real ZT edge-router tagged with the org's \"org-<org>\" role attribute,\ncarrying the controller's own health signal: \"online\" when connected, \"disabled\"\nwhen administratively disabled, \"offline\" otherwise. region is filled only from a\n\"region-<slug>\" role attribute and omitted when the router carries none, so the\ncolumn renders \"—\" rather than a guess.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list.",
+		Fields: map[string]string{
+			"routerList.routers": "Routers is one row per ZT edge-router tagged with the caller's org role.",
+			"routerView.id":      "ID is the ZT edge-router's id.",
+			"routerView.name":    "Name is the edge-router's name, falling back to its id when it has none.",
+			"routerView.region":  "Region comes from a \"region-<slug>\" role attribute and is omitted when the\nrouter carries none, so the column renders \"—\" rather than a guess.",
+			"routerView.status":  "Status is the controller's own health signal: \"online\" when connected,\n\"disabled\" when administratively disabled, \"offline\" otherwise.",
 		},
 	})
 }

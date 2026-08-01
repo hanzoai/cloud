@@ -22,8 +22,8 @@ func main() {
 		Price: cloud.Free,
 		Mount: zt.Mount,
 		// This subsystem is named "zt" and serves NEITHER "/v1/zt" nor anything
-		// under it — its four routes are /v1/networks[/:id], /v1/mesh/services and
-		// /v1/edge/nodes. The /v1/<Name> convention MountPrefixes assumes therefore
+		// under it — its four routes are /v1/networks[/routers|/:id] and
+		// /v1/mesh/services. The /v1/<Name> convention MountPrefixes assumes therefore
 		// covered NOTHING it registers, so every request here was attributed to no
 		// subsystem and any middleware installed through the scoped Router landed
 		// on "/v1/zt" and never ran. The apps/plan defect, one app over. The list

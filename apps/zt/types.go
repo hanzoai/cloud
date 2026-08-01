@@ -5,7 +5,7 @@
 //
 //   - networkView  -> console NetworksModule.tsx   BootnodeNetwork {id,name,chain,status,nodes,rpc}
 //   - meshView     -> console ServiceMeshModule.tsx MeshService     {id,service,namespace,mtls,requests,status}
-//   - edgeNodeView -> console EdgeModule.tsx        EdgeNode        {id,name,region,status,requests,latency}
+//   - routerView   -> console RoutersModule.tsx     Router          {id,name,region,status,requests,latency}
 //
 // Every field is a REAL ZT value or an honest omission. Telemetry ZT's management
 // API does not carry (per-service request counts, per-router latency) is left off
@@ -102,11 +102,11 @@ type meshView struct {
 	Status string `json:"status"`
 }
 
-// edgeNodeView is the shape console EdgeModule (EdgeNode) consumes — one row per ZT
+// routerView is the shape console RoutersModule (Router) consumes — one row per ZT
 // edge-router. status is the REAL online/disabled/offline signal; region is filled
 // only from a "region-<slug>" role attribute (honest "—" otherwise); requests and
 // latency are omitted (no per-router telemetry in the management API).
-type edgeNodeView struct {
+type routerView struct {
 	// ID is the ZT edge-router's id.
 	ID string `json:"id"`
 	// Name is the edge-router's name, falling back to its id when it has none.
@@ -201,13 +201,13 @@ func regionOf(r ztEdgeRouter) string {
 	return ""
 }
 
-// toEdgeNodeView maps a ZT edge-router to the console edge row.
-func toEdgeNodeView(r ztEdgeRouter) edgeNodeView {
+// toRouterView maps a ZT edge-router to the console router row.
+func toRouterView(r ztEdgeRouter) routerView {
 	name := r.Name
 	if name == "" {
 		name = r.ID
 	}
-	return edgeNodeView{
+	return routerView{
 		ID:     r.ID,
 		Name:   name,
 		Region: regionOf(r),
