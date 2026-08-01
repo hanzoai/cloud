@@ -323,39 +323,53 @@ func normalize(org string, now time.Time, e CaptureEvent) (fact, bool) {
 	return f, true
 }
 
-// resolveName picks the stored event name. A tracked product event MUST name itself
-// (an unnamed one is unroutable and dropped — the pre-existing rule); every other route
-// has a server-chosen default, so a caller that names nothing cannot leave the row
-// unnamed AND cannot choose what it is called.
+// The ROUTE's server-chosen default names, declared once because two files decide with
+// them: resolveName picks them when the caller named nothing, and the anonymous lane's
+// kind table (publicKinds, public.go) stores them outright. Naming them here is what
+// keeps those two from drifting into two spellings of one name.
+//
+// They are plain verb-object names. The old sentinels ($pageview, $error) were PostHog
+// jargon standing in for a discriminator the schema now has: a page view is `kind =
+// page`, which is what a reader filters on, so the magic name is no longer load-bearing
+// anywhere.
+const (
+	namePageView = "page_viewed"
+	nameError    = "error"
+	nameIdentify = "user_identified"
+	nameGroup    = "group_identified"
+	nameLog      = "log_record"
+	nameSpan     = "span"
+)
+
+// resolveName picks the stored event name. A tracked product event MUST name itself (an
+// unnamed one is unroutable and dropped — the pre-existing rule); every other route has
+// a server-chosen default, so a caller that names nothing cannot leave the row unnamed
+// and cannot choose what it is called.
 //
 // AN ERROR IS NAMED `error`, NEVER ITS EXCEPTION CLASS. This branch used to fall back to
-// e.Error.Type, and that was a caller string on the one function the ANONYMOUS lane
-// leans on for its whole name rule: `{"type":"error","error":{"type":"…"}}` with no
-// credential wrote chosen bytes into `name`, fifty distinct per request, and on a
-// published-site host into a REAL org's partition — unbounded cardinality in a column
-// every signal here treats as low-cardinality, from a caller nobody vouched for.
+// e.Error.Type, and that was a caller string on a function the ANONYMOUS lane reaches:
+// `{"type":"error","error":{"type":"…"}}` with no credential wrote 60 KiB of chosen bytes
+// into `name`, fifty distinct per request, and on a published-site host into a real org's
+// partition — unbounded cardinality in the column the plane orders by, from a caller
+// nobody vouched for.
 //
-// Dropping the fallback costs nothing, which is why the fix belongs here rather than in
-// a per-lane special case: the class was never this column's fact to hold. It is stored
-// in the fault's own `class`, it is the first thing fingerprint() hashes into `group`,
-// and the error lens reads it back from attributes['$exception']. Naming the row after
-// it was a third copy of one fact under a third spelling.
-//
-// The defaults are plain verb-object names. The old sentinels ($pageview, $error) were
-// PostHog jargon standing in for a discriminator the schema now has: a page view is
-// `kind = page`, which is what a reader filters on, so the magic name is no longer
-// load-bearing anywhere.
+// Dropping it costs nothing, which is why the fix belongs here and not in a per-lane
+// special case. The class was never this column's fact to hold: it is stored in the
+// fault's own `class`, it is the first thing fingerprint() hashes into `group`, and the
+// error lens surfaces it from attributes['$exception']. Naming the row after it was a
+// THIRD copy of one fact under a third spelling — and it is what kept `name` from being
+// the low-cardinality column every signal here treats it as.
 func resolveName(r route, e CaptureEvent) string {
 	if n := strings.TrimSpace(e.Event); n != "" {
 		return n
 	}
 	switch r.signal {
 	case signalError:
-		return "error"
+		return nameError
 	case signalLog:
-		return "log_record"
+		return nameLog
 	case signalSpan:
-		return "span"
+		return nameSpan
 	case signalMetric:
 		if e.Metric != nil {
 			return trim(e.Metric.Name)
@@ -364,11 +378,11 @@ func resolveName(r route, e CaptureEvent) string {
 	}
 	switch r.kind {
 	case kindPage:
-		return "page_viewed"
+		return namePageView
 	case kindIdentify:
-		return "user_identified"
+		return nameIdentify
 	case kindGroup:
-		return "group_identified"
+		return nameGroup
 	}
 	return "" // a tracked event with no name is unroutable
 }
