@@ -115,16 +115,6 @@
         ]
       }
     },
-    "/v1/billing/auto-recharge/run-all": {
-      "post": {
-        "operationId": "post_v1_billing_auto-recharge_run-all",
-        "summary": "Platform sweep: top up every org whose balance has fallen below its own threshold",
-        "description": "Walks every organization and, for those that enabled auto-recharge and whose available balance (balance minus holds) has fallen under their configured threshold, charges their default payment method off-session and credits the balance, answering a per-org result row for each one it touched. This is the platform cron's door, not a customer's: it is gated on the internal service token AND platform scope, so an org admin cannot run the fleet-wide sweep. An org above its threshold is skipped silently; an org with no default payment method is reported as an uncharged row with the reason rather than failing the whole run.",
-        "tags": [
-          "billing"
-        ]
-      }
-    },
     "/v1/billing/invoices": {
       "get": {
         "operationId": "get_v1_billing_invoices",
@@ -155,11 +145,11 @@
         ]
       }
     },
-    "/v1/billing/payment-config": {
-      "get": {
-        "operationId": "get_v1_billing_payment-config",
-        "summary": "The public payment-provider config your card form needs to initialize",
-        "description": "Answers the Square application id, location id, environment and live flag the browser's card iframe boots against — public values only, never a secret. Resolution lives in one place shared with the public tenant projection, so the card form can never initialize against a different Square application than the one commerce will actually charge. It deliberately does NOT hydrate credentials from KMS: the dialog blocks on this call, so it answers from the org and the deployment environment without a round trip, and an org with no per-org credentials gets the deployment's own public app id.",
+    "/v1/billing/mode": {
+      "post": {
+        "operationId": "post_v1_billing_mode",
+        "summary": "Move an org between sandbox and live billing",
+        "description": "Flips the org's live flag, which is the single authority for both the payment environment and the ledger bucket its transactions land in. This is a money-MINT control, not a customer action: it is gated on the internal service token AND platform scope, so an ORG ADMIN CANNOT move their own org — otherwise a tenant could drop itself into sandbox and stop paying. The rule most callers get wrong is the default: an org that has never been flipped transacts in SANDBOX, which is why a production-credentialled deployment can still hand a buyer a sandbox card form. When the deployment pins the payment environment explicitly, that pin governs and this flag only marks the transactions.",
         "tags": [
           "billing"
         ]
@@ -180,6 +170,26 @@
         "operationId": "get_v1_billing_plans",
         "summary": "The public plan catalog, annotated with the active platform promotion",
         "description": "Returns every subscription tier a buyer can choose, each carrying the platform promo currently in effect, optionally narrowed with the category query. Prices come from the admin-editable plan authority in the database; the embedded catalog is only a loud-failing fallback, so a failed seed or a query error serves the known plans rather than a silently blank list. It is a catalog read, not an entitlement read — it says what may be bought, never what this caller has.",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/recharge/run-all": {
+      "post": {
+        "operationId": "post_v1_billing_recharge_run-all",
+        "summary": "Platform sweep: top up every org whose balance has fallen below its own threshold",
+        "description": "Walks every organization and, for those that enabled auto-recharge and whose available balance (balance minus holds) has fallen under their configured threshold, charges their default payment method off-session and credits the balance, answering a per-org result row for each one it touched. This is the platform cron's door, not a customer's: it is gated on the internal service token AND platform scope, so an org admin cannot run the fleet-wide sweep. An org above its threshold is skipped silently; an org with no default payment method is reported as an uncharged row with the reason rather than failing the whole run.",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/settings": {
+      "get": {
+        "operationId": "get_v1_billing_settings",
+        "summary": "The public payment-provider config your card form needs to initialize",
+        "description": "Answers the Square application id, location id, environment and live flag the browser's card iframe boots against — public values only, never a secret. Resolution lives in one place shared with the public tenant projection, so the card form can never initialize against a different Square application than the one commerce will actually charge. It deliberately does NOT hydrate credentials from KMS: the dialog blocks on this call, so it answers from the org and the deployment environment without a round trip, and an org with no per-org credentials gets the deployment's own public app id.",
         "tags": [
           "billing"
         ]
@@ -242,16 +252,6 @@
               "type": "string"
             }
           }
-        ]
-      }
-    },
-    "/v1/billing/test-mode": {
-      "post": {
-        "operationId": "post_v1_billing_test-mode",
-        "summary": "Move an org between sandbox and live billing",
-        "description": "Flips the org's live flag, which is the single authority for both the payment environment and the ledger bucket its transactions land in. This is a money-MINT control, not a customer action: it is gated on the internal service token AND platform scope, so an ORG ADMIN CANNOT move their own org — otherwise a tenant could drop itself into sandbox and stop paying. The rule most callers get wrong is the default: an org that has never been flipped transacts in SANDBOX, which is why a production-credentialled deployment can still hand a buyer a sandbox card form. When the deployment pins the payment environment explicitly, that pin governs and this flag only marks the transactions.",
-        "tags": [
-          "billing"
         ]
       }
     },
@@ -585,11 +585,9 @@
         ]
       }
     },
-    "/v1/store/token": {
+    "/v1/store/storefront-token": {
       "post": {
-        "operationId": "post_v1_store_token",
-        "summary": "Mint your org's least-privilege storefront read key",
-        "description": "Answers a freshly minted token carrying ONLY the published-read permission — enough for a logged-out shopper's storefront to read your published catalog and nothing more, with no write and no admin scope. It is org-bound, signed with the org's own secret and subject to the org id, so unlike a shared service token it can never act on another tenant. Minting ROTATES rather than accumulates: the previous storefront token is dropped first and is invalid immediately, so re-minting is how you revoke. Admin is enforced by the handler as well as the route, because the route's token gate does not apply on the identity path and a plain member must not be able to mint their org's key.",
+        "operationId": "post_v1_store_storefront-token",
         "tags": [
           "store"
         ]

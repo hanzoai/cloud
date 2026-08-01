@@ -134,7 +134,7 @@
       "put": {
         "operationId": "put_v1_webhooks_id",
         "summary": "Replaces the editable fields of one of the caller org's endpoints — url, events, status and description — and answers the stored row with its secret redacted.",
-        "description": "Replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhooks/{id}/rotate-secret.",
+        "description": "Replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhooks/{id}/secret.",
         "tags": [
           "webhooks"
         ],

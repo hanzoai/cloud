@@ -345,7 +345,7 @@ components:
         sources:
           description: |-
             Sources name the books reports the figures were computed from — "pnl",
-            "balance-sheet", "trial-balance".
+            "position", "trial".
           items:
             type: string
           type: array
@@ -3672,7 +3672,7 @@ components:
     ModelRow:
       properties:
         model:
-          description: Model is the model id, e.g. claude-opus-4.
+          description: Model is the model id, e.g. zen5-coder.
           type: string
         pct:
           description: Pct is this model's share of the window's returned spend, 0..100,
@@ -7474,7 +7474,7 @@ components:
         o11yAi:
           $ref: '#/components/schemas/aimO11yAI'
         o11yAiModels:
-          description: o11y_ai per-model (honest-empty today)
+          description: gen_ai spans per-model
           items:
             $ref: '#/components/schemas/aimLfModelStat'
           type: array
@@ -17225,34 +17225,6 @@ components:
           description: Purged is the number of messages removed.
           type: integer
       type: object
-    pushEvent:
-      properties:
-        after:
-          type: string
-        pusher:
-          properties:
-            login:
-              type: string
-            username:
-              type: string
-          type: object
-        ref:
-          type: string
-        repository:
-          properties:
-            clone_url:
-              type: string
-            name:
-              type: string
-            owner:
-              properties:
-                login:
-                  type: string
-                username:
-                  type: string
-              type: object
-          type: object
-      type: object
     pushFile:
       properties:
         content:
@@ -17830,8 +17802,8 @@ components:
           description: OutputTokens is completion tokens produced in the window.
           type: integer
         plan:
-          description: Plan is the provider plan the account is on, e.g. a Claude
-            Max plan.
+          description: Plan is the subscription plan the account is on, as the provider
+            names it.
           type: string
         provider:
           description: |-
@@ -18278,8 +18250,8 @@ components:
           description: OutputTokens is completion tokens produced in the window.
           type: integer
         plan:
-          description: Plan is the provider plan the account is on, e.g. a Claude
-            Max plan.
+          description: Plan is the subscription plan the account is on, as the provider
+            names it.
           type: string
         provider:
           description: Provider is the upstream the account belongs to, e.g. anthropic.
@@ -20460,8 +20432,8 @@ components:
             unknown.
           type: integer
         plan:
-          description: Plan is the provider plan the account is on, e.g. a Claude
-            Max plan.
+          description: Plan is the subscription plan the account is on, as the provider
+            names it.
           type: string
         requests:
           description: |-
@@ -22226,14 +22198,14 @@ paths:
   /v1/admin/aimetrics:
     get:
       description: |-
-        Is the fleet AI board: O11yAI generations (count, cost, avg/p95 latency,
-        per-model), per-model usage from the live cloud_usage ledger, and the eval plane
-        (traces, scores, score names, runs, and the average-score trend).
+        Is the fleet AI board: LLM generations over gen_ai spans (count, cost,
+        avg/p95 latency, per-model), per-model usage from the live cloud_usage ledger, and
+        the eval plane (traces, scores, score names, runs, and the average-score trend).
 
         Every signal degrades INDEPENDENTLY — a table that is absent or errors contributes its
-        zero value and the read still succeeds. O11yAI latency is a SEPARATE query from
-        generations and cost on purpose: a Nullable end_time or a column mismatch there must
-        not zero the two numbers that did read.
+        zero value and the read still succeeds. Generation latency is a SEPARATE query from
+        generations and cost on purpose: a duration/attribute mismatch there must not zero
+        the two numbers that did read.
       operationId: adminAIMetrics
       parameters:
       - description: |-
@@ -22264,9 +22236,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/aimetricsOut'
           description: ok
-      summary: 'Is the fleet AI board: O11yAI generations (count, cost, avg/p95 latency,
-        per-model), per-model usage from the live cloud_usage ledger, and the eval
-        plane (traces, scores, score names, runs, and the average-score trend).'
+      summary: 'Is the fleet AI board: LLM generations over gen_ai spans (count, cost,
+        avg/p95 latency, per-model), per-model usage from the live cloud_usage ledger,
+        and the eval plane (traces, scores, score names, runs, and the average-score
+        trend).'
       tags:
       - admin
   /v1/admin/analytics:
@@ -22942,7 +22915,7 @@ paths:
   /v1/admin/catalog/models/{wildcard1}:
     patch:
       description: |-
-        Sets one model's availability overlay — and the price overrides applied on top of the catalog — then answers the new effective overlay, so a console needs no second read. The model id is the whole remaining path, so a slashed id like `anthropic/claude-opus-4.6` addresses intact.
+        Sets one model's availability overlay — and the price overrides applied on top of the catalog — then answers the new effective overlay, so a console needs no second read. The model id is the whole remaining path, so a slashed id like `acme/some-model-1` addresses intact.
 
         SuperAdmin only; every other caller is 403, decided before the body is read. The overlay is PLATFORM-WIDE — this is the catalog every org prices against, not a per-org setting — and `betaOrgs` is what narrows a beta to named orgs.
 
@@ -26684,7 +26657,7 @@ paths:
       description: |-
         ReportRoutedRun completes a claimed run: it delivers the terminal result to the
         run's durable owner, which is what lets that workflow finish. Scoped to (org,
-        target, run) and claim-key-authenticated, so a machine can only ever report a
+        target, run) and claim-key authenticated, so a machine can only ever report a
         run it legitimately holds. Idempotent — a report for an unknown or
         already-finished run answers delivered:false rather than failing, because the
         session's terminal state was already set by the machine's own stream.
@@ -28137,7 +28110,7 @@ paths:
   /v1/benchmark/runs:
     post:
       description: |-
-        Admits a request to run one or more catalog benchmarks against `model` — a catalog model id — or against `endpoint`, your own OpenAI-compatible endpoint, and answers 202 with what was queued. It ADMITS AND QUEUES ONLY: nothing is executed on this call and no scores come back with it. Results land in the leaderboard as the worker completes them.
+        Admits a request to run one or more catalog benchmarks against `model` — a catalog model id — or against `endpoint`, an endpoint of your own on the chat-completions wire, and answers 202 with what was queued. It ADMITS AND QUEUES ONLY: nothing is executed on this call and no scores come back with it. Results land in the leaderboard as the worker completes them.
 
         Cost is bounded by the store rather than by a quota: attempts are append-only and keyed by (benchmark, item, model), so an (item, model) pair already attempted is skipped instead of re-spent, and re-queuing the same run is close to free. Validation is up front and total — a request with neither `model` nor `endpoint` is a 400, one with no benchmarks is a 400, and any benchmark id outside the catalog is a 422 naming exactly which ids were unknown, so a typo never silently queues a partial run.
       operationId: post_v1_benchmark_runs
@@ -28224,22 +28197,6 @@ paths:
       summary: The per-request spend-cap verdict the metering gate consumes
       tags:
       - billing
-  /v1/billing/auto-recharge/run-all:
-    post:
-      description: 'Walks every organization and, for those that enabled auto-recharge
-        and whose available balance (balance minus holds) has fallen under their configured
-        threshold, charges their default payment method off-session and credits the
-        balance, answering a per-org result row for each one it touched. This is the
-        platform cron''s door, not a customer''s: it is gated on the internal service
-        token AND platform scope, so an org admin cannot run the fleet-wide sweep.
-        An org above its threshold is skipped silently; an org with no default payment
-        method is reported as an uncharged row with the reason rather than failing
-        the whole run.'
-      operationId: post_v1_billing_auto-recharge_run-all
-      summary: 'Platform sweep: top up every org whose balance has fallen below its
-        own threshold'
-      tags:
-      - billing
   /v1/billing/balance:
     get:
       description: |-
@@ -28254,7 +28211,7 @@ paths:
       summary: Prepaid credit the caller's org can still spend
       tags:
       - billing
-  /v1/billing/gpu-charge:
+  /v1/billing/gpu/charge:
     post:
       description: |-
         Records a gpu-tagged debit against the caller's own org and answers 201 with the transaction id and the prepaid balance left. This is the ONE endpoint on the customer billing surface that moves an org's ledger.
@@ -28268,11 +28225,11 @@ paths:
         `amountCents` is whole USD cents and debits EXACTLY, with no rounding — the ledger holds 18-decimal USD, so the cents asked for are the cents taken.
 
         401 without a validated principal — a customer charging its OWN wallet, so an absent identity is not signed in, never not authorized.
-      operationId: post_v1_billing_gpu-charge
+      operationId: post_v1_billing_gpu_charge
       summary: Debit the caller's org prepaid balance for a GPU
       tags:
       - billing
-  /v1/billing/gpu-eligibility:
+  /v1/billing/gpu/eligibility:
     get:
       description: |-
         Answers `eligible` plus the exact `reason` — `ok`, `card_required` or `insufficient_prepaid` — with the org's prepaid available, whether a card is on file, and the cents required. It answers 200 in EVERY case: a no is data the launch UI renders as a remedy, never a 402.
@@ -28282,7 +28239,7 @@ paths:
         `amountCents` is the immediate charge and `minPrepaidCents` the 24h floor GPU policy requires; the gate needs prepaid available >= the larger of the two. Both default to 0, so asking with neither answers whether a card exists, not whether a launch is affordable.
 
         The wallet is pinned server-side to the caller's own org, so this reads exactly the wallet a charge debits — the gate and the debit can never address two wallets. 401 without a validated principal.
-      operationId: get_v1_billing_gpu-eligibility
+      operationId: get_v1_billing_gpu_eligibility
       summary: Whether the caller's org may launch a GPU right now, and what is missing
       tags:
       - billing
@@ -28317,21 +28274,7 @@ paths:
       summary: Download one invoice as a PDF attachment
       tags:
       - billing
-  /v1/billing/payment-config:
-    get:
-      description: 'Answers the Square application id, location id, environment and
-        live flag the browser''s card iframe boots against — public values only, never
-        a secret. Resolution lives in one place shared with the public tenant projection,
-        so the card form can never initialize against a different Square application
-        than the one commerce will actually charge. It deliberately does NOT hydrate
-        credentials from KMS: the dialog blocks on this call, so it answers from the
-        org and the deployment environment without a round trip, and an org with no
-        per-org credentials gets the deployment''s own public app id.'
-      operationId: get_v1_billing_payment-config
-      summary: The public payment-provider config your card form needs to initialize
-      tags:
-      - billing
-  /v1/billing/payment-methods:
+  /v1/billing/methods:
     get:
       description: |-
         Answers the org's saved payment methods as the portal holds them — brand, last four, expiry, default flag. This is what the GPU launch gate's card-on-file check reads.
@@ -28341,7 +28284,7 @@ paths:
         The customer filter is pinned server-side to the caller's own ORG slug — the upstream 400s without one, and this always supplies it — so a caller sees only its own org's methods. A card is SAVED under that same org key, so this list is the one that always matches what was saved; the /v1/finance/payment-methods sibling keys the same store on the resolved WALLET instead, which differs wherever the payer is a person rather than the org pool.
 
         401 without a validated principal. The upstream status forwards verbatim and an unreachable upstream is 502 — never an empty list, because no cards and could not ask must not look alike.
-      operationId: get_v1_billing_payment-methods
+      operationId: get_v1_billing_methods
       summary: Cards saved against the caller's org, masked
       tags:
       - billing
@@ -28354,8 +28297,23 @@ paths:
         The owning customer is pinned server-side to the caller's own org on every billing subject key, so a forged body can never attach a card to another tenant. Vaulting VALIDATES the card with the processor, so a card the bank refuses comes back 402 carrying the processor's own reason — forwarded verbatim, because insufficient funds and a wrong security code are different remedies for the customer.
 
         401 without a validated principal.
-      operationId: post_v1_billing_payment-methods
+      operationId: post_v1_billing_methods
       summary: Save a card on file for the caller's org
+      tags:
+      - billing
+  /v1/billing/mode:
+    post:
+      description: 'Flips the org''s live flag, which is the single authority for
+        both the payment environment and the ledger bucket its transactions land in.
+        This is a money-MINT control, not a customer action: it is gated on the internal
+        service token AND platform scope, so an ORG ADMIN CANNOT move their own org
+        — otherwise a tenant could drop itself into sandbox and stop paying. The rule
+        most callers get wrong is the default: an org that has never been flipped
+        transacts in SANDBOX, which is why a production-credentialled deployment can
+        still hand a buyer a sandbox card form. When the deployment pins the payment
+        environment explicitly, that pin governs and this flag only marks the transactions.'
+      operationId: post_v1_billing_mode
+      summary: Move an org between sandbox and live billing
       tags:
       - billing
   /v1/billing/payouts:
@@ -28380,6 +28338,36 @@ paths:
         what this caller has.
       operationId: get_v1_billing_plans
       summary: The public plan catalog, annotated with the active platform promotion
+      tags:
+      - billing
+  /v1/billing/recharge/run-all:
+    post:
+      description: 'Walks every organization and, for those that enabled auto-recharge
+        and whose available balance (balance minus holds) has fallen under their configured
+        threshold, charges their default payment method off-session and credits the
+        balance, answering a per-org result row for each one it touched. This is the
+        platform cron''s door, not a customer''s: it is gated on the internal service
+        token AND platform scope, so an org admin cannot run the fleet-wide sweep.
+        An org above its threshold is skipped silently; an org with no default payment
+        method is reported as an uncharged row with the reason rather than failing
+        the whole run.'
+      operationId: post_v1_billing_recharge_run-all
+      summary: 'Platform sweep: top up every org whose balance has fallen below its
+        own threshold'
+      tags:
+      - billing
+  /v1/billing/settings:
+    get:
+      description: 'Answers the Square application id, location id, environment and
+        live flag the browser''s card iframe boots against — public values only, never
+        a secret. Resolution lives in one place shared with the public tenant projection,
+        so the card form can never initialize against a different Square application
+        than the one commerce will actually charge. It deliberately does NOT hydrate
+        credentials from KMS: the dialog blocks on this call, so it answers from the
+        org and the deployment environment without a round trip, and an org with no
+        per-org credentials gets the deployment''s own public app id.'
+      operationId: get_v1_billing_settings
+      summary: The public payment-provider config your card form needs to initialize
       tags:
       - billing
   /v1/billing/subscribe/card:
@@ -28446,21 +28434,6 @@ paths:
         schema:
           type: string
       summary: Undo a pending cancellation and keep the subscription running
-      tags:
-      - billing
-  /v1/billing/test-mode:
-    post:
-      description: 'Flips the org''s live flag, which is the single authority for
-        both the payment environment and the ledger bucket its transactions land in.
-        This is a money-MINT control, not a customer action: it is gated on the internal
-        service token AND platform scope, so an ORG ADMIN CANNOT move their own org
-        — otherwise a tenant could drop itself into sandbox and stop paying. The rule
-        most callers get wrong is the default: an org that has never been flipped
-        transacts in SANDBOX, which is why a production-credentialled deployment can
-        still hand a buyer a sandbox card form. When the deployment pins the payment
-        environment explicitly, that pin governs and this flag only marks the transactions.'
-      operationId: post_v1_billing_test-mode
-      summary: Move an org between sandbox and live billing
       tags:
       - billing
   /v1/billing/topup/token:
@@ -36950,7 +36923,7 @@ paths:
     get:
       description: |-
         Models lists the models the engine serves, each with its load state — the
-        server's own model table (its OpenAI-style list envelope, load status
+        server's own model table (its standard list envelope, load status
         included), relayed verbatim.
       operationId: get_v1_engine_models
       responses:
@@ -36960,8 +36933,8 @@ paths:
               schema: {}
           description: ok
       summary: Models lists the models the engine serves, each with its load state
-        — the server's own model table (its OpenAI-style list envelope, load status
-        included), relayed verbatim.
+        — the server's own model table (its standard list envelope, load status included),
+        relayed verbatim.
       tags:
       - engine
   /v1/engine/status:
@@ -38228,7 +38201,7 @@ paths:
 
         It re-masks defensively: whatever the upstream sends, at most the trailing four DIGITS survive into `last4`. No card number, no security code and no processor token exists in this shape at all, so an over-returning upstream still cannot leak one through this lane.
 
-        Read the sibling difference before trusting a mismatch. This keys the store on the resolved wallet; /v1/billing/payment-methods keys it on the org SLUG, which is also the key a card is SAVED under — identical for an org paying from its shared pool, different wherever the payer is a person. When the two lists disagree, the billing one is what was saved.
+        Read the sibling difference before trusting a mismatch. This keys the store on the resolved wallet; /v1/billing/methods keys it on the org SLUG, which is also the key a card is SAVED under — identical for an org paying from its shared pool, different wherever the payer is a person. When the two lists disagree, the billing one is what was saved.
 
         401 without a validated principal. An upstream that answers non-2xx or cannot be reached is 502 — never an empty list, because no cards and could not ask must not look alike.
       operationId: get_v1_finance_payment-methods
@@ -38273,7 +38246,7 @@ paths:
     post:
       description: |-
         Evaluate runs the caller's flag definitions for one identity and returns the
-        PostHog-shaped verdict: which flags are on (or which variant), their payloads,
+        flag verdict: which flags are on (or which variant), their payloads,
         and whether any definition failed to compute. Evaluation is in-process over the
         caller's own (org, project) definitions — no network hop, no shared KV — so a
         tenant can only ever evaluate its own flags.
@@ -38303,8 +38276,8 @@ paths:
               schema: {}
           description: ok
       summary: 'Evaluate runs the caller''s flag definitions for one identity and
-        returns the PostHog-shaped verdict: which flags are on (or which variant),
-        their payloads, and whether any definition failed to compute.'
+        returns the flag verdict: which flags are on (or which variant), their payloads,
+        and whether any definition failed to compute.'
       tags:
       - flags
   /v1/flags/activity:
@@ -38336,7 +38309,7 @@ paths:
     post:
       description: |-
         Evaluate runs the caller's flag definitions for one identity and returns the
-        PostHog-shaped verdict: which flags are on (or which variant), their payloads,
+        flag verdict: which flags are on (or which variant), their payloads,
         and whether any definition failed to compute. Evaluation is in-process over the
         caller's own (org, project) definitions — no network hop, no shared KV — so a
         tenant can only ever evaluate its own flags.
@@ -38366,8 +38339,8 @@ paths:
               schema: {}
           description: ok
       summary: 'Evaluate runs the caller''s flag definitions for one identity and
-        returns the PostHog-shaped verdict: which flags are on (or which variant),
-        their payloads, and whether any definition failed to compute.'
+        returns the flag verdict: which flags are on (or which variant), their payloads,
+        and whether any definition failed to compute.'
       tags:
       - flags
   /v1/flags/defs:
@@ -38437,7 +38410,7 @@ paths:
     put:
       description: |-
         PutFlagDefinition creates or replaces the flag definition at the path's key and
-        returns the stored row. The BODY IS THE DEFINITION DOCUMENT — the PostHog-shaped
+        returns the stored row. The BODY IS THE DEFINITION DOCUMENT — the flag-definition
         JSON object the evaluator consumes — and it is stored verbatim except that its
         "key" is forced to the key in the URL, so a document can never be filed under a
         name other than the one it was addressed by. Every write bumps the version and
@@ -40759,18 +40732,15 @@ paths:
   /v1/git/webhook:
     post:
       description: |-
-        The canonical forge's push-to-deploy door. git.hanzo.ai runs as a SEPARATE process, so its pushes never reach this binary's receive-pack; without this a push to the host we call canonical would build nothing. A verified push is handed to the same single trigger the embedded git server and the GitHub App fire, and the build decision itself stays downstream in the one place that knows what a push means.
+        GONE (410). This was the canonical forge's push-to-deploy door, and it never dispatched a build in its life.
 
-        PUBLIC at the JWT layer, because the forge carries no Hanzo session: AUTHENTICATION IS THE SIGNATURE. The HMAC covers the raw bytes and is verified BEFORE the payload is parsed, so an unauthenticated body is never decoded — which is also why this cannot be a typed op, since a typed op decodes first. An UNSET webhook secret refuses every delivery rather than trusting it: a door that starts builds fails closed. A bad signature is 401, a payload over 8 MiB is 413, and a malformed one 400.
+        It handed each verified push to cloud.OnGitPush, a single-registrant seam whose only registrant lives in apps/platform. cloud runs each app as its own OS process, so in the git process that builder is nil forever — and this handler answered 204 either way. Delivered, signature valid, green on the forge's hook page, and nothing built.
 
-        Every success answers 204 and no body, including the deliveries it deliberately ignores: a non-push event, a payload whose ref is not a ref, a ref DELETE (a zero `after` has no commit to build), and a BOT-authored push — release automation pushes as the forge's own actions user, and a release must never rebuild itself. Every other ref reaches the builder, branches and tags alike, because releases are cut by tag and filtering here would silently stop publishing. A trigger that fails is logged rather than returned, so a push that already landed on the forge is not retried against us.
+        Push-to-deploy now belongs to POST https://platform.hanzo.ai/v1/git-webhook, which owns the build system-of-record and dispatches BuildKit Jobs. git.hanzo.ai delivers there through ONE forge-wide system webhook covering every repository; a repo opts in by committing hanzo.yml, not by owning a hook of its own.
+
+        The route is kept, and answers 410 naming that address, precisely so a misdirected delivery says what is wrong. Deleting it would 404, and a 404 here reads as 'the API is switched off' — the wrong conclusion this estate has already drawn twice.
       operationId: post_v1_git_webhook
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/pushEvent'
-      summary: Receive a push from the canonical forge and trigger its build
+      summary: Retired — forge pushes build via platform.hanzo.ai
       tags:
       - git
   /v1/git/zap/createRepo:
@@ -41434,7 +41404,7 @@ paths:
   /v1/iam:
     delete:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41451,7 +41421,7 @@ paths:
       - iam
     get:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41468,7 +41438,7 @@ paths:
       - iam
     options:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41485,7 +41455,7 @@ paths:
       - iam
     patch:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41502,7 +41472,7 @@ paths:
       - iam
     post:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41519,7 +41489,7 @@ paths:
       - iam
     put:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41536,7 +41506,7 @@ paths:
       - iam
     trace:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41554,7 +41524,7 @@ paths:
   /v1/iam/{wildcard1}:
     delete:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41577,7 +41547,7 @@ paths:
       - iam
     get:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41600,7 +41570,7 @@ paths:
       - iam
     options:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41623,7 +41593,7 @@ paths:
       - iam
     patch:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41646,7 +41616,7 @@ paths:
       - iam
     post:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41669,7 +41639,7 @@ paths:
       - iam
     put:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -41692,7 +41662,7 @@ paths:
       - iam
     trace:
       description: |-
-        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
+        Relays github.com/hanzoai/iam verbatim. The remainder of the path and the method together select the operation INSIDE IAM — OIDC discovery and JWKS, the oauth authorize/token/userinfo/logout/introspect/revoke/device endpoints, credential and wallet sign-in, the front door a hosted login page self-configures from, the typed CRUD over users, organizations, applications, providers, roles, projects, workspaces, permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, memberships, TOTP enrollment, and the legacy verb aliases (get-users, add-organization, …) the live consoles still call. cloud does not interpret the remainder or rewrite the reply: the status, the bytes and the Content-Type are the nested app's own.
 
         WHO MAY CALL IT is structural inside IAM — decided by which group a route is registered on, never by an allow-list that can drift. The protocol half is public by construction, because a caller holding no token has to be able to reach it: discovery, JWKS, authorize, token, userinfo, logout, introspect, revoke, credential sign-in, the CAIP-122 wallet flow, and the Docker registry token endpoint. Everything else is behind IAM's one Guard and fails closed at 401 — in IAM's OWN {"status":401,"error":"authentication required"} envelope, which is NOT cloud's error shape, so a client that only parses cloud errors will not recognise a refusal from here.
 
@@ -49677,7 +49647,7 @@ paths:
       parameters:
       - description: |-
           Name is the model's name or its slugged id ("zen4",
-          "anthropic/claude-opus-4.6"), matched case-insensitively. It comes from
+          "acme/some-model-1"), matched case-insensitively. It comes from
           the path: the URL is the addressing authority.
         example: zen4
         in: path
@@ -53747,19 +53717,9 @@ paths:
       summary: Resolve your org's active storefront without naming an id
       tags:
       - store
-  /v1/store/token:
+  /v1/store/storefront-token:
     post:
-      description: 'Answers a freshly minted token carrying ONLY the published-read
-        permission — enough for a logged-out shopper''s storefront to read your published
-        catalog and nothing more, with no write and no admin scope. It is org-bound,
-        signed with the org''s own secret and subject to the org id, so unlike a shared
-        service token it can never act on another tenant. Minting ROTATES rather than
-        accumulates: the previous storefront token is dropped first and is invalid
-        immediately, so re-minting is how you revoke. Admin is enforced by the handler
-        as well as the route, because the route''s token gate does not apply on the
-        identity path and a plain member must not be able to mint their org''s key.'
-      operationId: post_v1_store_token
-      summary: Mint your org's least-privilege storefront read key
+      operationId: post_v1_store_storefront-token
       tags:
       - store
   /v1/summary:
@@ -56176,7 +56136,7 @@ paths:
     get:
       description: |-
         Is the PER-PROVIDER view: one connected account's own consumption of its
-        own plan — "my Claude Max plan is 47% through its 6h window, resets at 14:20".
+        own plan — "my plan is 47% through its 6h window, resets at 14:20".
 
         `current` is the newest instance of each lane (the headline); `windows` is the
         history behind it. Both come from ONE deduped read, so they can never disagree.
@@ -56222,8 +56182,7 @@ paths:
                 $ref: '#/components/schemas/dashResp'
           description: ok
       summary: 'Is the PER-PROVIDER view: one connected account''s own consumption
-        of its own plan — "my Claude Max plan is 47% through its 6h window, resets
-        at 14:20".'
+        of its own plan — "my plan is 47% through its 6h window, resets at 14:20".'
       tags:
       - usage
   /v1/usage/summary:
@@ -57012,7 +56971,7 @@ paths:
         with its secret redacted. It is a full replace, not a patch: an omitted field
         is written as its empty value, and an omitted or empty events list resubscribes
         the endpoint to EVERY event. The signing secret and the creation time are
-        immutable here; rotate the secret with POST /v1/webhooks/{id}/rotate-secret.
+        immutable here; rotate the secret with POST /v1/webhooks/{id}/secret.
       operationId: put_v1_webhooks_id
       parameters:
       - example: wh_9f8c1d2e
