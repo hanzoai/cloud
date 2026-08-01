@@ -107,9 +107,9 @@ func init() {
 		Description: "Is the fleet-wide observability board: LLM usage (requests, tokens, cost,\nerrors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in ms,\nerror rate, top services), fleet log volume, and the O11yAI generation rollup — all\naggregated across EVERY tenant, with no org filter applied.\n\nEvery signal degrades INDEPENDENTLY. A table that is absent or errors contributes its\nzero value and the read still succeeds, so the board renders exactly what the\nwarehouse holds rather than failing whole because one of four sources is missing.\nSame when the warehouse is not connected at all: the zero board, never a fabricated\nfleet.",
 		Fields: map[string]string{
 			"o11ySvcStat.errorRate":     "percent (0..100)",
-			"o11yTotals.logVolume":      "Logs (distributed_logs_v2), fleet volume over the window.",
+			"o11yTotals.logVolume":      "Logs (event.log), fleet volume over the window.",
 			"o11yTotals.requests":       "LLM usage (hanzo.cloud_usage), all orgs.",
-			"o11yTotals.traceCount":     "Traces (o11y_index_v3), all services.",
+			"o11yTotals.traceCount":     "Traces (event.span), all services.",
 			"o11yTotals.traceErrorRate": "percent (0..100)",
 			"rangeIn.range":             "Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the\nboard's own default.",
 		},
