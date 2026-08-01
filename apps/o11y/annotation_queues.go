@@ -22,14 +22,14 @@ import (
 // feature (annotation_store.go) registered BEFORE the hanzoai/o11y wildcard
 // (inside MountO11y, order 69) so Fiber's in-order match gives it precedence.
 //
-//	GET    /v1/o11y/annotation-queues              list queues (org+project scoped)
-//	POST   /v1/o11y/annotation-queues              create a queue
-//	GET    /v1/o11y/annotation-queues/:id          queue detail (+ counts + items)
-//	PATCH  /v1/o11y/annotation-queues/:id          update name/description/scoreConfigIds
-//	DELETE /v1/o11y/annotation-queues/:id          delete a queue (+ its items)
-//	GET    /v1/o11y/annotation-queues/:id/items    list items (status filter, paged)
-//	POST   /v1/o11y/annotation-queues/:id/items    add items (traces/observations/sessions)
-//	PATCH  /v1/o11y/annotation-queues/:id/items/:itemId  update item status/assignee
+//	GET    /v1/o11y/reviews              list queues (org+project scoped)
+//	POST   /v1/o11y/reviews              create a queue
+//	GET    /v1/o11y/reviews/:id          queue detail (+ counts + items)
+//	PATCH  /v1/o11y/reviews/:id          update name/description/scoreConfigIds
+//	DELETE /v1/o11y/reviews/:id          delete a queue (+ its items)
+//	GET    /v1/o11y/reviews/:id/items    list items (status filter, paged)
+//	POST   /v1/o11y/reviews/:id/items    add items (traces/observations/sessions)
+//	PATCH  /v1/o11y/reviews/:id/items/:itemId  update item status/assignee
 //
 // Lists return the console REST envelope {data:[…], meta:{page,limit,totalItems,
 // totalPages}}. Every route is a TYPED op, so tenant isolation is tenantOf (the
@@ -81,7 +81,7 @@ func mountAnnotationQueues(a cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("o11y.mountAnnotationQueues: open store: %w", err)
 	}
-	log := deps.Logger.New("subsystem", "o11y-annotation-queues")
+	log := deps.Logger.New("subsystem", "o11y-reviews")
 	s := &annService{store: store, log: log}
 	annQueues = s
 
@@ -92,16 +92,16 @@ func mountAnnotationQueues(a cloud.Router, deps cloud.Deps) error {
 	// param routes so an id can never shadow a collection route (the eval
 	// discipline).
 	g := a.Group(o11yPrefix)
-	zip.Get(g, "/annotation-queues", s.listQueues)
-	zip.Post(g, "/annotation-queues", s.createQueue, zip.WithStatus(http.StatusCreated))
-	zip.Get(g, "/annotation-queues/:id", s.getQueue)
-	zip.Patch(g, "/annotation-queues/:id", s.updateQueue)
-	zip.Delete(g, "/annotation-queues/:id", s.deleteQueue)
-	zip.Get(g, "/annotation-queues/:id/items", s.listItems)
-	zip.Post(g, "/annotation-queues/:id/items", s.addItems, zip.WithStatus(http.StatusCreated))
-	zip.Patch(g, "/annotation-queues/:id/items/:itemId", s.updateItem)
+	zip.Get(g, "/reviews", s.listQueues)
+	zip.Post(g, "/reviews", s.createQueue, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/reviews/:id", s.getQueue)
+	zip.Patch(g, "/reviews/:id", s.updateQueue)
+	zip.Delete(g, "/reviews/:id", s.deleteQueue)
+	zip.Get(g, "/reviews/:id/items", s.listItems)
+	zip.Post(g, "/reviews/:id/items", s.addItems, zip.WithStatus(http.StatusCreated))
+	zip.Patch(g, "/reviews/:id/items/:itemId", s.updateItem)
 
-	log.Info("o11y annotation-queues surface mounted (native)")
+	log.Info("o11y reviews surface mounted (native)")
 	return nil
 }
 
