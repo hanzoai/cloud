@@ -233,8 +233,10 @@ func newLoginCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 		Long: "Authenticate against Hanzo IAM (hanzo.id) and store the token in\n" +
 			"~/.hanzo/credentials.json (mode 0600). Default is the device flow: scan the\n" +
 			"QR (or open the link) from any signed-in device and approve — no password\n" +
-			"touches this terminal, works over ssh/headless. --username/--password-stdin\n" +
-			"keep the password grant for automation; --token stores an externally-minted\n" +
+			"touches this terminal, works over ssh/headless. For automation use --token:\n" +
+			"the password grant needs a client secret, and this CLI is a public client\n" +
+			"that holds none. --username/--password-stdin therefore only work against a\n" +
+			"confidential --client-id. --token stores an externally-minted\n" +
 			"token; --platform-token stores the platform control-plane service token\n" +
 			"needed by apps/deploy/clusters.",
 		Args: cobra.NoArgs,

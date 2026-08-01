@@ -14,7 +14,7 @@ func TestDeviceAuth(t *testing.T) {
 		if r.URL.Path != "/v1/iam/oauth/device" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
-		if got := r.URL.Query().Get("client_id"); got != "hanzo-app" {
+		if got := r.URL.Query().Get("client_id"); got != "hanzo-cli" {
 			t.Fatalf("client_id = %q", got)
 		}
 		if got := r.URL.Query().Get("response_type"); got != "device_code" {
@@ -32,7 +32,7 @@ func TestDeviceAuth(t *testing.T) {
 	defer srv.Close()
 	srv0 = srv.URL
 
-	iam := newIAMClient(srv.URL, "hanzo-app")
+	iam := newIAMClient(srv.URL, "hanzo-cli")
 	da, err := iam.deviceAuth(context.Background(), "openid profile email")
 	if err != nil {
 		t.Fatal(err)
