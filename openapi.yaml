@@ -57079,7 +57079,7 @@ paths:
         record of what was sent, what the subscriber answered, and how long it took.
       tags:
       - webhooks
-  /v1/webhooks/{id}/rotate-secret:
+  /v1/webhooks/{id}/secret:
     post:
       description: |-
         Mints a NEW HMAC signing secret for the endpoint and answers the
@@ -57087,7 +57087,7 @@ paths:
         secret. The old secret stops working the instant this returns: every subsequent
         delivery signs with the new one, with no overlap window. Call it when the
         subscriber is ready to swap the value on its side, not before.
-      operationId: post_v1_webhooks_id_rotate-secret
+      operationId: post_v1_webhooks_id_secret
       parameters:
       - example: wh_9f8c1d2e
         in: path

@@ -179,7 +179,7 @@ func TestFailsClosedWithoutAValidatedPrincipal(t *testing.T) {
 		{http.MethodDelete, "/v1/webhooks/wh_x"},
 		{http.MethodGet, "/v1/webhooks/wh_x/deliveries"},
 		{http.MethodPost, "/v1/webhooks/wh_x/test"},
-		{http.MethodPost, "/v1/webhooks/wh_x/rotate-secret"},
+		{http.MethodPost, "/v1/webhooks/wh_x/secret"},
 	}
 	for _, r := range routes {
 		var body []byte
@@ -272,7 +272,7 @@ func TestSecretsLeaveOnceEach(t *testing.T) {
 			t.Errorf("GET %s leaked a signing secret: %s", path, got)
 		}
 	}
-	code, body = call(t, app, http.MethodPost, "/v1/webhooks/"+created.ID+"/rotate-secret", "acme", true, nil)
+	code, body = call(t, app, http.MethodPost, "/v1/webhooks/"+created.ID+"/secret", "acme", true, nil)
 	if code != http.StatusOK {
 		t.Fatalf("rotate want 200, got %d (%s)", code, body)
 	}

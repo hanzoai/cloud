@@ -307,7 +307,7 @@ func (o ops) getEndpoint(ctx context.Context, in *endpointRef) (*Endpoint, error
 // with its secret redacted. It is a full replace, not a patch: an omitted field
 // is written as its empty value, and an omitted or empty events list resubscribes
 // the endpoint to EVERY event. The signing secret and the creation time are
-// immutable here; rotate the secret with POST /v1/webhooks/{id}/rotate-secret.
+// immutable here; rotate the secret with POST /v1/webhooks/{id}/secret.
 //
 // Example: {"id": "wh_9f8c1d2e", "url": "https://acme.example/hooks/v2", "events": ["commerce.order.paid"], "status": "disabled"}
 func (o ops) updateEndpoint(ctx context.Context, in *updateEndpointIn) (*Endpoint, error) {
