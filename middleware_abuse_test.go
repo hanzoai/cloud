@@ -413,3 +413,65 @@ func abuseBody(t *testing.T, resp *http.Response) string {
 // nowish is the clock the sensor tests read. A single call site so a future move
 // to an injected clock has one place to change.
 func abuseNow() time.Time { return time.Now() }
+
+// A hold must not buy a free minute at a time. When it lapses, the caller is
+// asked about AGAIN on its next request — whether or not the local pattern still
+// looks unusual, because the scorer sees things the sensor cannot: prior accounts
+// on a device, a spend curve, a chargeback. Waiting for a rolling minute of
+// request counts to re-trip would wait forever.
+func TestAbuseGate_ALapsedHoldForcesTheQuestionAgain(t *testing.T) {
+	resetScorer(t)
+	asked := 0
+	SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
+		asked++
+		return RiskVerdict{ID: "d-1", Action: ActionBlock}, nil
+	})
+	tr := edge.NewTraffic()
+	deps := Deps{GatewayPolicy: staticModeStore(t, edge.ModeLive), Traffic: tr}
+	app := zip.New(zip.Config{})
+	app.Use(AbuseGate(deps, tr))
+	app.Get("/v1/models", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "1"}) })
+
+	sig := edge.Signal{Org: "acme", Cred: Fingerprint("sk-live-1"), IP: "203.0.113.9"}
+
+	// First request screens and is held.
+	if got := abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "203.0.113.9").StatusCode; got != 403 {
+		t.Fatalf("first request → %d, want 403", got)
+	}
+	if asked != 1 {
+		t.Fatalf("asked %d times, want 1", asked)
+	}
+	// Held: no further questions while it is in force.
+	abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "203.0.113.9")
+	if asked != 1 {
+		t.Fatalf("a held verdict must not re-ask: asked %d", asked)
+	}
+
+	// Lapse it. The pattern is now unremarkable — a handful of requests, one
+	// path, no failures, no peers — so nothing but the lapse can force the ask.
+	// Backdate it rather than sleeping: a hold whose deadline is already in the
+	// past is unambiguously lapsed, where a millisecond one is a race.
+	tr.Hold(sig, edge.Hold{Action: ActionBlock}, time.Second, time.Now().Add(-time.Minute))
+	if _, ok := tr.Held(sig, time.Now()); ok {
+		t.Fatal("the hold did not lapse")
+	}
+	before := asked
+	abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "203.0.113.9")
+	if asked != before+1 {
+		t.Fatalf("a lapsed hold must force the question again: asked %d, want %d", asked, before+1)
+	}
+
+	// And once the scorer allows, the lapsed hold is dropped so it stops forcing
+	// a screen on every request thereafter.
+	SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
+		asked++
+		return RiskVerdict{ID: "d-ok", Action: ActionAllow}, nil
+	})
+	tr.Hold(sig, edge.Hold{Action: ActionBlock}, time.Second, time.Now().Add(-time.Minute))
+	abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "203.0.113.9") // re-judged: allow, hold released
+	cleared := asked
+	abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "203.0.113.9")
+	if asked != cleared {
+		t.Fatalf("a released hold must stop forcing screens: asked %d, want %d", asked, cleared)
+	}
+}
