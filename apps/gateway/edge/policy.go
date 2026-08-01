@@ -334,8 +334,26 @@ func (s *Store) Effective(org string) Policy {
 // platform default, else shadow. Cached with the same short TTL as every other
 // per-org resolver, and fail-soft to SHADOW — a policy-store outage must not be
 // the reason a tenant starts being refused.
+//
+// An EMPTY org is the anonymous lane, and it resolves to the PLATFORM row. That
+// is the same shape PerIPRPM already has and for the same reason: a caller with
+// no tenant still has to be governed by something, and the platform scope is what
+// governs a request that has no tenant at evaluation time. Without this the one
+// lane a bad bot actually calls from could never be armed, because there would be
+// no org to arm.
+//
+// A SuperAdmin arms it the same way any org is armed, by targeting the reserved
+// admin org — PUT /v1/gateway/config?org=<adminOrg> {"mode":"live"} — since the
+// admin org's row IS the platform row. One mechanism, not a second one for the
+// case that has no tenant.
 func (s *Store) Mode(org string) string {
-	if m := s.effectiveOrg(org).Mode; m == ModeLive {
+	var m string
+	if org == "" {
+		m = s.Platform().Mode
+	} else {
+		m = s.effectiveOrg(org).Mode
+	}
+	if m == ModeLive {
 		return ModeLive
 	}
 	return ModeShadow
