@@ -137,3 +137,34 @@ func TestTheCacheCredentialIsNeverOnArgv(t *testing.T) {
 		}
 	}
 }
+
+// The layer cache belongs in the object store, and hanzo-build's Cilium policy
+// selects PODS: build-egress-deny-internal denies the namespace every internal
+// CIDR, artifact-publish-egress reopens s3:9000 for hanzo.ai/publish=artifact.
+// A Job copies only its POD TEMPLATE's labels onto the pod, so the four labels on
+// the Job (which countActiveBuilds reads) do not reach it. The template carried
+// none, the pod matched no policy, and every dial of the object store timed out —
+// silently, since a cache miss is not an error. That left the cache on the node's
+// disk, where it filled the runner pool and evicted builds mid-run.
+func TestBuildPodCanReachTheObjectStore(t *testing.T) {
+	k := fakeK8s()
+	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
+
+	pod, _, err := unstructured.NestedStringMap(job.Object, "spec", "template", "metadata", "labels")
+	if err != nil {
+		t.Fatalf("pod template labels: %v", err)
+	}
+	if pod["hanzo.ai/publish"] != "artifact" {
+		t.Errorf("pod template labels are %v, so the pod matches no egress policy and cannot reach s3:9000", pod)
+	}
+
+	// The Job's own labels are a separate concern — the build quota counts Jobs by
+	// them. Labelling the pod must not have moved them.
+	j, _, err := unstructured.NestedStringMap(job.Object, "metadata", "labels")
+	if err != nil {
+		t.Fatalf("job labels: %v", err)
+	}
+	if j["hanzo.ai/build"] != "true" || j["hanzo.ai/org"] != "hanzoai" {
+		t.Errorf("job labels are %v; countActiveBuilds selects on hanzo.ai/build + hanzo.ai/org", j)
+	}
+}
