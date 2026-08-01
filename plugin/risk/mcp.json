@@ -1,0 +1,893 @@
+[
+  {
+    "description": "Features is the typology-to-feature inventory the model is built on: what each\ndimension measures, the risk indicator it serves, and the published source\nthose words come from.\n\nIt is code rather than a document because a mapping kept beside the model\ncannot drift away from what the model actually reads — and the attributability\nit makes possible is why this is a tree and not a net.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "mlFeatures"
+  },
+  {
+    "description": "Restore reinstates this tenant's learned state from its pinned snapshot.\n\nA snapshot whose shape does not match the running inventory is REFUSED, not\ncoerced, and a snapshot belonging to another tenant is refused twice — here,\nby the tenant that asked, and again inside the engine. State the model would\ntreat as its own memory has to have come from this algorithm over this feature\nset for this tenant.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "mlRestore"
+  },
+  {
+    "description": "Score scores one observation and LEARNS NOTHING from it. It is how a candidate\nis tried against a tenant's real behaviour before anything depends on the\nanswer, and it is the model's analogue of testing a rule: because it records\nnothing, the aggregates it reads do not include the candidate.",
+    "inputSchema": {
+      "$defs": {
+        "mlObservation": {
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/riskAmount",
+              "description": "Amount is the money involved, if any."
+            },
+            "at": {
+              "description": "At is when it happened, RFC 3339. Absent means now.",
+              "type": "string"
+            },
+            "signals": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Signals are the observations: ip, device, counterparty and the rest.",
+              "type": "object"
+            },
+            "subject": {
+              "$ref": "#/$defs/riskSubject",
+              "description": "Subject is whose behaviour this is."
+            }
+          },
+          "type": "object"
+        },
+        "riskAmount": {
+          "properties": {
+            "currency": {
+              "description": "Currency is the ISO 4217 code.",
+              "type": "string"
+            },
+            "direction": {
+              "description": "Direction is whether value came in or went out: \"in\" or \"out\". Without it\nthe model cannot see funds passing through, which is the layering shape.",
+              "type": "string"
+            },
+            "nano": {
+              "description": "Nano is the amount in billionths of one unit of Currency.",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "riskSubject": {
+          "properties": {
+            "id": {
+              "description": "ID is the subject's identifier within the caller's own org. It is never\ninterpreted, only aggregated on, so it may be any stable string.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "Kind is the sort of thing this is: account, transaction, session, agent,\nmerchant or payout. It selects the aggregation axes, not the tenant gate.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "observation": {
+          "$ref": "#/$defs/mlObservation",
+          "description": "Observation is what to score."
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlScore"
+  },
+  {
+    "description": "Search exhaustively tries the model topology over this tenant's own history\nand returns the learning curve and the winning shape.\n\nThe grid is CLOSED — trees x depth x window x blend x appetite — because an\nunbounded grid is an unbounded amount of a shared pod's CPU reachable by\nanyone with a key. Each candidate runs in a sandbox over fresh counters, so a\nsearch can never move the live model, and no candidate can see another\ntenant's history because the replay reads this tenant's own file.\n\nIt answers 202 with a run identifier; read the report back at\nGET /v1/ml/search/{id}.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit bounds how many recorded observations are replayed, 1..5000. The\ngrid itself is closed and needs no bound from the caller.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlSearch"
+  },
+  {
+    "description": "SearchResult reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to read, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlSearchResult"
+  },
+  {
+    "description": "SetAppetite sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
+    "inputSchema": {
+      "properties": {
+        "review": {
+          "description": "Review is the share of the stream that may be examined, in (0, 0.5].",
+          "type": "number"
+        },
+        "sample": {
+          "description": "Sample is the share of non-alerting traffic retained, in [0, 1].",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlSetAppetite"
+  },
+  {
+    "description": "Snapshot pins this tenant's learned state into its own encrypted file.\n\nIt is what an auditor asks for: the exact model that raised an alert, kept so\nthat the same input can be scored again a year later. It is also what makes a\nrollout survivable — the shutdown path snapshots every resident tenant,\nbecause cloud deploys Recreate at one replica and a model that comes back with\nnothing learned refuses to score for its whole warm period.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "mlSnapshot"
+  },
+  {
+    "description": "ModelState is what a review of the model reads: the appetite it was given, the\nthreshold that appetite produced, and the share it ACTUALLY reached.\n\nStated against realised is the whole governance report. An appetite is a\nmeasured commitment or it is nothing, and a fixed threshold on a drifting\ndistribution silently becomes either silence or a flood.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "mlState"
+  },
+  {
+    "description": "Train teaches this tenant's model from this tenant's own observations.\n\nIt is online: there is no job, no queue and no window in which the tenant is\nprotected by a stale model, because the half-space geometry is built before\nany data arrives and the model IS a set of mass counters. One observation is\none increment.\n\nTHERE IS NO CROSS-TENANT TRAINING INPUT AND NO WAY TO EXPRESS ONE. The model\nis indexed by the tenant key and its tree GEOMETRY is seeded from it, so two\ntenants do not merely hold different counters — they hold different trees.\nAny cross-org learning in this product is aggregate-only, lives in a table\nwith no tenant column, and is published only above a k-anonymity floor.",
+    "inputSchema": {
+      "$defs": {
+        "mlObservation": {
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/riskAmount",
+              "description": "Amount is the money involved, if any."
+            },
+            "at": {
+              "description": "At is when it happened, RFC 3339. Absent means now.",
+              "type": "string"
+            },
+            "signals": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Signals are the observations: ip, device, counterparty and the rest.",
+              "type": "object"
+            },
+            "subject": {
+              "$ref": "#/$defs/riskSubject",
+              "description": "Subject is whose behaviour this is."
+            }
+          },
+          "type": "object"
+        },
+        "riskAmount": {
+          "properties": {
+            "currency": {
+              "description": "Currency is the ISO 4217 code.",
+              "type": "string"
+            },
+            "direction": {
+              "description": "Direction is whether value came in or went out: \"in\" or \"out\". Without it\nthe model cannot see funds passing through, which is the layering shape.",
+              "type": "string"
+            },
+            "nano": {
+              "description": "Nano is the amount in billionths of one unit of Currency.",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "riskSubject": {
+          "properties": {
+            "id": {
+              "description": "ID is the subject's identifier within the caller's own org. It is never\ninterpreted, only aggregated on, so it may be any stable string.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "Kind is the sort of thing this is: account, transaction, session, agent,\nmerchant or payout. It selects the aggregation axes, not the tenant gate.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "observations": {
+          "description": "Observations are what to learn from. They are this tenant's own data and\nnothing else: there is no cross-tenant training input and no way to\nexpress one, because the model is indexed by the tenant key and its tree\nGEOMETRY is seeded from it.",
+          "items": {
+            "$ref": "#/$defs/mlObservation"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlTrain"
+  },
+  {
+    "description": "Activity is the watcher: what is firing right now, what is being muted, and\nwhich way the decisions are going.\n\nIt reads the DECISION LOG rather than a second bus. The log is already the\nrecord and the analytics copies already reach the platform stream; a dedicated\nactivation bus would be a third representation of one fact and a third thing\nthat can be behind.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit bounds how many recent decisions are summarised, 1..500.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskActivity"
+  },
+  {
+    "description": "AddListEntries adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the list, from the path.",
+          "type": "string"
+        },
+        "values": {
+          "description": "Values are the values to add. They are folded to lower case, so a value\nadded in one case matches a signal in another.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskAddListEntries"
+  },
+  {
+    "description": "Controls lists the platform controls declared on this tenant's subjects:\nreserves, payout holds and blocks.\n\nThey are DECLARATIONS the money plane reads. Risk never moves money —\nhanzoai/commerce owns payouts, disputes and balances — so a marketplace reads\nthis before a payout and calls decide at authorization, and risk touches no\nprocessor. That is what \"processor-agnostic\" is: a structural property, not a\nfeature.",
+    "inputSchema": {
+      "properties": {
+        "kind": {
+          "description": "Kind narrows to one subject kind.",
+          "type": "string"
+        },
+        "subject": {
+          "description": "Subject narrows to one subject.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskControls"
+  },
+  {
+    "description": "CreateList creates an allow or deny list a rule can name in an inlist term.",
+    "inputSchema": {
+      "properties": {
+        "kind": {
+          "description": "Kind is whether membership allows or denies.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the list's identifier.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskCreateList"
+  },
+  {
+    "description": "CreateRule admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
+    "inputSchema": {
+      "$defs": {
+        "riskRule": {
+          "properties": {
+            "action": {
+              "description": "Action is what the rule asks for when it holds.",
+              "type": "string"
+            },
+            "all": {
+              "description": "All is the conjunction. An empty conjunction is refused: a rule that holds\non everything is not a detection.",
+              "items": {
+                "$ref": "#/$defs/riskTerm"
+              },
+              "type": "array"
+            },
+            "enabled": {
+              "description": "Enabled governs the live path. A disabled rule still replays, because the\nquestion a simulation asks is what happens ON activation.",
+              "type": "boolean"
+            },
+            "id": {
+              "description": "ID is the rule's identifier within this tenant.",
+              "type": "string"
+            },
+            "name": {
+              "description": "Name is what a reviewer reads in an alert.",
+              "type": "string"
+            },
+            "severity": {
+              "description": "Severity is the reviewer-facing grading: low, medium, high or critical.",
+              "type": "string"
+            },
+            "stage": {
+              "description": "Stage narrows the rule to one lifecycle moment; empty means every stage.",
+              "type": "string"
+            },
+            "weight": {
+              "description": "Weight is how much a hit contributes, in [0,1].",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "riskTerm": {
+          "properties": {
+            "field": {
+              "description": "Field is the fact to read: one of the closed vocabulary, or signal.\u003cname\u003e,\nor velocity.\u003caxis\u003e.\u003cwindow\u003e.\u003cstat\u003e. GET /v1/risk/dictionary lists them.",
+              "type": "string"
+            },
+            "number": {
+              "description": "Number is the numeric operand.",
+              "type": "number"
+            },
+            "op": {
+              "description": "Op is the comparison: eq, ne, gt, gte, lt, lte, in, notin, inlist,\nnotinlist, exists, absent, contains, prefix or suffix.",
+              "type": "string"
+            },
+            "value": {
+              "description": "Value is the string operand.",
+              "type": "string"
+            },
+            "values": {
+              "description": "Values is the set operand, for in and notin.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "id": {
+          "description": "ID is the rule to replace, from the path on a PATCH. Ignored on create,\nwhere the server mints one.",
+          "type": "string"
+        },
+        "rule": {
+          "$ref": "#/$defs/riskRule",
+          "description": "Rule is the detection."
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskCreateRule"
+  },
+  {
+    "description": "Decide scores one entity or event and answers what to do about it: allow,\nchallenge, review, restrict or block, with the evidence behind it.\n\nOne op, not three. \"Score this thing\" is one verb, and a stage-specific op per\nlifecycle moment would be three places for the tenant gate to drift. The stage\nselects the feature window and the rule set and nothing else.\n\nIt is METERED AFTER the work, never gated before it. A pre-work balance gate\nwould have to render its refusal in the fleet's nested error contract, which a\ntyped op cannot do — so the hot path stays typed, the screen is billed on the\ndecision that was actually produced, and no funded client's 402 parsing is\naffected. Overage lands on the caller's OWN ledger: Meter sends the org as\nboth the commerce identity and the org header, which is the anti-cross-org\nproperty.",
+    "inputSchema": {
+      "$defs": {
+        "riskActor": {
+          "properties": {
+            "agent": {
+              "description": "Agent is the agent reference the caller claims to be acting as. It is\nresolved against THIS org's agent registry; an unresolvable reference is\nsimply not a declaration.",
+              "type": "string"
+            },
+            "credential": {
+              "description": "Credential is the credential class the caller believes it presented.\nAdvisory only — the server reads the credential it actually verified.",
+              "type": "string"
+            },
+            "session": {
+              "description": "Session is the session reference this action belongs to.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "riskAmount": {
+          "properties": {
+            "currency": {
+              "description": "Currency is the ISO 4217 code.",
+              "type": "string"
+            },
+            "direction": {
+              "description": "Direction is whether value came in or went out: \"in\" or \"out\". Without it\nthe model cannot see funds passing through, which is the layering shape.",
+              "type": "string"
+            },
+            "nano": {
+              "description": "Nano is the amount in billionths of one unit of Currency.",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "riskSubject": {
+          "properties": {
+            "id": {
+              "description": "ID is the subject's identifier within the caller's own org. It is never\ninterpreted, only aggregated on, so it may be any stable string.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "Kind is the sort of thing this is: account, transaction, session, agent,\nmerchant or payout. It selects the aggregation axes, not the tenant gate.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "actor": {
+          "$ref": "#/$defs/riskActor",
+          "description": "Actor is who is acting, if the caller knows."
+        },
+        "amount": {
+          "$ref": "#/$defs/riskAmount",
+          "description": "Amount is the money involved, for the stages where there is any."
+        },
+        "idem": {
+          "description": "Idem makes a re-decide idempotent: the same key returns the same decision\nrather than scoring twice and moving the counters twice.",
+          "type": "string"
+        },
+        "signals": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Signals are the observations the caller can supply: ip, email,\nemaildomain, device, bin, asn, country, counterparty. Unknown keys are\ncarried and are readable by a rule as signal.\u003ckey\u003e, so a tenant can score\non facts only it has.",
+          "type": "object"
+        },
+        "stage": {
+          "description": "Stage is the lifecycle moment being judged: signup, payment, session,\nusage, payout or dispute. It selects the feature window and the rule set;\nit does NOT select a different tenant gate.",
+          "type": "string"
+        },
+        "subject": {
+          "$ref": "#/$defs/riskSubject",
+          "description": "Subject is what is being judged."
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskDecide"
+  },
+  {
+    "description": "DecisionDetail reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, taken from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskDecisionDetail"
+  },
+  {
+    "description": "Decisions lists this tenant's recent decisions, newest first. Every filter is\nan equality on a column the tenant's own file owns, so a filter can narrow the\ncaller's own log and can never widen it.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Action narrows to one outcome.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind narrows to one subject kind.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Limit bounds the page, 1..500, default 100.",
+          "type": "integer"
+        },
+        "stage": {
+          "description": "Stage narrows to one lifecycle moment.",
+          "type": "string"
+        },
+        "subject": {
+          "description": "Subject narrows to one subject.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskDecisions"
+  },
+  {
+    "description": "DeleteRule retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, taken from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskDeleteRule"
+  },
+  {
+    "description": "Dictionary is the vocabulary a rule may be written in: every fact, every\noperator, every velocity axis and window, this tenant's own lists, and the\nsignal keys this tenant has actually sent.\n\nTwo lenses on one catalogue. The product half is closed and is what admission\nchecks against. The tenant half — the signals — is the tenant's own, read back\noff its recent decisions, which is what makes a rule builder able to offer the\nfields that exist here rather than the fields that exist in general.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskDictionary"
+  },
+  {
+    "description": "Label records what a human concluded about a decision — fraud, legitimate,\nchargeback, abuse or unknown.\n\nTHE DECIDER IS SERVER-SET. It comes from the validated principal and never\nfrom the request body: the engine's own resolutions carry an unauthenticated\n`by`, and importing that gap into a product that bills on the decision would\nmake the attribution worthless the moment anyone asked who cleared what.\n\nThis is also the only supervision this product has. Everything the model knows\nabout its own miss rate comes from these labels against the below-the-line\nsample.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the decision, from the path.",
+          "type": "string"
+        },
+        "verdict": {
+          "description": "Verdict is what it turned out to be: fraud, legitimate, chargeback, abuse\nor unknown. It is the only supervision this product has, and it is what\nturns a false-positive rate from a guess into a measurement.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskLabel"
+  },
+  {
+    "description": "Lists shows this tenant's allow and deny lists and how many values each holds.\n\nThese are the TENANT's operational lists. Sanctions and PEP designations are\nnot here and are never merged into them: a tenant may add to its own deny\nlist, and a tenant may not edit OFAC.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskLists"
+  },
+  {
+    "description": "Mode reports whether this tenant's decisions act or only observe.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskMode"
+  },
+  {
+    "description": "ReleaseControl lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, taken from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskReleaseControl"
+  },
+  {
+    "description": "RemoveListEntry removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the list, from the path.",
+          "type": "string"
+        },
+        "value": {
+          "description": "Value is the value to remove, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskRemoveListEntry"
+  },
+  {
+    "description": "Rules lists this tenant's detections. A tenant starts with a starter set\ncovering the lifecycle the product names — signup burst, shared device,\ndisposable email, card testing, denied address, spend spike, payout velocity,\nundeclared automation — all of which it may read, copy, edit and retire.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskRules"
+  },
+  {
+    "description": "SetControl declares a reserve, a payout hold or a block on a subject.",
+    "inputSchema": {
+      "$defs": {
+        "riskSubject": {
+          "properties": {
+            "id": {
+              "description": "ID is the subject's identifier within the caller's own org. It is never\ninterpreted, only aggregated on, so it may be any stable string.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "Kind is the sort of thing this is: account, transaction, session, agent,\nmerchant or payout. It selects the aggregation axes, not the tenant gate.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "control": {
+          "description": "Control is which one: reserve, payout-hold or block.",
+          "type": "string"
+        },
+        "rate": {
+          "description": "Rate is the reserve fraction, in [0,1], for a reserve.",
+          "type": "number"
+        },
+        "reason": {
+          "description": "Reason is why.",
+          "type": "string"
+        },
+        "subject": {
+          "$ref": "#/$defs/riskSubject",
+          "description": "Subject is what the control applies to."
+        },
+        "until": {
+          "description": "Until is when it lapses, RFC 3339. Absent means it does not.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSetControl"
+  },
+  {
+    "description": "SetMode takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
+    "inputSchema": {
+      "properties": {
+        "mode": {
+          "description": "Mode is \"shadow\" or \"live\". Shadow is the default and the default is not\nconfigurable: a model that quietly went live and started declining\npayments is the worst failure available here, so going live is an act\nsomebody performs and can be asked about.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSetMode"
+  },
+  {
+    "description": "Simulate replays a candidate rule over this tenant's OWN recorded decisions\nand reports what it would have caught, what it would have given up, and how\nmuch of that a human has already judged.\n\nIt is a gate and not a nicety: a new typology has to be tested before live\nactivation, and a retirement has to be justified against the outgoing rule's\nperformance. Nothing is written — the replay reads the decision log and\nevaluates in memory.\n\nAn EMPTY history is REFUSED rather than reported as zero alerts. \"No alerts\"\nis exactly what a quiet rule looks like, and being unable to tell the two\napart is the failure a sandbox exists to prevent.",
+    "inputSchema": {
+      "$defs": {
+        "riskRule": {
+          "properties": {
+            "action": {
+              "description": "Action is what the rule asks for when it holds.",
+              "type": "string"
+            },
+            "all": {
+              "description": "All is the conjunction. An empty conjunction is refused: a rule that holds\non everything is not a detection.",
+              "items": {
+                "$ref": "#/$defs/riskTerm"
+              },
+              "type": "array"
+            },
+            "enabled": {
+              "description": "Enabled governs the live path. A disabled rule still replays, because the\nquestion a simulation asks is what happens ON activation.",
+              "type": "boolean"
+            },
+            "id": {
+              "description": "ID is the rule's identifier within this tenant.",
+              "type": "string"
+            },
+            "name": {
+              "description": "Name is what a reviewer reads in an alert.",
+              "type": "string"
+            },
+            "severity": {
+              "description": "Severity is the reviewer-facing grading: low, medium, high or critical.",
+              "type": "string"
+            },
+            "stage": {
+              "description": "Stage narrows the rule to one lifecycle moment; empty means every stage.",
+              "type": "string"
+            },
+            "weight": {
+              "description": "Weight is how much a hit contributes, in [0,1].",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "riskTerm": {
+          "properties": {
+            "field": {
+              "description": "Field is the fact to read: one of the closed vocabulary, or signal.\u003cname\u003e,\nor velocity.\u003caxis\u003e.\u003cwindow\u003e.\u003cstat\u003e. GET /v1/risk/dictionary lists them.",
+              "type": "string"
+            },
+            "number": {
+              "description": "Number is the numeric operand.",
+              "type": "number"
+            },
+            "op": {
+              "description": "Op is the comparison: eq, ne, gt, gte, lt, lte, in, notin, inlist,\nnotinlist, exists, absent, contains, prefix or suffix.",
+              "type": "string"
+            },
+            "value": {
+              "description": "Value is the string operand.",
+              "type": "string"
+            },
+            "values": {
+              "description": "Values is the set operand, for in and notin.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "candidate": {
+          "$ref": "#/$defs/riskRule",
+          "description": "Candidate is the rule to try. It is evaluated as activated whatever its\nenabled flag says: the question is what happens on activation."
+        },
+        "incumbent": {
+          "description": "Incumbent is the rule the candidate would replace, when it replaces one.\nNaming it is what turns a report into a justification for a retirement.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Limit bounds how many recorded decisions are replayed, 1..5000.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSimulate"
+  },
+  {
+    "description": "SubjectState reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions and whatever controls are declared on\nit. This is the continuous-monitoring read — a merchant, an account or an\nagent, on one page.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the subject identifier, from the path.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is the subject kind, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSubjectState"
+  },
+  {
+    "description": "Suppress mutes a rule's activations for a subject, a subject kind, or\neverywhere that rule fires.\n\nA suppressed hit is RECORDED with suppressed set and contributes nothing to\nthe action. It is never dropped, for the same reason the model counts its\nrefusals: silence must never read as a clean result, and a compliance record\nthat can be silently muted by an operational knob is not a record.",
+    "inputSchema": {
+      "properties": {
+        "kind": {
+          "description": "Kind narrows the suppression to one subject kind.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Reason is why. It is required, because a mute nobody can explain later is\na control that quietly stopped.",
+          "type": "string"
+        },
+        "rule": {
+          "description": "Rule is the rule to mute. At least one of Rule, Kind or Subject must be\ngiven — a suppression that names nothing would mute everything.",
+          "type": "string"
+        },
+        "subject": {
+          "description": "Subject narrows it to one subject.",
+          "type": "string"
+        },
+        "until": {
+          "description": "Until is when it expires, RFC 3339. Absent means it does not, which is a\nchoice somebody should be able to be asked about.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSuppress"
+  },
+  {
+    "description": "Suppressions lists the active mutes. A suppression that has expired is not\nlisted and mutes nothing — a forgotten mute stops muting instead of quietly\nstaying on forever.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskSuppressions"
+  },
+  {
+    "description": "Unsuppress lifts a mute. Answers 204, or 404 for an identifier this tenant\ndoes not own.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, taken from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskUnsuppress"
+  },
+  {
+    "description": "UpdateRule replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
+    "inputSchema": {
+      "$defs": {
+        "riskRule": {
+          "properties": {
+            "action": {
+              "description": "Action is what the rule asks for when it holds.",
+              "type": "string"
+            },
+            "all": {
+              "description": "All is the conjunction. An empty conjunction is refused: a rule that holds\non everything is not a detection.",
+              "items": {
+                "$ref": "#/$defs/riskTerm"
+              },
+              "type": "array"
+            },
+            "enabled": {
+              "description": "Enabled governs the live path. A disabled rule still replays, because the\nquestion a simulation asks is what happens ON activation.",
+              "type": "boolean"
+            },
+            "id": {
+              "description": "ID is the rule's identifier within this tenant.",
+              "type": "string"
+            },
+            "name": {
+              "description": "Name is what a reviewer reads in an alert.",
+              "type": "string"
+            },
+            "severity": {
+              "description": "Severity is the reviewer-facing grading: low, medium, high or critical.",
+              "type": "string"
+            },
+            "stage": {
+              "description": "Stage narrows the rule to one lifecycle moment; empty means every stage.",
+              "type": "string"
+            },
+            "weight": {
+              "description": "Weight is how much a hit contributes, in [0,1].",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "riskTerm": {
+          "properties": {
+            "field": {
+              "description": "Field is the fact to read: one of the closed vocabulary, or signal.\u003cname\u003e,\nor velocity.\u003caxis\u003e.\u003cwindow\u003e.\u003cstat\u003e. GET /v1/risk/dictionary lists them.",
+              "type": "string"
+            },
+            "number": {
+              "description": "Number is the numeric operand.",
+              "type": "number"
+            },
+            "op": {
+              "description": "Op is the comparison: eq, ne, gt, gte, lt, lte, in, notin, inlist,\nnotinlist, exists, absent, contains, prefix or suffix.",
+              "type": "string"
+            },
+            "value": {
+              "description": "Value is the string operand.",
+              "type": "string"
+            },
+            "values": {
+              "description": "Values is the set operand, for in and notin.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "id": {
+          "description": "ID is the rule to replace, from the path on a PATCH. Ignored on create,\nwhere the server mints one.",
+          "type": "string"
+        },
+        "rule": {
+          "$ref": "#/$defs/riskRule",
+          "description": "Rule is the detection."
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskUpdateRule"
+  }
+]

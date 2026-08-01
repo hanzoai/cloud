@@ -11,6 +11,7 @@ require (
 	github.com/digitorus/pdf v0.1.2
 	github.com/digitorus/pdfsign v0.0.0-20260407063256-85ede6424a74
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
+	github.com/gofiber/fiber/v3 v3.2.0
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.1
@@ -33,6 +34,7 @@ require (
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
 	github.com/lib/pq v1.12.3
+	github.com/luxfi/aml v0.3.5
 	github.com/luxfi/log v1.6.0
 	github.com/luxfi/node v1.36.15
 	github.com/luxfi/trace v1.4.0
@@ -503,7 +505,7 @@ require (
 	github.com/luxfi/corona v0.10.4 // indirect
 	github.com/luxfi/crypto v1.20.2
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
-	github.com/luxfi/fhe v1.8.2 // indirect
+	github.com/luxfi/fhe v1.8.8 // indirect
 	github.com/luxfi/geth v1.20.1
 	github.com/luxfi/ids v1.3.2
 	github.com/luxfi/kms v1.12.9
