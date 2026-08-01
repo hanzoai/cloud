@@ -49,7 +49,7 @@ type Model map[string]any
 func str(v any) string { s, _ := v.(string); return s }
 
 // modelID is the overlay key for a model: its slugged id when present
-// (third-party, e.g. "anthropic/claude-opus-4.6"), else its name (Hanzo/Zen
+// (third-party, e.g. "acme/some-model-1"), else its name (Hanzo/Zen
 // models, e.g. "zen4"). Mirrors the bundle's own lookup, which matches name OR
 // id.
 func modelID(m Model) string {

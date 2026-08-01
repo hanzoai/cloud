@@ -193,7 +193,8 @@ func init() {
 	openapi.Describe("/v1/benchmark/runs", http.MethodPost,
 		"Queue a benchmark run against a catalog model or your own endpoint",
 		"Admits a request to run one or more catalog benchmarks against `model` — a catalog "+
-			"model id — or against `endpoint`, your own OpenAI-compatible endpoint, and answers "+
+			"model id — or against `endpoint`, an endpoint of your own on the chat-completions "+
+			"wire, and answers "+
 			"202 with what was queued. It ADMITS AND QUEUES ONLY: nothing is executed on this "+
 			"call and no scores come back with it. Results land in the leaderboard as the worker "+
 			"completes them.\n\n"+
@@ -410,7 +411,7 @@ func binom(n, k int) float64 {
 }
 
 // RunRequest: run a benchmark against a model/endpoint. target is a catalog model id
-// OR a BYO OpenAI-compatible endpoint+key (the cloud offering: benchmark YOUR model).
+// OR your own chat-completions endpoint+key (the cloud offering: benchmark YOUR model).
 // The runner caches before spend (skip any (item, model) already attempted) and
 // records provenance. Execution is the async worker (follow-on); this admits + queues.
 type RunRequest struct {

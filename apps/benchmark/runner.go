@@ -2,7 +2,7 @@ package benchmark
 
 // The run-execution worker: turn POST /v1/benchmark/runs into real attempts. Given a
 // (benchmark, target) it loads the benchmark's items, calls the target endpoint
-// (OpenAI-compatible; a catalog model via the internal gateway, or a BYO endpoint+key),
+// (the chat-completions wire; a catalog model via the internal gateway, or your own endpoint+key),
 // extracts + scores each answer, and appends an attempt to the append-only store —
 // SKIPPING any (item, model) already attempted (cache-before-spend: never pay twice).
 //
@@ -34,7 +34,7 @@ type item struct {
 }
 
 // target is what a run measures: a model id served through the internal gateway, or a
-// BYO OpenAI-compatible endpoint + key (benchmark YOUR model — the cloud offering).
+// Your own chat-completions endpoint + key (benchmark YOUR model — the cloud offering).
 type target struct {
 	Model    string
 	Endpoint string // base URL, e.g. https://openrouter.ai/api/v1 ; "" => internal gateway
@@ -98,7 +98,7 @@ type chatResp struct {
 	} `json:"error"`
 }
 
-// callModel runs one OpenAI-compatible chat completion and returns the raw text.
+// callModel runs one chat completion and returns the raw text.
 func callModel(ctx context.Context, t target, question string) (string, error) {
 	base := t.Endpoint
 	if base == "" {

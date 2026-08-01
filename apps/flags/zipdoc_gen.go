@@ -44,7 +44,7 @@ func init() {
 		Response: json.RawMessage(`{"ok":true,"engine":"hanzo-flags"}`),
 	})
 	zip.Describe("POST /v1/flags", zip.Doc{
-		Description: "Evaluate runs the caller's flag definitions for one identity and returns the\nPostHog-shaped verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
+		Description: "Evaluate runs the caller's flag definitions for one identity and returns the\nflag verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
 		Fields: map[string]string{
 			"evaluateIn.distinct_id":       "DistinctID is the identity the flags are evaluated for. Required.",
 			"evaluateIn.groups":            "Groups are the group-level properties, keyed by group type index.",
@@ -54,7 +54,7 @@ func init() {
 		Response: json.RawMessage(`{"featureFlags":{"new-editor":true},"featureFlagPayloads":{},"errorsWhileComputingFlags":false}`),
 	})
 	zip.Describe("POST /v1/flags/decide", zip.Doc{
-		Description: "Evaluate runs the caller's flag definitions for one identity and returns the\nPostHog-shaped verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
+		Description: "Evaluate runs the caller's flag definitions for one identity and returns the\nflag verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
 		Fields: map[string]string{
 			"evaluateIn.distinct_id":       "DistinctID is the identity the flags are evaluated for. Required.",
 			"evaluateIn.groups":            "Groups are the group-level properties, keyed by group type index.",
@@ -64,7 +64,7 @@ func init() {
 		Response: json.RawMessage(`{"featureFlags":{"new-editor":true},"featureFlagPayloads":{},"errorsWhileComputingFlags":false}`),
 	})
 	zip.Describe("PUT /v1/flags/defs/:key", zip.Doc{
-		Description: "PutFlagDefinition creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the PostHog-shaped\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity.",
+		Description: "PutFlagDefinition creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the flag-definition\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity.",
 		Fields: map[string]string{
 			"putDefIn.definition": "Definition is the flag definition document, carried verbatim.",
 			"putDefIn.key":        "Key is the flag key to write, from the path.",

@@ -16,7 +16,7 @@
 //
 //   - /v1/flags — the product API (org-scoped via the gateway principal): evaluate
 //     flags for a distinct_id + properties, manage definitions, read the activity
-//     log. PostHog-shaped responses so existing SDK consumers port 1:1.
+//     log. The verdict carries each flag's state, variant and payload.
 //
 //   - the PLATFORM switches — the launch/ops knobs the SuperAdmin flips from
 //     admin.hanzo.ai (registry below). They evaluate from the reserved

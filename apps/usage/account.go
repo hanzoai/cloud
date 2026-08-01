@@ -152,7 +152,7 @@ type usageWindowView struct {
 
 	// Account is the linked provider account the window belongs to.
 	Account string `json:"account,omitempty"`
-	// Plan is the provider plan the account is on, e.g. a Claude Max plan.
+	// Plan is the subscription plan the account is on, as the provider names it.
 	Plan string `json:"plan,omitempty"`
 	// Machine is the host whose meter reported the window.
 	Machine string `json:"machine,omitempty"`
@@ -236,7 +236,7 @@ type sampleReq struct {
 	Provider string `json:"provider"`
 	// Account is the linked account the window was metered from.
 	Account string `json:"account"`
-	// Plan is the provider plan the account is on, e.g. a Claude Max plan.
+	// Plan is the subscription plan the account is on, as the provider names it.
 	Plan string `json:"plan"`
 	// Kind is subscription or apikey. Empty is accepted; anything else is
 	// refused.
@@ -304,7 +304,7 @@ type reportReq struct {
 	Provider string `json:"provider"`
 	// Account is the linked account the window was metered from.
 	Account string `json:"account"`
-	// Plan is the provider plan the account is on, e.g. a Claude Max plan.
+	// Plan is the subscription plan the account is on, as the provider names it.
 	Plan string `json:"plan"`
 	// Kind is subscription or apikey. Empty is accepted; anything else is
 	// refused.
@@ -527,7 +527,7 @@ type usageSamplesQuery struct {
 }
 
 // samples is the PER-PROVIDER view: one connected account's own consumption of its
-// own plan — "my Claude Max plan is 47% through its 6h window, resets at 14:20".
+// own plan — "my plan is 47% through its 6h window, resets at 14:20".
 //
 // `current` is the newest instance of each lane (the headline); `windows` is the
 // history behind it. Both come from ONE deduped read, so they can never disagree.
