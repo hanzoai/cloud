@@ -27,9 +27,7 @@ package cloud
 // matching the gateway's admin-guard. An org admin gets NO admin authority.
 
 import (
-	"crypto/subtle"
 	"log/slog"
-	"os"
 	"net/url"
 	"strings"
 	"time"
@@ -194,27 +192,6 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		}
 		for _, h := range subScopeHeaders {
 			req.Header.Del(h)
-		}
-
-		// THE TRUSTED IN-PROC SERVICE CALLER. `ai` is its own PROCESS, so it cannot see
-		// build.go's in-process balanceReader and falls back to HTTP against
-		// /v1/billing/balance bearing COMMERCE_SERVICE_TOKEN. apps/billing already
-		// trusts that token (account.IsServiceToken) — but it reads the org from
-		// X-Org-Id, which the loop above has just deleted, so `org` was empty and the
-		// handler answered 401 "sign in to view billing". The balance gate is
-		// fail-CLOSED, so that 401 denied EVERY paid completion fleet-wide: chat,
-		// copilot and documents all 503 balance_unavailable on a healthy pod.
-		//
-		// Restoring the org here — and ONLY the org — closes that loop at the one place
-		// the header is removed. This grants NO authority: no user, no admin, no roles;
-		// a request bearing this token still cannot be an admin. Reachability is the
-		// safety argument the token already rests on: the gateway 401s a public bearer
-		// that is not an IAM JWT or an hk-/pk-/sk- key, and the 64-hex service token is
-		// a JWT candidate that fails to parse, so no EXTERNAL client can present it —
-		// only in-proc dispatch. The compare is constant-time, and the value is never
-		// logged.
-		if cliOrg != "" && isTrustedServiceToken(c) {
-			req.Header.Set("X-Org-Id", cliOrg)
 		}
 
 		if claims := validatedPrincipal(c, v); claims != nil {
@@ -383,6 +360,17 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		// stay stripped (no trusted org to validate a project against, and the data
 		// plane gates on a validated principal anyway). Restore only the client org
 		// for the Phase-1 data path (see residual note above).
+		//
+		// THE TRUSTED IN-PROC SERVICE CALLER arrives here too, and this line is the
+		// whole of what it needs. `ai` is its own PROCESS, so it cannot see build.go's
+		// in-process balanceReader and falls back to HTTP against /v1/billing/balance
+		// bearing COMMERCE_SERVICE_TOKEN; apps/billing trusts that token
+		// (account.IsServiceToken) but takes the org from X-Org-Id, which the strip
+		// loop above deleted. That token is not a JWT, so validatedPrincipal is nil for
+		// it and this restore runs unconditionally — which is why a second,
+		// token-predicated copy of it above was dead code and is gone. Restoring the
+		// org grants NO authority: no user, no admin, no roles, and the org itself is
+		// still refused if it bears an unsafe rune.
 		if cliOrg != "" {
 			req.Header.Set(authz.HeaderOrg, cliOrg)
 		}
@@ -596,22 +584,4 @@ func CallerBearer(c *zip.Ctx) string {
 		return ""
 	}
 	return tok
-}
-
-// isTrustedServiceToken reports whether the request's Bearer is EXACTLY the configured
-// COMMERCE_SERVICE_TOKEN — the same predicate apps/account/billing.go trusts, restated
-// here because that package imports this one and the dependency cannot run the other
-// way. Constant-time; the token is never logged. An empty configured token trusts
-// nothing.
-//
-// It answers ONE question — "is this our own in-proc caller?" — and the only thing the
-// answer buys is that the caller's X-Org-Id survives sanitization. It confers no user,
-// no admin, and no roles.
-func isTrustedServiceToken(c *zip.Ctx) bool {
-	token := strings.TrimSpace(os.Getenv("COMMERCE_SERVICE_TOKEN"))
-	if token == "" {
-		return false
-	}
-	bearer := strings.TrimSpace(strings.TrimPrefix(c.Header("Authorization"), "Bearer "))
-	return bearer != "" && subtle.ConstantTimeCompare([]byte(bearer), []byte(token)) == 1
 }
