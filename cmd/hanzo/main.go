@@ -25,12 +25,63 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/hanzoai/cloud/cli"
 )
 
-// version is overridden at build time via -ldflags "-X main.version=...".
+// version is stamped at link time by the Makefile's `hanzo` target,
+// -ldflags "-X main.version=$(VERSION)". It is only the FIRST rung of
+// resolveVersion, never the only one.
 var version = "dev"
+
+// readBuildInfo is the toolchain's own account of this binary. It is a var so
+// the ladder below can be tested at every rung: which rung answers depends on
+// the toolchain that built you (Go ≥1.24 fills Main.Version in from VCS itself;
+// before that it is "(devel)" and only the vcs.revision rung saves you), and a
+// rung nobody can reach is a rung nobody has checked.
+var readBuildInfo = debug.ReadBuildInfo
+
+// resolveVersion answers what this binary IS, and does it without depending on
+// anyone remembering a build flag. That dependency is exactly what shipped
+// broken: the ldflag was documented here and wired nowhere, so every build ever
+// made — including the installed one — said "dev".
+//
+// The ladder, most authoritative first: the stamped release tag; the module
+// version the toolchain records on its own (`go install ...@v1.2.3`, or a
+// pseudo-version it derives from the checkout); the raw VCS stamp `go build`
+// embeds. Only a binary whose toolchain knew nothing at all may still say "dev".
+func resolveVersion() string {
+	if version != "" && version != "dev" {
+		return version
+	}
+	info, ok := readBuildInfo()
+	if !ok {
+		return "dev"
+	}
+	if v := info.Main.Version; v != "" && v != "(devel)" {
+		return v
+	}
+	var rev, dirty string
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			if rev = s.Value; len(rev) > 12 {
+				rev = rev[:12]
+			}
+		case "vcs.modified":
+			if s.Value == "true" {
+				dirty = "-dirty"
+			}
+		}
+	}
+	if rev == "" {
+		return "dev"
+	}
+	// Unmistakably a source build, and it names the exact source: 0.0.0 sorts
+	// below every release, and the commit is the whole point of asking.
+	return "0.0.0-dev+" + rev + dirty
+}
 
 func main() {
 	// Restore the real stdout (cli.init redirected it to stderr so dependency
@@ -38,7 +89,8 @@ func main() {
 	cli.RestoreStdout()
 
 	// Share the build version with the CLI (User-Agent, `hanzo version`).
-	cli.Version = version
+	// Resolved ONCE, here: cli holds the answer, it does not re-derive it.
+	cli.Version = resolveVersion()
 
 	if len(os.Args) < 2 {
 		if err := cli.Execute([]string{"--help"}); err != nil {

@@ -3285,6 +3285,50 @@ the verbs `cli.newRootCmd` registers and hands EVERY other verb to the Rust CLI,
 resolved as `hanzo-node` (or `HANZO_FABRIC_CLI`), so the one `hanzo` name is a
 superset of both. It cannot mount a subsystem — serving is `cmd/cloud`'s job.
 
+### `hanzo --version` — a binary that describes ITSELF, and a delegate that warns
+
+`hanzo --version` answered `hanzo dev` on every build ever made, the installed one
+included. `cmd/hanzo/main.go` declared `var version = "dev"` "overridden at build
+time via -ldflags", and `-X main.version=` was written NOWHERE — not the Makefile,
+not `mk/*.mk`, not the workflow. cmd/hanzo had no make target at all, so the ldflag
+had no place to live even in principle.
+
+Both halves are wired now, and the runtime half does not depend on the build half:
+
+- `resolveVersion()` (cmd/hanzo/main.go) is the ladder, most authoritative first —
+  the stamped tag; `info.Main.Version` from `debug.ReadBuildInfo` (Go ≥1.24 derives
+  a pseudo-version from the checkout by itself, so a bare `go build ./cmd/hanzo`
+  already knows its commit); a `0.0.0-dev+<12-char-sha>[-dirty]` synthesised from
+  the `vcs.*` settings (the rung that carries Go ≤1.23, where `Main.Version` is
+  `(devel)`); then, and only then, `dev`. It resolves ONCE and assigns
+  `cli.Version` — cli never re-derives it. `readBuildInfo` is a var so every rung
+  is reachable from a test, because which rung fires depends on the toolchain.
+- `make hanzo` builds it and appends `-X main.version=$(VERSION)` to LDFLAGS
+  (`VERSION ?= git describe --tags --always --dirty`). Appended, not folded into
+  the `LDFLAGS ?= -s -w` default, so `make LDFLAGS=...` overrides what it always
+  did and still cannot produce an unstamped binary. `make cloud` stamps
+  `github.com/hanzoai/cloud.Version` the same way, matching what the Dockerfile
+  already passed — plugin builds have no version symbol and are untouched.
+
+The version command's OUTPUT CONTRACT is a stream split, and both sides matter:
+
+- **stdout is exactly one line, `hanzo <version>`, always.** It is the answer to
+  the question asked, and it is also what a parent `hanzo` parses back out of a
+  delegate — `delegateVersion` reads the FIRST line's LAST token — so one line
+  keeps that honest in both directions. The delegate used to print a second
+  `delegate: <path> <version>` line here, on stdout, unconditionally.
+- **the delegate is a stderr WARNING, raised only when actionable**: version
+  differs (naming both paths and both versions, and that verbs handed to
+  `hanzo-node` run THAT build), or present-but-unreadable. Absent or in agreement
+  prints NOTHING. Ours is compared with its leading `v` trimmed, the same
+  normalisation `delegateVersion` applies to the delegate's, so `v1.2.3` against
+  `1.2.3` is agreement and not a false alarm.
+
+Do not point `HANZO_FABRIC_CLI` at this binary itself. `fabricCLI` self-guards the
+PATH rung (`os.Executable`), but the explicit override is taken as given, and a
+binary delegating to itself recurses until `delegateVersion`'s 3s timeout ends it —
+which then reports the delegate as unreadable.
+
 `cli.IsControlVerb` draws that line, and it must keep drawing it off the cobra tree
 (`newRootCmd().Find`, cobra's own name+alias resolution). It used to be a
 hand-maintained map of verbs — a SECOND source of truth for a fact the tree already
