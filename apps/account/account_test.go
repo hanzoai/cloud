@@ -303,7 +303,7 @@ func TestKeys_RequireValidatedPrincipal(t *testing.T) {
 	// No X-User-Id → no validated principal → 403, and IAM is never touched, even if
 	// a forged X-Org-Id is present (the bearer-less data path must not mint a key).
 	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
-		for _, path := range []string{"/v1/keys", "/v1/iam/keys"} {
+		for _, path := range []string{"/v1/keys"} {
 			code, _ := call(t, app, m, path, "", "victim", "")
 			if code != http.StatusForbidden {
 				t.Fatalf("%s %s with forged org but no principal: want 403, got %d", m, path, code)
@@ -528,73 +528,12 @@ func TestKeys_UnknownTypeRefused(t *testing.T) {
 	}
 }
 
-// /v1/iam/keys is an ALIAS, not a second implementation: it answers identically and
-// says on the wire that it is superseded (RFC 8594), naming /v1/keys.
-func TestKeys_LegacyPathIsAThinDeprecatedAlias(t *testing.T) {
-	f := newFakeIAM()
-	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
-
-	req := httptest.NewRequest(http.MethodGet, "/v1/iam/keys", nil)
-	req.Header.Set("X-User-Id", "alice")
-	req.Header.Set("X-Org-Id", "acme")
-	resp, err := app.Fiber().Test(req)
-	if err != nil {
-		t.Fatalf("alias GET: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("alias GET: want 200, got %d", resp.StatusCode)
-	}
-	if resp.Header.Get("Deprecation") != "true" {
-		t.Fatal("the superseded path must announce itself deprecated")
-	}
-	if !strings.Contains(resp.Header.Get("Link"), "/v1/keys") {
-		t.Fatalf("the deprecation must NAME its replacement, got Link: %q", resp.Header.Get("Link"))
-	}
-
-	// And it is the SAME handler — a mint through the alias is a mint, with the type
-	// field honored exactly as on the canonical path.
-	code, body := call(t, app, http.MethodPost, "/v1/iam/keys?type=publishable", "alice", "acme", "")
-	if code != http.StatusOK || !strings.Contains(string(body), "pk-") {
-		t.Fatalf("alias POST must behave identically: %d %s", code, body)
-	}
-
-	// Every method, including the revoke: the Deprecation header is carried by the
-	// middleware the op is REGISTERED with, not by a wrapper around one handler, so
-	// this is exactly the announcement a re-registration quietly drops.
-	req = httptest.NewRequest(http.MethodDelete, "/v1/iam/keys?type=publishable", nil)
-	req.Header.Set("X-User-Id", "alice")
-	req.Header.Set("X-Org-Id", "acme")
-	resp, err = app.Fiber().Test(req)
-	if err != nil {
-		t.Fatalf("alias DELETE: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("alias DELETE: want 200, got %d", resp.StatusCode)
-	}
-	if resp.Header.Get("Deprecation") != "true" || !strings.Contains(resp.Header.Get("Link"), "/v1/keys") {
-		t.Fatalf("the superseded revoke must announce itself deprecated and name /v1/keys, got %q / %q",
-			resp.Header.Get("Deprecation"), resp.Header.Get("Link"))
-	}
-	if len(f.revokedType) != 1 || f.revokedType[0] != "publishable" {
-		t.Fatalf("alias DELETE must revoke the class it named, got %v", f.revokedType)
-	}
-}
-
-// TestKeys_DirectBearerPath_MintsByUsernameNotUUID is the regression guard for the
-// cloud-direct hk- mint 502. On the in-binary direct-Bearer path SanitizeIdentity
-// stamps X-User-Id = the JWT subject (a UUID) and, distinctly, X-User-Name = the IAM
-// username. The user-key ops must target <owner>/<username> ("hanzo/z"), NOT
-// <owner>/<uuid> — which failed IAM's GetOwnerAndNameFromId user lookup ("password
-// or code is incorrect", surfaced as 502). The gateway path (no X-User-Name;
-// X-User-Id == username) must be UNCHANGED (keyID falls back to owner/name).
 func TestKeys_DirectBearerPath_MintsByUsernameNotUUID(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
 	const uuid = "2d4d67ab-30f1-474e-b81f-f60461852259"
-	req := httptest.NewRequest(http.MethodPost, "/v1/iam/keys", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/keys", nil)
 	req.Header.Set("X-User-Id", uuid)  // direct-path stamp: the subject UUID
 	req.Header.Set("X-User-Name", "z") // direct-path stamp: the IAM username
 	req.Header.Set("X-Org-Id", "hanzo")
@@ -622,7 +561,7 @@ func TestKeys_DirectBearerPath_MintsByUsernameNotUUID(t *testing.T) {
 func TestKeys_NotConfigured_501(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "", "") // confidential client unwired
-	code, body := call(t, app, http.MethodPost, "/v1/iam/keys", "alice", "acme", "")
+	code, body := call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", "")
 	if code != http.StatusNotImplemented {
 		t.Fatalf("unconfigured mint: want 501, got %d (%s)", code, body)
 	}
@@ -632,7 +571,7 @@ func TestKeys_MintUpstreamFailure_502(t *testing.T) {
 	f := newFakeIAM()
 	f.failMintKey = true
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
-	code, body := call(t, app, http.MethodPost, "/v1/iam/keys", "alice", "acme", "")
+	code, body := call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", "")
 	if code != http.StatusBadGateway {
 		t.Fatalf("mint upstream failure: want 502, got %d (%s)", code, body)
 	}
@@ -649,7 +588,7 @@ func TestOnboard_FirstRun_CreatesAndMoves(t *testing.T) {
 
 	// First-run: the caller has NO org (empty X-Org-Id) but IS validated. onboard
 	// must allow it (requireOwner=false), create the org, and MOVE the user in.
-	code, body := call(t, app, http.MethodPost, "/v1/iam/onboard", "dave", "", `{"name":"Acme Rockets"}`)
+	code, body := call(t, app, http.MethodPost, "/v1/orgs", "dave", "", `{"name":"Acme Rockets"}`)
 	if code != http.StatusOK {
 		t.Fatalf("first-run onboard: want 200, got %d (%s)", code, body)
 	}
@@ -675,7 +614,7 @@ func TestOnboard_Additional_CreatesWithoutMoving(t *testing.T) {
 
 	// The caller ALREADY has an org. onboard must create the new org but NOT move
 	// them (a move would strip their owner + orphan their current org).
-	code, body := call(t, app, http.MethodPost, "/v1/iam/onboard", "alice", "acme", `{"name":"Side Project"}`)
+	code, body := call(t, app, http.MethodPost, "/v1/orgs", "alice", "acme", `{"name":"Side Project"}`)
 	if code != http.StatusOK {
 		t.Fatalf("additional onboard: want 200, got %d (%s)", code, body)
 	}
@@ -695,12 +634,12 @@ func TestOnboard_ReservedAndTaken(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
 	// A reserved brand/system name is a 400 (policy), before any IAM create.
-	code, _ := call(t, app, http.MethodPost, "/v1/iam/onboard", "alice", "acme", `{"name":"Hanzo"}`)
+	code, _ := call(t, app, http.MethodPost, "/v1/orgs", "alice", "acme", `{"name":"Hanzo"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("reserved name: want 400, got %d", code)
 	}
 	// An explicit name that's taken is an honest 409.
-	code, _ = call(t, app, http.MethodPost, "/v1/iam/onboard", "alice", "acme", `{"name":"Taken"}`)
+	code, _ = call(t, app, http.MethodPost, "/v1/orgs", "alice", "acme", `{"name":"Taken"}`)
 	if code != http.StatusConflict {
 		t.Fatalf("taken name: want 409, got %d", code)
 	}
@@ -717,7 +656,7 @@ func TestOnboard_Personal_AutoSuffixesOnCollision(t *testing.T) {
 
 	// personal:true (zero-org user) with the base slug taken → auto-suffix to dave-2,
 	// first-run move.
-	code, body := call(t, app, http.MethodPost, "/v1/iam/onboard", "dave", "", `{"personal":true}`)
+	code, body := call(t, app, http.MethodPost, "/v1/orgs", "dave", "", `{"personal":true}`)
 	if code != http.StatusOK {
 		t.Fatalf("personal onboard: want 200, got %d (%s)", code, body)
 	}
@@ -732,7 +671,7 @@ func TestOnboard_PersonalWhenAlreadyOrged_409(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 	// A user WITH an org asking for a personal org is meaningless → 409.
-	code, _ := call(t, app, http.MethodPost, "/v1/iam/onboard", "alice", "acme", `{"personal":true}`)
+	code, _ := call(t, app, http.MethodPost, "/v1/orgs", "alice", "acme", `{"personal":true}`)
 	if code != http.StatusConflict {
 		t.Fatalf("personal-while-orged: want 409, got %d", code)
 	}
@@ -741,80 +680,56 @@ func TestOnboard_PersonalWhenAlreadyOrged_409(t *testing.T) {
 func TestOnboard_Unauthenticated_403(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
-	code, _ := call(t, app, http.MethodPost, "/v1/iam/onboard", "", "", `{"name":"x"}`)
+	code, _ := call(t, app, http.MethodPost, "/v1/orgs", "", "", `{"name":"x"}`)
 	if code != http.StatusForbidden {
 		t.Fatalf("unauth onboard: want 403, got %d", code)
 	}
 }
 
-// ── route ordering: the native /v1/iam surface beats clients/iam's wildcard ───
+// ── ownership: account claims nothing under /v1/iam ──────────────────────────
 
-// TestIAMKeysBeatsWildcard proves the ACTUAL route-match precedence: with the account
-// self-service routes mounted FIRST (order 48) and clients/iam's /v1/iam/* WILDCARD
-// mounted AFTER (order 50) — the exact production mount order — a request to /v1/iam/keys
-// reaches the NATIVE handler, not the wildcard. A path the native surface does NOT own
-// still falls through to the wildcard, proving it is really mounted and only the specific
-// route shadows it.
-func TestIAMKeysBeatsWildcard(t *testing.T) {
+// TestAccountClaimsNothingUnderIAM replaces TestIAMKeysBeatsWildcard, which proved
+// the opposite fact and proved it about a topology that is gone.
+//
+// account used to register /v1/iam/keys (three methods) and /v1/iam/onboard inside
+// IAM's own prefix, in front of the /v1/iam/* wildcard iam was relayed behind, and
+// that test pinned fiber's most-specific-wins as the thing keeping the two apart.
+// It was already a fiction in production: api.hanzo.ai routes /v1/iam/* to IAM, so
+// none of those four registrations ever answered there — measurably, that address
+// returns IAM's own {"status":401,"error":"authentication required"} from
+// server: zip, with no Deprecation header and no x-api-version.
+//
+// iam is GRAFTED now, so both would be EXACT routes at one address and the winner
+// would be registration order rather than specificity — silent, and zip.Graft
+// refuses it at compose time instead. The keys aliases are deleted (the canonical
+// /v1/keys is unchanged) and onboard moved to /v1/orgs, named for the resource,
+// which is the same rule that moved the key surface off /v1/iam/keys in the first
+// place. This test is the ratchet on that: nothing account registers may sit under
+// a prefix another app owns.
+func TestAccountClaimsNothingUnderIAM(t *testing.T) {
 	f := newFakeIAM()
 	t.Setenv("IAM_URL", f.server(t).URL)
 	t.Setenv("IAM_MINT_CLIENT_ID", "hanzo-console")
 	t.Setenv("IAM_MINT_CLIENT_SECRET", "s3cr3t")
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	deps := cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}
-	// account (order 48) mounts its SPECIFIC /v1/iam/keys + /v1/iam/onboard FIRST.
-	if err := MountAccount(app, deps); err != nil {
+	if err := MountAccount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}); err != nil {
 		t.Fatalf("MountAccount: %v", err)
 	}
-	// clients/iam (order 50) mounts its /v1/iam/* WILDCARD AFTER — the exact prod order.
-	const sentinel = 599
-	app.All("/v1/iam/*", func(c *zip.Ctx) error {
-		return c.JSON(sentinel, map[string]string{"handler": "iam-wildcard"})
-	})
-
-	// GET /v1/iam/keys must hit the NATIVE handler (keyStatus 200), never the wildcard.
-	code, body := call(t, app, http.MethodGet, "/v1/iam/keys", "alice", "acme", "")
-	if code != http.StatusOK {
-		t.Fatalf("/v1/iam/keys must hit the native handler (200), got %d (%s) — wildcard shadowed it", code, body)
-	}
-	if strings.Contains(string(body), "iam-wildcard") {
-		t.Fatalf("/v1/iam/keys reached the wildcard, not the native handler: %s", body)
-	}
-	var st apiKeyList
-	mustJSON(t, body, &st) // native response shape
-
-	// POST /v1/iam/keys (mint) must ALSO hit the native handler and target the derived id.
-	code, body = call(t, app, http.MethodPost, "/v1/iam/keys", "alice", "acme", "")
-	if code != http.StatusOK || strings.Contains(string(body), "iam-wildcard") {
-		t.Fatalf("POST /v1/iam/keys must mint via the native handler, got %d (%s)", code, body)
-	}
-	if len(f.mintedFor) != 1 || f.mintedFor[0] != "acme/alice" {
-		t.Fatalf("native mint must target acme/alice, got %v", f.mintedFor)
+	for _, r := range app.Fiber().GetRoutes(true) {
+		if strings.HasPrefix(r.Path, "/v1/iam") || strings.HasPrefix(r.Path, "/login/oauth") {
+			t.Errorf("account registers %s %s, inside a prefix iam owns — a graft refuses "+
+				"the duplicate at compose time and the whole subsystem fail-closes to 503",
+				r.Method, r.Path)
+		}
 	}
 
-	// DELETE too — and it is the method that matters most here. A revoke that lands
-	// on the wildcard reaches IAM's own Guard and 401s, so the caller is told their
-	// key still works when nothing tried to revoke it.
-	code, body = call(t, app, http.MethodDelete, "/v1/iam/keys", "alice", "acme", "")
-	if code != http.StatusOK || strings.Contains(string(body), "iam-wildcard") {
-		t.Fatalf("DELETE /v1/iam/keys must revoke via the native handler, got %d (%s)", code, body)
+	// The two operations that moved are alive at their own addresses.
+	if code, body := call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", ""); code != http.StatusOK {
+		t.Fatalf("GET /v1/keys: want 200, got %d (%s)", code, body)
 	}
-	if len(f.revokedFor) != 1 || f.revokedFor[0] != "acme/alice" {
-		t.Fatalf("native revoke must target acme/alice, got %v", f.revokedFor)
-	}
-
-	// /v1/iam/onboard is likewise native (not the wildcard).
-	code, _ = call(t, app, http.MethodPost, "/v1/iam/onboard", "dave", "", `{"name":"Acme Rockets"}`)
-	if code == sentinel {
-		t.Fatalf("/v1/iam/onboard reached the wildcard (%d) — the native handler must win", sentinel)
-	}
-
-	// A path the native surface does NOT own falls through to the wildcard (proof it IS
-	// mounted and only the specific /v1/iam/keys + /v1/iam/onboard routes shadow it).
-	code, _ = call(t, app, http.MethodGet, "/v1/iam/oauth/token", "alice", "acme", "")
-	if code != sentinel {
-		t.Fatalf("/v1/iam/oauth/token must reach the /v1/iam/* wildcard (%d), got %d", sentinel, code)
+	if code, _ := call(t, app, http.MethodPost, "/v1/orgs", "dave", "", `{"name":"Acme Rockets"}`); code != http.StatusOK {
+		t.Fatalf("POST /v1/orgs: want 200, got %d", code)
 	}
 }
 
