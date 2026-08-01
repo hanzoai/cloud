@@ -16,6 +16,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -71,11 +72,11 @@ type Deps struct {
 	// subsystem falls back to whatever it did before.
 	MasterKey []byte
 
-	// Durable is the per-deployment HA-durability factory an OrgStore wires
-	// WithDurable: the shared ha election + vfs FencedStore over the SeaweedFS S3
+	// Durable is the per-deployment HA-durability factory every OrgStore routes
+	// through: the shared ha election + vfs FencedStore over the SeaweedFS S3
 	// gateway + per-org envelope Cipher. nil ⇒ local-only (no object store creds,
 	// dev/single-node), and every OrgStore is exactly the pre-durability cache.
-	Durable *Durability
+	Durable *org.Durability
 
 	// LiveMembers reads the CURRENT live writer set (the SAME ha.Membership snapshot the
 	// durability fencer elects over). Non-nil ONLY when the durable plane is active — the

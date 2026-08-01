@@ -464,9 +464,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("flags.Mount: empty deps.DataDir")
 	}
-	log := deps.Logger.New("subsystem", "flags")
+	b := cloud.NewBase(deps, "flags")
+	log := b.Log
 	c := &Client{
-		stores:     cloud.NewOrgStore[*Store](deps.DataDir, "flags", openStore),
+		stores:     cloud.NewOrgStore[*Store](b, "flags", openStore),
 		distinctID: firstNonEmpty(os.Getenv("FLAGS_PLATFORM_DISTINCT_ID"), "hanzo-platform:"+firstNonEmpty(deps.Brand, "hanzo")),
 		ttl:        ttlFromEnv(),
 	}
@@ -476,7 +477,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// imports the root package, root imports routers), so the root package holds the
 	// seam and this is the one call that fills it.
 	cloud.SetSwitchReader(Bool)
-	b := cloud.NewBase(deps, "flags")
 	svc := &cloud.Service[state]{Base: b, State: state{client: c}}
 	routes(app, svc)
 	log.Info("flags engine ready", "engine", "hanzo-flags", "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
