@@ -3368,6 +3368,17 @@ the map, so cobra's own commands were handed to a binary that has never heard of
 them. Do not reintroduce a list: adding a command to `newRootCmd` IS the whole
 registration, and `TestRouterMatchesCommandTree` fails the moment the two disagree.
 
+`hanzo status` is DELEGATED, and not by accident: it was implemented twice and the
+two disagreed. This binary's `newStatusCmd`/`runFleetStatus` called one endpoint,
+`GET /v1/fleet/workers` — whose server side (apps/visor `byoWorkers`) returns only
+BYO machines that dialled in — so it showed two laptops and none of the org's
+clusters or deployed applications; the fabric CLI's composes clusters +
+applications + workers, leads with whatever is unhealthy, and renders the same
+per-machine compute block, a strict superset. Both were deleted here (`statusDot`
+went with them; `fleetWorker` stayed, it is the shape registration round-trips),
+`status` moved to `delegatedVerbs` in cli_test.go, and re-registering it fails
+`TestRouterMatchesCommandTree` three ways.
+
 Four names come from cobra rather than from our `AddCommand`. `help` and `completion`
 are added in `newRootCmd` (`InitDefaultHelpCmd` / `InitDefaultCompletionCmd`, both
 idempotent) because otherwise Execute adds them too late for the router to see them.

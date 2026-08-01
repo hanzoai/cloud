@@ -585,7 +585,6 @@ func newRootCmd() *cobra.Command {
 		newSecurityCmd(envOf),
 		newLinkCmd(envOf, &f),
 		newUnlinkCmd(envOf, &f),
-		newStatusCmd(envOf, &f),
 		newEngineCmd(envOf, &f),
 		newRunnerCmd(envOf, &f),
 		newRunCmd(envOf, &f),

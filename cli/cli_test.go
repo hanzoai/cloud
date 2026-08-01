@@ -261,16 +261,24 @@ func TestConfigFieldGetSet(t *testing.T) {
 var servedVerbs = []string{
 	"agent", "apps", "auth", "bot", "build", "cluster", "clusters", "completion",
 	"config", "deploy", "engine", "help", "link", "login", "logout", "run",
-	"runner", "security", "status", "unlink", "version", "whoami",
+	"runner", "security", "unlink", "version", "whoami",
 }
 
 // delegatedVerbs is what belongs to the Rust fabric CLI. `code` and `k8s` are
 // the ones that hurt: both stayed in the router's old hand-kept verb list after
 // their commands were deleted, so `hanzo code` died with `unknown command
 // "code" for "hanzo"` instead of reaching the fabric CLI that implements it.
+//
+// `status` is here because it was implemented TWICE and the two disagreed. This
+// binary's version called ONE endpoint, GET /v1/fleet/workers, which serves only
+// BYO machines that dialled in — so it showed two laptops and none of the org's
+// clusters or deployed applications. The fabric CLI's composes clusters +
+// applications + workers and leads with whatever is unhealthy: a strict superset.
+// Registering a `status` command here again re-forks the fleet view, so this entry
+// keeps it delegated.
 var delegatedVerbs = []string{
 	"code", "k8s", "node", "dev", "wallet", "network",
-	"iam", "kms", "cloud", "gateway", "datastore", "nope",
+	"iam", "kms", "cloud", "gateway", "datastore", "status", "nope",
 }
 
 // runVerb executes verb against a real root command with `--help`, which reaches
