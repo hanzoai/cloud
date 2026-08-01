@@ -10,7 +10,7 @@
       },
       "type": "object"
     },
-    "name": "delete_v1_load-balancers_id"
+    "name": "delete_v1_balancers_id"
   },
   {
     "description": "DeleteVpc removes one of the caller org's VPCs and answers 204. Ownership is\nconfirmed by re-fetching the resource and checking its physical name carries\nthe caller's org prefix BEFORE anything is deleted, so a cross-tenant id is a\n404 rather than a delete of another org's VPC.",
@@ -31,7 +31,7 @@
       "properties": {},
       "type": "object"
     },
-    "name": "get_v1_load-balancers"
+    "name": "get_v1_balancers"
   },
   {
     "description": "GetLoadBalancer returns one of the caller org's load balancers by id. One that\nexists in another org's namespace is reported 404, never 403 — the same\nexistence-oracle guard the VPC read applies.",
@@ -44,7 +44,7 @@
       },
       "type": "object"
     },
-    "name": "get_v1_load-balancers_id"
+    "name": "get_v1_balancers_id"
   },
   {
     "description": "ListVpcs returns every VPC the caller's org owns, under the friendly names the\norg created them with. DigitalOcean is one account for the whole deployment, so\nthe account-wide inventory is filtered to the caller's own \"o\"\u003corgHash\u003e- name\nprefix and the prefix is stripped — another org's VPC is not merely hidden, it\nis never in the answer.",
@@ -120,7 +120,7 @@
       },
       "type": "object"
     },
-    "name": "post_v1_load-balancers"
+    "name": "post_v1_balancers"
   },
   {
     "description": "CreateVpc creates a VPC in the caller's org namespace and answers 201 with it.\nThe physical DigitalOcean name is derived server-side from the validated org,\nso a tenant can only ever create inside its own namespace; a name that already\nexists there is a 409.",

@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/load-balancers/:id", zip.Doc{
+	zip.Describe("DELETE /v1/balancers/:id", zip.Doc{
 		Description: "DeleteLoadBalancer removes one of the caller org's load balancers and answers\n204. Ownership is confirmed by re-fetching the resource before anything is\ndeleted, so a cross-tenant id is a 404 rather than a delete of another org's\nload balancer.",
 		Fields: map[string]string{
 			"idIn.id": "ID is the DigitalOcean resource id (a UUID), from the path.",
@@ -21,14 +21,14 @@ func init() {
 			"idIn.id": "ID is the DigitalOcean resource id (a UUID), from the path.",
 		},
 	})
-	zip.Describe("GET /v1/load-balancers", zip.Doc{
+	zip.Describe("GET /v1/balancers", zip.Doc{
 		Description: "ListLoadBalancers returns every load balancer the caller's org owns, under the\nfriendly names the org created them with. Same account-wide filter as the VPC\nlisting: a load balancer outside the caller's \"o\"<orgHash>- namespace is never\nin the answer.",
 		Fields: map[string]string{
 			"lbList.loadBalancers": "LoadBalancers are the caller org's load balancers under their friendly names.",
 		},
 		Response: json.RawMessage(`{"loadBalancers":[{"id":"lb-1","name":"edge","type":"REGIONAL","targets":3,"ip":"10.0.0.1","status":"active"}]}`),
 	})
-	zip.Describe("GET /v1/load-balancers/:id", zip.Doc{
+	zip.Describe("GET /v1/balancers/:id", zip.Doc{
 		Description: "GetLoadBalancer returns one of the caller org's load balancers by id. One that\nexists in another org's namespace is reported 404, never 403 — the same\nexistence-oracle guard the VPC read applies.",
 		Fields: map[string]string{
 			"idIn.id": "ID is the DigitalOcean resource id (a UUID), from the path.",
@@ -47,7 +47,7 @@ func init() {
 			"idIn.id": "ID is the DigitalOcean resource id (a UUID), from the path.",
 		},
 	})
-	zip.Describe("POST /v1/load-balancers", zip.Doc{
+	zip.Describe("POST /v1/balancers", zip.Doc{
 		Description: "CreateLoadBalancer creates a load balancer in the caller's org namespace and\nanswers 201 with it. The physical DigitalOcean name is derived server-side from\nthe validated org; a name that already exists there is a 409. Omitting\nforwarding rules yields a usable HTTP 80→80 load balancer rather than a 422.",
 		Fields: map[string]string{
 			"createLBReq.forwarding_rules": "ForwardingRules are the listen→backend port mappings. Empty defaults to\nplain HTTP 80→80, the same default DigitalOcean's own console applies.",
