@@ -996,8 +996,14 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 			},
 		},
 		"spec": map[string]any{
-			"backoffLimit":            int64(0),
-			"ttlSecondsAfterFinished": int64(3600),
+			"backoffLimit": int64(0),
+			// A finished build holds its buildkitd emptyDir until the POD is deleted,
+			// so this TTL is disk time, not just record-keeping. At an hour, with a
+			// build every few minutes, six finished pods sat on tens of gigabytes
+			// each and the next build was evicted off a node they had filled. Ten
+			// minutes is long past the terminal-state read (waitForJob polls every
+			// 5s) and long enough to pull logs from a failure.
+			"ttlSecondsAfterFinished": int64(600),
 			"template": map[string]any{
 				"metadata": map[string]any{
 					// AppArmor unconfined for the rootless worker. The beta annotation is
@@ -1042,8 +1048,8 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 						// scheduler avoid a full node; the limit bounds a runaway build
 						// instead of letting it take the node down for everything else.
 						"resources": map[string]any{
-							"requests": map[string]any{"ephemeral-storage": "20Gi"},
-							"limits":   map[string]any{"ephemeral-storage": "60Gi"},
+							"requests": map[string]any{"ephemeral-storage": "50Gi"},
+							"limits":   map[string]any{"ephemeral-storage": "80Gi"},
 						},
 						"securityContext": map[string]any{
 							"privileged":      false,
