@@ -83,6 +83,18 @@ var foreignDoors = map[string]string{
 	// capability with a different owner, reached through this fleet rather than
 	// projected from it.
 	"apps/tasks/tasks.go": "hanzoai/tasks' own engine tool surface (srv.MCPHandler), not a projection of cloud's typed ops",
+
+	// hanzoai/world's OWN MCP surface (serverInfo "hanzo-world"; the world-brief and
+	// market-radar tools live in that module's internal/world/mcp), reached at
+	// /v1/world/mcp because the ingress carves that path off the cloud catch-all to
+	// world-gw. Same class as tasks — a real capability with a different owner —
+	// with one difference worth stating: cloud does not SERVE this door, it only
+	// NAMES it. apps/world/index.go holds the address as a data value in the front
+	// door's wire list, because a route cloud does not route can appear in no
+	// document (openapi.Describe renders prose only for a served route), so that op
+	// is the only place a caller can discover it. No JSON-RPC envelope is registered
+	// here and none may be.
+	"apps/world/index.go": "hanzoai/world's own MCP tool surface, served by world-gw via an ingress path-carve; cloud names the address, never serves it",
 }
 
 // TestNoSecondMCPDoorInSource is the gate that makes a fourth registry impossible
