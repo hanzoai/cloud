@@ -16,7 +16,7 @@ func mountAgentPR(t *testing.T) {
 	prev := mounted
 	mounted = &cloud.Service[state]{
 		Base:  cloud.Base{Log: luxlog.New("test")},
-		State: state{stores: cloud.NewOrgStore(t.TempDir(), "tracker", openStore)},
+		State: state{stores: cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir()}, "tracker", openStore)},
 	}
 	t.Cleanup(func() { mounted = prev })
 }
