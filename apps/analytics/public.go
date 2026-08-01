@@ -41,20 +41,32 @@
 //     publicTenant (the compile-time constant every /v1 door passes) and the resolved
 //     Site's org on a published-site host, which is the SAME host-derived tenant the
 //     file plane and the Base carve already serve that host's bytes under.
-//   - KIND is an ALLOWLIST of two — pageview and error, what a marketing surface and a
-//     published site emit. `identify` and `group` (which name a person and a group)
-//     and every custom event — the whole commerce/billing/metering surface — are
-//     dropped, counted in the honest receipt, never stored.
-//   - NAME is server-chosen FROM the kind ($pageview | $error), so the anonymous name
-//     space is closed to two values: an anonymous caller can introduce neither a new
-//     name into the read lenses nor unbounded cardinality into the table's ORDER BY
-//     key.
+//   - WHAT MAY BE STORED is ONE rule: THE SERVER NAMES THE ROW. An anonymous event is
+//     admitted only when its stored name comes from THIS FILE and not from the caller's
+//     bytes (publicName). That is what keeps the anonymous name space closed — an
+//     unattested caller can introduce neither a new name into the read lenses nor
+//     unbounded cardinality into the warehouse's keys. Two families satisfy the rule:
+//
+//     KIND — pageview and error (publicKinds), whose name the ROUTE derives
+//     (resolveName ⇒ page_viewed / error). The caller's own `event` string is dropped
+//     on the way through, so the body cannot reach the name at all.
+//
+//     NAME — the closed autocapture vocabulary carried by the `event` kind
+//     (publicNames: $click, $input, $change, $submit, $view). An interaction's whole
+//     identity IS its name — strip it and there is no event — so the kind allowlist
+//     alone could not admit one. The name is instead RESOLVED through a server-owned
+//     table, and the TABLE'S VALUE is what gets stored.
+//
+//     `identify` and `group` (which name a person and a group) and every OTHER custom
+//     event — the whole commerce/billing/metering surface — are dropped, counted in the
+//     honest receipt, never stored.
 //   - FIELDS are a PROJECTION, not a filter: admitPublic builds a fresh CaptureEvent
 //     from the fields it names, so a field it does not name — personId, groupId,
-//     revenue, productId, quantity, currency, refCode, channel, signupWeek, and the
-//     entire client property bag — cannot reach the row. The only properties an
-//     anonymous row carries are the server-folded $exception and the write core's
-//     $source.
+//     revenue, productId, quantity, currency, refCode, channel, signupWeek — cannot
+//     reach the row. The property bag is projected the SAME way and by the same
+//     argument (publicProps): the @hanzo/observe annotation and NOTHING else. So an
+//     anonymous row's attributes still hold exactly what the SERVER put there — the
+//     folded $exception and the write core's $source.
 //   - BYTES and COUNT are bounded first, and REFUSED rather than truncated.
 //   - RATE is capped per client IP and, independently, per socket peer.
 //   - DNT / Sec-GPC on the wire is honored: nothing is stored and the receipt says so.
@@ -99,12 +111,39 @@ const (
 	maxPublicBatch = 50
 )
 
-// publicKinds is the ALLOWLIST of canonical kinds (canonicalType's closed set) an
-// anonymous caller may store. A kind absent here is dropped: `identify` and `group`
-// bind an event to a named person and a named group, and a bare `event` is the whole
-// custom product/billing/metering surface — none of which a caller nobody vouched for
-// may write. Adding a kind here is the ONLY way to widen the anonymous surface.
+// publicKinds is the ALLOWLIST of canonical kinds (canonicalType's closed set) whose
+// name the ROUTE derives, so an anonymous caller may store one whatever its body says:
+// admitPublic drops the caller's `event` string and resolveName supplies page_viewed /
+// error. `identify` and `group` bind an event to a named person and a named group, and
+// are refused here for that reason.
 var publicKinds = map[string]bool{"pageview": true, "error": true}
+
+// publicNames is the other half of the same rule, for the ONE kind whose name is
+// load-bearing. An autocaptured interaction arrives as the `event` kind, and its entire
+// identity is its name — drop the name and there is no event at all, because
+// resolveName returns "" for an unnamed track and the write core discards it. So the
+// kind allowlist could never carry one: `event` as a KIND is the whole custom
+// commerce/billing/metering surface, and that stays refused.
+//
+// The set is CLOSED, and it is the client's own reserved vocabulary rather than a
+// server invention: @hanzo/observe derives an interaction's name from its kind
+// (observer.ts NAME) and emits exactly these five through capture(). Its sixth, nav,
+// calls pageview() and arrives as the pageview KIND — which is why $pageview is not a
+// name here. It would be a second way to say the first thing.
+//
+// THE MAP'S VALUE IS WHAT GETS STORED, and that is the security property. The lookup
+// folds case and space (the same fold canonicalType already applies to the sibling
+// field), so what lands in `name` is a constant declared HERE and never the caller's
+// bytes: an anonymous caller can introduce neither a new name nor a second SPELLING of
+// an admitted one — $Click and $click are one name, not two. Adding an entry here, or a
+// kind above, is the ONLY way to widen the anonymous surface.
+var publicNames = map[string]string{
+	"$click":  "$click",
+	"$input":  "$input",
+	"$change": "$change",
+	"$submit": "$submit",
+	"$view":   "$view",
+}
 
 // publicRateWindow, publicRateLimit and publicPeerRateLimit cap anonymous ingest.
 // TWO independent buckets, because neither key alone suffices:
@@ -227,6 +266,67 @@ func optedOut(c *zip.Ctx) bool {
 	return strings.TrimSpace(c.Header("Sec-GPC")) == "1"
 }
 
+// publicName is the anonymous admission decision AND the name it yields, in one
+// function because it is one rule: AN EVENT IS ADMITTED ONLY WHEN THE SERVER CAN NAME
+// IT WITHOUT READING THE CALLER'S NAME.
+//
+// ok=false ⇒ dropped. ok=true with an EMPTY name ⇒ the route names itself downstream
+// (resolveName's server-chosen default), which is how pageview and error have always
+// been named on this lane — admitPublic rebuilds without the caller's `event`, so the
+// empty string is not a gap in the decision but the whole of it. A non-empty name is a
+// publicNames value, and nothing else can be.
+func publicName(e CaptureEvent) (string, bool) {
+	kind := canonicalType(e.Type)
+	if publicKinds[kind] {
+		return "", true
+	}
+	if kind != "event" {
+		return "", false
+	}
+	name, ok := publicNames[strings.ToLower(strings.TrimSpace(e.Event))]
+	return name, ok
+}
+
+// publicProps is the property bag's PROJECTION — the field projection's own argument,
+// applied one level down. It keeps exactly the @hanzo/observe annotation
+// (annotationKeys, fact.go) and drops every other key, so the property names an
+// anonymous row may carry are a set this SERVER declares.
+//
+// The annotation is what makes an anonymous interaction worth storing: a $click with a
+// url and no element identity is a count, not a heatmap. It is also the one property
+// family that widens nothing, and that is why it is the one that may cross: the
+// annotation keys are LIFTED OUT of the bag into the `el` tuple (annotationOf), and
+// attributesOf skips exactly the same keys — so admitting them adds no key to
+// attributes, whose Map(LowCardinality(String), String) dictionary is the thing an
+// unbounded anonymous property bag would actually attack. The invariant above survives
+// verbatim: an anonymous row's attributes hold the folded $exception and the write
+// core's $source, and nothing a caller sent.
+//
+// VALUES ARE NOT BOUNDED HERE, deliberately. maxPublicBytes is the ONE bound on how
+// many caller bytes an anonymous request may store, applied once at the door, and it
+// already governs every other caller string this projection carries (url, path,
+// referrer, distinctId, the UTM tuple). A second, per-value bound on this family alone
+// would be a second mechanism for a job the first one already does — and would have to
+// explain why $el is clipped and url is not.
+func publicProps(p map[string]any) map[string]any {
+	if len(p) == 0 {
+		return nil
+	}
+	// Ranging over annotationKeys rather than over p is what binds this to the reader:
+	// a key fact.go starts lifting into the tuple is carried here by construction,
+	// instead of by remembering to spell the set a second time.
+	out := make(map[string]any, len(annotationKeys))
+	for _, k := range annotationKeys {
+		if v, ok := p[k]; ok {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // admitPublic is the anonymous lane's WHOLE capability decision, and it is PURE over
 // the decoded batch: it returns the events that may be stored and how many were
 // dropped. It decides WHAT, never WHERE — it takes no *zip.Ctx AND no org, so neither
@@ -236,23 +336,22 @@ func optedOut(c *zip.Ctx) bool {
 // returned for the request's host.
 //
 // Each admitted event is REBUILT from the allowlisted fields rather than edited, so a
-// field this function does not name cannot reach the row. The stored name comes from
-// the kind (resolveEventName maps the empty name to $pageview / $error). Properties are
-// left nil: the shared tail (ingestDecoded) folds the typed error into
-// properties.$exception and the write core stamps $source, so an anonymous row's
-// properties hold exactly what the SERVER put there and nothing the caller sent.
+// field this function does not name cannot reach the row. Both caller-controlled
+// vocabularies come back through a server-owned decision on the way in — the name from
+// publicName, the property keys from publicProps — so neither is copied across.
 func admitPublic(evs []CaptureEvent) ([]CaptureEvent, int) {
 	out := make([]CaptureEvent, 0, len(evs))
 	dropped := 0
 	for _, e := range evs {
-		kind := canonicalType(e.Type)
-		if !publicKinds[kind] {
+		name, ok := publicName(e)
+		if !ok {
 			dropped++
 			continue
 		}
 		out = append(out, CaptureEvent{
 			MessageID:   e.MessageID,
-			Type:        kind,
+			Type:        canonicalType(e.Type),
+			Event:       name,
 			Timestamp:   e.Timestamp,
 			DistinctID:  e.DistinctID,
 			AnonymousID: e.AnonymousID,
@@ -265,6 +364,7 @@ func admitPublic(evs []CaptureEvent) ([]CaptureEvent, int) {
 			Library:     e.Library,
 			LibraryVer:  e.LibraryVer,
 			Error:       e.Error,
+			Properties:  publicProps(e.Properties),
 		})
 	}
 	return out, dropped
