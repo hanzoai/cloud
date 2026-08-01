@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/types"
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -52,9 +52,9 @@ func (c *countingAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float3
 // AI, seeded with the supplied agents. Returns the scheduler for direct tick().
 func schedService(t *testing.T, ai types.AIClient, seed ...Agent) *scheduler {
 	t.Helper()
-	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{store: testStore(t), ai: ai}}
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{stores: testStores(t), ai: ai}}
 	for _, a := range seed {
-		if err := s.State.store.Create(context.Background(), a); err != nil {
+		if err := storeOf(t, &s.State, a.Org).Create(context.Background(), a); err != nil {
 			t.Fatalf("seed %s/%s: %v", a.Org, a.Name, err)
 		}
 	}
@@ -106,10 +106,10 @@ func TestSchedulerRecordsRun(t *testing.T) {
 	ctx := context.Background()
 	sc.tick(ctx, at(t, "2026-07-01 12:00"))
 	if !waitFor(func() bool {
-		runs, _ := sc.s.State.store.ListRuns(ctx, "acme", "cron", 10)
+		runs, _ := storeOf(t, &sc.s.State, "acme").ListRuns(ctx, "acme", "cron", 10)
 		return len(runs) == 1 && runs[0].Status == "ok"
 	}) {
-		runs, _ := sc.s.State.store.ListRuns(ctx, "acme", "cron", 10)
+		runs, _ := storeOf(t, &sc.s.State, "acme").ListRuns(ctx, "acme", "cron", 10)
 		t.Fatalf("scheduled run not recorded: %+v", runs)
 	}
 }
@@ -188,12 +188,12 @@ func TestSchedulerBillsScheduledRun(t *testing.T) {
 	s := &cloud.Service[state]{
 		Base: cloud.Base{Log: luxlog.New("test")},
 		State: state{
-			store: testStore(t),
-			ai:    &countingAI{},
-			bill:  cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind),
+			stores: testStores(t),
+			ai:     &countingAI{},
+			bill:   cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind),
 		},
 	}
-	if err := s.State.store.Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
+	if err := storeOf(t, &s.State, "acme").Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	sc := newScheduler(s, luxlog.New("test"))
@@ -232,12 +232,12 @@ func TestSchedulerGatesUnfundedRun(t *testing.T) {
 	s := &cloud.Service[state]{
 		Base: cloud.Base{Log: luxlog.New("test")},
 		State: state{
-			store: testStore(t),
-			ai:    ai,
-			bill:  cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind),
+			stores: testStores(t),
+			ai:     ai,
+			bill:   cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind),
 		},
 	}
-	if err := s.State.store.Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
+	if err := storeOf(t, &s.State, "acme").Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	sc := newScheduler(s, luxlog.New("test"))

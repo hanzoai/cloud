@@ -281,7 +281,13 @@ func (o sessionOps) build(ctx context.Context, in *buildRef) (*buildView, error)
 	if org == "" || project == "" || len(project) > maxProject {
 		return nil, zip.ErrNotFound("build not found")
 	}
-	rows, err := s.State.store.ListSessions(ctx, org,
+	// PUBLIC: org comes off the wire, so this resolves the org's file only if it
+	// already exists — a stranger can read a published build, never mint a store.
+	sto, ok := s.State.storeForPublic(org)
+	if !ok {
+		return nil, zip.ErrNotFound("no published build for " + org + "/" + project)
+	}
+	rows, err := sto.ListSessions(ctx, org,
 		SessionFilter{Project: project, Published: true, Limit: 1})
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "builds: %v", err)
@@ -290,7 +296,7 @@ func (o sessionOps) build(ctx context.Context, in *buildRef) (*buildView, error)
 		return nil, zip.ErrNotFound("no published build for " + org + "/" + project)
 	}
 	x := rows[0]
-	evs, err := s.State.store.ListEvents(ctx, org, x.ID, 0, buildsCap)
+	evs, err := sto.ListEvents(ctx, org, x.ID, 0, buildsCap)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "turns: %v", err)
 	}
@@ -341,7 +347,11 @@ func (w deployWriter) OnDeploy(ctx context.Context, org, slug, url, deploymentID
 	if w.s == nil || org == "" || slug == "" {
 		return
 	}
-	rows, err := w.s.State.store.ListSessions(ctx, org, SessionFilter{Project: slug, Limit: 1})
+	sto, err := w.s.State.storeFor(org)
+	if err != nil {
+		return
+	}
+	rows, err := sto.ListSessions(ctx, org, SessionFilter{Project: slug, Limit: 1})
 	if err != nil || len(rows) == 0 {
 		return
 	}
@@ -355,7 +365,7 @@ func (w deployWriter) OnDeploy(ctx context.Context, org, slug, url, deploymentID
 	if err != nil {
 		return
 	}
-	e, err := w.s.State.store.AppendEvent(ctx, Event{
+	e, err := sto.AppendEvent(ctx, Event{
 		ID: id, SessionID: rows[0].ID, Org: org, Kind: KindStatus, Actor: "deploy",
 		Payload: string(body), CreatedAt: time.Now().Unix(),
 	})
@@ -399,13 +409,16 @@ type buildList struct {
 // sessions appear here.
 func (o sessionOps) builds(ctx context.Context, in *buildsQuery) (*buildList, error) {
 	s := o.s
-	rows, err := s.State.store.ListPublishedBuilds(ctx, in.Limit)
+	rows, err := s.State.allPublishedBuilds(ctx, in.Limit)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "builds: %v", err)
 	}
 	out := make([]buildSummary, 0, len(rows))
-	for _, x := range rows {
-		n, _ := s.State.store.CountEvents(ctx, x.Org, x.ID)
+	for _, b := range rows {
+		x := b.Session
+		// The store the build came from is the one holding its events; counting
+		// through it costs no second resolution and cannot reach another org's.
+		n, _ := b.Store.CountEvents(ctx, x.Org, x.ID)
 		out = append(out, buildSummary{
 			Org: x.Org, Project: x.Project, Session: x.ID, Title: x.Title,
 			Agent: x.Agent, Status: x.Status, Repo: x.Repo, Turns: n,

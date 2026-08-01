@@ -414,7 +414,7 @@ type registerReq struct {
 // Example: {"agent": "hanzo-dev", "title": "ship the landing page", "host": "gpu-01"}
 func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +446,7 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 	if len(body.TaskWorkflowID) > maxWorkflowRef || len(body.TaskRunID) > maxWorkflowRef {
 		return nil, zip.ErrBadRequest("task workflow/run reference too long")
 	}
-	host, cwd, repo, target, cerr := sessionContext(ctx, s, org, body.Host, body.Cwd, body.Repo, body.Target)
+	host, cwd, repo, target, cerr := sessionContext(ctx, sto, org, body.Host, body.Cwd, body.Repo, body.Target)
 	if cerr != nil {
 		return nil, cerr
 	}
@@ -494,7 +494,7 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 	// one flow share it); a session with no parent is itself a root.
 	parent := strings.TrimSpace(body.ParentSessionID)
 	if parent != "" {
-		p, perr := s.State.store.GetSession(ctx, org, parent)
+		p, perr := sto.GetSession(ctx, org, parent)
 		if perr == errSessionNotFound {
 			return nil, zip.ErrBadRequest("parentSessionId not found in this org")
 		}
@@ -507,7 +507,7 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 		x.RootID = id
 	}
 
-	if err := s.State.store.CreateSession(ctx, x); err != nil {
+	if err := sto.CreateSession(ctx, x); err != nil {
 		if err == errParentNotFound {
 			return nil, zip.ErrBadRequest("parentSessionId not found in this org")
 		}
@@ -540,7 +540,7 @@ func sessionTerminal(v string) (string, error) {
 	return v, nil
 }
 
-func sessionContext(ctx context.Context, s *cloud.Service[state], org, host, cwd, repo, target string) (string, string, string, string, error) {
+func sessionContext(ctx context.Context, sto *Store, org, host, cwd, repo, target string) (string, string, string, string, error) {
 	host = strings.TrimSpace(host)
 	if len(host) > maxHost {
 		return "", "", "", "", zip.ErrBadRequest("host too long")
@@ -558,7 +558,7 @@ func sessionContext(ctx context.Context, s *cloud.Service[state], org, host, cwd
 		if len(target) > maxSessionID {
 			return "", "", "", "", zip.ErrBadRequest("target too long")
 		}
-		if _, err := s.State.store.GetTarget(ctx, org, target); err == errTargetNotFound {
+		if _, err := sto.GetTarget(ctx, org, target); err == errTargetNotFound {
 			return "", "", "", "", zip.ErrBadRequest("target not found in this org")
 		} else if err != nil {
 			return "", "", "", "", zip.Errorf(http.StatusInternalServerError, "target: %v", err)
@@ -577,7 +577,7 @@ func sessionContext(ctx context.Context, s *cloud.Service[state], org, host, cwd
 // Example: {"status": "running", "limit": 20}
 func (o sessionOps) list(ctx context.Context, in *sessionQuery) (*sessionList, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -593,16 +593,16 @@ func (o sessionOps) list(ctx context.Context, in *sessionQuery) (*sessionList, e
 	if f.Status != "" && !validStatus(f.Status) {
 		return nil, zip.ErrBadRequest("status must be running|paused|done|error")
 	}
-	rows, err := s.State.store.ListSessions(ctx, org, f)
+	rows, err := sto.ListSessions(ctx, org, f)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]sessionView, 0, len(rows))
 	for _, x := range rows {
-		ev, _ := s.State.store.CountEvents(ctx, org, x.ID)
-		ch, _ := s.State.store.CountChildren(ctx, org, x.ID)
+		ev, _ := sto.CountEvents(ctx, org, x.ID)
+		ch, _ := sto.CountChildren(ctx, org, x.ID)
 		v := toSessionView(x, ev, ch)
-		if last, ok, _ := s.State.store.LastEvent(ctx, org, x.ID); ok {
+		if last, ok, _ := sto.LastEvent(ctx, org, x.ID); ok {
 			v.LastEvent = toLastEventView(last)
 		}
 		out = append(out, v)
@@ -618,7 +618,7 @@ func (o sessionOps) list(ctx context.Context, in *sessionQuery) (*sessionList, e
 // Example: {"id": "sess_1"}
 func (o sessionOps) get(ctx context.Context, in *sessionRef) (*sessionDetail, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -626,26 +626,26 @@ func (o sessionOps) get(ctx context.Context, in *sessionRef) (*sessionDetail, er
 	if len(id) > maxSessionID {
 		return nil, zip.ErrNotFound("session not found")
 	}
-	x, err := s.State.store.GetSession(ctx, org, id)
+	x, err := sto.GetSession(ctx, org, id)
 	if err == errSessionNotFound {
 		return nil, zip.ErrNotFound("session not found")
 	}
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	kids, err := s.State.store.ListSessions(ctx, org, SessionFilter{Parent: id})
+	kids, err := sto.ListSessions(ctx, org, SessionFilter{Parent: id})
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "children: %v", err)
 	}
-	events, err := s.State.store.ListEvents(ctx, org, id, 0, recentEvents)
+	events, err := sto.ListEvents(ctx, org, id, 0, recentEvents)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "events: %v", err)
 	}
-	evCount, _ := s.State.store.CountEvents(ctx, org, id)
+	evCount, _ := sto.CountEvents(ctx, org, id)
 	kidViews := make([]sessionView, 0, len(kids))
 	for _, k := range kids {
-		kc, _ := s.State.store.CountChildren(ctx, org, k.ID)
-		ke, _ := s.State.store.CountEvents(ctx, org, k.ID)
+		kc, _ := sto.CountChildren(ctx, org, k.ID)
+		ke, _ := sto.CountEvents(ctx, org, k.ID)
 		kidViews = append(kidViews, toSessionView(k, ke, kc))
 	}
 	evViews := make([]eventView, 0, len(events))
@@ -669,7 +669,7 @@ func (o sessionOps) get(ctx context.Context, in *sessionRef) (*sessionDetail, er
 // Example: {"id": "sess_1"}
 func (o sessionOps) tree(ctx context.Context, in *sessionRef) (*treeNode, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
@@ -677,7 +677,7 @@ func (o sessionOps) tree(ctx context.Context, in *sessionRef) (*treeNode, error)
 	if len(id) > maxSessionID {
 		return nil, zip.ErrNotFound("session not found")
 	}
-	x, err := s.State.store.GetSession(ctx, org, id)
+	x, err := sto.GetSession(ctx, org, id)
 	if err == errSessionNotFound {
 		return nil, zip.ErrNotFound("session not found")
 	}
@@ -685,11 +685,11 @@ func (o sessionOps) tree(ctx context.Context, in *sessionRef) (*treeNode, error)
 		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
 	// One indexed query pulls the whole tree (same RootID); assemble in memory.
-	nodes, err := s.State.store.ListTree(ctx, org, x.RootID, treeNodeCap)
+	nodes, err := sto.ListTree(ctx, org, x.RootID, treeNodeCap)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "tree: %v", err)
 	}
-	counts, err := s.State.store.EventCountsByRoot(ctx, org, x.RootID)
+	counts, err := sto.EventCountsByRoot(ctx, org, x.RootID)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "counts: %v", err)
 	}
@@ -761,12 +761,12 @@ type patchSessionIn struct {
 // Example: {"id": "sess_1", "status": "done"}
 func (o sessionOps) patch(ctx context.Context, in *patchSessionIn) (*sessionView, error) {
 	s := o.s
-	org, err := tenantOf(ctx)
+	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
 		return nil, err
 	}
 	id := in.ID
-	x, err := s.State.store.GetSession(ctx, org, id)
+	x, err := sto.GetSession(ctx, org, id)
 	if err == errSessionNotFound {
 		return nil, zip.ErrNotFound("session not found")
 	}
@@ -817,7 +817,7 @@ func (o sessionOps) patch(ctx context.Context, in *patchSessionIn) (*sessionView
 			if len(nt) > maxSessionID {
 				return nil, zip.ErrBadRequest("target too long")
 			}
-			if _, terr := s.State.store.GetTarget(ctx, org, nt); terr == errTargetNotFound {
+			if _, terr := sto.GetTarget(ctx, org, nt); terr == errTargetNotFound {
 				return nil, zip.ErrBadRequest("target not found in this org")
 			} else if terr != nil {
 				return nil, zip.Errorf(http.StatusInternalServerError, "target: %v", terr)
@@ -833,14 +833,14 @@ func (o sessionOps) patch(ctx context.Context, in *patchSessionIn) (*sessionView
 		x.Terminal = nt // "" withdraws
 	}
 	x.UpdatedAt = time.Now().Unix()
-	if err := s.State.store.UpdateSession(ctx, x); err != nil {
+	if err := sto.UpdateSession(ctx, x); err != nil {
 		if err == errSessionNotFound {
 			return nil, zip.ErrNotFound("session not found")
 		}
 		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
-	ev, _ := s.State.store.CountEvents(ctx, org, id)
-	ch, _ := s.State.store.CountChildren(ctx, org, id)
+	ev, _ := sto.CountEvents(ctx, org, id)
+	ch, _ := sto.CountChildren(ctx, org, id)
 	publishSession(s, x, ev, ch)
 	v := toSessionView(x, ev, ch)
 	return &v, nil
@@ -867,8 +867,12 @@ func appendSessionEvent(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	sto, err := s.State.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "store: %v", err)
+	}
 	id := idParam(c)
-	x, err := s.State.store.GetSession(c.Context(), org, id)
+	x, err := sto.GetSession(c.Context(), org, id)
 	if err == errSessionNotFound {
 		return zip.ErrNotFound("session not found")
 	}
@@ -907,7 +911,7 @@ func appendSessionEvent(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	e, err := s.State.store.AppendEvent(c.Context(), Event{
+	e, err := sto.AppendEvent(c.Context(), Event{
 		ID: evID, SessionID: id, Org: org, Kind: kind, Actor: actor,
 		Payload: string(body.Payload), CreatedAt: time.Now().Unix(),
 	})
@@ -954,8 +958,12 @@ func control(s *cloud.Service[state], c *zip.Ctx, command string) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	sto, err := s.State.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "store: %v", err)
+	}
 	id := idParam(c)
-	x, err := s.State.store.GetSession(c.Context(), org, id)
+	x, err := sto.GetSession(c.Context(), org, id)
 	if err == errSessionNotFound {
 		return zip.ErrNotFound("session not found")
 	}
@@ -999,7 +1007,7 @@ func control(s *cloud.Service[state], c *zip.Ctx, command string) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	e, err := s.State.store.AppendEvent(c.Context(), Event{
+	e, err := sto.AppendEvent(c.Context(), Event{
 		ID: evID, SessionID: id, Org: org, Kind: KindControl, Actor: actor,
 		Payload: string(cp), CreatedAt: time.Now().Unix(),
 	})
@@ -1058,7 +1066,10 @@ func signalPayload(b controlReq) []byte {
 // is not (yet) a tasks workflow — when runs are promoted to hanzoai/tasks
 // ExecuteWorkflow, set TaskWorkflowID/TaskRunID here from the workflow handle.
 func openRunSession(s *cloud.Service[state], ctx context.Context, a Agent, r Run, actor string) {
-	if s.State.store == nil {
+	// The run's own agent names the org, and the run already happened under it —
+	// this is bookkeeping for a completed execution, not a new authorization.
+	sto, err := s.State.storeFor(a.Org)
+	if err != nil {
 		return
 	}
 	status := StatusDone
@@ -1079,7 +1090,7 @@ func openRunSession(s *cloud.Service[state], ctx context.Context, a Agent, r Run
 		RootID: id, Title: runTitle(r.Input),
 		StartedAt: ts, EndedAt: ts, CreatedAt: ts, UpdatedAt: ts,
 	}
-	if err := s.State.store.CreateSession(ctx, x); err != nil {
+	if err := sto.CreateSession(ctx, x); err != nil {
 		s.Log.Warn("run session: create", "org", a.Org, "agent", a.Name, "err", err)
 		return
 	}
@@ -1092,7 +1103,7 @@ func openRunSession(s *cloud.Service[state], ctx context.Context, a Agent, r Run
 		publishSession(s, x, 0, 0)
 		return
 	}
-	e, aerr := s.State.store.AppendEvent(ctx, Event{
+	e, aerr := sto.AppendEvent(ctx, Event{
 		ID: evID, SessionID: id, Org: a.Org, Kind: KindLog, Actor: actor,
 		Payload: string(payload), CreatedAt: ts,
 	})

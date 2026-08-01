@@ -27,8 +27,20 @@ func mountApp(t *testing.T, ai types.AIClient) *zip.App {
 // (deps.AIDefaultModel), so a test can exercise the empty-model → default path.
 func mountAppModel(t *testing.T, ai types.AIClient, defaultModel string) *zip.App {
 	t.Helper()
+	return mountAppIn(t, t.TempDir(), ai, defaultModel)
+}
+
+// mountAppDir mounts over an EXISTING data dir, so a test can stand up what a
+// deployment already has on disk (a pre-split agents.db) and boot over it.
+func mountAppDir(t *testing.T, dir string) *zip.App {
+	t.Helper()
+	return mountAppIn(t, dir, &fakeAI{content: "x"}, "")
+}
+
+func mountAppIn(t *testing.T, dir string, ai types.AIClient, defaultModel string) *zip.App {
+	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai, AIDefaultModel: defaultModel}); err != nil {
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: dir, AI: ai, AIDefaultModel: defaultModel}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	// Mount starts the scheduler goroutine when AI is non-nil and sets the global

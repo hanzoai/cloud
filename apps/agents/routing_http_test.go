@@ -384,7 +384,7 @@ func TestUnownedTarget_AdminOnly_ThenBoundByRegister(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().Unix()
 	// Seed an unowned row directly, as an upgraded pre-owner DB would carry.
-	if err := mounted.State.store.CreateTarget(ctx, Target{ID: "tgt_legacy", Org: "acme", Owner: "", Label: "old", Kind: TargetMachine, Status: TargetOnline, Host: "old", CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := storeOf(t, &mounted.State, "acme").CreateTarget(ctx, Target{ID: "tgt_legacy", Org: "acme", Owner: "", Label: "old", Kind: TargetMachine, Status: TargetOnline, Host: "old", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	// A plain member cannot mint on an unowned row.

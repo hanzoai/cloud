@@ -15,8 +15,7 @@ import (
 //
 // A session is NOT foreign-keyed to an agents row: an external surface (the
 // @hanzo/dev CLI) registers a session whose Agent is just a label, not a cloud
-// Agent definition. Tenant isolation is the Org column, enforced on every query
-// exactly like agents/runs — one file (agents.db), tenancy is the org.
+// Agent definition. Tenancy is the org's own file, exactly like agents/runs.
 type Session struct {
 	ID        string
 	Org       string
@@ -119,8 +118,8 @@ var (
 )
 
 // migrateSessions creates the session + event tables. Called from migrate() so
-// the ONE agents.db carries agents, runs, sessions and events — one store, one
-// tenancy column, no second DB handle. Idempotent (IF NOT EXISTS).
+// one org's file carries its agents, runs, sessions and events — one store, one
+// handle, one transaction domain. Idempotent (IF NOT EXISTS).
 func (s *Store) migrateSessions() error {
 	const ddl = `
 CREATE TABLE IF NOT EXISTS agent_sessions (
@@ -196,6 +195,10 @@ CREATE INDEX IF NOT EXISTS ix_sessions_published ON agent_sessions(published, up
 	}
 	return nil
 }
+
+// eventCols is the event projection, named ONCE for the same reason sessionCols
+// is: four statements read or write it and a fifth (the legacy fan-out) copies it.
+const eventCols = `id,session_id,org,seq,kind,actor,payload,created_at`
 
 const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published`
 
@@ -406,9 +409,11 @@ func (s *Store) CountChildren(ctx context.Context, org, id string) (int, error) 
 	return n, nil
 }
 
-// AppendEvent inserts one event, allocating the next per-session Seq. The store
-// runs on a single connection (SetMaxOpenConns(1)) so the read-then-write of the
-// max seq is serialised; the UNIQUE(session_id,seq) index is the final backstop.
+// AppendEvent inserts one event, allocating the next per-session Seq. The org's
+// file runs on a single connection (cloud.OrgDB sets MaxOpenConns(1)) so the
+// read-then-write of the max seq is serialised WITHIN the org, and the
+// UNIQUE(session_id,seq) index is the final backstop. Appends in different orgs
+// no longer queue behind each other, because they are different files.
 // The session's updated_at is bumped in the SAME transaction so "last activity"
 // stays truthful. Returns the persisted event (with Seq/CreatedAt) for streaming.
 func (s *Store) AppendEvent(ctx context.Context, e Event) (Event, error) {
@@ -426,8 +431,7 @@ func (s *Store) AppendEvent(ctx context.Context, e Event) (Event, error) {
 	}
 	e.Seq = next
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO agent_session_events (id,session_id,org,seq,kind,actor,payload,created_at)
-		 VALUES (?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agent_session_events (`+eventCols+`) VALUES (?,?,?,?,?,?,?,?)`,
 		e.ID, e.SessionID, e.Org, e.Seq, e.Kind, e.Actor, e.Payload, e.CreatedAt); err != nil {
 		return Event{}, fmt.Errorf("insert event: %w", err)
 	}
@@ -449,8 +453,7 @@ func (s *Store) ListEvents(ctx context.Context, org, sessionID string, since int
 		limit = 200
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id,session_id,org,seq,kind,actor,payload,created_at
-		 FROM agent_session_events WHERE org=? AND session_id=? AND seq>?
+		`SELECT `+eventCols+` FROM agent_session_events WHERE org=? AND session_id=? AND seq>?
 		 ORDER BY seq ASC LIMIT ?`, org, sessionID, since, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list events: %w", err)
@@ -513,8 +516,7 @@ func (s *Store) CountEvents(ctx context.Context, org, sessionID string) (int, er
 // detail. ok=false when the session has no events yet. Org-scoped like every read.
 func (s *Store) LastEvent(ctx context.Context, org, sessionID string) (Event, bool, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id,session_id,org,seq,kind,actor,payload,created_at
-		 FROM agent_session_events WHERE org=? AND session_id=?
+		`SELECT `+eventCols+` FROM agent_session_events WHERE org=? AND session_id=?
 		 ORDER BY seq DESC LIMIT 1`, org, sessionID)
 	var e Event
 	err := row.Scan(&e.ID, &e.SessionID, &e.Org, &e.Seq, &e.Kind, &e.Actor, &e.Payload, &e.CreatedAt)
