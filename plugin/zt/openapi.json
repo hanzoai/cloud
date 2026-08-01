@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant's Hanzo Zero Trust footprint — overlay networks, mesh services and edge nodes — served as clean, org-scoped REST off the unified cloud binary and fronting the Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).",
+    "description": "Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant's Hanzo Zero Trust footprint — overlay networks, their routers and mesh services — served as clean, org-scoped REST off the unified cloud binary and fronting the Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).",
     "version": "v1"
   },
   "servers": [
@@ -12,9 +12,6 @@
   ],
   "tags": [
     {
-      "name": "edge"
-    },
-    {
       "name": "mesh"
     },
     {
@@ -22,33 +19,11 @@
     }
   ],
   "paths": {
-    "/v1/edge/nodes": {
-      "get": {
-        "operationId": "get_v1_edge_nodes",
-        "summary": "Returns the Zero Trust edge-routers the caller's org owns.",
-        "description": "Returns the Zero Trust edge-routers the caller's org owns.\n\nOne row per real ZT edge-router tagged with the org's \"org-\u003corg\u003e\" role attribute,\ncarrying the controller's own health signal: \"online\" when connected, \"disabled\"\nwhen administratively disabled, \"offline\" otherwise. region is filled only from a\n\"region-\u003cslug\u003e\" role attribute and omitted when the router carries none, so the\ncolumn renders \"—\" rather than a guess.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list.",
-        "tags": [
-          "edge"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/edgeNodeList"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
     "/v1/mesh/services": {
       "get": {
         "operationId": "get_v1_mesh_services",
         "summary": "Returns the Zero Trust edge services the caller's org owns.",
-        "description": "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-\u003corg\u003e\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and edge-node reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
+        "description": "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-\u003corg\u003e\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and router reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
         "tags": [
           "mesh"
         ],
@@ -80,6 +55,28 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/networkList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/networks/routers": {
+      "get": {
+        "operationId": "get_v1_networks_routers",
+        "summary": "Returns the Zero Trust routers the caller's org owns.",
+        "description": "Returns the Zero Trust routers the caller's org owns.\n\nOne row per real ZT edge-router tagged with the org's \"org-\u003corg\u003e\" role attribute,\ncarrying the controller's own health signal: \"online\" when connected, \"disabled\"\nwhen administratively disabled, \"offline\" otherwise. region is filled only from a\n\"region-\u003cslug\u003e\" role attribute and omitted when the router carries none, so the\ncolumn renders \"—\" rather than a guess.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list.",
+        "tags": [
+          "networks"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/routerList"
                 }
               }
             },
@@ -124,39 +121,6 @@
   },
   "components": {
     "schemas": {
-      "edgeNodeList": {
-        "properties": {
-          "nodes": {
-            "description": "Nodes is one row per ZT edge-router tagged with the caller's org role.",
-            "items": {
-              "$ref": "#/components/schemas/edgeNodeView"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "edgeNodeView": {
-        "properties": {
-          "id": {
-            "description": "ID is the ZT edge-router's id.",
-            "type": "string"
-          },
-          "name": {
-            "description": "Name is the edge-router's name, falling back to its id when it has none.",
-            "type": "string"
-          },
-          "region": {
-            "description": "Region comes from a \"region-\u003cslug\u003e\" role attribute and is omitted when the\nrouter carries none, so the column renders \"—\" rather than a guess.",
-            "type": "string"
-          },
-          "status": {
-            "description": "Status is the controller's own health signal: \"online\" when connected,\n\"disabled\" when administratively disabled, \"offline\" otherwise.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "meshServiceList": {
         "properties": {
           "services": {
@@ -218,6 +182,39 @@
           },
           "status": {
             "description": "Status is \"connected\" once at least one of the org's edge-routers is\nonline, else \"provisioning\" (routers exist but none has dialed home).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "routerList": {
+        "properties": {
+          "routers": {
+            "description": "Routers is one row per ZT edge-router tagged with the caller's org role.",
+            "items": {
+              "$ref": "#/components/schemas/routerView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "routerView": {
+        "properties": {
+          "id": {
+            "description": "ID is the ZT edge-router's id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the edge-router's name, falling back to its id when it has none.",
+            "type": "string"
+          },
+          "region": {
+            "description": "Region comes from a \"region-\u003cslug\u003e\" role attribute and is omitted when the\nrouter carries none, so the column renders \"—\" rather than a guess.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the controller's own health signal: \"online\" when connected,\n\"disabled\" when administratively disabled, \"offline\" otherwise.",
             "type": "string"
           }
         },

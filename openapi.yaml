@@ -12181,35 +12181,6 @@ components:
           description: Project is the Pages project name, from the path.
           type: string
       type: object
-    edgeNodeList:
-      properties:
-        nodes:
-          description: Nodes is one row per ZT edge-router tagged with the caller's
-            org role.
-          items:
-            $ref: '#/components/schemas/edgeNodeView'
-          type: array
-      type: object
-    edgeNodeView:
-      properties:
-        id:
-          description: ID is the ZT edge-router's id.
-          type: string
-        name:
-          description: Name is the edge-router's name, falling back to its id when
-            it has none.
-          type: string
-        region:
-          description: |-
-            Region comes from a "region-<slug>" role attribute and is omitted when the
-            router carries none, so the column renders "—" rather than a guess.
-          type: string
-        status:
-          description: |-
-            Status is the controller's own health signal: "online" when connected,
-            "disabled" when administratively disabled, "offline" otherwise.
-          type: string
-      type: object
     embedStatusResp:
       properties:
         app:
@@ -15185,7 +15156,7 @@ components:
         latencyP99Ms:
           type: number
         logVolume:
-          description: Logs (distributed_logs_v2), fleet volume over the window.
+          description: Logs (event.log), fleet volume over the window.
           type: integer
         models:
           type: integer
@@ -15201,7 +15172,7 @@ components:
         tokens:
           type: integer
         traceCount:
-          description: Traces (o11y_index_v3), all services.
+          description: Traces (event.span), all services.
           type: integer
         traceErrorRate:
           description: percent (0..100)
@@ -18002,6 +17973,35 @@ components:
           description: TimeoutSeconds bounds the run on the machine; 0 means the machine's
             own default.
           type: integer
+      type: object
+    routerList:
+      properties:
+        routers:
+          description: Routers is one row per ZT edge-router tagged with the caller's
+            org role.
+          items:
+            $ref: '#/components/schemas/routerView'
+          type: array
+      type: object
+    routerView:
+      properties:
+        id:
+          description: ID is the ZT edge-router's id.
+          type: string
+        name:
+          description: Name is the edge-router's name, falling back to its id when
+            it has none.
+          type: string
+        region:
+          description: |-
+            Region comes from a "region-<slug>" role attribute and is omitted when the
+            router carries none, so the column renders "—" rather than a guess.
+          type: string
+        status:
+          description: |-
+            Status is the controller's own health signal: "online" when connected,
+            "disabled" when administratively disabled, "offline" otherwise.
+          type: string
       type: object
     rulesOut:
       properties:
@@ -36755,30 +36755,6 @@ paths:
       summary: Download a file a run produced
       tags:
       - download
-  /v1/edge/nodes:
-    get:
-      description: |-
-        Returns the Zero Trust edge-routers the caller's org owns.
-
-        One row per real ZT edge-router tagged with the org's "org-<org>" role attribute,
-        carrying the controller's own health signal: "online" when connected, "disabled"
-        when administratively disabled, "offline" otherwise. region is filled only from a
-        "region-<slug>" role attribute and omitted when the router carries none, so the
-        column renders "—" rather than a guess.
-
-        The read degrades rather than erroring: a deployment with no ZT credential, and a
-        controller that cannot be reached, both answer 200 with an empty list.
-      operationId: get_v1_edge_nodes
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/edgeNodeList'
-          description: ok
-      summary: Returns the Zero Trust edge-routers the caller's org owns.
-      tags:
-      - edge
   /v1/embed:
     get:
       description: |-
@@ -46226,7 +46202,7 @@ paths:
         status is "active" because a listed service is a configured, dialable entry. A
         service tagged for another org, or tagged for none, is invisible here.
 
-        Unlike the network and edge-node reads this does NOT degrade: an unconfigured
+        Unlike the network and router reads this does NOT degrade: an unconfigured
         deployment answers 503 and an unreachable controller surfaces the upstream's
         status, so a mesh page never renders "no services" for a fabric it simply could
         not read.
@@ -46854,6 +46830,30 @@ paths:
                 $ref: '#/components/schemas/networkView'
           description: ok
       summary: Returns one overlay network by id, scoped to the caller's org.
+      tags:
+      - networks
+  /v1/networks/routers:
+    get:
+      description: |-
+        Returns the Zero Trust routers the caller's org owns.
+
+        One row per real ZT edge-router tagged with the org's "org-<org>" role attribute,
+        carrying the controller's own health signal: "online" when connected, "disabled"
+        when administratively disabled, "offline" otherwise. region is filled only from a
+        "region-<slug>" role attribute and omitted when the router carries none, so the
+        column renders "—" rather than a guess.
+
+        The read degrades rather than erroring: a deployment with no ZT credential, and a
+        controller that cannot be reached, both answer 200 with an empty list.
+      operationId: get_v1_networks_routers
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/routerList'
+          description: ok
+      summary: Returns the Zero Trust routers the caller's org owns.
       tags:
       - networks
   /v1/notify/health:
@@ -57505,11 +57505,6 @@ tags:
 - description: 'Package exec is the code interpreter: run a snippet in a sandbox and
     move files in and out.'
   name: download
-- description: 'Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant''s
-    Hanzo Zero Trust footprint — overlay networks, mesh services and edge nodes —
-    served as clean, org-scoped REST off the unified cloud binary and fronting the
-    Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
-  name: edge
 - description: 'Package account is your own account: API keys you mint and revoke,
     org onboarding, and wallet top-up.'
   name: embed
@@ -57562,8 +57557,9 @@ tags:
 - description: 'Package functions is your serverless code: publish it, call it over
     HTTP, watch every run and what it cost.'
   name: functions
-- description: 'Package gateway is live control of your API edge: CORS, rate limits,
-    cache TTL and allowed methods, changed without a redeploy.'
+- description: 'Package gateway is live control of the policy your API applies to
+    every incoming request: CORS, rate limits, cache TTL and allowed methods, changed
+    without a redeploy.'
   name: gateway
 - description: 'Package git is Git hosting for your org: create repos, clone, push,
     and see what they cost.'
@@ -57635,8 +57631,8 @@ tags:
     and mints the short-lived token that lets them in.'
   name: meet
 - description: 'Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant''s
-    Hanzo Zero Trust footprint — overlay networks, mesh services and edge nodes —
-    served as clean, org-scoped REST off the unified cloud binary and fronting the
+    Hanzo Zero Trust footprint — overlay networks, their routers and mesh services
+    — served as clean, org-scoped REST off the unified cloud binary and fronting the
     Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
   name: mesh
 - name: metrics
@@ -57647,8 +57643,8 @@ tags:
     them drain, ack what you pulled.'
   name: mq
 - description: 'Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant''s
-    Hanzo Zero Trust footprint — overlay networks, mesh services and edge nodes —
-    served as clean, org-scoped REST off the unified cloud binary and fronting the
+    Hanzo Zero Trust footprint — overlay networks, their routers and mesh services
+    — served as clean, org-scoped REST off the unified cloud binary and fronting the
     Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
   name: networks
 - description: Package notify is transactional email and SMS, sent through your org's
