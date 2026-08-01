@@ -156,12 +156,36 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 	scannerRoutes(app, s)
 }
 
-// storeFor resolves the caller's OWN book store for the requested ledger (live/sandbox).
-func (s *state) storeFor(org string, sandbox bool) (*store, error) {
+// ledger picks the registry for the requested book (live or sandbox). The two
+// are separate SUBSYSTEMS — separate files under the same org — so the choice is
+// which registry to ask, never a different name to ask it for.
+func (s *state) ledger(sandbox bool) *cloud.OrgStore[*store] {
 	if sandbox {
-		return s.sandbox.For(org, "")
+		return s.sandbox
 	}
-	return s.live.For(org, "")
+	return s.live
+}
+
+// storeFor is the ONE way this package reaches a book store: it names the
+// database through cloud.OrgNamespace — the single door a validated org walks
+// through — and asks the chosen registry for that name.
+func (s *state) storeFor(org string, sandbox bool) (*store, error) {
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return s.ledger(sandbox).For(ns)
+}
+
+// shipLedger is the ship-before-ack step: it names the same database the write
+// went to and ships THAT one, so a write and its ship can never address
+// different files.
+func (s *state) shipLedger(org string, sandbox bool) (acked bool, err error) {
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return false, err
+	}
+	return s.ledger(sandbox).Sync(ns)
 }
 
 // syncLedger ingests one org's commerce transactions into one ledger, then ships the
@@ -176,11 +200,7 @@ func (s *state) syncLedger(ctx context.Context, org string, sandbox bool) (int, 
 		return posted, err
 	}
 	if posted > 0 {
-		store := s.live
-		if sandbox {
-			store = s.sandbox
-		}
-		if _, serr := store.Sync(org, ""); serr != nil {
+		if _, serr := s.shipLedger(org, sandbox); serr != nil {
 			s.log.Warn("books durable sync degraded", "org", org, "sandbox", sandbox, "err", serr)
 		}
 	}

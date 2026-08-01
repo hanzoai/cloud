@@ -251,7 +251,7 @@ func (o ops) listDefs(ctx context.Context, _ *noInput) (*defsOut, error) {
 	if err != nil {
 		return nil, err
 	}
-	st, err := o.s.State.client.stores.For(cl.org, cl.project)
+	st, err := o.s.State.client.storeFor(cl.org, cl.project)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +273,7 @@ func (o ops) getDef(ctx context.Context, in *keyIn) (*DefRow, error) {
 	if key == "" {
 		return nil, zip.ErrBadRequest("key is required")
 	}
-	st, err := o.s.State.client.stores.For(cl.org, cl.project)
+	st, err := o.s.State.client.storeFor(cl.org, cl.project)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +308,7 @@ func (o ops) putDef(ctx context.Context, in *putDefIn) (*DefRow, error) {
 	if len(body) == 0 || !json.Valid(body) {
 		return nil, zip.ErrBadRequest("body must be the flag definition JSON")
 	}
-	st, err := o.s.State.client.stores.For(cl.org, cl.project)
+	st, err := o.s.State.client.storeFor(cl.org, cl.project)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +333,7 @@ func (o ops) deleteDef(ctx context.Context, in *keyIn) (*deletedOut, error) {
 	if key == "" {
 		return nil, zip.ErrBadRequest("key is required")
 	}
-	st, err := o.s.State.client.stores.For(cl.org, cl.project)
+	st, err := o.s.State.client.storeFor(cl.org, cl.project)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +354,7 @@ func (o ops) listActivity(ctx context.Context, in *activityIn) (*activityOut, er
 	if err != nil {
 		return nil, err
 	}
-	st, err := o.s.State.client.stores.For(cl.org, cl.project)
+	st, err := o.s.State.client.storeFor(cl.org, cl.project)
 	if err != nil {
 		return nil, err
 	}

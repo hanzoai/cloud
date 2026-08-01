@@ -82,6 +82,17 @@ func OrgNamespace(org, project string) (namespace.Namespace, error) {
 	return ns.WithGroup(g), nil
 }
 
+// MustOrgNamespace is OrgNamespace for an org fixed in the source — a test, a
+// seed, a constant in a migration. It panics, which is correct for a value that
+// is wrong before the program runs and wrong for anything from a request.
+func MustOrgNamespace(org, project string) namespace.Namespace {
+	ns, err := OrgNamespace(org, project)
+	if err != nil {
+		panic(err)
+	}
+	return ns
+}
+
 // nsOnDisk reads a namespace back out of the directory name OrgNamespace wrote.
 //
 // It is the inverse of the door above, not a second one: the segment it is

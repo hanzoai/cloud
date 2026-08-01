@@ -94,7 +94,7 @@ func TestAppendEventSequenceIsDenseAndUniqueUnderConcurrency(t *testing.T) {
 // serves on exactly one connection. If this ever changes, the test above starts
 // failing intermittently and this one says why in a single line.
 func TestOrgFilesAreSingleWriter(t *testing.T) {
-	db, err := cloud.OrgDB(t.TempDir(), "acme", "", "agents")
+	db, err := cloud.OrgDB(t.TempDir(), cloud.MustOrgNamespace("acme", ""), "agents")
 	if err != nil {
 		t.Fatalf("OrgDB: %v", err)
 	}

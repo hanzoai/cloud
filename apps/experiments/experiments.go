@@ -83,6 +83,37 @@ type state struct {
 // pattern flags exposes for admission.
 var mounted *state
 
+// storeFor is the ONE way this package reaches a store: it names the database
+// through cloud.OrgNamespace — the single door a validated org walks through —
+// and asks the registry for that name. Nothing else here resolves a store, so
+// "which file does this request touch" has one answer from one input.
+//
+// org MUST already be validated: principal.Org for a request, or the caller's
+// own server-side resolution for an in-process seam.
+//
+// experiments is project-scoped: the IAM project is a physical partition of the
+// org, so it rides in the namespace rather than in a column.
+func storeFor(s *cloud.Service[*state], org, project string) (*store, error) {
+	ns, err := cloud.OrgNamespace(org, project)
+	if err != nil {
+		return nil, err
+	}
+	return s.State.stores.For(ns)
+}
+
+// mountedStore is storeFor for an in-process seam, whose caller has already
+// resolved the org server-side and states that as its contract.
+func mountedStore(org, project string) (*store, error) {
+	if mounted == nil || mounted.stores == nil {
+		return nil, fmt.Errorf("experiments: not mounted")
+	}
+	ns, err := cloud.OrgNamespace(org, project)
+	if err != nil {
+		return nil, err
+	}
+	return mounted.stores.For(ns)
+}
+
 // Mount opens the per-org registry stores, installs the process seam, and registers
 // the /v1/experiments surface.
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -297,7 +328,7 @@ func create(s *cloud.Service[*state], c *zip.Ctx) error {
 		return zip.ErrBadRequest(err.Error())
 	}
 
-	st, err := s.State.stores.For(org, project)
+	st, err := storeFor(s, org, project)
 	if err != nil {
 		return err
 	}
@@ -459,7 +490,7 @@ func list(s *cloud.Service[*state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	st, err := s.State.stores.For(org, project)
+	st, err := storeFor(s, org, project)
 	if err != nil {
 		return err
 	}
@@ -649,7 +680,7 @@ func decideRoute(s *cloud.Service[*state], c *zip.Ctx) error {
 	if err := flags.PutDef(org, project, exp.FlagKey, promoted, c.UserEmail()); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "promote winner: %v", err)
 	}
-	st, err := s.State.stores.For(org, project)
+	st, err := storeFor(s, org, project)
 	if err != nil {
 		return err
 	}
@@ -707,7 +738,7 @@ func Assign(ctx context.Context, org, project, experimentID, subject string, pro
 	if mounted == nil || mounted.stores == nil {
 		return flags.Assignment{}, fmt.Errorf("experiments: not mounted")
 	}
-	st, err := mounted.stores.For(org, project)
+	st, err := mountedStore(org, project)
 	if err != nil {
 		return flags.Assignment{}, err
 	}
@@ -728,7 +759,7 @@ func Analyze(ctx context.Context, org, project, experimentID string, start, end 
 	if mounted == nil || mounted.stores == nil {
 		return Analysis{}, fmt.Errorf("experiments: not mounted")
 	}
-	st, err := mounted.stores.For(org, project)
+	st, err := mountedStore(org, project)
 	if err != nil {
 		return Analysis{}, err
 	}
@@ -750,7 +781,7 @@ func loadExperiment(s *cloud.Service[*state], ctx context.Context, org, project,
 	if !slugRE.MatchString(id) {
 		return Experiment{}, false, nil
 	}
-	st, err := s.State.stores.For(org, project)
+	st, err := storeFor(s, org, project)
 	if err != nil {
 		return Experiment{}, false, err
 	}

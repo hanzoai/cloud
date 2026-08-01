@@ -46,6 +46,21 @@ type state struct {
 // mounted is the active service so Shutdown can close the per-org stores.
 var mounted *cloud.Service[state]
 
+// storeFor is the ONE way this package reaches a store: it names the database
+// through cloud.OrgNamespace — the single door a validated org walks through —
+// and asks the registry for that name. Nothing else here resolves a store, so
+// "which file does this request touch" has one answer from one input.
+//
+// org MUST already be validated: principal.Org for a request, or the caller's
+// own server-side resolution for an in-process seam.
+func storeFor(stores *cloud.OrgStore[*Store], org string) (*Store, error) {
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return stores.For(ns)
+}
+
 // Mount wires /v1/guide/* onto app. Complex flavour (a package global for Shutdown
 // + a per-org OrgStore), so it constructs the Service value directly.
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -90,7 +105,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		toolOK:       automations.ToolExists,
 	}}
 	s.State.detectors = newDetectors(func(_ context.Context, org string) (*Store, error) {
-		return stores.For(org, "")
+		return storeFor(stores, org)
 	}, s.State.signals)
 	mounted = s
 	routes(app, s)
@@ -471,7 +486,7 @@ func stateMap(rows map[string]StateRow) map[string]State {
 // returns the reconciled rows (auto-detected steps already persisted + reflected).
 // A free function (not a method) — Go forbids methods on the external cloud.Service.
 func snapshotFor(s *cloud.Service[state], ctx context.Context, org string) (store *Store, cur Curriculum, custom bool, rows map[string]StateRow, err error) {
-	store, err = s.State.stores.For(org, "")
+	store, err = storeFor(s.State.stores, org)
 	if err != nil {
 		return nil, Curriculum{}, false, nil, err
 	}
@@ -689,7 +704,7 @@ func (o ops) getCurriculum(ctx context.Context, _ *noInput) (*curriculumView, er
 	if err != nil {
 		return nil, err
 	}
-	store, err := o.s.State.stores.For(org, "")
+	store, err := storeFor(o.s.State.stores, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
@@ -713,7 +728,7 @@ func putCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
-	store, err := s.State.stores.For(org, "")
+	store, err := storeFor(s.State.stores, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
@@ -737,7 +752,7 @@ func (o ops) deleteCurriculum(ctx context.Context, _ *noInput) (*curriculumView,
 	if err != nil {
 		return nil, err
 	}
-	store, err := o.s.State.stores.For(org, "")
+	store, err := storeFor(o.s.State.stores, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
@@ -765,7 +780,7 @@ func (o ops) listActions(ctx context.Context, _ *noInput) (*actionsView, error) 
 	if err != nil {
 		return nil, err
 	}
-	store, err := o.s.State.stores.For(org, "")
+	store, err := storeFor(o.s.State.stores, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}

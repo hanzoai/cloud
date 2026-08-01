@@ -10,7 +10,7 @@ import (
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	db, err := cloud.OrgDB(t.TempDir(), "test", "default", "tracker")
+	db, err := cloud.OrgDB(t.TempDir(), cloud.MustOrgNamespace("test", "default"), "tracker")
 	if err != nil {
 		t.Fatalf("OrgDB: %v", err)
 	}
