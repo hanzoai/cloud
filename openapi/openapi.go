@@ -549,6 +549,23 @@ func Typed(app *zip.App) (Registry, error) {
 // same operation.
 const Compat = "compat"
 
+// Products drops Compat from an operation's tag list.
+//
+// Compat is an orthogonal fact about ONE address, not a product. Everything that
+// reads tags to answer "which products does this document publish" — the floor
+// ratchet, the weave's ownership claims, the document's own tag list — has to
+// ask this instead of iterating Tags, or `compat` arrives as a product with
+// twenty-three operations in it and a doc-site heading nothing answers to.
+func Products(tags []string) []string {
+	out := make([]string, 0, len(tags))
+	for _, t := range tags {
+		if t != Compat {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // Fold lays the registry's detail over the router's shape, in place. A typed op
 // REPLACES the structural operation at its address — it is strictly richer,
 // including the path parameters, which zip derives from the same pattern.
