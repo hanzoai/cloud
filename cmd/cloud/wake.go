@@ -82,6 +82,12 @@ func serveWake(app *zip.App) {
 	// whichever side read first starve the other — here, a failed bind consumed by
 	// the wait would hang shutdown forever on a value that had already been taken.
 	// A closed channel broadcasts.
+	// Bind the SHARED runtime dir first. This router links the plane leaf and not the
+	// fleet, so it cannot reach cloud's binder — and without binding, zip resolved the
+	// start door to a private temp path. The door then existed nowhere any child looked,
+	// so waking a lazy app failed with "this process runs under a router whose start
+	// door is not there" and every call to a not-yet-started app was unreachable.
+	plane.BindRuntimeDir()
 	path := zip.SocketPath(plane.HostApp)
 	done := make(chan struct{})
 	var listenErr error
