@@ -251,7 +251,7 @@ type Timeseries struct {
 
 // ModelRow is one model's usage in the window, ranked by spend.
 type ModelRow struct {
-	// Model is the model id, e.g. claude-opus-4.
+	// Model is the model id, e.g. zen5-coder.
 	Model string `json:"model"`
 	// Provider is who served it.
 	Provider string `json:"provider"`

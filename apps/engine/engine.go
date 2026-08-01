@@ -160,7 +160,7 @@ type engineStatus struct {
 // engineResult is the engine's own response payload, relayed to the caller
 // VERBATIM so the product's shape reaches the platform without field loss. It
 // is opaque BY CONSTRUCTION: this plane proxies the product and deliberately
-// does not remodel its shapes — a model list is the server's OpenAI-style
+// does not remodel its shapes — a model list is the server's standard
 // list envelope, the system report is its SystemInfo document. See
 // github.com/hanzoai/engine for the shape behind each op.
 type engineResult struct{ raw json.RawMessage }
@@ -210,7 +210,7 @@ func (o ops) status(ctx context.Context, _ *engineNoInput) (*engineStatus, error
 }
 
 // Models lists the models the engine serves, each with its load state — the
-// server's own model table (its OpenAI-style list envelope, load status
+// server's own model table (its standard list envelope, load status
 // included), relayed verbatim.
 func (o ops) models(ctx context.Context, _ *engineNoInput) (*engineResult, error) {
 	if err := caller(ctx); err != nil {

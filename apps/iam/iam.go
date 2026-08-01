@@ -349,7 +349,7 @@ const (
 		"and wallet sign-in, the front door a hosted login page self-configures from, the typed " +
 		"CRUD over users, organizations, applications, providers, roles, projects, workspaces, " +
 		"permissions, certs, keys, invitations and audit logs, SCIM 2.0, service accounts, " +
-		"memberships, TOTP enrollment, and the Casdoor verb aliases (get-users, " +
+		"memberships, TOTP enrollment, and the legacy verb aliases (get-users, " +
 		"add-organization, …) the live consoles still call. cloud does not interpret the " +
 		"remainder or rewrite the reply: the status, the bytes and the Content-Type are the " +
 		"nested app's own.\n\n" +

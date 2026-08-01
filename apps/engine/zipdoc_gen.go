@@ -17,7 +17,7 @@ func init() {
 		Example: json.RawMessage(`{"model":"Qwen/Qwen3-4B"}`),
 	})
 	zip.Describe("GET /v1/engine/models", zip.Doc{
-		Description: "Models lists the models the engine serves, each with its load state — the\nserver's own model table (its OpenAI-style list envelope, load status\nincluded), relayed verbatim.",
+		Description: "Models lists the models the engine serves, each with its load state — the\nserver's own model table (its standard list envelope, load status\nincluded), relayed verbatim.",
 	})
 	zip.Describe("GET /v1/engine/status", zip.Doc{
 		Description: "Status reports whether the engine deployment is reachable and which build\nrevision it runs — an honest lens for \"is the serving runtime up\", never a\nfabricated ok.",

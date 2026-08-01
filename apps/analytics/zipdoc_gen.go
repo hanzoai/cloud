@@ -82,7 +82,7 @@ func init() {
 			"BreakdownRow.pageviews": "Pageviews is how many $pageview events fell in this bucket.",
 			"BreakdownRow.pct":       "Pct is this bucket's share of ALL in-window pageviews, 0..100, one decimal —\nnot of the returned rows, so a top-N shows the long tail honestly.",
 			"BreakdownRow.visitors":  "Visitors is how many distinct people they came from.",
-			"ModelRow.model":         "Model is the model id, e.g. claude-opus-4.",
+			"ModelRow.model":         "Model is the model id, e.g. zen5-coder.",
 			"ModelRow.pct":           "Pct is this model's share of the window's returned spend, 0..100, one decimal.",
 			"ModelRow.provider":      "Provider is who served it.",
 			"ModelRow.requests":      "Requests is how many calls went to this model.",

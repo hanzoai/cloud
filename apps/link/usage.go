@@ -440,7 +440,7 @@ type dashResp struct {
 }
 
 // usageDash is the PER-PROVIDER view: one connected account's own consumption of
-// its own plan — "my Claude Max plan is 47% through its 6h window, resets at 14:20".
+// its own plan — "my plan is 47% through its 6h window, resets at 14:20".
 //
 // `current` is the newest instance of each lane (the headline); `windows` is the
 // history behind it. Both are computed from ONE deduped read — no second query.

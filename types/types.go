@@ -311,7 +311,7 @@ type AIClient interface {
 }
 
 // ModelLister is an OPTIONAL capability an AIClient may ALSO implement: it
-// enumerates the model ids the gateway currently serves (its OpenAI-compatible
+// enumerates the model ids the gateway currently serves (its standard
 // /v1/models catalog). The agents subsystem uses it to reject a non-catalog
 // model at agent create/update time with a clean 400, instead of letting the run
 // surface a confusing gateway 502 for a model this gateway never served. An
