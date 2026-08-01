@@ -234,9 +234,9 @@
         }
       }
     },
-    "/v1/webhooks/{id}/rotate-secret": {
+    "/v1/webhooks/{id}/secret": {
       "post": {
-        "operationId": "post_v1_webhooks_id_rotate-secret",
+        "operationId": "post_v1_webhooks_id_secret",
         "summary": "Mints a NEW HMAC signing secret for the endpoint and answers the endpoint WITH it — the only other response besides create that ever carries a secret.",
         "description": "Mints a NEW HMAC signing secret for the endpoint and answers the\nendpoint WITH it — the only other response besides create that ever carries a\nsecret. The old secret stops working the instant this returns: every subsequent\ndelivery signs with the new one, with no overlap window. Call it when the\nsubscriber is ready to swap the value on its side, not before.",
         "tags": [
