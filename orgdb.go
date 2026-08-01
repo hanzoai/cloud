@@ -62,38 +62,23 @@ func WithStoreLogger(log luxlog.Logger) OrgStoreOption {
 	return func(o *orgStoreOpts) { o.log = log }
 }
 
-// OrgDB is the ONE way any cloud subsystem opens a per-org SQLite file
-// (HIP-0302 physical org isolation). It resolves the path, creates the
-// parent directory 0700, opens via the sole "sqlite" driver, and applies the
-// single-writer + WAL pragmas every org store shares. The caller owns
-// migration (its schema is its own) and Close.
+// OrgDB is the ONE way any cloud subsystem opens a per-entity SQLite file
+// (HIP-0302 physical isolation). It resolves the namespace to its path, creates
+// the parent directory 0700, opens via the sole "sqlite" driver under that
+// namespace's own key, and applies the single-writer + WAL pragmas every store
+// shares. The caller owns migration (its schema is its own) and Close.
 //
-// Path convention — scope is chosen by project:
+// It takes the NAME rather than the parts a name is made of, so it cannot pair
+// one namespace's path with another namespace's key, and so the question "could
+// this have come from caller input" is asked once — at OrgNamespace, the only
+// door — instead of again at every subsystem that opens a file.
 //
-//	project != ""  →  {DataDir}/orgs/{orgSlug}/projects/{projectSlug}/{subsystem}.db
-//	project == ""  →  {DataDir}/orgs/{orgSlug}/{subsystem}.db
+// Path convention — see nsKey:
 //
-// org and project MUST be the VALIDATED principal values (principal.Org and,
-// when project-scoped, principal.Project) — never a raw request body/header.
-// OrgDB folds each through SanitizeOrg, the ONE injective org slugger, so
-// two distinct orgs can never share a file (case-fold on a case-insensitive
-// filesystem, or a "-"/"." fold, would otherwise collapse them) and no segment
-// can traverse out of DataDir. An org (or, when project-scoped, a project) that
-// SanitizeOrg refuses is an error — never a silent fall-through to another
-// org's file.
-func OrgDB(dataDir, org, project, subsystem string) (*sql.DB, error) {
-	ns, err := OrgNamespace(org, project)
-	if err != nil {
-		return nil, err
-	}
-	return openNS(dataDir, ns, subsystem)
-}
-
-// openNS resolves a namespace to its file and opens it under that namespace's
-// own key. It is the ONE seam between "which database" (orgns.go) and "an open
-// handle to it" (openOrgDB), so no caller can pair one namespace's name with
-// another namespace's key.
-func openNS(dataDir string, ns namespace.Namespace, subsystem string) (*sql.DB, error) {
+//	org/{slug}            →  {DataDir}/orgs/{slug}/{subsystem}.db
+//	org/{slug}/{project}  →  {DataDir}/orgs/{slug}/projects/{project}/{subsystem}.db
+//	system                →  {DataDir}/orgs/_platform/{subsystem}.db
+func OrgDB(dataDir string, ns namespace.Namespace, subsystem string) (*sql.DB, error) {
 	path, err := nsPath(dataDir, ns, subsystem)
 	if err != nil {
 		return nil, err
@@ -146,18 +131,6 @@ func openOrgDB(p cek.Principal, path string) (*sql.DB, error) {
 		}
 	}
 	return db, nil
-}
-
-// PlatformDB opens the deployment's reserved, NON-tenant partition of an
-// otherwise per-org subsystem at {DataDir}/orgs/_platform/{subsystem}.db, through
-// the SAME cek + single-writer + WAL path as OrgDB. It is the home for records a
-// per-org subsystem holds that belong to no single tenant (e.g. a platform-wide
-// HMAC key): everything tenant-scoped stays in its own {DataDir}/orgs/{slug}/…
-// file. It is disjoint from every tenant's file because it is a different KIND
-// of namespace, not because of a rune its slug happens to carry. The caller owns
-// migration + Close.
-func PlatformDB(dataDir, subsystem string) (*sql.DB, error) {
-	return openNS(dataDir, PlatformNamespace(), subsystem)
 }
 
 // OrgStore is the lazily-opened, cached set of per-entity stores of type T for
@@ -229,21 +202,12 @@ func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, 
 	}
 }
 
-// For returns the store for (org, project), opening and migrating it on first
-// use and caching it thereafter. Pass project=="" for an org-scoped subsystem;
-// pass principal.Project(c) for a project-scoped one. Isolation is PHYSICAL: a
-// distinct (org[, project]) resolves to a distinct file, so a query in one can
-// never reach another's rows.
-func (c *OrgStore[T]) For(orgID, project string) (T, error) {
-	ns, err := OrgNamespace(orgID, project)
-	if err != nil {
-		var zero T
-		return zero, err
-	}
-	return c.forNS(ns)
-}
+// For returns the store the namespace names, opening and migrating it on first
+// use and caching it thereafter. Isolation is PHYSICAL: a distinct namespace
+// resolves to a distinct file, so a query in one can never reach another's rows.
+func (c *OrgStore[T]) For(ns namespace.Namespace) (T, error) { return c.forNS(ns) }
 
-// Has reports whether (org, project) ALREADY has a store for this subsystem on
+// Has reports whether the namespace ALREADY has a store for this subsystem on
 // disk, without opening or creating anything.
 //
 // It exists for reads whose org is named by an UNAUTHENTICATED caller — a public
@@ -255,11 +219,7 @@ func (c *OrgStore[T]) For(orgID, project string) (T, error) {
 //
 // An authenticated, org-scoped caller does NOT want this: its org is real by
 // construction and its store must be created on first touch.
-func (c *OrgStore[T]) Has(orgID, project string) bool {
-	ns, err := OrgNamespace(orgID, project)
-	if err != nil {
-		return false
-	}
+func (c *OrgStore[T]) Has(ns namespace.Namespace) bool {
 	path, err := nsPath(c.dataDir, ns, c.subsystem)
 	if err != nil {
 		return false
@@ -431,15 +391,10 @@ func (c *OrgStore[T]) promote(ns namespace.Namespace, path string, old T, oldDur
 // (the ship-before-ack step a durable subsystem calls after a write commits). It
 // returns acked=false when this replica is not the owner or was deposed mid-request
 // (the caller retries on the new owner). On a local-only store (no Durability) it is
-// a successful no-op — the write is already as durable as configured. project is ""
-// for an org-scoped subsystem.
-func (c *OrgStore[T]) Sync(orgID, project string) (acked bool, err error) {
+// a successful no-op — the write is already as durable as configured.
+func (c *OrgStore[T]) Sync(ns namespace.Namespace) (acked bool, err error) {
 	if c.dur == nil {
 		return true, nil
-	}
-	ns, err := OrgNamespace(orgID, project)
-	if err != nil {
-		return false, err
 	}
 	c.mu.Lock()
 	d := c.durables[ns]
@@ -453,9 +408,9 @@ func (c *OrgStore[T]) Sync(orgID, project string) (acked bool, err error) {
 }
 
 // Each folds fn over every org that has a {subsystem} store on disk under
-// {dataDir}/orgs, handing it the org's SLUG (the on-disk directory name) and the
-// SAME cached store handle For returns (opened through forPath, keyed by path — no
-// second open). It is the cross-org sweep primitive a reconciler folds over: the
+// {dataDir}/orgs, handing it that org's NAMESPACE and the SAME cached store
+// handle For returns (opened through forNS, keyed by the namespace — no second
+// open). It is the cross-org sweep primitive a reconciler folds over: the
 // filesystem is the source of truth for "which orgs have this store", so no derived
 // registry can drift. The reserved platform partitions ({dataDir}/orgs/_*) are
 // skipped (their '_' is a rune SanitizeOrg never emits, so no real org is dropped).
@@ -463,7 +418,7 @@ func (c *OrgStore[T]) Sync(orgID, project string) (acked bool, err error) {
 // missing orgs root (a writer with no stores yet) is not an error. Under horizontal
 // sharding each writer's PVC holds only the orgs routed to it, so Each on a given
 // writer enumerates exactly that writer's orgs.
-func (c *OrgStore[T]) Each(fn func(slug string, st T, err error)) error {
+func (c *OrgStore[T]) Each(fn func(ns namespace.Namespace, st T, err error)) error {
 	var zero T
 	root := filepath.Join(c.dataDir, "orgs")
 	ents, err := os.ReadDir(root)
@@ -485,11 +440,14 @@ func (c *OrgStore[T]) Each(fn func(slug string, st T, err error)) error {
 		// the one the election hashes; Each is org-root scoped, so no project group.
 		ns, err := nsOnDisk(e.Name())
 		if err != nil {
-			fn(e.Name(), zero, err)
+			// A directory no namespace can name is not an org's store: it predates
+			// the constructor or was written by hand. Skipping it silently would
+			// hide a store the sweep is meant to reach, so it is reported.
+			fn(namespace.Namespace{}, zero, fmt.Errorf("cloud: %q under %s names no namespace: %w", e.Name(), root, err))
 			continue
 		}
 		st, openErr := c.forNS(ns)
-		fn(e.Name(), st, openErr)
+		fn(ns, st, openErr)
 	}
 	return nil
 }

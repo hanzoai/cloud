@@ -37,6 +37,11 @@ import (
 // (org, project) the flag engine uses for its platform switches, so the registry and
 // the waitlist.<svc> switches co-locate. One waitlist.db for the deployment.
 const (
+	// A REAL org namespace named "platform", not cloud.PlatformNamespace(). The
+	// system namespace is the right name for the deployment's own partition and
+	// would make it unsquattable by a tenant who registers that org, but it
+	// renders to a different file, and moving a live store is a migration rather
+	// than a rename. Left as it is, deliberately.
 	platformOrg     = "platform"
 	platformProject = "platform"
 )
@@ -123,7 +128,11 @@ func requireRegistry() (*waitlistStore, error) {
 	if mounted == nil || mounted.store == nil {
 		return nil, fmt.Errorf("admission: waitlist registry not mounted")
 	}
-	return mounted.store.For(platformOrg, platformProject)
+	ns, err := cloud.OrgNamespace(platformOrg, platformProject)
+	if err != nil {
+		return nil, err
+	}
+	return mounted.store.For(ns)
 }
 
 // WaitlistModeForHost is THE decide the Enforce consumer, /v1/flags/waitlist, and
@@ -132,10 +141,7 @@ func requireRegistry() (*waitlistStore, error) {
 // error, or an un-governed host all return known=false, so a request is NEVER gated
 // pre-boot or on a registry fault (availability over a hard gate, matching the guard).
 func WaitlistModeForHost(ctx context.Context, host string) (mode bool, service string, known bool) {
-	if mounted == nil || mounted.store == nil {
-		return false, "", false
-	}
-	st, err := mounted.store.For(platformOrg, platformProject)
+	st, err := requireRegistry()
 	if err != nil {
 		return false, "", false
 	}
@@ -233,7 +239,7 @@ func seedRegistry(brand string, log luxlog.Logger) int {
 	for _, sv := range seed { // in-memory switches — always succeeds
 		flags.Register(waitlistDef(sv.Service, sv.DisplayName))
 	}
-	st, err := mounted.store.For(platformOrg, platformProject)
+	st, err := requireRegistry()
 	if err != nil {
 		log.Warn("waitlist registry unavailable — modes degrade to seed defaults", "err", err)
 		return len(seed)

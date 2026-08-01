@@ -357,11 +357,7 @@ func (s *state) syncDurable(org string, sandbox bool, posted int) {
 	if posted <= 0 {
 		return
 	}
-	store := s.live
-	if sandbox {
-		store = s.sandbox
-	}
-	if _, err := store.Sync(org, ""); err != nil {
+	if _, err := s.shipLedger(org, sandbox); err != nil {
 		s.log.Warn("books bank durable sync degraded", "org", org, "sandbox", sandbox, "err", err)
 	}
 }

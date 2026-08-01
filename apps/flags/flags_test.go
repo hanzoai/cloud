@@ -126,7 +126,7 @@ func TestIntSwitchRidesThePayload(t *testing.T) {
 
 func TestProjectEvaluationRolloutAndVariants(t *testing.T) {
 	c := newTestClient(t)
-	st, err := c.stores.For("acme", "web")
+	st, err := c.stores.For(cloud.MustOrgNamespace("acme", "web"))
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestProjectEvaluationRolloutAndVariants(t *testing.T) {
 
 func TestStoreCRUDAndActivity(t *testing.T) {
 	c := newTestClient(t)
-	st, err := c.stores.For("acme", "")
+	st, err := c.stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
