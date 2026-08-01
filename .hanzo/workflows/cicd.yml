@@ -85,7 +85,16 @@ jobs:
     # the ref does not carry, the forge cannot even construct a run — InsertRun
     # fails before any run row is written, so there is no failed run to look at.
     # Dead CI here is not red, it is absent.
-    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
+    #
+    # Pinned to the immutable patch tag, not the `v1` rolling alias, because the
+    # alias is only as current as the last sync and sync-from-github refuses to
+    # move a tag that already exists. On the forge `v1` still names a commit
+    # whose tree is `.github` and README alone, so the gate resolved to a ref
+    # carrying no `.hanzo/` at all and every release died at InsertRun — the
+    # condition the paragraph above describes, reached through the alias rather
+    # than the path. v1.0.16 is the same commit github's `v1` resolves to, and
+    # the forge already carries it, so this pin needs no tag to be moved.
+    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1.0.16
     with:
       # Not on a tag: the tag is minted below only after this gate passed on main
       # AND the image built AND it smoked, so a tag build re-tests a proven
