@@ -413,6 +413,48 @@ func TestTheStableIsBoundedPerTenant(t *testing.T) {
 	}
 }
 
+// TestATrialDoesNotGrowWithoutBound is the disk-fill this design would otherwise
+// have. A challenger writes one row per DECISION for as long as it runs, and the
+// tally reads no further back than trialDepth — so everything older is storage
+// nobody can read, in a per-tenant SQLite file on a pod with one disk.
+func TestATrialDoesNotGrowWithoutBound(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	at := time.Now().Add(-2 * time.Hour)
+	over := trialDepth + 250
+	for i := 0; i < over; i++ {
+		if err := putChallenge(db, challengeRow{
+			Decision: "dec-" + strconv.Itoa(i), At: at.Add(time.Duration(i) * time.Second),
+			Champion: "champ", Fit: "chall", Score: 0.5, Cut: 0.4, Scored: true,
+		}); err != nil {
+			t.Fatalf("putChallenge: %v", err)
+		}
+	}
+	if err := pruneTrials(db); err != nil {
+		t.Fatalf("pruneTrials: %v", err)
+	}
+	var kept int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM challenge`).Scan(&kept); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if kept != trialDepth {
+		t.Fatalf("the trial kept %d comparisons of %d written, bound is %d", kept, over, trialDepth)
+	}
+	// The MOST RECENT are the ones kept: a tally over the oldest thousand of a
+	// running trial describes a model as it was, not as it is.
+	var oldest string
+	if err := db.QueryRow(`SELECT decision FROM challenge ORDER BY at ASC LIMIT 1`).Scan(&oldest); err != nil {
+		t.Fatalf("oldest: %v", err)
+	}
+	if oldest != "dec-250" {
+		t.Fatalf("the oldest kept comparison is %q, want dec-250 — the prune dropped the wrong end", oldest)
+	}
+}
+
 // TestOneTenantsLearnedStateCannotEnterAnother is the isolation claim about the
 // thing the registry actually persists: not rows, but a forest's mass counters.
 //

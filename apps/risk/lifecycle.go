@@ -451,6 +451,31 @@ func putChallenge(db *sql.DB, r challengeRow) error {
 	return err
 }
 
+// trialDepth is how many of a trial's comparisons are kept. It is the tally's own
+// ceiling, and that is the whole argument: nothing reads further back, so a row
+// older than this is a row that can only ever be storage.
+//
+// A trial writes one row PER DECISION for as long as it runs. On a tenant
+// authorising a million payments a day that is a million rows a day into a
+// SQLite file on a pod with one disk, for a table nothing reads past the most
+// recent thousand. Unbounded growth in a per-tenant store is a tenant filling its
+// own disk — the only shape of that failure this design accepts, and still not
+// one worth accepting when the reader is already bounded.
+const trialDepth = 5000
+
+// pruneTrials drops each trial's rows past trialDepth, oldest first.
+//
+// It runs on the tick and not on the insert: a DELETE per decision is a write on
+// the authorisation path, paid a million times to remove rows a bounded reader
+// was never going to see.
+func pruneTrials(db *sql.DB) error {
+	_, err := db.Exec(`DELETE FROM challenge WHERE decision IN (
+		SELECT decision FROM challenge AS c WHERE (
+			SELECT COUNT(*) FROM challenge AS n WHERE n.fit = c.fit AND n.at > c.at
+		) >= ?)`, trialDepth)
+	return err
+}
+
 // tally is the comparison read back: how the two sides answered the same
 // stream. It reports AGREEMENT and the two alert shares rather than declaring a
 // winner, because a winner needs judged rows and this table has none — the
@@ -470,7 +495,7 @@ type tally struct {
 }
 
 func readTally(db *sql.DB, fit string, limit int) (tally, error) {
-	if limit <= 0 || limit > 5000 {
+	if limit <= 0 || limit > trialDepth {
 		limit = 1000
 	}
 	rows, err := db.Query(`SELECT champion, incumbent, score, cut, alert, scored
@@ -840,6 +865,9 @@ func watch(s *stateService, t Tenant, db *sql.DB, now time.Time) error {
 	n, err := maturedSince(db, sched.Horizon, last, now)
 	if err != nil {
 		return err
+	}
+	if err := pruneTrials(db); err != nil {
+		s.Log.Warn("risk: a tenant's trial rows were not pruned", "tenant", t.String(), "err", err)
 	}
 	if ok, why := due(sched, last, n, now); ok {
 		if _, running := s.State.bench.running(t); !running {

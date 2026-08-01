@@ -61,6 +61,14 @@ const appetiteBand = 2.0
 // raised off it is an alarm an operator learns to ignore.
 const driftFloor = 200
 
+// driftDeadline bounds ONE tenant's examination. It is far tighter than the
+// estimation's ceiling and deliberately so: the tick walks the resident tenants
+// in one goroutine, so a tenant allowed ten minutes here is a tenant that can
+// hold every other tenant's drift check — and their scheduled re-estimations —
+// behind it. Thirty seconds is two orders of magnitude above the measured cost
+// of replaying the thousand-row window this reads.
+const driftDeadline = 30 * time.Second
+
 // ── the index ───────────────────────────────────────────────────────────────
 
 // psi is the population stability index between a reference distribution and an
@@ -284,7 +292,7 @@ func alarm(s *stateService, t Tenant, db *sql.DB, now time.Time) error {
 	if err != nil || !ok || r.Status != fitReady {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), benchDeadline)
+	ctx, cancel := context.WithTimeout(context.Background(), driftDeadline)
 	defer cancel()
 	d, err := examine(ctx, s, t, db, r, 0, now)
 	if err != nil || !d.Drifted {
