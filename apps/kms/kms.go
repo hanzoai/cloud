@@ -179,17 +179,18 @@ func New(cfg Config, log luxlog.Logger) (*Client, error) {
 	// reader never boots "healthy" over nothing:
 	//   no master key → cannot decrypt any file at rest → refuse.
 	//   no restored store under {DataDir}/orgs → nothing to serve → refuse.
+	store := newSecretStore(dir, cfg.ReadOnly)
 	if cfg.ReadOnly {
 		if keyErr != nil {
 			return nil, fmt.Errorf("kms.New: reader mode requires a master key to open the encrypted store: %w", keyErr)
 		}
-		if !hasRestoredStore(dir) {
+		if !store.stores.Stored() {
 			return nil, fmt.Errorf("kms.New: reader mode but no restored store under %s — hydrate before serving KMS reads", filepath.Join(dir, "orgs"))
 		}
 	}
 
 	c := &Client{
-		store:     newSecretStore(dir, cfg.ReadOnly),
+		store:     store,
 		masterKey: masterKey, // nil when keyErr != nil
 		mpcAddr:   strings.TrimSpace(cfg.MPCAddr),
 		vaultID:   strings.TrimSpace(cfg.MPCVaultID),
