@@ -639,6 +639,20 @@ func Serve(plugins []Plugin, enable []string) error {
 // is the one place cloud honours it, which is what makes every generated
 // cmd/<app> binary a valid plugin without a line of its own.
 func listenOn(cfg *Config) (addrs []string, ops string) {
+	// BIND THE SHARED RUNTIME DIR FIRST. zip.Addr("") answers with the socket this
+	// process will listen on, and it derives that from ZIP_RUNTIME_DIR — which nothing
+	// had set this early, so every plugin bound a PRIVATE temp path
+	// (/tmp/zip-commerce-*/commerce.sock) while every caller dialed the shared one
+	// (/var/lib/cloud/run/commerce.sock). The socket file at the shared path was a
+	// stale leftover, so the dial did not fail loudly as "missing" — it failed as
+	// "connection refused", which reads like the callee is down rather than absent.
+	//
+	// Cost: every cross-process plane call was unreachable. For the money ops that is
+	// fail-CLOSED, so the AI balance gate could not verify a balance and EVERY
+	// completion answered 503 — chat, copilot and documents — on a pod whose ledger
+	// was healthy. bindRuntimeDir is idempotent and honours an externally-set
+	// ZIP_RUNTIME_DIR, so this only fills in the default the plane already assumes.
+	bindRuntimeDir()
 	if sock := zip.Addr(""); sock != "" {
 		return []string{sock}, ""
 	}
