@@ -174,7 +174,7 @@
       "get": {
         "operationId": "mlSearchResult",
         "summary": "Read back one exhaustive search",
-        "description": "SearchResult reads back one search run: every shape tried over this\norganisation's own history, best first, and the one that fit.\n\nA run another organisation started is simply not there — the same 404 an\nunknown id gives, so the read is not a probe oracle.",
+        "description": "Reads back one search run: every shape tried over this\norganisation's own history, best first, and the one that fit.\n\nA run another organisation started is simply not there — the same 404 an\nunknown id gives, so the read is not a probe oracle.",
         "tags": [
           "ml"
         ],
@@ -230,7 +230,7 @@
       "put": {
         "operationId": "mlSetAppetite",
         "summary": "Restate the risk appetite, and whether the model is live",
-        "description": "SetAppetite restates how much of the stream the caller organisation's model may\nsend for examination, and whether it is live.\n\nThe appetite is the decision a model is not permitted to make for itself: its\noutput is a probability, so how likely it is to MISS something is a matter of\npolicy that has to be stated, measured and reviewed rather than absorbed into a\nconstant. The alert threshold is then derived from it as a quantile of the\nscores actually observed, which is what keeps its meaning as the distribution\ndrifts.\n\nLearned state survives the change. The model's identity covers its SHAPE — the\ninventory and the geometry — and not its appetite, so restating policy unlearns\nnothing.",
+        "description": "Restates how much of the stream the caller organisation's model may\nsend for examination, and whether it is live.\n\nThe appetite is the decision a model is not permitted to make for itself: its\noutput is a probability, so how likely it is to MISS something is a matter of\npolicy that has to be stated, measured and reviewed rather than absorbed into a\nconstant. The alert threshold is then derived from it as a quantile of the\nscores actually observed, which is what keeps its meaning as the distribution\ndrifts.\n\nLearned state survives the change. The model's identity covers its SHAPE — the\ninventory and the geometry — and not its appetite, so restating policy unlearns\nnothing.",
         "tags": [
           "ml"
         ],
@@ -321,7 +321,7 @@
       "get": {
         "operationId": "get_v1_risk_health",
         "summary": "Whether the risk model plane can actually work right now",
-        "description": "Reports whether the per-organisation model plane is genuinely usable: that the plane was built, that the per-organisation stores can be written, and whether the event surface the feature plane is rolled up from is reachable. It is a REAL probe, not status theatre.\n\n200 only when the plane can work. Otherwise 503 CARRYING THE REPORT — which part failed and the real error — and that body is why this is not a typed op: a typed op reaches a non-2xx by returning an error, and the envelope that produces would drop exactly the detail the probe exists to deliver.\n\nAn unreachable event surface is REPORTED and is not a failure. Scoring reads in-memory aggregates and never the warehouse, so a warm that cannot run degrades how much history a model has seen and does not stop it deciding.\n\nIt answers about the process, not about a tenant: it takes no organisation and names none.",
+        "description": "Reports whether the per-organisation model plane is genuinely usable: that the plane was built, that the per-organisation stores can be written, and whether the event surface the feature plane is rolled up from is reachable. It is a REAL probe, not status theatre.\n\n200 only when the plane can work. Otherwise 503 CARRYING THE REPORT — which part failed and the real error — and that body is why this is not a typed op: a typed op reaches a non-2xx by returning an error, and the envelope that produces would drop exactly the detail the probe exists to deliver.\n\nAn unreachable event surface is REPORTED and is not a failure. Scoring reads in-memory aggregates and never the warehouse, so a warm that cannot run degrades how much history a model has seen and does not stop it deciding.\n\nIt also reports how many organisations' models are resident and how many have been evicted to hold that bound. Eviction is lossless — learned state is written to that organisation's own store first and its aggregates rebuild from its own record — so a climbing count is a capacity signal, not a loss.\n\nIt answers about the process, not about a tenant: it takes no organisation and names none.",
         "tags": [
           "risk"
         ]
@@ -422,7 +422,7 @@
       "mlEvent": {
         "properties": {
           "at": {
-            "description": "At is when it happened, RFC 3339. Empty means now. An event older than the\nlongest window is still recorded, at the leading edge, and counted as late\nrather than dropped.",
+            "description": "At is when it happened, RFC 3339. Empty means now. It must sit inside the\nthirty-day window the aggregates keep and no more than two minutes ahead of\nthis plane's clock; anything outside that is REFUSED rather than quietly\naccepted, because a future timestamp moves the aggregates' leading edge and\nleaves every later event for that subject reading as though it never\nhappened. History older than the window is folded in from your own event\nsurface, not through this door.",
             "type": "string"
           },
           "device": {
@@ -467,7 +467,7 @@
       "mlLearnOut": {
         "properties": {
           "learned": {
-            "description": "Learned is how many events were recorded into the tenant's aggregates and\nlearned from.",
+            "description": "Learned is how many events the model learned from, which is the batch, and\nis also what the call is metered at: one screen per event.",
             "type": "integer"
           },
           "verdicts": {
@@ -838,6 +838,14 @@
           "gap": {
             "description": "Gap says why the fold did not happen or did not complete, when that is the\ncase. An empty surface and an unreachable warehouse are different facts and\na model must not report them as the same one.",
             "type": "string"
+          },
+          "replayed": {
+            "description": "Replayed is how many of this organisation's own recorded observations\nrebuilt its sliding aggregates when the model became resident. It is what\nsays a rollout was a rebuild rather than a blindness: the aggregates are a\nprojection of a durable record, so a restart costs a replay and not a\ncontrol.",
+            "type": "integer"
+          },
+          "rolled": {
+            "description": "Rolled is how many windows of this organisation's own source planes —\nproduct events, captured failures, metered inference — were rolled up into\nits feature surface before that fold. Zero with no gap means the surface was\nalready current, which is a different fact from the rollup never running.",
+            "type": "integer"
           },
           "window": {
             "description": "Window is the lookback the fold covered.",

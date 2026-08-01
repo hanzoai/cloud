@@ -177,8 +177,11 @@ func TestFeatureRead_RefusesAnUnqualifiedTenant(t *testing.T) {
 		if _, err := rows(context.Background(), bad, query{start: end.Add(-time.Hour), end: end}); err == nil {
 			t.Errorf("rows accepted the unqualified key %q", string(bad))
 		}
-		if _, err := rollup(context.Background(), bad, end.Add(-time.Hour), end); err == nil {
+		if err := rollup(context.Background(), bad, rollups[0], end.Add(-time.Hour), end); err == nil {
 			t.Errorf("rollup accepted the unqualified key %q", string(bad))
+		}
+		if _, err := newTestPlane(t).roll(context.Background(), bad); err == nil {
+			t.Errorf("roll accepted the unqualified key %q", string(bad))
 		}
 	}
 }
@@ -192,8 +195,13 @@ func TestRollup_ReadsTheBareOrgAndWritesTheQualifiedKey(t *testing.T) {
 	probe.reset(true)
 	k := key(t, brandA, orgA)
 	end := time.Now().UTC()
-	if _, err := rollup(context.Background(), k, end.Add(-time.Hour), end); err != nil {
-		t.Fatalf("rollup: %v", err)
+	if err := ensure(context.Background()); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	for _, r := range rollups {
+		if err := rollup(context.Background(), k, r, end.Add(-time.Hour), end); err != nil {
+			t.Fatalf("rollup %q: %v", r.Name, err)
+		}
 	}
 	var folds int
 	for _, s := range probe.all() {
@@ -216,6 +224,116 @@ func TestRollup_ReadsTheBareOrgAndWritesTheQualifiedKey(t *testing.T) {
 	}
 	if folds != len(rollups) {
 		t.Fatalf("%d rollup statements ran, want %d", folds, len(rollups))
+	}
+}
+
+// TestRollup_ClosesTheLoop is THE MOAT, end to end and in one test: an
+// organisation emits into a source plane, the rollup folds that window into its
+// own feature surface, and the model reads it back as the organisation's own
+// history.
+//
+// It exists because the rollup was declared, tested in isolation, and CALLED BY
+// NOTHING — so the per-org feature surface was a table that was never written,
+// the warm read it and found nothing, and the whole moat was prose. A unit test
+// of `rollup` passes in exactly that world. This one does not.
+//
+// Mutation proof: remove the p.roll call from plane.fold and the read below comes
+// back empty.
+func TestRollup_ClosesTheLoop(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	now := time.Now().UTC()
+	// The organisation emits into the SOURCE planes, under its bare slug, the way
+	// the one ingest door writes them.
+	for i := 0; i < 12; i++ {
+		probe.emit(orgA, emitted{
+			Plane: "account", Subject: "u_7",
+			At: now.Add(-time.Duration(i+1) * time.Hour), Spend: 250_000_000,
+		})
+	}
+	// A DIFFERENT organisation emits too, so "the loop closes" cannot be satisfied
+	// by folding everybody's rows into everybody's surface.
+	probe.emit(orgB, emitted{Plane: "account", Subject: "u_7", At: now.Add(-time.Hour), Spend: 999_000_000})
+
+	f := p.fold(context.Background(), k)
+	if f.Rolled == 0 {
+		t.Fatalf("the fold rolled no window at all: %+v", f)
+	}
+	if f.Folded == 0 {
+		t.Fatalf("the fold read nothing back after rolling %d window(s): %s", f.Rolled, f.Gap)
+	}
+	// Read the surface the way the catalogue does, and check WHOSE rows arrived.
+	rs, err := rows(context.Background(), k, query{start: now.Add(-warmWindow), end: now.Add(time.Minute)})
+	if err != nil {
+		t.Fatalf("read the feature surface: %v", err)
+	}
+	if len(rs) == 0 {
+		t.Fatal("the organisation's own events never became features — the loop does not close")
+	}
+	var spend float64
+	for _, r := range rs {
+		if r.Subject != "u_7" || r.Kind != kindAccount {
+			t.Fatalf("a foreign row reached this organisation's surface: %+v", r)
+		}
+		spend += r.Value["spend"]
+	}
+	if spend != float64(len(rs))*250_000_000 {
+		t.Fatalf("the folded spend is %.0f over %d rows — another organisation's numbers are in it", spend, len(rs))
+	}
+	// And the other organisation's surface holds only its own.
+	other, err := rows(context.Background(), key(t, brandA, orgB), query{start: now.Add(-warmWindow), end: now.Add(time.Minute)})
+	if err != nil {
+		t.Fatalf("read organisation B's surface: %v", err)
+	}
+	if len(other) != 0 {
+		t.Fatalf("organisation B's surface has %d rows without B ever being folded", len(other))
+	}
+}
+
+// TestRollup_RollsEachWindowOnce: the feature surface is a SummingMergeTree, so
+// re-inserting a window that already landed does not replace it — the rows merge
+// by addition and the organisation's own history doubles. Idempotency cannot come
+// from the engine, so it comes from a durable per-tenant watermark.
+//
+// Mutation proof: stop advancing the watermark in plane.roll and the second fold
+// doubles every number.
+func TestRollup_RollsEachWindowOnce(t *testing.T) {
+	probe.reset(true)
+	dir := t.TempDir()
+	p := planeAt(t, dir)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	now := time.Now().UTC()
+	for i := 0; i < 6; i++ {
+		probe.emit(orgA, emitted{Plane: "account", Subject: "u_1", At: now.Add(-time.Duration(i+1) * time.Hour), Spend: 1_000})
+	}
+	if _, err := p.roll(context.Background(), k); err != nil {
+		t.Fatalf("roll: %v", err)
+	}
+	once := probe.rowsFor(string(k))
+	if once == 0 {
+		t.Fatal("the first roll wrote nothing — the test proves nothing")
+	}
+	if _, err := p.roll(context.Background(), k); err != nil {
+		t.Fatalf("second roll: %v", err)
+	}
+	if twice := probe.rowsFor(string(k)); twice != once {
+		t.Fatalf("rolling twice wrote %d rows where one roll wrote %d — every number in this organisation's "+
+			"history is now inflated, and a SummingMergeTree will never converge back", twice, once)
+	}
+	// The watermark is DURABLE, so a rollout does not re-roll what already landed.
+	if err := p.close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	second := planeAt(t, dir)
+	defer func() { _ = second.close() }()
+	if _, err := second.roll(context.Background(), k); err != nil {
+		t.Fatalf("roll after restart: %v", err)
+	}
+	if after := probe.rowsFor(string(k)); after != once {
+		t.Fatalf("a restart re-rolled windows that had already landed: %d rows, want %d", after, once)
 	}
 }
 
@@ -323,5 +441,92 @@ func TestDictionary_ReportsBlindDimensionsHonestly(t *testing.T) {
 	}
 	if c := seen["spend"]; !c.Blind() {
 		t.Errorf("spend read %+v, want BLIND — this organisation's surface carries no metered spend", c)
+	}
+}
+
+// TestRollup_NeverSplitsABucket: the surface is written at five-minute buckets
+// (toStartOfFiveMinute) and merged by ADDITION, so a window that ends inside a
+// bucket is not merely inefficient — it inflates every uniqExact column. A
+// subject active either side of the cut contributes `1` twice, and the surface
+// then reports two distinct addresses, sessions or paths where there was one.
+// Those columns are model inputs, so the model trains on numbers no traffic
+// produced.
+//
+// The roll therefore aligns its edge DOWN to the bucket, which makes every
+// watermark aligned too. This drives it at three deliberately unaligned wall
+// clocks and holds every boundary that reached the warehouse.
+//
+// Mutation proof: drop the .Truncate(featureBucket) in plane.roll and the
+// boundaries below land mid-bucket.
+func TestRollup_NeverSplitsABucket(t *testing.T) {
+	probe.reset(true)
+	dir := t.TempDir()
+	p := planeAt(t, dir)
+	defer func() { _ = p.close() }()
+	k := key(t, brandA, orgA)
+	// The only rolls that reach the warehouse are the three this test drives — and
+	// so the clock below is read by one goroutine.
+	holdFolds(t, p)
+	base := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	for _, off := range []time.Duration{0, 7*time.Minute + 13*time.Second, 63*time.Minute + 41*time.Second} {
+		at := base.Add(off)
+		p.now = func() time.Time { return at }
+		if _, err := p.roll(context.Background(), k); err != nil {
+			t.Fatalf("roll at %s: %v", at, err)
+		}
+	}
+	var checked int
+	for _, s := range probe.all() {
+		if !strings.HasPrefix(strings.TrimSpace(s.SQL), "INSERT") || len(s.Args) < 4 {
+			continue
+		}
+		for _, i := range []int{2, 3} {
+			lit, ok := s.Args[i].(string)
+			if !ok {
+				t.Fatalf("a rollup window boundary is %T, not the literal the statement binds", s.Args[i])
+			}
+			at, err := time.Parse("2006-01-02 15:04:05", lit)
+			if err != nil {
+				t.Fatalf("boundary %q does not parse: %v", lit, err)
+			}
+			if !at.Equal(at.Truncate(featureBucket)) {
+				t.Fatalf("a rollup covered [%v] — the window ends inside a %s bucket, so every uniqExact "+
+					"column in that bucket is counted once per partial insert", s.Args[2:4], featureBucket)
+			}
+			checked++
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no rollup statement reached the warehouse — the test proves nothing")
+	}
+}
+
+// TestSearch_RollsBeforeItReadsItsHistory: the fold that brings a tenant's
+// surface current runs in the BACKGROUND, so a search that only waited for
+// residency would race it and answer "your history is empty" on first use — the
+// one answer a search must never give wrongly, because an empty history and a
+// clean history are the same 404 to a caller.
+//
+// Mutation proof: remove the p.roll call at the top of plane.begin and this comes
+// back "history over the window is empty".
+func TestSearch_RollsBeforeItReadsItsHistory(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	k := key(t, brandA, orgA)
+	now := time.Now().UTC()
+	// Only the SOURCE plane has anything. Nothing has rolled, and nothing will
+	// unless begin does it.
+	for i := 0; i < 24; i++ {
+		probe.emit(orgA, emitted{
+			Plane: "account", Subject: "u_" + itoa(i%3),
+			At: now.Add(-time.Duration(i+1) * 20 * time.Minute), Spend: 100_000_000,
+		})
+	}
+	run, err := p.begin(context.Background(), k, 24*time.Hour, nil)
+	if err != nil {
+		t.Fatalf("the first search over an unrolled surface: %v", err)
+	}
+	if run.Events == 0 {
+		t.Fatal("the search admitted a run over zero events")
 	}
 }
