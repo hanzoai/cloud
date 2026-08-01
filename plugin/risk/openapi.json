@@ -1,0 +1,2386 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package risk is Hanzo Risk: the scoring and decision plane for any entity a tenant has — an account, a transaction, a session, an agent, a merchant, a payout — and the shared model plane both it and the compliance face read.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "ml"
+    },
+    {
+      "name": "risk"
+    }
+  ],
+  "paths": {
+    "/v1/ml/features": {
+      "get": {
+        "operationId": "mlFeatures",
+        "summary": "Read the typology-to-feature inventory the model is built on",
+        "description": "Features is the typology-to-feature inventory the model is built on: what each\ndimension measures, the risk indicator it serves, and the published source\nthose words come from.\n\nIt is code rather than a document because a mapping kept beside the model\ncannot drift away from what the model actually reads — and the attributability\nit makes possible is why this is a tree and not a net.",
+        "tags": [
+          "ml"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlFeatureInventory"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/ml/restore": {
+      "post": {
+        "operationId": "mlRestore",
+        "summary": "Restore this tenant's learned state from its pinned snapshot",
+        "description": "Restore reinstates this tenant's learned state from its pinned snapshot.\n\nA snapshot whose shape does not match the running inventory is REFUSED, not\ncoerced, and a snapshot belonging to another tenant is refused twice — here,\nby the tenant that asked, and again inside the engine. State the model would\ntreat as its own memory has to have come from this algorithm over this feature\nset for this tenant.",
+        "tags": [
+          "ml"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlModelState"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/ml/score": {
+      "post": {
+        "operationId": "mlScore",
+        "summary": "Score an observation without learning from it",
+        "description": "Score scores one observation and LEARNS NOTHING from it. It is how a candidate\nis tried against a tenant's real behaviour before anything depends on the\nanswer, and it is the model's analogue of testing a rule: because it records\nnothing, the aggregates it reads do not include the candidate.",
+        "tags": [
+          "ml"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/mlScoreIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlScoreOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/ml/search": {
+      "post": {
+        "operationId": "mlSearch",
+        "summary": "Exhaustively search the model topology over this tenant's own history",
+        "description": "Search exhaustively tries the model topology over this tenant's own history\nand returns the learning curve and the winning shape.\n\nThe grid is CLOSED — trees x depth x window x blend x appetite — because an\nunbounded grid is an unbounded amount of a shared pod's CPU reachable by\nanyone with a key. Each candidate runs in a sandbox over fresh counters, so a\nsearch can never move the live model, and no candidate can see another\ntenant's history because the replay reads this tenant's own file.\n\nIt answers 202 with a run identifier; read the report back at\nGET /v1/ml/search/{id}.",
+        "tags": [
+          "ml"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/mlSearchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlSearchRun"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        }
+      }
+    },
+    "/v1/ml/search/{id}": {
+      "get": {
+        "operationId": "mlSearchResult",
+        "summary": "Read an exhaustive search's report",
+        "description": "SearchResult reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the record to read, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlSearchReport"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/ml/snapshot": {
+      "post": {
+        "operationId": "mlSnapshot",
+        "summary": "Pin this tenant's learned state",
+        "description": "Snapshot pins this tenant's learned state into its own encrypted file.\n\nIt is what an auditor asks for: the exact model that raised an alert, kept so\nthat the same input can be scored again a year later. It is also what makes a\nrollout survivable — the shutdown path snapshots every resident tenant,\nbecause cloud deploys Recreate at one replica and a model that comes back with\nnothing learned refuses to score for its whole warm period.",
+        "tags": [
+          "ml"
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlSnapshotOut"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/ml/state": {
+      "get": {
+        "operationId": "mlState",
+        "summary": "Read the model's governance state",
+        "description": "ModelState is what a review of the model reads: the appetite it was given, the\nthreshold that appetite produced, and the share it ACTUALLY reached.\n\nStated against realised is the whole governance report. An appetite is a\nmeasured commitment or it is nothing, and a fixed threshold on a drifting\ndistribution silently becomes either silence or a flood.",
+        "tags": [
+          "ml"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlModelState"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/ml/state/appetite": {
+      "put": {
+        "operationId": "mlSetAppetite",
+        "summary": "Set the share of the stream the model may examine",
+        "description": "SetAppetite sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
+        "tags": [
+          "ml"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/mlAppetiteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlModelState"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/ml/train": {
+      "post": {
+        "operationId": "mlTrain",
+        "summary": "Train this tenant's model on its own observations",
+        "description": "Train teaches this tenant's model from this tenant's own observations.\n\nIt is online: there is no job, no queue and no window in which the tenant is\nprotected by a stale model, because the half-space geometry is built before\nany data arrives and the model IS a set of mass counters. One observation is\none increment.\n\nTHERE IS NO CROSS-TENANT TRAINING INPUT AND NO WAY TO EXPRESS ONE. The model\nis indexed by the tenant key and its tree GEOMETRY is seeded from it, so two\ntenants do not merely hold different counters — they hold different trees.\nAny cross-org learning in this product is aggregate-only, lives in a table\nwith no tenant column, and is published only above a k-anonymity floor.",
+        "tags": [
+          "ml"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/mlTrainIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlTrainOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/activity": {
+      "get": {
+        "operationId": "riskActivity",
+        "summary": "Watch live rule activations and their disposition",
+        "description": "Activity is the watcher: what is firing right now, what is being muted, and\nwhich way the decisions are going.\n\nIt reads the DECISION LOG rather than a second bus. The log is already the\nrecord and the analytics copies already reach the platform stream; a dedicated\nactivation bus would be a third representation of one fact and a third thing\nthat can be behind.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds how many recent decisions are summarised, 1..500.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskActivityView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/controls": {
+      "get": {
+        "operationId": "riskControls",
+        "summary": "List the platform controls declared on subjects",
+        "description": "Controls lists the platform controls declared on this tenant's subjects:\nreserves, payout holds and blocks.\n\nThey are DECLARATIONS the money plane reads. Risk never moves money —\nhanzoai/commerce owns payouts, disputes and balances — so a marketplace reads\nthis before a payout and calls decide at authorization, and risk touches no\nprocessor. That is what \"processor-agnostic\" is: a structural property, not a\nfeature.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind narrows to one subject kind.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "query",
+            "required": false,
+            "description": "Subject narrows to one subject.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskControlPage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "riskSetControl",
+        "summary": "Declare a reserve, a payout hold or a block on a subject",
+        "description": "SetControl declares a reserve, a payout hold or a block on a subject.",
+        "tags": [
+          "risk"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/riskControlIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskControl"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/risk/controls/{id}": {
+      "delete": {
+        "operationId": "riskReleaseControl",
+        "summary": "Release a control",
+        "description": "ReleaseControl lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the record to act on, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
+      }
+    },
+    "/v1/risk/decide": {
+      "post": {
+        "operationId": "riskDecide",
+        "summary": "Score an entity or event and return a decision",
+        "description": "Decide scores one entity or event and answers what to do about it: allow,\nchallenge, review, restrict or block, with the evidence behind it.\n\nOne op, not three. \"Score this thing\" is one verb, and a stage-specific op per\nlifecycle moment would be three places for the tenant gate to drift. The stage\nselects the feature window and the rule set and nothing else.\n\nIt is METERED AFTER the work, never gated before it. A pre-work balance gate\nwould have to render its refusal in the fleet's nested error contract, which a\ntyped op cannot do — so the hot path stays typed, the screen is billed on the\ndecision that was actually produced, and no funded client's 402 parsing is\naffected. Overage lands on the caller's OWN ledger: Meter sends the org as\nboth the commerce identity and the org header, which is the anti-cross-org\nproperty.",
+        "tags": [
+          "risk"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/riskDecideIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskDecision"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/decisions": {
+      "get": {
+        "operationId": "riskDecisions",
+        "summary": "List recent decisions",
+        "description": "Decisions lists this tenant's recent decisions, newest first. Every filter is\nan equality on a column the tenant's own file owns, so a filter can narrow the\ncaller's own log and can never widen it.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind narrows to one subject kind.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "query",
+            "required": false,
+            "description": "Subject narrows to one subject.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "description": "Action narrows to one outcome.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "description": "Stage narrows to one lifecycle moment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page, 1..500, default 100.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskDecisionPage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/decisions/{id}": {
+      "get": {
+        "operationId": "riskDecisionDetail",
+        "summary": "Read one decision with its evidence",
+        "description": "DecisionDetail reads one decision with everything behind it: the evidence, the\nmodel's per-feature attribution and the digest of the model that produced it.\nThat set IS the dispute packet — what was decided, on what, by which model.\n\nA decision another tenant owns answers 404, exactly as an unknown identifier\ndoes, because the tenant's file is the only place looked in: there is no query\nthat could reach another tenant's row, so a probe learns nothing.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the record to act on, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskDecisionView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/decisions/{id}/label": {
+      "post": {
+        "operationId": "riskLabel",
+        "summary": "Record what a human concluded about a decision",
+        "description": "Label records what a human concluded about a decision — fraud, legitimate,\nchargeback, abuse or unknown.\n\nTHE DECIDER IS SERVER-SET. It comes from the validated principal and never\nfrom the request body: the engine's own resolutions carry an unauthenticated\n`by`, and importing that gap into a product that bills on the decision would\nmake the attribution worthless the moment anyone asked who cleared what.\n\nThis is also the only supervision this product has. Everything the model knows\nabout its own miss rate comes from these labels against the below-the-line\nsample.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the decision, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/riskLabelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskDecisionView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/dictionary": {
+      "get": {
+        "operationId": "riskDictionary",
+        "summary": "Read the field catalogue a rule may name",
+        "description": "Dictionary is the vocabulary a rule may be written in: every fact, every\noperator, every velocity axis and window, this tenant's own lists, and the\nsignal keys this tenant has actually sent.\n\nTwo lenses on one catalogue. The product half is closed and is what admission\nchecks against. The tenant half — the signals — is the tenant's own, read back\noff its recent decisions, which is what makes a rule builder able to offer the\nfields that exist here rather than the fields that exist in general.",
+        "tags": [
+          "risk"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskDictionaryView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/health": {
+      "get": {
+        "operationId": "get_v1_risk_health",
+        "summary": "Report whether the decision plane can decide",
+        "description": "Answers 200 with a report of what is up, or 503 CARRYING THE SAME REPORT as its body — which is the whole point of a real probe, and the reason this one route is not a typed op: a typed op reaches a non-2xx only by returning an error, and that renders as an envelope with the report dropped.\n\nThe report names the model digest in force, how many tenants this process holds resident, whether the feature warehouse is reachable, and whether metering is configured. Only the first is load-bearing for a decision: the rings are in memory, the rules and lists are the tenant's own file, and the model is in process, so a decision does NOT need the warehouse and the probe stays green without it. A warehouse that is down costs the field dictionary and the search sandbox, and is reported as exactly that rather than as a failure of the authorization path.",
+        "tags": [
+          "risk"
+        ]
+      }
+    },
+    "/v1/risk/lists": {
+      "get": {
+        "operationId": "riskLists",
+        "summary": "List this tenant's allow and deny lists",
+        "description": "Lists shows this tenant's allow and deny lists and how many values each holds.\n\nThese are the TENANT's operational lists. Sanctions and PEP designations are\nnot here and are never merged into them: a tenant may add to its own deny\nlist, and a tenant may not edit OFAC.",
+        "tags": [
+          "risk"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskListPage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "riskCreateList",
+        "summary": "Create an allow or deny list",
+        "description": "CreateList creates an allow or deny list a rule can name in an inlist term.",
+        "tags": [
+          "risk"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/riskListIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskListView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/risk/lists/{name}/entries": {
+      "post": {
+        "operationId": "riskAddListEntries",
+        "summary": "Add values to a list",
+        "description": "AddListEntries adds values to a list. Values are folded to lower case so a\nvalue added in one case matches a signal sent in another.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the list, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/riskListEntriesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskListView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/lists/{name}/entries/{value}": {
+      "delete": {
+        "operationId": "riskRemoveListEntry",
+        "summary": "Remove one value from a list",
+        "description": "RemoveListEntry removes one value from a list. Answers 204, or 404 when the\nlist does not hold it.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the list, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "value",
+            "in": "path",
+            "required": true,
+            "description": "Value is the value to remove, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
+      }
+    },
+    "/v1/risk/mode": {
+      "get": {
+        "operationId": "riskMode",
+        "summary": "Read whether this tenant's decisions act or only observe",
+        "description": "Mode reports whether this tenant's decisions act or only observe.",
+        "tags": [
+          "risk"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskModeView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "put": {
+        "operationId": "riskSetMode",
+        "summary": "Take this tenant live, or return it to shadow",
+        "description": "SetMode takes this tenant live, or returns it to shadow.\n\nSHADOW IS THE DEFAULT AND THE DEFAULT IS NOT CONFIGURABLE. In shadow every\nrule runs, the model scores and learns, every decision is recorded, and the\naction is always allow — so what would have happened is readable over real\ntraffic before anyone depends on it. A model that quietly went live and\nstarted declining payments is the worst failure available here.",
+        "tags": [
+          "risk"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/riskModeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskModeView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/rules": {
+      "get": {
+        "operationId": "riskRules",
+        "summary": "List this tenant's rules",
+        "description": "Rules lists this tenant's detections. A tenant starts with a starter set\ncovering the lifecycle the product names — signup burst, shared device,\ndisposable email, card testing, denied address, spend spike, payout velocity,\nundeclared automation — all of which it may read, copy, edit and retire.",
+        "tags": [
+          "risk"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskRuleList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "riskCreateRule",
+        "summary": "Create a rule",
+        "description": "CreateRule admits a new detection. Admission is strict on purpose: a rule with\nno terms holds on everything, a rule naming a field that does not exist holds\non nothing, and both read as a working control from the outside.",
+        "tags": [
+          "risk"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/riskRuleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskRule"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/risk/rules/{id}": {
+      "delete": {
+        "operationId": "riskDeleteRule",
+        "summary": "Retire a rule",
+        "description": "DeleteRule retires a detection. Answers 204, or 404 for an identifier this\ntenant does not own.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the record to act on, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "riskUpdateRule",
+        "summary": "Replace a rule",
+        "description": "UpdateRule replaces a detection whole. There is no partial update: a rule is a\nconjunction of terms, and merging a partial term list into an existing one is\na change nobody can read off the request.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the rule to replace, from the path on a PATCH. Ignored on create,\nwhere the server mints one.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/riskRuleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskRule"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/simulate": {
+      "post": {
+        "operationId": "riskSimulate",
+        "summary": "Replay a candidate rule over this tenant's own history",
+        "description": "Simulate replays a candidate rule over this tenant's OWN recorded decisions\nand reports what it would have caught, what it would have given up, and how\nmuch of that a human has already judged.\n\nIt is a gate and not a nicety: a new typology has to be tested before live\nactivation, and a retirement has to be justified against the outgoing rule's\nperformance. Nothing is written — the replay reads the decision log and\nevaluates in memory.\n\nAn EMPTY history is REFUSED rather than reported as zero alerts. \"No alerts\"\nis exactly what a quiet rule looks like, and being unable to tell the two\napart is the failure a sandbox exists to prevent.",
+        "tags": [
+          "risk"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/riskSimulateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskSimulateReport"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/subjects/{kind}/{id}": {
+      "get": {
+        "operationId": "riskSubjectState",
+        "summary": "Read one subject's current risk state",
+        "description": "SubjectState reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions and whatever controls are declared on\nit. This is the continuous-monitoring read — a merchant, an account or an\nagent, on one page.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "description": "Kind is the subject kind, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the subject identifier, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskSubjectView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/risk/suppressions": {
+      "get": {
+        "operationId": "riskSuppressions",
+        "summary": "List active suppressions",
+        "description": "Suppressions lists the active mutes. A suppression that has expired is not\nlisted and mutes nothing — a forgotten mute stops muting instead of quietly\nstaying on forever.",
+        "tags": [
+          "risk"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskSuppressionPage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "riskSuppress",
+        "summary": "Suppress a rule's activations",
+        "description": "Suppress mutes a rule's activations for a subject, a subject kind, or\neverywhere that rule fires.\n\nA suppressed hit is RECORDED with suppressed set and contributes nothing to\nthe action. It is never dropped, for the same reason the model counts its\nrefusals: silence must never read as a clean result, and a compliance record\nthat can be silently muted by an operational knob is not a record.",
+        "tags": [
+          "risk"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/riskSuppressIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/riskSuppression"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
+      }
+    },
+    "/v1/risk/suppressions/{id}": {
+      "delete": {
+        "operationId": "riskUnsuppress",
+        "summary": "Lift a suppression",
+        "description": "Unsuppress lifts a mute. Answers 204, or 404 for an identifier this tenant\ndoes not own.",
+        "tags": [
+          "risk"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the record to act on, taken from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "mlAppetite": {
+        "properties": {
+          "review": {
+            "description": "Review is the share of the stream that may be sent for examination. The\nalert threshold is derived from it as a quantile of the scores actually\nobserved, rather than fixed at a number someone liked — so an alert level\nis governed rather than tuned, and a drifting distribution does not turn\nit into silence or a flood.",
+            "type": "number"
+          },
+          "sample": {
+            "description": "Sample is the share of NON-alerting traffic retained for review below the\nline. It is the only instrument that can measure what the model missed,\nbecause nothing in the stream is labelled.",
+            "type": "number"
+          },
+          "warm": {
+            "description": "Warm is how many observations the model must learn before it may score.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "mlAppetiteIn": {
+        "properties": {
+          "review": {
+            "description": "Review is the share of the stream that may be examined, in (0, 0.5].",
+            "type": "number"
+          },
+          "sample": {
+            "description": "Sample is the share of non-alerting traffic retained, in [0, 1].",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "mlCandidate": {
+        "properties": {
+          "blend": {
+            "description": "Blend is how much of a closing window folds into the reference.",
+            "type": "number"
+          },
+          "depth": {
+            "description": "Depth is how deep each tree splits.",
+            "type": "integer"
+          },
+          "review": {
+            "description": "Review is the share of the stream this topology may examine.",
+            "type": "number"
+          },
+          "trees": {
+            "description": "Trees is how many half-space trees the model holds.",
+            "type": "integer"
+          },
+          "window": {
+            "description": "Window is how many observations make up one reference window.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "mlFeature": {
+        "properties": {
+          "citation": {
+            "description": "Citation is where those words come from, so the claim is checkable.",
+            "type": "string"
+          },
+          "indicator": {
+            "description": "Indicator is the supervisor's own words for what is being looked for.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the dimension.",
+            "type": "string"
+          },
+          "neutral": {
+            "description": "Neutral is the value at which this feature is unremarkable — the\ncoordinate the counterfactual moves it to.",
+            "type": "number"
+          },
+          "severity": {
+            "description": "Severity is the grading a hit on this feature carries.",
+            "type": "string"
+          },
+          "typology": {
+            "description": "Typology is the pattern it expresses.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit is how to read the raw number.",
+            "type": "string"
+          },
+          "window": {
+            "description": "Window is the span it is measured over, when it has one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "mlFeatureInventory": {
+        "properties": {
+          "digest": {
+            "description": "Digest is the identity of this shape.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items is every dimension, in coordinate order. The ORDER is part of the\nmodel's identity: adding, removing or reordering one invalidates learned\nstate, which the digest enforces.",
+            "items": {
+              "$ref": "#/components/schemas/mlFeature"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "mlModelState": {
+        "properties": {
+          "alerted": {
+            "description": "Alerted is how many of those it alerted on — the numerator of Realised.",
+            "type": "integer"
+          },
+          "appetite": {
+            "$ref": "#/components/schemas/mlAppetite",
+            "description": "Appetite is the stated share of the stream that may be examined."
+          },
+          "blind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Blind counts, per feature, how often it took its neutral value for want of\ndata.",
+            "type": "object"
+          },
+          "digest": {
+            "description": "Digest is the model identity an auditor pins.",
+            "type": "string"
+          },
+          "distribution": {
+            "description": "Distribution is the score distribution the threshold is cut from, in 32\nbands.",
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "inventory": {
+            "description": "Inventory is the feature set, so the state and the shape are read\ntogether.",
+            "items": {
+              "$ref": "#/components/schemas/mlFeature"
+            },
+            "type": "array"
+          },
+          "learned": {
+            "description": "Learned is how many observations this tenant's model has taken in.",
+            "type": "integer"
+          },
+          "realised": {
+            "description": "Realised is the share that ACTUALLY alerted. Stated against realised is\nthe governance report — an appetite is a measured commitment or it is\nnothing.",
+            "type": "number"
+          },
+          "refusals": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Refusals counts what the model declined to score, by reason. None of these\nwas examined by the model; all of them were examined by the rules.",
+            "type": "object"
+          },
+          "saturated": {
+            "description": "Saturated means the appetite cannot be honoured by any threshold because\ntoo much of the stream scores in the top band. It is the one state that\nmust never be mistaken for quiet.",
+            "type": "boolean"
+          },
+          "scored": {
+            "description": "Scored is how many observations the model was able to score — the\ndenominator of Realised.",
+            "type": "integer"
+          },
+          "threshold": {
+            "description": "Threshold is the score cut currently in force, recomputed each window as\nthe quantile that admits the stated share.",
+            "type": "number"
+          },
+          "warming": {
+            "description": "Warming is true while the model has not learned enough to score. A warming\nmodel REFUSES rather than scoring low, and the refusal is counted below.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "mlObservation": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/riskAmount",
+            "description": "Amount is the money involved, if any."
+          },
+          "at": {
+            "description": "At is when it happened, RFC 3339. Absent means now.",
+            "type": "string"
+          },
+          "signals": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Signals are the observations: ip, device, counterparty and the rest.",
+            "type": "object"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/riskSubject",
+            "description": "Subject is whose behaviour this is."
+          }
+        },
+        "type": "object"
+      },
+      "mlScoreIn": {
+        "properties": {
+          "observation": {
+            "$ref": "#/components/schemas/mlObservation",
+            "description": "Observation is what to score."
+          }
+        },
+        "type": "object"
+      },
+      "mlScoreOut": {
+        "properties": {
+          "alert": {
+            "description": "Alert is whether this would become evidence.",
+            "type": "boolean"
+          },
+          "causes": {
+            "description": "Causes is the per-feature attribution, ordered by contribution.",
+            "items": {
+              "$ref": "#/components/schemas/riskCause"
+            },
+            "type": "array"
+          },
+          "cut": {
+            "description": "Cut is the threshold in force, derived from the appetite.",
+            "type": "number"
+          },
+          "model": {
+            "description": "Model is the digest of the model that produced this.",
+            "type": "string"
+          },
+          "refusal": {
+            "description": "Refusal names the decline: warming or unidentified.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the anomaly score in [0,1]: 0 where this tenant's recent\nbehaviour is densest, 1 where there is none of it.",
+            "type": "number"
+          },
+          "scored": {
+            "description": "Scored is false when the model declined; Refusal says which refusal.",
+            "type": "boolean"
+          },
+          "shadow": {
+            "description": "Shadow is whether the model is observing rather than contributing.",
+            "type": "boolean"
+          },
+          "values": {
+            "description": "Values is every coordinate, including the blind ones.",
+            "items": {
+              "$ref": "#/components/schemas/mlValue"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "mlSearchIn": {
+        "properties": {
+          "limit": {
+            "description": "Limit bounds how many recorded observations are replayed, 1..5000. The\ngrid itself is closed and needs no bound from the caller.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "mlSearchReport": {
+        "properties": {
+          "curve": {
+            "description": "Curve is the winner's separation as a function of how much history it had\nseen, in ten steps — the learning curve.",
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "events": {
+            "description": "Events is how many historical observations were replayed.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID identifies the run.",
+            "type": "string"
+          },
+          "refusal": {
+            "description": "Refusal names why the report is empty when it is. An empty history is\nrefused rather than reported as zero alerts, because a quiet model and an\nunrun model produce the same number.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"running\", \"done\" or \"refused\".",
+            "type": "string"
+          },
+          "trials": {
+            "description": "Trials is every candidate tried, best-separating first.",
+            "items": {
+              "$ref": "#/components/schemas/mlTrial"
+            },
+            "type": "array"
+          },
+          "winner": {
+            "$ref": "#/components/schemas/mlCandidate",
+            "description": "Winner is the best-separating topology that also honoured its stated\nappetite. Absent when no candidate did both."
+          }
+        },
+        "type": "object"
+      },
+      "mlSearchRun": {
+        "properties": {
+          "candidates": {
+            "description": "Candidates is how many topologies will be tried.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID identifies the run; read it back at GET /v1/ml/search/{id}.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"running\" or \"done\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "mlSnapshotOut": {
+        "properties": {
+          "at": {
+            "description": "At is when it was pinned, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "digest": {
+            "description": "Digest is the model identity that was pinned.",
+            "type": "string"
+          },
+          "learned": {
+            "description": "Learned is how many observations that state had taken in.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "mlTrainIn": {
+        "properties": {
+          "observations": {
+            "description": "Observations are what to learn from. They are this tenant's own data and\nnothing else: there is no cross-tenant training input and no way to\nexpress one, because the model is indexed by the tenant key and its tree\nGEOMETRY is seeded from it.",
+            "items": {
+              "$ref": "#/components/schemas/mlObservation"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "mlTrainOut": {
+        "properties": {
+          "learned": {
+            "description": "Learned is how many observations were incorporated.",
+            "type": "integer"
+          },
+          "model": {
+            "description": "Model is the digest of the model that learned them.",
+            "type": "string"
+          },
+          "refused": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Refused is how many were not, by reason.",
+            "type": "object"
+          },
+          "warm": {
+            "description": "Warm is true once the model has learned enough of this tenant's behaviour\nto score at all.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "mlTrial": {
+        "properties": {
+          "alerted": {
+            "description": "Alerted is how many of those it would have alerted on.",
+            "type": "integer"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/mlCandidate",
+            "description": "Candidate is the topology tried."
+          },
+          "realised": {
+            "description": "Realised is Alerted over Scored, against the Review share intended.",
+            "type": "number"
+          },
+          "scored": {
+            "description": "Scored is how many observations it was able to score.",
+            "type": "integer"
+          },
+          "separation": {
+            "description": "Separation is the mean score of the alerted set minus the mean of the\nrest. It is the ranking objective: a topology that separates the tail from\nthe body is doing the job whatever its absolute scores look like.",
+            "type": "number"
+          },
+          "warm": {
+            "description": "Warm is how many observations passed before it would score at all.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "mlValue": {
+        "properties": {
+          "baseline": {
+            "description": "Baseline is what is unremarkable here.",
+            "type": "number"
+          },
+          "blind": {
+            "description": "Blind is true when this feature had no usable coordinate, so it took its\nneutral value. A feature blind on most traffic is not contributing\nwhatever the inventory claims for it.",
+            "type": "boolean"
+          },
+          "feature": {
+            "description": "Feature is the dimension.",
+            "type": "string"
+          },
+          "observed": {
+            "description": "Observed is the raw number behind it.",
+            "type": "number"
+          },
+          "unit": {
+            "description": "Unit is how to read Observed and Baseline.",
+            "type": "string"
+          },
+          "x": {
+            "description": "X is the coordinate the model used, in [0,1].",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "riskActivityRule": {
+        "properties": {
+          "activations": {
+            "description": "Activations is how many of the sampled decisions it fired on.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is its detection name.",
+            "type": "string"
+          },
+          "rule": {
+            "description": "Rule is the rule that fired.",
+            "type": "string"
+          },
+          "suppressed": {
+            "description": "Suppressed is how many of those were muted.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "riskActivityView": {
+        "properties": {
+          "actions": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Actions is how many decisions reached each action.",
+            "type": "object"
+          },
+          "agency": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Agency is how many decisions were of each actor class.",
+            "type": "object"
+          },
+          "refusals": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Refusals is how many decisions the model declined to score, by reason.",
+            "type": "object"
+          },
+          "rules": {
+            "description": "Rules is per-rule activation, most active first.",
+            "items": {
+              "$ref": "#/components/schemas/riskActivityRule"
+            },
+            "type": "array"
+          },
+          "sampled": {
+            "description": "Sampled is how many recent decisions this summarises.",
+            "type": "integer"
+          },
+          "shadow": {
+            "description": "Shadow is whether this tenant is observing rather than acting.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "riskActor": {
+        "properties": {
+          "agent": {
+            "description": "Agent is the agent reference the caller claims to be acting as. It is\nresolved against THIS org's agent registry; an unresolvable reference is\nsimply not a declaration.",
+            "type": "string"
+          },
+          "credential": {
+            "description": "Credential is the credential class the caller believes it presented.\nAdvisory only — the server reads the credential it actually verified.",
+            "type": "string"
+          },
+          "session": {
+            "description": "Session is the session reference this action belongs to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskAmount": {
+        "properties": {
+          "currency": {
+            "description": "Currency is the ISO 4217 code.",
+            "type": "string"
+          },
+          "direction": {
+            "description": "Direction is whether value came in or went out: \"in\" or \"out\". Without it\nthe model cannot see funds passing through, which is the layering shape.",
+            "type": "string"
+          },
+          "nano": {
+            "description": "Nano is the amount in billionths of one unit of Currency.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "riskCause": {
+        "properties": {
+          "baseline": {
+            "description": "Baseline is what is unremarkable for this subject.",
+            "type": "number"
+          },
+          "citation": {
+            "description": "Citation is where those words come from.",
+            "type": "string"
+          },
+          "feature": {
+            "description": "Feature is the model dimension.",
+            "type": "string"
+          },
+          "indicator": {
+            "description": "Indicator is the supervisor's own words for what is being looked for.",
+            "type": "string"
+          },
+          "observed": {
+            "description": "Observed is this subject's value.",
+            "type": "number"
+          },
+          "share": {
+            "description": "Share is this feature's part of the score, in [0,1].",
+            "type": "number"
+          },
+          "typology": {
+            "description": "Typology is the pattern the feature expresses.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit is how to read Observed and Baseline.",
+            "type": "string"
+          },
+          "without": {
+            "description": "Without is the score the model would have produced with this feature\nneutral, holding everything else.",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "riskControl": {
+        "properties": {
+          "at": {
+            "description": "At is when, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "by": {
+            "description": "By is who declared it, taken from the validated principal.",
+            "type": "string"
+          },
+          "control": {
+            "description": "Control is which one.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID identifies the control.",
+            "type": "string"
+          },
+          "rate": {
+            "description": "Rate is the reserve fraction, for a reserve.",
+            "type": "number"
+          },
+          "reason": {
+            "description": "Reason is why it was declared.",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/riskSubject",
+            "description": "Subject is what it applies to."
+          },
+          "until": {
+            "description": "Until is when it lapses, RFC 3339. Absent means it does not.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskControlIn": {
+        "properties": {
+          "control": {
+            "description": "Control is which one: reserve, payout-hold or block.",
+            "type": "string"
+          },
+          "rate": {
+            "description": "Rate is the reserve fraction, in [0,1], for a reserve.",
+            "type": "number"
+          },
+          "reason": {
+            "description": "Reason is why.",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/riskSubject",
+            "description": "Subject is what the control applies to."
+          },
+          "until": {
+            "description": "Until is when it lapses, RFC 3339. Absent means it does not.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskControlPage": {
+        "properties": {
+          "items": {
+            "description": "Items is every control, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/riskControl"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "riskDecideIn": {
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/riskActor",
+            "description": "Actor is who is acting, if the caller knows."
+          },
+          "amount": {
+            "$ref": "#/components/schemas/riskAmount",
+            "description": "Amount is the money involved, for the stages where there is any."
+          },
+          "idem": {
+            "description": "Idem makes a re-decide idempotent: the same key returns the same decision\nrather than scoring twice and moving the counters twice.",
+            "type": "string"
+          },
+          "signals": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Signals are the observations the caller can supply: ip, email,\nemaildomain, device, bin, asn, country, counterparty. Unknown keys are\ncarried and are readable by a rule as signal.\u003ckey\u003e, so a tenant can score\non facts only it has.",
+            "type": "object"
+          },
+          "stage": {
+            "description": "Stage is the lifecycle moment being judged: signup, payment, session,\nusage, payout or dispute. It selects the feature window and the rule set;\nit does NOT select a different tenant gate.",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/riskSubject",
+            "description": "Subject is what is being judged."
+          }
+        },
+        "type": "object"
+      },
+      "riskDecision": {
+        "properties": {
+          "action": {
+            "description": "Action is what to do: allow, challenge, review, restrict or block.",
+            "type": "string"
+          },
+          "agency": {
+            "description": "Agency is what kind of actor this was: agent, human, bot or unknown.\nDerived server-side from the credential class, this org's agent registry,\nthe live agent session and the account's metered shape — never from a\nuser-agent string, which is a claim rather than a fact.",
+            "type": "string"
+          },
+          "causes": {
+            "description": "Causes is the model's per-feature attribution, when the model contributed.",
+            "items": {
+              "$ref": "#/components/schemas/riskCause"
+            },
+            "type": "array"
+          },
+          "hits": {
+            "description": "Hits is the evidence, strongest first.",
+            "items": {
+              "$ref": "#/components/schemas/riskHit"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID identifies this decision for the whole of its life: the label, the\nevidence read and the dispute packet all key on it.",
+            "type": "string"
+          },
+          "model": {
+            "description": "Model is the digest of the model that produced this, so an auditor can pin\nthe exact geometry that raised an alert.",
+            "type": "string"
+          },
+          "refusal": {
+            "description": "Refusal names why the model declined to score, when it did: warming,\nunidentified or shadow. It is present precisely so that silence never\nreads as a clean result.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the weight-of-evidence score in [0,1].",
+            "type": "number"
+          },
+          "shadow": {
+            "description": "Shadow is true when this tenant is observing rather than acting. In shadow\nAction is always allow and everything else is computed and recorded.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "riskDecisionBrief": {
+        "properties": {
+          "action": {
+            "description": "Action is what was decided.",
+            "type": "string"
+          },
+          "agency": {
+            "description": "Agency is the actor class.",
+            "type": "string"
+          },
+          "at": {
+            "description": "At is when it was made, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID identifies the decision.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the subject kind.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is what a human later concluded, when anyone has.",
+            "type": "string"
+          },
+          "refusal": {
+            "description": "Refusal names why the model declined, when it did.",
+            "type": "string"
+          },
+          "score": {
+            "description": "Score is the weight-of-evidence score.",
+            "type": "number"
+          },
+          "shadow": {
+            "description": "Shadow is whether the decision acted.",
+            "type": "boolean"
+          },
+          "stage": {
+            "description": "Stage is the lifecycle moment.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the subject identifier.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskDecisionPage": {
+        "properties": {
+          "items": {
+            "description": "Items is the page, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/riskDecisionBrief"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "riskDecisionView": {
+        "properties": {
+          "causes": {
+            "description": "Causes is the model's attribution.",
+            "items": {
+              "$ref": "#/components/schemas/riskCause"
+            },
+            "type": "array"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/riskDecisionBrief",
+            "description": "Decision is the row."
+          },
+          "hits": {
+            "description": "Hits is the evidence.",
+            "items": {
+              "$ref": "#/components/schemas/riskHit"
+            },
+            "type": "array"
+          },
+          "model": {
+            "description": "Model is the digest of the model that produced it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskDictionaryView": {
+        "properties": {
+          "actions": {
+            "description": "Actions are the outcomes, weakest first.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "axes": {
+            "description": "Axes are the velocity axes.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "fields": {
+            "description": "Fields is every scalar fact.",
+            "items": {
+              "$ref": "#/components/schemas/riskField"
+            },
+            "type": "array"
+          },
+          "lists": {
+            "description": "Lists are this tenant's own lists, which an inlist term may name.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "signals": {
+            "description": "Signals are the signal keys this tenant has actually sent, which is the\nhalf of the catalogue that is the tenant's own rather than the product's.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "stages": {
+            "description": "Stages are the lifecycle moments.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "windows": {
+            "description": "Windows are the velocity spans.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "riskField": {
+        "properties": {
+          "field": {
+            "description": "Field is how a rule names it.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what sort of value it holds: \"string\" or \"number\".",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note says what it means.",
+            "type": "string"
+          },
+          "ops": {
+            "description": "Ops are the comparisons that make sense on it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "riskHit": {
+        "properties": {
+          "action": {
+            "description": "Action is what this evidence alone asked for.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the detection's human-readable name.",
+            "type": "string"
+          },
+          "rule": {
+            "description": "Rule is the identifier of the rule or model that produced this evidence.",
+            "type": "string"
+          },
+          "severity": {
+            "description": "Severity is the reviewer-facing grading.",
+            "type": "string"
+          },
+          "suppressed": {
+            "description": "Suppressed marks evidence a suppression muted. It is reported and\ncontributes nothing — a muted control that left no trace would be\nindistinguishable from one that was never running.",
+            "type": "boolean"
+          },
+          "weight": {
+            "description": "Weight is how much it contributed, in [0,1].",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "riskLabelIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the decision, from the path.",
+            "type": "string"
+          },
+          "verdict": {
+            "description": "Verdict is what it turned out to be: fraud, legitimate, chargeback, abuse\nor unknown. It is the only supervision this product has, and it is what\nturns a false-positive rate from a guess into a measurement.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskListEntriesIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the list, from the path.",
+            "type": "string"
+          },
+          "values": {
+            "description": "Values are the values to add. They are folded to lower case, so a value\nadded in one case matches a signal in another.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "riskListIn": {
+        "properties": {
+          "kind": {
+            "description": "Kind is whether membership allows or denies.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the list's identifier.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskListPage": {
+        "properties": {
+          "items": {
+            "description": "Items is every list.",
+            "items": {
+              "$ref": "#/components/schemas/riskListView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "riskListView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when it was created, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "entries": {
+            "description": "Entries is how many values it holds.",
+            "type": "integer"
+          },
+          "kind": {
+            "description": "Kind is whether membership allows or denies: \"allow\" or \"deny\".",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the list's identifier, which a rule names in an inlist term.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskModeIn": {
+        "properties": {
+          "mode": {
+            "description": "Mode is \"shadow\" or \"live\". Shadow is the default and the default is not\nconfigurable: a model that quietly went live and started declining\npayments is the worst failure available here, so going live is an act\nsomebody performs and can be asked about.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskModeView": {
+        "properties": {
+          "mode": {
+            "description": "Mode is \"shadow\" or \"live\".",
+            "type": "string"
+          },
+          "since": {
+            "description": "Since is when it was last changed, RFC 3339 in UTC. Empty means never.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskRule": {
+        "properties": {
+          "action": {
+            "description": "Action is what the rule asks for when it holds.",
+            "type": "string"
+          },
+          "all": {
+            "description": "All is the conjunction. An empty conjunction is refused: a rule that holds\non everything is not a detection.",
+            "items": {
+              "$ref": "#/components/schemas/riskTerm"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "description": "Enabled governs the live path. A disabled rule still replays, because the\nquestion a simulation asks is what happens ON activation.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the rule's identifier within this tenant.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is what a reviewer reads in an alert.",
+            "type": "string"
+          },
+          "severity": {
+            "description": "Severity is the reviewer-facing grading: low, medium, high or critical.",
+            "type": "string"
+          },
+          "stage": {
+            "description": "Stage narrows the rule to one lifecycle moment; empty means every stage.",
+            "type": "string"
+          },
+          "weight": {
+            "description": "Weight is how much a hit contributes, in [0,1].",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "riskRuleIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the rule to replace, from the path on a PATCH. Ignored on create,\nwhere the server mints one.",
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/riskRule",
+            "description": "Rule is the detection."
+          }
+        },
+        "type": "object"
+      },
+      "riskRuleList": {
+        "properties": {
+          "items": {
+            "description": "Items is every rule, by identifier.",
+            "items": {
+              "$ref": "#/components/schemas/riskRule"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "riskSimulateIn": {
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/riskRule",
+            "description": "Candidate is the rule to try. It is evaluated as activated whatever its\nenabled flag says: the question is what happens on activation."
+          },
+          "incumbent": {
+            "description": "Incumbent is the rule the candidate would replace, when it replaces one.\nNaming it is what turns a report into a justification for a retirement.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Limit bounds how many recorded decisions are replayed, 1..5000.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "riskSimulateReport": {
+        "properties": {
+          "added": {
+            "description": "Added is what the candidate catches and the incumbent does not — the new\ncoverage, and the new volume.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "alerts": {
+            "description": "Alerts is how many the candidate would have fired on.",
+            "type": "integer"
+          },
+          "dropped": {
+            "description": "Dropped is what the incumbent catches and the candidate does not — the\ncoverage being given up, which is what a retirement has to justify.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "events": {
+            "description": "Events is how many recorded decisions were replayed.",
+            "type": "integer"
+          },
+          "falsePositive": {
+            "description": "FalsePositive is the share of judged alerts a human called legitimate. It\nis ABSENT rather than zero when nothing was judged: an unmeasured\nproportion reported as 0.0 reads as a perfect rule.",
+            "type": "number"
+          },
+          "judged": {
+            "description": "Judged is how many of the candidate's alerts fall on decisions a human has\nlabelled.",
+            "type": "integer"
+          },
+          "kept": {
+            "description": "Kept is what both catch.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "refusal": {
+            "description": "Refusal names why a report is empty when it is. An empty history is\nrefused rather than reported as zero alerts, because a quiet rule and an\nunrun rule produce the same number.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskSubject": {
+        "properties": {
+          "id": {
+            "description": "ID is the subject's identifier within the caller's own org. It is never\ninterpreted, only aggregated on, so it may be any stable string.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the sort of thing this is: account, transaction, session, agent,\nmerchant or payout. It selects the aggregation axes, not the tenant gate.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskSubjectView": {
+        "properties": {
+          "controls": {
+            "description": "Controls is what is currently declared on the subject.",
+            "items": {
+              "$ref": "#/components/schemas/riskControl"
+            },
+            "type": "array"
+          },
+          "decisions": {
+            "description": "Decisions is the subject's recent decision history, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/riskDecisionBrief"
+            },
+            "type": "array"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/riskSubject",
+            "description": "Subject is what this describes."
+          },
+          "velocity": {
+            "description": "Velocity is every live aggregate the subject has.",
+            "items": {
+              "$ref": "#/components/schemas/riskVelocity"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "riskSuppressIn": {
+        "properties": {
+          "kind": {
+            "description": "Kind narrows the suppression to one subject kind.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is why. It is required, because a mute nobody can explain later is\na control that quietly stopped.",
+            "type": "string"
+          },
+          "rule": {
+            "description": "Rule is the rule to mute. At least one of Rule, Kind or Subject must be\ngiven — a suppression that names nothing would mute everything.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject narrows it to one subject.",
+            "type": "string"
+          },
+          "until": {
+            "description": "Until is when it expires, RFC 3339. Absent means it does not, which is a\nchoice somebody should be able to be asked about.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskSuppression": {
+        "properties": {
+          "at": {
+            "description": "At is when it was applied, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "by": {
+            "description": "By is who applied it, taken from the validated principal and never from\nthe request body.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID identifies the suppression.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the subject kind muted, when it names one.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is why it was applied.",
+            "type": "string"
+          },
+          "rule": {
+            "description": "Rule is the rule muted, when it names one.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the subject muted, when it names one.",
+            "type": "string"
+          },
+          "until": {
+            "description": "Until is when it expires, RFC 3339. Absent means it does not.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "riskSuppressionPage": {
+        "properties": {
+          "items": {
+            "description": "Items is every suppression, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/riskSuppression"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "riskTerm": {
+        "properties": {
+          "field": {
+            "description": "Field is the fact to read: one of the closed vocabulary, or signal.\u003cname\u003e,\nor velocity.\u003caxis\u003e.\u003cwindow\u003e.\u003cstat\u003e. GET /v1/risk/dictionary lists them.",
+            "type": "string"
+          },
+          "number": {
+            "description": "Number is the numeric operand.",
+            "type": "number"
+          },
+          "op": {
+            "description": "Op is the comparison: eq, ne, gt, gte, lt, lte, in, notin, inlist,\nnotinlist, exists, absent, contains, prefix or suffix.",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the string operand.",
+            "type": "string"
+          },
+          "values": {
+            "description": "Values is the set operand, for in and notin.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "riskVelocity": {
+        "properties": {
+          "axis": {
+            "description": "Axis is what is being aggregated over: account, device, ip, pair, email or\nbin.",
+            "type": "string"
+          },
+          "count": {
+            "description": "Count is how many observations fell in the window.",
+            "type": "integer"
+          },
+          "days": {
+            "description": "Days is how many distinct calendar days contributed.",
+            "type": "integer"
+          },
+          "near": {
+            "description": "Near is how many fell just below the reporting threshold — the structuring\nsignal.",
+            "type": "integer"
+          },
+          "sum": {
+            "description": "Sum is their total value, in units of currency.",
+            "type": "number"
+          },
+          "window": {
+            "description": "Window is the span: 1h, 24h, 7d or 30d.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}
