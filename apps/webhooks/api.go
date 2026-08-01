@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -194,7 +195,20 @@ func tenant(ctx context.Context) (string, error) {
 	return org, nil
 }
 
-func (s *state) storeFor(org string) (*store, error) { return s.stores.For(org, "") }
+// storeFor is the ONE way this package reaches a store: it names the database
+// through cloud.OrgNamespace — the single door a validated org walks through —
+// and asks the registry for that name. Nothing else here resolves a store, so
+// "which file does this request touch" has one answer from one input.
+//
+// org MUST already be validated: principal.Org for a request, or the caller's
+// own server-side resolution for an in-process seam.
+func (s *state) storeFor(org string) (*store, error) {
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return s.stores.For(ns)
+}
 
 // listEndpoints returns every webhook endpoint the caller's org has registered,
 // newest first, each with its 7-day delivery and failure counts. Signing secrets

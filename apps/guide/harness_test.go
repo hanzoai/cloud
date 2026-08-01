@@ -89,7 +89,7 @@ func testStore(t *testing.T) *Store {
 	t.Helper()
 	stores := cloud.NewOrgStore(t.TempDir(), "guide", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
-	st, err := stores.For("acme", "")
+	st, err := stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

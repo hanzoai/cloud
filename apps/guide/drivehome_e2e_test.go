@@ -492,7 +492,7 @@ func TestDrive_AutonomousLoop(t *testing.T) {
 
 	// stepDone reads the org's REAL persisted step state from the guide store.
 	stepDone := func(id string) bool {
-		st, err := mounted.State.stores.For(org, "")
+		st, err := mounted.State.stores.For(cloud.MustOrgNamespace(org, ""))
 		if err != nil {
 			return false
 		}

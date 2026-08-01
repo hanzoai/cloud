@@ -41,11 +41,22 @@ var mounted atomic.Pointer[cloud.Service[state]]
 // (startScheduler's closure self-guards), nil-safe.
 var schedStop func()
 
-// storeFor resolves the caller's org-scoped syncs store (one SQLite file at
-// {DataDir}/orgs/{org}/sync.db). Sync is org-scoped, not project-scoped — a link
-// binds two endpoints within one org.
+// storeFor is the ONE way this package reaches a store: it names the database
+// through cloud.OrgNamespace — the single door a validated org walks through —
+// and asks the registry for that name. Nothing else here resolves a store, so
+// "which file does this request touch" has one answer from one input.
+//
+// org MUST already be validated: principal.Org for a request, or the caller's
+// own server-side resolution for an in-process seam.
+//
+// sync is org-scoped, not project-scoped — a link binds two endpoints within
+// one org.
 func storeFor(s *cloud.Service[state], org string) (*store, error) {
-	return s.State.stores.For(org, "")
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return s.State.stores.For(ns)
 }
 
 // Mount wires /v1/sync, registers the git provider, and installs the reconcile func

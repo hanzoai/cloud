@@ -255,7 +255,7 @@ func getDeliveries(t *testing.T, app *zip.App, org, id, query string) []Delivery
 // "retrying" row the single-attempt test-send path can never itself produce.
 func seedDelivery(t *testing.T, org, endpointID, status string) {
 	t.Helper()
-	st, err := mounted.stores.For(org, "")
+	st, err := mounted.stores.For(cloud.MustOrgNamespace(org, ""))
 	if err != nil {
 		t.Fatalf("store for %s: %v", org, err)
 	}

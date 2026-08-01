@@ -34,62 +34,75 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/namespace"
 	kmsstore "github.com/luxfi/kms/pkg/store"
 )
-
-// reservedPlatformSlug names cloud.PlatformDB's reserved partition — the file that
-// holds deployment-wide, org-less facade secrets. It is reached ONLY when fileOrg
-// signals facade=true (an empty / non-"/orgs/" path), never by an org STRING. A
-// tenant path that literally spells "/orgs/_platform/…" keys on SanitizeOrg's slug,
-// which carries no '_' and so can never equal this reserved slug — that path opens a
-// distinct (empty) tenant store and reads a plain 404, indistinguishable from any
-// missing secret. (The earlier code compared the RAW pre-slug org and would have
-// aliased the two; the comment claimed a guarantee the code did not have.)
-const reservedPlatformSlug = "_platform"
 
 // errReadOnly is returned by a reader-mode store when a mutation is attempted. A
 // reader must never fork the authoritative writer's state.
 var errReadOnly = errors.New("kms: store is read-only (reader HA role)")
 
-// secretStore holds the lazily-opened, cached per-org SQLite handles. Each file
-// is opened + migrated once on first touch and cached by org slug. Opens are
-// serialized so a concurrent first touch opens exactly once — the same shape as
-// clients/finance.
+// secretStore holds the lazily-opened per-entity SQLite handles.
+//
+// It used to hold its own map, its own lock and its own first-touch-opens-once
+// dance — a second copy of cloud.OrgStore, keyed on a slug it computed itself.
+// That copy is what let a tenant path spelling "/orgs/_platform/…" share a cache
+// slot with the facade before the key was corrected. There is now one registry
+// and the key is the namespace, so the two are different KINDS and the collision
+// is not expressible.
 type secretStore struct {
-	dataDir  string
 	readOnly bool
-
-	mu  sync.Mutex
-	dbs map[string]*sql.DB // key: the file-identity slug (SanitizeOrg, or the reserved facade slug)
+	stores   *cloud.OrgStore[*sql.DB]
 }
 
 func newSecretStore(dataDir string, readOnly bool) *secretStore {
-	return &secretStore{dataDir: dataDir, readOnly: readOnly, dbs: map[string]*sql.DB{}}
+	return &secretStore{
+		readOnly: readOnly,
+		// A reader performs no DDL: the writer already migrated the file it
+		// hydrated, and a reader must never fork the authoritative state.
+		stores: cloud.NewOrgStore(dataDir, "kms", func(db *sql.DB) (*sql.DB, error) {
+			if readOnly {
+				return db, nil
+			}
+			if err := migrateSecrets(db); err != nil {
+				return nil, err
+			}
+			return db, nil
+		}),
+	}
 }
 
 // fileOrg extracts the org whose file holds a secret path. A path shaped
 // "/orgs/{org}[/…]" belongs to tenant {org}; anything else is deployment-wide and
-// lands in the reserved platform partition. The returned value is the RAW org (or
-// the reserved sentinel); cloud.OrgDB folds a raw org through SanitizeOrg, so
-// distinct raw orgs stay on distinct files.
+// lands in the deployment's own partition. org is the RAW org and is empty
+// exactly when facade is true — the facade is chosen by the BOOLEAN and never by
+// an org string, so no org a caller can spell reaches it.
 func fileOrg(path string) (org string, facade bool) {
 	p := strings.Trim(strings.TrimSpace(path), "/")
 	if p == "" {
-		return reservedPlatformSlug, true
+		return "", true
 	}
 	segs := strings.SplitN(p, "/", 3)
 	if segs[0] == "orgs" && len(segs) >= 2 && segs[1] != "" {
 		return segs[1], false
 	}
-	return reservedPlatformSlug, true
+	return "", true
+}
+
+// namespaceFor names the database a secret path's records live in. It is the ONE
+// door in this package: the facade partition is the system namespace and a
+// tenant's is an org namespace, so which of the two a path reaches is decided by
+// KIND and cannot be argued into by a cleverly spelled org.
+func namespaceFor(path string) (namespace.Namespace, error) {
+	org, facade := fileOrg(path)
+	if facade {
+		return cloud.PlatformNamespace(), nil
+	}
+	return cloud.OrgNamespace(org, "")
 }
 
 // dbFor resolves (opening + migrating + caching on first use) the SQLite handle
@@ -107,52 +120,17 @@ func (s *secretStore) dbFor(path string, create bool) (*sql.DB, error) {
 	if s.readOnly {
 		create = false
 	}
-	org, facade := fileOrg(path)
-	// key is the FILE identity, not the raw org: the reserved slug for the facade,
-	// else the SanitizeOrg slug that OrgDB actually opens. This is what the cache and
-	// the existence check MUST key on — the raw org does not, and that mismatch was a
-	// real aliasing: a tenant path "/orgs/_platform/…" (raw "_platform") shared a cache
-	// slot with the facade (also "_platform"), so whichever opened first served the
-	// other. SanitizeOrg NEVER emits "_platform" (it carries '_'), so a real tenant
-	// slug can never collide with the reserved one — the boundary is now structural.
-	key := reservedPlatformSlug
-	if !facade {
-		key = cloud.SanitizeOrg(org)
-		if key == "" {
-			return nil, nil // unsluggable org → not found (same 404 as any miss; no oracle)
-		}
+	ns, err := namespaceFor(path)
+	if err != nil {
+		return nil, nil // unnameable org → not found (same 404 as any miss; no oracle)
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if db, ok := s.dbs[key]; ok {
-		return db, nil
-	}
-	if !create && !cek.Exists(filepath.Join(s.dataDir, "orgs", key, "kms.db")) {
+	if !create && !s.stores.Has(ns) {
 		return nil, nil // nothing to open; caller returns not-found / empty
 	}
-
-	var (
-		db  *sql.DB
-		err error
-	)
-	if facade {
-		db, err = cloud.PlatformDB(s.dataDir, "kms")
-	} else {
-		// OrgDB SanitizeOrg-slugs the org, creates {DataDir}/orgs/{slug} 0700, opens
-		// via cek (encrypted at rest, per-db DEK) with the single-writer + WAL pragmas.
-		db, err = cloud.OrgDB(s.dataDir, org, "", "kms")
-	}
+	db, err := s.stores.For(ns)
 	if err != nil {
-		return nil, fmt.Errorf("kms: open org store %q: %w", org, err)
+		return nil, fmt.Errorf("kms: open org store %q: %w", path, err)
 	}
-	if !s.readOnly {
-		if err := migrateSecrets(db); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("kms: migrate org store %q: %w", org, err)
-		}
-	}
-	s.dbs[key] = db
 	return db, nil
 }
 
@@ -291,38 +269,6 @@ func (s *secretStore) del(path, name, env string) error {
 	return nil
 }
 
-// hasRestoredStore reports whether any per-org kms.db already exists under
-// {dataDir}/orgs — the reader's boot-time "is there anything to serve?" check, so
-// a reader with an empty data dir fails closed at New rather than opening nothing
-// and answering as if healthy.
-func hasRestoredStore(dataDir string) bool {
-	root := filepath.Join(dataDir, "orgs")
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return false
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		if cek.Exists(filepath.Join(root, e.Name(), "kms.db")) {
-			return true
-		}
-	}
-	return false
-}
-
-// close closes every cached per-org handle (best-effort), returning the first
+// close closes every open per-entity handle (best-effort), returning the first
 // error. Safe to call once at shutdown.
-func (s *secretStore) close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var first error
-	for org, db := range s.dbs {
-		if err := db.Close(); err != nil && first == nil {
-			first = err
-		}
-		delete(s.dbs, org)
-	}
-	return first
-}
+func (s *secretStore) close() error { return s.stores.CloseAll() }
