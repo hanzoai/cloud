@@ -200,9 +200,14 @@ func TestAdmitPublic_ForeignOrgNeverStamped(t *testing.T) {
 	}
 }
 
-// TestAdmitPublic_KindAllowlist: pageview and error are admitted; identify, group, and
-// every custom event are dropped and counted. This is the allowlist, not a denylist —
-// an unknown type folds to "event" (canonicalType) and is therefore dropped too.
+// TestAdmitPublic_KindAllowlist: pageview and error are admitted on their KIND alone,
+// whatever the body says; identify, group, and a custom event that names itself are
+// dropped and counted. This is an allowlist, not a denylist — an unknown type folds to
+// "event" (canonicalType), which admits nothing by itself.
+//
+// `event` appears in the dropped set carrying the name "whatever", and the name is the
+// point: that kind is admitted ONLY for the closed autocapture vocabulary
+// (publicNames), which anon_autocapture_test.go pins from both sides.
 func TestAdmitPublic_KindAllowlist(t *testing.T) {
 	for _, kind := range []string{"pageview", "page", "error"} {
 		out, dropped := admitPublic([]CaptureEvent{{Type: kind, Error: &Exception{Message: "m"}}})
@@ -218,9 +223,13 @@ func TestAdmitPublic_KindAllowlist(t *testing.T) {
 	}
 }
 
-// TestAdmitPublic_NameIsServerChosen: the anonymous name space is CLOSED to two values.
-// A caller cannot introduce a new event name into the read lenses, nor unbounded
-// cardinality into the table's ORDER BY key.
+// TestAdmitPublic_NameIsServerChosen: on the KIND family the name is the ROUTE's, so a
+// caller naming a pageview or an error changes nothing — the projection drops `event`
+// and resolveEventName supplies the reserved one. (The autocapture family closes the
+// same hole the other way, by resolving the name through a server-owned table;
+// TestAnonAutocapture_NameIsTheServersNotTheCallers pins that half.) Between them a
+// caller cannot introduce a new event name into the read lenses, nor unbounded
+// cardinality into the warehouse's keys.
 func TestAdmitPublic_NameIsServerChosen(t *testing.T) {
 	cases := []struct{ kind, sent, want string }{
 		{"pageview", "attacker_chosen_name", "$pageview"},
@@ -246,28 +255,36 @@ func truncate(s string) string {
 	return s
 }
 
-// TestAdmitPublic_OnlyServerProperties: an anonymous fact's attributes are exactly what
+// TestAdmitPublic_OnlyServerProperties: an anonymous fact's ATTRIBUTES are exactly what
 // the SERVER put there — the $exception the shared tail folds and the $source the write
-// core stamps. No key the caller chose can be persisted. This walks the SAME composition
-// the handler does: admitPublic (projection) → foldException (ingestDecoded's tail) →
-// withSource (write core) → normalize (the fact).
+// core stamps. No key the caller chose can reach that map. This walks the SAME
+// composition the handler does: admitPublic (projection) → foldException
+// (ingestDecoded's tail) → withSource (write core) → normalize (the fact).
+//
+// The bag deliberately includes an ANNOTATION key ($el), the one family the projection
+// does carry, because that is the case the invariant has to survive: annotationOf lifts
+// those keys OUT into the `el` tuple and attributesOf skips exactly the same set, so
+// admitting them adds nothing to the Map(LowCardinality(String), String) dictionary that
+// an unbounded anonymous property bag would attack. Attributes stay {$exception,$source}.
 func TestAdmitPublic_OnlyServerProperties(t *testing.T) {
 	out, _ := admitPublic([]CaptureEvent{{
 		Type:       "error",
 		Error:      &Exception{Type: "TypeError", Message: "x is not a function"},
-		Properties: map[string]any{"password": "hunter2", "custom": "junk", "$release": "v1"},
+		Properties: map[string]any{"password": "hunter2", "custom": "junk", "$release": "v1", "$el": "nav/button[cta]"},
 	}})
 	if len(out) != 1 {
 		t.Fatal("want 1 admitted error event")
 	}
-	// The projection itself carries NO properties — the client's bag is gone entirely.
-	if len(out[0].Properties) != 0 {
-		t.Fatalf("the client property bag survived the projection: %v", out[0].Properties)
+	// The projection keeps the annotation and NOTHING else: every caller-chosen key is
+	// gone, and the one key that crossed is a key this server declares.
+	if len(out[0].Properties) != 1 || out[0].Properties["$el"] != "nav/button[cta]" {
+		t.Fatalf("projected properties = %v, want exactly the $el annotation", out[0].Properties)
 	}
-	// The shared tail folds the typed error, and nothing else appears.
+	// The shared tail folds the typed error, and nothing else appears: the annotation
+	// it copied forward plus the $exception it stamped.
 	folded := foldException(out[0])
-	if len(folded.Properties) != 1 {
-		t.Fatalf("after the shared fold, properties must hold only $exception, got %v", folded.Properties)
+	if len(folded.Properties) != 2 {
+		t.Fatalf("after the shared fold, properties must hold $el + $exception, got %v", folded.Properties)
 	}
 	if _, ok := folded.Properties["$exception"]; !ok {
 		t.Fatalf("the typed error must be folded to $exception, got %v", folded.Properties)
@@ -284,6 +301,10 @@ func TestAdmitPublic_OnlyServerProperties(t *testing.T) {
 	}
 	if len(f.attributes) != 2 || f.attributes["$source"] != "event" || f.attributes["$exception"] == "" {
 		t.Fatalf("stored attributes = %v, want exactly {$exception,$source}", f.attributes)
+	}
+	// And the annotation landed where it belongs — the `el` tuple, off the dictionary.
+	if f.el.label != "nav/button[cta]" {
+		t.Fatalf("el.label = %q, want the annotation lifted out of the bag", f.el.label)
 	}
 }
 
