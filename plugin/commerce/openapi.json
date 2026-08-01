@@ -585,9 +585,9 @@
         ]
       }
     },
-    "/v1/store/storefront-token": {
+    "/v1/store/token": {
       "post": {
-        "operationId": "post_v1_store_storefront-token",
+        "operationId": "post_v1_store_token",
         "summary": "Mint your org's least-privilege storefront read key",
         "description": "Answers a freshly minted token carrying ONLY the published-read permission — enough for a logged-out shopper's storefront to read your published catalog and nothing more, with no write and no admin scope. It is org-bound, signed with the org's own secret and subject to the org id, so unlike a shared service token it can never act on another tenant. Minting ROTATES rather than accumulates: the previous storefront token is dropped first and is invalid immediately, so re-minting is how you revoke. Admin is enforced by the handler as well as the route, because the route's token gate does not apply on the identity path and a plain member must not be able to mint their org's key.",
         "tags": [
