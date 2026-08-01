@@ -15,7 +15,7 @@ import (
 // what makes this a positive identification rather than an inference from the
 // call having worked.
 func TestPlaneWireCarriesNoFieldNames(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", runDir(t))
 	cloud.ResetPlane()
 
 	var seen []byte

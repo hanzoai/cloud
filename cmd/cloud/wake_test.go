@@ -70,7 +70,7 @@ func TestMain(m *testing.M) {
 // door on it. Nothing is running when it returns; that is the point.
 func router(t *testing.T, name string) {
 	t.Helper()
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", runDir(t))
 	cloud.ResetPlane()
 
 	app := zip.New(zip.Config{AppName: "cloud", Logger: luxlog.New("test")})
@@ -89,6 +89,20 @@ func router(t *testing.T, name string) {
 	// main.go is one `defer f()()` away from never opening the door at all.
 	serveWake(app)
 	waitFor(t, zip.SocketPath(plane.HostApp))
+}
+
+// runDir is the plane's run directory for one test, and it is SHORT on purpose: a
+// unix socket path is capped near 104 bytes, and t.TempDir() spends most of that
+// budget on the test's own name — so a long test name binds nothing and fails with
+// "invalid argument" about something the test is not about.
+func runDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "wk")
+	if err != nil {
+		t.Fatalf("run dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
 
 func waitFor(t *testing.T, path string) {
@@ -166,10 +180,10 @@ func TestWakeRefusesAnAppThisFleetDoesNotRun(t *testing.T) {
 
 // TestWakeWithNoRouterIsNoPeer pins the developer's case, and it is what keeps every
 // unit test in the fleet honest: with no router in the process tree there is nothing
-// that can start anything, so "not deployed here" is simply true — and it costs one
-// stat, not a dial and a timeout.
+// that can start anything, so "not deployed here" is simply true — and it is answered
+// at once, from a connect that is refused, never a timeout.
 func TestWakeWithNoRouterIsNoPeer(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", runDir(t))
 	cloud.ResetPlane()
 
 	_, err := cloud.Ask[struct{}, plane.Started](context.Background(), "sleepy", "wake_alive", &struct{}{})
@@ -192,7 +206,7 @@ func TestWakeWithNoRouterIsNoPeer(t *testing.T) {
 // absence now travels as a FIELD on a 200, and a router that cannot answer this op
 // cannot claim anything about the fleet.
 func TestWakeAgainstAnOlderRouterIsAnOutage(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", runDir(t))
 	cloud.ResetPlane()
 
 	// A router of the previous generation: a plane socket at the host's name, with
@@ -212,5 +226,62 @@ func TestWakeAgainstAnOlderRouterIsAnOutage(t *testing.T) {
 	if errors.Is(err, cloud.ErrNoPeer) {
 		t.Fatalf("version skew read as \"not deployed here\" — a rail believing this serves "+
 			"every priced tool free until the last old pod turns over: %v", err)
+	}
+}
+
+// TestWakeStartsALazyAppBehindALeftoverSocket is the OUTAGE, end to end, in the shape
+// prod ran it.
+//
+// The cloud pod keeps its run directory on a volume, so /var/lib/cloud/run survives the
+// pod that wrote it. commerce is lazy; a previous pod left commerce.sock behind and
+// nothing unlinked it. reach() decided the peer was up by STAT'ing that file, so the
+// wake above never ran, the dial hit a kernel with no listener, and apps/billing read
+// the failure as "this fleet has no commerce" and fell through to an HTTP proxy that is
+// unconfigured in this deployment. ai's balance gate is fail-CLOSED, so every paid
+// completion in the fleet answered 503 balance_unavailable — for three days, with
+// nothing in any log naming the reason.
+//
+// The rule: a socket FILE is not a listener. A leftover one must change NOTHING about
+// waking a cold app — the app comes up and answers, exactly as it does with no file at
+// all. Both halves are asserted, because "always report absent" would pass one of them.
+func TestWakeStartsALazyAppBehindALeftoverSocket(t *testing.T) {
+	const name = "sleepy"
+	router(t, name)
+
+	// The pod that died: bound once, never unlinked, nobody behind it. The run dir
+	// outlives the process, so this is what the next pod finds.
+	path := zip.SocketPath(name)
+	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		t.Fatalf("bind the leftover socket: %v", err)
+	}
+	ln.SetUnlinkOnClose(false)
+	if err := ln.Close(); err != nil {
+		t.Fatalf("close the leftover socket: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("no leftover socket file; this does not reproduce prod: %v", err)
+	}
+	if c, derr := net.DialTimeout("unix", path, time.Second); derr == nil {
+		_ = c.Close()
+		t.Fatal("the leftover socket still ACCEPTS; this does not reproduce prod")
+	}
+
+	out, err := cloud.Ask[struct{}, plane.Started](context.Background(), name, "wake_alive", &struct{}{})
+	if err != nil {
+		t.Fatalf("a leftover socket file suppressed the wake of a cold app: %v\n"+
+			"this is the outage: commerce never started, every prepaid balance read "+
+			"refused, and the fail-CLOSED gate answering 503 for every paid completion", err)
+	}
+	if out == nil || out.Addr != name {
+		t.Fatalf("woke something that is not %s: %+v", name, out)
+	}
+
+	// It is really up: a second call is answered by the SAME child, not a new one.
+	if _, err := cloud.Ask[struct{}, plane.Started](context.Background(), name, "wake_alive", &struct{}{}); err != nil {
+		t.Fatalf("second call to the woken app failed: %v", err)
+	}
+	if n := running(t); n != 1 {
+		t.Fatalf("%d children running, want exactly 1", n)
 	}
 }
