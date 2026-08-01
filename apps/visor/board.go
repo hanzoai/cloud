@@ -181,8 +181,8 @@ func agentUnits(s *cloud.Service[state], c *zip.Ctx, org string) []fleetUnit {
 
 // workerUnits folds in the BYO machines that dialed in via `hanzo link`.
 // byoWorkers is already fail-soft (nil on any error).
-func workerUnits(org string) []fleetUnit {
-	workers := byoWorkers(org)
+func workerUnits(ctx context.Context, org string) []fleetUnit {
+	workers := byoWorkers(ctx, org)
 	out := make([]fleetUnit, 0, len(workers))
 	for _, w := range workers {
 		out = append(out, byoUnit(w))
@@ -291,7 +291,7 @@ func (o ops) listFleet(ctx context.Context, _ *noArgs) (*fleetBoard, error) {
 	s := o.Service
 	units := make([]fleetUnit, 0, 16)
 	units = append(units, agentUnits(s, c, org)...)
-	units = append(units, workerUnits(org)...)
+	units = append(units, workerUnits(ctx, org)...)
 	units = append(units, clusterUnits(s, org, project(c))...)
 	units = append(units, machineUnits(s, c, org)...)
 
@@ -321,7 +321,7 @@ func (o ops) listFleet(ctx context.Context, _ *noArgs) (*fleetBoard, error) {
 	// carry a render queue; an agent unit's Running stays its session load. Fail-soft:
 	// gpuJobs is nil on an unavailable engine, so counts is empty and nothing is
 	// touched — the board never breaks because the queue read did.
-	counts := gpuJobCounts(gpuJobs(org))
+	counts := gpuJobCounts(gpuJobs(ctx, org))
 	for i := range units {
 		if units[i].Source != samples.SourceBYO {
 			continue
