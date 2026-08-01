@@ -3,7 +3,7 @@ package flags
 // /v1/flags — the product flag API, org-scoped through the gateway principal
 // (HIP-0026) and project-scoped through the principal's project. Evaluation is
 // the embedded evaluator over the caller's own SQLite definitions; responses
-// are PostHog-shaped so existing SDK consumers port 1:1.
+// carry each flag's state, variant and payload.
 //
 // Every route here is a TYPED op: ONE registry entry that is at once the REST
 // route, the OpenAPI operation with its schemas, the MCP tool, the CLI command
@@ -208,7 +208,7 @@ func (o ops) health(context.Context, *noInput) (*healthOut, error) {
 }
 
 // Evaluate runs the caller's flag definitions for one identity and returns the
-// PostHog-shaped verdict: which flags are on (or which variant), their payloads,
+// flag verdict: which flags are on (or which variant), their payloads,
 // and whether any definition failed to compute. Evaluation is in-process over the
 // caller's own (org, project) definitions — no network hop, no shared KV — so a
 // tenant can only ever evaluate its own flags.
@@ -288,7 +288,7 @@ func (o ops) getDef(ctx context.Context, in *keyIn) (*DefRow, error) {
 }
 
 // PutFlagDefinition creates or replaces the flag definition at the path's key and
-// returns the stored row. The BODY IS THE DEFINITION DOCUMENT — the PostHog-shaped
+// returns the stored row. The BODY IS THE DEFINITION DOCUMENT — the flag-definition
 // JSON object the evaluator consumes — and it is stored verbatim except that its
 // "key" is forced to the key in the URL, so a document can never be filed under a
 // name other than the one it was addressed by. Every write bumps the version and

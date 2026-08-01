@@ -32,7 +32,7 @@ import (
 // (defense in depth — a collection-name bug can never leak across tenants because
 // the payload filter would still exclude foreign points, and vice-versa).
 //
-// Embeddings: the Hanzo AI gateway (OpenAI-compatible /embeddings), the SAME model
+// Embeddings: the Hanzo AI gateway (standard /embeddings), the SAME model
 // for index and query so vector dimensions always match. Indexing is FAIL-OPEN: if
 // the gateway or Qdrant is unreachable, the document is still saved (the after_save
 // hook logs and moves on) — knowledge writes never block on the index. Query is

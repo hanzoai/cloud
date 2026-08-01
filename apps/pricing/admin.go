@@ -122,7 +122,7 @@ func init() {
 		"Sets one model's availability overlay — and the price overrides applied on top of the "+
 			"catalog — then answers the new effective overlay, so a console needs no second read. "+
 			"The model id is the whole remaining path, so a slashed id like "+
-			"`anthropic/claude-opus-4.6` addresses intact.\n\n"+
+			"`acme/some-model-1` addresses intact.\n\n"+
 			"SuperAdmin only; every other caller is 403, decided before the body is read. The "+
 			"overlay is PLATFORM-WIDE — this is the catalog every org prices against, not a "+
 			"per-org setting — and `betaOrgs` is what narrows a beta to named orgs.\n\n"+
@@ -142,7 +142,7 @@ func init() {
 }
 
 // adminPatchModel upserts the overlay for one model id. The id is a greedy
-// wildcard so slashed ids (anthropic/claude-opus-4.6) route intact.
+// wildcard so slashed ids (acme/some-model-1) route intact.
 func adminPatchModel(c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("SuperAdmin required")

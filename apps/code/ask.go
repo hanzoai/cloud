@@ -17,7 +17,7 @@ type Synthesizer interface {
 }
 
 // aiSynth is the production synthesizer over cloud's in-process AI client (the
-// same OpenAI-compatible chat path agents/eval use). A nil client disables it and
+// same chat-completions path agents/eval use). A nil client disables it and
 // /ask degrades to citations-only.
 type aiSynth struct {
 	ai    cloud.AIClient

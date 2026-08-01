@@ -45,7 +45,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/usage/samples", zip.Doc{
-		Description: "Is the PER-PROVIDER view: one connected account's own consumption of its\nown plan — \"my Claude Max plan is 47% through its 6h window, resets at 14:20\".\n\n`current` is the newest instance of each lane (the headline); `windows` is the\nhistory behind it. Both come from ONE deduped read, so they can never disagree.\nThe rows are the caller's OWN linked accounts, scoped to the validated principal\nand its subject — never another user's, and never another org's.",
+		Description: "Is the PER-PROVIDER view: one connected account's own consumption of its\nown plan — \"my plan is 47% through its 6h window, resets at 14:20\".\n\n`current` is the newest instance of each lane (the headline); `windows` is the\nhistory behind it. Both come from ONE deduped read, so they can never disagree.\nThe rows are the caller's OWN linked accounts, scoped to the validated principal\nand its subject — never another user's, and never another org's.",
 		Fields: map[string]string{
 			"dashResp.account":                  "Account is the linked account that was asked about, when one was named.",
 			"dashResp.available":                "Available is false when the warehouse could not be read. That means \"no\nanswer\", NOT \"no usage\" — the two lists below are then empty for a reason.",
@@ -71,7 +71,7 @@ func init() {
 			"usageWindowView.lane":              "Lane is the meter lane this instance belongs to, e.g. a provider's own\nrolling-window meter.",
 			"usageWindowView.machine":           "Machine is the host whose meter reported the window.",
 			"usageWindowView.outputTokens":      "OutputTokens is completion tokens produced in the window; omitted when\nunknown.",
-			"usageWindowView.plan":              "Plan is the provider plan the account is on, e.g. a Claude Max plan.",
+			"usageWindowView.plan":              "Plan is the subscription plan the account is on, as the provider names it.",
 			"usageWindowView.requests":          "Requests is how many requests were made in the window; omitted when the\nmeter did not report it.",
 			"usageWindowView.resetsAt":          "ResetsAt is when this window rolls over, RFC3339 UTC; omitted when unknown.",
 			"usageWindowView.synthetic":         "Synthetic marks an instance the meter inferred rather than read.",
@@ -156,7 +156,7 @@ func init() {
 			"reportReq.lane":              "Lane is the meter lane within the account.",
 			"reportReq.machine":           "Machine is the host whose meter read the window. Required on every sample.",
 			"reportReq.outputTokens":      "OutputTokens is completion tokens produced in the window.",
-			"reportReq.plan":              "Plan is the provider plan the account is on, e.g. a Claude Max plan.",
+			"reportReq.plan":              "Plan is the subscription plan the account is on, as the provider names it.",
 			"reportReq.provider":          "Provider is the upstream the account belongs to, e.g. anthropic. Required\non every sample.",
 			"reportReq.requests":          "Requests is how many requests the window covers.",
 			"reportReq.resetsAt":          "ResetsAt is when the measured window rolls over, RFC3339.",
@@ -180,7 +180,7 @@ func init() {
 			"sampleReq.lane":              "Lane is the meter lane within the account.",
 			"sampleReq.machine":           "Machine is the host whose meter read the window. Required.",
 			"sampleReq.outputTokens":      "OutputTokens is completion tokens produced in the window.",
-			"sampleReq.plan":              "Plan is the provider plan the account is on, e.g. a Claude Max plan.",
+			"sampleReq.plan":              "Plan is the subscription plan the account is on, as the provider names it.",
 			"sampleReq.provider":          "Provider is the upstream the account belongs to, e.g. anthropic. Required.",
 			"sampleReq.requests":          "Requests is how many requests the window covers.",
 			"sampleReq.resetsAt":          "ResetsAt is when the measured window rolls over, RFC3339. Empty is\nallowed; anything else that is not RFC3339 is refused.",

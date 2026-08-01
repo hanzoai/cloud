@@ -20,7 +20,7 @@ import (
 )
 
 // engineEvaluate runs the evaluator over one definitions array and one
-// evaluation context (both JSON) and returns the PostHog-shaped response.
+// evaluation context (both JSON) and returns the flag verdict.
 func engineEvaluate(defsJSON, ctxJSON []byte) (json.RawMessage, error) {
 	out, err := eval.EvaluateJSON(defsJSON, ctxJSON)
 	if err != nil {

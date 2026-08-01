@@ -117,7 +117,7 @@ func init() {
 	zip.Describe("GET /v1/pricing/model/:name", zip.Doc{
 		Description: "GetModel returns one model's catalog entry — its pricing, context window and\ncapabilities as the pricing source records them. A model hidden for the\ncaller's org answers the same 404 an unknown name does, so a disabled model\ngets no existence oracle.",
 		Fields: map[string]string{
-			"pricingModelRef.name": "Name is the model's name or its slugged id (\"zen4\",\n\"anthropic/claude-opus-4.6\"), matched case-insensitively. It comes from\nthe path: the URL is the addressing authority.",
+			"pricingModelRef.name": "Name is the model's name or its slugged id (\"zen4\",\n\"acme/some-model-1\"), matched case-insensitively. It comes from\nthe path: the URL is the addressing authority.",
 		},
 		Example: json.RawMessage(`{"name":"zen4"}`),
 	})
