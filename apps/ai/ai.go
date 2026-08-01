@@ -19,131 +19,74 @@ package ai
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	aimod "github.com/hanzoai/ai"
 	aiobject "github.com/hanzoai/ai/object"
+	airouters "github.com/hanzoai/ai/routers"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
-// fallback is the sentence every operation below shares, because each is read
-// alone: the document publishes five operations at one address, and a consumer
-// meeting `PATCH /v1/{wildcard1}` has no sibling to infer the rule from.
-const fallback = "\n\nThis address is a FALLBACK, not a front door. It is registered last, so every " +
-	"subsystem that claims a specific path under /v1 — billing, plans, pricing, the per-app " +
-	"health routes — still serves its own, and this catches the rest. The wildcard is the " +
-	"remainder of the path, and the answer is relayed with the model API's own status, " +
-	"headers and content type, so a streamed response streams and an upstream refusal " +
-	"arrives as itself."
-
-// The prose for the operations this package publishes. It is declared here rather
-// than lifted from a doc comment because there is no handler in this repository to
-// lift it from: the real routes live in github.com/hanzoai/ai. Describe is keyed
-// on (method, ROUTER PATTERN) — the spelling the router holds, `:model` and `*`,
-// not the document's `{model}` and `{wildcard1}` — and renders only while the
-// router serves that route, so prose for a route that goes away renders nowhere.
+// The MODEL API IS THE DOOR'S REGISTRY, and it is asked rather than described.
 //
-// TWO KINDS, and the difference is whether the address is real. The named ones
-// come first: hanzoai/ai promotes them onto this router at their own patterns, so
-// each is an ordinary route the document can name. The `/v1/*` ones state what is
-// BEHIND the greedy fallback without pretending the operations have been typed.
+// aimod.Mount registers one greedy `app.All("/v1/*")` — the whole model API,
+// ~200 routes, reaching the wire through a single wildcard. Read the router alone
+// and the published document says `/v1/{wildcard1}` and seven operations, which is
+// why no generated SDK and no MCP tool list carried chat completions: the fleet's
+// largest product was, in the contract, one path.
+//
+// This package used to close the PROSE half of that hole — five hand-written
+// openapi.Describe blocks saying what was behind each verb of the wildcard. That
+// is now deleted, and its deletion is the point. Prose about a door is a
+// description of a thing standing in for the API; hanzoai/ai can hand over the API
+// itself, so nothing here has to say what is behind the door and nothing here can
+// be wrong about it.
+//
+// routers.App is the ai runtime's ONE router — every /v1 route registers on it
+// (routers/router.go) — and Patterns is its own accessor for the table, exported
+// there precisely so a caller can assert things about it from outside. Prose is
+// the second half: the sentence each of those routes owes a reader, lifted by
+// hanzoai/ai's own cmd/routerdoc from the doc comment on the handler the
+// registration names, because Go drops comments at compile time and a sentence
+// written anywhere else is a second source for one fact. Its own tests hold the
+// bijection — every route has a sentence, every sentence has a route — so a hole
+// there is red in the repo that can fix it.
+//
+// Both are read out of the PINNED MODULE at describe time: no network, no vendored
+// copy, no second list, reproducible from a checkout and a go.mod. What that buys
+// is EXISTENCE, PLACEMENT, VERB, OPERATIONID and PROSE for every route ai serves.
+// What it does not buy is schemas: App.Router names a controller method and the
+// body types are read off the beego context inside the handler, never declared, so
+// there is nothing to reflect. That is per-operation typing work in hanzoai/ai, and
+// it is a different job from this one.
 func init() {
-	// THE NAMED ADDRESSES. These are not behind the wildcard: hanzoai/ai promotes
-	// them onto this router at their real patterns (its mount.go `promoted`), so
-	// they are ordinary routes with ordinary paths and the document says who serves
-	// them. They carry no `fallback` sentence for exactly that reason — each IS a
-	// front door.
-	//
-	// All three were live, authenticated and answering in production while the
-	// document showed `/v1/{wildcard1}` where they are: no generated SDK offered
-	// the model catalogue, no MCP tool listed it, no CLI command reached it, and
-	// the enso access flow — the way a caller asks for a limited-preview model —
-	// could not be found by anyone reading the API.
-	openapi.Describe("/v1/models", http.MethodGet,
-		"List the models this org can call",
-		"Returns the model catalogue as the CALLER sees it: the models the calling org "+
-			"is entitled to, with the identifier to send as `model` on a completion.\n\n"+
-			"Scoped, not global. A limited-preview model appears only once the org has "+
-			"been granted access to it, so two orgs reading this address at the same moment "+
-			"correctly see different catalogues. It is deliberately NOT gated on balance — "+
-			"reading which models exist is how a caller decides what to buy, and refusing it "+
-			"to an org at zero balance would blank the console for every customer between "+
-			"top-ups.\n\n"+
-			"For what a model COSTS, read /v1/pricing/models: this address answers "+
-			"availability, that one answers price.")
-	openapi.Describe("/v1/models/:model/access", http.MethodGet,
-		"Read this org's access standing for one model",
-		"Answers where the calling org stands on a limited-preview model — whether it "+
-			"already has access, has an outstanding request, or has never asked. `model` is "+
-			"the same identifier /v1/models lists and a completion sends.\n\n"+
-			"Read your OWN standing. It reports the calling org's position, not another's, "+
-			"and it is the read half of the pair whose write half is the POST below.")
-	openapi.Describe("/v1/models/:model/access", http.MethodPost,
-		"Request access to a limited-preview model",
-		"Files the calling org's request to use a model that is not open to everyone, and "+
-			"is the ONLY way to enter that queue. A granted request makes the model appear "+
-			"in /v1/models and callable on a completion; until then a completion naming it "+
-			"is refused.\n\n"+
-			"Idempotent in effect: asking again while a request is outstanding does not "+
-			"create a second one. Granting is an administrative act and is not this address.")
+	door := openapi.Table("github.com/hanzoai/ai", "/v1", airouters.App.Patterns, aiProse)
+	// /v1 is a REMAINDER, not a namespace: this row is last in manifest.Apps, so
+	// what it answers is everything under /v1 no earlier app claimed. Fifteen of
+	// ai's own registrations are delivered to a sibling instead, and four of those
+	// 404 on api.hanzo.ai because the sibling does not serve them. The door reads
+	// which ones from the fleet's routing table rather than carrying a list beside
+	// it — manifest/router_test.go asks the real router the same question, so a
+	// wrong answer here is a red gate and not a shipped phantom.
+	door.Yields = manifest.Elsewhere("ai")
+	openapi.Front(door)
+}
 
-	openapi.Describe("/v1/*", http.MethodPost,
-		"The Hanzo AI model API",
-		"Carries every generating call in the model API: chat completions and responses "+
-			"(streamed when the body asks for it), embeddings, reranking, image, video and "+
-			"speech generation, speech-to-text, RAG ingest, and fine-tune jobs — plus the "+
-			"creates on the managed collections behind /v1.\n\n"+
-			"This is the billed half of the surface. A call is metered per org against the "+
-			"balance the commerce subsystem holds, and the balance gate is FAIL-CLOSED: when "+
-			"no native balance reader is wired into the process the call is refused rather "+
-			"than guessed at, and an insufficient balance answers 402 with its own message "+
-			"intact."+fallback)
-	openapi.Describe("/v1/*", http.MethodGet,
-		"Read the model catalogue and the AI subsystem's own resources",
-		"Covers the reads: the model catalogue and a model's access status, connected "+
-			"providers and their usage, fine-tune jobs and presets, Hugging Face model, "+
-			"dataset and repository search, the subsystem's health and metrics, and the "+
-			"collection and member reads on the managed resources behind /v1.\n\n"+
-			"Reads are scoped to the calling org by the identity the gateway validated; the "+
-			"catalogue a caller sees is the one its own org has access to, not the whole "+
-			"provider list."+fallback)
-	openapi.Describe("/v1/*", http.MethodPut,
-		"Replace one AI resource in full",
-		"Replaces a member of one of the AI subsystem's managed collections with the body "+
-			"given. PUT and PATCH reach the SAME update — a full replacement and a partial "+
-			"one are accepted at one address so a client need not know which verb a given "+
-			"collection prefers — so the difference is in what the caller sends, not in what "+
-			"the server does with it."+fallback)
-	openapi.Describe("/v1/*", http.MethodPatch,
-		"Update one AI resource in place",
-		"Updates a member of one of the AI subsystem's managed collections with the fields "+
-			"given, leaving the rest as they were. It is the same update PUT reaches, so "+
-			"either verb is accepted on these resources.\n\n"+
-			"Nothing under this method reaches the generating model API; that is the POST "+
-			"surface."+fallback)
-	openapi.Describe("/v1/*", http.MethodDelete,
-		"Remove an AI resource, connection or indexed document",
-		"Removes a member of one of the AI subsystem's managed collections, a connected "+
-			"provider (which revokes the stored connection for the caller's org), or "+
-			"documents from the RAG index.\n\n"+
-			"Deleting a provider connection is the one a reader most easily "+
-			"underestimates: it does not merely hide the provider, it drops the org's stored "+
-			"authorization for it, and every later call routed to that provider fails until "+
-			"it is connected again."+fallback)
-	// The methods left over. This address is bound with All(), so it publishes every
-	// method this generator knows and the ones above are only the ones that DO
-	// something. DescribeRest covers the remainder from the generator's own set, so a
-	// method added there is covered the day it appears rather than published bare —
-	// which is what a hand-copied list here had already produced for OPTIONS and TRACE.
-	openapi.DescribeRest("/v1/*",
-		"Not served by the inference surface",
-		"Published because this catch-all accepts every method, but the inference surface "+
-			"answers none of them here — the request falls through to whatever owns the path, "+
-			"and reaches no model.")
-
+// aiProse restates hanzoai/ai's own prose in this package's vocabulary. It is a
+// rename and nothing else: two repositories cannot share a struct without one
+// depending on the other's document type, and the door is the wrong place for that
+// coupling — hanzoai/ai must stay able to say what its routes do without importing
+// a fleet document format.
+func aiProse() map[string]openapi.Said {
+	said := airouters.Prose()
+	out := make(map[string]openapi.Said, len(said))
+	for key, d := range said {
+		out[key] = openapi.Said{Summary: d.Summary, Description: d.Description}
+	}
+	return out
 }
 
 // Mount installs the money, ingest and telemetry wiring, then mounts ai. A nil
@@ -285,21 +228,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		}
 		return f(ctx, subject, namespace)
 	})
-	// UNTYPED BY DESIGN, and NOT this package's to fix. aimod.Mount registers a
-	// single `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy beego
-	// ControllerRegister through zip.AdaptNetHTTP, so ai's ~200 real routes —
+	// The door: ONE `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy
+	// beego ControllerRegister through zip.AdaptNetHTTP, so ai's ~200 real routes —
 	// /v1/chat/completions, /v1/models, /v1/messages and the rest — reach the wire
-	// through ONE greedy wildcard. Typing it here is impossible on three counts
-	// (All has no typed registrar; a `{wildcard1}` path segment cannot be a bound
-	// In field; the adapter relays the beego handler's own status and Content-Type
-	// verbatim), and typing it AT ALL means declaring ops inside github.com/hanzoai/ai
-	// where those handlers live. The consequence is worth stating plainly because
-	// it is the largest hole in the fleet document: plugin/ai/openapi.json publishes
-	// seven operations at /v1/{wildcard1} and NONE of the AI API, so no generated
-	// SDK and no MCP tool list carries chat completions today.
+	// through a single greedy wildcard.
 	//
-	// The prose half of that hole is closed — see the Describe block above, which
-	// says what each method behind the wildcard actually reaches — but prose is all
-	// it closes. A typed op is still what an SDK method and an MCP tool come from.
+	// That is a routing fact, not a documentation one, and it stays: All has no typed
+	// registrar, a `{wildcard1}` segment cannot be a bound In field, and the adapter
+	// relays the beego handler's own status and Content-Type verbatim. What the door
+	// no longer costs is the DOCUMENT — the relay declared in this package's init
+	// projects routers.App's own table through it, so the published surface is ai's
+	// 192 paths rather than one wildcard. Typed request and response schemas for them
+	// are still work in github.com/hanzoai/ai, where those handlers live.
 	return aimod.Mount(app, deps)
 }

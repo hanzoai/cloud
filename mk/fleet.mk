@@ -119,8 +119,9 @@ surface-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail 
 	  $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a describe >/dev/null \
 	    || { echo "!! $$a cannot project its own document"; exit 1; }; \
 	done
-	@$(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi-weave OUT=$(ROOT)/openapi.yaml >/dev/null
-	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml plugin/); \
+	@$(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi-weave OUT=$(ROOT)/openapi.yaml >/dev/null \
+	  || { echo "!! the weave refused — see the message above; nothing was written"; exit 1; }
+	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml openapi/floor.json plugin/); \
 	if [ -n "$$stale" ]; then \
 	  echo "$$stale"; \
 	  git -C $(ROOT) diff --stat -- openapi.yaml plugin/; \

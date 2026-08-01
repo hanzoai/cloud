@@ -722,6 +722,56 @@ document pipeline" below.)
   quoted count is stale the next week (api.hanzo.ai measured 1467 operations /
   1064 paths / 167 products against a doc that still claimed 983/692/109). Count
   the live spec when you need a number.
+- **A DOOR publishes the registry behind it, not the wildcard** (`openapi/relay.go`).
+  `app.All("/v1/*")` is ONE entry in this process's route table and 190 patterns in
+  the registry mounted behind it, so reading the router alone published
+  `/v1/{wildcard1}` and seven operations for the whole model API — no generated SDK
+  and no MCP tool list carried chat completions, and hanzoai/cli grew a
+  `{wildcard1}` command because that is what the document named. The door's owner
+  is the one that MOUNTED the thing behind it, so it is the one that can say what
+  is there: same process, same objects, same instant. `openapi.Front` declares
+  that; `Mounted` projects a sub-app through the same `Spec` the host's own
+  document is, `Table` projects a foreign registry's route table plus its prose.
+  hanzoai/ai's `routers.App.Patterns` and `routers.Prose` are read out of the
+  PINNED MODULE at describe time — no network, no vendored copy, no second list,
+  reproducible from a checkout and a go.mod.
+  - Same laws as every other seam here: `Register` declares bodies and renders only
+    on a live route, `Describe` declares prose and renders only on a live route, a
+    relay declares the routes BEHIND a route and renders only on a live door.
+  - Four refusals, each naming the source so a wrong placement is traceable to the
+    repo that registered it: a registry that published nothing (the shrink), a
+    registry that could not describe itself (the outage), an operation outside its
+    own door (the routing bug), and a registry that says nothing about a route it
+    serves (the same law `openapi.Complete` holds an app's own operations to).
+    A name collision goes through the SAME noun gate the weave uses (`nouns`,
+    openapi/weave.go) — one schema name meaning two things is one law whether the
+    claimants are two apps or an app and the registry behind its door.
+  - A door YIELDS where the router says it does, in both directions. Inside a
+    binary, a specific route the host registered wins over the relay's claim on
+    that address. Across the fleet, `Weave` resolves exactly that one overlap and
+    reads it off the data — a relayed operation names its own registry in `x-app`,
+    a direct one does not. Two specific claims, or two doors, stay a refusal.
+    `/v1` is a REMAINDER, not a namespace: ai's row is last in `manifest.Apps`, so
+    `manifest.Elsewhere` answers which of its registrations the fleet delivers to a
+    sibling, and those are not published.
+- **`x-app` is PROVENANCE, on every operation**: the registry that registered it.
+  For an app's own route it is the app name, so the code is `apps/<name>` here; for
+  a relayed one it is the module behind the door, so the code is that repo. Written
+  once by whichever producer knows (`Project` for a relay, `Weave` for the rest)
+  and never overwritten. It is the one question a reader of a wrong operation has,
+  and until it was recorded the answer took a bisect of 116 subsets.
+- **`openapi/floor.json` is THE RATCHET — the surface may grow and may not quietly
+  shrink** (`openapi/floor.go`). Every other gate here compares the document to
+  something that moved WITH it: the weave compares two derived artifacts,
+  `surface-check` regenerates them both from source. Neither holds a line across
+  time, so a surface can lose products with everything green — and has: the CLI's
+  capture went from 151 products to 4 in one bad reading and shipped 46 products
+  short, and `plugin/ingress` lost eight paths because a subset was never
+  regenerated. The floor is the counts, per product; a regeneration that comes in
+  under any of them fails, names the deltas, and writes nothing. A deliberate
+  deletion lowers it by hand in the same commit, where a reviewer sees the number
+  go down next to the reason. A MISSING floor is refused rather than treated as
+  zero — losing the file must not be a way to lose the guarantee.
 - **Reading the LIVE router is the only total source.** `POST /v1/kms/auth/login`
   is registered as `Group("/v1/kms/auth").Post("/login")` — no grep can find that
   path; only the assembled router knows it. And the route set is a function of

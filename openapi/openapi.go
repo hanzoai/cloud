@@ -272,6 +272,16 @@ type Parameter struct {
 // RequestBody and Responses are `any` because the two seams produce different
 // (JSON-identical) shapes: Register builds the closed *RequestBody /
 // map[string]*Response, the fold reuses zip's open maps verbatim.
+// App is PROVENANCE: the registry that registered this operation. It is the one
+// question a reader of a wrong operation has — who do I file this against — and
+// until it was recorded the answer took a bisect of 116 subsets. For an app's own
+// route it is the app name, so the code is apps/<name> in this repo; for an
+// operation reached through a door it is the module behind that door, so the code
+// is that repo. Either way it names a place to go.
+//
+// It is written exactly once per operation, by whichever producer knows: [Project]
+// stamps the relay's source as the operation enters, [Weave] stamps the part's app
+// for everything else, and neither overwrites a value already there.
 type Operation struct {
 	OperationID string      `json:"operationId"`
 	Summary     string      `json:"summary,omitempty"`
@@ -280,6 +290,7 @@ type Operation struct {
 	Parameters  []Parameter `json:"parameters,omitempty"`
 	RequestBody any         `json:"requestBody,omitempty"`
 	Responses   any         `json:"responses,omitempty"`
+	App         string      `json:"x-app,omitempty"`
 }
 
 // Components holds the named schemas operations reference by $ref, so an SDK
@@ -543,8 +554,14 @@ func Fold(doc *Document, reg Registry) error {
 	return uniqueOperationIDs(doc)
 }
 
-// Spec reads the live router and both projections of it — the one call a caller
+// Spec reads the live router and every projection of it — the one call a caller
 // wants.
+//
+// Three readings, in the order each earns: the router gives the total set of
+// addresses, the typed registry gives detail for the ones that have any, and the
+// relays give what is BEHIND the addresses that are doors rather than endpoints.
+// Project runs last because a door is only a door once the router has been read,
+// and because what it substitutes is already a finished document.
 func Spec(app *zip.App, info Info, servers ...Server) (*Document, error) {
 	doc, err := From(Live(app), info, servers...)
 	if err != nil {
@@ -555,6 +572,9 @@ func Spec(app *zip.App, info Info, servers ...Server) (*Document, error) {
 		return nil, err
 	}
 	if err := Fold(doc, reg); err != nil {
+		return nil, err
+	}
+	if err := Project(doc, relays()); err != nil {
 		return nil, err
 	}
 	return doc, nil
