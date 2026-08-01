@@ -27,12 +27,37 @@ import (
 // stamped per release and putting it here would make every build differ from the
 // committed golden. House law is /v1 forever, so this is "v1" forever; the
 // document's own shape is versioned by its `openapi` field.
+//
+// THE DESCRIPTION SAYS WHAT PRODUCED THE DOCUMENT, and it is not what it used to
+// say. It read "Generated from the live router — every operation below is a route
+// the unified cloud binary actually serves." No producer can make that claim.
+//
+// There is no unified cloud binary; there is a light host that mounts no
+// subsystem and 116 app binaries that each project their OWN router when they are
+// BUILT. What the host serves is the weave of those projections ([MountFleet]),
+// so nothing in production reads a live router, and the artifact is only as fresh
+// as the last `make -f mk/fleet.mk describe-apps`. It shipped stale — one binary
+// answered /v1/billing/gpu/eligibility while publishing /v1/billing/gpu-eligibility,
+// because the rename commit did not regenerate the subset.
+//
+// A false provenance is worse than a missing one, because it is READ. hanzoai/cli's
+// genspec quoted this exact sentence as the correctness argument for dropping
+// operations from its capture: "a route that is not mounted cannot appear in it."
+// Every projection downstream — eight SDKs, the MCP tool list, the CLI, the docs —
+// inherits whatever this claims.
+//
+// So it claims exactly what is true and no more: each operation is a route the
+// subsystem that publishes it registered in its own router. What it does NOT
+// prove, and what only a probe of the deployed host can: that the front door
+// delivers that path to that subsystem. It did not, for all 23 of pricing's, until
+// the ingress carve that gave them to an edge worker was deleted.
 var (
 	fleetInfo = Info{
 		Title:   "Hanzo Cloud API",
 		Version: "v1",
-		Description: "Generated from the live router — every operation below is a route the " +
-			"unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+		Description: "Composed from each subsystem's own projection of its router, in the fleet's " +
+			"mount order — every operation below is a route the subsystem that publishes it " +
+			"registered. Tagged by product: the first path segment after /v1/.",
 	}
 	fleetServer = Server{URL: "https://api.hanzo.ai"}
 )
