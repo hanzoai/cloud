@@ -54,8 +54,8 @@ func seedRun(t *testing.T, app *zip.App, org, project, dataset, authz string) {
 		map[string]any{"name": dataset}); code != http.StatusCreated {
 		t.Fatalf("seed dataset %q: %d", dataset, code)
 	}
-	if code, _ := doProj(t, app, http.MethodPost, "/v1/evals/dataset-items", org, project, authz,
-		map[string]any{"datasetName": dataset, "input": "2+2", "expectedOutput": "4"}); code != http.StatusCreated {
+	if code, _ := doProj(t, app, http.MethodPost, "/v1/evals/datasets/"+dataset+"/items", org, project, authz,
+		map[string]any{"input": "2+2", "expectedOutput": "4"}); code != http.StatusCreated {
 		t.Fatalf("seed item: %d", code)
 	}
 	if code, _ := doProj(t, app, http.MethodPost, "/v1/evals/runs", org, project, authz,

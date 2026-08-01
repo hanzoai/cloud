@@ -18,7 +18,7 @@ import (
 )
 
 // The eval METASTORE is the config/metadata half of the storage split (CTO
-// directive): datasets, dataset-items, evaluators, score-configs and dataset-run
+// directive): datasets, dataset items, evaluators, rubrics and dataset-run
 // definitions live here in Hanzo Base/SQLite, per-org. The high-volume telemetry
 // half (traces, observations, scores-as-events) lives in datastore/datastore —
 // see telemetry.go. These two are orthogonal: the metastore owns durable config,

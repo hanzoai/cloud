@@ -16,8 +16,8 @@ func TestRed_ContentCapped(t *testing.T) {
 	}
 	// A 2 MiB input is rejected (raw JSON string over the 64 KiB cap).
 	big := `"` + strings.Repeat("A", 2*1024*1024) + `"`
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/dataset-items", "acme",
-		map[string]any{"datasetName": "d", "input": rawMsg(big)}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/d/items", "acme",
+		map[string]any{"input": rawMsg(big)}); code != http.StatusBadRequest {
 		t.Fatalf("2MiB item input want 400 (capped), got %d", code)
 	}
 	// Oversize metadata is likewise rejected.
@@ -71,7 +71,7 @@ func TestRed_ForgedHeaderCannotCrossTenant(t *testing.T) {
 // name (the config is authoritative for the type), nor push a non-finite value.
 func TestRed_ScoreTypeCannotBeCoerced(t *testing.T) {
 	app, _ := mountApp(t)
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/score-configs", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/evals/rubrics", "o",
 		map[string]any{"name": "quality", "dataType": "NUMERIC", "minValue": 0, "maxValue": 1}); code != http.StatusCreated {
 		t.Fatalf("config: %d", code)
 	}
@@ -97,8 +97,8 @@ func TestRed_RunNameAndJudgeNameGuarded(t *testing.T) {
 	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets", "o", map[string]any{"name": "qa"}); code != http.StatusCreated {
 		t.Fatalf("seed dataset: %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/dataset-items", "o",
-		map[string]any{"datasetName": "qa", "input": "x", "expectedOutput": "x"}); code != http.StatusCreated {
+	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/qa/items", "o",
+		map[string]any{"input": "x", "expectedOutput": "x"}); code != http.StatusCreated {
 		t.Fatalf("seed item: %d", code)
 	}
 	// A traversal-looking runName is rejected at the boundary (validated principal
