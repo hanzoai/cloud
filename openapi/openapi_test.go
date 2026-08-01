@@ -181,9 +181,12 @@ func TestFromRejectsDuplicateOperationID(t *testing.T) {
 	}
 }
 
-// A REAL pair from the live router: /v1/pricing-policy and /v1/pricing/policy
-// both exist. Folding '-' into '_' collapsed them onto one id and made the whole
-// document unemittable. Pinned so the encoding never regresses.
+// The pair that found this bug: /v1/pricing-policy and /v1/pricing/policy both
+// existed, and folding '-' into '_' collapsed them onto one id, making the whole
+// document unemittable. The alias has since been deleted, so the routes below are
+// now a constructed case rather than a live one — but hyphenated addresses we do
+// not own (git-upload-pack, delete-batch) are permanent, and nothing stops the
+// next slash-sibling. Pinned so the encoding never regresses.
 func TestOperationIDKeepsHyphenDistinctFromPathSeparator(t *testing.T) {
 	rs := []Route{
 		{Method: "GET", Path: "/v1/pricing-policy"},

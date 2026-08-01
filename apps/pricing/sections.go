@@ -127,10 +127,6 @@ func mountSections(zapp *zip.App, o ops) {
 	zip.Get(zapp, "/v1/pricing/policy", o.policy)
 	zip.Get(zapp, "/v1/pricing/tools", o.tools)
 	zip.Get(zapp, "/v1/pricing/gpu", o.gpu)
-	// The top-level alias for the policy document. It answers the SAME section as
-	// /v1/pricing/policy and is a separate op because it is a separate address,
-	// and an address is what every projection keys on.
-	zip.Get(zapp, "/v1/pricing-policy", o.pricingPolicy)
 }
 
 // ---- infrastructure ----
@@ -243,12 +239,5 @@ func (o ops) gpu(ctx context.Context, _ *pricingNoInput) (*pricingTierList, erro
 // percentage and who is eligible) and the commitments Hanzo makes about how it
 // bills — no hidden fees, no egress charges, no surprise bills.
 func (o ops) policy(ctx context.Context, _ *pricingNoInput) (*pricingBlob, error) {
-	return sectionOf[pricingBlob](ctx, o, "policy")
-}
-
-// GetPricingPolicyAlias returns the pricing policy document at its top-level
-// address. It is the same document GET /v1/pricing/policy returns, byte for
-// byte, at the shorter address the marketing surface links to.
-func (o ops) pricingPolicy(ctx context.Context, _ *pricingNoInput) (*pricingBlob, error) {
 	return sectionOf[pricingBlob](ctx, o, "policy")
 }

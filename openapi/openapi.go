@@ -615,12 +615,15 @@ func translate(pattern string) (string, []string) {
 // operationID derives a stable id from method+path.
 //
 // '_' is the SEPARATOR (it encodes '/'), so any character that also folded to
-// '_' would collide with a path boundary. That is not hypothetical: the live
-// router serves both GET /v1/pricing-policy and GET /v1/pricing/policy, which an
-// earlier "everything non-alphanumeric → _" rule collapsed onto one id. '-' and
-// '.' are legal in an operationId and are therefore preserved rather than
-// folded, which keeps that pair distinct (get_v1_pricing-policy vs
-// get_v1_pricing_policy).
+// '_' would collide with a path boundary. That was not hypothetical: the router
+// once served both GET /v1/pricing-policy and GET /v1/pricing/policy, and an
+// earlier "everything non-alphanumeric → _" rule collapsed them onto one id.
+// (The first of those was a pure alias of the second and has since been deleted,
+// but the encoding still has to survive the next such pair — and hyphenated
+// addresses we do not own, like /v1/git/…/git-upload-pack and
+// /v1/index/…/documents/delete-batch, are permanent.) '-' and '.' are legal in
+// an operationId and are therefore preserved rather than folded, which keeps any
+// such pair distinct (get_v1_pricing-policy vs get_v1_pricing_policy).
 //
 // Params contribute "by_<name>" so /v1/a/{b} and /v1/a/b do not collapse either.
 // This is derivation, not proof: a literal '_' in a segment can still alias a
