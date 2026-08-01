@@ -459,7 +459,7 @@ func (s safeCustody) ProposeTx(ctx context.Context, w *Wallet, tx SafeTx) (*Safe
 
 // safeProposer is the OPTIONAL capability a custody backend exposes when it can
 // propose (and MPC-sign) a Safe transaction. Only safeCustody implements it; the
-// /v1/wallets/:id/safe-tx handler type-asserts for it and 400s otherwise. This is
+// /v1/wallets/:id/transactions handler type-asserts for it and 400s otherwise. This is
 // the "values, not places" seam: the HTTP layer asks the backend whether it can
 // propose, it does not switch on the Kind.
 type safeProposer interface {

@@ -56795,48 +56795,6 @@ paths:
         and answers the wallet with whatever address that produced.
       tags:
       - wallets
-  /v1/wallets/{id}/safe-tx:
-    post:
-      description: |-
-        Composes a Safe transaction on the MPC ring and answers its
-        EIP-712 hash together with the owner approval the ring's threshold signature
-        produced. Only a wallet whose custody is "safe" can do this — any other custody
-        is a 400, because the backend itself is asked whether it can propose rather
-        than the kind being switched on. The ring computes the Safe-tx hash bound to
-        the Safe contract and the chain id, so the hash a caller gets back is the one
-        the Safe will verify. This PROPOSES: it does not execute the transaction.
-      operationId: post_v1_wallets_id_safe-tx
-      parameters:
-      - example: wal_4b1e77
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              chainId: 36963
-              data: 0x
-              id: wal_4b1e77
-              nonce: 7
-              to: 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
-              value: "0"
-            schema:
-              $ref: '#/components/schemas/safeTxIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/safeProposal'
-          description: ok
-      summary: Composes a Safe transaction on the MPC ring and answers its EIP-712
-        hash together with the owner approval the ring's threshold signature produced.
-      tags:
-      - wallets
   /v1/wallets/{id}/sign:
     post:
       description: |-
@@ -56873,6 +56831,48 @@ paths:
           description: ok
       summary: Produces a secp256k1 signature from one of the caller org's wallets
         over a 32-byte digest, through whichever custody backend that wallet uses.
+      tags:
+      - wallets
+  /v1/wallets/{id}/transactions:
+    post:
+      description: |-
+        Composes a Safe transaction on the MPC ring and answers its
+        EIP-712 hash together with the owner approval the ring's threshold signature
+        produced. Only a wallet whose custody is "safe" can do this — any other custody
+        is a 400, because the backend itself is asked whether it can propose rather
+        than the kind being switched on. The ring computes the Safe-tx hash bound to
+        the Safe contract and the chain id, so the hash a caller gets back is the one
+        the Safe will verify. This PROPOSES: it does not execute the transaction.
+      operationId: post_v1_wallets_id_transactions
+      parameters:
+      - example: wal_4b1e77
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              chainId: 36963
+              data: 0x
+              id: wal_4b1e77
+              nonce: 7
+              to: 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
+              value: "0"
+            schema:
+              $ref: '#/components/schemas/safeTxIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/safeProposal'
+          description: ok
+      summary: Composes a Safe transaction on the MPC ring and answers its EIP-712
+        hash together with the owner approval the ring's threshold signature produced.
       tags:
       - wallets
   /v1/wallets/accounts:
