@@ -54,7 +54,13 @@ func TestO11ySQL_ReadsCanonicalTables(t *testing.T) {
 		{"topOrgs", o11yTopOrgsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", o11yTopModelsSQL(), "hanzo.cloud_usage", 1},
 		{"topServices", o11yTopServicesSQL(), "o11y_traces.distributed_o11y_index_v3", 1},
-		{"llm", o11yLLMSQL(), "console.observations", 1},
+		// WHY this pin moved (o11y_ai.observations → console.observations → event.span):
+		// the first name was a database that never existed; the second held the real
+		// rows but was a surface name on a store already folded into the event plane.
+		// event.span carries those same rows as kind='client' gen_ai spans (identical
+		// count and cost, verified 2026-07-31) — a gen_ai span IS the observation
+		// (HIP-0132) — and moving the last reader here is what makes `console` droppable.
+		{"llm", o11yLLMSQL(), "event.span", 1},
 	}
 	for _, c := range cases {
 		if !strings.Contains(c.sql, "FROM "+c.table) {
@@ -89,9 +95,14 @@ func TestO11yTop_LimitAndOrder(t *testing.T) {
 	if !strings.Contains(o11yTopServicesSQL(), "LIMIT 12") {
 		t.Errorf("topServices must limit %d", o11yServiceLimit)
 	}
-	// The LLM lens is scoped to generations only (not spans/events).
-	if !strings.Contains(o11yLLMSQL(), "type = 'GENERATION'") {
-		t.Errorf("llm lens must scope to GENERATION observations; got %q", o11yLLMSQL())
+	// The LLM lens is scoped to gen_ai CLIENT spans only. WHY the pin changed from
+	// type = 'GENERATION': that was console's column; on the plane the generation
+	// scope is the gen_ai marker plus kind='client' (the LLM call span — the one
+	// carrying operation/model/cost), while the old trace roots sit beside them as
+	// kind='server' gen_ai spans and must NOT be counted as observations.
+	if !strings.Contains(o11yLLMSQL(), "mapContains(attributes, 'gen_ai.system')") ||
+		!strings.Contains(o11yLLMSQL(), "kind = 'client'") {
+		t.Errorf("llm lens must scope to gen_ai client spans; got %q", o11yLLMSQL())
 	}
 }
 
