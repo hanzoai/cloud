@@ -28,15 +28,17 @@ func TestAimSQL_ReadsCanonicalTables(t *testing.T) {
 		name, sql, table string
 		wantQMarks       int
 	}{
-		// The pin moved off "o11y_ai.observations" on 2026-07-31: there is no o11y_ai
-		// DATABASE (checked against system.tables), so every AI number read zero while
-		// 8,867 observations sat in `console`. A pin is only worth having if it names a
-		// table that exists — this one was pinning the fiction. `console` is a SURFACE
-		// name on a store and is wrong too; it moves to o11y.spans with #102, and this
-		// pin moves with it.
-		{"o11yAiTotals", aimO11yAITotalsSQL(), "console.observations", 1},
-		{"o11yAiLatency", aimO11yAILatencySQL(), "console.observations", 1},
-		{"o11yAiModels", aimO11yAIModelsSQL(), "console.observations", 1},
+		// WHY these pins moved AGAIN (console.observations → event.span, 2026-07-31):
+		// `console` was a surface name on rows the event plane already holds — the
+		// same 8,867 observations live in event.span as kind='client' gen_ai spans
+		// (identical count and summed cost verified at the move). A gen_ai span IS
+		// the observation (HIP-0132), so the lens reads the plane and `console`
+		// becomes droppable. The totals pin is o11yLLMSQL because totals are ONE
+		// query stated ONCE, shared with the o11y board — the previous twin builders
+		// drifted precisely because the same fact lived in two places.
+		{"o11yAiTotals", o11yLLMSQL(), "event.span", 1},
+		{"o11yAiLatency", aimO11yAILatencySQL(), "event.span", 1},
+		{"o11yAiModels", aimO11yAIModelsSQL(), "event.span", 1},
 		{"usageTotals", aimUsageTotalsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", aimTopModelsSQL(), "hanzo.cloud_usage", 1},
 		{"evalTraces", aimEvalTracesSQL(), "hanzo.eval_traces", 1},
@@ -55,12 +57,16 @@ func TestAimSQL_ReadsCanonicalTables(t *testing.T) {
 	}
 }
 
-// TestAimO11yAIScopedToGeneration proves the O11yAI lens is scoped to
-// generations only (not spans/events), matching the o11y LLM lens.
+// TestAimO11yAIScopedToGeneration proves the AI lens is scoped to gen_ai CLIENT
+// spans only, matching the o11y LLM lens. WHY the pin changed from type =
+// 'GENERATION': that was console's column; on the plane the generation scope is
+// the gen_ai marker plus kind='client' (the LLM call span — the one carrying
+// operation/model/cost), never the kind='server' trace roots beside them.
 func TestAimO11yAIScopedToGeneration(t *testing.T) {
-	for _, sql := range []string{aimO11yAITotalsSQL(), aimO11yAILatencySQL(), aimO11yAIModelsSQL()} {
-		if !strings.Contains(sql, "type = 'GENERATION'") {
-			t.Errorf("o11y_ai lens must scope to GENERATION observations; got %q", sql)
+	for _, sql := range []string{o11yLLMSQL(), aimO11yAILatencySQL(), aimO11yAIModelsSQL()} {
+		if !strings.Contains(sql, "mapContains(attributes, 'gen_ai.system')") ||
+			!strings.Contains(sql, "kind = 'client'") {
+			t.Errorf("AI lens must scope to gen_ai client spans; got %q", sql)
 		}
 	}
 }
@@ -89,14 +95,17 @@ func TestAimScoreSeries_IntervalBound(t *testing.T) {
 	}
 }
 
-// TestAimEvalLatencyGuarded proves the latency expressions guard end_time>start_time
-// so a zero/default end_time never contributes a garbage (negative) latency.
+// TestAimEvalLatencyGuarded proves the latency expressions guard their zero case
+// so an unset window never contributes a garbage latency. Eval traces still carry
+// two timestamps (end_time > start_time); the gen_ai span guard moved to
+// duration > 0 because a span has ONE duration column (UInt64 nanoseconds) and
+// zero is its unset/instant value — same honesty, the span store's shape.
 func TestAimEvalLatencyGuarded(t *testing.T) {
 	if !strings.Contains(aimEvalTracesSQL(), "end_time > start_time") {
 		t.Errorf("eval traces latency must guard end_time>start_time; got %q", aimEvalTracesSQL())
 	}
-	if !strings.Contains(aimO11yAILatencySQL(), "end_time > start_time") {
-		t.Errorf("o11y_ai latency must guard end_time>start_time; got %q", aimO11yAILatencySQL())
+	if !strings.Contains(aimO11yAILatencySQL(), "duration > 0") {
+		t.Errorf("gen_ai span latency must guard duration>0; got %q", aimO11yAILatencySQL())
 	}
 }
 
