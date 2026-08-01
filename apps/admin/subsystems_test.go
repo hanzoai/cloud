@@ -8,22 +8,26 @@ import (
 	"github.com/hanzoai/cloud"
 )
 
-// TestSubsystemSQL_UsesV3Columns is the regression guard for the bug this board was
-// built on top of: distributed_o11y_index_v3 is snake_case and spells resource
-// attributes with $$. Querying the v2 spellings (durationNano / serviceName) does not
-// fail loudly — the caller swallows the error and the board shows honest-looking zeros
-// forever. Pin the real column names.
-func TestSubsystemSQL_UsesV3Columns(t *testing.T) {
+// TestSubsystemSQL_UsesPlaneColumns is the regression guard for the bug this board
+// was built on top of: a query that names a column the table does not have does NOT
+// fail loudly — the caller swallows the error and the board renders honest-looking
+// zeros forever. event.span spells its columns plainly (duration / service / status);
+// pin those IN, and pin OUT every retired o11y-index spelling — the v2 index's
+// durationNano / serviceName and the v3 index's duration_nano /
+// resource_string_service$$name / has_error.
+func TestSubsystemSQL_UsesPlaneColumns(t *testing.T) {
 	for _, sql := range []string{subsystemREDSQL(), subsystemLastErrorSQL(), o11yTraceTotalsSQL(), o11yTopServicesSQL()} {
-		if strings.Contains(sql, "durationNano") || strings.Contains(sql, "serviceName") {
-			t.Errorf("v2 column spelling in a v3 query — it will silently return nothing: %q", sql)
+		for _, dead := range []string{"durationNano", "serviceName", "duration_nano", "resource_string_service$$name", "has_error"} {
+			if strings.Contains(sql, dead) {
+				t.Errorf("retired o11y-index column %q in a plane query — it will silently return nothing: %q", dead, sql)
+			}
 		}
 	}
-	if !strings.Contains(subsystemREDSQL(), "duration_nano") {
-		t.Errorf("RED query must measure duration_nano; got %q", subsystemREDSQL())
+	if !strings.Contains(subsystemREDSQL(), "(duration)") {
+		t.Errorf("RED query must measure the plane's duration column; got %q", subsystemREDSQL())
 	}
-	if !strings.Contains(o11yTraceTotalsSQL(), "resource_string_service$$name") {
-		t.Errorf("trace totals must count the v3 service column; got %q", o11yTraceTotalsSQL())
+	if !strings.Contains(o11yTraceTotalsSQL(), "uniqExact(service)") {
+		t.Errorf("trace totals must count event.span's service column; got %q", o11yTraceTotalsSQL())
 	}
 }
 
@@ -42,7 +46,7 @@ func TestSubsystemSQL_Shape(t *testing.T) {
 			t.Errorf("%s: %d bind params, want 1 (the time bound only); got %q", name, n, sql)
 		}
 	}
-	if !strings.Contains(subsystemLastErrorSQL(), "has_error") {
+	if !strings.Contains(subsystemLastErrorSQL(), "status = 'error'") {
 		t.Errorf("last-error query must select only errored spans; got %q", subsystemLastErrorSQL())
 	}
 }

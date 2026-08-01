@@ -14,9 +14,9 @@
 //	RUNTIME handler the hanzoai/o11y wildcard (order 70) delegates to via
 //	  o11y.SetHandler — the in-process runtime (embed.go) or a reverse-proxy
 //	  fallback (this file).
-//	WRITE plane (opt-in, order-independent):
-//	  - OTLP ingest collector (ingest.go)
-//	  - in-process trace sink (tracesink.go)
+//	WRITE plane (order-independent):
+//	  - ZAP span+log receivers + opt-in in-process trace sink, all writing
+//	    the event plane (planesink.go)
 //
 // Decomplection (one and one way): these were five separately-registered
 // subsystems (o11yscope 69, o11y-runtime 71, o11y-event-ingest 68,
@@ -579,11 +579,10 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 		r.URL.Path = mapped
 		h.ServeHTTP(w, r)
 	}))
-	// WRITE plane — opt-in, order-independent (no /v1/o11y/* Fiber route).
-	if err := mountIngest(deps); err != nil { // ZAP ingest collector (:4317)
-		return err
-	}
-	if err := mountTraceSink(deps); err != nil { // in-process trace sink
+	// WRITE plane — order-independent (no /v1/o11y/* Fiber route): the ZAP
+	// span+log receivers and the opt-in in-process trace sink, all writing
+	// event.span / event.log (planesink.go).
+	if err := mountPlaneIngest(deps); err != nil {
 		return err
 	}
 	if err := mountProbes(deps); err != nil { // fleet health probes -> hanzo_service_up
@@ -613,9 +612,10 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 }
 
 // shutdownO11y tears down the write-plane resources that hold process-lifetime
-// connections, in REVERSE mount order — trace sink, OTLP collector, event-ingest
-// Datastore — so buffered spans/logs/rows flush before exit. Best-effort: the
-// first error is returned but every teardown still runs. Idempotent and nil-safe.
+// connections, in REVERSE mount order — plane ingest (trace sink + receivers),
+// event-ingest Datastore — so buffered spans/logs/rows flush before exit.
+// Best-effort: the first error is returned but every teardown still runs.
+// Idempotent and nil-safe.
 func ShutdownO11y(ctx context.Context) error {
 	stopProbes()
 	stopExposition(ctx)
@@ -623,10 +623,7 @@ func ShutdownO11y(ctx context.Context) error {
 	if err := shutdownAnnotationQueues(); err != nil && firstErr == nil {
 		firstErr = err
 	}
-	if err := shutdownTraceSink(ctx); err != nil && firstErr == nil {
-		firstErr = err
-	}
-	if err := shutdownIngest(ctx); err != nil && firstErr == nil {
+	if err := shutdownPlaneIngest(ctx); err != nil && firstErr == nil {
 		firstErr = err
 	}
 	if err := shutdownEventIngest(ctx); err != nil && firstErr == nil {
