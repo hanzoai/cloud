@@ -1,46 +1,32 @@
 # Addresses openapi.yaml publishes that the deployed api does NOT route.
 #
 # THIS FILE MAY ONLY SHRINK. openapi/reach.py probes every literal GET the
-# document publishes against the deployed host, once per release, and refuses:
+# document publishes against the host that is serving THIS release — car 2 has
+# already proved `x-api-version` is ours, so both sides are the same version —
+# and refuses:
+#
 #   a 404 that is not listed here  → a NEW dark address; the release goes red
-#   a line here that now answers   → delete the line in the same commit
+#   a line here that now answers   → delete the line, in the same commit
 #
 # Each line is a defect with an owner, not an exemption. An address in this
 # document is a method in every generated SDK, a tool in the MCP list and a
-# command in the CLI — so a line here is a call every client offers and no
-# caller can make.
+# command in the CLI, so a line here is a call every client offers and no caller
+# can make.
 #
-# ── /v1/pricing/* — 14 lines, ONE owner, ONE decision (D3).
+# IT IS EMPTY, and that is a measurement, not a default. Probed against the
+# deployed release's own document and host (v1.801.350, 490 literal addresses):
+# zero dark. Anything that appears here from now on arrived after this line.
 #
-# These are answered by a Cloudflare worker that intercepts /v1/pricing* (and
-# /v1/models*) by naive prefix match and 404s anything its 10-key KV lacks. The
-# origin implements them TWICE — apps/pricing registers 23 routes here, and
-# hanzoai/pricing's server.mjs implements every one of these — and never
-# receives the request. Two of the three implementations are dead code.
+# It did not start empty. Fourteen `/v1/pricing/*` addresses were dark — answered
+# by a Cloudflare worker that intercepted `/v1/pricing*` and `/v1/models*` by
+# naive prefix match and 404ed anything its ten-key KV lacked, while the origin
+# implemented every one of them twice over and never received the request. That
+# is closed: those paths now answer 200 from `server: hanzo`, the origin took
+# them back, and one path has one owner again — the one that can describe
+# itself. The remaining three (`/v1/billing/{gpu-eligibility,payment-methods,
+# payment-config}`) were a stale subset publishing addresses one binary had
+# already renamed; regenerating the document retired them.
 #
-# The worker exists only in the Cloudflare account: no repo, no source, nothing
-# any CI diff in this fleet can see. That is why these lines are here rather
-# than fixed — the fix is an ownership decision, and the recommendation is that
-# the ORIGIN take the paths back and the worker keep caching only, because the
-# document is a projection of the origin's router and a second implementation at
-# the edge cannot be projected from anything. One path, one owner, and the owner
-# is the one that can describe itself.
-#
-# The same decision un-buries GET/POST /v1/models/{model}/access, registered at
-# hanzoai/ai routers/router.go:106 and uncallable in production (404 on GET, 405
-# on POST — the worker advertises GET, HEAD, OPTIONS only). It is not listed
-# here because it is parameterised and this gate probes literal paths only.
-GET /v1/pricing/base
-GET /v1/pricing/blockchain
-GET /v1/pricing/compute
-GET /v1/pricing/compute/presets
-GET /v1/pricing/featured
-GET /v1/pricing/free
-GET /v1/pricing/health
-GET /v1/pricing/iam
-GET /v1/pricing/models
-GET /v1/pricing/paas
-GET /v1/pricing/policy
-GET /v1/pricing/providers
-GET /v1/pricing/subscriptions
-GET /v1/pricing/tools
+# If you are adding a line: name the owner in a comment above it. A ratchet
+# nobody can read becomes an allowlist, and an allowlist is how a defect
+# becomes a feature.
