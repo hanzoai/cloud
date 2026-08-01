@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -233,6 +234,60 @@ func TestIdempotentDecideDoesNotScoreTwice(t *testing.T) {
 	_ = json.Unmarshal(list, &page)
 	if len(page.Items) != 1 {
 		t.Fatalf("%d decisions recorded for one idempotency key", len(page.Items))
+	}
+}
+
+// TestConcurrentRetriesUnderOneKeyProduceOneDecision pins the race the
+// two-statement version had: insert the row, then claim the key, and two
+// simultaneous retries both find no row, both insert, and the loser's claim
+// violates the index — so a caller that retried CORRECTLY gets a 500 and the
+// tenant's counters moved twice.
+//
+// Claiming the key inside the insert makes the loser lose at the index, before a
+// second decision exists, and read the winner's answer back.
+func TestConcurrentRetriesUnderOneKeyProduceOneDecision(t *testing.T) {
+	app, _ := wireApp(t)
+	body := `{"stage":"payment","subject":{"kind":"transaction","id":"tx-race"},
+	          "amount":{"nano":2500000000,"currency":"USD","direction":"in"},
+	          "signals":{"ip":"198.51.100.99"},"idem":"race-1"}`
+
+	const n = 8
+	type result struct {
+		code int
+		id   string
+	}
+	out := make(chan result, n)
+	var start sync.WaitGroup
+	start.Add(1)
+	for i := 0; i < n; i++ {
+		go func() {
+			start.Wait()
+			code, b := req(t, app, http.MethodPost, "/v1/risk/decide", "acme", "u_acme", body)
+			var d riskDecision
+			_ = json.Unmarshal(b, &d)
+			out <- result{code, d.ID}
+		}()
+	}
+	start.Done()
+
+	ids := map[string]int{}
+	for i := 0; i < n; i++ {
+		r := <-out
+		if r.code != http.StatusOK {
+			t.Errorf("a concurrent retry answered %d — a correct retry must never be an error", r.code)
+			continue
+		}
+		ids[r.id]++
+	}
+	if len(ids) != 1 {
+		t.Fatalf("%d concurrent requests under one key produced %d distinct decisions: %v", n, len(ids), ids)
+	}
+	// And exactly one row was written, so the counters moved once.
+	_, list := req(t, app, http.MethodGet, "/v1/risk/decisions", "acme", "u_acme", "")
+	var page riskDecisionPage
+	_ = json.Unmarshal(list, &page)
+	if len(page.Items) != 1 {
+		t.Fatalf("%d decisions recorded under one idempotency key", len(page.Items))
 	}
 }
 
