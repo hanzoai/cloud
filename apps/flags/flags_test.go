@@ -33,7 +33,7 @@ func newTestClient(t *testing.T) *Client {
 	testMasterKey(t)
 	prev := mounted
 	c := &Client{
-		stores:     cloud.NewOrgStore[*Store](t.TempDir(), "flags", openStore),
+		stores:     cloud.NewOrgStore[*Store](cloud.Base{DataDir: t.TempDir()}, "flags", openStore),
 		distinctID: "test",
 		ttl:        time.Minute,
 	}

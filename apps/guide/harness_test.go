@@ -87,7 +87,7 @@ func reqRaw(t *testing.T, app *zip.App, method, path string, headers map[string]
 // physical, so this exercises the exact production open path.
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	stores := cloud.NewOrgStore(t.TempDir(), "guide", openStore)
+	stores := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir()}, "guide", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
 	st, err := stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {

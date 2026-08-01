@@ -44,7 +44,7 @@ func rawAt(t *testing.T, path string) *sql.DB {
 // assertion is a statement about the shipped code.
 func testStores(t *testing.T) *cloud.OrgStore[*Store] {
 	t.Helper()
-	c := cloud.NewOrgStore[*Store](t.TempDir(), "agents", openStore)
+	c := cloud.NewOrgStore[*Store](cloud.Base{DataDir: t.TempDir()}, "agents", openStore)
 	t.Cleanup(func() { _ = c.CloseAll() })
 	return c
 }

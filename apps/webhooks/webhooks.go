@@ -71,8 +71,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("webhooks.Mount: empty deps.DataDir")
 	}
 	b := cloud.NewBase(deps, "webhooks")
-	stores := cloud.NewOrgStore[*store](deps.DataDir, "webhooks", openStore,
-		cloud.WithDurable(b.Durable), cloud.WithStoreLogger(b.Log))
+	stores := cloud.NewOrgStore[*store](b, "webhooks", openStore)
 
 	st := &state{stores: stores, disp: newDispatcher(stores, b.Log)}
 	mounted = st
