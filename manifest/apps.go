@@ -160,7 +160,7 @@ var Apps = []App{
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
 	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/admin/referrals", "/v1/affiliates"}},
 	{Name: "esign", Prefixes: []string{"/v1/esign"}},
-	{Name: "product", Prefixes: []string{"/v1/search-docs/indexes", "/v1/search-docs/stats", "/v1/vector/collections", "/v1/vector/stats"}},
+	{Name: "product", Prefixes: []string{"/v1/search/indexes", "/v1/search/stats", "/v1/vector/collections", "/v1/vector/stats"}},
 	{Name: "evals", Prefixes: []string{"/v1/evals"}},
 	{Name: "benchmark", Prefixes: []string{"/v1/benchmark"}},
 	{Name: "research", Prefixes: []string{"/v1/research"}},

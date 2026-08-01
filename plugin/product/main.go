@@ -22,7 +22,7 @@ func main() {
 		Price: cloud.Free,
 		Mount: product.Mount,
 		// This subsystem is named "product" and serves NEITHER "/v1/product" nor
-		// anything under it — its four routes are /v1/search-docs/{indexes,stats}
+		// anything under it — its four routes are /v1/search/{indexes,stats}
 		// and /v1/vector/{collections,stats}. The /v1/<Name> convention
 		// MountPrefixes assumes therefore covered NOTHING it registers: every
 		// request here was attributed to no subsystem by the tracing and price
