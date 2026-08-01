@@ -615,17 +615,23 @@ var doors = []door{
 			"account names the person, so a `distinctId` in the body cannot pin events on a colleague.\n\n" +
 			"NO CREDENTIAL IS ALSO ADMITTED, and that is the point — a logged-out visitor has none. " +
 			"Such a write is PROJECTED: filed under the reserved `$public` tenant, narrowed to what the " +
-			"SERVER can name — pageviews and errors, whose names the route supplies, plus the closed " +
-			"autocapture vocabulary ($click, $input, $change, $submit, $view) resolved through a " +
-			"server-owned table — and stripped to the fields the projection names, so revenue, " +
-			"personId, groupId, an arbitrary event name and every property but the element annotation " +
-			"cannot reach a row. Everything refused is counted in `dropped`. On a published-site host " +
+			"SERVER can name — pageviews and errors, plus the closed autocapture vocabulary ($click, " +
+			"$input, $change, $submit, $view) — where EVERY one of those names is resolved through a " +
+			"server-owned table and stored as that table's value, so the name on the wire is never the " +
+			"name in the row. Stripped, too, to the fields the projection names, so revenue, personId, " +
+			"groupId and every property but the element annotation " +
+			"cannot reach a row — and an exception is carried only on an error, never on an " +
+			"interaction, so a click cannot ship a stack trace into a row's attributes. " +
+			"Everything refused is counted in `dropped`. On a published-site host " +
 			"the same projection applies with that site's org as the tenant. But a credential that IS " +
 			"presented and does NOT resolve is 403, never quietly downgraded: filing a misconfigured " +
 			"key's events under $public would hide them in a partition their owner cannot read.\n\n" +
 			"The anonymous lane alone is bounded: 413 over 64 KiB, 400 over 50 events, 429 on the " +
 			"per-client-IP and per-peer caps, and a DNT:1 or Sec-GPC:1 request stores nothing and says " +
-			"so in the receipt. Where a deployment switches anonymous capture off, a credential-less " +
+			"so in the receipt. Two stored values carry their own bounds on top, because a request cap " +
+			"does not bound one value: an element annotation over 2 KiB (or a trail over 32 steps) and " +
+			"an exception class over 256 bytes are dropped from the row, which still lands. Where a " +
+			"deployment switches anonymous capture off, a credential-less " +
 			"write is 403 instead. Authenticated bodies are offered to the observability plane first, " +
 			"which claims LLM-observability ingestion batches and declines everything else.",
 	},
