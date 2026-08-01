@@ -152,11 +152,12 @@ generate: ## Scaffold missing plugin/<app>/main.go and validate the manifest.App
 	$(GO) run ./plugin/gen-app-cmds
 
 # NOTE: the shipped API is the light host plus one binary per app (there is no
-# fused `cloud` binary anymore). The Go `hanzo` CLI (cmd/hanzo) is DELETED; the
-# shipped `hanzo` is the Rust CLI (~/work/hanzo/cli, `curl hanzo.sh`), which talks
-# to this API over HTTP via its OpenAPI-generated command surface. cli/ remains
-# only as the reference for the still-to-port client-side tools and is not built
-# here.
+# fused `cloud` binary anymore). The `hanzo` name is served by two binaries: the
+# Rust fabric CLI (~/work/hanzo/cli, `curl hanzo.sh`), which talks to this API
+# over HTTP via its OpenAPI-generated command surface, and cmd/hanzo here, the
+# CLIENT-ONLY control binary over cli/ that delegates every verb it does not
+# register to that Rust CLI. cmd/hanzo links cli and nothing else — no app, no
+# host — so it is not part of the API build above: `go build ./cmd/hanzo`.
 
 # Builds the host plus EXACTLY the plugins it is told to mount — not all 106.
 # The host resolves a plugin as a file beside itself (manifest.App.Plugin), so a
