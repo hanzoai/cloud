@@ -248,6 +248,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Publish the delivery inventory read on the internal plane, so apps/deploy
 	// renders from a tree read instead of cloning (files.go).
 	exposeFiles()
+	exposeImport()
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key

@@ -560,8 +560,13 @@ func spawnImport(org string, items []githubImportItem) {
 					log.Warn("github import: token", "org", org, "repo", it.Name, "err", err)
 					return
 				}
+				// Project is the GitHub ACCOUNT the repo came from, which is what
+				// keeps hanzoai/ai, hanzo-apps/ai and hanzo-docs/ai three repos
+				// rather than one overwriting the next: native stores a repo at
+				// <org>/<project>/<name>.git, so without it they share a path.
 				if err := cloud.ImportGitRepo(rctx, cloud.GitImportReq{
-					Org: org, Repo: it.Name, CloneURL: it.CloneURL, Token: tok, MirrorURL: it.CloneURL,
+					Org: org, Project: it.Owner, Repo: it.Name,
+					CloneURL: it.CloneURL, Token: tok, MirrorURL: it.CloneURL,
 				}); err != nil {
 					log.Warn("github import failed", "org", org, "repo", it.Name, "err", err)
 					return
