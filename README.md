@@ -28,10 +28,10 @@ Open <http://localhost:8080> for the embedded console; the API is served under `
 
 ## `hanzo` — cloud control CLI
 
-The same binary is also the control CLI for the live estate. The first token selects the mode:
+The same binary is also the control CLI for the Hanzo Cloud. The first token selects the mode:
 
 - `hanzo <subsystem>` — **server mode**: serve a subsystem (`hanzo iam`, `hanzo cloud`, …).
-- `hanzo <verb>` — **client mode**: control the live estate. A thin client over
+- `hanzo <verb>` — **client mode**: manage the Hanzo Cloud. A thin client over
   Hanzo IAM (`hanzo.id`), the platform control plane (`platform.hanzo.ai/v1`),
   and the cloud `/v1` API — it invents no parallel API.
 
