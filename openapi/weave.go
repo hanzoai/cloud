@@ -28,6 +28,14 @@ import (
 // What Weave does NOT do is arbitrate. It has no policy for who should win,
 // because there is no such policy: an overlap is a bug at the composition root,
 // and the fix is in Wire(), not here.
+//
+// The one exception is not a policy either, it is the matcher: an operation that
+// arrived through a DOOR (openapi/relay.go — a wildcard standing for a whole
+// registry) loses to one that did not, because a wildcard is registered after the
+// specific paths that carve out of it and fiber picks the specific one. Weave can
+// see that because a relayed operation names its own registry in x-app and a
+// direct one does not, so the rule is read off the data rather than configured.
+// Two specific claims, or two doors, are still a refusal.
 
 // Part is one app's contribution: its document, and the name a conflict is
 // reported against. The name is the app's, not the file's — a message naming
@@ -169,6 +177,71 @@ func (c *Conflict) Error() string {
 	}
 }
 
+// nouns is THE noun gate: one schema name, one shape, wherever two claimants meet.
+//
+// Schemas are named after Go types (AccessOut, Campaign, None), so two
+// contributors can reach the same name honestly and mean different things — and
+// every generated SDK would bind whichever the merge read last. There is one gate
+// for that, here, and both composition points call it: [Weave], where the
+// claimants are two apps, and [Project], where they are an app and the registry
+// behind its door. A second implementation would be a second policy.
+//
+// Shapes are compared as CANONICAL JSON rather than with DeepEqual: they arrive as
+// decoded `any` trees whose numbers may be float64 or json.Number depending on how
+// the part was read, and two trees that serialize identically describe the same
+// type whatever their in-memory shape. encoding/json sorts object keys, so the
+// bytes are canonical.
+type nouns struct {
+	raw   map[string]json.RawMessage
+	owner map[string]string
+}
+
+func newNouns() *nouns {
+	return &nouns{raw: map[string]json.RawMessage{}, owner: map[string]string{}}
+}
+
+// add takes one claimant's schemas, or refuses the name it disagrees about.
+func (n *nouns) add(owner string, schemas map[string]any) error {
+	for _, name := range sortedKeys(schemas) {
+		raw, err := json.Marshal(schemas[name])
+		if err != nil {
+			return fmt.Errorf("%s: schema %q: %w", owner, name, err)
+		}
+		if prev, seen := n.raw[name]; seen {
+			if !bytes.Equal(prev, raw) {
+				return &Conflict{Kind: "schema", Name: name, A: n.owner[name], B: owner}
+			}
+			continue
+		}
+		n.raw[name] = raw
+		n.owner[name] = owner
+	}
+	return nil
+}
+
+// into merges the accumulated schemas into doc's components, leaving doc
+// untouched when there are none — an empty components block is noise in every
+// artifact that carries it.
+func (n *nouns) into(doc *Document) error {
+	if len(n.raw) == 0 {
+		return nil
+	}
+	if doc.Components == nil {
+		doc.Components = &Components{Schemas: map[string]any{}}
+	}
+	if doc.Components.Schemas == nil {
+		doc.Components.Schemas = map[string]any{}
+	}
+	for name, raw := range n.raw {
+		var v any
+		if err := json.Unmarshal(raw, &v); err != nil {
+			return fmt.Errorf("schema %q: %w", name, err)
+		}
+		doc.Components.Schemas[name] = v
+	}
+	return nil
+}
+
 // Weave composes the parts into the fleet document, or refuses.
 //
 // Identity (openapi version, info, servers) comes from THIS package, not from
@@ -182,9 +255,9 @@ func Weave(parts []Part) (*Document, error) {
 		Servers: []Server{fleetServer},
 		Paths:   map[string]PathItem{},
 	}
-	opOwner := map[string]string{}     // "METHOD path" → app
-	schemaOwner := map[string]string{} // schema name → app
-	schemas := map[string]json.RawMessage{}
+	opOwner := map[string]string{} // "METHOD path" → app
+	behind := map[string]bool{}    // "METHOD path" → the claim came through a door
+	schemas := newNouns()
 	tags := map[string]bool{}
 
 	for _, p := range parts {
@@ -192,38 +265,53 @@ func Weave(parts []Part) (*Document, error) {
 			item := p.Doc.Paths[path]
 			for _, method := range sortedKeys(item) {
 				at := strings.ToUpper(method) + " " + path
+				op := item[method]
+				// x-app names the registry that registered the operation, and it is
+				// set where that is known: [Project] stamps the module behind a door,
+				// this stamps the app for everything else. Never overwritten — an
+				// operation that already named its registry knows better than the
+				// part it arrived in, which is exactly the traceability the field is
+				// for. Two nested doors would each stamp their own source, and the
+				// innermost — the one that ran first — is the one that answers.
+				relayed := op.App != "" && op.App != p.App
+				if op.App == "" {
+					op.App = p.App
+				}
 				if prev, dup := opOwner[at]; dup {
-					return nil, &Conflict{Kind: "operation", Name: at, A: prev, B: p.App}
+					// A DOOR YIELDS TO A SPECIFIC ROUTE, because that is what the
+					// matcher does: a wildcard is registered after the paths that
+					// carve out of it, and fiber picks the specific one. So a claim
+					// that arrived through a door is not a rival to one that did not
+					// — it is the loser, and publishing it would name a handler no
+					// request reaches. apps/o11y mounts /v1/o11y/scope in front of
+					// the o11y door for exactly this reason.
+					//
+					// This is the ONE case Weave resolves, and it resolves it by
+					// reading the router's own rule rather than by preferring an app.
+					// Two specific claims, or two doors, remain a refusal: those are
+					// bugs at the composition root and there is no rule that picks.
+					switch {
+					case relayed && !behind[at]:
+						continue
+					case !relayed && behind[at]:
+					default:
+						return nil, &Conflict{Kind: "operation", Name: at, A: prev, B: p.App}
+					}
 				}
 				opOwner[at] = p.App
+				behind[at] = relayed
 				if out.Paths[path] == nil {
 					out.Paths[path] = PathItem{}
 				}
-				out.Paths[path][method] = item[method]
+				out.Paths[path][method] = op
 			}
 		}
 
-		// Schemas are compared as CANONICAL JSON rather than with DeepEqual:
-		// they arrive as decoded `any` trees whose numbers may be float64 or
-		// json.Number depending on how the part was read, and two trees that
-		// serialize identically describe the same type whatever their in-memory
-		// shape. encoding/json sorts object keys, so the bytes are canonical.
 		if p.Doc.Components == nil {
 			continue
 		}
-		for _, name := range sortedKeys(p.Doc.Components.Schemas) {
-			raw, err := json.Marshal(p.Doc.Components.Schemas[name])
-			if err != nil {
-				return nil, fmt.Errorf("%s: schema %q: %w", p.App, name, err)
-			}
-			if prev, seen := schemas[name]; seen {
-				if !bytes.Equal(prev, raw) {
-					return nil, &Conflict{Kind: "schema", Name: name, A: schemaOwner[name], B: p.App}
-				}
-				continue
-			}
-			schemas[name] = raw
-			schemaOwner[name] = p.App
+		if err := schemas.add(p.App, p.Doc.Components.Schemas); err != nil {
+			return nil, err
 		}
 	}
 
@@ -246,15 +334,8 @@ func Weave(parts []Part) (*Document, error) {
 	}
 	sort.Slice(out.Tags, func(i, j int) bool { return out.Tags[i].Name < out.Tags[j].Name })
 
-	if len(schemas) > 0 {
-		out.Components = &Components{Schemas: make(map[string]any, len(schemas))}
-		for name, raw := range schemas {
-			var v any
-			if err := json.Unmarshal(raw, &v); err != nil {
-				return nil, fmt.Errorf("schema %q: %w", name, err)
-			}
-			out.Components.Schemas[name] = v
-		}
+	if err := schemas.into(out); err != nil {
+		return nil, err
 	}
 
 	// The composed document owes the same invariant a generated one does: an
