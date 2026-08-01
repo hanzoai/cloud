@@ -97,7 +97,7 @@ func (o booksOps) trialBalance(ctx context.Context, in *periodIn) (*TrialBalance
 	}
 	tb, err := trialBalance(ctx, st, in.From, in.To)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "books trial-balance failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "books trial failed")
 	}
 	return &tb, nil
 }
@@ -137,7 +137,7 @@ func (o booksOps) balanceSheet(ctx context.Context, in *asOfIn) (*BalanceSheet, 
 	}
 	bs, err := balanceSheet(ctx, st, in.To)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "books balance-sheet failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "books position failed")
 	}
 	return &bs, nil
 }

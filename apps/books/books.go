@@ -2,8 +2,8 @@
 // reconciliation, and the reports that prove the books balance.
 //
 // It serves /v1/books: a fixed chart of accounts, an append-only general ledger,
-// bank feeds with reconciliation, receipt scanning, and the trial-balance / P&L /
-// balance-sheet reports.
+// bank feeds with reconciliation, receipt scanning, and the trial / P&L /
+// position reports.
 //
 // WHY THIS EXISTS. finance holds the money (a prepaid wallet: deposits + usage debits);
 // billing PROJECTS that wallet for the customer UI. Neither keeps BOOKS — a general
@@ -128,9 +128,9 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 	o := booksOps{s: s}
 	zip.Get(g, "/accounts", o.listAccounts)
 	zip.Get(g, "/gl", o.listGL)
-	zip.Get(g, "/trial-balance", o.trialBalance)
+	zip.Get(g, "/trial", o.trialBalance)
 	zip.Get(g, "/pnl", o.profitAndLoss)
-	zip.Get(g, "/balance-sheet", o.balanceSheet)
+	zip.Get(g, "/position", o.balanceSheet)
 	zip.Get(g, "/export", o.exportPackage)
 	zip.Get(g, "/questions", o.listQuestions)
 	// The metrics read went typed the day its Out stopped embedding Metrics:

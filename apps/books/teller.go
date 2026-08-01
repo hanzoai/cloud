@@ -298,14 +298,14 @@ func (tc *tellerConn) exchange(ctx context.Context, org, accessToken string) err
 
 // TellerLink is the client-side config for Teller Connect (the browser widget that produces
 // an enrollment). application_id is PUBLIC (not a secret); environment selects sandbox vs
-// production. This is the link-token analog — Teller Connect runs client-side, so there is
+// production. This is the bank-token analog — Teller Connect runs client-side, so there is
 // no server-minted token, only this public config.
 type TellerLink struct {
 	ApplicationID string `json:"applicationId"`
 	Environment   string `json:"environment"`
 }
 
-// linkConfig returns the public Teller Connect config from env — the link-token handler's
+// linkConfig returns the public Teller Connect config from env — the bank-token handler's
 // payload. It reads no secret: the application id is public and the token only ever arrives
 // afterward, via exchange, straight into KMS.
 func (tc *tellerConn) linkConfig() (TellerLink, error) {
