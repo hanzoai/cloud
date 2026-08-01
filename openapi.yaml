@@ -27952,6 +27952,110 @@ paths:
       summary: Release a run waiting at an approval step, with the approval payload
       tags:
       - automations
+  /v1/balancers:
+    get:
+      description: |-
+        ListLoadBalancers returns every load balancer the caller's org owns, under the
+        friendly names the org created them with. Same account-wide filter as the VPC
+        listing: a load balancer outside the caller's "o"<orgHash>- namespace is never
+        in the answer.
+      operationId: get_v1_balancers
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                loadBalancers:
+                - id: lb-1
+                  ip: 10.0.0.1
+                  name: edge
+                  status: active
+                  targets: 3
+                  type: REGIONAL
+              schema:
+                $ref: '#/components/schemas/lbList'
+          description: ok
+      summary: ListLoadBalancers returns every load balancer the caller's org owns,
+        under the friendly names the org created them with.
+      tags:
+      - load-balancers
+    post:
+      description: |-
+        CreateLoadBalancer creates a load balancer in the caller's org namespace and
+        answers 201 with it. The physical DigitalOcean name is derived server-side from
+        the validated org; a name that already exists there is a 409. Omitting
+        forwarding rules yields a usable HTTP 80→80 load balancer rather than a 422.
+      operationId: post_v1_balancers
+      requestBody:
+        content:
+          application/json:
+            example:
+              forwarding_rules:
+              - entry_port: 443
+                entry_protocol: https
+                target_port: 8080
+                target_protocol: http
+              name: edge
+              region: nyc3
+            schema:
+              $ref: '#/components/schemas/createLBReq'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/lbView'
+          description: created
+      summary: CreateLoadBalancer creates a load balancer in the caller's org namespace
+        and answers 201 with it.
+      tags:
+      - load-balancers
+  /v1/balancers/{id}:
+    delete:
+      description: |-
+        DeleteLoadBalancer removes one of the caller org's load balancers and answers
+        204. Ownership is confirmed by re-fetching the resource before anything is
+        deleted, so a cross-tenant id is a 404 rather than a delete of another org's
+        load balancer.
+      operationId: delete_v1_balancers_id
+      parameters:
+      - description: ID is the DigitalOcean resource id (a UUID), from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteLoadBalancer removes one of the caller org's load balancers and
+        answers 204.
+      tags:
+      - load-balancers
+    get:
+      description: |-
+        GetLoadBalancer returns one of the caller org's load balancers by id. One that
+        exists in another org's namespace is reported 404, never 403 — the same
+        existence-oracle guard the VPC read applies.
+      operationId: get_v1_balancers_id
+      parameters:
+      - description: ID is the DigitalOcean resource id (a UUID), from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/lbView'
+          description: ok
+      summary: GetLoadBalancer returns one of the caller org's load balancers by id.
+      tags:
+      - load-balancers
   /v1/base/health:
     get:
       description: |-
@@ -44559,110 +44663,6 @@ paths:
       summary: See plan consumption and Hanzo spend side by side
       tags:
       - links
-  /v1/load-balancers:
-    get:
-      description: |-
-        ListLoadBalancers returns every load balancer the caller's org owns, under the
-        friendly names the org created them with. Same account-wide filter as the VPC
-        listing: a load balancer outside the caller's "o"<orgHash>- namespace is never
-        in the answer.
-      operationId: get_v1_load-balancers
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                loadBalancers:
-                - id: lb-1
-                  ip: 10.0.0.1
-                  name: edge
-                  status: active
-                  targets: 3
-                  type: REGIONAL
-              schema:
-                $ref: '#/components/schemas/lbList'
-          description: ok
-      summary: ListLoadBalancers returns every load balancer the caller's org owns,
-        under the friendly names the org created them with.
-      tags:
-      - load-balancers
-    post:
-      description: |-
-        CreateLoadBalancer creates a load balancer in the caller's org namespace and
-        answers 201 with it. The physical DigitalOcean name is derived server-side from
-        the validated org; a name that already exists there is a 409. Omitting
-        forwarding rules yields a usable HTTP 80→80 load balancer rather than a 422.
-      operationId: post_v1_load-balancers
-      requestBody:
-        content:
-          application/json:
-            example:
-              forwarding_rules:
-              - entry_port: 443
-                entry_protocol: https
-                target_port: 8080
-                target_protocol: http
-              name: edge
-              region: nyc3
-            schema:
-              $ref: '#/components/schemas/createLBReq'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/lbView'
-          description: created
-      summary: CreateLoadBalancer creates a load balancer in the caller's org namespace
-        and answers 201 with it.
-      tags:
-      - load-balancers
-  /v1/load-balancers/{id}:
-    delete:
-      description: |-
-        DeleteLoadBalancer removes one of the caller org's load balancers and answers
-        204. Ownership is confirmed by re-fetching the resource before anything is
-        deleted, so a cross-tenant id is a 404 rather than a delete of another org's
-        load balancer.
-      operationId: delete_v1_load-balancers_id
-      parameters:
-      - description: ID is the DigitalOcean resource id (a UUID), from the path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: DeleteLoadBalancer removes one of the caller org's load balancers and
-        answers 204.
-      tags:
-      - load-balancers
-    get:
-      description: |-
-        GetLoadBalancer returns one of the caller org's load balancers by id. One that
-        exists in another org's namespace is reported 404, never 403 — the same
-        existence-oracle guard the VPC read applies.
-      operationId: get_v1_load-balancers_id
-      parameters:
-      - description: ID is the DigitalOcean resource id (a UUID), from the path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/lbView'
-          description: ok
-      summary: GetLoadBalancer returns one of the caller org's load balancers by id.
-      tags:
-      - load-balancers
   /v1/logs/health:
     get:
       description: |-
