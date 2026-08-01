@@ -26,7 +26,8 @@ package admin
 //   - Traces     → o11y_traces.distributed_o11y_index_v3 : request count, latency p50/p95/p99,
 //                                                              error rate, top services
 //   - Logs       → o11y_logs.distributed_logs_v2 : fleet log volume + volume-over-time
-//   - LLM gens   → console.observations     : generations + cost (fleet-wide; rows exist, see o11yAIObs)
+//   - LLM gens   → event.span                : gen_ai spans — a gen_ai span IS the
+//                                              observation of record (see o11yAIObs)
 //
 // SUPERADMIN ONLY (core.Admit, the op's first line): the gateway strips a client
 // X-Org-Id and re-mints from the JWT owner, and this handler applies NO org filter,
@@ -51,26 +52,39 @@ import (
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ZAP collector
-// (o11y_*), the ai ledger (hanzo.cloud_usage), and O11yAI own their writes.
+// (o11y_*), the ai ledger (hanzo.cloud_usage), and the event plane (apps/analytics)
+// own their writes.
 //
-// o11yAIObs pointed at `o11y_ai.observations` and that DATABASE DOES NOT EXIST —
-// verified against system.tables on 2026-07-31, which is why the fleet AI panel
-// has always read zero. It was not honest-empty: 8,867 real observations (plus
-// 8,819 traces) sit in `console`, which nothing reads. Columns match this file's
-// queries exactly (project_id, type, start_time, Nullable end_time,
-// provided_model_name, internal_model_id, total_cost), so the fix is the name.
-// The rows span 2026-02-11..2026-03-14, so a recent window still totals zero —
-// correctly, because no gen_ai observation has landed since. That is the honest
-// answer; the previous one was a missing table pretending to be an empty one.
-// `console` is a SURFACE name on a store and is itself wrong: HIP-0132 folds
-// this signal into o11y.spans (gen_ai span == the observation of record). This
-// const moves there with #102 — pointing at the rows that exist is the step that
-// does not require the o11y database to exist first.
+// The AI lens reads the PLANE's span table: a gen_ai span IS the observation of
+// record (HIP-0132; llmobs in hanzoai/o11y projects the very same attributes).
+// This const has hopped twice, each hop toward the rows that actually exist:
+// `o11y_ai.observations` (a database that never existed — the panel read zero),
+// then `console.observations` (real rows, but a SURFACE name on a store that had
+// already been folded into the plane). event.span holds those same rows as
+// kind='client' gen_ai spans — identical count (8,867) and identical summed cost
+// verified against console on 2026-07-31 — so with this hop nothing reads
+// `console` and the database is droppable. Model, cost and latency are span
+// ATTRIBUTES (gen_ai.* / _o11y.*), not columns, hence the projection consts next
+// to the table name; attribute values are Map strings, so numeric ones read
+// through toFloat64OrZero.
 const (
-	o11yUsageTable   = "hanzo.cloud_usage"
-	o11yTraceTable   = "o11y_traces.distributed_o11y_index_v3"
-	o11yLogTable     = "o11y_logs.distributed_logs_v2"
-	o11yAIObs        = "console.observations"
+	o11yUsageTable = "hanzo.cloud_usage"
+	o11yTraceTable = "o11y_traces.distributed_o11y_index_v3"
+	o11yLogTable   = "o11y_logs.distributed_logs_v2"
+
+	// The fleet AI observation source: gen_ai spans on the event plane. These
+	// consts are ONE projection stated ONCE — aimetrics.go reads them too. (Its
+	// former twin const drifted into pointing at nothing precisely because the
+	// same fact was stated twice.) kind='client' because the observation is the
+	// LLM CALL span — OTel gen_ai spans are client spans, and that is the kind
+	// carrying gen_ai.operation.name/model/cost; the old trace roots live beside
+	// them as kind='server' gen_ai spans and are NOT observations.
+	o11yAIObs      = "event.span"
+	o11yGenAISpan  = "mapContains(attributes, 'gen_ai.system') AND kind = 'client'"
+	o11yGenAICost  = "toFloat64OrZero(attributes['_o11y.gen_ai.total_cost'])"
+	o11yGenAIModel = "if(attributes['gen_ai.response.model'] != '', " +
+		"attributes['gen_ai.response.model'], attributes['gen_ai.request.model'])"
+
 	o11yTopN         = 10
 	o11yServiceLimit = 12
 
@@ -161,7 +175,7 @@ type o11ySvcStat struct {
 	LatencyP95Ms float64 `json:"latencyP95Ms"`
 }
 
-// o11yLLM is the fleet-wide O11yAI generation rollup (near-empty today → honest).
+// o11yLLM is the fleet-wide LLM generation rollup over gen_ai spans.
 type o11yLLM struct {
 	Generations int64   `json:"generations"`
 	CostUsd     float64 `json:"costUsd"`
@@ -242,7 +256,7 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 	if rows, err := datastore.Query(ctx, o11yTopServicesSQL(), sinceTS); err == nil {
 		payload.TopServices = topServicesFromRows(rows)
 	}
-	// Fleet LLM generations (O11yAI) — best-effort; near-empty today.
+	// Fleet LLM generations — gen_ai spans on the plane; best-effort.
 	if rows, err := datastore.Query(ctx, o11yLLMSQL(), sinceTS); err == nil {
 		r := firstRowOr(rows)
 		payload.LLM = o11yLLM{Generations: chInt64(r["gens"]), CostUsd: chFloat64(r["cost"])}
@@ -314,9 +328,11 @@ func o11yTopServicesSQL() string {
 		"GROUP BY service ORDER BY requests DESC LIMIT " + strconv.Itoa(o11yServiceLimit)
 }
 
+// o11yLLMSQL is the fleet generation rollup over gen_ai spans — ONE builder,
+// read by this board and by aimetrics (same package, same query, stated once).
 func o11yLLMSQL() string {
-	return "SELECT count() AS gens, toFloat64(sum(total_cost)) AS cost FROM " + o11yAIObs +
-		" WHERE type = 'GENERATION' AND start_time >= ?"
+	return "SELECT count() AS gens, sum(" + o11yGenAICost + ") AS cost FROM " + o11yAIObs +
+		" WHERE " + o11yGenAISpan + " AND time >= ?"
 }
 
 // ── pure row parsers (unit-tested) ──
