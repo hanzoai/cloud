@@ -185,8 +185,12 @@ func (g *abuseGate) handle(c *zip.Ctx) error {
 		return g.enforce(c, sig, RiskVerdict{Action: h.Action, ID: h.Decision, Cause: h.Reason})
 	}
 
+	// A LAPSED hold forces the question again. Without it a hold buys a free
+	// minute at a time: the scorer sees more than the sensor does, so a verdict
+	// reached from the org's own history leaves no trace in a rolling minute of
+	// counts, and waiting for the local pattern to re-trip would wait forever.
 	privileged := Privileged(c.Method(), path)
-	if !g.screen(p, privileged) {
+	if !g.screen(p, privileged) && !g.traffic.Lapsed(sig, now) {
 		return g.watch(c, sig)
 	}
 
@@ -238,7 +242,11 @@ func (g *abuseGate) handle(c *zip.Ctx) error {
 	g.traffic.Screen(org, now)
 	g.meter.Meter(org, principal.Project(c), "screen", g.cents, c.RequestID(), sig.IP)
 
-	if !v.Allowed() {
+	if v.Allowed() {
+		// The caller has been re-judged and is fine. Drop any lapsed hold, so it
+		// stops forcing a screen on every subsequent request.
+		g.traffic.Release(sig)
+	} else {
 		g.traffic.Hold(sig, edge.Hold{Action: v.Action, Reason: v.Cause, Decision: v.ID}, holdFor, now)
 	}
 	return g.enforce(c, sig, v)

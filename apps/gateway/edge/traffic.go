@@ -349,7 +349,28 @@ func (t *Traffic) Held(s Signal, now time.Time) (Hold, bool) {
 	return c.hold, true
 }
 
-// Release drops any held verdict for this caller — the operator's undo.
+// Lapsed reports whether a verdict WAS in force for this caller and has since
+// expired. It is what stops a hold from buying an attacker a free minute at a
+// time: a caller the scorer refused is asked about again on its next request
+// after the hold ends, whether or not the local pattern still looks unusual.
+//
+// That distinction matters because the scorer sees more than the sensor does. A
+// verdict reached from the org's own history — prior accounts on this device, a
+// spend curve, a chargeback — leaves no trace in a rolling minute of request
+// counts, so waiting for the local pattern to re-trip would wait forever.
+//
+// The record is dropped by Release, which the gate calls once the scorer allows
+// the caller again. So this is true exactly between "a hold ended" and "the
+// scorer said it is fine now".
+func (t *Traffic) Lapsed(s Signal, now time.Time) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	c := t.kv[callerKey(s.Org, s.Cred, s.IP)]
+	return c != nil && c.hold.Action != "" && !now.Before(c.hold.Until)
+}
+
+// Release drops any held verdict for this caller — the operator's undo, and the
+// gate's own acknowledgement that a lapsed hold has been re-judged.
 func (t *Traffic) Release(s Signal) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
