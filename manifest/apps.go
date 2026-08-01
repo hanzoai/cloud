@@ -106,6 +106,23 @@ var Apps = []App{
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
 	{Name: "webhooks", Prefixes: []string{"/v1/webhooks"}},
 	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models", "/v1/train/experiments", "/v1/train/health", "/v1/train/jobs"}},
+	// risk owns the NATIVE leaves of /v1/ml — the per-organisation model plane —
+	// while ml's row above keeps the kserve/Kubeflow bridge. Longest-prefix match
+	// separates them and no route moves, the same way `storage` and `provisioning`
+	// share /v1/s3.
+	//
+	// The leaves are on THIS row and not on ml's, and that is the sharpest
+	// structural fact here: the model is IN-PROCESS MUTABLE STATE (per-tenant mass
+	// counters). A row is a BINARY, so if one process learned and another scored,
+	// the two would hold different counters and answer one question two ways —
+	// with no error and no log. One owner of the state, one row.
+	//
+	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
+	// always-ok liveness route would otherwise shadow.
+	{Name: "risk", Prefixes: []string{
+		"/v1/ml/features", "/v1/ml/learn", "/v1/ml/score", "/v1/ml/search", "/v1/ml/state",
+		"/v1/risk/health",
+	}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},
