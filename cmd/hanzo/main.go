@@ -47,9 +47,15 @@ func main() {
 		return
 	}
 
+	// `version`, `--version` and `-v` are three spellings of ONE command, so
+	// they normalise onto it rather than each printing their own line. A second
+	// implementation here is how the version command's delegate reporting came
+	// to be dead code: this short-circuit ran first and nobody saw the rest.
 	switch os.Args[1] {
 	case "version", "--version", "-v":
-		fmt.Printf("hanzo %s\n", version)
+		if err := cli.Execute([]string{"version"}); err != nil {
+			os.Exit(1)
+		}
 		return
 	}
 
