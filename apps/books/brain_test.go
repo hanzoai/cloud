@@ -172,8 +172,8 @@ func TestAskRoutesToRealFigures(t *testing.T) {
 	if v := figureValue(r, "Cash"); v != "$950" {
 		t.Fatalf("cash figure must be $950, got %q", v)
 	}
-	if !hasSource(r, "balance-sheet") {
-		t.Fatalf("runway answer must cite the balance-sheet source, got %v", r.Sources)
+	if !hasSource(r, "position") {
+		t.Fatalf("runway answer must cite the position source, got %v", r.Sources)
 	}
 
 	// Revenue question → total recognized revenue.
