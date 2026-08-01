@@ -23,12 +23,15 @@ package risk
 import (
 	"context"
 	"errors"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/luxfi/aml/pkg/anomaly"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -91,9 +94,13 @@ type mlEvent struct {
 	// Device is the device fingerprint, if any. It is the axis that surfaces
 	// several nominally unrelated subjects acting as one.
 	Device string `json:"device,omitempty"`
-	// At is when it happened, RFC 3339. Empty means now. An event older than the
-	// longest window is still recorded, at the leading edge, and counted as late
-	// rather than dropped.
+	// At is when it happened, RFC 3339. Empty means now. It must sit inside the
+	// thirty-day window the aggregates keep and no more than two minutes ahead of
+	// this plane's clock; anything outside that is REFUSED rather than quietly
+	// accepted, because a future timestamp moves the aggregates' leading edge and
+	// leaves every later event for that subject reading as though it never
+	// happened. History older than the window is folded in from your own event
+	// surface, not through this door.
 	At string `json:"at,omitempty"`
 }
 
@@ -116,18 +123,30 @@ func (e mlEvent) observation(now time.Time) (observation, error) {
 		if err != nil {
 			return observation{}, zip.ErrBadRequest("'at' must be RFC 3339")
 		}
+		// BOUNDED, BOTH DIRECTIONS, AND REFUSED RATHER THAN ADJUSTED. Unbounded this
+		// is a one-request detector evasion: a future stamp moves the aggregates'
+		// leading edge, after which the subject's real activity is older than every
+		// window and reads as nothing at all. See [within].
+		if err := within(parsed, now, ringWindow); err != nil {
+			return observation{}, err
+		}
 		at = parsed
 	}
+	// One-second resolution, because that is the resolution the aggregates are
+	// durable at (ring.go) and the finest ring bucket is a minute. Truncating HERE
+	// is what makes a rebuild from the record identical to the live rings rather
+	// than merely close to them.
+	at = at.UTC().Truncate(time.Second)
 	id := strings.TrimSpace(e.ID)
 	if id == "" {
-		id = kind + ":" + subject + "@" + at.UTC().Format(time.RFC3339Nano)
+		id = kind + ":" + subject + "@" + at.Format(time.RFC3339Nano)
 	}
 	return observation{
 		ID: id, Kind: kind, Subject: subject,
 		USD:    float64(e.Nano) / 1e9,
 		Peer:   strings.TrimSpace(e.Peer),
 		Device: strings.TrimSpace(e.Device),
-		At:     at.UTC(),
+		At:     at,
 	}, nil
 }
 
@@ -236,8 +255,8 @@ type mlLearnIn struct {
 
 // mlLearnOut is what the batch did.
 type mlLearnOut struct {
-	// Learned is how many events were recorded into the tenant's aggregates and
-	// learned from.
+	// Learned is how many events the model learned from, which is the batch, and
+	// is also what the call is metered at: one screen per event.
 	Learned int `json:"learned"`
 	// Verdicts is the model's verdict on each event, in the order given, so a
 	// caller that is both teaching and deciding needs one round trip.
@@ -302,6 +321,17 @@ type mlSurface struct {
 	// Folded is how many buckets of the tenant's own feature surface were folded
 	// into the model when it became resident.
 	Folded int `json:"folded"`
+	// Rolled is how many windows of this organisation's own source planes —
+	// product events, captured failures, metered inference — were rolled up into
+	// its feature surface before that fold. Zero with no gap means the surface was
+	// already current, which is a different fact from the rollup never running.
+	Rolled int `json:"rolled"`
+	// Replayed is how many of this organisation's own recorded observations
+	// rebuilt its sliding aggregates when the model became resident. It is what
+	// says a rollout was a rebuild rather than a blindness: the aggregates are a
+	// projection of a durable record, so a restart costs a replay and not a
+	// control.
+	Replayed int `json:"replayed"`
 	// Window is the lookback the fold covered.
 	Window string `json:"window"`
 	// Gap says why the fold did not happen or did not complete, when that is the
@@ -608,10 +638,19 @@ func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
 	if err != nil {
 		return nil, err
 	}
+	pay, err := o.gate(ctx, "score", 1)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.enter(t); err != nil {
+		return nil, err
+	}
+	defer p.leave(t)
 	a, err := p.score(t, obs)
 	if err != nil {
 		return nil, wrap(err)
 	}
+	pay(1)
 	out := verdict(a)
 	return &out, nil
 }
@@ -645,18 +684,33 @@ func (o ops) learn(ctx context.Context, in *mlLearnIn) (*mlLearnOut, error) {
 	if len(in.Events) > maxBatch {
 		return nil, zip.Errorf(413, "at most %d events per batch", maxBatch)
 	}
+	// Validate the WHOLE batch before any of it is charged for or learned from: a
+	// batch that is half applied and then refused leaves the caller unable to say
+	// what its model holds.
 	now := time.Now()
-	out := mlLearnOut{Verdicts: make([]mlScoreOut, 0, len(in.Events))}
+	obs := make([]observation, 0, len(in.Events))
 	for i := range in.Events {
-		obs, err := in.Events[i].observation(now)
+		one, err := in.Events[i].observation(now)
 		if err != nil {
 			return nil, err
 		}
-		a, err := p.learn(t, obs)
-		if err != nil {
-			return nil, wrap(err)
-		}
-		out.Learned++
+		obs = append(obs, one)
+	}
+	pay, err := o.gate(ctx, "learn", len(obs))
+	if err != nil {
+		return nil, err
+	}
+	if err := p.enter(t); err != nil {
+		return nil, err
+	}
+	defer p.leave(t)
+	verdicts, err := p.learn(t, obs...)
+	if err != nil {
+		return nil, wrap(err)
+	}
+	pay(len(verdicts))
+	out := mlLearnOut{Learned: len(verdicts), Verdicts: make([]mlScoreOut, 0, len(verdicts))}
+	for _, a := range verdicts {
 		out.Verdicts = append(out.Verdicts, verdict(a))
 	}
 	return &out, nil
@@ -816,7 +870,15 @@ func (o ops) features(ctx context.Context, in *mlCatalogIn) (*mlCatalog, error) 
 			Blind: st.Blind[f.Name],
 		})
 	}
+	// A SURFACE READ ROLLS FIRST, the same rule the search follows: the dictionary
+	// answers what this organisation's surface actually carries, and a surface
+	// nobody rolled carries nothing — which reads as "every dimension blind" and is
+	// the wrong answer rather than a missing one. Idempotent under the watermark and
+	// aligned to the surface's own grain, so a current surface issues no statement.
 	end := time.Now().UTC()
+	if _, err := p.roll(ctx, t); err != nil {
+		out.Gap = err.Error()
+	}
 	cov, err := dictionary(ctx, t, end.Add(-days), end)
 	if err != nil {
 		out.Gap = err.Error()
@@ -862,24 +924,27 @@ func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
 	}
 	// A search is real compute over real history, so it is GATED before any of it
 	// runs, on the caller's OWN ledger, and it fails closed: a commerce that
-	// cannot be reached refuses rather than admits. The refusal is a typed error —
-	// this route is new, so no client is parsing an older body shape for it.
-	c, onHTTP := cloud.Request(ctx)
-	fee := cloud.ResourceFeeCents(feeEnv, "search")
-	if onHTTP {
-		project, validated := principal.ValidatedProject(c)
-		if err := o.s.Bill.Gate(ctx, principal.Ledger(c), project, validated, "search", fee); err != nil {
-			return nil, zip.Errorf(402, "%v", err)
+	// cannot be reached refuses rather than admits. It is priced as the screens it
+	// will actually perform — every candidate over every event — so the biggest
+	// operation on this surface is not also the cheapest.
+	//
+	// The gate runs where the SIZE is known: [plane.begin] measures the history
+	// first and admits the run second, so the balance check is against the work
+	// actually about to happen rather than against a flat fee that is wrong in both
+	// directions.
+	pay := func(int) {}
+	run, err := p.begin(ctx, t, days, func(events int) error {
+		var err error
+		pay, err = o.gate(ctx, "search", events*len(candidates()))
+		if err != nil {
+			pay = func(int) {}
 		}
-	}
-	run, err := p.begin(ctx, t, days)
+		return err
+	})
 	if err != nil {
 		return nil, wrap(err)
 	}
-	if onHTTP {
-		project, _ := principal.ValidatedProject(c)
-		o.s.Bill.Meter(principal.Ledger(c), project, "search", fee, c.RequestID(), cloud.ClientIP(c))
-	}
+	pay(run.Events * len(candidates()))
 	return &mlSearchRun{ID: run.ID, Events: run.Events, Candidates: len(candidates())}, nil
 }
 
@@ -921,9 +986,81 @@ func (o ops) result(ctx context.Context, in *mlRunRef) (*mlSearchReport, error) 
 // unbounded one is a way to hold every other tenant's request behind this one.
 const maxBatch = 1000
 
-// feeEnv is the operator knob for the per-search fee: CLOUD_RISK_FEE_CENTS_SEARCH
-// wins over CLOUD_RISK_FEE_CENTS, else the fleet default.
-const feeEnv = "CLOUD_RISK_FEE_CENTS"
+// ── the money ────────────────────────────────────────────────────────────────
+//
+// THE BILLABLE UNIT IS A SCREEN: one event judged against an organisation's own
+// model. Scoring one event is one screen, learning from a batch is one per event,
+// and a search is one per candidate per event of the history it replays — which
+// is why the search is priced from its measured size rather than as a flat fee.
+//
+// Every one of them is GATED before the work and METERED after it, on the
+// caller's OWN ledger, in every environment. This surface used to gate only the
+// search: score and learn — the two an abuser would actually call, in a loop —
+// were free, unbounded compute against a per-tenant model and a per-tenant disk
+// write. Free unbounded compute is a denial of service and lost revenue at the
+// same time, and which of the two it is depends only on who found it first.
+
+// defaultScreenUUSD is the fallback price of ONE screen in micro-USD when no
+// operator override is set. A clearly-named, configurable POLICY default — never
+// a fabricated market price; ops sets the real number per deployment via
+// CLOUD_RISK_PRICE_UUSD_PER_SCREEN. Zero makes screens free and therefore
+// un-gated, mirroring the edge gate's price==0 pass-through.
+const defaultScreenUUSD int64 = 100
+
+// screenRate resolves the per-screen price. A negative or unparseable value falls
+// through to the default, so a typo can never silently zero out billing.
+func screenRate() int64 {
+	s := strings.TrimSpace(os.Getenv("CLOUD_RISK_PRICE_UUSD_PER_SCREEN"))
+	if s == "" {
+		return defaultScreenUUSD
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n < 0 {
+		return defaultScreenUUSD
+	}
+	return n
+}
+
+// screenMicros is what n screens cost, in micro-USD.
+func screenMicros(n int) int64 {
+	rate := screenRate()
+	if n <= 0 || rate <= 0 {
+		return 0
+	}
+	return int64(n) * rate
+}
+
+// gate checks the caller's own balance for n screens and returns the debit to run
+// once the work has actually happened.
+//
+// TWO HALVES, ONE DEFINITION, and the split is the point: the gate runs on the
+// UPPER BOUND of the work before any of it starts, and the meter runs on what was
+// DONE. A caller that is refused pays nothing; a caller whose batch was truncated
+// pays for the part that landed.
+//
+// It fails closed — a commerce that cannot be reached refuses rather than admits
+// — and it refuses in the fleet's own money contract via [cloud.Denied], so a 402
+// from this surface reads exactly like a 402 from every other one. Off the HTTP
+// path (an in-process CLI or MCP invocation) there is no ledger to charge and the
+// pair is a no-op, which is the same rule the rest of the fleet applies.
+func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), error) {
+	c, onHTTP := cloud.Request(ctx)
+	if !onHTTP {
+		return func(int) {}, nil
+	}
+	ledger := principal.Ledger(c)
+	project, validated := principal.ValidatedProject(c)
+	if err := o.s.Bill.Gate(ctx, ledger, project, validated, kind, cloud.MicrosToGateCents(screenMicros(n))); err != nil {
+		return nil, cloud.Denied(err)
+	}
+	return func(done int) {
+		o.s.Bill.MeterUsage(ledger, kind, metering.Usage{
+			Model: kind, Project: project, Actor: c.User(),
+			AmountMicros: screenMicros(done),
+			RequestID:    c.RequestID(), ClientIP: cloud.ClientIP(c),
+		})
+	}, nil
+}
 
 // window validates a day count and returns it as a duration. 400 days is the
 // surface's own retention, so asking for more asks for rows that do not exist.
@@ -979,7 +1116,10 @@ func modelState(t tenant, st anomaly.State, f fold) mlModelState {
 		Stated: st.Config.Appetite.Review, Realised: st.Realised, Sample: st.Config.Appetite.Sample,
 		Cut: st.Cut, Saturated: st.Saturated,
 		Refused: st.Refused, Blind: st.Blind,
-		Surface: mlSurface{Folded: f.Folded, Window: f.Window.String(), Gap: f.Gap},
+		Surface: mlSurface{
+			Folded: f.Folded, Rolled: f.Rolled, Replayed: f.Replayed,
+			Window: f.Window.String(), Gap: f.Gap,
+		},
 	}
 }
 

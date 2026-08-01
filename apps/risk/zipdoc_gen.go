@@ -38,7 +38,7 @@ func init() {
 		Example: json.RawMessage(`{"days":30}`),
 	})
 	zip.Describe("GET /v1/ml/search/:id", zip.Doc{
-		Description: "SearchResult reads back one search run: every shape tried over this\norganisation's own history, best first, and the one that fit.\n\nA run another organisation started is simply not there — the same 404 an\nunknown id gives, so the read is not a probe oracle.",
+		Description: "Reads back one search run: every shape tried over this\norganisation's own history, best first, and the one that fit.\n\nA run another organisation started is simply not there — the same 404 an\nunknown id gives, so the read is not a probe oracle.",
 		Fields: map[string]string{
 			"mlRunRef.id":            "ID is the run, taken from the path. A run another organisation started is\nsimply not there — the same answer an unknown id gives.",
 			"mlSearchReport.done":    "Done is false while the run is still going; the trials below are then the\nones finished so far.",
@@ -85,8 +85,13 @@ func init() {
 			"mlModelState.warm":      "Warm is whether that is enough for the model to have an opinion at all.\nBelow it the model declines to score, which is an ordinary state and is not\na clean bill of health.",
 			"mlSurface.folded":       "Folded is how many buckets of the tenant's own feature surface were folded\ninto the model when it became resident.",
 			"mlSurface.gap":          "Gap says why the fold did not happen or did not complete, when that is the\ncase. An empty surface and an unreachable warehouse are different facts and\na model must not report them as the same one.",
+			"mlSurface.replayed":     "Replayed is how many of this organisation's own recorded observations\nrebuilt its sliding aggregates when the model became resident. It is what\nsays a rollout was a rebuild rather than a blindness: the aggregates are a\nprojection of a durable record, so a restart costs a replay and not a\ncontrol.",
+			"mlSurface.rolled":       "Rolled is how many windows of this organisation's own source planes —\nproduct events, captured failures, metered inference — were rolled up into\nits feature surface before that fold. Zero with no gap means the surface was\nalready current, which is a different fact from the rollup never running.",
 			"mlSurface.window":       "Window is the lookback the fold covered.",
 		},
+	})
+	zip.Describe("GET /v1/risk/health", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 	zip.Describe("POST /v1/ml/learn", zip.Doc{
 		Description: "Learn records a batch of events into the caller organisation's own aggregates\nand lets its model learn from them, answering the model's verdict on each.\n\nThis is the training path, and there is no job behind it: the model IS a set of\nmass counters over half-space trees, so learning is an increment and the model\nis current the instant the last event lands. Nothing from any other\norganisation is in it, and nothing from this organisation leaves it.\n\nEvents are recorded FIRST and judged after, which is deliberate: the numbers an\nalert quotes are then the same ones an investigator sees when they look at the\nsubject, and every baseline has the event removed from it arithmetically so\nnothing is measured against itself.",
@@ -101,7 +106,7 @@ func init() {
 			"mlCause.typology":    "Typology is the laundering or abuse pattern this dimension detects.",
 			"mlCause.unit":        "Unit is how to read Observed, which is what turns a coordinate into a\nsentence.",
 			"mlCause.without":     "Without is the score the same event would have received with this\ncoordinate at its neutral value — the counterfactual itself.",
-			"mlEvent.at":          "At is when it happened, RFC 3339. Empty means now. An event older than the\nlongest window is still recorded, at the leading edge, and counted as late\nrather than dropped.",
+			"mlEvent.at":          "At is when it happened, RFC 3339. Empty means now. It must sit inside the\nthirty-day window the aggregates keep and no more than two minutes ahead of\nthis plane's clock; anything outside that is REFUSED rather than quietly\naccepted, because a future timestamp moves the aggregates' leading edge and\nleaves every later event for that subject reading as though it never\nhappened. History older than the window is folded in from your own event\nsurface, not through this door.",
 			"mlEvent.device":      "Device is the device fingerprint, if any. It is the axis that surfaces\nseveral nominally unrelated subjects acting as one.",
 			"mlEvent.id":          "ID is the caller's own stable identifier for the event. It selects the\nbelow-the-line review sample by hash, so a counter would make the sample\nsteerable — use the id the event already has.",
 			"mlEvent.kind":        "Kind is whose behaviour this is: person, session or account. It namespaces\nthe subject, so a person and an account that share an identifier stay two\nsubjects.",
@@ -109,7 +114,7 @@ func init() {
 			"mlEvent.peer":        "Peer is the counterparty, if any. It is an aggregation axis of its own —\n\"unfamiliar\" is a fact about a relationship and not about either party.",
 			"mlEvent.subject":     "Subject is the identifier on that kind.",
 			"mlLearnIn.events":    "Events are the things that happened, oldest first. An empty batch is\nrefused: learning nothing is not an operation.",
-			"mlLearnOut.learned":  "Learned is how many events were recorded into the tenant's aggregates and\nlearned from.",
+			"mlLearnOut.learned":  "Learned is how many events the model learned from, which is the batch, and\nis also what the call is metered at: one screen per event.",
 			"mlLearnOut.verdicts": "Verdicts is the model's verdict on each event, in the order given, so a\ncaller that is both teaching and deciding needs one round trip.",
 			"mlScoreOut.alert":    "Alert is whether this would become evidence. It is false in shadow however\nhigh the score.",
 			"mlScoreOut.causes":   "Causes is the per-feature attribution, ordered by contribution. Each is a\nCOUNTERFACTUAL on the model that produced the score — the coordinate moved\nto its neutral value and the event rescored — so the explanation is the\nsame arithmetic the score came from.",
@@ -141,7 +146,7 @@ func init() {
 			"mlCause.typology":   "Typology is the laundering or abuse pattern this dimension detects.",
 			"mlCause.unit":       "Unit is how to read Observed, which is what turns a coordinate into a\nsentence.",
 			"mlCause.without":    "Without is the score the same event would have received with this\ncoordinate at its neutral value — the counterfactual itself.",
-			"mlEvent.at":         "At is when it happened, RFC 3339. Empty means now. An event older than the\nlongest window is still recorded, at the leading edge, and counted as late\nrather than dropped.",
+			"mlEvent.at":         "At is when it happened, RFC 3339. Empty means now. It must sit inside the\nthirty-day window the aggregates keep and no more than two minutes ahead of\nthis plane's clock; anything outside that is REFUSED rather than quietly\naccepted, because a future timestamp moves the aggregates' leading edge and\nleaves every later event for that subject reading as though it never\nhappened. History older than the window is folded in from your own event\nsurface, not through this door.",
 			"mlEvent.device":     "Device is the device fingerprint, if any. It is the axis that surfaces\nseveral nominally unrelated subjects acting as one.",
 			"mlEvent.id":         "ID is the caller's own stable identifier for the event. It selects the\nbelow-the-line review sample by hash, so a counter would make the sample\nsteerable — use the id the event already has.",
 			"mlEvent.kind":       "Kind is whose behaviour this is: person, session or account. It namespaces\nthe subject, so a person and an account that share an identifier stay two\nsubjects.",
@@ -205,6 +210,8 @@ func init() {
 			"mlSnapshotBody.version": "Version is the layout of the state. State from another version is rejected\nrather than reinterpreted.",
 			"mlSurface.folded":       "Folded is how many buckets of the tenant's own feature surface were folded\ninto the model when it became resident.",
 			"mlSurface.gap":          "Gap says why the fold did not happen or did not complete, when that is the\ncase. An empty surface and an unreachable warehouse are different facts and\na model must not report them as the same one.",
+			"mlSurface.replayed":     "Replayed is how many of this organisation's own recorded observations\nrebuilt its sliding aggregates when the model became resident. It is what\nsays a rollout was a rebuild rather than a blindness: the aggregates are a\nprojection of a durable record, so a restart costs a replay and not a\ncontrol.",
+			"mlSurface.rolled":       "Rolled is how many windows of this organisation's own source planes —\nproduct events, captured failures, metered inference — were rolled up into\nits feature surface before that fold. Zero with no gap means the surface was\nalready current, which is a different fact from the rollup never running.",
 			"mlSurface.window":       "Window is the lookback the fold covered.",
 		},
 	})
@@ -228,7 +235,7 @@ func init() {
 		},
 	})
 	zip.Describe("PUT /v1/ml/state/appetite", zip.Doc{
-		Description: "SetAppetite restates how much of the stream the caller organisation's model may\nsend for examination, and whether it is live.\n\nThe appetite is the decision a model is not permitted to make for itself: its\noutput is a probability, so how likely it is to MISS something is a matter of\npolicy that has to be stated, measured and reviewed rather than absorbed into a\nconstant. The alert threshold is then derived from it as a quantile of the\nscores actually observed, which is what keeps its meaning as the distribution\ndrifts.\n\nLearned state survives the change. The model's identity covers its SHAPE — the\ninventory and the geometry — and not its appetite, so restating policy unlearns\nnothing.",
+		Description: "Restates how much of the stream the caller organisation's model may\nsend for examination, and whether it is live.\n\nThe appetite is the decision a model is not permitted to make for itself: its\noutput is a probability, so how likely it is to MISS something is a matter of\npolicy that has to be stated, measured and reviewed rather than absorbed into a\nconstant. The alert threshold is then derived from it as a quantile of the\nscores actually observed, which is what keeps its meaning as the distribution\ndrifts.\n\nLearned state survives the change. The model's identity covers its SHAPE — the\ninventory and the geometry — and not its appetite, so restating policy unlearns\nnothing.",
 		Fields: map[string]string{
 			"mlAppetiteIn.live":      "Live turns the model out of shadow. It defaults to FALSE on every call, so\ngoing live is always an explicit act and never a side effect of changing a\nnumber.",
 			"mlAppetiteIn.review":    "Review is the share of the stream that may be sent for examination, in\n(0, 0.5]. The alert threshold is derived from it as a quantile of the scores\nactually observed, so the level is governed rather than tuned.",
@@ -248,6 +255,8 @@ func init() {
 			"mlModelState.warm":      "Warm is whether that is enough for the model to have an opinion at all.\nBelow it the model declines to score, which is an ordinary state and is not\na clean bill of health.",
 			"mlSurface.folded":       "Folded is how many buckets of the tenant's own feature surface were folded\ninto the model when it became resident.",
 			"mlSurface.gap":          "Gap says why the fold did not happen or did not complete, when that is the\ncase. An empty surface and an unreachable warehouse are different facts and\na model must not report them as the same one.",
+			"mlSurface.replayed":     "Replayed is how many of this organisation's own recorded observations\nrebuilt its sliding aggregates when the model became resident. It is what\nsays a rollout was a rebuild rather than a blindness: the aggregates are a\nprojection of a durable record, so a restart costs a replay and not a\ncontrol.",
+			"mlSurface.rolled":       "Rolled is how many windows of this organisation's own source planes —\nproduct events, captured failures, metered inference — were rolled up into\nits feature surface before that fold. Zero with no gap means the surface was\nalready current, which is a different fact from the rollup never running.",
 			"mlSurface.window":       "Window is the lookback the fold covered.",
 		},
 		Example: json.RawMessage(`{"review":0.01,"sample":0.001,"live":false}`),
