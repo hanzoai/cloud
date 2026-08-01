@@ -111,12 +111,12 @@ func TestTenantDBPathConvention(t *testing.T) {
 func TestTenantDBOrgIsolation(t *testing.T) {
 	dir := t.TempDir()
 
-	a, err := OrgDB(dir, "orga", "", "widget")
+	a, err := OrgDB(dir, MustOrgNamespace("orga", ""), "widget")
 	if err != nil {
 		t.Fatalf("open orgA: %v", err)
 	}
 	defer func() { _ = a.Close() }()
-	b, err := OrgDB(dir, "orgb", "", "widget")
+	b, err := OrgDB(dir, MustOrgNamespace("orgb", ""), "widget")
 	if err != nil {
 		t.Fatalf("open orgB: %v", err)
 	}
@@ -154,12 +154,12 @@ func TestTenantDBOrgIsolation(t *testing.T) {
 func TestTenantDBProjectIsolation(t *testing.T) {
 	dir := t.TempDir()
 
-	alpha, err := OrgDB(dir, "acme", "alpha", "tracker")
+	alpha, err := OrgDB(dir, MustOrgNamespace("acme", "alpha"), "tracker")
 	if err != nil {
 		t.Fatalf("open alpha: %v", err)
 	}
 	defer func() { _ = alpha.Close() }()
-	beta, err := OrgDB(dir, "acme", "beta", "tracker")
+	beta, err := OrgDB(dir, MustOrgNamespace("acme", "beta"), "tracker")
 	if err != nil {
 		t.Fatalf("open beta: %v", err)
 	}
@@ -196,11 +196,11 @@ func TestTenantStoreCachesAndIsolates(t *testing.T) {
 	})
 	t.Cleanup(func() { _ = cache.CloseAll() })
 
-	a1, err := cache.For("orga", "")
+	a1, err := cache.For(MustOrgNamespace("orga", ""))
 	if err != nil {
 		t.Fatalf("For orgA: %v", err)
 	}
-	a2, err := cache.For("orga", "")
+	a2, err := cache.For(MustOrgNamespace("orga", ""))
 	if err != nil {
 		t.Fatalf("For orgA (2): %v", err)
 	}
@@ -211,7 +211,7 @@ func TestTenantStoreCachesAndIsolates(t *testing.T) {
 		t.Fatalf("open called %d times for one org, want 1", opened)
 	}
 
-	b, err := cache.For("orgb", "")
+	b, err := cache.For(MustOrgNamespace("orgb", ""))
 	if err != nil {
 		t.Fatalf("For orgB: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestTenantStoreCachesAndIsolates(t *testing.T) {
 	}
 
 	// A project scope under the same org is a DISTINCT file/handle.
-	pa, err := cache.For("orga", "alpha")
+	pa, err := cache.For(MustOrgNamespace("orga", "alpha"))
 	if err != nil {
 		t.Fatalf("For orgA/alpha: %v", err)
 	}
@@ -244,11 +244,11 @@ func TestOrgStoreEach(t *testing.T) {
 	t.Cleanup(func() { _ = cache.CloseAll() })
 
 	// Two real orgs (For creates + caches their widget.db) ...
-	a, err := cache.For("orga", "")
+	a, err := cache.For(MustOrgNamespace("orga", ""))
 	if err != nil {
 		t.Fatalf("For orga: %v", err)
 	}
-	b, err := cache.For("orgb", "")
+	b, err := cache.For(MustOrgNamespace("orgb", ""))
 	if err != nil {
 		t.Fatalf("For orgb: %v", err)
 	}
@@ -256,9 +256,9 @@ func TestOrgStoreEach(t *testing.T) {
 		t.Fatalf("want 2 opens after two For, got %d", opened)
 	}
 	// ... a reserved platform partition (must be skipped) ...
-	p, err := PlatformDB(dir, "widget")
+	p, err := OrgDB(dir, PlatformNamespace(), "widget")
 	if err != nil {
-		t.Fatalf("PlatformDB: %v", err)
+		t.Fatalf("platform partition: %v", err)
 	}
 	defer func() { _ = p.Close() }()
 	// ... and an org dir carrying only a DIFFERENT subsystem's file (no widget.db → skipped).
@@ -270,22 +270,23 @@ func TestOrgStoreEach(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	seen := map[string]*sql.DB{}
-	if err := cache.Each(func(slug string, st *sql.DB, e error) {
+	seen := map[namespace.Namespace]*sql.DB{}
+	if err := cache.Each(func(ns namespace.Namespace, st *sql.DB, e error) {
 		if e != nil {
-			t.Fatalf("Each open %s: %v", slug, e)
+			t.Fatalf("Each open %s: %v", ns, e)
 		}
-		seen[slug] = st
+		seen[ns] = st
 	}); err != nil {
 		t.Fatalf("Each: %v", err)
 	}
 
 	// Exactly the two real orgs — _platform skipped, orgc (no widget.db) skipped.
-	if len(seen) != 2 || seen["orga"] == nil || seen["orgb"] == nil {
-		t.Fatalf("Each enumerated %d slugs %v, want exactly {orga,orgb}", len(seen), seen)
+	nsA, nsB := MustOrgNamespace("orga", ""), MustOrgNamespace("orgb", "")
+	if len(seen) != 2 || seen[nsA] == nil || seen[nsB] == nil {
+		t.Fatalf("Each enumerated %d namespaces %v, want exactly {orga,orgb}", len(seen), seen)
 	}
 	// The handles are the SAME cached ones For returned — no second open.
-	if seen["orga"] != a || seen["orgb"] != b {
+	if seen[nsA] != a || seen[nsB] != b {
 		t.Fatal("Each must return the cached handle, not a fresh open")
 	}
 	if opened != 2 {
@@ -294,7 +295,7 @@ func TestOrgStoreEach(t *testing.T) {
 
 	// A missing orgs root is an empty enumeration, not an error.
 	empty := NewOrgStore(filepath.Join(dir, "nope"), "widget", func(db *sql.DB) (*sql.DB, error) { return db, nil })
-	if err := empty.Each(func(string, *sql.DB, error) { t.Fatal("no orgs → fn must not be called") }); err != nil {
+	if err := empty.Each(func(namespace.Namespace, *sql.DB, error) { t.Fatal("no orgs → fn must not be called") }); err != nil {
 		t.Fatalf("missing root want nil error, got %v", err)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/namespace"
 )
 
 // scheduler.go is the FRESHNESS driver: a periodic reconcile loop that keeps every
@@ -130,17 +131,17 @@ func startScheduler(s *cloud.Service[state]) func() {
 func sweep(s *cloud.Service[state], ctx context.Context) {
 	var wg sync.WaitGroup
 	var candidates, reconciled int64
-	err := s.State.stores.Each(func(slug string, st *store, openErr error) {
+	err := s.State.stores.Each(func(ns namespace.Namespace, st *store, openErr error) {
 		if ctx.Err() != nil {
 			return
 		}
 		if openErr != nil {
-			s.Log.Warn("sync reconcile: open store", "slug", slug, "err", openErr)
+			s.Log.Warn("sync reconcile: open store", "namespace", ns, "err", openErr)
 			return
 		}
 		syncs, err := st.ListAll(ctx)
 		if err != nil {
-			s.Log.Warn("sync reconcile: list", "slug", slug, "err", err)
+			s.Log.Warn("sync reconcile: list", "namespace", ns, "err", err)
 			return
 		}
 		for _, sy := range syncs {

@@ -44,7 +44,7 @@ func TestCreateAgentPR_KeyNumberingAndDiscriminators(t *testing.T) {
 	}
 
 	// The rows carry the right immutable discriminators (Kind:pr, Source:agent).
-	store, _ := mounted.State.stores.For("acme", "")
+	store, _ := mounted.State.stores.For(cloud.MustOrgNamespace("acme", ""))
 	rows, err := store.ListIssues(ctx, "acme", pr1ProjectID(t, store, ctx), IssueFilter{Repo: "api", Kind: "pr"})
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("want 2 pr rows, got %d (%v)", len(rows), err)
@@ -79,13 +79,13 @@ func TestCreateAgentPR_TenantIsolation(t *testing.T) {
 		t.Fatalf("beta1: %v", err)
 	}
 	// acme sees only its own two rows; beta sees only its one — separate org DBs.
-	acme, _ := mounted.State.stores.For("acme", "")
+	acme, _ := mounted.State.stores.For(cloud.MustOrgNamespace("acme", ""))
 	ap, _ := acme.GetProject(ctx, "acme", "API")
 	arows, _ := acme.ListIssues(ctx, "acme", ap.ID, IssueFilter{Source: "agent"})
 	if len(arows) != 2 {
 		t.Fatalf("acme should see 2 agent PRs, got %d", len(arows))
 	}
-	beta, _ := mounted.State.stores.For("beta", "")
+	beta, _ := mounted.State.stores.For(cloud.MustOrgNamespace("beta", ""))
 	bp, _ := beta.GetProject(ctx, "beta", "API")
 	brows, _ := beta.ListIssues(ctx, "beta", bp.ID, IssueFilter{Source: "agent"})
 	if len(brows) != 1 {

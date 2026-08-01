@@ -154,7 +154,7 @@ func (o ops) strategies(ctx context.Context, in *strategiesQuery) (*corpusView, 
 	if err != nil {
 		return nil, err
 	}
-	store, err := o.s.State.stores.For(org, "")
+	store, err := storeFor(o.s.State.stores, org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}

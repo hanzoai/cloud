@@ -80,7 +80,7 @@ func (o ops) scope(ctx context.Context) (*zip.Ctx, string, *Store, error) {
 	if !ok {
 		return nil, "", nil, zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := storeFor(o.s, c, org)
+	store, err := requestStore(o.s, c, org)
 	if err != nil {
 		return nil, "", nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}

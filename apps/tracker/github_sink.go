@@ -54,7 +54,7 @@ func upsertIssueSeam(ctx context.Context, in cloud.IssueUpsert) (cloud.IssueUpse
 	if proj == "" {
 		proj = principal.DefaultProject // GitHub issues are org-level → the default project store
 	}
-	store, err := s.State.stores.For(org, proj)
+	store, err := storeFor(s, org, proj)
 	if err != nil {
 		return cloud.IssueUpsertResult{}, err
 	}

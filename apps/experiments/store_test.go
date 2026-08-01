@@ -23,7 +23,7 @@ func sampleExp(id string) Experiment {
 func TestStore_CreateGetListDecide(t *testing.T) {
 	stores := cloud.NewOrgStore[*store](t.TempDir(), "experiments", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
-	st, err := stores.For("acme", "")
+	st, err := stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -70,11 +70,11 @@ func TestStore_TenantIsolation(t *testing.T) {
 	t.Cleanup(func() { _ = stores.CloseAll() })
 	ctx := context.Background()
 
-	acme, err := stores.For("acme", "")
+	acme, err := stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
 		t.Fatalf("acme: %v", err)
 	}
-	globex, err := stores.For("globex", "")
+	globex, err := stores.For(cloud.MustOrgNamespace("globex", ""))
 	if err != nil {
 		t.Fatalf("globex: %v", err)
 	}

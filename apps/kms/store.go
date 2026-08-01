@@ -136,13 +136,16 @@ func (s *secretStore) dbFor(path string, create bool) (*sql.DB, error) {
 		db  *sql.DB
 		err error
 	)
-	if facade {
-		db, err = cloud.PlatformDB(s.dataDir, "kms")
-	} else {
-		// OrgDB SanitizeOrg-slugs the org, creates {DataDir}/orgs/{slug} 0700, opens
-		// via cek (encrypted at rest, per-db DEK) with the single-writer + WAL pragmas.
-		db, err = cloud.OrgDB(s.dataDir, org, "", "kms")
+	ns := cloud.PlatformNamespace()
+	if !facade {
+		// OrgNamespace SanitizeOrg-slugs the org; OrgDB creates {DataDir}/orgs/{slug}
+		// 0700 and opens via cek (encrypted at rest, per-db DEK) with the
+		// single-writer + WAL pragmas.
+		if ns, err = cloud.OrgNamespace(org, ""); err != nil {
+			return nil, fmt.Errorf("kms: name org store %q: %w", org, err)
+		}
 	}
+	db, err = cloud.OrgDB(s.dataDir, ns, "kms")
 	if err != nil {
 		return nil, fmt.Errorf("kms: open org store %q: %w", org, err)
 	}
