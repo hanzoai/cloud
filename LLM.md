@@ -3498,6 +3498,26 @@ isOrgAdmin). A background job with no request to forward states its tenant once 
 `cloud.For`; an inbound request always wins over what it stated, so a job can supply an
 identity and can never launder one.
 
+**A socket FILE is not a peer, and only the router may say an app is absent.** `Ask`
+wakes a lazy app before it calls it (`reach`), and `reach` proves a LISTENER — it
+connects, it does not stat. A run directory on a volume outlives the pod that wrote it,
+so a leftover `<app>.sock` from a dead pod passes a stat forever; read as "the peer is
+up", it suppresses the wake that would have put a listener behind it, and the app never
+starts. The listener unlinks a stale path when it binds, so `reach` removes nothing —
+the run dir keeps one writer.
+
+The answer a caller gets is therefore two facts, not one: **`ErrNoPeer` means this
+deployment does not run that app** — the router said so from the manifest it owns, or
+there is no router at all — **and it is the ONLY error that may be read as "fall back".
+Every other failure is an outage.** Absence inferred from a failed call is a fail-open:
+a payment rail concluding nothing is priced, or (v1.801.340, three days) `apps/billing`
+concluding the fleet ran no commerce, handing the prepaid balance read to an HTTP proxy
+that is unset in exactly that deployment, while ai's fail-CLOSED gate answered 503
+`balance_unavailable` for every paid completion. Nothing logged the reason, because after
+the line that dropped the error nothing had it. Pinned by `TestStaleSocketIsNotAPeer`,
+`TestWakeStartsALazyAppBehindALeftoverSocket` and
+`TestBalance_APlaneOutageIsNotASplitDeploy`.
+
 The socket is also the coarse boundary: it is 0600 and `SO_PEERCRED`-authenticated, so a
 peer is already one of our own processes. It is NOT a boundary between them — never read
 a caller's org as an authorization decision on its own.

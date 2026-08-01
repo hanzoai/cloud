@@ -42,6 +42,8 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -661,8 +663,13 @@ func financeTxns(s *cloud.Service[state], c *zip.Ctx, org string) ([]commerceTxn
 	// The ledger's own entries, from the process that holds them. Credits, usage and
 	// the ledger page are three projections of this one list, and all three answered
 	// 501 from a process without the ledger — which is every process but commerce.
-	if rows, ok := peerTxns(c.Context(), org); ok {
-		return rows, nil
+	peer, served, err := peerTxns(c.Context(), org)
+	if err != nil {
+		s.Log.Warn("finance transactions read failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
+	}
+	if served {
+		return peer, nil
 	}
 	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/transactions", org, financeSubject(subjectFor(c, org), url.Values{"limit": {"2000"}}))
 	if err != nil {
@@ -797,27 +804,41 @@ func abs64(v int64) int64 {
 	return v
 }
 
-// peerTxns reads the ledger over the internal plane. ok=false means no peer served
-// it, and the caller falls back to the configured commerce URL — the split deploy,
-// which is a real shape and not a failure.
+// peerTxns reads the ledger over the internal plane. ok=false means this deployment
+// runs no commerce, and the caller falls back to the configured commerce URL — the
+// split deploy, which is a real shape and not a failure. A non-nil err is a REAL read
+// failure: the peer is here and it did not answer, which is an outage and must reach
+// the customer as one rather than as somebody else's ledger.
+//
+// Only the ROUTER may state absence (cloud.ErrNoPeer); it owns the manifest. Absence
+// inferred from a failed call is how a dead peer became a phantom split deploy.
 //
 // The amount arrives as its exact 18-decimal integer and is flattened to cents HERE,
 // at the boundary where commerceTxn is already a cents-shaped view. The wire keeps
 // the precision so the day that view stops being cents-shaped, nothing upstream has
 // to be re-plumbed to find it.
-func peerTxns(ctx context.Context, org string) ([]commerceTxn, bool) {
+func peerTxns(ctx context.Context, org string) ([]commerceTxn, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, txnsPeerTimeout)
 	defer cancel()
 	reply, err := cloud.Ask[struct{}, plane.Txns](cloud.For(ctx, org), "commerce",
 		plane.FinanceTxns, &struct{}{})
-	if err != nil || reply == nil {
-		return nil, false
+	if err != nil {
+		if errors.Is(err, cloud.ErrNoPeer) {
+			return nil, false, nil
+		}
+		return nil, true, fmt.Errorf("transactions: commerce ledger read: %w", err)
+	}
+	if reply == nil {
+		// A void reply is not an empty ledger. Nothing was read, so nothing is known.
+		return nil, true, errors.New("transactions: commerce answered nothing")
 	}
 	out := make([]commerceTxn, 0, len(reply.Rows))
 	for _, t := range reply.Rows {
 		amt, perr := money.ParseUSD(t.Amount.Decimal)
 		if perr != nil {
-			return nil, false // a total we cannot read exactly is not a total we report
+			// A total we cannot read exactly is not a total we report — and it is the
+			// peer's answer that is wrong, not the peer that is absent.
+			return nil, true, fmt.Errorf("transactions: %w", perr)
 		}
 		out = append(out, commerceTxn{
 			ID: t.ID,
@@ -831,7 +852,7 @@ func peerTxns(ctx context.Context, org string) ([]commerceTxn, bool) {
 			CreatedAt: time.Unix(t.CreatedAt, 0).UTC().Format(time.RFC3339),
 		})
 	}
-	return out, true
+	return out, true, nil
 }
 
 // txnsPeerTimeout bounds the ledger read behind an interactive billing page.
