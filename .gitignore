@@ -3,6 +3,9 @@
 /hanzo
 # `make host` writes here too — 26MB of ELF one `git add -A` away from a commit.
 /host
+# A bare `go build ./plugin/<app>/` writes <app> HERE, not into /bin where the
+# Makefile puts it: 150MB of unstripped ELF in a checkout several sessions share.
+/o11y
 
 # Local build directories
 /dist/

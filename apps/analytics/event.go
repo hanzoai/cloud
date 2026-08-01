@@ -619,7 +619,11 @@ var doors = []door{
 			"autocapture vocabulary ($click, $input, $change, $submit, $view) resolved through a " +
 			"server-owned table — and stripped to the fields the projection names, so revenue, " +
 			"personId, groupId, an arbitrary event name and every property but the element annotation " +
-			"cannot reach a row. Everything refused is counted in `dropped`. On a published-site host " +
+			"cannot reach a row. ITS IDENTITY IS NAMESPACED for the same reason the name is: nobody " +
+			"signed for it, so a `distinctId` off the wire is stored under a reserved `$anon:` prefix " +
+			"that no identified subject carries — an anonymous visitor still counts as one visitor, and " +
+			"still cannot be joined to a person the org knows. Everything refused is counted in " +
+			"`dropped`. On a published-site host " +
 			"the same projection applies with that site's org as the tenant. But a credential that IS " +
 			"presented and does NOT resolve is 403, never quietly downgraded: filing a misconfigured " +
 			"key's events under $public would hide them in a partition their owner cannot read.\n\n" +
