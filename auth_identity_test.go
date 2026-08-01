@@ -65,8 +65,9 @@ func TestOrgAdminAdmitsOwner(t *testing.T) {
 		{"empty org admits nothing", []authz.Membership{{Org: "acme", Role: "owner"}}, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isOrgAdmin(tc.orgs, tc.org); got != tc.want {
-				t.Fatalf("isOrgAdmin(%v, %q) = %v; want %v", tc.orgs, tc.org, got, tc.want)
+			claims := &idClaims{Claims: authz.Claims{Orgs: tc.orgs}}
+			if got := orgAdmin(claims, tc.org); got != tc.want {
+				t.Fatalf("orgAdmin(%v, %q) = %v; want %v", tc.orgs, tc.org, got, tc.want)
 			}
 		})
 	}

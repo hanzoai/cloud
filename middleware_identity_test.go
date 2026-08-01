@@ -99,7 +99,7 @@ func newIdentityApp(t *testing.T, v *identityValidator) (*zip.App, *captured) {
 	t.Helper()
 	got := &captured{}
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(c *zip.Ctx) error {
 		got.org = c.Org()
 		got.user = c.User()
@@ -357,7 +357,7 @@ func TestSanitizeIdentity_OrgAdminHeader(t *testing.T) {
 
 	var gotAdmin, gotOrgAdmin, gotOrg string
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(cx *zip.Ctx) error {
 		gotAdmin = cx.Header("X-User-IsAdmin")
 		gotOrgAdmin = cx.Header("X-User-IsOrgAdmin")
@@ -472,7 +472,7 @@ func TestSanitizeIdentity_StampsUserName(t *testing.T) {
 
 	var gotName, gotID, gotOrg string
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(cx *zip.Ctx) error {
 		gotName = cx.Header("X-User-Name")
 		gotID = cx.User()
@@ -509,7 +509,7 @@ func TestSanitizeIdentity_UserNameForgeryStripped(t *testing.T) {
 
 	var gotName string
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(cx *zip.Ctx) error {
 		gotName = cx.Header("X-User-Name")
 		return cx.JSON(http.StatusOK, map[string]string{"ok": "1"})
@@ -710,7 +710,7 @@ func TestSanitizeIdentity_OrgAdminFromMembershipRole(t *testing.T) {
 
 	var gotOrgAdmin, gotAdmin, gotOrg string
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(cx *zip.Ctx) error {
 		gotAdmin = cx.Header("X-User-IsAdmin")
 		gotOrgAdmin = cx.Header("X-User-IsOrgAdmin")

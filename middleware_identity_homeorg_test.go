@@ -54,7 +54,7 @@ func orgFor(t *testing.T, claims idClaims, selected string) (org string, admin b
 	tok := signWith(t, key, claims)
 
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(c *zip.Ctx) error {
 		org, admin = c.Org(), c.IsAdmin()
 		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
