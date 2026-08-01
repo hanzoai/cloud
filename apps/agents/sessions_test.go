@@ -19,7 +19,7 @@ import (
 
 func testSessionStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(filepath.Join(t.TempDir(), "agents.db"))
+	s, err := openStoreAt(filepath.Join(t.TempDir(), "agents.db"))
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

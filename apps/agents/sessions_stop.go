@@ -97,20 +97,17 @@ func (s *Store) countActiveMatch(ctx context.Context, org string, m SessionMatch
 // row. A match with no actor stops nothing (fail-closed). Not-mounted → (0, nil), so
 // a revoke tolerates a deployment with no session plane.
 func StopSessions(ctx context.Context, org string, m SessionMatch) (int, error) {
-	if mounted == nil {
+	sto, org, serr := mountedStore(org)
+	if serr != nil || m.empty() {
 		return 0, nil
 	}
-	org = strings.TrimSpace(org)
-	if org == "" || m.empty() {
-		return 0, nil
-	}
-	live, err := mounted.State.store.listActiveMatch(ctx, org, m)
+	live, err := sto.listActiveMatch(ctx, org, m)
 	if err != nil {
 		return 0, err
 	}
 	stopped := 0
 	for _, x := range live {
-		if err := stopOne(ctx, x); err != nil {
+		if err := stopOne(ctx, sto, x); err != nil {
 			// Best-effort per session: a failure on one does not abort the rest, so a
 			// revoke tears down as many as it can and reports the true count.
 			mounted.Log.Warn("agents: stop session", "org", org, "session", x.ID, "err", err)
@@ -124,14 +121,14 @@ func StopSessions(ctx context.Context, org string, m SessionMatch) (int, error) 
 // stopOne records a stop control event on a live session and moves it to a
 // terminal (error) state — the forced-teardown transition. A session already
 // terminal is skipped (monotonic terminal rule).
-func stopOne(ctx context.Context, x Session) error {
+func stopOne(ctx context.Context, sto *Store, x Session) error {
 	if isTerminalStatus(x.Status) {
 		return nil
 	}
 	now := time.Now().Unix()
 	if evID, err := genID("evt"); err == nil {
 		payload, _ := json.Marshal(controlPayload{Command: CmdStop, Message: "account logged out via login manager"})
-		e, aerr := mounted.State.store.AppendEvent(ctx, Event{
+		e, aerr := sto.AppendEvent(ctx, Event{
 			ID: evID, SessionID: x.ID, Org: x.Org, Kind: KindControl,
 			Actor: billingActor(x.Org, ""), Payload: string(payload), CreatedAt: now,
 		})
@@ -142,11 +139,11 @@ func stopOne(ctx context.Context, x Session) error {
 	x.Status = StatusError
 	x.EndedAt = now
 	x.UpdatedAt = now
-	if err := mounted.State.store.UpdateSession(ctx, x); err != nil {
+	if err := sto.UpdateSession(ctx, x); err != nil {
 		return err
 	}
-	ev, _ := mounted.State.store.CountEvents(ctx, x.Org, x.ID)
-	ch, _ := mounted.State.store.CountChildren(ctx, x.Org, x.ID)
+	ev, _ := sto.CountEvents(ctx, x.Org, x.ID)
+	ch, _ := sto.CountChildren(ctx, x.Org, x.ID)
 	publishSession(mounted, x, ev, ch)
 	return nil
 }
@@ -155,12 +152,9 @@ func stopOne(ctx context.Context, x Session) error {
 // (running|paused) — the device view's "active sessions". Org-scoped; 0 when not
 // mounted or the match is empty.
 func CountActiveSessions(ctx context.Context, org string, m SessionMatch) (int, error) {
-	if mounted == nil {
+	sto, org, serr := mountedStore(org)
+	if serr != nil || m.empty() {
 		return 0, nil
 	}
-	org = strings.TrimSpace(org)
-	if org == "" || m.empty() {
-		return 0, nil
-	}
-	return mounted.State.store.countActiveMatch(ctx, org, m)
+	return sto.countActiveMatch(ctx, org, m)
 }
