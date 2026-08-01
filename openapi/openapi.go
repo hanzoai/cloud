@@ -61,6 +61,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -515,6 +516,25 @@ func Typed(app *zip.App) (Registry, error) {
 	return reg, nil
 }
 
+// Compat marks an operation whose ADDRESS is a legacy spelling of another
+// operation's: served so a consumer pinned to it does not break, and not part of
+// the contract.
+//
+// The router cannot know this. `/v1/iam/get-users` and `/v1/iam/users` are two
+// live routes with no relation the route table can see; only the code that
+// registers them knows one replaced the other. So the SERVING code declares it —
+// hanzoai/iam tags the fifty-one entity verbs it inherited (`get-users`,
+// `add-application`, `set-preferred-mfa`) and the singular `application` address
+// it had before the kind was pluralized — and the declaration rides the weave
+// out to hanzoai/openapi, whose merge keeps those addresses out of the published
+// document. Without it the customer surface carries two spellings of every one of
+// those operations: two SDK methods, two docs entries, two `hanzo iam` commands.
+//
+// It is a SECOND tag, never the first: the product tag is the axis every
+// generator files an operation under, and this is an orthogonal fact about the
+// same operation.
+const Compat = "compat"
+
 // Fold lays the registry's detail over the router's shape, in place. A typed op
 // REPLACES the structural operation at its address — it is strictly richer,
 // including the path parameters, which zip derives from the same pattern.
@@ -523,7 +543,8 @@ func Typed(app *zip.App) (Registry, error) {
 // authority on them:
 //
 //   - the product tag, which is the path's first /v1/ segment and nothing else.
-//     zip's per-op tags are a different axis and cloud registers none.
+//     zip's per-op tags name a different axis, and the one that carries a fact
+//     the router cannot know survives beside it (Compat, below).
 //   - membership. A typed op with no live route is a contradiction — registering
 //     one registers a fiber route — so it means the two readings disagree about
 //     a path (a translation bug), and the honest answer is to refuse rather than
@@ -536,7 +557,11 @@ func Fold(doc *Document, reg Registry) error {
 		if shape == nil {
 			return fmt.Errorf("typed op %q has no live route — the registry and the router disagree about its path", key)
 		}
+		legacy := slices.Contains(op.Tags, Compat)
 		op.Tags = shape.Tags
+		if legacy {
+			op.Tags = append(op.Tags, Compat)
+		}
 		doc.Paths[path][strings.ToLower(method)] = op
 	}
 	// MERGE, never replace: From may already have named schemas from Register.
