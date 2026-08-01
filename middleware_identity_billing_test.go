@@ -34,7 +34,7 @@ func identityProbe(t *testing.T, key *rsa.PrivateKey, jwksURL string, tok string
 	v := newIdentityValidator(testIssuer, jwksURL, 0)
 	var got string
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(cx *zip.Ctx) error {
 		got = cx.Header("X-Billing-Account-Id")
 		return cx.JSON(http.StatusOK, map[string]string{"ok": "1"})
@@ -154,7 +154,7 @@ func TestSanitizeIdentity_AnonymousCarriesNoBillingAccount(t *testing.T) {
 
 	var got string
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(v, "admin"))
+	app.Use(SanitizeIdentity(v))
 	app.Get("/probe", func(cx *zip.Ctx) error {
 		got = cx.Header("X-Billing-Account-Id")
 		return cx.JSON(http.StatusOK, map[string]string{"ok": "1"})

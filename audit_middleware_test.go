@@ -492,7 +492,7 @@ func TestAudit_AnonRequestNotAttributedToForgedOrg(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = rec.Close() })
 	app := zip.New(zip.Config{})
-	app.Use(SanitizeIdentity(nil, "admin")) // trust boundary
+	app.Use(SanitizeIdentity(nil)) // trust boundary
 	app.Use(AuditTrail(rec))
 	app.Post("/v1/kms/secrets", func(c *zip.Ctx) error { return c.JSON(http.StatusOK, map[string]string{"ok": "1"}) })
 
