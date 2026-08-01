@@ -145,6 +145,12 @@ func BuildDeps(cfg *Config) Deps {
 	}
 	deps.GatewayPolicy = gp
 
+	// The edge traffic sensor the abuse gate writes and /v1/gateway/traffic reads.
+	// One object per process, hung off deps for the same reason the policy store
+	// is: two of them would be two answers to "who is calling", and the middleware
+	// and the subsystem would each be sure of a different one.
+	deps.Traffic = edge.NewTraffic()
+
 	return deps
 }
 
