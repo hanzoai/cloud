@@ -90,10 +90,11 @@ type Event struct {
 // core consumes. No $-property is promoted to a column here — every non-core
 // field the caller sent stays in Properties.
 //
-// TYPE IS CARRIED, and it has to be. The kind is what the ANONYMOUS lane admits
-// on (publicKinds, public.go): canonicalType maps an empty Type to "event", which
-// is NOT allowlisted, so an Event that cannot say "pageview" is dropped — with a
-// 200 receipt — every single time. That made two of the three shapes this door
+// TYPE IS CARRIED, and it has to be. The kind is half of what the ANONYMOUS lane
+// admits on (publicKinds, public.go — the other half is the closed autocapture
+// name): canonicalType maps an empty Type to "event", which is NOT an allowlisted
+// kind, so an Event that cannot say "pageview" and does not name an autocaptured
+// interaction is dropped — with a 200 receipt — every single time. That made two of the three shapes this door
 // PUBLISHES (openapi.OneOf{Event, []Event, CaptureBatch}) totally lossy without a
 // credential while the third worked, which is a document that lies to any SDK
 // generated from it. One wire, three spellings, ONE meaning: whatever CaptureBatch
@@ -552,7 +553,8 @@ type door struct {
 // Trying canonical first and falling back on an empty result is WRONG, and
 // TestMount_HostCarve_IngestsForSiteOrg refutes it: decodeIngest ACCEPTS a PostHog
 // body as a bare canonical Event and returns ONE event, which is then dropped whole
-// downstream (canonicalType("") is "event", not in publicKinds). The caller gets 200
+// downstream (canonicalType("") is "event", which is not an allowlisted kind, and
+// $pageview is not an autocapture name — it is a KIND). The caller gets 200
 // and the event vanishes. A count of 1 is not evidence the body was understood.
 //
 // The wires are distinguishable exactly, with no heuristic: canonical spells the field
@@ -612,9 +614,11 @@ var doors = []door{
 			"REDUCED capability: the signed " +
 			"account names the person, so a `distinctId` in the body cannot pin events on a colleague.\n\n" +
 			"NO CREDENTIAL IS ALSO ADMITTED, and that is the point — a logged-out visitor has none. " +
-			"Such a write is PROJECTED: filed under the reserved `$public` tenant, narrowed to " +
-			"pageview and error, renamed server-side to $pageview/$error, and stripped to the fields " +
-			"the projection names, so revenue, personId, groupId and the whole client property bag " +
+			"Such a write is PROJECTED: filed under the reserved `$public` tenant, narrowed to what the " +
+			"SERVER can name — pageviews and errors, whose names the route supplies, plus the closed " +
+			"autocapture vocabulary ($click, $input, $change, $submit, $view) resolved through a " +
+			"server-owned table — and stripped to the fields the projection names, so revenue, " +
+			"personId, groupId, an arbitrary event name and every property but the element annotation " +
 			"cannot reach a row. Everything refused is counted in `dropped`. On a published-site host " +
 			"the same projection applies with that site's org as the tenant. But a credential that IS " +
 			"presented and does NOT resolve is 403, never quietly downgraded: filing a misconfigured " +
