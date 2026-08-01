@@ -136,3 +136,50 @@ func unsaltedDigest(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return base64.RawURLEncoding.EncodeToString(sum[:])[:fingerprintLen]
 }
+
+// The credential must be read through the SAME resolution the identity boundary
+// trusts. A second answer to "which credential is this caller" would pool a
+// client that authenticates by X-Authorization or by session cookie under its
+// ADDRESS instead of under itself — which is exactly the caller the sensor exists
+// to tell apart from its neighbours.
+func TestCredentialClass_UsesTheBoundarysOwnResolution(t *testing.T) {
+	cases := []struct {
+		name       string
+		set        func(*http.Request)
+		wantClass  string
+		wantSameAs string // a header spelling that must fingerprint identically
+	}{
+		{"Authorization bearer", func(r *http.Request) {
+			r.Header.Set("Authorization", "Bearer sk-live-1")
+		}, CredSecret, ""},
+		{"X-Authorization bearer", func(r *http.Request) {
+			r.Header.Set("X-Authorization", "Bearer sk-live-1")
+		}, CredSecret, "Bearer sk-live-1"},
+		{"X-Api-Key", func(r *http.Request) {
+			r.Header.Set("X-Api-Key", "sk-live-1")
+		}, CredSecret, "Bearer sk-live-1"},
+	}
+	base := Fingerprint("sk-live-1")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var class, fp string
+			app := zip.New(zip.Config{})
+			app.Get("/probe", func(c *zip.Ctx) error {
+				class, fp = credentialClass(c), credentialOf(c)
+				return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
+			})
+			req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+			req.Header.Set("X-Org-Id", "acme")
+			tc.set(req)
+			if _, err := app.Fiber().Test(req); err != nil {
+				t.Fatal(err)
+			}
+			if class != tc.wantClass {
+				t.Fatalf("class = %q, want %q", class, tc.wantClass)
+			}
+			if fp != base {
+				t.Fatalf("one credential must fingerprint to ONE caller however it is spelled: %q vs %q", fp, base)
+			}
+		})
+	}
+}
