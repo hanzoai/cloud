@@ -112,12 +112,21 @@
     "name": "adminBases"
   },
   {
-    "description": "Is the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
+    "description": "Reads one org's usage caps: its spend alerts plus the derived period\nspend, over/warn state and reset time.\n\nThese are the SAME rows the customer edits in their own console — a platform override\nand a customer budget are one model, not two.",
     "inputSchema": {
-      "properties": {},
+      "properties": {
+        "id": {
+          "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
+          "type": "string"
+        },
+        "org": {
+          "description": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
+          "type": "string"
+        }
+      },
       "type": "object"
     },
-    "name": "adminBlockStorage"
+    "name": "adminCaps"
   },
   {
     "description": "Rolls the fleet's compute usage up to one row per (org, app, project, kind):\nhow many distinct machines ran in the window, how many are still active, what they\nbilled, and when each group last emitted an event. The console folds these into its\norg → app → project tree.\n\nA machine counts as ACTIVE when its LATEST lifecycle event is not a terminal one\n(stop/destroy/terminate/delete/off/shutdown/expire and their past tenses) — the same\nfold the console applies, done in the warehouse so the count is over every machine and\nnot just the page.\n\nHonest-empty when the warehouse is not connected or hanzo.compute_usage is not\nprovisioned yet: an empty list, never a fabricated fleet.",
@@ -162,16 +171,6 @@
     "name": "adminCordonNode"
   },
   {
-    "description": "Mints credit for one org. It is the ONE admin mint surface, and it\ndoes NOT mint in-process: it forwards the request to commerce's already-mint-gated\nPOST /v1/billing/credits, authenticated by the service token and scoped to the\ntarget org, then writes one tamper-evident compliance record. Commerce stays the sole\ncredit ledger; this is a thin, audited relay so there is exactly one place credit is\ncreated.\n\nThe body is commerce's OWN CreateCreditGrant contract, forwarded whole — every field\nit carries reaches commerce. The only two this layer reads are the target org (`org`,\nor `user` as the org-pool alias), which selects the namespace commerce's EdgeAuth\ntrusts, and `idempotencyKey`, which makes a double-clicked grant credit once.\n\nA FAILED grant is audited too, with the request body attached: an attempted mint is\nexactly as interesting to a compliance auditor as a successful one.",
-    "inputSchema": {
-      "additionalProperties": {
-        "type": "object"
-      },
-      "type": "object"
-    },
-    "name": "adminCreateCredit"
-  },
-  {
     "description": "Sets a usage cap on one org — a platform override of a customer budget,\nwritten to the customer's own spend-alert rows. The body is commerce's spend-alert\ncontract, forwarded byte-for-byte.",
     "inputSchema": {
       "properties": {
@@ -186,7 +185,17 @@
       },
       "type": "object"
     },
-    "name": "adminCreateSpendCap"
+    "name": "adminCreateCap"
+  },
+  {
+    "description": "Mints credit for one org. It is the ONE admin mint surface, and it\ndoes NOT mint in-process: it forwards the request to commerce's already-mint-gated\nPOST /v1/billing/credits, authenticated by the service token and scoped to the\ntarget org, then writes one tamper-evident compliance record. Commerce stays the sole\ncredit ledger; this is a thin, audited relay so there is exactly one place credit is\ncreated.\n\nThe body is commerce's OWN CreateCreditGrant contract, forwarded whole — every field\nit carries reaches commerce. The only two this layer reads are the target org (`org`,\nor `user` as the org-pool alias), which selects the namespace commerce's EdgeAuth\ntrusts, and `idempotencyKey`, which makes a double-clicked grant credit once.\n\nA FAILED grant is audited too, with the request body attached: an attempted mint is\nexactly as interesting to a compliance auditor as a successful one.",
+    "inputSchema": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "type": "object"
+    },
+    "name": "adminCreateCredit"
   },
   {
     "description": "Answers GET /v1/admin/customers/:org.",
@@ -208,6 +217,23 @@
       "type": "object"
     },
     "name": "adminCustomers"
+  },
+  {
+    "description": "Removes one cap by id, lifting the ceiling entirely.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
+          "type": "string"
+        },
+        "org": {
+          "description": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "adminDeleteCap"
   },
   {
     "description": "Destroys a droplet the board has just proven is NOT a DOKS node. There\nis no snapshot-first undo for a droplet the way there is for a volume: the local disk\ngoes with it.",
@@ -242,23 +268,6 @@
       "type": "object"
     },
     "name": "adminDeleteLoadBalancer"
-  },
-  {
-    "description": "Removes one cap by id, lifting the ceiling entirely.",
-    "inputSchema": {
-      "properties": {
-        "id": {
-          "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
-          "type": "string"
-        },
-        "org": {
-          "description": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "adminDeleteSpendCap"
   },
   {
     "description": "Destroys a volume the board has just proven no PersistentVolume in any\ncluster references. Irreversible, so it snapshots first unless explicitly waived —\nthe snapshot IS the undo.",
@@ -746,23 +755,6 @@
     "name": "adminSnapshotVolume"
   },
   {
-    "description": "Reads one org's usage caps: its spend alerts plus the derived period\nspend, over/warn state and reset time.\n\nThese are the SAME rows the customer edits in their own console — a platform override\nand a customer budget are one model, not two.",
-    "inputSchema": {
-      "properties": {
-        "id": {
-          "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
-          "type": "string"
-        },
-        "org": {
-          "description": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "adminSpendCaps"
-  },
-  {
     "description": "Answers GET /v1/admin/subscriptions.\n\n\tGET /v1/admin/subscriptions?org=\u0026status=\u0026limit=",
     "inputSchema": {
       "properties": {
@@ -832,7 +824,7 @@
       },
       "type": "object"
     },
-    "name": "adminUpdateSpendCap"
+    "name": "adminUpdateCap"
   },
   {
     "description": "Onboards a hosted service, or edits one, so a new host comes under the\nlaunch gate WITHOUT a redeploy. Re-registering an existing service PRESERVES its live\nswitch — editing the hosts of a service that is already open must not silently close\nit again.",
@@ -915,6 +907,14 @@
       "type": "object"
     },
     "name": "adminUsers"
+  },
+  {
+    "description": "Returns the realtime block-storage board: the DigitalOcean volume fleet\n(count, capacity, monthly list cost, per-volume region and attachment) plus the\nanalytics datastore's OWN fill, read from its system.disks.\n\nA volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no\nfill, so the console renders \"—\" rather than a number nobody measured. The datastore\ncard is the one real fill here, and it is the number to scale on.\n\nThe two sources degrade independently — a DO outage still returns the datastore fill,\nand a disconnected datastore still returns the DO fleet.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "adminVolumes"
   },
   {
     "description": "Reads one waitlist's leaderboard from the Hanzo waitlist engine — position,\npoints and referral standing per entry — proxied server-authed with the engine secret,\nnever a client credential.\n\nThe engine's payload is forwarded VERBATIM as data; the console normalizes it. When\nthe engine is not configured on this deployment the read still succeeds, with an empty\nobject and a msg saying so, so the panel shows an honest not-wired state instead of an\nerror the operator would chase.",
