@@ -1075,6 +1075,8 @@ github.com/hanzoai/metrics v1.110.2 h1:Q79loK4YKNF255hIaf0CJsd5oq+yMRTsxZyoZREwT
 github.com/hanzoai/metrics v1.110.2/go.mod h1:+XOENte7ldQwSEsY/ASrvCifQqhIG+PFqTGzLxBLvYY=
 github.com/hanzoai/money v0.2.1 h1:w2Fi2aP9bBYY+Zk1jyYfCOT3QhaswGzXQUmoZIjwIHM=
 github.com/hanzoai/money v0.2.1/go.mod h1:A8BJJ7CFalMMv+gyJm0gUMGfxg3zpygXgfb2WeRzStY=
+github.com/hanzoai/namespace v1.1.0 h1:ogheqRdpbxSEhw6VsE0JSb994IzeG2DD5Ig/Z/e2iqg=
+github.com/hanzoai/namespace v1.1.0/go.mod h1:vGuxMDHg5MdhH5q2bqqjZL/afINBWJubP4WD1YwZTm4=
 github.com/hanzoai/notify v1.7.2 h1:xHaVVcOWLvLMpmtSH128FRgskj4WyfG371K6CI3OC/I=
 github.com/hanzoai/notify v1.7.2/go.mod h1:GZXKmj6UNtNBz32h0XPugNkYf8R34wlJqWuRstytXZE=
 github.com/hanzoai/o11y v1.5.34 h1:ArDzc3qyw6D7k3YlJvJbMt4yrqsVILFDNiK8OoxmvW0=
