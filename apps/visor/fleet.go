@@ -2,15 +2,20 @@
 // dialed IN via `hanzo link`, as opposed to the DOKS/DigitalOcean machines
 // Visor provisions. A BYO worker is an outbound agent behind NAT: it can't be
 // listed by Visor (Visor never provisioned it), so its presence lives as a
-// heartbeating standalone activity in the org's `fleet` namespace of the ONE
-// in-process tasks engine (cloud.EmbeddedTasks). This file reads that registry and
-// folds it into the SAME machineView / gpuView the console already renders, tagged
-// provider="byo", so the existing Machines and GPUs pages light up for free — no
-// parallel UI. It also serves the raw list at GET /v1/fleet/workers.
+// heartbeating standalone activity in the org's `fleet` namespace of the durable
+// engine. This file reads that registry and folds it into the SAME machineView /
+// gpuView the console already renders, tagged provider="byo", so the existing
+// Machines and GPUs pages light up for free — no parallel UI. It also serves the
+// raw list at GET /v1/fleet/workers.
 //
 // Registration is written by the CLI over the public tasks surface
 // (POST /v1/tasks/namespaces/fleet/activities + heartbeat) — this subsystem only
 // READS, and only ever the caller's own tenant (principal.Org → org shard).
+//
+// That surface belongs to the TASKS app, and the engine behind it is per-process
+// (durable.go), so the registry is not in visor's address space at all: the read
+// crosses to tasks over ZAP on its unix socket (allActivitiesForOrg). Opening a
+// local engine here is what made an online, heartbeating GPU read as no fleet.
 
 package visor
 
@@ -26,6 +31,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/samples"
+	"github.com/hanzoai/cloud/plane"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
 	"github.com/zap-proto/zip"
 )
@@ -117,11 +123,11 @@ type fleetRegistration struct {
 // read error yields an empty list, never an error — a BYO read must never break the
 // Visor-backed machine/gpu listing it augments. Terminal (disconnected) presence
 // records are excluded so a `hanzo unlink` removes the row.
-func byoWorkers(org string) []byoWorker {
+func byoWorkers(ctx context.Context, org string) []byoWorker {
 	// ALL pages, not the first 100: an online worker must never be truncated away
 	// (dropping it from Machines/GPUs/status) because terminal presence rows crowd
 	// the hash-ordered first page. allActivitiesForOrg is fail-soft (nil on no engine).
-	acts := allActivitiesForOrg(org, fleetNamespace)
+	acts := allActivitiesForOrg(ctx, org, fleetNamespace)
 	now := time.Now().UTC()
 	out := make([]byoWorker, 0, len(acts))
 	for _, a := range acts {
@@ -197,7 +203,7 @@ func (o ops) listFleetWorkers(ctx context.Context, _ *noArgs) (*workerList, erro
 	if err != nil {
 		return nil, err
 	}
-	return &workerList{Workers: byoWorkers(org)}, nil
+	return &workerList{Workers: byoWorkers(ctx, org)}, nil
 }
 
 // ---- unions into the existing console shapes ----
@@ -373,25 +379,38 @@ const (
 )
 
 // allActivitiesForOrg cursor-walks the org's activities in ns to COMPLETION, defeating
-// the 100-row truncation. Fail-soft: a nil engine or a read error yields what it has
-// so far (possibly nil), never an error — a queue/fleet read must never 500 the board.
-func allActivitiesForOrg(org, ns string) []tasks.StandaloneActivity {
-	eng := cloud.EmbeddedTasks()
-	if eng == nil {
-		return nil
-	}
+// the 100-row truncation. Fail-soft: an unreachable engine or a read error yields what
+// it has so far (possibly nil), never an error — a queue/fleet read must never 500 the
+// board.
+//
+// It ASKS the tasks app rather than reading an engine here, because the engine is
+// per-PROCESS (durable.go: its SQLite has one writer, so every app embeds its own over
+// its own data dir). Both namespaces this walks are written through the tasks surface —
+// a BYO worker registers its presence in `fleet` and claims out of `gpu-jobs` — so the
+// rows have never been in visor's engine. Reading the local one returned an empty page
+// with no error, and an online GPU that was heartbeating every 30s appeared on
+// /v1/machines, /v1/gpus, /v1/fleet/workers, the board and studio's node badges as no
+// fleet at all. The org travels as the CALLER, never as an argument, so this cannot
+// page another tenant.
+func allActivitiesForOrg(ctx context.Context, org, ns string) []tasks.StandaloneActivity {
 	var out []tasks.StandaloneActivity
 	cursor := ""
 	for i := 0; i < maxActivityPages; i++ {
-		page, next, err := eng.ActivitiesPageForOrg(org, ns, cursor, activityPageSize)
-		if err != nil {
+		page, err := cloud.Ask[plane.ActivitiesIn, plane.Activities](
+			cloud.For(ctx, org), "tasks", plane.TasksActivities,
+			&plane.ActivitiesIn{Namespace: ns, Cursor: cursor, Size: activityPageSize})
+		if err != nil || page == nil {
 			return out
 		}
-		out = append(out, page...)
-		if next == "" || len(page) == 0 {
+		var rows []tasks.StandaloneActivity
+		if err := json.Unmarshal(page.Rows, &rows); err != nil {
+			return out
+		}
+		out = append(out, rows...)
+		if page.Next == "" || len(rows) == 0 {
 			break
 		}
-		cursor = next
+		cursor = page.Next
 	}
 	return out
 }
@@ -459,8 +478,8 @@ func isTerminalJob(status string) bool {
 // recent maxTerminalJobs — so a busy org's live work is never hidden by truncation and
 // the view stays bounded. The SAME cursor-walk backs byoWorkers, so jobs and workers
 // can never disagree about the tenant. Fail-soft throughout.
-func gpuJobs(org string) []gpuJob {
-	acts := allActivitiesForOrg(org, jobsNamespace)
+func gpuJobs(ctx context.Context, org string) []gpuJob {
+	acts := allActivitiesForOrg(ctx, org, jobsNamespace)
 	now := time.Now().UTC()
 	all := make([]gpuJob, 0, len(acts))
 	for _, a := range acts {
@@ -579,7 +598,7 @@ func (o ops) listFleetJobs(ctx context.Context, in *jobFilter) (*jobList, error)
 	if err != nil {
 		return nil, err
 	}
-	return &jobList{Jobs: filterGPUJobs(gpuJobs(org), in.GPU, in.Status)}, nil
+	return &jobList{Jobs: filterGPUJobs(gpuJobs(ctx, org), in.GPU, in.Status)}, nil
 }
 
 // jobCancel identifies the render to cancel and why.
