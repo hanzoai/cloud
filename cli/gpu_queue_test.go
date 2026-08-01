@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -266,8 +267,23 @@ func TestSharePolicyRejectFallback(t *testing.T) {
 }
 
 // studioCap is advertised ONLY when the node can actually render: a missing worker
-// token is never ready (the gated seam would 403), and the block reason is explicit.
+// token is never ready (the gated seam would 403), a studio that does not answer is
+// never ready EVEN ON A NODE THAT LAUNCHES ITS OWN, and the block reason is explicit.
+//
+// That middle clause is the regression this pins. Launching a studio was once taken
+// as proof of readiness, so a --studio-dir node advertised studio.render and claimed
+// render jobs from its first instant — before it had started the studio at all, and
+// long before that studio bound its port and loaded models. It won every job it could
+// reach while cold and failed each one on arrival.
 func TestStudioReadyGatesCapability(t *testing.T) {
+	// The probe is against a fixed loopback address, so a real studio already
+	// serving there would make "not reachable" untestable in this process.
+	ln, err := net.Listen("tcp", strings.TrimPrefix(localComfyUI, "http://"))
+	if err != nil {
+		t.Skipf("%s is already in use; this test owns that address: %v", localComfyUI, err)
+	}
+	_ = ln.Close()
+
 	t.Setenv("STUDIO_WORKER_TOKEN", "")
 	w := &worker{launchesStudio: true, http: &http.Client{}}
 	w.refreshStudioReady(context.Background())
@@ -280,12 +296,36 @@ func TestStudioReadyGatesCapability(t *testing.T) {
 	if w.studioBlockReason() == "" {
 		t.Fatal("a not-ready node must explain why it won't render")
 	}
-	// Token present + we launch the studio ⇒ ready ⇒ studioCap advertised.
+
+	// A token alone is not readiness: we launch the studio, but nothing answers yet.
 	t.Setenv("STUDIO_WORKER_TOKEN", "tok")
+	w.refreshStudioReady(context.Background())
+	if w.studioReady {
+		t.Fatal("a node that launches its own studio claimed readiness before that studio answered")
+	}
+	if contains(w.capabilities(), studioCap) {
+		t.Fatalf("studioCap advertised by a cold node: %v", w.capabilities())
+	}
+
+	// Once the studio answers, readiness flips and the capability is advertised —
+	// the same recovery path a studio that died and came back travels.
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"queue_running":[],"queue_pending":[]}`)
+	})}
+	up, err := net.Listen("tcp", strings.TrimPrefix(localComfyUI, "http://"))
+	if err != nil {
+		t.Fatalf("bind %s: %v", localComfyUI, err)
+	}
+	go func() { _ = srv.Serve(up) }()
+	defer func() { _ = srv.Close() }()
+
 	if changed := w.refreshStudioReady(context.Background()); !changed {
-		t.Fatal("adding the token should flip readiness")
+		t.Fatal("a studio that started answering should flip readiness")
 	}
 	if !w.studioReady || !contains(w.capabilities(), studioCap) {
-		t.Fatalf("token + launchesStudio must be ready + advertise studioCap: ready=%v caps=%v", w.studioReady, w.capabilities())
+		t.Fatalf("a reachable studio must be ready + advertise studioCap: ready=%v caps=%v", w.studioReady, w.capabilities())
+	}
+	if w.studioBlockReason() != "" {
+		t.Fatalf("a ready node must give no block reason: %q", w.studioBlockReason())
 	}
 }

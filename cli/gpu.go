@@ -964,8 +964,9 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	}
 
 	// studio.render preflight: decide whether this node can SERVE renders BEFORE it
-	// advertises studioCap or claims a render lane. A --studio-dir node launches its
-	// own studio (assumed reachable once up); a BYO node probes an already-running one.
+	// advertises studioCap or claims a render lane. Every node probes, including one
+	// that launches its own studio below — at this point that studio has not been
+	// started yet, so a node claiming work here would be claiming it cold.
 	// The worker token is required either way — the gated execute seam refuses without it.
 	w.launchesStudio = opts.studioDir != ""
 	w.refreshStudioReady(ctx)
@@ -1166,12 +1167,22 @@ func (w *worker) studioReachable(ctx context.Context) bool {
 }
 
 // refreshStudioReady recomputes whether this node can serve renders and returns
-// whether the verdict changed. Ready ⇔ a worker token is present AND (we launch the
-// studio ourselves via --studio-dir, or a studio is reachable now). The token is the
-// decisive gate: without it the gated execute seam 403s every job. A missing studio
-// on a node that does NOT launch one also blocks — it would only refuse renders.
+// whether the verdict changed. Ready ⇔ a worker token is present AND a studio
+// ANSWERS right now. The token is the decisive gate: without it the gated execute
+// seam 403s every job.
+//
+// Reachability is MEASURED even when we launch the studio ourselves. Launching one
+// does not make it serve — it makes it serve eventually, after it binds the port and
+// loads its models, which on a cold box is minutes. Treating "--studio-dir was
+// passed" as readiness advertised studio.render and claimed render jobs from the
+// first instant of the process, before superviseStudio had even been started (it is
+// launched after this runs), so a cold node won every job it could reach and failed
+// each one on arrival. Nothing deadlocks by probing instead: the studio launch does
+// not depend on this verdict, and the heartbeat loop re-evaluates it every 30s and
+// flips claiming on the way up — the same path that already recovers a studio that
+// died under a node that had been ready.
 func (w *worker) refreshStudioReady(ctx context.Context) bool {
-	ready := workerToken() != "" && (w.launchesStudio || w.studioReachable(ctx))
+	ready := workerToken() != "" && w.studioReachable(ctx)
 	changed := ready != w.studioReady
 	w.studioReady = ready
 	return changed
@@ -1200,6 +1211,9 @@ func (w *worker) studioBlockReason() string {
 	}
 	if workerToken() == "" {
 		return "STUDIO_WORKER_TOKEN not set (the gated studio seam would refuse every render) — set it from KMS"
+	}
+	if w.launchesStudio {
+		return fmt.Sprintf("the studio we launched is not serving on %s yet (still starting, or it failed) — this clears by itself once it answers", localComfyUI)
 	}
 	return fmt.Sprintf("no studio reachable on %s (start one, or pass --studio-dir so the worker launches it)", localComfyUI)
 }
