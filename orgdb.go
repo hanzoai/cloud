@@ -420,7 +420,7 @@ func (c *OrgStore[T]) Sync(ns namespace.Namespace) (acked bool, err error) {
 // writer enumerates exactly that writer's orgs.
 func (c *OrgStore[T]) Each(fn func(ns namespace.Namespace, st T, err error)) error {
 	var zero T
-	root := filepath.Join(c.dataDir, "orgs")
+	root := filepath.Join(c.dataDir, orgsRoot)
 	ents, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -450,6 +450,40 @@ func (c *OrgStore[T]) Each(fn func(ns namespace.Namespace, st T, err error)) err
 		fn(ns, st, openErr)
 	}
 	return nil
+}
+
+// Stored reports whether ANY namespace already has a store for this subsystem on
+// disk, without opening one.
+//
+// It is the boot question a reader replica asks — has my volume been hydrated at
+// all? — and it has to be answerable without opening, because a reader that
+// opened every org's file to find out would pay the whole fleet's I/O for one
+// boolean. It is Each's walk without the opens, and it shares Each's rendering
+// of where a store lives, so the two cannot disagree about what counts as one.
+func (c *OrgStore[T]) Stored() bool {
+	// The deployment's own partition counts: a volume holding only the system
+	// namespace's file still has something to serve, and a boot check that said
+	// otherwise would refuse to start a replica that was in fact hydrated.
+	if c.Has(PlatformNamespace()) {
+		return true
+	}
+	ents, err := os.ReadDir(filepath.Join(c.dataDir, orgsRoot))
+	if err != nil {
+		return false
+	}
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		ns, err := nsOnDisk(e.Name())
+		if err != nil {
+			continue
+		}
+		if path, err := nsPath(c.dataDir, ns, c.subsystem); err == nil && cek.Exists(path) {
+			return true
+		}
+	}
+	return false
 }
 
 // CloseAll closes every open per-org store. Idempotent; returns the first
