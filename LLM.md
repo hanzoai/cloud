@@ -2787,6 +2787,91 @@ HIP-0026); never read a raw request header for scope.
   identity vocabulary is org-native regardless; only the on-cluster string waits on
   an infrastructure migration.
 
+## Platform authority is a MEMBERSHIP, and it is asked in one place
+
+Two admin scopes exist and they are not the same question. Both are decided once,
+in `SanitizeIdentity`, from the signed `orgs` claim, and both are asked through the
+predicates **hanzoai/authz** publishes — the issuer's own statement of what its
+claims mean. cloud does not re-derive either, because cloud re-deriving them is
+what went wrong.
+
+| Header | Predicate | Means |
+|---|---|---|
+| `X-User-IsAdmin` | `authz.Claims.PlatformSudo` | a HUMAN who is a MEMBER of the reserved `admin` org, **at any position** in `orgs` |
+| `X-User-IsOrgAdmin` | `authz.Claims.OrgAdmin(effOrg)` | admin/owner role in the org the request ACTS in. Never platform authority |
+
+Narrowed in `auth_identity.go` by the one denial only cloud can make — the per-org
+KMS-sync machine, named by its owner-bound audience — because authz decides
+machine-ness from an empty membership set, which a machine carrying memberships
+would defeat. It is a DENIAL layered over the grant, never a second route to one.
+
+**There is no `isAdmin` CLAIM.** IAM mints one into *neither* token: `Claims` in
+`iam/internal/oidc/jwt.go` has no such field, and `(*Signer).claims` is the single
+place an `Identity` becomes a claim set, so the access token and the id_token
+differ only in `aud` / `tokenType` / `nonce`. The bit exists only as a user-row
+column that `/v1/iam/userinfo` and `whoami` report in a **response body**. Any code
+here that appears to read it is reading a claim that is never sent — verified
+against a live production token, which carries `orgs` and no `isAdmin`.
+
+**The bug this replaced, because the shape recurs.** The gate read
+`claims.homeOrg() == adminOrg`, i.e. `Claims.Orgs[0].Org` — a *positional* read of
+a *set*. IAM's `MemberOrgRefs` always writes the user's own org at index 0 and
+appends granted memberships after it, so that test could only ever be true for
+someone whose USER ROW lives in the admin org. An operator anchored in a brand org
+and *granted* admin-org membership — the deliberate, signed, revocable way
+operators are actually made — was structurally unreachable by it. `z@hanzo.ai`
+carries `orgs:[{hanzo,admin},{admin,admin},{lux,admin},{pars,admin},{zoo,admin}]`
+and was refused every `superAdminOf` surface because `admin` sits at index 1.
+
+Honoring it widens nothing: IAM already guards the grant as platform authority on
+the write side (`memberships.mayGrant` refuses a membership into a reserved org
+unless the caller is already a SuperAdmin, because it "seeds admin-org (SuperAdmin)
+tenancy"). A grant the issuer treats as sudo must not be inert at the resource
+server. `TestPlatformSudoIsMembershipNotPosition` pins it with z's real membership
+set; its negative cases (admin of every brand org but no reserved membership, a
+look-alike `"Admin"`, an empty set) pass under both predicates, which is how the
+change is shown to grant nothing new.
+
+**No `adminOrg` knob.** The reserved org is the ISSUER's constant (IAM hardcodes
+`owner == "admin"`), so a consumer-side setting could only ever let cloud disagree
+with the contract it is reading. `IAM_ADMIN_ORG` is no longer consulted here.
+
+## A degraded dependency is reported, never served as an empty success
+
+Surfaces that fold two sources (Visor + the org's BYO registry) keep folding — a
+page that 502s on an optional provider is worse than one that shows what it can —
+but they now say what they could not reach. `clusterList.degraded` (`apps/visor/
+degraded.go`) is additive and `omitempty`, so a healthy response is byte-identical
+and an empty list means "you have none" **iff** `degraded` is absent.
+
+This is a shipped defect, not a hypothetical: production Visor sits at
+`v1.108.12`, four tags behind the commit that introduced `/v1/k8s/clusters`
+(`v1.108.13`), so every call 404s and `GET /v1/k8s/clusters` answered
+`{"clusters":[]}` to an operator running eight of them. **No Visor image exists past
+`v1.108.12`** — `ghcr.io/hanzoai/visor:v1.108.13` is `not found` — so those routes
+exist in git and in no running binary; `/v1/k8s/nodes` needs a Visor *release*, not
+a cloud change. `terse()` keeps the upstream's HTML error page out of the response
+and the logs.
+
+The machines/GPU fold (`managedMachines`) has the same shape and is **not** covered
+yet — it feeds three surfaces through a different type.
+
+## Two CR kinds, and the documented endpoint had the empty one
+
+`hanzo.ai/v1 App` is the TENANT plane (per-tenant namespace, org-labelled).
+`apps.hanzo.ai/v1alpha1 Application` is the PLATFORM plane, what Hanzo CD
+reconciles. Production holds **328** of the latter and **zero** of the former, yet
+`/v1/deploy/applications` projected only App CRs — so it answered `items: []` for
+the whole estate while `/v1/deploy/gitops` held the real list.
+
+They are not interchangeable, so the fix is not to pick a kind: it is to answer for
+the CALLER, which `scope.namespaces()` already branches on. A tenant scope is
+untouched; a platform SuperAdmin additionally gets the CD plane folded in, from the
+same source and the same gate as `/v1/deploy/gitops`. This widens the ENDPOINT,
+never the audience — `TestApplicationsDoesNotWidenForATenant` is the half that keeps
+it so. `projectCDApp` goes through `observeGitOpsApp`, so the list and the gitops
+view can never disagree about sync state, health, or applied revision.
+
 ## API keys are ONE noun (`/v1/keys`), and the type is a FIELD
 
 `POST` creates, `DELETE` revokes, `GET` lists. `apps/account/account.go`.
