@@ -93,7 +93,7 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 	if a.inbound {
 		// Advance the pushed branch fast-forward only; a diverged native ref is a
 		// Conflict (preserved) and an up-to-date ref is a no-op — both "no change".
-		res, err := cloud.InboundGitSync(ctx, cloud.GitInboundReq{
+		res, err := cloud.InboundGitSync(cloud.For(ctx, owner), cloud.GitInboundReq{
 			Org: owner, Repo: native, Ref: ev.Ref,
 			CloneURL: source, Token: tok, Origin: hostOf(source),
 		})
@@ -112,7 +112,13 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		if dirPushes(sy.Direction) {
 			mirrorURL = source
 		}
-		if err := cloud.ImportGitRepo(ctx, cloud.GitImportReq{
+		// The reconcile runs on a SCHEDULE, so there is no request to forward and
+		// the import — which crosses to the git app over the internal plane —
+		// would arrive anonymous, where the callee refuses a tenant it cannot see.
+		// cloud.For states the org this sync acts for; an inbound request always
+		// wins over a stated one, so a job supplies an identity where there is
+		// none and can never launder one.
+		if err := cloud.ImportGitRepo(cloud.For(ctx, owner), cloud.GitImportReq{
 			Org: owner, Repo: native, CloneURL: source, Token: tok, MirrorURL: mirrorURL,
 		}); err != nil {
 			return false, fmt.Errorf("import: %w", err)
