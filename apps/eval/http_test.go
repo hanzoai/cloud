@@ -33,12 +33,12 @@ func mountApp(t *testing.T) (*zip.App, *service) {
 	app.Get("/v1/evals/datasets", s.listDatasets)
 	app.Get("/v1/evals/datasets/:name", s.getDataset)
 	app.Delete("/v1/evals/datasets/:name", s.deleteDataset)
-	app.Post("/v1/evals/dataset-items", s.createItem)
-	app.Get("/v1/evals/dataset-items", s.listItems)
+	app.Post("/v1/evals/datasets/:name/items", s.createItem)
+	app.Get("/v1/evals/datasets/:name/items", s.listItems)
 	app.Post("/v1/evals/evaluators", s.createEvaluator)
 	app.Get("/v1/evals/evaluators", s.listEvaluators)
-	app.Post("/v1/evals/score-configs", s.createScoreConfig)
-	app.Get("/v1/evals/score-configs", s.listScoreConfigs)
+	app.Post("/v1/evals/rubrics", s.createScoreConfig)
+	app.Get("/v1/evals/rubrics", s.listScoreConfigs)
 	app.Post("/v1/evals/scores", s.createScore)
 	app.Get("/v1/evals/scores", s.listScores)
 	app.Get("/v1/evals/traces", s.listTraces)
@@ -146,7 +146,7 @@ func TestHTTPDatasetLifecycleAndIsolation(t *testing.T) {
 	app, _ := mountApp(t)
 
 	// No org header → 403 on every collection.
-	for _, p := range []string{"/v1/evals/datasets", "/v1/evals/evaluators", "/v1/evals/score-configs"} {
+	for _, p := range []string{"/v1/evals/datasets", "/v1/evals/evaluators", "/v1/evals/rubrics"} {
 		if code, _ := do(t, app, http.MethodGet, p, "", nil); code != http.StatusForbidden {
 			t.Fatalf("no-org GET %s want 403, got %d", p, code)
 		}
@@ -157,8 +157,8 @@ func TestHTTPDatasetLifecycleAndIsolation(t *testing.T) {
 		map[string]any{"name": "qa", "description": "quality"}); code != http.StatusCreated {
 		t.Fatalf("create dataset want 201, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/dataset-items", "maxpower",
-		map[string]any{"datasetName": "qa", "input": "2+2", "expectedOutput": "4"}); code != http.StatusCreated {
+	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/qa/items", "maxpower",
+		map[string]any{"input": "2+2", "expectedOutput": "4"}); code != http.StatusCreated {
 		t.Fatalf("create item want 201, got %d", code)
 	}
 
@@ -182,8 +182,8 @@ func TestHTTPDatasetLifecycleAndIsolation(t *testing.T) {
 		t.Fatalf("acme GET maxpower dataset want 404, got %d", code)
 	}
 	// acme cannot add an item to maxpower's dataset (404, not silent create).
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/dataset-items", "acme",
-		map[string]any{"datasetName": "qa", "input": "x"}); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/qa/items", "acme",
+		map[string]any{"input": "x"}); code != http.StatusNotFound {
 		t.Fatalf("acme add item to maxpower dataset want 404, got %d", code)
 	}
 	// acme cannot delete maxpower's dataset.
@@ -203,7 +203,7 @@ func TestHTTPScoreIntegrity(t *testing.T) {
 	app, _ := mountApp(t)
 
 	// A NUMERIC config in [0,1].
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/score-configs", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/evals/rubrics", "o",
 		map[string]any{"name": "quality", "dataType": "NUMERIC", "minValue": 0, "maxValue": 1}); code != http.StatusCreated {
 		t.Fatalf("create score-config want 201, got %d", code)
 	}
@@ -225,7 +225,7 @@ func TestHTTPScoreIntegrity(t *testing.T) {
 	}
 
 	// A CATEGORICAL config; a forged label outside the set is rejected.
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/score-configs", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/evals/rubrics", "o",
 		map[string]any{"name": "tone", "dataType": "CATEGORICAL", "categories": []string{"good", "bad"}}); code != http.StatusCreated {
 		t.Fatalf("create categorical config want 201, got %d", code)
 	}
@@ -277,8 +277,8 @@ func TestHTTPRunRequiresAuthAndOwnDataset(t *testing.T) {
 
 	// Seed two active items, then run: the stub runner scores both.
 	for _, in := range []string{"a", "b"} {
-		if code, _ := do(t, app, http.MethodPost, "/v1/evals/dataset-items", "o",
-			map[string]any{"datasetName": "qa", "input": in, "expectedOutput": in}); code != http.StatusCreated {
+		if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/qa/items", "o",
+			map[string]any{"input": in, "expectedOutput": in}); code != http.StatusCreated {
 			t.Fatalf("seed item %q: %d", in, code)
 		}
 	}
@@ -329,8 +329,8 @@ func TestRunDeadlineBounded(t *testing.T) {
 		t.Fatalf("seed dataset: %d", code)
 	}
 	for _, in := range []string{"a", "b"} {
-		if code, _ := do(t, app, http.MethodPost, "/v1/evals/dataset-items", "o",
-			map[string]any{"datasetName": "qa", "input": in, "expectedOutput": in}); code != http.StatusCreated {
+		if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/qa/items", "o",
+			map[string]any{"input": in, "expectedOutput": in}); code != http.StatusCreated {
 			t.Fatalf("seed item %q: %d", in, code)
 		}
 	}
