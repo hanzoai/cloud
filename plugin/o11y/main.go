@@ -73,7 +73,7 @@ func run() error {
 	// no-op provider and emitted nothing.
 	defer cloud.InstallTelemetry(context.Background(), deps.Logger, "hanzo-o11y")(context.Background())
 
-	app := zip.New(zip.Config{AppName: "o11y", Logger: deps.Logger})
+	app := newApp(deps)
 
 	if err := o11y.MountO11y(app, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
@@ -97,4 +97,31 @@ func run() error {
 		addr = defaultListen
 	}
 	return app.Listen(zip.Addr(addr))
+}
+
+// newApp builds this app's router with the edge policy a PUBLIC-facing process
+// has to carry.
+//
+// The host in front of every plugin is a pure router: it claims prefixes and
+// proxies them, and installs no middleware of its own (cmd/cloud/main.go). So the
+// browser-facing policy belongs to the process that answers the request, which is
+// this one. Every scaffolded app gets it from cloud.Serve; this main is
+// hand-written (see the package doc), and that is exactly why it has to install
+// it explicitly — nothing else in this process will.
+//
+// EdgeCORS in particular, because these prefixes include GET /v1/summary: the
+// PUBLIC status document, read cross-origin by a browser on a brand host that the
+// CLOUD_CORS_ORIGINS allowlist already admits. Without this the o11y plugin was
+// the only public surface answering 200 with no Access-Control-Allow-Origin, and
+// the browser discarded a body it had already received. It is the SAME middleware
+// over the SAME live allowlist every other app answers with — one CORS policy,
+// one definition of it, never a second mechanism for the endpoint that happens to
+// be unauthenticated.
+//
+// Installed BEFORE the mount because fiber runs middleware in registration order:
+// one added after the routes never runs.
+func newApp(deps cloud.Deps) *zip.App {
+	app := zip.New(zip.Config{AppName: "o11y", Logger: deps.Logger})
+	app.Use(cloud.EdgeCORS(deps.GatewayPolicy))
+	return app
 }
