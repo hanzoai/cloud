@@ -99,21 +99,21 @@ func TestLimits_SpendCaps_OrgScoped(t *testing.T) {
 	do := mount(t, iam.server.URL, com.server.URL, "")
 
 	// SuperAdmin with ?org=maxpower → forwards X-Org-Id=maxpower.
-	resp, body := do("GET", "/v1/admin/spend-caps?org=maxpower", superHdr)
+	resp, body := do("GET", "/v1/admin/caps?org=maxpower", superHdr)
 	if resp.StatusCode != http.StatusOK || envStatus(t, body) != "ok" {
-		t.Fatalf("super spend-caps = %d %s", resp.StatusCode, body)
+		t.Fatalf("super caps = %d %s", resp.StatusCode, body)
 	}
 	if _, p, org := com.seen(); org != "maxpower" || !strings.HasSuffix(p, "/alerts") {
 		t.Fatalf("forwarded org=%q path=%q, want maxpower .../alerts", org, p)
 	}
 
 	// SuperAdmin WITHOUT ?org → org required (honest error, no guessed tenant).
-	if _, body := do("GET", "/v1/admin/spend-caps", superHdr); envStatus(t, body) != "error" {
-		t.Fatalf("super spend-caps without org must be an error envelope, got %s", body)
+	if _, body := do("GET", "/v1/admin/caps", superHdr); envStatus(t, body) != "error" {
+		t.Fatalf("super caps without org must be an error envelope, got %s", body)
 	}
 
 	// A scoped org admin naming a FOREIGN ?org=hanzo is hard-pinned to their OWN org.
-	do("GET", "/v1/admin/spend-caps?org=hanzo", orgAdminHdr)
+	do("GET", "/v1/admin/caps?org=hanzo", orgAdminHdr)
 	if _, _, org := com.seen(); org != "maxpower" {
 		t.Fatalf("scoped admin forwarded org=%q, want maxpower (client ?org= must be ignored)", org)
 	}
