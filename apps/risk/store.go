@@ -515,7 +515,20 @@ func dropControl(db *sql.DB, id string) error {
 
 // ── decisions ───────────────────────────────────────────────────────────────
 
-func putDecision(db *sql.DB, o observation, out outcome, digest string) error {
+// putDecision records the decision and CLAIMS its idempotency key in ONE
+// statement.
+//
+// Writing the row and then claiming the key in a second statement leaves a
+// window: two concurrent requests carrying the same key both find no row, both
+// insert, and the second one's claim then violates the unique index — so a
+// caller that retried correctly gets a 500. Here the key is part of the insert,
+// so the loser of the race is refused by the index BEFORE a second decision
+// exists, and the caller reads the winner's answer back. Which is what an
+// idempotency key promises: one decision, one set of counters moved.
+//
+// The unique index is PARTIAL (`WHERE idem != ''`), so decisions made without a
+// key do not collide with each other.
+func putDecision(db *sql.DB, o observation, out outcome, digest, idem string) error {
 	hits, _ := json.Marshal(out.hits)
 	causes, _ := json.Marshal(out.causes)
 	signals, _ := json.Marshal(o.signals)
@@ -524,8 +537,24 @@ func putDecision(db *sql.DB, o observation, out outcome, digest string) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		out.id, stamp(o.at), o.stage, o.kind, o.subject, out.action, out.score, out.agency,
 		boolInt(out.shadow), out.refusal, o.amount, o.currency, o.direction,
-		"", string(hits), string(causes), string(signals), digest)
+		idem, string(hits), string(causes), string(signals), digest)
+	if err != nil && idem != "" && isUnique(err) {
+		return errIdemTaken
+	}
 	return err
+}
+
+// errIdemTaken says another request already recorded a decision under this key.
+// The caller reads that decision and returns it — the retry gets the original
+// answer rather than an error or a second decision.
+var errIdemTaken = errors.New("risk: this idempotency key already named a decision")
+
+// isUnique reports a UNIQUE-constraint violation without importing a driver.
+// The message is stable across both SQLite drivers cloud can be built with, and
+// the alternative — a driver-specific error code — would make this file the one
+// place in the package that knows which driver is linked.
+func isUnique(err error) bool {
+	return err != nil && strings.Contains(strings.ToUpper(err.Error()), "UNIQUE")
 }
 
 // byIdem returns the decision a repeated idempotency key already produced. The
@@ -541,14 +570,6 @@ func byIdem(db *sql.DB, idem string) (string, bool, error) {
 		return "", false, nil
 	}
 	return id, err == nil, err
-}
-
-func claimIdem(db *sql.DB, id, idem string) error {
-	if idem == "" {
-		return nil
-	}
-	_, err := db.Exec(`UPDATE decision SET idem = ? WHERE id = ?`, idem, id)
-	return err
 }
 
 // decisionsPage reads a page of decisions. Every filter is an EQUALITY on a
@@ -846,15 +867,22 @@ func sortStrings(s []string) { sort.Strings(s) }
 // to watch and never the record to keep: the decision is already in the tenant's
 // file and in the audit chain before this line runs. Wired the other way, a bus
 // hiccup loses evidence and the loss is invisible.
+// It is also DETACHED. PublishEvents dials the bus and publishes inline, and
+// analytics itself only ever calls it from a goroutine for exactly that reason
+// ("a slow bus costs a goroutine and never an ingest"). On this package's hot
+// path the equivalent would be a bus dial inside a card processor's
+// authorization window — the record is already durable by the time this runs, so
+// there is nothing for the caller to wait for.
 func emit(org, name string, props map[string]any) {
 	if org == "" {
 		return
 	}
-	analytics.PublishEvents(org, []analytics.SinkEvent{{
+	ev := analytics.SinkEvent{
 		MessageID:  newID("ev"),
 		Name:       name,
 		DistinctID: org,
 		Time:       time.Now().UTC(),
 		Properties: props,
-	}})
+	}
+	go analytics.PublishEvents(org, []analytics.SinkEvent{ev})
 }
