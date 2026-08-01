@@ -141,6 +141,13 @@ type engine struct {
 	// still RBAC-scoped, never inlined in the CR. Empty ⇒ envFrom (the default).
 	secretMount string
 	// pod memory floor/ceiling — a database needs a real memory reservation.
+	//
+	// Both are env-overridable per engine (CLOUD_DEDICATED_<ENGINE>_MEM_REQUEST /
+	// _MEM_LIMIT), the same way tag is. They were compile-time constants while tag
+	// was not, so a tenant instance suffocating in production could not be given
+	// headroom without shipping a release — the one lever an operator needs during
+	// an incident was the one that was missing. Defaults are unchanged; this only
+	// makes them reachable.
 	memReq string
 	memLim string
 	// dataMount, when non-empty, is the container path the instance's "data" PVC
@@ -183,7 +190,7 @@ var dedicatedEngines = map[string]engine{
 		clientPort: 5432,
 		dataMount:  "/var/lib/postgresql/data",
 		env:        map[string]string{"PGDATA": "/var/lib/postgresql/data/pgdata"},
-		memReq:     "128Mi", memLim: "512Mi",
+		memReq:     env("CLOUD_DEDICATED_SQL_MEM_REQUEST", "128Mi"), memLim: env("CLOUD_DEDICATED_SQL_MEM_LIMIT", "512Mi"),
 		secretEnv: func(user, pw, db string) map[string]string {
 			return map[string]string{
 				"POSTGRES_USER":     user,
@@ -211,7 +218,7 @@ var dedicatedEngines = map[string]engine{
 		adminUser:   "default",
 		secretMount: "/etc/kvconf",
 		args:        []string{"/etc/kvconf/kv.conf", "--bind", "0.0.0.0", "--dir", "/data", "--protected-mode", "no", "--maxmemory-policy", "allkeys-lru"},
-		memReq:      "64Mi", memLim: "512Mi",
+		memReq:      env("CLOUD_DEDICATED_KV_MEM_REQUEST", "64Mi"), memLim: env("CLOUD_DEDICATED_KV_MEM_LIMIT", "512Mi"),
 		secretEnv: func(_, pw, _ string) map[string]string {
 			// A valkey config snippet, not env: requirepass sets the default
 			// user's password (genToken output is [A-Za-z0-9_-] — no quoting
@@ -239,7 +246,7 @@ var dedicatedEngines = map[string]engine{
 		image: "ghcr.io/hanzoai/datastore", tag: env("CLOUD_DEDICATED_DATASTORE_TAG", "26.2.3.2"),
 		ports:      []enginePort{{"http", 8123}, {"native", 9000}},
 		clientPort: 8123,
-		memReq:     "256Mi", memLim: "1Gi",
+		memReq:     env("CLOUD_DEDICATED_DATASTORE_MEM_REQUEST", "256Mi"), memLim: env("CLOUD_DEDICATED_DATASTORE_MEM_LIMIT", "1Gi"),
 		secretEnv: func(user, pw, db string) map[string]string {
 			return map[string]string{
 				"DATASTORE_DB":       db,
@@ -267,7 +274,7 @@ var dedicatedEngines = map[string]engine{
 		clientPort: 27017,
 		dataMount:  "/state",
 		fsGroup:    1000, // FerretDB image runs as UID:GID 1000 (distroless); PVC must be group-writable
-		memReq:     "128Mi", memLim: "512Mi",
+		memReq:     env("CLOUD_DEDICATED_DOCDB_MEM_REQUEST", "128Mi"), memLim: env("CLOUD_DEDICATED_DOCDB_MEM_LIMIT", "512Mi"),
 		secretEnv: func(user, pw, db string) map[string]string {
 			// FerretDB v1.24 SQLite backend + per-instance SCRAM auth. Data at
 			// rest is SQLite files under /state — NO mongod, NO Postgres. The
