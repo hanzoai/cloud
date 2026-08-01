@@ -254,8 +254,13 @@ func (g *abuseGate) screen(p edge.Pattern, privileged bool) bool {
 		p.Paths >= screenPaths
 }
 
+// mode is the org's posture. An EMPTY org — the anonymous lane, which is where a
+// bad bot calls from — resolves to the PLATFORM row rather than to shadow, or the
+// one lane the gate exists for could never be armed. edge.Store.Mode owns that
+// resolution; here it is only the nil-store case, which is shadow because an
+// unwired deployment never enforces.
 func (g *abuseGate) mode(org string) string {
-	if g.policy == nil || org == "" {
+	if g.policy == nil {
 		return edge.ModeShadow
 	}
 	return g.policy.Mode(org)
