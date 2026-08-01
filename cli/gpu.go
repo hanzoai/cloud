@@ -64,6 +64,9 @@ const (
 	heartbeatEvery = 30 * time.Second
 	claimPoll      = 2 * time.Second
 	claimLeaseSecs = 120
+	// maxFetchedInputBytes guards fetchInput's read. Generous next to any real
+	// source (a 4K PNG is ~20MB) and finite, so a wrong URL cannot exhaust memory.
+	maxFetchedInputBytes = 512 << 20
 	// registerAttempts/registerBackoff let the presence write ride out a control
 	// plane that is rolling. ~30s of cover, which is longer than a pod replacement
 	// and far shorter than a real outage.
@@ -2040,7 +2043,55 @@ func (w *worker) postLibraryUpload(ctx context.Context, base, tok, sub, name str
 type inputImage struct {
 	Name      string `json:"name"`
 	Subfolder string `json:"subfolder"`
-	Data      string `json:"data"` // base64
+	Data      string `json:"data"` // base64 — small inputs ride inside the job
+	// URL is the other way an input arrives: the coordinator serves it and this
+	// worker FETCHES it. Inlining is bounded by the tasks API's 4MB body, so a 4K
+	// source (19MB, 25MB encoded) could never be enqueued at all — the dispatch was
+	// refused, reported as "GPU worker unavailable", and the render waited forever
+	// for a fleet that was healthy. Pulling the bytes moves them over a channel with
+	// no such ceiling. Empty for an inlined input; when set, Data is empty.
+	URL string `json:"url"`
+}
+
+// fetchInput pulls one input's bytes from the coordinator that dispatched this job.
+//
+// It exists because inlining has a ceiling and photographs do not. The tasks API
+// takes a 4MB body, so a 4K source could never ride inside the job — its dispatch was
+// refused, the refusal was reported as "GPU render worker is momentarily unavailable",
+// and the render waited on a fleet that was never the problem. Fetching has no such
+// ceiling, and the coordinator already serves the file it staged.
+//
+// Authorized with this worker's own credentials, exactly as uploadOutputs is: the
+// worker is a member of the org whose work it claims, and the coordinator resolves
+// the org from the token rather than from anything the job says.
+func (w *worker) fetchInput(ctx context.Context, cl *http.Client, url string) ([]byte, error) {
+	tok, err := w.env.ensureToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := cl.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, serverMessage(raw))
+	}
+	// A source is megabytes, not gigabytes; the cap is a guard, not a budget.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxFetchedInputBytes))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty body")
+	}
+	return data, nil
 }
 
 // materializeInputs writes each shipped input into the LOCAL studio's input dir by
@@ -2049,12 +2100,17 @@ type inputImage struct {
 // unreadable by this worker — becomes resolvable by LoadImage before the render.
 func (w *worker) materializeInputs(ctx context.Context, cl *http.Client, inputs []inputImage) error {
 	for _, in := range inputs {
-		if in.Name == "" || in.Data == "" {
+		if in.Name == "" || (in.Data == "" && in.URL == "") {
 			continue
 		}
-		data, err := base64.StdEncoding.DecodeString(in.Data)
-		if err != nil {
-			return fmt.Errorf("decode input %q: %w", in.Name, err)
+		var data []byte
+		var err error
+		if in.Data != "" {
+			if data, err = base64.StdEncoding.DecodeString(in.Data); err != nil {
+				return fmt.Errorf("decode input %q: %w", in.Name, err)
+			}
+		} else if data, err = w.fetchInput(ctx, cl, in.URL); err != nil {
+			return fmt.Errorf("fetch input %q: %w", in.Name, err)
 		}
 		var buf bytes.Buffer
 		mw := multipart.NewWriter(&buf)
