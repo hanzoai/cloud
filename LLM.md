@@ -82,7 +82,7 @@ and reports this 5-route plane as 29. Two products, one string prefix.
 | `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `apps/venue` | Shipped — 5 ops |
 | `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `apps/blueprint` | Shipped — 3 ops |
 | `/v1/templates` | Starter kits: ONE entry per template, shapes as variants | `apps/templates` | Shipped — 2 ops |
-| `/v1/iam` | Identity: users, orgs, roles | `apps/iam` | Shipped — opaque (5 wildcards relaying a nested app of 94 ops; see below) |
+| `/v1/iam` | Identity: users, orgs, roles | `apps/iam` | Shipped — GRAFTED (155 paths / 182 ops / 94 typed with schema; see below) |
 | `/v1/kms` | Secret custody: sealed secrets | `apps/kms` | Shipped — 7 ops |
 
 `/v1/bots` and `/v1/compute/bots` are two nouns with two owners; the row above
@@ -800,20 +800,22 @@ document pipeline" below.)
   opacity is a property of a SUBSET before it is one of a product — measure the one
   you mean. Three subsets are opaque end to end, and two of them (`plugin/tasks`,
   `plugin/iam`) publish exactly a bare noun plus one wildcard.
-- **`plugin/iam` is the extreme case of an opaque subset** — see
-  "apps/iam (0 of 25, and why)" below. It publishes 35 operations, every
+- **`plugin/iam` WAS the extreme case, and is now the counter-example** — see
+  "apps/iam — what the graft recovered" below. It published 35 operations, every
   one of them a method on one of five `app.All` wildcards relaying
   `iamserver.Handler(db)`: github.com/hanzoai/iam's ENTIRE standalone zip app —
-  94 typed ops of its own — adapted to net/http and hung on a wildcard. The
-  opaque class therefore has two shapes, and the difference decides what a fix
-  even looks like: `bot`/`sentry` proxy to ANOTHER PROCESS, where the
-  route table is genuinely not in this binary; `iam` — and `licensing`, whose
-  external Mount (hanzoai/licensing mount.go) hangs its own net/http mux on one
-  wildcard through `zip.AdaptNetHTTP` — proxies to a nested app IN
-  this process, whose 94 ops each already carry a `WithSummary` and are already
-  projected — at that nested app's own `/.well-known/openapi.json` and `/mcp`,
-  which cloud's document does not read. So iam's 25 undescribed operations are
-  not an absence of knowledge, they are an absence of COMPOSITION.
+  94 typed ops of its own — adapted to net/http and hung on a wildcard. It now
+  publishes **155 paths / 182 operations / 94 component schemas / 94 MCP tools**,
+  because `zip.Graft` composes the App instead of adapting a handler.
+  The opaque class has two shapes and the difference decides what a fix even
+  looks like: `bot`/`exec`/`dns`/`base` proxy to ANOTHER PROCESS, where the route
+  table is genuinely not in this binary and a splice is the wrong tool — those
+  need the MIRROR primitive (the host reads the child's own
+  `/.well-known/openapi.json` across the wire at compose time, which is not
+  built). `ai`/`o11y`/`tasks`/`licensing` are in THIS process but behind a
+  FOREIGN router (beego, gorilla/mux, net/http mux) with **zero** typed zip ops
+  between them, so Graft has nothing to carry until those repos type their own
+  surface — and the moment they do, it lands here with no change to cloud.
 - **Opaque does not always mean UNKNOWABLE, and `tasks` is the case that shows
   the difference.** Its whole product is `/v1/tasks` (a 307 to `/v1/tasks/`) plus
   one `/v1/tasks/*` relay, so it publishes 28 operations and describes none —
@@ -1346,7 +1348,7 @@ gates the whole surface as an EXACT set — live router == `app.Commands()` == t
 | D | ~~pricing 18~~ (done: 30 typed, 2 refused — both admin overlay PATCHes: one addresses a slashed model id through a greedy wildcard fiber calls `*1` and the document calls `{wildcard1}`, so the bound field and the published parameter cannot agree; the other carries an RFC 7386 merge patch stored and echoed VERBATIM, which `json.RawMessage` publishes as an array of integers and `map[string]any` reorders. The 15 "verbatim byte proxy" refusals came OFF the list: apps/goja already re-marshals the bundle's answer through Go's encoding/json, so a typed op re-marshalling the same value is byte-identical — apps/pricing/sections_wire_test.go proves it route by route), ~~ml 18~~ (done, and the 18 was 17: **10 typed, 7 refused**, every refusal wire-bound and GATED rather than asserted — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in apps/ml/typed_wire_test.go, whose two ledgers must SUM to the served surface. The seven: the three creates (`POST /v1/ml/models`, `/v1/train/jobs`, `/v1/train/experiments`) answer 402/503 IN BAND through `cloud.DenyResource` with the fleet's nested `{"error":{"code","message"}}` contract, and a typed op can only refuse by RETURNING an error, which zip renders as the flat `{"status","code","error"}` HTTPError — a NEW refusal class, distinct from multi-status #78: a non-2xx with a DOMAIN body. Moving the gate to middleware does not rescue them either, because it would run before the body decode and turn today's 400-on-a-bad-name into a 402. `PATCH /v1/ml/models/{name}` relays an opaque RFC 7386 merge patch VERBATIM to the Kubernetes API (`map[string]any` turns `{"replicas":1000000}` into `1e+06` and patches a float over an int). `POST …/predict` returns the predictor's own status, bytes and Content-Type. The two `/health` probes answer 503 carrying the degraded REPORT as their body. One `view()` now returns the published `mlResource` for BOTH the typed reads and the untyped create/patch, so the shape cannot depend on which route served it; `TestView` asserts the marshalled BYTES, which is what proves the map→struct swap did not move the wire, and mlResource's field order is ALPHABETICAL for exactly that reason), ~~automations 18~~ (done: 14 typed, 4 refused), index 17, dataroom 17, ~~compliance 17~~ (done: 16 typed, 1 refused — the HMAC webhook: the signature is computed over the RAW body bytes and verified before any parse, and an unknown reference answers a second 200 shape; the refusal is now GATED, not prose — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in typed_wire_test.go), affiliates 17 | 104 |
 | E | ~~tools 16~~ (done: **15 served, 14 typed, 1 refused**, wire-bound and GATED rather than asserted — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in apps/tools/typed_wire_test.go, whose two ledgers must SUM to the served surface and whose counts are pinned so the prose here cannot drift from the binary. Its 16 ops published NO summary and NO description at all before this — the whole subset was invisible to prose, MCP, the CLI and every typed SDK method. The one refusal: `POST /v1/plugins/build` answers 422 carrying the build DIAGNOSTICS (detail, source, generated) as a domain body, the ml refusal class — a typed op's only refusal is a returned error, which zip renders as the flat HTTPError with nowhere to put them. Three query filters stayed STRINGS rather than becoming bools, deliberately: these routes compare the raw value to the literal `"true"`, and zip's `setScalar` reads a bare `?activated` and `?activated=1` as true, so a bool In would return a different set of tools for the same URL — `TestActivatedFilterIsTheLiteralTrue` pins it. The pass also closed the response-side hole the op gate cannot see: Tool, Skill, MCPServer, AuthoredPlugin and Price are store rows, so all 29 of their published properties would have reached openapi.yaml, every SDK and every MCP inputSchema bare; `TestEveryPublishedFieldIsDescribed` gates them now — and it covers all 52 properties the subset publishes, not only the row types. Re-verified independently at a later pass, and the refusals were re-read against zip SOURCE rather than inherited: `op.invoke`'s unconditional `ErrBadRequest` on an unparseable body is typed.go:242 and the `cmp.Or(op.Status, 204)` a nil Out stamps is typed.go:305 — three citations in the refusal prose were off by one to three lines and are now exact, which matters because a file:line nobody can land on is how a refusal stops being re-checkable. That pass also closed the half of a refusal the op gate cannot see, the books/company answer one plane over: the untyped route rendered as an operationId and a tag and NO BODY AT ALL — indistinguishable from a route that takes no input and returns none — so every SDK generated off openapi.yaml offered a plugin build with nowhere to put the source. `openapi.Register` (apps/tools/tools.go init) now states the half that IS statable: buildRequest→buildOut, gated by `TestTheUntypedRouteStillDeclaresItsBody`. A map literal became a named struct to do it, with ALPHABETICAL fields because encoding/json writes a map in sorted key order — `TestBuildReceiptIsByteIdentical` asserts the marshalled BYTES, which is what proves naming a shape did not move it. The cost is honest and recorded: 17 of the subset's 69 published properties are now bare, because zipdoc lifts field prose off TYPED ops only and Register's reflection seam reads Go types, not comments — the same gap company recorded for deckOut. Described ops stay 14 of 15: Register buys the SHAPE, never the prose, and inventing a description for a route nobody typed would be worse than none. The SECOND refusal is now GONE rather than typed: `POST /v1/tools/mcp` was a hand-rolled JSON-RPC door, and the fleet serves ONE MCP door on the host — this plane reaches it through the typed `POST /v1/tools/call`, so the envelope, its declared shapes and its byte-identity gate all went with the route), eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | ~~plan~~ (done: **15 typed, 0 refused** — the whole `/v1/plans` surface, which published 15 addresses and NOTHING about any of them. It is apps/pricing's shape one subsystem over, so it took pricing's answer: apps/goja re-marshals the bundle's reply with Go's encoding/json before a handler sees it, so decoding and re-marshalling is byte-identical, and `apps/plan/wire_test.go` proves it against the live router for all 12 sections × 3 identity shapes plus BOTH parameterised routes over EVERY id the shipped catalog holds. Opaque catalog values are `json.RawMessage`, not `map[string]any`: zip ≥v1.18.9 asks whether a type marshals itself before asking what it is made of, so a RawMessage publishes `{}` — "any JSON", true — while `map[string]any` publishes `additionalProperties:{"type":"object"}`, which the first `"priceMonthly": 20` in the catalog refutes. Two deltas recorded and PINNED rather than glossed: Content-Type gains `; charset=utf-8` (what every zip error on the surface already sent), and a non-200 body gains zip's `status` field beside the bundle's own message — the same trade main already took for `GET /v1/pricing/model/{name}`, whose 404 is equally first-class. Latent defect found and fixed by typing: the subsystem is named `plan` and serves `/v1/plans`, so `MountPrefixes`'s `/v1/<Name>` default covered NOTHING it registers — measured, `SubsystemOf("/v1/plans")` was `""` and `PriceOf` `undeclared`, and any middleware the subsystem installed (including the typed-op Bridge) landed on `/v1/plan` and never ran. `plugin/plan/main.go` now passes `manifest.PrefixesFor("plan")`; 28 other apps' `/v1/<name>` is likewise absent from their declared prefixes — most legitimately, because they declare deeper subtrees that DO cover their routes, so re-measure per app rather than fixing the list), ~~analytics 13~~ (done: **6 typed, 7 refused**, both ledgers GATED in apps/analytics/typed_wire_test.go — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed`, whose two ledgers must SUM to the served surface, so a route added untyped here goes red and a stale reason goes red too. The six are the READ lenses: `/v1/analytics/{overview,timeseries,top}`, `/v1/errors`, `/v1/insights/{events,health}`. The seven refusals are one probe and the six ingest doors, and they are MEASURED rather than asserted. `GET /v1/analytics/health` answers 503 CARRYING the degraded report as its body — the ml `/health` class — and `TestHealthStillCarriesItsReportAt503` pins the pair a typed op would have to break. The six doors share ONE admission decision (`handle`, event.go) resolved entirely from facts that never reach a typed op: the presented credential (Authorization / `x-hanzo-ingest-key` / `?ingest_key=`), the client IP and socket peer the anonymous rate caps key on, DNT/Sec-GPC, and the RAW body length that is the anonymous lane's 64 KiB→413 bound (`public.go maxPublicBytes`, invisible to a typed op and far below the fleet's global zip BodyLimit). Four of the six add a SECOND, independent blocker: the canonical wire is POLYMORPHIC (`decodeIngest` takes a bare Event object, a bare Event ARRAY, and the `{batch:[…]}`/`{events:[…]}` envelope on one path) and the team SPA's is a bare ARRAY unconditionally — bodies zip's `op.invoke` would 400 where they answer 200 today. `TestArrayBodiedDoorsStillAnswer200` is that measurement, so when zip can declare a polymorphic body the conversion is a test away rather than a re-derivation. Two latent defects surfaced and were fixed: plugin/analytics/main.go declared NO `Prefixes`, so the standalone binary's scope owned only the `/v1/<name>` default and five of the app's six prefixes were outside anything it could gate or that `cloud.Declare` could attribute — the pricing defect exactly, one app over; and `apps/analytics` had no `cloud.Bridge` of its own, relying entirely on Serve's app-wide install, which the package's own test harness does not run. A THIRD is fleet-wide and only named here: `SeriesPoint` was about to be a one-name/two-shape collision with apps/admin's `{t,value}` launch-board point, which `openapi.Weave` refuses — analytics yielded to `UsagePoint`, since its schema was not yet published. `TestEveryPublishedFieldIsDescribed` gates the response side: all 19 TYPED schemas carry per-field prose, so `errorRate` says it is a ratio and `pct` says it is a share of the WINDOW rather than of the rows returned. **Re-verified at a later pass against a MOVED surface, and every refusal held** — by then main had folded `/v1/event/collect` away and added the two Sentry doors `POST /v1/event/{project}/{envelope,store}`, so the ledger reads 6 typed / 8 refused. The reasons were re-derived from zip v1.18.11's own `typed.go` rather than inherited as prose, and each gained a blocker the first pass had not written down: ORDER. `op.invoke` decodes the body BEFORE the handler is entered, while the anonymous lane refuses 403 (capture disabled), then 429 (rate), then 413 (64 KiB) with the raw bytes still in hand and nothing parsed — so a typed op would answer 400 to a beacon that is answered 413 or 429 today. Error precedence is wire. What that pass DID change is the other half of the cost: all eight published an operationId and NOTHING else, so every generated SDK offered `post_v1_event` — the door every Hanzo product beacons to — as a call with nowhere to put the event. They declare their bodies now through `openapi.Register`, driven off the `doors` table itself so a door cannot be routed with one wire and documented with another, and the gate quantifies over `untypedByDesign` rather than over doors (`TestEveryUntypedRouteDeclaresItsBodies`) so a refusal added tomorrow owes its bodies by construction. The canonical four use the new `openapi.OneOf`, because their wire is genuinely three shapes; the two Sentry doors use `openapi.Binary` for a request that is an opaque envelope stream and declare NO response, named in `relayed` — they copy back whatever `cloud.ObsErrorIngest` installed, and publishing a shape there would be inventing one. The subset went 0→7 requestBody and 6→12 responses, 19→30 schemas, and the described count did NOT move: 6, exactly the typed ops, because prose, an MCP tool and a CLI command are the three things only zip's registry supplies. Reported as unchanged rather than counted as progress. The health probe's `map[string]any` became `healthReport` in the same move — a map's shape cannot be declared without hand-writing a schema beside it, which is the drift `Register` exists to prevent — and `TestHealthReportKeepsTheMapItReplaced` pins both bodies field-for-field. The one difference is serialization ORDER (Go struct order, not encoding/json's sorted map keys), which the JSON data model does not carry; no field name, value, presence rule or status moved. The cost is a `proseless` ledger of eleven components publishing 63 bare properties, and it may only SHRINK — it caught its own first staleness during this rebase, when main's removal of the Team door left `teamEvent` named and unpublished), the ~70 remaining packages, 1–11 routes each | ~358 |
-| — | ~~iam 25~~ (done: **0 typed, 25 refused** — the whole product is five `app.All` wildcards relaying a nested app; see "apps/iam (0 of 25, and why)" above. The refusal is gated, and the pass fixed a live fail-closed hole) | 0 |
+| — | ~~iam 25~~ (done, then RE-done and the second answer is the real one: the first pass typed **0 of 25 and refused all 25**, correctly, because the seam erased the child's registry. `zip.Graft` (v1.18.16) composes the App instead of adapting a handler, so iam now publishes **155 paths / 182 ops / 94 with schema / 94 MCP tools / 94 CLI commands / 0 wildcards** — see "apps/iam — what the graft recovered" above. Nothing in iam was typed to get there; the 94 were always typed, in its own repo, and the adapter was throwing them away) | 94 |
 
 **The five-plugin pass (ask, audit, catalog, crawl, x402): 3 typed, 2 refused —
 and all five published NOTHING before it.** Five one-operation subsets, every one
@@ -1685,7 +1687,18 @@ command, no typed SDK method. It was 38 operations. Two things it taught:
   generated SDK and in the MCP tool list as seven undescribed `{wildcard1}`
   operations and in no other form. Fixing it means declaring ops inside
   `hanzoai/ai`, next to the handlers; nothing cloud can do at the mount point
-  reaches it.
+  reaches it — **and `zip.Graft` is now the receiver that makes that work pay
+  out.** Until it existed, typing an op inside a wildcard-mounted child bought
+  nothing here, because `AdaptNetHTTP` erased the registry on arrival; the ops
+  would have been typed and cloud would still have printed `{wildcard1}`. Graft
+  takes a `*zip.App`, so the order is: hanzoai/ai converts its beego
+  `ControllerRegister` to zip and types its ops (measured: **0** typed zip ops
+  today, 84 paths / 90 method-ops in `routers/*.go`), cloud swaps the
+  `AdaptNetHTTP` for a `Graft`, and every one lands in the document, the SDKs,
+  the MCP list and the CLI at once. Same for `o11y`, `tasks` and `licensing`.
+  Note ai's inference paths are a COMPATIBILITY surface whose shape we do not
+  own — transcribe from the external contract and pin with golden fixtures, do
+  not design them.
 
 `templates` went 5 of 5 (a closed ledger, `TestEveryRouteIsATypedOp` — no
 refusals to name), `destinations` 4 of 5 (`untypedByDesign` +
@@ -2330,52 +2343,86 @@ commerceDo returning response headers, three call sites including the top-up
 money path, keeping `Cache-Control: no-store` (a tenancy property, not a content
 one) — and recorded at the lines that cause it.
 
-`apps/iam` (0 of 25, and why) is the FLOOR of the migration — the one partition
-where the honest answer is that none of it converts, and the reason is worth more
-than the count. Its published subset is **35** operations and ZERO described — not
-the 25 a hand count reaches, and the ten-op gap is worth knowing before you measure
-any `All`-mounted package: `app.All` registers NINE fiber methods and
-`openapi.From` publishes SEVEN of them, so each wildcard yields
-get/post/put/patch/delete **plus OPTIONS and TRACE**. All 35
-are methods on five `app.All` wildcards in `safeMount` (apps/iam/iam.go): `/v1/iam`,
-`/v1/iam/*`, `/login/oauth`, `/login/oauth/*` and the root `/.well-known/*`, each
-handed `zip.AdaptNetHTTP(iamserver.Handler(db))` — and that handler is
-`server.NewApp(db)`, github.com/hanzoai/iam's WHOLE standalone zip app (94 typed
-ops: OIDC discovery/JWKS, the oauth protocol endpoints, credential login, the v2
-entity CRUD, SCIM, the Casdoor verb-alias compat layer) adapted to net/http. Three
-independent facts each forbid a typed op, and they are pinned by
-`TestTheRelayIsWhyNothingIsTyped` rather than asserted:
+`apps/iam` — what the graft recovered. This was the FLOOR of the migration, "0 of
+25 and none of it converts", and the reason it read that way is worth more than the
+count: the refusal was correct about the SEAM and wrong about iam.
 
-1. **One registration serves an OPEN set of sub-paths.** A typed op has one path.
-   Enumerating the leaves would mean cloud restating another module's route table,
-   and any leaf missed 404s a path IAM serves today.
-2. **The bytes, the status and the Content-Type are the nested app's own** —
-   including its Guard answering `{"status":401,"error":"authentication required"}`,
-   which is not cloud's error shape, and `/login/oauth`'s 302 + `Location` with no
-   body. A typed op answers one declared status with one marshalled `Out`.
-3. **The oauth token/introspect/revoke endpoints take
-   `application/x-www-form-urlencoded`** by RFC 6749/7662/7009, and zip's
-   `op.invoke` decodes every non-empty typed body with `jsonenc.Unmarshal` — so
-   declaring any `In` turns a working token exchange into a 400. Same wall as
-   apps/books' uploads, one content type over.
+**Before.** Its published subset was **35** operations and ZERO described — not the
+25 a hand count reaches, and the ten-op gap is worth knowing before you measure any
+`All`-mounted package: `app.All` registers NINE fiber methods and `openapi.From`
+publishes SEVEN of them, so each wildcard yields get/post/put/patch/delete **plus
+OPTIONS and TRACE**. All 35 were methods on five `app.All` wildcards in `safeMount`:
+`/v1/iam`, `/v1/iam/*`, `/login/oauth`, `/login/oauth/*` and the root
+`/.well-known/*`, each handed `zip.AdaptNetHTTP(iamserver.Handler(db))` — and that
+handler was `server.NewApp(db)`, github.com/hanzoai/iam's WHOLE standalone zip app
+(94 typed ops) adapted to net/http.
 
-**The fix is COMPOSITION, not typing.** Unlike `bot`/`licensing`/`sentry`, whose
-route tables are in another process, iam's 94 ops are in THIS process, each already
-carrying a `WithSummary`, already projected by zip at the nested app's own
-`/.well-known/openapi.json` and `/mcp` (94 ops, logged at mount). Cloud's
-`openapi.Spec` = `From` ∘ `Live` reads cloud's fiber table, which holds the wildcard
-and not what is behind it, so those 94 reach neither `openapi.yaml` nor any SDK nor
-the MCP tool list. Closing it means teaching the projection to MERGE a nested app's
-own document at the prefix it is mounted on — a second document source, so it is a
-deliberate seam decision and not a side effect of a typing pass. Two things to
-verify first, both measured: `hanzoai/iam v1.33.26` ships NO `zipdoc_gen.go` and no
-`zip.Describe` call anywhere (`grep -rl zip.Describe` over the module: empty), so
-those 94 ops have summaries and no descriptions and no field prose — composing
-today buys shapes and one-liners, not the full product surface; and the merge has to
-respect that cloud's own static `/.well-known/openapi.json` and agentskills'
-`/.well-known/agent-skills/*` sit UNDER iam's root wildcard and win only because
-zip's matcher takes the most specific pattern regardless of registration order
-(zip specificity_test.go — checked, not assumed).
+**After** — `app.Graft(iamserver.NewApp(db))`, measured on the regenerated subset:
+
+| | before | after |
+|---|---|---|
+| published paths | 5 | **155** |
+| published operations | 35 | **182** |
+| operations with a real schema | 0 | **94** |
+| component schemas | 0 | **94** |
+| MCP tools | 0 | **94** |
+| CLI commands | 0 | **94** |
+| wildcard path keys | 5 | **0** |
+
+Fleet-wide that is 1058 → 1207 paths, 1490 → 1634 operations, 1140 → 1234 schemas,
+833 → 924 MCP tools, and the wildcard ratchet 28 → **25**.
+
+**The three facts that used to forbid a typed op were all true, and none of them
+were about typing.** They were about a RELAY: one registration serving an open set
+of sub-paths; the bytes/status/Content-Type belonging to the nested app; the oauth
+endpoints taking `application/x-www-form-urlencoded`. A graft does not type
+anything — it composes the app that ALREADY typed itself, so all three keep
+holding and none of them costs a description any more. The child's router still
+matches, still runs its own `Use(authz.Guard)`, still answers its own
+`{"status":401,"error":"authentication required"}`, still form-decodes its own
+token endpoint. `apps/iam/typed_wire_test.go` pins that (`TestServingIsUnchanged`)
+and turns the old refusal into a RATCHET: 94 typed may only rise, 88 untyped may
+only fall, and zero wildcards is an assertion.
+
+**What the graft cost, elsewhere, and it was all pre-existing damage made loud.**
+A graft refuses a duplicate METHOD+pattern at compose time instead of letting
+registration order decide, and it found three:
+
+- `GET /v1/iam/keys` and `POST /v1/iam/onboard` — `apps/account` registered
+  deprecated aliases and an onboard handler INSIDE iam's prefix. Measured live,
+  neither ever answered in production: api.hanzo.ai routes `/v1/iam/*` to IAM, so
+  both addresses return IAM's own Guard envelope from `server: zip` with no
+  `Deprecation` header and no `x-api-version`. The aliases are deleted (canonical
+  `/v1/keys` unchanged) and onboard moved to `/v1/orgs` — named for the resource,
+  the same rule that moved the key surface off `/v1/iam/keys` in the first place,
+  and it is now reachable for the first time.
+- `GET /healthz` — iam's child app declared it on its PUBLIC router while
+  `cmd/cloud/main.go` registers it as the HOST's. zip's own `ops.go` states the
+  rule: `/healthz`, `/readyz`, `/metrics` are a SECOND listener the deployment
+  brings up when it names `OPS_PORT`, **never** the public one. hanzoai/iam
+  dropped it. This is the same shadowing incident apps/iam's doc comment already
+  recorded as an outage (`{"binary":"iam2"}` out of the shared binary), and it was
+  invisible to every document because `/healthz` is published by nobody — which is
+  why Graft reads the ROUTER (`Declaration()`), never the document.
+
+It also surfaced five duplicate `operationId`s INSIDE hanzoai/iam (the legacy verb
+aliases claimed the same id as the REST twin they delegate to), which OpenAPI
+forbids and any weave refuses. Fixed there: an alias is named by its address.
+
+**And it CLOSED a reachability gap.** `manifest/router_test.go`'s `unreachable`
+ledger carried `iam /.well-known/{wildcard1} -> nothing` — a relying party's FIRST
+call reaching no app. Relayed, the only prefix that could have routed it was
+`/.well-known`, which owns the whole subtree and would have taken agentskills' with
+it. Grafted, iam declares the three exact documents its router holds, so
+`manifest.Apps` routes exactly those three and nothing else.
+
+**What is NOT in reach, and why the answer is not "graft harder".** `hanzoai/iam`
+ships no `zipdoc_gen.go` and no `zip.Describe` (`grep -rl zip.Describe` over the
+module: empty), so those 94 carry summaries and no descriptions and no field prose
+— composing bought shapes and one-liners, and field prose is still theirs to write.
+88 of iam's 182 operations are still untyped, in ITS repo; each conversion there
+lands here on the next dependency bump with no change to cloud, which is exactly
+the ordering Graft buys.
 
 The refusal is a GATE: `apps/iam/typed_wire_test.go` holds `untypedByDesign` keyed
 by PATH rather than `METHOD /path` (one `app.All` refuses for every method at once;

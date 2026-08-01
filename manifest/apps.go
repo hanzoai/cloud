@@ -15,9 +15,15 @@
 // plugin/gen-app-cmds reads THIS list to scaffold a new app's main and to VALIDATE
 // that the two never drift — every row has a plugin/<name> serving exactly it, and
 // no plugin/<name> app-binary is missing from this list. Order is deliberate: a
-// shallower prefix registered earlier wins (account's /v1/iam/keys must precede
-// iam's /v1/iam), and manifest/order_test.go freezes the sequence so a reorder
-// is a decision, never an accident.
+// shallower prefix registered earlier wins (account's /v1/commerce/topup/wallet
+// must precede commerce's /v1/commerce), and manifest/order_test.go freezes the
+// sequence so a reorder is a decision, never an accident.
+//
+// account no longer names anything under /v1/iam. It used to — deprecated key
+// aliases and an onboard handler sitting inside IAM's prefix — and those were
+// unreachable in production, because api.hanzo.ai routes /v1/iam/* to IAM. Since
+// iam is GRAFTED rather than relayed through a wildcard, a duplicate address is
+// refused at compose time instead of being decided by registration order.
 package manifest
 
 var Apps = []App{
@@ -32,8 +38,16 @@ var Apps = []App{
 	// the bare "/v1" remainder, which serves none of them.
 	{Name: "metrics", Prefixes: []string{"/v1/logs", "/v1/metrics", "/v1/traces"}},
 	{Name: "ingress", Prefixes: []string{"/v1/ingress"}},
-	{Name: "account", Prefixes: []string{"/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed", "/v1/iam/keys", "/v1/iam/onboard", "/v1/keys"}},
-	{Name: "iam", Prefixes: []string{"/login/oauth", "/v1/iam"}},
+	{Name: "account", Prefixes: []string{"/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed", "/v1/keys", "/v1/orgs"}},
+	// The three root /.well-known documents are named EXACTLY, one prefix each, and
+	// naming them at all is new: OIDC discovery and JWKS live at the ISSUER root by
+	// spec (RFC 8414 / OIDC Discovery 1.0), so before iam was grafted the only thing
+	// it could declare here was /.well-known/*, which would have taken the whole
+	// subtree from agentskills and from anything else that ever lands under it. A
+	// grafted child declares the addresses its router actually holds, so the host can
+	// route the three and nothing more. They were in manifest/router_test.go's
+	// `unreachable` ledger until now — a relying party's FIRST call, reaching no app.
+	{Name: "iam", Prefixes: []string{"/.well-known/jwks", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", "/login/oauth", "/v1/iam"}},
 	{Name: "base", Prefixes: []string{"/v1/base", "/v1/collections", "/v1/waitlist"}},
 	// /v1/summary is the PUBLIC platform status document (apps/o11y/summary.go),
 	// the outward projection of the fleet health probes o11y already runs. It has
