@@ -106,10 +106,22 @@ func ImportGitRepo(ctx context.Context, req GitImportReq) error {
 // InboundGitSync fast-forward-only advances one native branch from an upstream
 // push. Never force-overwrites native; a divergence returns Conflict.
 func InboundGitSync(ctx context.Context, req GitInboundReq) (GitSyncResult, error) {
-	if gitImporter == nil {
-		return GitSyncResult{}, ErrGitImporterUnavailable
+	if gitImporter != nil {
+		return gitImporter.InboundSync(ctx, req)
 	}
-	return gitImporter.InboundSync(ctx, req)
+	// Not co-resident — the app that receives the push is not the app that holds
+	// the repos, so the request travels the plane. See ImportGitRepo.
+	out, err := Ask[plane.InboundIn, plane.Synced](ctx, "git", plane.GitInbound, &plane.InboundIn{
+		Project: req.Project, Repo: req.Repo, Ref: req.Ref,
+		CloneURL: req.CloneURL, Token: req.Token, Origin: req.Origin,
+	})
+	if err != nil {
+		return GitSyncResult{}, err
+	}
+	return GitSyncResult{
+		Applied: out.Applied, NoOp: out.NoOp, Conflict: out.Conflict,
+		Detail: out.Detail, Before: out.Before, After: out.After,
+	}, nil
 }
 
 // GitRepoStatuses returns the per-repo import + sync status for names (org-scoped).

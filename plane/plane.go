@@ -63,6 +63,7 @@ const (
 
 	GitFiles   = "git_files"
 	GitImport = "git_import"
+	GitInbound = "git_inbound"
 	GitPublish = "git_publish"
 
 	PlatformFleet   = "platform_fleet"
@@ -321,6 +322,40 @@ type ImportIn struct {
 	Token string `json:"token"`
 	// MirrorURL registers an outbound mirror target; empty registers none.
 	MirrorURL string `json:"mirrorUrl"`
+}
+
+// InboundIn advances ONE branch of a native repo from an upstream push. It rides
+// the plane for the same reason ImportIn does: the app that receives the webhook
+// and the app that owns the repos are different processes.
+type InboundIn struct {
+	// Project is the sub-scope — the provider-side account.
+	Project string `json:"project"`
+	// Repo is the native repository name.
+	Repo string `json:"repo"`
+	// Ref is the FULL ref, e.g. refs/heads/main or refs/tags/v1.2.3.
+	Ref string `json:"ref"`
+	// CloneURL is the upstream to fetch the ref from.
+	CloneURL string `json:"cloneUrl"`
+	// Token authenticates the fetch; env-fed downstream, never argv.
+	Token string `json:"token"`
+	// Origin is the source host, so the outbound mirror suppresses the echo.
+	Origin string `json:"origin"`
+}
+
+// Synced reports what the fetch did. A divergence is NOT an error: native is
+// canonical and was left alone, which the caller needs to know rather than retry.
+type Synced struct {
+	// Applied is true when native fast-forwarded.
+	Applied bool `json:"applied"`
+	// NoOp is true when native was already at that tip.
+	NoOp bool `json:"noOp"`
+	// Conflict is true when native had diverged and was NOT overwritten.
+	Conflict bool `json:"conflict"`
+	// Detail is the human reason for a conflict or a skip.
+	Detail string `json:"detail,omitempty"`
+	// Before and After are the native tips around an Applied fetch.
+	Before string `json:"before,omitempty"`
+	After  string `json:"after,omitempty"`
 }
 
 // Imported acknowledges an import. A failure is an error, never this shape.
