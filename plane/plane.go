@@ -68,6 +68,16 @@ const (
 	PlatformFleet   = "platform_fleet"
 	TreasuryReserve = "treasury_reserve"
 
+	// The durable engine's org-scoped read, across the process boundary. Each app
+	// embeds its OWN engine over its OWN data dir (durable.go: SQLite has one
+	// writer, so a shared store would be the collision a shared port already was),
+	// which makes "the engine" a per-process fact. A namespace written through one
+	// app's surface is therefore invisible to every other app — and the BYO fleet
+	// is exactly that: workers register through the tasks surface and visor renders
+	// them, so visor read its own empty engine and reported an online GPU as no
+	// fleet at all. The engine is asked, not opened, like the ledger above.
+	TasksActivities = "tasks_activities"
+
 	// The x402 rail, across the process boundary. Four ops, because the four
 	// things a settlement needs live in four binaries: the RAIL is x402's, the
 	// PRICE is the marketplace's, the PAYEE is wallets', and the LEDGER is
@@ -397,6 +407,28 @@ type ReserveIn struct {
 // Reserved reports what was held.
 type Reserved struct {
 	Amount Money `json:"amount"`
+}
+
+// ---- tasks.activities — the durable engine, one page at a time -------------
+
+// ActivitiesIn names one page of one namespace. The ORG is the caller's, never an
+// argument, exactly like every other op here.
+type ActivitiesIn struct {
+	Namespace string `json:"namespace" validate:"required"`
+	Cursor    string `json:"cursor,omitempty"`
+	Size      int    `json:"size,omitempty"`
+}
+
+// Activities is one page of standalone activities, plus the cursor for the next.
+//
+// Rows is the engine's OWN JSON, relayed verbatim. The alternative is a struct
+// here mirroring hanzoai/tasks' StandaloneActivity — a second copy of a type this
+// package does not own, free to drift from the one that produced the bytes. The
+// consumer already imports the engine and names the type; the plane only carries
+// it. An empty Next ends the walk.
+type Activities struct {
+	Rows []byte `json:"rows"`
+	Next string `json:"next,omitempty"`
 }
 
 // ---- x402.settle — the payment rail ----------------------------------------
