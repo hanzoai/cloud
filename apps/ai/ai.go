@@ -174,8 +174,28 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 			if bal == nil {
 				return 0, fmt.Errorf("plane balance read: commerce answered nothing")
 			}
-			// Minor units == cents, the same coarse figure the gate compares.
-			return bal.Amount.Minor()
+			// The gate wants a COARSE cents figure (it compares > 0), but the ledger
+			// keeps eighteen decimals — per-token charges are routinely finer than a
+			// cent — so Money.Minor() refuses to answer rather than round behind the
+			// caller's back. Its doc says to round explicitly, where the choice is
+			// visible. This is that choice:
+			//
+			// ROUND DOWN. A gate that rounded up would admit a request the balance
+			// cannot actually cover, and the debit that follows is exact — so the
+			// error would land as a negative balance nobody authorized. Rounding down
+			// can only ever refuse slightly early, which is the safe direction for a
+			// fail-closed gate. Nothing is billed from this number; it decides
+			// admission only.
+			a, err := bal.Amount.Parse()
+			if err != nil {
+				return 0, fmt.Errorf("plane balance read: %w", err)
+			}
+			minor := a.Minor() // big.Int of cents, truncated toward zero by Rescale
+			if !minor.IsInt64() {
+				return 0, fmt.Errorf("plane balance read: %s %s exceeds int64 cents",
+					bal.Amount.Decimal, bal.Amount.Currency)
+			}
+			return minor.Int64(), nil
 		})
 	}
 	// The DEBIT crosses the same way, for the same reason — and it must key on the SAME
