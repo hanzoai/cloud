@@ -1,7 +1,7 @@
 // Package pricing is the price list: what every model, provider, GPU tier, tool and
 // hosting plan costs.
 //
-// It serves /v1/pricing/* and /v1/pricing-policy — plus the enablement registry that
+// It serves /v1/pricing/* — plus the enablement registry that
 // decides which catalog entries a caller may even see
 // (/v1/enablement{,/optin,/optout} and the SuperAdmin /v1/admin/{catalog,enablement}).
 //
@@ -202,15 +202,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// strictly under /v1/pricing/*. (Same reasoning the note below records for
 	// /v1/plans, /v1/tools, /v1/gpu, /v1/cloud, /v1/subscriptions, /v1/iam —
 	// all owned by other subsystems at the top level to avoid collisions.)
-	// The ONE top-level alias this surface does serve, /v1/pricing-policy, is
-	// declared with the other sections in sections.go.
-
 	// Live sync trigger — admin only. Network fetch in Go, markup in goja.
 	zip.Post(zapp, "/v1/pricing/sync", o.sync)
 
 	logger.Info("pricing mounted",
 		"prefix", "/v1/pricing",
-		"section_routes", 15, // the fixed plans/infra/tools/gpu/policy sections + the policy alias
+		"section_routes", 14, // the fixed plans/infra/tools/gpu/policy sections
 		"gated_routes", 6, // models, free, featured, providers, summary, model/:name
 		"admin_routes", 3, // GET /v1/admin/catalog + PATCH models/* + PATCH providers/:name
 		"overlay_db", dbPath,
