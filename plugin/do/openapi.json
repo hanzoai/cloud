@@ -19,9 +19,9 @@
     }
   ],
   "paths": {
-    "/v1/load-balancers": {
+    "/v1/balancers": {
       "get": {
-        "operationId": "get_v1_load-balancers",
+        "operationId": "get_v1_balancers",
         "summary": "ListLoadBalancers returns every load balancer the caller's org owns, under the friendly names the org created them with.",
         "description": "ListLoadBalancers returns every load balancer the caller's org owns, under the\nfriendly names the org created them with. Same account-wide filter as the VPC\nlisting: a load balancer outside the caller's \"o\"\u003corgHash\u003e- namespace is never\nin the answer.",
         "tags": [
@@ -53,7 +53,7 @@
         }
       },
       "post": {
-        "operationId": "post_v1_load-balancers",
+        "operationId": "post_v1_balancers",
         "summary": "CreateLoadBalancer creates a load balancer in the caller's org namespace and answers 201 with it.",
         "description": "CreateLoadBalancer creates a load balancer in the caller's org namespace and\nanswers 201 with it. The physical DigitalOcean name is derived server-side from\nthe validated org; a name that already exists there is a 409. Omitting\nforwarding rules yields a usable HTTP 80→80 load balancer rather than a 422.",
         "tags": [
@@ -95,9 +95,9 @@
         }
       }
     },
-    "/v1/load-balancers/{id}": {
+    "/v1/balancers/{id}": {
       "delete": {
-        "operationId": "delete_v1_load-balancers_id",
+        "operationId": "delete_v1_balancers_id",
         "summary": "DeleteLoadBalancer removes one of the caller org's load balancers and answers 204.",
         "description": "DeleteLoadBalancer removes one of the caller org's load balancers and answers\n204. Ownership is confirmed by re-fetching the resource before anything is\ndeleted, so a cross-tenant id is a 404 rather than a delete of another org's\nload balancer.",
         "tags": [
@@ -121,7 +121,7 @@
         }
       },
       "get": {
-        "operationId": "get_v1_load-balancers_id",
+        "operationId": "get_v1_balancers_id",
         "summary": "GetLoadBalancer returns one of the caller org's load balancers by id.",
         "description": "GetLoadBalancer returns one of the caller org's load balancers by id. One that\nexists in another org's namespace is reported 404, never 403 — the same\nexistence-oracle guard the VPC read applies.",
         "tags": [

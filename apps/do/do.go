@@ -1,5 +1,5 @@
 // Package do is the org-scoped private-network surface — /v1/vpcs and
-// /v1/load-balancers — carved out of Hanzo's OWN house DigitalOcean account.
+// /v1/balancers — carved out of Hanzo's OWN house DigitalOcean account.
 //
 // It is the house-account facade over digitalocean/godo's VPCs + LoadBalancers.
 // An org's OWN cloud accounts (DigitalOcean, AWS, GCP, Azure) are a different
@@ -9,10 +9,10 @@
 //	POST   /v1/vpcs                 create {name,region,ip_range}     -> Vpc
 //	GET    /v1/vpcs/:id             one VPC (owned)                   -> Vpc
 //	DELETE /v1/vpcs/:id             delete one VPC (owned)
-//	GET    /v1/load-balancers       list the caller's LBs             -> {loadBalancers:[...]}
-//	POST   /v1/load-balancers       create {name,region,...}          -> LoadBalancer
-//	GET    /v1/load-balancers/:id   one LB (owned)                    -> LoadBalancer
-//	DELETE /v1/load-balancers/:id   delete one LB (owned)
+//	GET    /v1/balancers       list the caller's LBs             -> {loadBalancers:[...]}
+//	POST   /v1/balancers       create {name,region,...}          -> LoadBalancer
+//	GET    /v1/balancers/:id   one LB (owned)                    -> LoadBalancer
+//	DELETE /v1/balancers/:id   delete one LB (owned)
 //
 // TENANT ISOLATION — DigitalOcean is a SINGLE account, so the org boundary is
 // enforced by this subsystem, not by DO. A resource's PHYSICAL DO name is derived
@@ -100,7 +100,7 @@ type state struct {
 // godo seams are nil and every op fails closed 503.
 func configured(s *cloud.Service[state]) bool { return s.State.vpcs != nil && s.State.lbs != nil }
 
-// Mount wires /v1/vpcs/* and /v1/load-balancers/* onto app — one line over the
+// Mount wires /v1/vpcs/* and /v1/balancers/* onto app — one line over the
 // generic subsystem entrypoint. Routes register unconditionally (even when
 // unconfigured) so the surface owns its space and fails closed under its own name
 // rather than 404-ing to a fallthrough.
@@ -121,7 +121,7 @@ func build(b cloud.Base) (state, error) {
 	if st.vpcs == nil || st.lbs == nil {
 		b.Log.Warn("digitalocean subsystem mounted fail-closed: DO_API_TOKEN not set (all ops 503 until configured)")
 	} else {
-		b.Log.Info("digitalocean subsystem mounted", "prefix", "/v1/vpcs,/v1/load-balancers", "brand", b.Brand, "env", b.Env)
+		b.Log.Info("digitalocean subsystem mounted", "prefix", "/v1/vpcs,/v1/balancers", "brand", b.Brand, "env", b.Env)
 	}
 	return st, nil
 }
@@ -153,7 +153,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// subsystem resolves its tenant through tenant(), which reads the validated
 	// principal AND the SuperAdmin bit, so it needs the request itself and not
 	// only the org. On the scoped Router this installs once per DECLARED prefix
-	// (/v1/vpcs, /v1/load-balancers) and nowhere else. It must precede the leaves
+	// (/v1/vpcs, /v1/balancers) and nowhere else. It must precede the leaves
 	// below: fiber runs middleware in registration order, so one installed after
 	// them never runs for them. Serve installs one app-wide too — nesting is
 	// harmless (the inner one is what the handler sees) and the tests mount this
@@ -170,10 +170,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(zapp, "/v1/vpcs/:id", o.getVPC)
 	zip.Delete(zapp, "/v1/vpcs/:id", o.deleteVPC)
 
-	zip.Get(zapp, "/v1/load-balancers", o.listLBs)
-	zip.Post(zapp, "/v1/load-balancers", o.createLB, zip.WithStatus(http.StatusCreated))
-	zip.Get(zapp, "/v1/load-balancers/:id", o.getLB)
-	zip.Delete(zapp, "/v1/load-balancers/:id", o.deleteLB)
+	zip.Get(zapp, "/v1/balancers", o.listLBs)
+	zip.Post(zapp, "/v1/balancers", o.createLB, zip.WithStatus(http.StatusCreated))
+	zip.Get(zapp, "/v1/balancers/:id", o.getLB)
+	zip.Delete(zapp, "/v1/balancers/:id", o.deleteLB)
 }
 
 // ── request/response shapes (console VpcModule / LoadBalancerModule contract) ──

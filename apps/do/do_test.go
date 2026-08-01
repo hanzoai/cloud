@@ -210,7 +210,7 @@ func TestLoadBalancerListIsolationAndDefaults(t *testing.T) {
 	app, _, rawLBs := mountFake(t)
 
 	// Minimal create (no forwarding rules) must succeed with a defaulted rule.
-	code, body := req(t, app, http.MethodPost, "/v1/load-balancers", "acme",
+	code, body := req(t, app, http.MethodPost, "/v1/balancers", "acme",
 		map[string]string{"name": "edge", "region": "sfo3"})
 	if code != http.StatusCreated {
 		t.Fatalf("create lb: want 201, got %d (%s)", code, body)
@@ -224,14 +224,14 @@ func TestLoadBalancerListIsolationAndDefaults(t *testing.T) {
 	}
 
 	// A second org's LB in the same account.
-	req(t, app, http.MethodPost, "/v1/load-balancers", "maxpower",
+	req(t, app, http.MethodPost, "/v1/balancers", "maxpower",
 		map[string]string{"name": "edge", "region": "nyc3"})
 	if len(rawLBs.byID) != 2 {
 		t.Fatalf("account must hold both orgs' LBs, got %d", len(rawLBs.byID))
 	}
 
 	// acme lists exactly one — its own.
-	code, body = req(t, app, http.MethodGet, "/v1/load-balancers", "acme", nil)
+	code, body = req(t, app, http.MethodGet, "/v1/balancers", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("acme lb list: want 200, got %d (%s)", code, body)
 	}
@@ -255,7 +255,7 @@ func TestForgePathRefused(t *testing.T) {
 	if code, _ := req(t, app, http.MethodGet, "/v1/vpcs", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-principal VPC list: want 403, got %d", code)
 	}
-	if code, _ := req(t, app, http.MethodGet, "/v1/load-balancers", "", nil); code != http.StatusForbidden {
+	if code, _ := req(t, app, http.MethodGet, "/v1/balancers", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-principal LB list: want 403, got %d", code)
 	}
 
@@ -282,7 +282,7 @@ func TestFailClosedWhenUnconfigured(t *testing.T) {
 	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "do"), State: state{}} // nil seams → unconfigured
 	routes(app, s)
 
-	for _, path := range []string{"/v1/vpcs", "/v1/load-balancers"} {
+	for _, path := range []string{"/v1/vpcs", "/v1/balancers"} {
 		if code, _ := req(t, app, http.MethodGet, path, "acme", nil); code != http.StatusServiceUnavailable {
 			t.Fatalf("unconfigured GET %s: want 503, got %d", path, code)
 		}
