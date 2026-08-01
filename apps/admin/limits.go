@@ -17,7 +17,7 @@ import (
 // service-token seam —
 //
 //	promos      → commerce /v1/platform/promo   (the admin-configured plan promo)
-//	spend-caps  → commerce /v1/billing/alerts (a per-org usage cap override)
+//	caps        → commerce /v1/billing/alerts (a per-org usage cap override)
 //
 // so admin.hanzo.ai configures the 50%-off promo and oversees/overrides any org's
 // caps without a parallel model. Promo ops are platform-only (core.Admit); cap
@@ -33,10 +33,10 @@ func limitRoutes(z *zip.App, o ops) {
 	// Per-org usage-cap oversight/override — SuperAdmin (any org via org=) or an org
 	// admin (own org only). Reuses the customer's OWN self-service spend-alert CRUD,
 	// so a platform override and a customer edit are the same rows.
-	zip.Get(z, "/v1/admin/spend-caps", o.listSpendCaps, op("adminSpendCaps"))
-	zip.Post(z, "/v1/admin/spend-caps", o.createSpendCap, op("adminCreateSpendCap"))
-	zip.Patch(z, "/v1/admin/spend-caps/:id", o.updateSpendCap, op("adminUpdateSpendCap"))
-	zip.Delete(z, "/v1/admin/spend-caps/:id", o.deleteSpendCap, op("adminDeleteSpendCap"))
+	zip.Get(z, "/v1/admin/caps", o.listCaps, op("adminCaps"))
+	zip.Post(z, "/v1/admin/caps", o.createCap, op("adminCreateCap"))
+	zip.Patch(z, "/v1/admin/caps/:id", o.updateCap, op("adminUpdateCap"))
+	zip.Delete(z, "/v1/admin/caps/:id", o.deleteCap, op("adminDeleteCap"))
 }
 
 // capIn addresses one spend cap. Every cap op takes the same two values: WHICH org
@@ -101,7 +101,7 @@ type promoIn struct {
 	Active bool `json:"active"`
 }
 
-// listSpendCaps reads one org's usage caps: its spend alerts plus the derived period
+// listCaps reads one org's usage caps: its spend alerts plus the derived period
 // spend, over/warn state and reset time.
 //
 // These are the SAME rows the customer edits in their own console — a platform override
@@ -111,7 +111,7 @@ type promoIn struct {
 // Response: {"status":"ok","msg":"","data":[{"id":"cap_1","limitCents":100000,
 // "enforce":true,"periodSpendCents":42000,"over":false,"warn":false,
 // "resetsAt":"2026-08-01T00:00:00Z"}],"total":0}
-func (o ops) listSpendCaps(ctx context.Context, in *capIn) (*rawOut, error) {
+func (o ops) listCaps(ctx context.Context, in *capIn) (*rawOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
 		return nil, err
@@ -125,14 +125,14 @@ func (o ops) listSpendCaps(ctx context.Context, in *capIn) (*rawOut, error) {
 	return relay(raw, status, err)
 }
 
-// createSpendCap sets a usage cap on one org — a platform override of a customer budget,
+// createCap sets a usage cap on one org — a platform override of a customer budget,
 // written to the customer's own spend-alert rows. The body is commerce's spend-alert
 // contract, forwarded byte-for-byte.
 //
 // Example: {"org":"acme","limitCents":100000,"enforce":true}
 // Response: {"status":"ok","msg":"","data":{"id":"cap_1","limitCents":100000,
 // "enforce":true},"total":0}
-func (o ops) createSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
+func (o ops) createCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
 		return nil, err
@@ -146,13 +146,13 @@ func (o ops) createSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	return relay(raw, status, err)
 }
 
-// updateSpendCap edits one cap by id — raise or lower the ceiling, flip enforcement. The
+// updateCap edits one cap by id — raise or lower the ceiling, flip enforcement. The
 // body is commerce's spend-alert patch contract, forwarded byte-for-byte.
 //
 // Example: {"org":"acme","limitCents":250000,"enforce":false}
 // Response: {"status":"ok","msg":"","data":{"id":"cap_1","limitCents":250000,
 // "enforce":false},"total":0}
-func (o ops) updateSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
+func (o ops) updateCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
 		return nil, err
@@ -170,11 +170,11 @@ func (o ops) updateSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	return relay(raw, status, err)
 }
 
-// deleteSpendCap removes one cap by id, lifting the ceiling entirely.
+// deleteCap removes one cap by id, lifting the ceiling entirely.
 //
 // Example: {"org":"acme","id":"cap_1"}
 // Response: {"status":"ok","msg":"","data":{"ok":true}}
-func (o ops) deleteSpendCap(ctx context.Context, in *capIn) (*rawOut, error) {
+func (o ops) deleteCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
 		return nil, err
