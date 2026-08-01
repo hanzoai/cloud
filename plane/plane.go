@@ -62,6 +62,7 @@ const (
 	IAMMailable = "iam_mailable"
 
 	GitFiles   = "git_files"
+	GitImport = "git_import"
 	GitPublish = "git_publish"
 
 	PlatformFleet   = "platform_fleet"
@@ -291,6 +292,32 @@ type Roster struct {
 }
 
 // ---- git -------------------------------------------------------------------
+
+// ImportIn asks git to create a repo and mirror an upstream into it. It exists
+// because the app that decides to import (integrations, holding the provider
+// credential) and the app that owns the git store are DIFFERENT PROCESSES, so
+// the in-process importer seam is nil across that boundary — the request has to
+// travel.
+type ImportIn struct {
+	// Repo is the repository name to create locally.
+	Repo string `json:"repo"`
+	// Project is the sub-scope the repo lives in — the provider-side account for
+	// an import, so two upstreams of the same name stay distinct.
+	Project string `json:"project"`
+	// CloneURL is the upstream to mirror from.
+	CloneURL string `json:"cloneUrl"`
+	// Token authenticates the fetch. It rides the internal socket only, and is
+	// presented to git out of band (env-fed http.extraHeader), never argv.
+	Token string `json:"token"`
+	// MirrorURL registers an outbound mirror target; empty registers none.
+	MirrorURL string `json:"mirrorUrl"`
+}
+
+// Imported acknowledges an import. A failure is an error, never this shape.
+type Imported struct {
+	// Repo names what was imported.
+	Repo string `json:"repo"`
+}
 
 // FilesIn asks for a repo's files at one ref.
 type FilesIn struct {

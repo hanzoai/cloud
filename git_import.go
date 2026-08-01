@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"errors"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // git_import.go is the INBOUND half of the GitHub-App bidirectional-sync seam —
@@ -80,10 +81,26 @@ var ErrGitImporterUnavailable = errors.New("cloud: git importer not registered")
 
 // ImportGitRepo creates + mirrors an external repo into the native git server.
 func ImportGitRepo(ctx context.Context, req GitImportReq) error {
-	if gitImporter == nil {
-		return ErrGitImporterUnavailable
+	if gitImporter != nil {
+		return gitImporter.ImportRepo(ctx, req)
 	}
-	return gitImporter.ImportRepo(ctx, req)
+	// Not co-resident: this process is not the one that owns the git store, so the
+	// in-process seam is nil and the request travels the internal plane instead.
+	// Every subsystem runs as its own process, so the app that DECIDES to import
+	// (integrations, holding the provider credential) is never the app that holds
+	// the repos — an import answered "git importer not registered" while both were
+	// healthy. The org is not sent: the callee reads it from the plane identity, so
+	// an argument can never widen the tenant an import lands in.
+	if _, err := Ask[plane.ImportIn, plane.Imported](ctx, "git", plane.GitImport, &plane.ImportIn{
+		Repo:      req.Repo,
+		Project:   req.Project,
+		CloneURL:  req.CloneURL,
+		Token:     req.Token,
+		MirrorURL: req.MirrorURL,
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 // InboundGitSync fast-forward-only advances one native branch from an upstream
