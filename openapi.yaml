@@ -26650,7 +26650,7 @@ paths:
         to THIS machine.'
       tags:
       - agents
-  /v1/agents/targets/{id}/claim-key:
+  /v1/agents/targets/{id}/key:
     post:
       description: |-
         MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve`
@@ -26658,7 +26658,7 @@ paths:
         SHA-256 hash is stored. Rotating supersedes any prior daemon, so only the
         machine's owner — or an org admin — may call it; every other caller gets the
         same not-found an unknown id gets, and learns nothing about what exists.
-      operationId: post_v1_agents_targets_id_claim-key
+      operationId: post_v1_agents_targets_id_key
       parameters:
       - description: ID is the target to act on, from the path.
         example: tgt_1

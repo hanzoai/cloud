@@ -783,9 +783,9 @@
         }
       }
     },
-    "/v1/agents/targets/{id}/claim-key": {
+    "/v1/agents/targets/{id}/key": {
       "post": {
-        "operationId": "post_v1_agents_targets_id_claim-key",
+        "operationId": "post_v1_agents_targets_id_key",
         "summary": "MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve` daemon presents to claim work for this machine, and returns it ONCE: only its SHA-256 hash is stored.",
         "description": "MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve`\ndaemon presents to claim work for this machine, and returns it ONCE: only its\nSHA-256 hash is stored. Rotating supersedes any prior daemon, so only the\nmachine's owner — or an org admin — may call it; every other caller gets the\nsame not-found an unknown id gets, and learns nothing about what exists.",
         "tags": [
