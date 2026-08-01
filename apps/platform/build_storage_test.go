@@ -66,39 +66,55 @@ func TestAFinishedBuildReleasesItsDiskPromptly(t *testing.T) {
 	}
 }
 
-// The layer cache lives in the object store because it has to scale independently
-// of a build node. A registry cache is pulled WHOLE onto the node before any of it
+// The cache backend is a DEPLOYMENT fact, not a code opinion. The object store is
+// the right home — a registry cache is pulled whole onto the node before any of it
 // can be read, so its size lands on the same 105GB disk that holds the images, the
-// snapshots and the build's own working set — 79GB retained with 26GB left, and a
-// build evicted fifteen minutes in.
-func TestTheCacheDoesNotLandOnTheNodesDisk(t *testing.T) {
-	var joined []string
-	for _, a := range buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/cloud:v1") {
-		joined = append(joined, a.(string))
+// snapshots and the build's working set, which is what filled the runner pool. But
+// the build namespace has no network path to the object store yet, so selecting it
+// by default would point every build at a cache it cannot open.
+func TestTheCacheBackendFollowsWhatIsReachable(t *testing.T) {
+	// Unset: the backend that works today.
+	t.Setenv("BUILD_CACHE_S3_ENDPOINT", "")
+	got := strings.Join(cacheArgs("ghcr.io/hanzoai/cloud"), " ")
+	if !strings.Contains(got, "type=registry") {
+		t.Errorf("with no object store configured the cache must stay on the registry: %s", got)
 	}
-	s := strings.Join(joined, " ")
-	if strings.Contains(s, "type=registry") {
-		t.Error("a registry cache is pulled whole onto the node; that is what filled the runner pool")
+
+	// Set: the cache moves, with no code change.
+	t.Setenv("BUILD_CACHE_S3_ENDPOINT", "s3.hanzo.svc:9000")
+	got = strings.Join(cacheArgs("ghcr.io/hanzoai/cloud"), " ")
+	for _, want := range []string{
+		"type=s3", "bucket=buildcache",
+		"endpoint_url=http://s3.hanzo.svc:9000",
+		// SeaweedFS addresses buckets by path, not virtual host.
+		"use_path_style=true",
+		// Keyed per repository inside the shared bucket.
+		"name=hanzoai-cloud",
+		// The intermediate stages are where the expensive steps live.
+		"mode=max",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("s3 cache missing %q: %s", want, got)
+		}
 	}
-	if !strings.Contains(s, "type=s3") {
-		t.Error("the cache must live in the object store")
+	if strings.Contains(got, "type=registry") {
+		t.Error("both backends at once: the cache would be written twice")
 	}
 }
 
-// The credential reaches buildkit through the ENVIRONMENT, never argv — a build
-// command is logged and inspectable, and a key on it is a key in the logs.
+// Whichever backend is chosen, the credential reaches buildkit through the
+// ENVIRONMENT and never argv — a build command is logged and inspectable.
 func TestTheCacheCredentialIsNeverOnArgv(t *testing.T) {
-	var joined []string
-	for _, a := range buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/cloud:v1") {
-		joined = append(joined, a.(string))
-	}
-	s := strings.Join(joined, " ")
-	for _, leak := range []string{"access_key_id=", "secret_access_key=", "AWS_SECRET"} {
-		if strings.Contains(s, leak) {
+	t.Setenv("BUILD_CACHE_S3_ENDPOINT", "s3.hanzo.svc:9000")
+	got := strings.Join(cacheArgs("ghcr.io/hanzoai/cloud"), " ")
+	for _, leak := range []string{"access_key_id=", "secret_access_key="} {
+		if strings.Contains(got, leak) {
 			t.Errorf("the build command carries %q; it belongs in the env", leak)
 		}
 	}
-	// And it IS supplied, from the same optional Secret the artifact publisher uses.
+	// And it IS supplied, from the same optional Secret the artifact publisher uses:
+	// absent, buildkit reports a miss and the build runs uncached rather than the
+	// Job being unschedulable. A cache accelerates; it never gates.
 	k := fakeK8s()
 	job := k.buildJobSpec("pf-runner-t", "hanzoai", "runner", "push-hanzoai", []any{"buildctl-daemonless.sh"})
 	cs, _, _ := unstructured.NestedSlice(job.Object, "spec", "template", "spec", "containers")
@@ -110,8 +126,6 @@ func TestTheCacheCredentialIsNeverOnArgv(t *testing.T) {
 		found[name] = true
 		if strings.HasPrefix(name, "AWS_") {
 			ref := em["valueFrom"].(map[string]any)["secretKeyRef"].(map[string]any)
-			// Optional, so a cluster without the Secret still SCHEDULES the build:
-			// a cache accelerates, it never gates.
 			if ref["optional"] != true {
 				t.Errorf("%s is required; an absent cache credential would make the Job unschedulable", name)
 			}
@@ -119,19 +133,7 @@ func TestTheCacheCredentialIsNeverOnArgv(t *testing.T) {
 	}
 	for _, n := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} {
 		if !found[n] {
-			t.Errorf("%s is not supplied, so every build is a cache miss", n)
+			t.Errorf("%s is not supplied, so an object-store cache could never authenticate", n)
 		}
-	}
-}
-
-// The write goes to the INTERNAL endpoint. The public host is a CDN edge that
-// takes no writes — the same split artifactPutBase makes.
-func TestTheCacheWritesToTheInternalEndpoint(t *testing.T) {
-	ep := s3CacheEndpoint()
-	if !strings.HasPrefix(ep, "http://") && !strings.HasPrefix(ep, "https://") {
-		t.Errorf("endpoint %q has no scheme; buildkit needs a URL", ep)
-	}
-	if strings.Contains(ep, "s3.hanzo.ai") {
-		t.Error("that is the public edge; writes go to the in-cluster address")
 	}
 }

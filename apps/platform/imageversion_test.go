@@ -58,17 +58,8 @@ func TestBuildFrontendCmdCarriesASharedCache(t *testing.T) {
 	}
 	got := join(buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/studio:v1.2.3"))
 	for _, want := range []string{
-		"--import-cache type=s3,bucket=buildcache",
-		"--export-cache type=s3,bucket=buildcache",
-		// Keyed per repository inside one bucket, so a new repo needs no
-		// provisioning and two repos never share a cache.
-		"name=hanzoai-studio",
-		// mode=max keeps the intermediate stages, where the expensive steps live.
-		"mode=max",
-		// The INTERNAL endpoint: the public host is a CDN edge that takes no writes.
-		"endpoint_url=http://s3.hanzo.svc:9000",
-		// SeaweedFS addresses buckets by path, not by virtual host.
-		"use_path_style=true",
+		"--import-cache type=registry,ref=ghcr.io/hanzoai/studio:buildcache",
+		"--export-cache type=registry,ref=ghcr.io/hanzoai/studio:buildcache,mode=max",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("build command missing %q\ngot:%s", want, got)
