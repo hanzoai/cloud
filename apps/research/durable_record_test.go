@@ -163,7 +163,7 @@ func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
 	succDur := org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint())
 	succStore := cloud.NewOrgStore(t.TempDir(), "research", openStore, cloud.WithDurable(succDur), cloud.WithStoreLogger(luxlog.New("succ")))
 	t.Cleanup(func() { _ = succStore.CloseAll() })
-	st, err := succStore.For(orgID, "")
+	st, err := succStore.For(cloud.MustOrgNamespace(orgID, ""))
 	if err != nil {
 		t.Fatalf("successor For: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestDurableForDedupsConcurrentOpens(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := 0; i < n; i++ {
-		go func(i int) { defer wg.Done(); got[i], errs[i] = stores.For("acme", "") }(i)
+		go func(i int) { defer wg.Done(); got[i], errs[i] = stores.For(cloud.MustOrgNamespace("acme", "")) }(i)
 	}
 	wg.Wait()
 	for i := 0; i < n; i++ {
