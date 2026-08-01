@@ -57,7 +57,7 @@ var Apps = []App{
 	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/recharge", "/v1/billing/invoices", "/v1/billing/settings", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/alerts", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/mode", "/v1/billing/topup/token", "/v1/billing/webhooks", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/currencies", "/v1/commerce/deposits", "/v1/commerce/tenant", "/v1/commerce/webhooks", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
-	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing", "/v1/pricing-policy"}},
+	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing"}},
 	// storage is the S3 DATA plane (buckets, objects, health); provisioning below
 	// PROVISIONS an s3 resource and answers /v1/s3 + /v1/s3/{name}. Both rows once
 	// read "/v1/s3" — one prefix, two owners — so whichever mounted first took the

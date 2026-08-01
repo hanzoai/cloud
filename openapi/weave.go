@@ -222,7 +222,7 @@ func Weave(parts []Part) (*Document, error) {
 	// The composed document owes the same invariant a generated one does: an
 	// injective (method, path) → operation map. The path check above already
 	// enforces it ACROSS apps; this catches an id collision between two
-	// different addresses (the /v1/pricing-policy vs /v1/pricing/policy family),
+	// different addresses (the hyphen-vs-separator family operationID guards),
 	// which composition can introduce even when no app is at fault.
 	if err := uniqueOperationIDs(out); err != nil {
 		return nil, err

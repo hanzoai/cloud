@@ -49402,26 +49402,6 @@ paths:
         and infrastructure pricing.'
       tags:
       - pricing
-  /v1/pricing-policy:
-    get:
-      description: |-
-        GetPricingPolicyAlias returns the pricing policy document at its top-level
-        address. It is the same document GET /v1/pricing/policy returns, byte for
-        byte, at the shorter address the marketing surface links to.
-      operationId: get_v1_pricing-policy
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                additionalProperties:
-                  type: object
-                type: object
-          description: ok
-      summary: GetPricingPolicyAlias returns the pricing policy document at its top-level
-        address.
-      tags:
-      - pricing-policy
   /v1/pricing/base:
     get:
       description: |-
@@ -57728,9 +57708,6 @@ tags:
 - description: 'Package pricing is the price list: what every model, provider, GPU
     tier, tool and hosting plan costs.'
   name: pricing
-- description: 'Package pricing is the price list: what every model, provider, GPU
-    tier, tool and hosting plan costs.'
-  name: pricing-policy
 - description: 'Package projects is where your sites live: create one, deploy a build,
     roll back to any release.'
   name: projects
