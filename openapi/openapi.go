@@ -456,6 +456,20 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 				return nil, err
 			}
 		}
+		// An UNTYPED route inside a GRAFTED app has its prose in neither place a
+		// host can reach: not in the typed registry (it is not typed) and not in
+		// [Describe] (that is this repo's seam, and the route is another repo's).
+		// It is in the doc comment on the handler, where it belongs, and zipdoc
+		// put it in zip's process-wide extraction — so ask there.
+		//
+		// Last, so nothing here overrides prose this app declared for itself: a
+		// host that has something to add about a route it mounts still wins, and
+		// the owning service's sentence is what fills the silence.
+		if op.Summary == "" && op.Description == "" {
+			if summary, description, ok := zip.Prose(r.Method, r.Path); ok {
+				op.Summary, op.Description = summary, description
+			}
+		}
 
 		if doc.Paths[path] == nil {
 			doc.Paths[path] = PathItem{}
