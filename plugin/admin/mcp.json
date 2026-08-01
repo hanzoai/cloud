@@ -162,14 +162,14 @@
     "name": "adminCordonNode"
   },
   {
-    "description": "Mints credit for one org. It is the ONE admin mint surface, and it\ndoes NOT mint in-process: it forwards the request to commerce's already-mint-gated\nPOST /v1/billing/credit-grants, authenticated by the service token and scoped to the\ntarget org, then writes one tamper-evident compliance record. Commerce stays the sole\ncredit ledger; this is a thin, audited relay so there is exactly one place credit is\ncreated.\n\nThe body is commerce's OWN CreateCreditGrant contract, forwarded whole — every field\nit carries reaches commerce. The only two this layer reads are the target org (`org`,\nor `user` as the org-pool alias), which selects the namespace commerce's EdgeAuth\ntrusts, and `idempotencyKey`, which makes a double-clicked grant credit once.\n\nA FAILED grant is audited too, with the request body attached: an attempted mint is\nexactly as interesting to a compliance auditor as a successful one.",
+    "description": "Mints credit for one org. It is the ONE admin mint surface, and it\ndoes NOT mint in-process: it forwards the request to commerce's already-mint-gated\nPOST /v1/billing/credits, authenticated by the service token and scoped to the\ntarget org, then writes one tamper-evident compliance record. Commerce stays the sole\ncredit ledger; this is a thin, audited relay so there is exactly one place credit is\ncreated.\n\nThe body is commerce's OWN CreateCreditGrant contract, forwarded whole — every field\nit carries reaches commerce. The only two this layer reads are the target org (`org`,\nor `user` as the org-pool alias), which selects the namespace commerce's EdgeAuth\ntrusts, and `idempotencyKey`, which makes a double-clicked grant credit once.\n\nA FAILED grant is audited too, with the request body attached: an attempted mint is\nexactly as interesting to a compliance auditor as a successful one.",
     "inputSchema": {
       "additionalProperties": {
         "type": "object"
       },
       "type": "object"
     },
-    "name": "adminCreateCreditGrant"
+    "name": "adminCreateCredit"
   },
   {
     "description": "Sets a usage cap on one org — a platform override of a customer budget,\nwritten to the customer's own spend-alert rows. The body is commerce's spend-alert\ncontract, forwarded byte-for-byte.",

@@ -9,7 +9,7 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/core"
 )
 
-// createCreditGrant mints credit for one org. It is the ONE admin mint surface, and it
+// createCredit mints credit for one org. It is the ONE admin mint surface, and it
 // does NOT mint in-process: it forwards the request to commerce's already-mint-gated
 // POST /v1/billing/credits, authenticated by the service token and scoped to the
 // target org, then writes one tamper-evident compliance record. Commerce stays the sole
@@ -28,7 +28,7 @@ import (
 // "idempotencyKey":"grant-2026-07-27-acme"}
 // Response: {"status":"ok","msg":"","data":{"id":"cg_01J","org":"acme","amountCents":50000,
 // "remainingCents":50000}}
-func (o ops) createCreditGrant(ctx context.Context, in *creditGrantIn) (*rawOut, error) {
+func (o ops) createCredit(ctx context.Context, in *creditGrantIn) (*rawOut, error) {
 	c, err := core.Admit(ctx)
 	if err != nil {
 		return nil, err
