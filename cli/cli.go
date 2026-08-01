@@ -21,10 +21,12 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -598,6 +600,28 @@ func newRootCmd() *cobra.Command {
 	return root
 }
 
+// delegateVersion asks the fabric CLI what it is. Empty means it would not say,
+// which is reported as such rather than guessed at — a version nobody can trust
+// is worse than none.
+func delegateVersion(bin string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, "--version").Output()
+	if err != nil {
+		return ""
+	}
+	line, _, _ := strings.Cut(string(out), "\n")
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return ""
+	}
+	v := strings.TrimPrefix(fields[len(fields)-1], "v")
+	if v == "" || v[0] < '0' || v[0] > '9' {
+		return ""
+	}
+	return v
+}
+
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:               "version",
@@ -605,7 +629,21 @@ func newVersionCmd() *cobra.Command {
 		Args:              cobra.NoArgs,
 		PersistentPreRunE: func(*cobra.Command, []string) error { return nil },
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Fprintf(cmd.OutOrStdout(), "hanzo %s\n", Version)
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "hanzo %s\n", Version)
+			// This binary owns a handful of verbs and hands every other one to
+			// the fabric CLI. That delegate is a SEPARATE artifact with its own
+			// version, and when it is stale nothing says so: the user types
+			// `hanzo`, gets delegated, and runs an old build whose command
+			// surface is not the one documented. Name it here, so the thing
+			// that actually answers is never invisible.
+			if p := fabricCLI(); p != "" {
+				if v := delegateVersion(p); v != "" {
+					fmt.Fprintf(out, "delegate: %s %s\n", p, v)
+				} else {
+					fmt.Fprintf(out, "delegate: %s (version unreadable)\n", p)
+				}
+			}
 			return nil
 		},
 	}
