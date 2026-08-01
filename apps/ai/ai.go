@@ -24,8 +24,8 @@ import (
 	aimod "github.com/hanzoai/ai"
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -39,15 +39,57 @@ const fallback = "\n\nThis address is a FALLBACK, not a front door. It is regist
 	"headers and content type, so a streamed response streams and an upstream refusal " +
 	"arrives as itself."
 
-// The prose for the five operations this package publishes. It is declared here
-// rather than lifted from a doc comment because there is no handler in this
-// repository to lift it from: aimod.Mount registers one greedy `app.All("/v1/*")`
-// and the real routes live in github.com/hanzoai/ai. Describe is keyed on (method,
-// path) and renders only while the router serves that route, so it states what is
-// BEHIND the wildcard without pretending the operations have been typed — the
-// document stops publishing five addresses and nothing else, and the typing work
-// named above is unaffected.
+// The prose for the operations this package publishes. It is declared here rather
+// than lifted from a doc comment because there is no handler in this repository to
+// lift it from: the real routes live in github.com/hanzoai/ai. Describe is keyed
+// on (method, ROUTER PATTERN) — the spelling the router holds, `:model` and `*`,
+// not the document's `{model}` and `{wildcard1}` — and renders only while the
+// router serves that route, so prose for a route that goes away renders nowhere.
+//
+// TWO KINDS, and the difference is whether the address is real. The named ones
+// come first: hanzoai/ai promotes them onto this router at their own patterns, so
+// each is an ordinary route the document can name. The `/v1/*` ones state what is
+// BEHIND the greedy fallback without pretending the operations have been typed.
 func init() {
+	// THE NAMED ADDRESSES. These are not behind the wildcard: hanzoai/ai promotes
+	// them onto this router at their real patterns (its mount.go `promoted`), so
+	// they are ordinary routes with ordinary paths and the document says who serves
+	// them. They carry no `fallback` sentence for exactly that reason — each IS a
+	// front door.
+	//
+	// All three were live, authenticated and answering in production while the
+	// document showed `/v1/{wildcard1}` where they are: no generated SDK offered
+	// the model catalogue, no MCP tool listed it, no CLI command reached it, and
+	// the enso access flow — the way a caller asks for a limited-preview model —
+	// could not be found by anyone reading the API.
+	openapi.Describe("/v1/models", http.MethodGet,
+		"List the models this org can call",
+		"Returns the model catalogue as the CALLER sees it: the models the calling org "+
+			"is entitled to, with the identifier to send as `model` on a completion.\n\n"+
+			"Scoped, not global. A limited-preview model appears only once the org has "+
+			"been granted access to it, so two orgs reading this address at the same moment "+
+			"correctly see different catalogues. It is deliberately NOT gated on balance — "+
+			"reading which models exist is how a caller decides what to buy, and refusing it "+
+			"to an org at zero balance would blank the console for every customer between "+
+			"top-ups.\n\n"+
+			"For what a model COSTS, read /v1/pricing/models: this address answers "+
+			"availability, that one answers price.")
+	openapi.Describe("/v1/models/:model/access", http.MethodGet,
+		"Read this org's access standing for one model",
+		"Answers where the calling org stands on a limited-preview model — whether it "+
+			"already has access, has an outstanding request, or has never asked. `model` is "+
+			"the same identifier /v1/models lists and a completion sends.\n\n"+
+			"Read your OWN standing. It reports the calling org's position, not another's, "+
+			"and it is the read half of the pair whose write half is the POST below.")
+	openapi.Describe("/v1/models/:model/access", http.MethodPost,
+		"Request access to a limited-preview model",
+		"Files the calling org's request to use a model that is not open to everyone, and "+
+			"is the ONLY way to enter that queue. A granted request makes the model appear "+
+			"in /v1/models and callable on a completion; until then a completion naming it "+
+			"is refused.\n\n"+
+			"Idempotent in effect: asking again while a request is outstanding does not "+
+			"create a second one. Granting is an administrative act and is not this address.")
+
 	openapi.Describe("/v1/*", http.MethodPost,
 		"The Hanzo AI model API",
 		"Carries every generating call in the model API: chat completions and responses "+

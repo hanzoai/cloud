@@ -10,7 +10,60 @@
       "url": "https://api.hanzo.ai"
     }
   ],
+  "tags": [
+    {
+      "name": "models"
+    }
+  ],
   "paths": {
+    "/v1/models": {
+      "get": {
+        "operationId": "get_v1_models",
+        "summary": "List the models this org can call",
+        "description": "Returns the model catalogue as the CALLER sees it: the models the calling org is entitled to, with the identifier to send as `model` on a completion.\n\nScoped, not global. A limited-preview model appears only once the org has been granted access to it, so two orgs reading this address at the same moment correctly see different catalogues. It is deliberately NOT gated on balance — reading which models exist is how a caller decides what to buy, and refusing it to an org at zero balance would blank the console for every customer between top-ups.\n\nFor what a model COSTS, read /v1/pricing/models: this address answers availability, that one answers price.",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/models/{model}/access": {
+      "get": {
+        "operationId": "get_v1_models_by_model_access",
+        "summary": "Read this org's access standing for one model",
+        "description": "Answers where the calling org stands on a limited-preview model — whether it already has access, has an outstanding request, or has never asked. `model` is the same identifier /v1/models lists and a completion sends.\n\nRead your OWN standing. It reports the calling org's position, not another's, and it is the read half of the pair whose write half is the POST below.",
+        "tags": [
+          "models"
+        ],
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_models_by_model_access",
+        "summary": "Request access to a limited-preview model",
+        "description": "Files the calling org's request to use a model that is not open to everyone, and is the ONLY way to enter that queue. A granted request makes the model appear in /v1/models and callable on a completion; until then a completion naming it is refused.\n\nIdempotent in effect: asking again while a request is outstanding does not create a second one. Granting is an administrative act and is not this address.",
+        "tags": [
+          "models"
+        ],
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/{wildcard1}": {
       "delete": {
         "operationId": "delete_v1_by_wildcard1",
