@@ -34,6 +34,25 @@ func newStore(dir string) *docStore { return &docStore{dir: dir, dbs: map[string
 
 var pathSanitize = regexp.MustCompile(`[^a-zA-Z0-9_.-]`)
 
+// seg is a SECOND physical name for an org, and it stays that way for now for
+// one reason: unifying it is a file move, not a rename.
+//
+// cloud.OrgNamespace is the one name a database should have, and it would fix a
+// real defect here — seg is NOT injective. Every character outside
+// [A-Za-z0-9_.-] becomes "_", so the distinct orgs "a/b" and "a_b" both land on
+// orgs/a_b, which is a cross-tenant collision, and SanitizeOrg exists precisely
+// because that class of fold is a tenant break. But seg is also the IDENTITY on
+// anything already clean, while SanitizeOrg truncates at 32 characters and
+// hash-suffixes anything that is not a short DNS label — so orgs/acme_corp
+// becomes orgs/acme-corp-cca8c7942f8c15a2 and every workspace under it is a file
+// that has moved. Switching the encoder without moving those files does not fix
+// the collision, it orphans the data.
+//
+// The fix is a migration that walks orgs/<seg>/ws/*.db, re-derives the name and
+// relocates each file, and it needs to be somebody's decision rather than a side
+// effect of a refactor. Until then this is the encoder, with its flaw written
+// down next to it.
+//
 // seg makes an org/workspace value safe as a single path segment. It is the
 // traversal guard on the tenant key: any char outside [A-Za-z0-9_.-] becomes '_'
 // (killing '/'), AND the two dot-only components "." and ".." — which ARE inside

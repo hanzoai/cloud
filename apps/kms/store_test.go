@@ -10,7 +10,7 @@ import "testing"
 // tenant is an org namespace — rather than by an argument about which runes a
 // slugger emits.
 func TestDBFor_TenantCannotSpellReservedPartition(t *testing.T) {
-	s := newSecretStore(t.TempDir(), false)
+	s := newSecretStore(cloud.Base{DataDir: t.TempDir()}, false)
 	// The facade partition is chosen by the boolean, never by a tenant org string.
 	_, facade := fileOrg("/orgs/_platform/secrets/x")
 	if facade {

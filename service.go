@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/hanzoai/cloud/internal/org"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -33,10 +34,11 @@ type Base struct {
 	Env     string
 	Domain  string
 	DataDir string
-	// Durable is the deployment's HA-durability factory (nil ⇒ local-only). A
-	// subsystem opening per-org SQLite passes it to NewOrgStore(WithDurable) to make
-	// its stores survive rolling deploys/replicas.
-	Durable *Durability
+	// Durable is the deployment's HA-durability factory (nil ⇒ local-only).
+	// NewOrgStore reads it straight off this value, so every per-org file a
+	// subsystem opens survives rolling deploys/replicas without the subsystem
+	// having to know that it should.
+	Durable *org.Durability
 }
 
 // NewBase derives the shared deps for a named subsystem: a scoped child logger,

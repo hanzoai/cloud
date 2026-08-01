@@ -21,7 +21,7 @@ func sampleExp(id string) Experiment {
 }
 
 func TestStore_CreateGetListDecide(t *testing.T) {
-	stores := cloud.NewOrgStore[*store](t.TempDir(), "experiments", openStore)
+	stores := cloud.NewOrgStore[*store](cloud.Base{DataDir: t.TempDir()}, "experiments", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
 	st, err := stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
@@ -66,7 +66,7 @@ func TestStore_CreateGetListDecide(t *testing.T) {
 // in one org is invisible to another org's store (a distinct SQLite file), so no
 // query can cross the tenant boundary.
 func TestStore_TenantIsolation(t *testing.T) {
-	stores := cloud.NewOrgStore[*store](t.TempDir(), "experiments", openStore)
+	stores := cloud.NewOrgStore[*store](cloud.Base{DataDir: t.TempDir()}, "experiments", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
 	ctx := context.Background()
 

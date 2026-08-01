@@ -104,8 +104,12 @@ func BuildDeps(cfg *Config) Deps {
 	// construction genuinely differs (embedded store / gateway preference /
 	// S3-admin backend). O11y's disabled stub is a no-op (telemetry going
 	// nowhere is normal), not fail-closed.
+	// BEFORE the clients: the durable plane reads only cfg and the object store, and
+	// the embedded KMS builds per-org stores that want it. Discovered late, it could
+	// not reach them, and KMS's files were local-only for no reason anyone chose.
+	deps.Durable, deps.LiveMembers = buildDurability(cfg, logger)
 	deps.IAM = pick(cfg, logger, "iam", "IAM", cfg.IAMZAPAddr, clients.IAMRPCAt, clients.DisabledIAM)
-	deps.KMS = pickKMSClient(cfg, logger)
+	deps.KMS = pickKMSClient(cfg, deps.Durable, logger)
 	deps.Base = pick(cfg, logger, "base", "Base", cfg.BaseZAPAddr, clients.BaseRPCAt, clients.DisabledBase)
 	deps.Commerce = pickCommerceClient(cfg, logger)
 	// Metering client BEFORE the AI client: deps.AI is wrapped in the metering
@@ -126,7 +130,6 @@ func BuildDeps(cfg *Config) Deps {
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
-	deps.Durable, deps.LiveMembers = buildDurability(cfg, logger)
 
 	// Payments and Vault never co-resident. Disabled stub when no
 	// endpoint, otherwise RPC.
@@ -335,7 +338,7 @@ func pick[T any](cfg *Config, log luxlog.Logger, name, label, zapAddr string, rp
 // the generic liveness route never shadows its real /v1/kms/health, and registers
 // the client factory this gate calls); this gate keys on the same id so "enabled"
 // is one concept.
-func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
+func pickKMSClient(cfg *Config, dur *org.Durability, log luxlog.Logger) KMSClient {
 	if cfg.Enabled("kms") {
 		// The embedded-client constructor is registered by clients/kms in init()
 		// (RegisterKMSClientFactory). cloud never imports clients/kms, so the KMS
@@ -346,7 +349,7 @@ func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
 			log.Error("deps.KMS: kms enabled but no client factory registered (clients/kms not linked); failing closed")
 			return clients.DisabledKMS()
 		}
-		c, err := kmsClientFactory(cfg, log)
+		c, err := kmsClientFactory(cfg, dur, log)
 		if err != nil {
 			log.Error("deps.KMS: embedded KMS unavailable, failing closed", "err", err)
 			return clients.DisabledKMS()
@@ -370,12 +373,12 @@ func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
 // depends on the KMSClient interface + this hook, never the concrete kms package
 // — the same inversion the subsystem Registry already uses (cloud mounts every
 // subsystem it never imports). Exactly one registration.
-var kmsClientFactory func(cfg *Config, log luxlog.Logger) (KMSClient, error)
+var kmsClientFactory func(cfg *Config, dur *org.Durability, log luxlog.Logger) (KMSClient, error)
 
 // RegisterKMSClientFactory installs the embedded-KMS constructor. clients/kms
 // calls this from its init(); it is the ONE inversion point that lets the KMS
 // library and its /v1/kms subsystem share one package with no cloud⇄kms cycle.
-func RegisterKMSClientFactory(f func(cfg *Config, log luxlog.Logger) (KMSClient, error)) {
+func RegisterKMSClientFactory(f func(cfg *Config, dur *org.Durability, log luxlog.Logger) (KMSClient, error)) {
 	kmsClientFactory = f
 }
 
@@ -787,7 +790,7 @@ const durableProbePrefix = ".probe/cas-"
 // It returns the durable factory AND the live-members reader for the shard router (the
 // SAME election snapshot), non-nil together only when the plane is active; both nil when
 // local-only (the router then stays on the static ordinal set).
-func buildDurability(cfg *Config, log luxlog.Logger) (*Durability, func() []ha.Member) {
+func buildDurability(cfg *Config, log luxlog.Logger) (*org.Durability, func() []ha.Member) {
 	// A multi-replica deployment REQUIRES the durable plane: with >1 writer, a per-org
 	// store that is not hydrate-on-open + fenced is the outage this exists to fix.
 	// disabledDurability logs at the severity the replica count warrants, so a

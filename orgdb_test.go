@@ -190,7 +190,7 @@ func TestTenantDBProjectIsolation(t *testing.T) {
 func TestTenantStoreCachesAndIsolates(t *testing.T) {
 	dir := t.TempDir()
 	opened := 0
-	cache := NewOrgStore(dir, "widget", func(db *sql.DB) (*sql.DB, error) {
+	cache := NewOrgStore(Base{DataDir: dir}, "widget", func(db *sql.DB) (*sql.DB, error) {
 		opened++
 		return db, nil
 	})
@@ -240,7 +240,7 @@ func TestTenantStoreCachesAndIsolates(t *testing.T) {
 func TestOrgStoreEach(t *testing.T) {
 	dir := t.TempDir()
 	opened := 0
-	cache := NewOrgStore(dir, "widget", func(db *sql.DB) (*sql.DB, error) { opened++; return db, nil })
+	cache := NewOrgStore(Base{DataDir: dir}, "widget", func(db *sql.DB) (*sql.DB, error) { opened++; return db, nil })
 	t.Cleanup(func() { _ = cache.CloseAll() })
 
 	// Two real orgs (For creates + caches their widget.db) ...
@@ -294,7 +294,7 @@ func TestOrgStoreEach(t *testing.T) {
 	}
 
 	// A missing orgs root is an empty enumeration, not an error.
-	empty := NewOrgStore(filepath.Join(dir, "nope"), "widget", func(db *sql.DB) (*sql.DB, error) { return db, nil })
+	empty := NewOrgStore(Base{DataDir: filepath.Join(dir, "nope")}, "widget", func(db *sql.DB) (*sql.DB, error) { return db, nil })
 	if err := empty.Each(func(namespace.Namespace, *sql.DB, error) { t.Fatal("no orgs → fn must not be called") }); err != nil {
 		t.Fatalf("missing root want nil error, got %v", err)
 	}
