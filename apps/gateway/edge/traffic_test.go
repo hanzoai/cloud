@@ -293,3 +293,37 @@ func TestTraffic_CountsScreensPerTenant(t *testing.T) {
 		t.Fatalf("acme requests = %d, want 1", v.Requests)
 	}
 }
+
+// The anonymous lane has no org, and it is the lane a bad bot calls from. It must
+// resolve to the PLATFORM row — otherwise the one lane the gate exists for could
+// never be armed, because there would be no org to arm.
+func TestPolicy_TheAnonymousLaneResolvesToThePlatformRow(t *testing.T) {
+	s, err := New(t.TempDir(), "admin", Policy{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	if got := s.Mode(""); got != ModeShadow {
+		t.Fatalf("anonymous starts %q, want %q", got, ModeShadow)
+	}
+	// Arming a TENANT must not arm the anonymous lane.
+	if _, err := s.Put(t.Context(), "acme", Policy{Mode: ModeLive}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if got := s.Mode(""); got != ModeShadow {
+		t.Fatalf("arming acme armed the anonymous lane too: %q", got)
+	}
+	// Arming the reserved admin org — which IS the platform row — arms it.
+	if _, err := s.PutPlatform(t.Context(), Policy{Mode: ModeLive}); err != nil {
+		t.Fatalf("PutPlatform: %v", err)
+	}
+	if got := s.Mode(""); got != ModeLive {
+		t.Fatalf("anonymous = %q after arming the platform row, want %q", got, ModeLive)
+	}
+	// And the platform row is a DEFAULT for a tenant, not an override of one: an
+	// org that has said nothing inherits it.
+	if got := s.Mode("globex"); got != ModeLive {
+		t.Fatalf("globex = %q, want the inherited %q", got, ModeLive)
+	}
+}
