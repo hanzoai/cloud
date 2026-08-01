@@ -72,6 +72,13 @@ const (
 )
 
 // The reserved store the platform switches evaluate from.
+//
+// This is a REAL org namespace named "platform", not cloud.PlatformNamespace().
+// The system namespace is the right name for it and would make it unsquattable
+// by a tenant who registers that org, but it renders to a different file, and
+// moving a live store is a migration rather than a rename. Left as it is,
+// deliberately, so the change is a decision somebody makes and not a side
+// effect of this one.
 const (
 	platformOrg     = "platform"
 	platformProject = "platform"
@@ -157,14 +164,31 @@ var mounted *Client
 
 func (c *Client) configured() bool { return c != nil && c.stores != nil }
 
+// storeFor is the ONE way this package reaches a definition store: it names the
+// database through cloud.OrgNamespace — the single door a validated org walks
+// through — and asks the registry for that name. Nothing else in flags resolves
+// a store, so "which file does this evaluation read" has exactly one answer and
+// it is derived from exactly one input.
+//
+// org and project MUST already be validated: the caller's own principal for a
+// request, or a server-side resolution an in-process composer states as its
+// contract.
+func (c *Client) storeFor(org, project string) (*Store, error) {
+	if !c.configured() {
+		return nil, fmt.Errorf("flags: engine not configured")
+	}
+	ns, err := cloud.OrgNamespace(org, project)
+	if err != nil {
+		return nil, err
+	}
+	return c.stores.For(ns)
+}
+
 // evaluateProject runs the engine over one (org, project) store for one
 // evaluation context. The definitions read is a local SQLite scan; the evaluation
 // is a pure in-memory function call.
 func (c *Client) evaluateProject(org, project string, ctx []byte) (json.RawMessage, error) {
-	if !c.configured() {
-		return nil, fmt.Errorf("flags: engine not configured")
-	}
-	st, err := c.stores.For(org, project)
+	st, err := c.storeFor(org, project)
 	if err != nil {
 		return nil, err
 	}
@@ -273,18 +297,14 @@ func (c *Client) invalidate() {
 // SetPlatformSwitch stores/overwrites a platform switch's definition (the admin
 // cockpit's ONE write path) and applies it immediately in this pod.
 func SetPlatformSwitch(key string, definition json.RawMessage, actor string) error {
-	c := mounted
-	if c == nil || c.stores == nil {
-		return fmt.Errorf("flags: not mounted")
-	}
-	st, err := c.stores.For(platformOrg, platformProject)
+	st, err := mounted.storeFor(platformOrg, platformProject)
 	if err != nil {
 		return err
 	}
 	if err := st.Upsert(key, definition, actor); err != nil {
 		return err
 	}
-	c.invalidate()
+	mounted.invalidate()
 	return nil
 }
 

@@ -78,10 +78,19 @@ type state struct {
 
 var mounted *cloud.Service[state]
 
-// storeFor resolves the caller's org-scoped functions store, opening the per-org
-// file ({DataDir}/orgs/{orgSlug}/functions.db) once via the shared cache.
+// storeFor is the ONE way this package reaches a store: it names the database
+// through cloud.OrgNamespace — the single door a validated org walks through —
+// and asks the registry for that name. Nothing else here resolves a store, so
+// "which file does this request touch" has one answer from one input.
+//
+// org MUST already be validated: principal.Org for a request, or the caller's
+// own server-side resolution for an in-process seam.
 func storeFor(s *cloud.Service[state], org string) (*Store, error) {
-	return s.State.stores.For(org, "")
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return s.State.stores.For(ns)
 }
 
 // ---- HTTP response shapes (console functions.ts contract) ----

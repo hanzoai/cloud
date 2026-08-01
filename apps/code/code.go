@@ -144,13 +144,21 @@ func Shutdown(_ context.Context) error {
 	return err
 }
 
-// storeFor lazily opens (and caches) the org's SQLite file through the shared
-// cloud.OrgStore cache. The physical path is {DataDir}/orgs/{orgSlug}/code.db
-// (org-scoped; code carries no project axis), where orgSlug = cloud.SanitizeOrg,
-// the codebase's ONE injective org-slug normalizer (shared with S3/KMS/knowledge),
-// so two distinct orgs never fold onto one file.
+// storeFor is the ONE way this package reaches a store: it names the database
+// through cloud.OrgNamespace — the single door a validated org walks through —
+// and asks the registry for that name. Nothing else here resolves a store, so
+// "which file does this request touch" has one answer from one input.
+//
+// org MUST already be validated: principal.Org for a request, or the caller's
+// own server-side resolution for an in-process seam.
+//
+// code is org-scoped: it carries no project axis.
 func (s *service) storeFor(org string) (*Store, error) {
-	return s.stores.For(org, "")
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return s.stores.For(ns)
 }
 
 func (s *service) engineFor(org, billingOrg, project string) (*engine, error) {

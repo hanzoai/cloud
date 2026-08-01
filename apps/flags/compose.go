@@ -91,10 +91,7 @@ func Assign(org, project, key, subject string, personProps json.RawMessage) (Ass
 // rewrite the variant weights on decide (promote a winner to 100%). One definition
 // store, one evaluator — no duplication.
 func PutDef(org, project, key string, definition json.RawMessage, actor string) error {
-	if mounted == nil || mounted.stores == nil {
-		return fmt.Errorf("flags: not mounted")
-	}
-	st, err := mounted.stores.For(org, project)
+	st, err := mounted.storeFor(org, project)
 	if err != nil {
 		return err
 	}
@@ -105,10 +102,7 @@ func PutDef(org, project, key string, definition json.RawMessage, actor string) 
 // exists. The experiments primitive composes it on decide to read the current
 // assignment flag before rewriting its variant weights.
 func GetDef(org, project, key string) (definition json.RawMessage, ok bool, err error) {
-	if mounted == nil || mounted.stores == nil {
-		return nil, false, fmt.Errorf("flags: not mounted")
-	}
-	st, err := mounted.stores.For(org, project)
+	st, err := mounted.storeFor(org, project)
 	if err != nil {
 		return nil, false, err
 	}

@@ -42,7 +42,7 @@ const proj = "enso-bench"
 func newStore(t *testing.T) (*store, context.Context) {
 	t.Helper()
 	stores := cloud.NewOrgStore(t.TempDir(), "research", openStore)
-	st, err := stores.For("acme", "")
+	st, err := stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

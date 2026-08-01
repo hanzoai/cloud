@@ -261,7 +261,7 @@ func TestApprovedIsImmuneToMachineChurn(t *testing.T) {
 // at the handler: whatever order writes arrive in, a machine write only ever
 // creates a row or refreshes one still at machine.
 func TestMachineWriteCannotOverwriteHumanWork(t *testing.T) {
-	db, err := cloud.OrgDB(t.TempDir(), "acme", "", "translate")
+	db, err := cloud.OrgDB(t.TempDir(), cloud.MustOrgNamespace("acme", ""), "translate")
 	if err != nil {
 		t.Fatalf("org db: %v", err)
 	}
@@ -492,7 +492,7 @@ func TestQualityRejectsAShortEnvelope(t *testing.T) {
 	}
 	// Nothing was written: the next call still reaches the model.
 	if out, _, err := func() (MemoryEntry, bool, error) {
-		mem, err := mounted.stores.For("acme", "")
+		mem, err := mounted.stores.For(cloud.MustOrgNamespace("acme", ""))
 		if err != nil {
 			return MemoryEntry{}, false, err
 		}

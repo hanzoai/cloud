@@ -69,7 +69,7 @@ func newBookStore(t *testing.T, subsystem string) *store {
 	t.Helper()
 	stores := cloud.NewOrgStore[*store](t.TempDir(), subsystem, openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
-	st, err := stores.For("acme", "")
+	st, err := stores.For(cloud.MustOrgNamespace("acme", ""))
 	if err != nil {
 		t.Fatalf("open books store: %v", err)
 	}

@@ -181,6 +181,17 @@ func newDispatcher(stores *cloud.OrgStore[*store], log luxlog.Logger) *dispatche
 	}
 }
 
+// storeFor is the dispatcher's half of the ONE door: the delivery loop names the
+// database the same way the API does, so an event and the endpoints it fans out
+// to can never come from different files.
+func (d *dispatcher) storeFor(org string) (*store, error) {
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return d.stores.For(ns)
+}
+
 // start brings the dispatcher up against the ONE platform bus. It never blocks and never
 // fails the mount: the connect + consume loop runs in the background and retries a down
 // bus forever, so the registry serves from the first moment either way.
@@ -325,7 +336,7 @@ func (d *dispatcher) handle(ctx context.Context, s streamSource, m *infra.Stream
 		})
 		return nil
 	}
-	st, err := d.stores.For(org, "")
+	st, err := d.storeFor(org)
 	if err != nil {
 		d.log.Warn("webhooks: open org store — will retry", "org", org, "err", err)
 		return err
@@ -448,7 +459,7 @@ func (d *dispatcher) recordAttempt(ctx context.Context, job deliveryJob, attempt
 	if job.org == "" || job.endpointID == "" {
 		return
 	}
-	st, err := d.stores.For(job.org, "")
+	st, err := d.storeFor(job.org)
 	if err != nil {
 		d.log.Warn("webhooks: open store for delivery log", "org", job.org, "err", err)
 		return
