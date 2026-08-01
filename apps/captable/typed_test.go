@@ -18,8 +18,8 @@ import (
 var typedReads = map[string]string{
 	"/v1/captable/company":       "company.get",
 	"/v1/captable/stakeholders":  "stakeholders.list",
-	"/v1/captable/share-classes": "shareClasses.list",
-	"/v1/captable/equity-plans":  "equityPlans.list",
+	"/v1/captable/classes":      "shareClasses.list",
+	"/v1/captable/plans":        "equityPlans.list",
 	"/v1/captable/shares":        "shares.list",
 	"/v1/captable/options":       "options.list",
 	"/v1/captable/safes":         "safes.list",
@@ -231,14 +231,14 @@ func seedTenant(t *testing.T, app *zip.App, org string) {
 	}
 
 	// A share class, then an equity plan drawing on it.
-	mustPost("/v1/captable/share-classes", http.StatusCreated, map[string]any{
+	mustPost("/v1/captable/classes", http.StatusCreated, map[string]any{
 		"name": "Common", "classType": "COMMON", "initialSharesAuthorized": 10000000,
 		"boardApprovalDate": "2026-01-01", "stockholderApprovalDate": "2026-01-02",
 		"votesPerShare": 1, "parValue": 0.0001, "pricePerShare": 0.25, "seniority": 0,
 		"conversionRights":              "CONVERTS_TO_FUTURE_ROUND",
 		"liquidationPreferenceMultiple": 1, "participationCapMultiple": 0,
 	})
-	_, body = req(t, app, http.MethodGet, "/v1/captable/share-classes", org, nil)
+	_, body = req(t, app, http.MethodGet, "/v1/captable/classes", org, nil)
 	var classes []struct {
 		ID string `json:"id"`
 	}
@@ -247,12 +247,12 @@ func seedTenant(t *testing.T, app *zip.App, org string) {
 	}
 	classID := classes[0].ID
 
-	mustPost("/v1/captable/equity-plans", http.StatusCreated, map[string]any{
+	mustPost("/v1/captable/plans", http.StatusCreated, map[string]any{
 		"name": "2026 Stock Plan", "boardApprovalDate": "2026-01-05",
 		"initialSharesReserved": 1000000, "shareClassId": classID,
 		"defaultCancellatonBehavior": "RETIRE", "comments": "founding pool",
 	})
-	_, body = req(t, app, http.MethodGet, "/v1/captable/equity-plans", org, nil)
+	_, body = req(t, app, http.MethodGet, "/v1/captable/plans", org, nil)
 	var plans struct {
 		Data []struct {
 			ID string `json:"id"`
