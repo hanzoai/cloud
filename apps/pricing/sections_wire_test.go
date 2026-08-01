@@ -51,7 +51,6 @@ var sectionRoutes = map[string]string{
 	"/v1/pricing/policy":          "policy",
 	"/v1/pricing/tools":           "tools",
 	"/v1/pricing/gpu":             "gpu",
-	"/v1/pricing-policy":          "policy",
 }
 
 // TestSectionsAreByteIdenticalToTheBundle drives every section route on the live

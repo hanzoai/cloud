@@ -46,8 +46,8 @@ package pricing
 // decision cannot diverge from execution — so this is not avoidable without
 // giving up the op. It reveals only that the body was unparseable.
 //
-// The fifteen fixed sections (/v1/pricing/{compute,cloud,subscriptions,…} and
-// /v1/pricing-policy) were on this list too, on the grounds that they proxy the
+// The fourteen fixed sections (/v1/pricing/{compute,cloud,subscriptions,…})
+// were on this list too, on the grounds that they proxy the
 // bundle's bytes verbatim. They do not: apps/goja re-marshals the bundle's
 // answer with Go's encoding/json before it ever reaches a handler, so decoding
 // and re-marshalling it is byte-identical. They are ops now — see sections.go.
@@ -62,18 +62,18 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Prefixes are the absolute subtrees this subsystem answers on. It serves five,
+// Prefixes are the absolute subtrees this subsystem answers on. It serves four,
 // not the one the /v1/<name> convention would assume: the catalog read plane
-// (/v1/pricing, /v1/pricing-policy), the self-service enablement plane
-// (/v1/enablement) and the two admin planes over the same overlay store
-// (/v1/admin/catalog, /v1/admin/enablement).
+// (/v1/pricing), the self-service enablement plane (/v1/enablement) and the two
+// admin planes over the same overlay store (/v1/admin/catalog,
+// /v1/admin/enablement).
 //
 // Declaring them is not decoration. cloud.Declare builds the prefix table that
 // resolves a request's subsystem label and its declared Price from this, and
 // cloud's scope refuses middleware a subsystem installs outside what it declared
 // — so an undeclared subtree is one whose requests are attributed to somebody
 // else and on which this subsystem cannot install the typed-op Bridge. The same
-// five are listed in manifest/apps.go, which the light host reads to route to
+// four are listed in manifest/apps.go, which the light host reads to route to
 // this plugin; that copy is a literal on purpose (the host must not import an
 // app package), so the two are kept equal by hand.
 var Prefixes = []string{
@@ -81,7 +81,6 @@ var Prefixes = []string{
 	"/v1/admin/enablement",
 	"/v1/enablement",
 	"/v1/pricing",
-	"/v1/pricing-policy",
 }
 
 // ops binds the typed ops to a receiver. A zip.TypedHandler is

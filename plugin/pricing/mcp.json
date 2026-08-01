@@ -32,14 +32,6 @@
     "name": "get_v1_pricing"
   },
   {
-    "description": "GetPricingPolicyAlias returns the pricing policy document at its top-level\naddress. It is the same document GET /v1/pricing/policy returns, byte for\nbyte, at the shorter address the marketing surface links to.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "get_v1_pricing-policy"
-  },
-  {
     "description": "ListBasePlans returns the Hanzo Base plans — the managed-instance tiers,\neach with its monthly and annual price, storage and request allowances and\nfeature list.",
     "inputSchema": {
       "properties": {},
