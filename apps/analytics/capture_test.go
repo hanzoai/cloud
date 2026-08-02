@@ -415,12 +415,7 @@ func TestCapture_NoPrincipalGetsAnonymousLane(t *testing.T) {
 		t.Fatalf("no-principal POST %s want 503 (anonymous lane, admitted), got %d (%s)", p, code, body)
 	}
 	code, body := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`)
-	if code != http.StatusOK {
-		t.Fatalf("no-principal commerce POST %s want 200 all-dropped, got %d (%s)", p, code, body)
-	}
-	if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-		t.Fatalf("no-principal commerce POST %s receipt = %+v, want accepted:0 dropped:1", p, r)
-	}
+	refusedAnon(t, "no-principal commerce POST "+p, code, body)
 }
 
 // TestCapture_ForgedOrgWithoutBearerBuysNothing: a raw X-Org-Id with no validated
@@ -435,12 +430,7 @@ func TestCapture_ForgedOrgWithoutBearerBuysNothing(t *testing.T) {
 	p := canonDoor
 	code, body := doBody(t, app, http.MethodPost, p, "", "maxpower",
 		`{"batch":[{"type":"event","event":"steal","groupId":"maxpower","personId":"victim","revenue":1}]}`)
-	if code != http.StatusOK {
-		t.Fatalf("forged-org-no-bearer POST %s want 200 all-dropped, got %d (%s)", p, code, body)
-	}
-	if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
-		t.Fatalf("forged-org-no-bearer POST %s receipt = %+v, want accepted:0 dropped:1", p, r)
-	}
+	refusedAnon(t, "forged-org-no-bearer POST "+p, code, body)
 }
 
 func TestCapture_EmptyBatchOK(t *testing.T) {

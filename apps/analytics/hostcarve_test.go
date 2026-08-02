@@ -210,15 +210,15 @@ func TestMount_HostCarve_FirstPartyHostResolvesPinned(t *testing.T) {
 // land in a site's org also let a stranger write a custom event name, revenue, personId
 // and groupId there. Now a credential-less beacon — which on a site host is every
 // beacon — gets the anonymous projection, so a non-allowlisted kind is refused storage
-// and reported in the honest receipt.
+// and the door says so (401) instead of answering success.
 func TestMount_HostCarve_AnonymousCapabilityOnly(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := carveApp(t, "hanzo")
 	code := postHost(t, app, "yadota.hanzo.app", canonDoor,
 		`{"batch":[{"type":"event","event":"signup_completed","revenue":999,"groupId":"victim"}]}`,
 		map[string]string{"X-Org-Id": "attacker"})
-	if code != http.StatusOK {
-		t.Fatalf("site-host custom event on %s want 200 (all-dropped, never stored), got %d", canonDoor, code)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("site-host custom event on %s want 401 (never stored, and said so), got %d", canonDoor, code)
 	}
 }
 
@@ -284,8 +284,8 @@ func TestMount_HostCarve_NonSiteHostUsesNormalGate(t *testing.T) {
 	}
 	if code := postHost(t, app, "evil.example.com", canonDoor,
 		`{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`,
-		map[string]string{"X-Org-Id": "attacker"}); code != http.StatusOK {
-		t.Fatalf("anonymous unknown-host commerce want 200 all-dropped, got %d", code)
+		map[string]string{"X-Org-Id": "attacker"}); code != http.StatusUnauthorized {
+		t.Fatalf("anonymous unknown-host commerce want 401 (nothing stored), got %d", code)
 	}
 }
 
