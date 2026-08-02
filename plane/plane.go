@@ -61,13 +61,6 @@ const (
 
 	IAMMailable = "iam_mailable"
 
-	// The two key doors. They stay two ops because they answer different
-	// questions and the answers must not be interchangeable: a SECRET key names a
-	// principal, a PUBLISHABLE key names only an org. One op with a mode flag
-	// would make "resolve this pk- to a user" expressible, and it must not be.
-	IAMResolveKey = "iam_resolve_key" // secret key (hk-/sk-) → the principal it authenticates
-	IAMResolveOrg = "iam_resolve_org" // publishable key (pk-) → the org that holds it, and nothing else
-
 	GitFiles   = "git_files"
 	GitImport  = "git_import"
 	GitInbound = "git_inbound"
@@ -315,44 +308,6 @@ type Recipient struct {
 // Roster is who an org may mail.
 type Roster struct {
 	Recipients []Recipient `json:"recipients"` // everyone in the org who may be mailed; empty is a real answer, not an error
-}
-
-// ---- iam.resolve-key / iam.resolve-org -------------------------------------
-
-// KeyRef is an opaque API key presented for resolution.
-//
-// This is the ONE call that carries a credential in its arguments, and it is
-// sound only because the plane is a unix socket inside one pod's own runtime
-// dir: the key is already in this process, and the process that can answer is
-// the neighbour that owns the identity store.
-//
-// It also runs BEFORE any principal exists — it IS the authentication — so
-// unlike every other op here it cannot take its subject from the caller. That is
-// why the key rides the argument and the ANSWER carries the org.
-type KeyRef struct {
-	Key string `json:"key"`
-}
-
-// KeyPrincipal is what a SECRET key resolves to: the same four facts a JWT for
-// that user carries, so one minting path serves a key and a session identically.
-//
-// An unresolved key is Owner == "" — never an error, because "this credential is
-// not one of ours" is an ANSWER, and the caller's response to it (stay anonymous)
-// is the same as its response to a valid key belonging to nobody. Refusal says
-// WHY, for the surface that has to explain it to a person; it changes no decision.
-type KeyPrincipal struct {
-	Owner   string `json:"owner"`             // the tenant the key speaks for; empty means unresolved
-	Name    string `json:"name,omitempty"`    // the user's name within that org
-	Email   string `json:"email,omitempty"`   // the user's address
-	IsAdmin bool   `json:"isAdmin,omitempty"` // the user's own admin bit, carried unchanged
-	Refusal string `json:"refusal,omitempty"` // why it did not resolve; empty for a real store fault, which is not a bad credential
-}
-
-// KeyOrg is what a PUBLISHABLE key resolves to, and deliberately all it resolves
-// to. There is no user field to fill in, which is what keeps a key shipped in a
-// browser bundle from ever becoming a read grant.
-type KeyOrg struct {
-	Owner string `json:"owner"` // the org that holds the key; empty means unresolved
 }
 
 // ---- git -------------------------------------------------------------------
