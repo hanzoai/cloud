@@ -285,7 +285,7 @@ func fleetAvailability(ctx context.Context) ([]serviceUp, time.Time, error) {
 		return availability.services, availability.at, nil
 	}
 
-	series, err := newVMClient().queryInstant(ctx, upMetric)
+	series, err := latestGauge(ctx, upMetric)
 	if err != nil {
 		if len(availability.services) > 0 {
 			return availability.services, availability.at, nil
@@ -304,11 +304,11 @@ func fleetAvailability(ctx context.Context) ([]serviceUp, time.Time, error) {
 	// rather than reported under an empty name.
 	out := make([]serviceUp, 0, len(series))
 	for _, s := range series {
-		name := strings.TrimSpace(s.metric["service"])
+		name := strings.TrimSpace(s.Labels["service"])
 		if name == "" {
 			continue
 		}
-		out = append(out, serviceUp{Name: name, Up: s.value == 1})
+		out = append(out, serviceUp{Name: name, Up: s.Value == 1})
 	}
 	if len(out) == 0 {
 		if len(availability.services) > 0 {
