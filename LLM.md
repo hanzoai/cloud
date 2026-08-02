@@ -4067,3 +4067,72 @@ SDK and every MCP tool list that answer 404 in production: the same dark hole th
 `api-hanzo-ai-catalog` router opened under `/v1/models` and `/v1/pricing`, which
 cost 17 documented-but-uncallable operations. Re-home that surface only after the
 upstream ships it, and prove the upstream answers before declaring anything.
+
+## /v1/ml/reference — the reference plane: two stores, one precedence, versions on the wire
+
+`apps/reference` is the lookup data a risk decision needs but cannot derive:
+disposable email domains, hosting and Tor address ranges, crawler user-agent
+patterns, delegated autonomous system numbers, card-scheme prefixes, browsers
+the fleet sees everywhere, and how current the designation lists the screening
+engine holds actually are. It is a row of its own in `manifest/apps.go` (one
+prefix, `/v1/ml/reference`), disjoint from `ml`'s `/v1/ml/health` and
+`/v1/ml/models`, so longest-prefix separates them and neither row moves. Six
+operations, all typed.
+
+**The unit of version and freshness is the SOURCE, not the set.** A set is the
+union of its publishers, and each carries its own version, its own as-of and its
+own failure. `net` draws on eleven publishers; a set-wide version would make one
+publisher's outage either block every other publisher's update or silently
+shrink the set. Per source, a publisher that stops answering ages out visibly on
+its own row. The set's version is the composition (`aws@<digest>+tor@<digest>+…`),
+so a decision records one string an auditor resolves back to a publisher, a
+licence and a date, and the set's as-of is the OLDEST contributing publisher —
+reporting the newest would let one daily source hide three that died.
+
+**A version IS the content digest, taken over the sorted entries and not over the
+bytes.** That is what makes ingest idempotent: the same set is the same version,
+so re-taking an unchanged publisher writes zero rows and says `unchanged`, while
+a publisher who reorders their file has not minted anything. Resumability is a
+`landed` cursor on the manifest, and it is an OPTIMISATION only — the primary key
+is `(set, source, version, key)` on a ReplacingMergeTree, so re-writing a chunk
+that already landed produces rows the merge deduplicates.
+
+**Two planes, two STORES, and that is the isolation argument.** The baseline
+lives in `hanzo.reference_source` + `hanzo.reference_entry`, whose DDL has NO
+tenant column — there is nowhere in the shape for an organisation to go, so the
+cross-tenant write is unrepresentable rather than refused, and no In struct
+carries a scope, org or tenant field either. A tenant's own allow/deny entries
+live in that org's own SQLite file via `cloud.OrgNamespace`, which is the same
+physical isolation every other per-entity store has. Resolution is override
+first, baseline second, first hit wins — and BOTH go through one `candidates`
+function, so a deny on `tempbox.example` covers `mail.tempbox.example` in the
+tenant's sense exactly as it does in the baseline's.
+
+**What may enter the baseline: published data under terms we hold, and
+aggregates no single org could produce.** Every source states its licence
+(`Source.Terms`) and it is on the wire. The one derived set (`device`) publishes
+only browser identities seen under at least `Orgs`=25 organisations with
+`Rows`=1000 observations — `Publishable`, enforced in the statement's WHERE and
+again on read — keyed by a digest rather than the identifier, with the count
+BANDED. `TestDeriveRefusesWhatOneOrgProduced` is the proof: one organisation
+producing a million observations yields an EMPTY baseline.
+
+**A source we may not redistribute is a declared SEAM, not an omission.**
+`pep`, `issuer` and `reputation` are in the catalog with the licence we do not
+hold as their refusal, and every lookup against them refuses. An absent set and
+an unlicensed one look identical from outside and only one of them is a decision.
+
+**Silence is never clean, and staleness is a signal.** A set that never loaded,
+one held by the engine that screens against it, and one behind a licence all
+answer with `refusal` — a caller reading `hit=false` without reading `refusal` is
+reading "we have no idea" as "not listed". A set past `MaxAge` still answers,
+because yesterday's list beats none, and every answer carries `version`, `asOf`,
+`age` and `stale`. `POST /v1/ml/reference/resolve` returns `consulted` — one
+version line per set — which is what a decision records.
+
+**Restart drops the snapshots, and that is handled rather than papered over.**
+cloud is `strategy: Recreate` at one replica, so every rollout starts from
+nothing; `Mount` starts a loop that hydrates from the warehouse (no network) and
+until it succeeds every set refuses. Re-taking happens at HALF the freshness
+bound, because a set refreshed only once it is already stale is stale for the
+whole interval between the two.
