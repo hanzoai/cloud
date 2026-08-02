@@ -215,7 +215,7 @@ const (
 	// CredSession is a validated bearer that is not an opaque key: a browser or
 	// CLI session minted by IAM for a person.
 	CredSession = "session"
-	// CredSecret is an sk-/hk- key: a machine credential issued to a principal.
+	// CredSecret is an sk- key: a machine credential issued to a principal.
 	// It may not be shipped to a browser, so possession attributes.
 	CredSecret = "secret"
 	// CredPublishable is a pk- key: org-only by design, shipped in client
