@@ -65921,6 +65921,14 @@ paths:
         An EMPTY history is REFUSED rather than reported as zero alerts. "No alerts"
         is exactly what a quiet rule looks like, and being unable to tell the two
         apart is the failure a sandbox exists to prevent.
+
+        IT IS A MEASUREMENT, SO IT CARRIES A MEASUREMENT'S BOUNDS. A replay walks up
+        to five thousand recorded decisions through a fresh evaluator, on the single
+        replica that is also answering authorisations, holding the tenant's ONE
+        connection for the read. Unpriced and unbounded that is a free way to spend
+        the pod: it goes through the same door /v1/ml/drift does — gated and metered
+        on the caller's own ledger, one in flight per tenant, two across the
+        deployment, and the bench's own ceiling on how long it may hold a core.
       operationId: riskSimulate
       requestBody:
         content:

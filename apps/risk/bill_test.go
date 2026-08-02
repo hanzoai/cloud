@@ -298,3 +298,41 @@ func TestHeavyWorkQueuesOnOneBench(t *testing.T) {
 		t.Fatal("the search is not on the bench at all")
 	}
 }
+
+// TestAReplayIsPricedAndBounded: /v1/risk/simulate walks up to five thousand
+// recorded decisions through a fresh evaluator, in the request, on the single
+// replica that is also answering authorisations — the drift reading's work under
+// another name. It went through no ledger and no pool, so it was a free way to
+// spend the pod and a way for one tenant to spend it with unbounded concurrency.
+func TestAReplayIsPricedAndBounded(t *testing.T) {
+	const body = `{"candidate":{"name":"c","stage":"signup","action":"review","weight":0.5,
+	  "all":[{"field":"signal.ip","op":"eq","value":"192.0.2.10"}]}}`
+
+	t.Run("priced", func(t *testing.T) {
+		book := &book{deny: true}
+		app, _ := wireBilled(t, t.TempDir(), book)
+		code, out := req(t, app, http.MethodPost, "/v1/risk/simulate", "acme", "u_acme", body)
+		if code != http.StatusPaymentRequired {
+			t.Fatalf("a replay by an unfunded org = %d %s, want 402 — the work is free", code, out)
+		}
+		if book.asked("acme") == 0 {
+			t.Fatal("the replay never asked the ledger")
+		}
+	})
+
+	t.Run("bounded", func(t *testing.T) {
+		app, s := wireAt(t, t.TempDir())
+		tn, _ := qualify("hanzo", "acme")
+		// The tenant's one in-request measurement, held by something else.
+		_, release, err := s.State.bench.probe(context.Background(), tn)
+		if err != nil {
+			t.Fatalf("probe: %v", err)
+		}
+		defer release()
+		code, out := req(t, app, http.MethodPost, "/v1/risk/simulate", "acme", "u_acme", body)
+		if code != http.StatusConflict {
+			t.Fatalf("a replay while this tenant's measurement slot is held = %d %s, want 409 — "+
+				"a tenant looping the op spends one slot per request instead of one", code, out)
+		}
+	})
+}

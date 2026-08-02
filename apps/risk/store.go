@@ -727,6 +727,47 @@ func byIdem(db *sql.DB, idem string) (string, bool, error) {
 	return id, err == nil, err
 }
 
+// activityRow is one decision as the live activity view counts it: the three
+// dimensions it tallies and the activations behind them, and nothing else. A
+// narrow projection rather than the whole record, because the view aggregates
+// hundreds of rows and renders none of them.
+type activityRow struct {
+	action  string
+	agency  string
+	refusal string
+	hits    []hit
+}
+
+// activityRows reads what the activity view aggregates, in ONE statement.
+//
+// It exists because the view used to read a page and then re-read every row of
+// it for its hits: five hundred sequential round trips on the tenant's ONE
+// connection (cloud.OrgDB sets MaxOpenConns(1)), which every decision for that
+// tenant queues behind — a read that stops the control it is reporting on. The
+// hits were on the row the first statement already touched.
+func activityRows(db *sql.DB, limit int) ([]activityRow, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	rows, err := db.Query(
+		`SELECT action, agency, refusal, hits FROM decision ORDER BY at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []activityRow
+	for rows.Next() {
+		var r activityRow
+		var hitsJSON string
+		if err := rows.Scan(&r.action, &r.agency, &r.refusal, &hitsJSON); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(hitsJSON), &r.hits)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // decisionsPage reads a page of decisions. Every filter is an EQUALITY on a
 // column this file owns, bound positionally; there is no free-text predicate and
 // no ordering a caller can name, so there is no statement to inject into.

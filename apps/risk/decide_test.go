@@ -627,3 +627,65 @@ func TestAnExistingFileGrowsTheColumn(t *testing.T) {
 		t.Fatalf("the widened column holds %q", got)
 	}
 }
+
+// TestActivityCountsWhatTheDecisionsRecorded covers the live activity view,
+// which had no test of its output at all — only that the route exists and is
+// gated. It reads its rows in ONE statement now; it used to read a page and
+// then re-read every row of that page for its hits, five hundred sequential
+// round trips on the tenant's ONE connection, which every decision for that
+// tenant queues behind.
+func TestActivityCountsWhatTheDecisionsRecorded(t *testing.T) {
+	app, _ := wireApp(t)
+	mustOK(t, app, http.MethodPost, "/v1/risk/rules", "acme", "u_acme",
+		`{"rule":{"name":"probe","stage":"signup","action":"review","weight":0.9,"enabled":true,
+		  "all":[{"field":"signal.ip","op":"eq","value":"192.0.2.10"}]}}`, http.StatusCreated)
+
+	// Two that fire the rule, one that does not.
+	for _, ip := range []string{"192.0.2.10", "192.0.2.10", "198.51.100.7"} {
+		mustOK(t, app, http.MethodPost, "/v1/risk/decide", "acme", "u_acme",
+			`{"stage":"signup","subject":{"kind":"account","id":"a-1"},"signals":{"ip":"`+ip+`"}}`,
+			http.StatusOK)
+	}
+
+	code, body := req(t, app, http.MethodGet, "/v1/risk/activity", "acme", "u_acme", "")
+	if code != http.StatusOK {
+		t.Fatalf("activity = %d %s", code, body)
+	}
+	var view riskActivityView
+	if err := json.Unmarshal(body, &view); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if view.Sampled != 3 {
+		t.Fatalf("sampled = %d, want the 3 recorded decisions", view.Sampled)
+	}
+	if n := view.Actions[ActionAllow] + view.Actions[ActionReview]; n != 3 {
+		t.Fatalf("the action tally covers %d of 3 decisions: %v", n, view.Actions)
+	}
+	if total := sum(view.Agency); total != 3 {
+		t.Fatalf("the agency tally covers %d of 3 decisions: %v", total, view.Agency)
+	}
+	if !view.Shadow {
+		t.Fatal("a tenant that never went live is reported as acting")
+	}
+	var probe *riskActivityRule
+	for i := range view.Rules {
+		if view.Rules[i].Name == "probe" {
+			probe = &view.Rules[i]
+		}
+	}
+	if probe == nil {
+		t.Fatalf("the rule that fired twice is absent from the activation report: %+v", view.Rules)
+	}
+	if probe.Activations != 2 {
+		t.Fatalf("the rule activated %d times, want 2 — the hits on the row were not read",
+			probe.Activations)
+	}
+}
+
+func sum(m map[string]int) int {
+	n := 0
+	for _, v := range m {
+		n += v
+	}
+	return n
+}

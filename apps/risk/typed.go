@@ -1493,7 +1493,7 @@ func (o ops) activity(ctx context.Context, in *riskActivityIn) (*riskActivityVie
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
-	rows, err := decisionsPage(db, "", "", "", "", limit)
+	rows, err := activityRows(db, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1506,16 +1506,12 @@ func (o ops) activity(ctx context.Context, in *riskActivityIn) (*riskActivityVie
 	}
 	perRule := map[string]*riskActivityRule{}
 	for _, r := range rows {
-		view.Actions[r.Action]++
-		view.Agency[r.Agency]++
-		if r.Refusal != "" {
-			view.Refusals[r.Refusal]++
+		view.Actions[r.action]++
+		view.Agency[r.agency]++
+		if r.refusal != "" {
+			view.Refusals[r.refusal]++
 		}
-		_, hits, _, _, err := decisionDetail(db, r.ID)
-		if err != nil {
-			continue
-		}
-		for _, h := range hits {
+		for _, h := range r.hits {
 			a := perRule[h.Rule]
 			if a == nil {
 				a = &riskActivityRule{Rule: h.Rule, Name: h.Name}
@@ -1551,8 +1547,16 @@ func (o ops) activity(ctx context.Context, in *riskActivityIn) (*riskActivityVie
 // An EMPTY history is REFUSED rather than reported as zero alerts. "No alerts"
 // is exactly what a quiet rule looks like, and being unable to tell the two
 // apart is the failure a sandbox exists to prevent.
+//
+// IT IS A MEASUREMENT, SO IT CARRIES A MEASUREMENT'S BOUNDS. A replay walks up
+// to five thousand recorded decisions through a fresh evaluator, on the single
+// replica that is also answering authorisations, holding the tenant's ONE
+// connection for the read. Unpriced and unbounded that is a free way to spend
+// the pod: it goes through the same door /v1/ml/drift does — gated and metered
+// on the caller's own ledger, one in flight per tenant, two across the
+// deployment, and the bench's own ceiling on how long it may hold a core.
 func (o ops) simulate(ctx context.Context, in *riskSimulateIn) (*riskSimulateReport, error) {
-	_, db, err := tenantState(ctx, o.s)
+	sc, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -1565,6 +1569,15 @@ func (o ops) simulate(ctx context.Context, in *riskSimulateIn) (*riskSimulateRep
 	if limit <= 0 || limit > 5000 {
 		limit = 1000
 	}
+	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "simulate", simulateCents); err != nil {
+		return nil, zip.Errorf(402, "%s", err.Error())
+	}
+	ctx, release, err := o.s.State.bench.probe(ctx, sc.tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	hist, err := replayHistory(db, limit)
 	if err != nil {
 		return nil, err
@@ -1582,6 +1595,12 @@ func (o ops) simulate(ctx context.Context, in *riskSimulateIn) (*riskSimulateRep
 	rep := &riskSimulateReport{Events: len(hist)}
 	var judged, fp int
 	for _, h := range hist {
+		// The bench's ceiling reaches the loop, not only the read: a walk that
+		// ignored it would hold its core for as long as the rows take however
+		// long ago the caller stopped waiting.
+		if err := ctx.Err(); err != nil {
+			return nil, zip.Errorf(503, "the replay did not finish inside its deadline")
+		}
 		f := h.facts
 		f.lists = member
 		fired := len(evaluate([]rule{cand}, h.obs.stage, f)) > 0
@@ -1609,8 +1628,17 @@ func (o ops) simulate(ctx context.Context, in *riskSimulateIn) (*riskSimulateRep
 		v := round4(float64(fp) / float64(judged))
 		rep.FalsePositive = &v
 	}
+	// Metered on the ledger the gate above checked, after the work.
+	o.s.State.bill.Meter(sc.org, sc.project, "simulate", simulateCents, sc.request, sc.clientIP)
 	return rep, nil
 }
+
+// simulateCents is what one replay costs. It is the drift reading's price for
+// the drift reading's reason: the same row ceiling walked through a fresh
+// evaluator, priced like a screen rather than like an estimation — but priced,
+// because free CPU on a single replica is a denial of service somebody else
+// pays for.
+const simulateCents = driftCents
 
 // Rules lists this tenant's detections. A tenant starts with a starter set
 // covering the lifecycle the product names — signup burst, shared device,

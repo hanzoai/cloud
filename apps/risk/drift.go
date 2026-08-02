@@ -520,9 +520,7 @@ func (o ops) drift(ctx context.Context, in *mlDriftIn) (*mlDriftOut, error) {
 	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "drift", driftCents); err != nil {
 		return nil, zip.Errorf(402, "%s", err.Error())
 	}
-	ctx, cancel := context.WithTimeout(ctx, driftDeadline)
-	defer cancel()
-	release, err := o.s.State.bench.probe(ctx, sc.tenant)
+	ctx, release, err := o.s.State.bench.probe(ctx, sc.tenant)
 	if err != nil {
 		return nil, err
 	}

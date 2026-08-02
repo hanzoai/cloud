@@ -431,11 +431,11 @@ func TestAReadingIsBoundedPerTenantAndAcrossTheFleet(t *testing.T) {
 	seedFit(t, s, a, adb, roleChampion, quickShape)
 
 	// One per tenant. The second ask is refused, not queued.
-	first, err := s.State.bench.probe(context.Background(), a)
+	_, first, err := s.State.bench.probe(context.Background(), a)
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
-	if _, err := s.State.bench.probe(context.Background(), a); err == nil {
+	if _, _, err := s.State.bench.probe(context.Background(), a); err == nil {
 		t.Fatal("one tenant holds two in-request measurements at once")
 	}
 
@@ -448,7 +448,7 @@ func TestAReadingIsBoundedPerTenantAndAcrossTheFleet(t *testing.T) {
 
 	// A NEIGHBOUR is unaffected: the per-tenant rule is what makes the fleet-wide
 	// pair safe, because acme can never be holding both of them.
-	second, err := s.State.bench.probe(context.Background(), b)
+	_, second, err := s.State.bench.probe(context.Background(), b)
 	if err != nil {
 		t.Fatalf("a neighbour was refused a slot acme could not have been holding: %v", err)
 	}
@@ -459,7 +459,7 @@ func TestAReadingIsBoundedPerTenantAndAcrossTheFleet(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	if _, err := s.State.bench.probe(ctx, third); err == nil {
+	if _, _, err := s.State.bench.probe(ctx, third); err == nil {
 		t.Fatal("a third tenant ran while both fleet slots were held — the pool is not a bound")
 	}
 	if took := time.Since(start); took > 5*time.Second {
@@ -469,7 +469,7 @@ func TestAReadingIsBoundedPerTenantAndAcrossTheFleet(t *testing.T) {
 	first()
 	second()
 	// Released, the next ask succeeds — a bound that never reopens is an outage.
-	again, err := s.State.bench.probe(context.Background(), a)
+	_, again, err := s.State.bench.probe(context.Background(), a)
 	if err != nil {
 		t.Fatalf("the slot did not reopen: %v", err)
 	}

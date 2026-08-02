@@ -512,16 +512,32 @@ func (b *bench) running(t Tenant, kind string) (string, bool) {
 	return j.id, true
 }
 
-// probe admits one in-request measurement and returns the release. A second one
-// for the same tenant is REFUSED rather than queued, and the fleet-wide slot is
-// WAITED for on the caller's own context — so a tenant looping the op spends
-// only its own one slot and only its own deadline, and a caller that gave up is
-// not still holding a core.
-func (b *bench) probe(ctx context.Context, t Tenant) (func(), error) {
+// probeDeadline bounds how long ONE in-request measurement may hold its slot,
+// counted from ADMISSION: the wait for the slot is bounded by the caller's own
+// context, which is the deadline it is entitled to, and this is the bound on the
+// core it then occupies.
+//
+// It is the bench's number and not any op's, because it is one fact about
+// running an estimation's work inside a request on a shared single replica.
+// Stated per op it would be several numbers that have to agree, and the one that
+// drifted would be the one holding the core.
+const probeDeadline = 30 * time.Second
+
+// probe admits one in-request measurement and returns the context it runs under
+// and the release. A second one for the same tenant is REFUSED rather than
+// queued, and the fleet-wide slot is WAITED for on the caller's own context — so
+// a tenant looping the op spends only its own one slot, and a caller that gave
+// up is not still holding a core.
+//
+// IT RETURNS THE CONTEXT SO THE CEILING CANNOT BE FORGOTTEN. The bound on how
+// long a measurement may run belongs with the bounds on how many may run, and an
+// op that reaches for the pool gets the deadline whether or not it thought to
+// apply one. Handed back as a value, the un-bounded call does not typecheck.
+func (b *bench) probe(ctx context.Context, t Tenant) (context.Context, func(), error) {
 	b.mu.Lock()
 	if b.probing[t] {
 		b.mu.Unlock()
-		return nil, zip.Errorf(409, "a measurement is already running for this tenant")
+		return nil, nil, zip.Errorf(409, "a measurement is already running for this tenant")
 	}
 	b.probing[t] = true
 	b.mu.Unlock()
@@ -533,10 +549,11 @@ func (b *bench) probe(ctx context.Context, t Tenant) (func(), error) {
 	}
 	select {
 	case b.probes <- struct{}{}:
-		return func() { <-b.probes; release() }, nil
+		run, stop := context.WithTimeout(ctx, probeDeadline)
+		return run, func() { stop(); <-b.probes; release() }, nil
 	case <-ctx.Done():
 		release()
-		return nil, zip.Errorf(503, "the measurement queue did not clear inside this request's deadline")
+		return nil, nil, zip.Errorf(503, "the measurement queue did not clear inside this request's deadline")
 	}
 }
 
