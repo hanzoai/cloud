@@ -10,11 +10,16 @@
 #   PUBLIC READ   GET  /v1/billing/plans          (anonymous, 200)
 #   ADMIN CRUD    GET/POST/PUT/DELETE /v1/plans/entries[/:slug]   (SuperAdmin)
 #
-# Safe to run destructively today because nothing has launched and there are no
-# subscribers. That is the ONLY reason the retire step below is acceptable — with
-# live subscriptions, repricing pro 20 -> 49 in place charges people 2.45x on
-# their next renewal with no notice, and retiring a slug strands whoever is on it.
-# If that ever changes, grandfather first and reprice second.
+# Retiring is ARCHIVING, never deleting (the Shopify product model). An archived
+# plan leaves the public catalog and can no longer be bought — the three purchase
+# entrypoints refuse it — but the row survives, so an invoice or renewal that
+# recorded the slug still resolves and prices itself. Un-archiving restores it.
+# This script used to DELETE those rows, which was only defensible because nothing
+# had launched; it is no longer the tradeoff being made.
+#
+# Repricing is still destructive in the way archiving is not: pro 20 -> 49 in place
+# charges an existing subscriber 2.45x on their next renewal with no notice. Today
+# there are no subscribers. When there are, grandfather first and reprice second.
 #
 # Usage:
 #   HANZO_ADMIN_TOKEN=<superadmin bearer> ./scripts/seed-plans.sh          # apply
@@ -34,7 +39,7 @@ read -r -d '' PLANS <<'JSON' || true
   {
     "slug": "go", "name": "Go", "category": "personal",
     "description": "Omnichannel agent hosting and the Hanzo desktop app, for builders getting started.",
-    "price": 900, "priceAnnual": 900, "currency": "usd",
+    "price": 900, "priceAnnual": 900, "currency": "usd", "status": "active",
     "interval": "monthly", "intervalCount": 1, "trialPeriodDays": 0,
     "features": [
       "Hanzo Bot Gateway — host local agents across WhatsApp, Telegram, Discord and Slack",
@@ -46,7 +51,7 @@ read -r -d '' PLANS <<'JSON' || true
   {
     "slug": "dev", "name": "Dev", "category": "personal",
     "description": "Terminal-native pair programming in your own repository shell.",
-    "price": 1900, "priceAnnual": 1900, "currency": "usd",
+    "price": 1900, "priceAnnual": 1900, "currency": "usd", "status": "active",
     "interval": "monthly", "intervalCount": 1, "trialPeriodDays": 0,
     "features": [
       "Hanzo Dev — full terminal-native pair programmer inside your local repo shell",
@@ -59,7 +64,7 @@ read -r -d '' PLANS <<'JSON' || true
   {
     "slug": "pro", "name": "Pro", "category": "personal",
     "description": "Multi-agent orchestration, background review, and maximum reasoning depth.",
-    "price": 4900, "priceAnnual": 4900, "currency": "usd",
+    "price": 4900, "priceAnnual": 4900, "currency": "usd", "status": "active",
     "interval": "monthly", "intervalCount": 1, "trialPeriodDays": 0,
     "features": [
       "Auto Drive orchestration — multi-agent teams executing repo milestones (/plan, /code, /solve)",
@@ -73,7 +78,7 @@ read -r -d '' PLANS <<'JSON' || true
   {
     "slug": "max", "name": "Max", "category": "personal",
     "description": "Enso orchestration, unlimited managed agents, and shared team workspaces.",
-    "price": 9900, "priceAnnual": 9900, "currency": "usd",
+    "price": 9900, "priceAnnual": 9900, "currency": "usd", "status": "active",
     "interval": "monthly", "intervalCount": 1, "trialPeriodDays": 0,
     "features": [
       "Enso orchestration — dedicated routing through Hanzo's foundational framework model",
@@ -93,6 +98,10 @@ RETIRE="developer plus team-max enterprise custom \
         world-free world-pro world-team world-enterprise \
         social-free social-pro social-team social-team-max social-enterprise \
         dns-free dns-pro dns-enterprise"
+
+# `team` is deliberately NOT retired: TeamEnterpriseStrip reads its price and seat
+# minimum live from this catalog, so archiving it blanks the seat price on the
+# pricing page.
 
 api() { curl -fsS -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' "$@"; }
 
@@ -122,12 +131,15 @@ for p in json.load(sys.stdin): print(json.dumps(p))
 done
 
 echo
-echo "== retiring everything off the ladder =="
+echo "== archiving everything off the ladder =="
 for slug in $RETIRE; do
-  if api -X DELETE "${API}/v1/plans/entries/${slug}" >/dev/null 2>&1; then
-    echo "  retired ${slug}"
+  # PUT status=archived. Absent body fields keep their stored value (UpdateEntry
+  # loads the row first), so this changes the row's lifecycle and nothing else —
+  # the price and history stay exactly as they were.
+  if api -X PUT "${API}/v1/plans/entries/${slug}" -d '{"status":"archived"}' >/dev/null 2>&1; then
+    echo "  archived ${slug}"
   else
-    echo "  absent  ${slug}"
+    echo "  absent   ${slug}"
   fi
 done
 
@@ -138,8 +150,11 @@ import sys,json
 rows=json.load(sys.stdin)
 for p in rows: print(f\"  {p['category']:11} {p['slug']:20} \${(p.get('price') or 0)//100}\")
 want={'go':9,'dev':19,'pro':49,'max':99}
-got={p['slug']:(p.get('price') or 0)//100 for p in rows}
-bad=[s for s,v in want.items() if got.get(s)!=v] + [s for s in got if s not in want]
+# The ladder IS the 'personal' category, so that is what is checked. 'team' lives
+# on and is read live by the pricing page's seat strip; it is not off-ladder.
+got={p['slug']:(p.get('price') or 0)//100 for p in rows if p['category']=='personal'}
+bad=[f'{s}(want \${v}, got \${got.get(s)})' for s,v in want.items() if got.get(s)!=v]
+bad+= [f'{s}(unexpected)' for s in got if s not in want]
 print()
 print('  LADDER CLEAN' if not bad else '  MISMATCH: '+', '.join(bad))
 "
