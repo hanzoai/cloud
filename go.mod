@@ -16,12 +16,12 @@ require (
 	github.com/hanzoai/account v0.2.1
 	github.com/hanzoai/cek v0.2.1
 	github.com/hanzoai/commerce v1.49.43
-	github.com/hanzoai/decimal v0.1.1
+	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/iam v1.34.0
 	github.com/hanzoai/kafka v1.3.1
-	github.com/hanzoai/money v0.2.1
+	github.com/hanzoai/money v0.2.2
 	github.com/hanzoai/namespace v1.2.0
 	github.com/hanzoai/notify v1.7.2
 	github.com/hanzoai/plans v1.4.4
@@ -683,7 +683,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.832.9
+	github.com/hanzoai/ai v1.832.10
 	github.com/hanzoai/authz v1.10.29
 	github.com/hanzoai/base v1.5.11
 	github.com/hanzoai/licensing v0.1.5
