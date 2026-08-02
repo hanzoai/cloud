@@ -14,7 +14,7 @@
 
 // forward.go is the CONSUMER fan-out seam of the canonical event plane. The ONE
 // write core (ingestEvents) commits a batch as FACTS — the publish that the sink
-// lands in event.event and its sibling signal tables; nothing here writes storage.
+// lands in event.fact under its own signal; nothing here writes storage.
 // This file used to sit beside a second storage write (the wide hanzo.events INSERT)
 // and hand the plane its only copy of each batch; that double-write is gone — the
 // fact publish IS the commit — and what remains here are the two SUBSCRIBER
