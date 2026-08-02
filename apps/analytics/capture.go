@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Capture (WRITE) side of the analytics plane. analytics.go serves the read
-// lenses over the event plane (event.event and its sibling signal tables); this
+// lenses over the event plane (event.fact, discriminated by signal); this
 // file is the symmetric ingest that FILLS that plane. Products emit here (the ONE
 // native front door) instead of talking to the insights capture service directly —
 // cloud owns the tenant boundary; the PLANE's schema is owned by hanzoai/o11y.
@@ -71,7 +71,7 @@ const publicCaptureEnv = "CLOUD_ANALYTICS_PUBLIC_CAPTURE"
 // the queryable window.
 //
 // maxBackdate (PAST) bounds the DOMAIN of `time`, which sits second in every plane
-// table's ORDER BY ((org, time, id) on event.event). A MergeTree part is skippable
+// table's ORDER BY ((org, time, id) on event.fact). A MergeTree part is skippable
 // only when its key range misses the query's, so ONE small batch spanning 2019..now
 // yields a part whose range intersects every window any tenant will ever ask for —
 // O(1) to write, O(table) to read, for everyone. Bounding the domain is what makes
@@ -94,7 +94,7 @@ const (
 // THERE IS NO EVENTS-TABLE DDL HERE ANY MORE, AND THAT IS THE POINT. This package
 // used to own eventsTableDDL/EnsureEventsTable for the legacy wide table
 // (hanzo.events) — a second, per-tenant-partitioned copy of every product event.
-// The plane's schema (event.event and its sibling signal tables) has ONE owner,
+// The plane's schema (event.fact, event.sample and their rollups) has ONE owner,
 // hanzoai/o11y (schema.sql there), and cloud is a WRITER and READER of it, never a
 // creator: the write core commits facts onto the plane and the sink lands them
 // (warehouse.go); every read lens answers honest-empty when the plane is absent,
@@ -108,28 +108,34 @@ const (
 // these; the server owns the tenant (tenant_id is NOT a field here — it can never
 // be set by the client).
 type CaptureEvent struct {
-	MessageID   string     `json:"messageId"`  // client idempotency id; server mints one if empty
-	Type        string     `json:"type"`       // pageview | event | identify | group
-	Event       string     `json:"event"`      // event name (type=event); pageview→$pageview
-	Timestamp   string     `json:"timestamp"`  // RFC3339; clamped to server-now on skew/absent
-	DistinctID  string     `json:"distinctId"` // resolved person/visitor id
-	AnonymousID string     `json:"anonymousId"`
-	PersonID    string     `json:"personId"`
-	SessionID   string     `json:"sessionId"`
-	Product     string     `json:"product"` // emitting surface: console|chat|app|site|admin
-	URL         string     `json:"url"`
-	Path        string     `json:"path"`
-	Referrer    string     `json:"referrer"`
-	UTM         UTM        `json:"utm"`
-	RefCode     string     `json:"refCode"`
-	Channel     string     `json:"channel"`
-	GroupID     string     `json:"groupId"`
-	SignupWeek  string     `json:"signupWeek"`
-	ProductID   string     `json:"productId"`
-	Quantity    uint32     `json:"quantity"`
-	Revenue     float64    `json:"revenue"`
-	Currency    string     `json:"currency"`
-	Error       *Exception `json:"error"` // set on type:'error' events (folded into properties.$exception)
+	MessageID   string `json:"messageId"`  // client idempotency id; server mints one if empty
+	Type        string `json:"type"`       // pageview | event | identify | group
+	Event       string `json:"event"`      // event name (type=event); pageview→$pageview
+	Timestamp   string `json:"timestamp"`  // RFC3339; clamped to server-now on skew/absent
+	DistinctID  string `json:"distinctId"` // resolved person/visitor id
+	AnonymousID string `json:"anonymousId"`
+	PersonID    string `json:"personId"`
+	SessionID   string `json:"sessionId"`
+	Product     string `json:"product"` // emitting surface: console|chat|app|site|admin
+	URL         string `json:"url"`
+	Path        string `json:"path"`
+	Referrer    string `json:"referrer"`
+	UTM         UTM    `json:"utm"`
+	RefCode     string `json:"refCode"`
+	Channel     string `json:"channel"`
+	GroupID     string `json:"groupId"`
+	// GroupType names WHICH grouping the id belongs to (organization, workspace,
+	// account). It is a map key rather than a column so the second grouping is a data
+	// change: the plane stores `groups[type] = id`, never group0..group4, because a
+	// fifth positional slot is a sixth one waiting to become a version suffix.
+	// Absent means the only grouping anything sends today, `organization`.
+	GroupType  string     `json:"groupType"`
+	SignupWeek string     `json:"signupWeek"`
+	ProductID  string     `json:"productId"`
+	Quantity   uint32     `json:"quantity"`
+	Revenue    float64    `json:"revenue"`
+	Currency   string     `json:"currency"`
+	Error      *Exception `json:"error"` // set on type:'error' events (folded into properties.$exception)
 
 	// THE OTEL SIGNALS. One envelope carries all four — event, log, span, metric —
 	// because they differ in their BODY, not in who sent them or when. Splitting the
@@ -141,6 +147,7 @@ type CaptureEvent struct {
 	Log    *LogBody    `json:"log"`
 	Span   *SpanBody   `json:"span"`
 	Metric *MetricBody `json:"metric"`
+	Clip   *ClipBody   `json:"clip"`
 
 	// Kind narrows Type when the surface knows more than the wire word does — a
 	// span's client/server role, a page's navigation kind. Empty means the route's
@@ -166,8 +173,16 @@ type CaptureEvent struct {
 
 	// TraceID and SpanID correlate a signal to a trace whatever its body is, so a log
 	// and the span it was emitted inside join without either owning the other.
-	TraceID    string         `json:"traceId"`
-	SpanID     string         `json:"spanId"`
+	TraceID string `json:"traceId"`
+	SpanID  string `json:"spanId"`
+
+	// Resource is the fingerprint of the emitting resource — the host, pod and
+	// service attributes a collector already deduplicates into its own dimension
+	// table. It joins event.log_resource / event.span_resource on `fingerprint`.
+	// ONE name for it: the plane previously carried this fact as `resource UInt64`
+	// AND `resource_fingerprint String` on the same row, one of them always zero.
+	Resource string `json:"resource"`
+
 	Properties map[string]any `json:"properties"`
 	Library    string         `json:"library"`
 	LibraryVer string         `json:"libraryVersion"`
@@ -202,6 +217,26 @@ type SpanBody struct {
 	Status string `json:"status"`
 	// Duration is the elapsed time in nanoseconds. Unsigned because a span cannot
 	// take negative time.
+	Duration uint64 `json:"duration"`
+}
+
+// ClipBody is the body of a session-replay clip: WHERE THE BLOB IS, not the blob.
+//
+// A clip's recording is a multi-megabyte time-ordered binary. It is wrong for a bus
+// message (which is a hand-off, sized for many small facts) and wrong for a warehouse
+// row (which is a column store optimized for scanning narrow values), so it goes
+// neither place. It is written to object storage by whoever recorded it, and the fact
+// plane carries the INDEX: the address, the size and the span of time it covers.
+//
+// That is what makes a whole product cost two columns. Everything else a replay needs
+// — which session, which org, which page, when — is already the envelope.
+type ClipBody struct {
+	// Object is the blob's address in object storage.
+	Object string `json:"object"`
+	// Bytes is its size, so a session list can show weight without opening it.
+	Bytes uint64 `json:"bytes"`
+	// Duration is the wall time the clip covers, in nanoseconds — the same column a
+	// span's elapsed time uses, because it is the same fact.
 	Duration uint64 `json:"duration"`
 }
 
@@ -583,7 +618,7 @@ func projectKey(c *zip.Ctx) string {
 
 // event source tags — the WIRE each row arrived on. Stamped into properties.$source
 // by ingestEvents, which the plane normalizer carries into attributes['$source'], so
-// the ONE event.event table stays honest about origin WITHOUT a second table or a
+// the ONE event.fact table stays honest about origin WITHOUT a second table or a
 // schema migration: $source is queryable in the attributes map. One tag per door,
 // and doors (event.go) is the only list that binds them.
 //
@@ -620,8 +655,7 @@ func withSource(p map[string]any, source string) map[string]any {
 // already HTTP-shaped (zip) for the handler to pass straight up.
 //
 // ONE ADMISSION, ONE STORAGE PROJECTION. The fact is the ONLY durable copy: the sink
-// (warehouse.go) lands it in its signal's own table — event.event for product events,
-// event.error / event.log / event.span for the others — so "stored" and "queryable by
+// (warehouse.go) lands it in event.fact under its own signal — so "stored" and "queryable by
 // signal" are the same claim. The legacy second projection (a wide hanzo.events row
 // per event, inserted here beside the publish) is GONE: it was the measured
 // 59.7-byte/row double-write the o11y MV then copied BACK onto the plane minus its

@@ -21,16 +21,18 @@
 // they wait on the stream and land when it returns. That is the difference between
 // backpressure and data loss, and it is the reason the insert moved off the handler.
 //
-// ONE DURABLE PER TABLE. Each signal gets its own durable consumer filtered to its own
-// subject, so event.error draining slowly cannot hold up event.event, and a writer can
-// be added or replaced per table.
+// ONE DURABLE PER SIGNAL, not per table. The signals share one table now, but they do
+// NOT share a queue: event.error draining slowly must not hold up event.act, so each
+// binds its own durable filtered to its own subject. Isolation is a property of the
+// hand-off, and it survives the tables merging.
 //
 // COMMIT, THEN ACK — in that order, always. The insert must be on disk before the
 // message is acknowledged; acking first would lose the fact while the bus believed it
-// delivered. An unacked message is redelivered, which is safe because every table is a
-// ReplacingMergeTree keyed on the fact id: a redelivered fact collapses on merge instead
-// of duplicating. Idempotency is therefore STRUCTURAL — no consumer hand-rolls it, and
-// a new consumer cannot forget it.
+// delivered. An unacked message is redelivered, which is safe because the fact table is
+// a ReplacingMergeTree keyed (org, time, id): a redelivered fact collapses on merge
+// instead of duplicating. Idempotency is therefore STRUCTURAL — no consumer hand-rolls
+// it, and a new consumer cannot forget it. `signal` leading the partition key keeps
+// that collapse per-signal, so an id collision across two signals cannot delete a row.
 //
 // ASYNC INSERT IS WHAT MAKES PER-MESSAGE ACKING AFFORDABLE. One INSERT per event would
 // explode the part count; the store's own async_insert batches many statements into one
@@ -82,26 +84,53 @@ const (
 	maxDeliver = 8
 )
 
-// writer is ONE table's writer: the signal it drains, the columns it inserts, and the
-// values one message contributes in exactly that order. Adding a table is adding a row
-// here — the consume loop, the ack ordering and the tenancy check are shared.
-type writer struct {
-	signal  signal
+// table is WHERE a signal lands and HOW a row is built for it: one name, one column
+// list, one row builder. There are exactly TWO, because there are exactly two grains —
+// an occurrence HAPPENED, a sample was MEASURED. Everything that used to differ per
+// signal (the columns, the args, the statement) is now shared, which is the whole
+// point: five signals write the identical row shape, so they cannot drift into five
+// shapes of one envelope.
+type table struct {
+	name    string
 	columns []string
 	args    func(message) []any
 }
 
-// envelopeColumns is the IDENTICAL 15-column head of every table, in position order.
+// writer binds ONE signal to its table. The consume loop, the ack ordering and the
+// tenancy check are shared; a writer is that mapping and nothing else.
+type writer struct {
+	signal signal
+	table  table
+}
+
+// factColumns is the column list of event.fact, in position order, written down ONCE.
 // ingested_at is deliberately absent: the server stamps it through a column DEFAULT, so
-// nothing on the wire can influence when a row expires.
+// nothing on the wire can influence when a row expires or which copy of a redelivered
+// fact wins.
 //
-// The four writers below all open with this list and with envelopeArgs, so the envelope
-// is written down ONCE. If it ever drifts per table, the tables stop being
-// UNION ALL-able and the plane loses the property that makes it one plane.
-var envelopeColumns = []string{
-	"org", "time", "id", "name", "kind", "product",
-	"session_id", "distinct_id", "anonymous_id", "person_id",
-	"url", "path", "attributes", "el",
+// `el` binds as a tuple of six and `frames.*` as five parallel arrays; everything else
+// is one placeholder. That is why the placeholder list is BUILT from the columns
+// (statement, below) rather than counted by hand.
+var factColumns = []string{
+	// spine
+	"org", "signal", "time", "id",
+	// what
+	"name", "kind", "message", "severity", "duration",
+	// where
+	"product", "env", "service", "release", "url", "path",
+	// who
+	"person_id", "distinct_id", "anonymous_id", "groups",
+	// correlation
+	"session_id", "trace_id", "span_id", "parent", "resource",
+	// open
+	"attributes", "el",
+	// error
+	"issue", "class", "origin", "handled",
+	"`frames.function`", "`frames.file`", "`frames.line`", "`frames.column`", "`frames.own`",
+	// span
+	"status",
+	// clip
+	"object", "bytes",
 }
 
 // elPlaceholder is the `el` tuple's binding: a tuple literal of six placeholders. A
@@ -109,7 +138,9 @@ var envelopeColumns = []string{
 // annotation values bind as ordinary scalars.
 const elPlaceholder = "(?, ?, ?, ?, ?, ?)"
 
-func envelopeArgs(m message) []any {
+// factArgs renders ONE message as the values of factColumns, in exactly that order.
+// There is one of these rather than one per signal, because there is one row shape.
+func factArgs(m message) []any {
 	el := m.El
 	if el == nil {
 		el = &messageEl{}
@@ -118,92 +149,69 @@ func envelopeArgs(m message) []any {
 	if path == nil {
 		path = []string{}
 	}
-	attrs := m.Attributes
-	if attrs == nil {
-		attrs = map[string]string{}
+	fn, file := make([]string, 0, len(m.Frames)), make([]string, 0, len(m.Frames))
+	line, col := make([]uint32, 0, len(m.Frames)), make([]uint32, 0, len(m.Frames))
+	own := make([]bool, 0, len(m.Frames))
+	for _, fr := range m.Frames {
+		fn, file = append(fn, fr.Function), append(file, fr.File)
+		line, col = append(line, fr.Line), append(col, fr.Column)
+		own = append(own, fr.Own)
 	}
 	return []any{
-		m.Org, m.Time, m.ID, m.Name, m.Kind, m.Product,
-		m.Session, m.Distinct, m.Anonymous, m.Person,
-		m.URL, m.Path, attrs,
-		el.Label, el.Role, el.Testid, el.Name, el.Component, path,
+		m.Org, m.Signal, m.Time, m.ID,
+		m.Name, m.Kind, m.Message, m.Severity, m.Duration,
+		m.Product, m.Env, m.Service, m.Release, m.URL, m.Path,
+		m.Person, m.Distinct, m.Anonymous, nonNilMap(m.Groups),
+		m.Session, m.Trace, m.Span, m.Parent, m.Resource,
+		nonNilMap(m.Attributes), el.Label, el.Role, el.Testid, el.Name, el.Component, path,
+		m.Issue, m.Class, m.Origin, m.Handled,
+		fn, file, line, col, own,
+		m.Status,
+		m.Object, m.Bytes,
 	}
 }
 
-// writers is THE SINK SURFACE: one writer per table, and the one list the consumers
+// nonNilMap keeps a nil map from binding as NULL into a non-nullable Map column.
+func nonNilMap(m map[string]string) map[string]string {
+	if m == nil {
+		return map[string]string{}
+	}
+	return m
+}
+
+// occurrence is the table every signal but `sample` lands in.
+var occurrence = table{name: factTable, columns: factColumns, args: factArgs}
+
+// writers is THE SINK SURFACE: one writer per signal, and the one list the consumers
 // derive from.
 //
-// event.metric IS ABSENT, DELIBERATELY. The metric table's identity is
-// (env, temporality, metric_name, fingerprint) and it has NO org column — it is the
-// samples model, moved into this database by RENAME with its 268M rows and its
-// fingerprint ordering intact, because rate()/increase() need that physical ordering
-// and no time-ordered table can express it. A writer here would therefore have to
-// insert a row it cannot attribute to a tenant, and two orgs reporting the same metric
-// name and labels would hash to the SAME fingerprint and interleave their samples into
-// one series. That is a cross-tenant write, not a missing feature, so the sink refuses
-// it rather than performing it.
+// signalSample IS ABSENT, DELIBERATELY, and the reason has moved. It used to be that
+// the metric table had no org column at all — its identity was
+// (env, temporality, metric_name, fingerprint) — so a writer would have had to insert a
+// row it could not attribute to a tenant, and two orgs reporting the same metric name
+// would have hashed to one fingerprint and interleaved their samples into one series.
+// That is a cross-tenant write, not a missing feature.
 //
-// So the door REFUSES a metric rather than accepting it (landableSignals, below). It is
-// the same refusal for the same reason, moved to the boundary where a caller can still
-// be told: an unwritable signal that is admitted is a 200 that means "discarded". The
-// fix is to fold org into the series fingerprint; then this list grows by one row and
-// the door starts accepting metrics the same day, with nothing else to change.
+// The org-keyed table now EXISTS (event.sample, migration 0003), so the remaining
+// precondition is that the rename has been applied to the deployment this binary talks
+// to. Adding the sixth writer against a table that is not there yet would make the door
+// accept metrics and the sink fail every insert until the bus gave up on them — a 200
+// that means "discarded", which is exactly the failure the derivation below exists to
+// prevent. So the writer lands with the migration, in one line:
+//
+//	{signalSample, measurement}
+//
+// where `measurement` is table{name: sampleTable, columns: …, args: …}.
+//
+// Until then the door REFUSES a sample rather than accepting it (landableSignals,
+// below) — the same refusal for the same reason, at the boundary where a caller can
+// still be told.
 var writers = []writer{
-	{
-		signal:  signalEvent,
-		columns: envelopeColumns,
-		args:    envelopeArgs,
-	},
-	{
-		signal: signalError,
-		columns: append(append([]string{}, envelopeColumns...),
-			"`group`", "message", "class", "site", "handled", "level", "release",
-			"environment", "service", "trace_id", "span_id",
-			"`frames.function`", "`frames.file`", "`frames.line`", "`frames.column`", "`frames.own`"),
-		args: func(m message) []any {
-			f := m.Fault
-			if f == nil {
-				f = &messageFault{}
-			}
-			fn, file := make([]string, 0, len(f.Frames)), make([]string, 0, len(f.Frames))
-			line, col := make([]uint32, 0, len(f.Frames)), make([]uint32, 0, len(f.Frames))
-			own := make([]bool, 0, len(f.Frames))
-			for _, fr := range f.Frames {
-				fn, file = append(fn, fr.Function), append(file, fr.File)
-				line, col = append(line, fr.Line), append(col, fr.Column)
-				own = append(own, fr.Own)
-			}
-			return append(envelopeArgs(m),
-				f.Group, f.Message, f.Class, f.Site, f.Handled, f.Level, f.Release,
-				f.Environment, f.Service, f.Trace, f.Span,
-				fn, file, line, col, own)
-		},
-	},
-	{
-		signal: signalLog,
-		columns: append(append([]string{}, envelopeColumns...),
-			"service", "severity_text", "severity_number", "body", "trace_id", "span_id", "resource"),
-		args: func(m message) []any {
-			r := m.Record
-			if r == nil {
-				r = &messageRecord{}
-			}
-			return append(envelopeArgs(m),
-				r.Service, r.Severity, r.Number, r.Body, r.Trace, r.Span, r.Resource)
-		},
-	},
-	{
-		signal: signalSpan,
-		columns: append(append([]string{}, envelopeColumns...),
-			"service", "trace_id", "span_id", "parent", "duration", "status"),
-		args: func(m message) []any {
-			s := m.Span
-			if s == nil {
-				s = &messageSpan{}
-			}
-			return append(envelopeArgs(m), s.Service, s.Trace, s.ID, s.Parent, s.Duration, s.Status)
-		},
-	},
+	{signalAct, occurrence},
+	{signalClip, occurrence},
+	{signalError, occurrence},
+	{signalLog, occurrence},
+	{signalSpan, occurrence},
 }
 
 // landableSignals is WHICH SIGNALS CAN BE MADE DURABLE, derived from writers so the
@@ -267,19 +275,23 @@ func lossReport() loss {
 // to writers is watched without a second edit.
 var maxDeliverAdvisory = "$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES." + EventStream + ".*"
 
-// statement renders this writer's INSERT: the fixed column list (never caller input)
-// and one placeholder per bound value. `el` is the one column whose binding is a tuple
-// of six, so the placeholder list is built from the columns rather than counted.
-func (w writer) statement() string {
-	ph := make([]string, 0, len(w.columns))
-	for _, c := range w.columns {
+// statement renders this sink's INSERT: the fixed column list (never caller input) and
+// one placeholder per bound value. `el` is the one column whose binding is a tuple of
+// six, so the placeholder list is built from the columns rather than counted.
+//
+// It hangs off the TABLE and not the writer, because five writers share one statement:
+// rendering it per signal would be five identical strings that a sixth signal could
+// silently make six different ones.
+func (t table) statement() string {
+	ph := make([]string, 0, len(t.columns))
+	for _, c := range t.columns {
 		if c == "el" {
 			ph = append(ph, elPlaceholder)
 			continue
 		}
 		ph = append(ph, "?")
 	}
-	return "INSERT INTO " + w.signal.table() + " (" + strings.Join(w.columns, ", ") + ")" +
+	return "INSERT INTO " + t.name + " (" + strings.Join(t.columns, ", ") + ")" +
 		insertSettings + " VALUES (" + strings.Join(ph, ", ") + ")"
 }
 
@@ -294,7 +306,7 @@ func (w writer) write(ctx context.Context, m message) error {
 	if strings.TrimSpace(m.Org) == "" {
 		return fmt.Errorf("refusing an unattributed %s fact (id %q)", w.signal, m.ID)
 	}
-	return warehouseExec(ctx, w.statement(), w.args(m)...)
+	return warehouseExec(ctx, w.table.statement(), w.table.args(m)...)
 }
 
 // drain owns the consumers — one per writer, all on the one bus connection. It is the
@@ -380,7 +392,7 @@ func (s *drain) consume(ctx context.Context, cl *infra.PubSubClient) error {
 		if _, err := cl.CreateConsumer(ctx, EventStream, &infra.ConsumerConfig{
 			Name:          durable,
 			Durable:       durable,
-			Description:   "land " + w.signal.subject() + " in " + w.signal.table(),
+			Description:   "land " + w.signal.subject() + " in " + w.table.name,
 			FilterSubject: w.signal.subject(),
 			// DeliverAll, not DeliverNew: a sink that starts after the door has been
 			// accepting must land what is already on the stream, which is the whole
@@ -441,7 +453,7 @@ func (s *drain) land(ctx context.Context, w writer, sm *infra.StreamMessage) err
 	}
 	if err := w.write(ctx, m); err != nil {
 		s.log.Warn("event sink: insert failed — will redeliver",
-			"table", w.signal.table(), "id", m.ID, "err", err)
+			"table", w.table.name, "id", m.ID, "err", err)
 		return err
 	}
 	return nil
@@ -472,10 +484,18 @@ func sleep(ctx context.Context, d time.Duration) {
 	}
 }
 
+// tableNames is the DISTINCT set of tables this sink writes, in writer order. It is a
+// set and not one name per writer, because five writers share one table and a boot log
+// that repeated it five times would read like five tables.
 func tableNames() []string {
-	out := make([]string, len(writers))
-	for i, w := range writers {
-		out[i] = w.signal.table()
+	seen := make(map[string]bool, len(writers))
+	out := make([]string, 0, len(writers))
+	for _, w := range writers {
+		if seen[w.table.name] {
+			continue
+		}
+		seen[w.table.name] = true
+		out = append(out, w.table.name)
 	}
 	return out
 }

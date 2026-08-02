@@ -105,7 +105,7 @@ func TestEventNormalizeThroughCore(t *testing.T) {
 	if !ok {
 		t.Fatal("want routable")
 	}
-	if f.org != "acme" || f.name != "signup" || f.signal != signalEvent || f.kind != kindTrack {
+	if f.org != "acme" || f.name != "signup" || f.signal != signalAct || f.kind != kindTrack {
 		t.Fatalf("fact = org %q name %q signal %q kind %q", f.org, f.name, f.signal, f.kind)
 	}
 }
