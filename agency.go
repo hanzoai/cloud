@@ -13,7 +13,7 @@ package cloud
 //
 // FOUR LANES, and the boundary between them is attributability:
 //
-//	agent   — an attributable machine credential (sk-/hk-, or a machine JWT).
+//	agent   — an attributable machine credential (sk-, or a machine JWT).
 //	          Programmatic traffic that a named org pays for and we can switch
 //	          off. This is the lane our own agents run in, and it is the lane a
 //	          customer's automation runs in. It gets judged on VOLUME PATTERN,
