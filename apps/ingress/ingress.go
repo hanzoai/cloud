@@ -99,11 +99,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "ingress")
 	log := b.Log
 
-	dir := filepath.Join(deps.DataDir, "ingress")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("ingress.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(dir, "ingress.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("ingress.Mount: open store: %w", err)
 	}
@@ -112,7 +108,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	ecfg := edgeConfig{
 		httpAddr:  getenv("CLOUD_INGRESS_HTTP_ADDR", ":80"),
 		httpsAddr: getenv("CLOUD_INGRESS_HTTPS_ADDR", ":443"),
-		cacheDir:  filepath.Join(dir, "acme"),
+		cacheDir:  filepath.Join(deps.DataDir, "ingress", "acme"),
 		email:     getenv("CLOUD_INGRESS_ACME_EMAIL", ""),
 		staging:   boolEnv("CLOUD_INGRESS_ACME_STAGING"),
 	}

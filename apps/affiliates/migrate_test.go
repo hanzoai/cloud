@@ -5,18 +5,20 @@ package affiliates
 import (
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 )
 
 // A store whose affiliate_referrals table predates the referrer_org column must
 // migrate cleanly: the referrer_org index is created AFTER ADD COLUMN, so it no
 // longer fails with "no such column: referrer_org" (the v1.800.1 boot crash).
 func TestMigrateFromPreReferrerOrgSchema(t *testing.T) {
-	path := t.TempDir() + "/old.db"
+	dir := t.TempDir()
 
-	// 1) Stand up the OLD schema: affiliate_referrals WITHOUT referrer_org, and an
+	// 1) Stand up the OLD schema in the SAME database openStore opens, so step 2
+	// migrates this file: affiliate_referrals WITHOUT referrer_org, and an
 	// affiliates row so the backfill has something to resolve.
-	db, err := cek.Open(cek.Global, path)
+	db, err := basedb.Open(namespace.System(), "affiliates", dir)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -40,7 +42,7 @@ INSERT INTO affiliate_referrals (id,affiliate_id,referred_org,code,created_at) V
 	_ = db.Close()
 
 	// 2) openStore runs migrate() on the existing old DB — this crashed v1.800.1.
-	s, err := openStore(path)
+	s, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("migrate from old schema: %v", err)
 	}

@@ -43,7 +43,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -217,10 +216,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if z == nil {
 		return fmt.Errorf("provisioning.Mount: %T does not expose the typed-op registry", app)
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("provisioning.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "provisioning.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("provisioning.Mount: open store: %w", err)
 	}

@@ -37,8 +37,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -89,10 +87,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("settings.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("settings.Mount: data dir: %w", err)
-	}
-	store, err := openSettingsStore(filepath.Join(deps.DataDir, "settings.db"))
+	store, err := openSettingsStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("settings.Mount: open settings store: %w", err)
 	}

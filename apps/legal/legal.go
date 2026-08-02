@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -37,7 +35,7 @@ type state struct {
 // mounted is the process-wide handle so Shutdown can close the store.
 var mounted *cloud.Service[state]
 
-// Mount wires /v1/legal/* and opens the sealed store under {DataDir}/legal.db. The
+// Mount wires /v1/legal/* and opens the sealed store under DataDir. The
 // e-sign and filing seams default to the honest stubs; a real provider is a
 // config-driven swap (the seams are provider-agnostic).
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -50,10 +48,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("legal.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("legal.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "legal.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("legal.Mount: open store: %w", err)
 	}

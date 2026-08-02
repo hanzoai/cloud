@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 
-	// cek opens the store encrypted at rest (migrate-on-open + shred).
-	"github.com/hanzoai/cloud/cek"
-	// The ONE "sqlite" driver, kept registered for cek's no-key plaintext fallback.
+	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
+	// The ONE "sqlite" driver.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -76,18 +78,18 @@ type Campaign struct {
 	UpdatedAt  int64         `json:"updatedAt"`
 }
 
-// Store is the campaign database. ONE SQLite file ({DataDir}/campaign.db) holds
-// every org's records; tenant isolation is the `org` column, enforced on EVERY
-// query. Mirrors clients/ads exactly (the ONE storage pattern). MaxOpenConns(1)
-// serializes writes against the single-writer file.
+// Store is the campaign database. ONE SQLite file — the system namespace's
+// "campaign" — holds every org's records; tenant isolation is the `org` column,
+// enforced on EVERY query. Mirrors clients/ads exactly (the ONE storage
+// pattern). MaxOpenConns(1) serializes writes against the single-writer file.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "campaign", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open campaign store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

@@ -1,8 +1,6 @@
 package cloud
 
 import (
-	"github.com/hanzoai/cloud/cek"
-
 	// namespace is the ONE thing that names the database an entity's data lives
 	// in, and the ONE thing that turns that name into a location. It is a value
 	// with constructors, not a string with a validator, because the string form
@@ -22,18 +20,21 @@ import (
 // beside a real one. What stays here is the DOOR: which cloud values are
 // allowed to become a name.
 //
-// THE ISOLATION ARGUMENT, in one paragraph. A namespace is reachable only
-// through OrgNamespace or PlatformNamespace. OrgNamespace's input is folded
-// through namespace.Sanitize — which refuses any org carrying a whitespace,
-// control or format rune, and disambiguates every other fold with a hash of the
-// raw owner, so it is injective — and then through the segment rule, which
-// admits only [a-z0-9][a-z0-9_-]* and folds case. PlatformNamespace takes no
-// input at all. So the only way to obtain a namespace is to hold an org string,
-// and the only org strings in this codebase come from principal.Org (a
-// validated IAM claim) or from a server-side resolution an in-process caller
-// states as its contract. A namespace built from a query parameter, a body
-// field, a header or a caller-supplied id would have to pass through
-// OrgNamespace too — which is the point of having exactly one door.
+// THE ISOLATION ARGUMENT, in one paragraph. An ENTITY's namespace is reachable
+// only through OrgNamespace. Its input is folded through namespace.Sanitize —
+// which refuses any org carrying a whitespace, control or format rune, and
+// disambiguates every other fold with a hash of the raw owner, so it is
+// injective — and then through the segment rule, which admits only
+// [a-z0-9][a-z0-9_-]* and folds case. So the only way to name an entity's
+// database is to hold an org string, and the only org strings in this codebase
+// come from principal.Org (a validated IAM claim) or from a server-side
+// resolution an in-process caller states as its contract. A namespace built from
+// a query parameter, a body field, a header or a caller-supplied id would have
+// to pass through OrgNamespace too — which is the point of having one door.
+//
+// namespace.System is outside the argument rather than an exception to it: it
+// takes no input, so nothing can be folded into it, and it names the deployment
+// rather than an entity. A platform store says so where it opens.
 
 // OrgNamespace names the database an org's records live in — or, when project
 // is non-empty, the database that org's records for one project live in.
@@ -70,30 +71,3 @@ func MustOrgNamespace(org, project string) namespace.Namespace {
 // It exists so the one construction in this package that does not start at a
 // principal is visible and greppable rather than an inline call.
 func nsOnDisk(slug string) (namespace.Namespace, error) { return namespace.Org(slug) }
-
-// PlatformNamespace names the deployment's own partition of an otherwise
-// per-org subsystem: the records a per-org store holds that belong to no single
-// org, such as a platform-wide HMAC key.
-//
-// It takes no argument, because there is one deployment. That is the whole
-// improvement over the constant it replaces: the platform partition used to be
-// disjoint from every org's because its slug carried a "_" and the slugger
-// never emits one — a true argument, but one that has to be re-derived by
-// whoever reads the code next, and one that stops being true the day someone
-// widens the slugger. Now the two are disjoint because they are different
-// KINDS, which no edit to a slugger can undo.
-func PlatformNamespace() namespace.Namespace { return namespace.System() }
-
-// nsPrincipal maps a namespace to the principal whose key opens its file. The
-// system namespace is NOT an org — it is the deployment's own partition — so it
-// keys under Global exactly like every other platform store, and only a real
-// entity gets an owner-bound key.
-//
-// It is the one thing in this file that could not move to hanzoai/namespace:
-// a key derivation is cek's, not a name's.
-func nsPrincipal(ns namespace.Namespace) cek.Principal {
-	if ns.Kind() == namespace.KindSystem {
-		return cek.Global
-	}
-	return cek.Org(ns.ID())
-}

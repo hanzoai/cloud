@@ -1,10 +1,10 @@
 package wallets
 
 import (
-	"path/filepath"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 )
 
 // legacyWalletsDDL is the wallets table as it existed BEFORE scoping columns
@@ -30,10 +30,11 @@ CREATE TABLE wallets (
 // wallets.db whose table predates the scope/finance columns must migrate cleanly,
 // not error on "CREATE INDEX ... no such column: project".
 func TestMigrateOverLegacyWalletsTable(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "wallets.db")
+	dir := t.TempDir()
 
-	// Stand up the legacy schema exactly as a pre-scoping prod DB has it.
-	raw, err := cek.Open(cek.Global, path)
+	// Stand up the legacy schema exactly as a pre-scoping prod DB has it, in the
+	// SAME database openStore opens.
+	raw, err := basedb.Open(namespace.System(), "wallets", dir)
 	if err != nil {
 		t.Fatalf("open legacy db: %v", err)
 	}
@@ -43,7 +44,7 @@ func TestMigrateOverLegacyWalletsTable(t *testing.T) {
 	_ = raw.Close()
 
 	// openStore runs migrate(): this is the exact path that failed at mount.
-	st, err := openStore(path)
+	st, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("migrate over legacy wallets table: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestMigrateOverLegacyWalletsTable(t *testing.T) {
 
 	// Re-open the SAME db: migrate() must be idempotent (ALTERs no-op via
 	// duplicate-column, indexes IF NOT EXISTS) with no error on a warm restart.
-	st2, err := openStore(path)
+	st2, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("re-migrate (idempotency): %v", err)
 	}

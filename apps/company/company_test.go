@@ -3,33 +3,21 @@ package company
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
-
-// TestMain seeds a random cek master key so the encrypted-at-rest store opens on an
-// encryption-capable test build (mirrors clients/compliance and clients/legal). On a
-// pure-Go build cek ignores it and uses the plaintext dev path.
-func TestMain(m *testing.M) {
-	k := make([]byte, 32)
-	if _, err := rand.Read(k); err != nil {
-		panic(err)
-	}
-	cek.SetMasterKey(k)
-	os.Exit(m.Run())
-}
 
 // testTimeout is a generous per-request ceiling for the in-memory fiber test
 // harness. fiber's default (1s) is too tight: under the race detector or an

@@ -218,8 +218,7 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build \
-      -ldflags="-s -w -X github.com/hanzoai/cloud.Version=${VERSION}" -o /cloud ./cmd/cloud && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /cek-rewrap ./cmd/cek-rewrap
+      -ldflags="-s -w -X github.com/hanzoai/cloud.Version=${VERSION}" -o /cloud ./cmd/cloud
 # The functional smoke prober (plugin/smoke) — a stdlib-only static binary shipped
 # alongside the host so the release gate can `docker exec` it against the freshly-
 # built image (and any deployment can be smoked via `docker run --entrypoint /smoke`).
@@ -312,7 +311,6 @@ COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
-COPY --from=build /cek-rewrap /cek-rewrap
 COPY --from=build /smoke /smoke
 # The per-app plugin binaries, landing beside /cloud because that is where the host
 # looks: manifest.App.Plugin resolves dir(os.Executable())+"/<name>". Copying the

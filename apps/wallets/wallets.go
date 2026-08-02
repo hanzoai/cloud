@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -74,10 +73,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("wallets.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("wallets.Mount: data dir: %w", err)
-	}
-	st, err := openStore(filepath.Join(deps.DataDir, "wallets.db"))
+	st, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("wallets.Mount: open store: %w", err)
 	}

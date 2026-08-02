@@ -42,8 +42,6 @@ package world
 import (
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -98,10 +96,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("world.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("world.Mount: data dir: %w", err)
-	}
-	store, err := openPipelineStore(filepath.Join(deps.DataDir, "world.db"))
+	store, err := openPipelineStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("world.Mount: open pipeline store: %w", err)
 	}

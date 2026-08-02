@@ -29,18 +29,38 @@ import (
 // It is a source assertion because that is the only kind that survives code
 // nobody has written yet.
 func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
-	// Every Namespace constructor: the entity ones, Parse, Of (from a billing
-	// subject) and OrgProject (from an org and a project, which is what
-	// OrgNamespace below IS). OrgProject and MustOrgProject are on this list
-	// precisely BECAUSE they are the friendly ones — they fold a hostile name
-	// into a safe segment, which makes namespace.MustOrgProject(c.Query("org"))
-	// compile, run, and quietly name somebody else's database.
+	// Every constructor that turns a VALUE INTO A NAME: the entity ones, Parse, Of
+	// (from a billing subject) and OrgProject (from an org and a project, which is
+	// what OrgNamespace below IS). OrgProject and MustOrgProject are on this list
+	// precisely BECAUSE they are the friendly ones — they fold a hostile name into
+	// a safe segment, which makes namespace.MustOrgProject(c.Query("org")) compile,
+	// run, and quietly name somebody else's database.
 	//
-	// namespace.Sanitize is deliberately absent, and NewGroup and MustGroup with
-	// it: none of them returns a Namespace. A slug is a string until a
-	// constructor accepts it, and a group is CODE a package declares once rather
+	// namespace.System is deliberately absent, and it is the one exception the
+	// argument survives: it takes NO INPUT. There is one deployment and one system
+	// namespace, it is a different KIND from every entity namespace, and no string
+	// anywhere can be folded into it — so a store naming the deployment's own
+	// partition is naming a constant, not an entity, and nothing about "what can a
+	// database be named after" is at stake. Every platform store says so where it
+	// opens, which is where a reader asks.
+	//
+	// namespace.Sanitize is absent for a different reason, and NewGroup and
+	// MustGroup with it: none of them returns a Namespace. A slug is a string until
+	// a constructor accepts it, and a group is CODE a package declares once rather
 	// than data that arrives with a request.
-	build := regexp.MustCompile(`\bnamespace\.(Org|User|Repo|System|MustOrg|MustUser|MustRepo|Parse|Of|OrgProject|MustOrgProject)\(`)
+	build := regexp.MustCompile(`\bnamespace\.(Org|User|Repo|MustOrg|MustUser|MustRepo|Parse|Of|OrgProject|MustOrgProject)\(`)
+
+	// The doors. orgns.go is cloud's, and holds the argument. finance.go is the
+	// SECOND and last, and it is one because cloud imports it: a package below
+	// cloud cannot call OrgNamespace, so before this it carried its own org→slug
+	// regexp instead — a second injective slugger the gate could not see, which is
+	// strictly worse than the call it now makes. Its org is principal.Org, the same
+	// validated claim every OrgNamespace caller passes. A THIRD door is not a thing
+	// to add; move the caller above cloud, or take the namespace as a parameter.
+	doors := map[string]bool{
+		"orgns.go":                true,
+		"apps/finance/finance.go": true,
+	}
 
 	root, err := filepath.Abs(".")
 	if err != nil {
@@ -58,7 +78,10 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 			return nil
 		}
 		name := d.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || name == "orgns.go" {
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			return nil
+		}
+		if rel, _ := filepath.Rel(root, path); doors[filepath.ToSlash(rel)] {
 			return nil
 		}
 		b, err := os.ReadFile(path)
@@ -69,7 +92,7 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 			rel, _ := filepath.Rel(root, path)
 			line := 1 + strings.Count(string(b[:loc[0]]), "\n")
 			t.Errorf("%s:%d builds a namespace outside orgns.go — every namespace must come "+
-				"from OrgNamespace or PlatformNamespace so the entity naming the file is "+
+				"from OrgNamespace so the entity naming the file is "+
 				"provably the validated one", rel, line)
 		}
 		return nil
@@ -162,11 +185,11 @@ func TestOrgNamespaceIsInjective(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		if ns == PlatformNamespace() {
+		if ns == namespace.System() {
 			t.Fatalf("org %q named the platform partition", org)
 		}
 		if k, err := namespace.Key(ns, "kms"); err == nil {
-			if p, _ := namespace.Key(PlatformNamespace(), "kms"); k == p {
+			if p, _ := namespace.Key(namespace.System(), "kms"); k == p {
 				t.Fatalf("org %q rendered to the platform partition's file %q", org, k)
 			}
 		}

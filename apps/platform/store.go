@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"strings"
 
+	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
-	// the "sqlite" database/sql name under both build tags (cgo →
-	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
-	// modernc directly instead would double-register "sqlite" under CGO and
-	// panic at init. Blank import registers the driver.
-	"github.com/hanzoai/cloud/cek"
+	// the "sqlite" database/sql name under both build tags. Importing modernc
+	// directly instead would double-register "sqlite" under CGO and panic at
+	// init. Blank import registers the driver.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -116,18 +118,18 @@ type Build struct {
 	UpdatedAt     int64
 }
 
-// Store is the platform metadata database. ONE SQLite file
-// ({DataDir}/platform.db) holds every org's records; tenancy is the org column.
+// Store is the platform metadata database. ONE SQLite file — the system
+// namespace's "platform" — holds every org's records; tenancy is the org column.
 // MaxOpenConns(1) serializes writes against the file lock without busy retries,
 // matching projects/provisioning.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "platform", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open platform store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

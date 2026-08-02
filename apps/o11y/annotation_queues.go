@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -77,7 +76,7 @@ func mountAnnotationQueues(a cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("o11y.mountAnnotationQueues: empty DataDir")
 	}
-	store, err := openAnnStore(filepath.Join(deps.DataDir, "o11y_annotations.db"))
+	store, err := openAnnStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("o11y.mountAnnotationQueues: open store: %w", err)
 	}

@@ -3,46 +3,28 @@ package entitlements
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/types"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-// The cek data plane fail-closes without a master key on encryption-capable
-// builds; tests supply one process-wide (SetMasterKey is once-only). Every
-// openStore caller in this package must take it first, or the store refuses to
-// open the data plane unencrypted and the whole suite fails before it asserts
-// anything. Mirrors clients/flags/flags_test.go.
-var cekOnce sync.Once
-
-func testMasterKey(t *testing.T) {
-	t.Helper()
-	cekOnce.Do(func() {
-		k := make([]byte, 32)
-		if _, err := rand.Read(k); err != nil {
-			t.Fatalf("rng: %v", err)
-		}
-		cek.SetMasterKey(k)
-	})
-}
-
 // openTestStore opens a throwaway entitlements store for one test — the ONE way
-// this package's tests reach the store, so the master key can never be forgotten
-// at a new call site.
+// this package's tests reach the store.
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	testMasterKey(t)
-	store, err := openStore(t.TempDir() + "/entitlements.db")
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

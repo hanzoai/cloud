@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cloud/cek"
+	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 )
 
 // blueprint_store.go is the SHARED, platform-scoped store for the brand blueprint —
@@ -33,12 +36,14 @@ type BlueprintStore struct {
 	db *sql.DB
 }
 
-// openBlueprintStore opens the shared blueprint DB at path (a cek-sealed SQLite file,
-// the house pattern) and migrates. MaxOpenConns(1) serializes writes.
-func openBlueprintStore(path string) (*BlueprintStore, error) {
-	db, err := cek.Open(cek.Global, path)
+// openBlueprintStore opens the shared blueprint DB under dir and migrates. It is
+// the DEPLOYMENT's own partition — namespace.System takes no input and names no
+// entity — because a brand blueprint is platform content, not an org's.
+// MaxOpenConns(1) serializes writes.
+func openBlueprintStore(dir string) (*BlueprintStore, error) {
+	db, err := basedb.Open(namespace.System(), "guide-blueprint", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open blueprint store %q: %w", path, err)
+		return nil, fmt.Errorf("open blueprint store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

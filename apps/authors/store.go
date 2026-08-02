@@ -10,9 +10,10 @@ import (
 	"net/url"
 	"strings"
 
-	// The ONE Hanzo SQLite driver (registers "sqlite" under both build tags).
+	// basedb is the ONE opener; the ONE Hanzo SQLite driver registers "sqlite".
 	// Mirrors clients/affiliates / clients/referrals — one storage pattern.
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -173,10 +174,10 @@ type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "authors", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open authors store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

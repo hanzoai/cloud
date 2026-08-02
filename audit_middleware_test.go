@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -30,8 +29,7 @@ import (
 // so we can prove the body never reaches a record.
 func newAuditApp(t *testing.T) (*zip.App, *audit.Recorder) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := audit.Open(path, nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}
@@ -267,8 +265,7 @@ func TestAudit_NeverCapturesRequestBody(t *testing.T) {
 // path) is never recorded verbatim in either Path or resource.ID — defense in
 // depth beyond "bodies are never read". A normal identifier is untouched.
 func TestAudit_ScrubsCredentialInPath(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := audit.Open(path, nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -317,8 +314,7 @@ func TestAudit_ScrubsCredentialInPath(t *testing.T) {
 // TestAudit_ScrubsSecretInUserAgent proves a bearer/API-key embedded in the
 // client-controlled User-Agent is scrubbed, and a normal UA is untouched.
 func TestAudit_ScrubsSecretInUserAgent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := audit.Open(path, nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -449,8 +445,7 @@ func TestScrubToken_RedReviewBypassClasses(t *testing.T) {
 // liveness exemption is exact and never suppresses a mutation or a denial. This
 // closes an audit-evasion hole where POST /v1/admin/orgs/x/health would slip past.
 func TestAudit_HealthSuffixCannotEvadeAudit(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := audit.Open(path, nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -485,8 +480,7 @@ func TestAudit_HealthSuffixCannotEvadeAudit(t *testing.T) {
 // (nil validator ⇒ strips authority, restores client X-Org-Id for the data path)
 // ahead of AuditTrail, exactly as serve.go wires them.
 func TestAudit_AnonRequestNotAttributedToForgedOrg(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := audit.Open(path, nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -549,8 +543,7 @@ func TestAudit_NoopWhenUnconfigured(t *testing.T) {
 // than allowed to succeed unlogged (AU-5). We force the failure by closing the
 // store's DB before the request, so Append errors.
 func TestAudit_FailsClosedOnWriteError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := audit.Open(path, nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

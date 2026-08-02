@@ -3,12 +3,16 @@ package functions
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
-
 	"github.com/hanzoai/cloud"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -48,13 +52,18 @@ func TestPerOrgStoreFileIsolation(t *testing.T) {
 		t.Fatalf("orgB create (same name): %d %s", code, b)
 	}
 
+	// Close before stat: on the pure-Go codec the database is written back at
+	// CLOSE, so an open store has not yet landed its file. Shutdown is idempotent,
+	// so the Cleanup above still runs harmlessly.
+	if err := Shutdown(); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+
 	fa := filepath.Join(dir, "orgs", "orga", "functions.db")
 	fb := filepath.Join(dir, "orgs", "orgb", "functions.db")
 	for _, p := range []string{fa, fb} {
-		// cek.Exists, not os.Stat: a store still OPEN has not materialized its
-		// database file on the pure-Go codec — only its sidecar is on disk.
-		if !cek.Exists(p) {
-			t.Fatalf("expected per-org functions store at %s", p)
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("expected per-org functions store at %s: %v", p, err)
 		}
 	}
 }

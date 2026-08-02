@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"strings"
 
+	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
-	// the "sqlite" database/sql name under both build tags (cgo →
-	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
-	// modernc directly instead would double-register "sqlite" under CGO and
-	// panic at init. Blank import registers the driver.
-	"github.com/hanzoai/cloud/cek"
+	// the "sqlite" database/sql name under both build tags. Importing modernc
+	// directly instead would double-register "sqlite" under CGO and panic at
+	// init. Blank import registers the driver.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -56,20 +58,20 @@ type Resource struct {
 	Instance string
 }
 
-// Store is the provisioning metadata database. ONE SQLite file
-// ({DataDir}/provisioning.db) holds every org's records; tenant isolation is
+// Store is the provisioning metadata database. ONE SQLite file — the system
+// namespace's "provisioning" — holds every org's records; tenant isolation is
 // by the org column, enforced at the query layer. MaxOpenConns(1) serializes
 // access so multi-step writes never race the SQLite file lock.
 type Store struct {
 	db *sql.DB
 }
 
-// openStore opens (creating if needed) the SQLite metadata DB at path and runs
-// the migration. The "sqlite" driver is the hanzoai/sqlite fork.
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+// openStore opens (creating if needed) the SQLite metadata DB under dir and runs
+// the migration.
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "provisioning", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open provisioning store: %w", err)
 	}
 	// Single connection: the control-plane table is low-volume and this makes
 	// every write atomic against the file lock without busy-loop retries.

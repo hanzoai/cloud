@@ -37,7 +37,7 @@ import (
 // (org, project) the flag engine uses for its platform switches, so the registry and
 // the waitlist.<svc> switches co-locate. One waitlist.db for the deployment.
 const (
-	// A REAL org namespace named "platform", not cloud.PlatformNamespace(). The
+	// A REAL org namespace named "platform", not namespace.System(). The
 	// system namespace is the right name for the deployment's own partition and
 	// would make it unsquattable by a tenant who registers that org, but it
 	// renders to a different file, and moving a live store is a migration rather

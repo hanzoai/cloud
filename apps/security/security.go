@@ -10,8 +10,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -70,10 +68,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("security.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("security.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "security.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("security.Mount: open store: %w", err)
 	}
@@ -90,7 +85,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	routes(app, s)
 
 	s.Log.Info("security mounted", "brand", deps.Brand, "rules", detect.RuleCount(),
-		"db", filepath.Join(deps.DataDir, "security.db"))
+		"dir", deps.DataDir)
 	return nil
 }
 

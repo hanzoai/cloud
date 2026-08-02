@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/money"
-	"github.com/hanzoai/cloud/cek"
+	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -46,11 +49,11 @@ type Store struct {
 	db *sql.DB
 }
 
-// Open opens (and migrates) the listing store at path.
-func Open(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+// Open opens (and migrates) the listing store under dir.
+func Open(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "marketplace", dir)
 	if err != nil {
-		return nil, fmt.Errorf("marketplace: open store %q: %w", path, err)
+		return nil, fmt.Errorf("marketplace: open store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON"} {

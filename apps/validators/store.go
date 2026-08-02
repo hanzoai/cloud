@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	// cek opens the store encrypted at rest (migrate-on-open + shred), the ONE
-	// storage pattern every cloud subsystem uses (clients/ads is the twin).
-	"github.com/hanzoai/cloud/cek"
-	// The ONE "sqlite" driver, kept registered for cek's no-key plaintext fallback.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
+
+	// The ONE Hanzo "sqlite" driver; blank import registers it.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -22,7 +22,8 @@ var (
 	errChallenge = errors.New("validators: challenge missing, expired, or already used")
 )
 
-// Store is the validators database. ONE SQLite file ({DataDir}/validators.db)
+// Store is the validators database. ONE SQLite file — the deployment's own
+// "validators" subsystem —
 // holds every org's entitlements, the owner-gated registration queue, and the
 // short-lived wallet-signature challenges. Tenant isolation is the `org`
 // column, enforced on EVERY org-scoped query. MaxOpenConns(1) serializes writes
@@ -31,10 +32,10 @@ type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "validators", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open validators store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{
