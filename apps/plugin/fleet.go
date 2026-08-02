@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/ha"
 	"github.com/zap-proto/zip"
 )
@@ -252,7 +252,7 @@ func (o *ops) record(ctx context.Context, c *zip.Ctx, a act, results []Result, f
 		Resource:  audit.Resource{Type: "plugin", ID: a.name},
 		Auth:      audit.AuthContext{Method: "jwt", IsAdmin: c.IsAdmin()},
 		Outcome:   outcome,
-		SourceIP:  c.Header("X-Forwarded-For"),
+		SourceIP:  cloud.ClientIP(c),
 		UserAgent: c.Header("User-Agent"),
 		RequestID: c.RequestID(),
 		Method:    c.Method(),
