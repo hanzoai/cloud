@@ -533,9 +533,6 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	a.Group(o11yPrefix).Use(cloud.Bridge())
 
 	// READ/SERVE plane — specific routes before the wildcard.
-	if err := mountEventIngest(a, deps); err != nil { // POST /v1/event/ingestion
-		return err
-	}
 	mountScope(a)  // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
 	mountAlerts(a) // POST /v1/o11y/alerts/:receiver + GET /v1/o11y/alerts/last
 	// Native human-review surface (SQLite metastore) — /v1/o11y/reviews*.
@@ -619,9 +616,6 @@ func ShutdownO11y(ctx context.Context) error {
 		firstErr = err
 	}
 	if err := shutdownPlaneIngest(ctx); err != nil && firstErr == nil {
-		firstErr = err
-	}
-	if err := shutdownEventIngest(ctx); err != nil && firstErr == nil {
 		firstErr = err
 	}
 	return firstErr

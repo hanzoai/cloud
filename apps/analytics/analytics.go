@@ -62,9 +62,9 @@
 //	GET  /v1/insights/health        the insights surface is serving
 //	GET  /v1/analytics/health       subsystem health (datastore connectivity + lens tables)
 //
-//	WRITE (the ingest doors — see doors, event.go)
-//	POST /v1/event                  the canonical wire (object | array | {batch:[…]})
-//	POST /v1/insights/e             the PostHog wire — a second WIRE, not a second name
+//	WRITE (the ingest door — see doors, event.go)
+//	POST /v1/event                  the canonical wire (object | array | {batch:[…]});
+//	                                decodeEvent sniffs the PostHog wire here too
 //	POST /v1/event/:project/envelope|store   the Sentry error wire, same door
 //
 // The six reads above /v1/analytics/health are TYPED ops, so each publishes its
@@ -342,9 +342,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// has never served, and op.Path is the identity every projection reads.
 	zip.Get(cloud.ZipApp(app), "/v1/errors", o.errors)
 
-	// /v1/insights — console reads over the SAME engine. The PostHog-wire INGEST at
-	// /v1/insights/e is a door and is registered in the loop above. Flags live at
-	// /v1/flags.
+	// /v1/insights — console READS over the SAME engine, and nothing else: the
+	// PostHog-wire ingest that used to sit at /v1/insights/e is retired onto the one
+	// door, so this group registers no door of its own. Flags live at /v1/flags.
 	ig := app.Group("/v1/insights")
 	zip.Get(ig, "/health", o.insightsHealth)
 	zip.Get(ig, "/events", o.insightsEvents)
