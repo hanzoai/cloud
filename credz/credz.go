@@ -76,7 +76,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/credz/launch"
 )
 
@@ -207,8 +207,7 @@ func resolve(dataDir string) Posture {
 
 	// 1. My own environment. This process is the root of the credential tree.
 	if k, ok := decode(os.Getenv(RootEnv)); ok {
-		root = k
-		cek.SetMasterKey(k)
+		bootErr = adopt(k)
 		// Scrub. zip spawns children with os.Environ(), so leaving the root key
 		// here hands it to all 108 of them — the exact sprawl this package exists
 		// to end. Everything in-process that needs it now reads Key().
@@ -232,8 +231,7 @@ func resolve(dataDir string) Posture {
 	}
 	if err == nil {
 		if k, ok := decode(b.Key); ok {
-			root = k
-			cek.SetMasterKey(k)
+			bootErr = adopt(k)
 		} else {
 			// A bundle with no data-plane key still installs the service credentials,
 			// but the first store open will fail closed — and the reason lives HERE,
@@ -247,10 +245,10 @@ func resolve(dataDir string) Posture {
 	}
 	bootErr = err
 
-	// 3. Nothing configured. On a build that cannot be production, run the
-	// production code path against a well-known key so a developer needs no
-	// configuration at all; on a production build, hold nothing and let the first
-	// store open refuse to write plaintext.
+	// 3. Nothing configured. There is no KMS to resolve a key from, so this process
+	// mints its own — a random one, which dies with it. Nothing it writes outlives
+	// the run, which is the honest shape of a keyless deployment and the reason a
+	// developer needs no configuration at all.
 	// A child the host launched may NOT fall back. It has a token, so a broker was
 	// promised; if one never came, the honest outcome is to hold nothing and let
 	// the first store open refuse — one deployment, one key, or no key at all.
@@ -260,15 +258,29 @@ func resolve(dataDir string) Posture {
 		return Unkeyed
 	}
 
-	if cek.EnsureDevKey() {
-		// Hold the dev key like any other: a keyless dev deployment still has ONE
-		// data-plane key, and its broker has to be able to hand that same key to a
-		// child rather than let each child derive its own.
-		root = cek.Master()
-		bootFrom = "dev key"
-		return Dev
+	k, devErr := cek.SetDevMaster()
+	if devErr != nil {
+		bootErr = devErr
+		return Unkeyed
 	}
-	return Unkeyed
+	// Hold the dev key like any other: a keyless dev deployment still has ONE
+	// data-plane key, and its broker has to be able to hand that same key to a
+	// child rather than let each child derive its own.
+	root = k
+	bootFrom = "dev key"
+	return Dev
+}
+
+// adopt makes k this process's root key: the key credz reports to a child and
+// the key every database of this process is derived from. ONE function, because
+// a process that answered Key() with a key cek does not hold would hand its
+// children a key its own files were not written under.
+func adopt(k []byte) error {
+	if err := cek.SetMaster(k); err != nil {
+		return fmt.Errorf("credz: %w", err)
+	}
+	root = k
+	return nil
 }
 
 // brokerWait bounds how long a launched child waits for the broker to answer. The

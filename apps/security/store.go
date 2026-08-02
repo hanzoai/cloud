@@ -8,7 +8,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/security/detect"
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags (cgo →
@@ -54,17 +55,17 @@ type StoredFinding struct {
 	CreatedAt   int64
 }
 
-// Store is the findings database. ONE SQLite file ({DataDir}/security.db) holds
-// every org's scans + findings; tenancy is the org column on both tables.
-// MaxOpenConns(1) serializes writes against the file lock.
+// Store is the findings database. ONE SQLite file — the deployment's own
+// "security" subsystem — holds every org's scans + findings; tenancy is the org
+// column on both tables. MaxOpenConns(1) serializes writes against the file lock.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "security", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open security store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

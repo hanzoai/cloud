@@ -31,7 +31,6 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -156,10 +155,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return errMount("empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return errMount("data dir: " + err.Error())
-	}
-	st, err := openStore(filepath.Join(deps.DataDir, "x402.db"))
+	st, err := openStore(deps.DataDir)
 	if err != nil {
 		return errMount("open store: " + err.Error())
 	}

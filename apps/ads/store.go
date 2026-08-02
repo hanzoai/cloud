@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 
-	// cek opens the store encrypted at rest (migrate-on-open + shred).
-	"github.com/hanzoai/cloud/cek"
-	// The ONE "sqlite" driver, kept registered for cek's no-key plaintext fallback.
+	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
+	// The ONE "sqlite" driver.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -20,18 +22,18 @@ var (
 	errConflict = errors.New("ads: already exists")
 )
 
-// Store is the ads database. ONE SQLite file ({DataDir}/ads.db) holds every
-// org's records; tenant isolation is the `org` column, enforced on EVERY query.
-// This mirrors clients/crm exactly (the ONE storage pattern). MaxOpenConns(1)
-// serializes writes against the single-writer file.
+// Store is the ads database. ONE SQLite file — the system namespace's "ads" —
+// holds every org's records; tenant isolation is the `org` column, enforced on
+// EVERY query. This mirrors clients/crm exactly (the ONE storage pattern).
+// MaxOpenConns(1) serializes writes against the single-writer file.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "ads", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open ads store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

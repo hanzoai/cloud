@@ -2,7 +2,7 @@ package wallets
 
 // store.go is the Hanzo Base (SQLite) persistence for accounts + wallets — the
 // SAME single-connection + WAL pattern every clients/* store uses (copied from
-// clients/treasury/ledger/sqlstore). ONE wallets.db holds every tenant's rows;
+// clients/treasury/ledger/sqlstore). ONE wallets store holds every tenant's rows;
 // tenant isolation is the `org` column present on EVERY row and enforced in
 // EVERY query. A wallet fetched for a different org returns not-found HERE, in
 // the store, not in the handler — the isolation boundary lives in one place.
@@ -14,9 +14,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
+
 	// The ONE Hanzo SQLite driver (registers "sqlite" under both build tags),
 	// identical to every other clients/* store.
-	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -24,11 +26,11 @@ type store struct {
 	db *sql.DB
 }
 
-// openStore opens (creating + migrating) wallets.db at path.
-func openStore(path string) (*store, error) {
-	db, err := cek.Open(cek.Global, path)
+// openStore opens (creating + migrating) the wallets store under dir.
+func openStore(dir string) (*store, error) {
+	db, err := basedb.Open(namespace.System(), "wallets", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open wallets store: %w", err)
 	}
 	db.SetMaxOpenConns(1) // serialize writes — one file, one writer
 	for _, pragma := range []string{

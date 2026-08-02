@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -19,7 +18,7 @@ import (
 
 func testSessionStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStoreAt(filepath.Join(t.TempDir(), "agents.db"))
+	s, err := openStoreAt(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

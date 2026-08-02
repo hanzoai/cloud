@@ -15,11 +15,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 )
 
 // dstPool owns the open destination SQLite handles, one per
@@ -61,16 +61,13 @@ func (p *dstPool) get(ctx context.Context, org, user string, t TableInfo) (*dstH
 	key := org + "/" + user
 	h, ok := p.handles[key]
 	if !ok {
-		path, err := destinationPath(p.root, org, user)
+		ns, err := destinationNamespace(org, user)
 		if err != nil {
 			return nil, err
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return nil, fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
-		}
-		db, err := cek.Open(cek.Global, path)
+		db, err := basedb.Open(ns, dstSubsystem, p.root)
 		if err != nil {
-			return nil, fmt.Errorf("open %s: %w", path, err)
+			return nil, fmt.Errorf("open %s: %w", ns, err)
 		}
 		for _, p := range []string{
 			"PRAGMA journal_mode=WAL",
@@ -84,7 +81,7 @@ func (p *dstPool) get(ctx context.Context, org, user string, t TableInfo) (*dstH
 			}
 		}
 		db.SetMaxOpenConns(1)
-		h = &dstHandle{db: db, path: path, tables: map[string]bool{}}
+		h = &dstHandle{db: db, ns: ns, tables: map[string]bool{}}
 		p.handles[key] = h
 	}
 	if !h.tables[t.Name] {
@@ -96,24 +93,33 @@ func (p *dstPool) get(ctx context.Context, org, user string, t TableInfo) (*dstH
 	return h, nil
 }
 
-// destinationPath derives /data/<org>/<user>/cloud.sqlite. The user
-// "_org" sentinel routes to /data/<org>/_org/cloud.sqlite, matching
-// the convention in CLAUDE_PG_TO_SQLITE_MIGRATION.md.
-func destinationPath(root, org, user string) (string, error) {
-	if !validToken.MatchString(org) {
-		return "", fmt.Errorf("invalid org token %q", org)
+// destinationNamespace names the database one row lands in. The two routing
+// sentinels are absences, not names: a row with no user belongs to the org, and
+// a row with neither belongs to the deployment — which is a different KIND of
+// namespace, so no org can ever be routed into it however it is spelled.
+//
+// It is the migrator's ONE naming decision, and it goes through cloud's door,
+// so a legacy PG value cannot name a database differently here than the running
+// service would name it.
+func destinationNamespace(org, user string) (namespace.Namespace, error) {
+	if org == sentinelOrg {
+		return namespace.System(), nil
 	}
-	if !validToken.MatchString(user) {
-		return "", fmt.Errorf("invalid user token %q", user)
+	if user == sentinelOrgUser {
+		return cloud.OrgNamespace(org, "")
 	}
-	return filepath.Join(root, org, user, "cloud.sqlite"), nil
+	return cloud.OrgNamespace(org, user)
 }
+
+// dstSubsystem names every destination database. One migration, one subsystem —
+// the split that matters is the entity, and that is the namespace above.
+const dstSubsystem = "cloud"
 
 // dstHandle wraps one (org, user) SQLite file. Keeps a per-call
 // transaction open so batched inserts amortise fsync cost.
 type dstHandle struct {
 	db     *sql.DB
-	path   string
+	ns     namespace.Namespace
 	tables map[string]bool
 	tx     *sql.Tx
 }

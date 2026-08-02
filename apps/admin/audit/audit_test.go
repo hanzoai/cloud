@@ -11,13 +11,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	auditstore "github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/admin/core"
+	auditstore "github.com/hanzoai/cloud/audit"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -27,8 +26,7 @@ import (
 // returns the store + a request helper. Only the audit routes are mounted here.
 func mountWithStore(t *testing.T) (*auditstore.Recorder, func(method, path string, hdr map[string]string) (*http.Response, []byte)) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := auditstore.Open(path, nil)
+	rec, err := auditstore.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}

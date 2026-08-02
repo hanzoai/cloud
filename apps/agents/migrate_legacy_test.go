@@ -31,8 +31,8 @@ func TestMigrateOverLegacyAgentsTable(t *testing.T) {
 	migratetest.Case{
 		Name:      "agents",
 		LegacyDDL: legacyAgentsDDL,
-		Open: func(path string) (io.Closer, error) {
-			st, err := openStoreAt(path)
+		Open: func(dir string) (io.Closer, error) {
+			st, err := openStoreAt(dir)
 			if err != nil {
 				return nil, err
 			}
@@ -87,10 +87,12 @@ CREATE TABLE agent_sessions (
 // schema (the v1.800.1-class regression the release smoke guards against).
 func TestMigrateOverLegacySessionsTable(t *testing.T) {
 	migratetest.Case{
-		Name:      "sessions",
+		// The subsystem, not the table: both cases seed a legacy epoch of the SAME
+		// agents database, which is the one Open then migrates.
+		Name:      "agents",
 		LegacyDDL: legacySessionsDDL,
-		Open: func(path string) (io.Closer, error) {
-			st, err := openStoreAt(path)
+		Open: func(dir string) (io.Closer, error) {
+			st, err := openStoreAt(dir)
 			if err != nil {
 				return nil, err
 			}

@@ -14,7 +14,6 @@ package cloud
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -70,8 +69,7 @@ func buildAuditRecorder(cfg *Config, logger luxlog.Logger, proc string) (*audit.
 	// exists for ("per-process resources ... instead of contending for one global
 	// name"). The host keeps the canonical audit.db so its existing history and the
 	// /v1/admin/audit surface are untouched; children get audit-<app>.db.
-	dbPath := filepath.Join(cfg.DataDir, auditDBName(proc))
-	rec, err := audit.Open(dbPath, mirror)
+	rec, err := audit.Open(cfg.DataDir, auditName(proc), mirror)
 	if err != nil {
 		return nil, fmt.Errorf("open audit store: %w", err)
 	}
@@ -107,7 +105,7 @@ func buildAuditRecorder(cfg *Config, logger luxlog.Logger, proc string) (*audit.
 	if logger != nil {
 		count, head := rec.Head()
 		logger.Info("audit trail ready (tamper-evident, append-only)",
-			"store", dbPath, "shard", shard, "records", count, "head", head,
+			"store", auditName(proc), "shard", shard, "records", count, "head", head,
 			"mirror", mirror != nil, "checkpoint_interval", interval.String())
 	}
 	return rec, nil
@@ -125,13 +123,13 @@ func auditCheckpointInterval() time.Duration {
 	return 5 * time.Minute
 }
 
-// auditDBName is the audit chain file for one process. The host ("cloud", or an
-// unnamed process) keeps the canonical audit.db so its existing history and the
-// /v1/admin/audit surface are untouched; every plugin child gets its own file.
-// Split out so the one-writer rule is testable without a filesystem.
-func auditDBName(proc string) string {
+// auditName is the audit chain one process writes. The host ("cloud", or an
+// unnamed process) keeps the canonical "audit" chain that the /v1/admin/audit
+// surface reads; every plugin child gets its own. Split out so the one-writer
+// rule is testable without a filesystem.
+func auditName(proc string) string {
 	if proc == "" || proc == "cloud" {
-		return "audit.db"
+		return "audit"
 	}
-	return "audit-" + proc + ".db"
+	return "audit-" + proc
 }

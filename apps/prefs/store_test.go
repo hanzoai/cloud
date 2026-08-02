@@ -1,24 +1,19 @@
 package prefs
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
-// testStore opens a real store on a temp file. It injects a fixed test master
-// key so the suite runs on an ENCRYPTION-CAPABLE build too: cek fails closed
-// without one, and skipping there would leave the isolation invariant below
-// untested on exactly the build configuration production ships — a green suite
-// that proves nothing. The key is a throwaway constant, never a real secret.
+// testStore opens a real store in a temp dir.
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	cek.SetMasterKey(bytes.Repeat([]byte{0x2a}, 32))
-	s, err := openStore(filepath.Join(t.TempDir(), "prefs.db"))
+	s, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

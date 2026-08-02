@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/namespace"
 )
 
@@ -77,7 +76,7 @@ func TestTenantDBPathConvention(t *testing.T) {
 
 	// the deployment's own partition is a different KIND of namespace, so it
 	// cannot collide with a tenant's however the slugger changes.
-	got, err = namespace.Path(dir, PlatformNamespace(), "kms")
+	got, err = namespace.Path(dir, namespace.System(), "kms")
 	if err != nil {
 		t.Fatalf("platform path: %v", err)
 	}
@@ -134,15 +133,16 @@ func TestTenantDBOrgIsolation(t *testing.T) {
 	}
 
 	// Two physically distinct stores exist (orga/, orgb/ are DNS-label identities).
-	// Asked through cek.Exists — the same predicate Each uses — because a store that
-	// is still OPEN has not materialized its database file on the pure-Go codec.
+	// Closed first: on the pure-Go codec the database is written back at close, so a
+	// still-open store has no file to stat yet.
+	_ = a.Close()
+	_ = b.Close()
 	fa := filepath.Join(dir, "orgs", "orga", "widget.db")
 	fb := filepath.Join(dir, "orgs", "orgb", "widget.db")
-	if !cek.Exists(fa) {
-		t.Fatalf("orgA store missing at %s", fa)
-	}
-	if !cek.Exists(fb) {
-		t.Fatalf("orgB store missing at %s", fb)
+	for _, f := range []string{fa, fb} {
+		if _, err := os.Stat(f); err != nil {
+			t.Fatalf("store missing at %s: %v", f, err)
+		}
 	}
 	if fa == fb {
 		t.Fatal("orgA and orgB resolved to the SAME file")
@@ -173,11 +173,13 @@ func TestTenantDBProjectIsolation(t *testing.T) {
 		t.Fatalf("project beta saw project alpha's row (cross-project leak): count=%d", n)
 	}
 
+	_ = alpha.Close()
+	_ = beta.Close()
 	fAlpha := filepath.Join(dir, "orgs", "acme", "projects", "alpha", "tracker.db")
 	fBeta := filepath.Join(dir, "orgs", "acme", "projects", "beta", "tracker.db")
 	for _, f := range []string{fAlpha, fBeta} {
-		if !cek.Exists(f) {
-			t.Fatalf("expected a nested project store at %s", f)
+		if _, err := os.Stat(f); err != nil {
+			t.Fatalf("expected a nested project store at %s: %v", f, err)
 		}
 	}
 	if fAlpha == fBeta {
@@ -256,7 +258,7 @@ func TestOrgStoreEach(t *testing.T) {
 		t.Fatalf("want 2 opens after two For, got %d", opened)
 	}
 	// ... a reserved platform partition (must be skipped) ...
-	p, err := OrgDB(dir, PlatformNamespace(), "widget")
+	p, err := OrgDB(dir, namespace.System(), "widget")
 	if err != nil {
 		t.Fatalf("platform partition: %v", err)
 	}

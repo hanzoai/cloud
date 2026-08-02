@@ -308,7 +308,7 @@ func TestCustomerDetail_RealAndNoSecretLeak(t *testing.T) {
 // tamper-evident audit trail with a before/after.
 func TestGrantCredit_DepositLandsAndAudited(t *testing.T) {
 	f := newCockpitFakes(t)
-	rec, err := audit.Open(":memory:", nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit open: %v", err)
 	}
@@ -426,7 +426,7 @@ func TestGrantCredit_NilAuditStoreFailsClosed(t *testing.T) {
 // nonce forwards no key (the additive default).
 func TestGrantCredit_IdempotencyKeyForwarded(t *testing.T) {
 	f := newCockpitFakes(t)
-	rec, err := audit.Open(":memory:", nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit open: %v", err)
 	}
@@ -476,7 +476,7 @@ func TestGrantCredit_IdempotencyKeyForwarded(t *testing.T) {
 // it — the customer's status reflects the change on a re-list.
 func TestSuspendReactivate_ForbidsUsersAndAudits(t *testing.T) {
 	f := newCockpitFakes(t)
-	rec, _ := audit.Open(":memory:", nil)
+	rec, _ := audit.Open(t.TempDir(), "audit", nil)
 	defer rec.Close()
 	f.service.State.AuditStore = rec
 

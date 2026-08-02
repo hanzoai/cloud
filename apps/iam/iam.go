@@ -79,10 +79,10 @@ package iam
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	iamserver "github.com/hanzoai/iam/server"
 	"github.com/hanzoai/orm"
@@ -90,7 +90,8 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 )
 
 // Prefixes are the canonical absolute prefixes the IAM identity surface owns — this
@@ -121,12 +122,30 @@ var Prefixes = []string{
 // a nil DB the way they used to guard a nil ormer.
 var embeddedDB orm.DB
 
+// embeddedConn is the connection embeddedDB was adapted from. orm's adapter takes a
+// BORROWED handle and deliberately never closes one it did not open — "the caller
+// closes what the caller opened" — and this package is that caller, so the handle is
+// held here and closed by Shutdown. It has to be closed: the database is written back
+// at close, so a store nothing ever closes is a store nothing ever persists.
+var embeddedConn *sql.DB
+
 // DB returns the embedded IAM store's orm.DB for in-process readers (clients/platform,
 // clients/deploy) that reflect the IAM-owned Project resource via
 // github.com/hanzoai/iam/pkg/store. It is nil until Mount has run (IAM not enabled, or
 // a boot failure that fail-closed the subsystem); callers MUST nil-guard and degrade to
 // 503 rather than dereference it.
 func DB() orm.DB { return embeddedDB }
+
+// Shutdown releases the embedded IAM store. Idempotent.
+func Shutdown() error {
+	conn := embeddedConn
+	embeddedDB, embeddedConn = nil, nil
+	cloud.SetIAMStore(nil)
+	if conn == nil {
+		return nil
+	}
+	return conn.Close()
+}
 
 // Mount opens IAM's embedded store, seeds config from the same init_data.json the
 // deployment provides (non-fatal), and registers the whole IAM v2 surface at the
@@ -139,24 +158,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	log := deps.Logger.New("subsystem", "iam")
 
-	dbPath, initDataPath := paths(deps)
+	dir, initDataPath := paths(deps)
 
-	// SQLite does not create parent dirs; ensure it exists (0700 — identity data).
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
-		log.Error("iam data dir create failed — serving fail-closed 503 (cloud stays up)", "err", err, "dir", filepath.Dir(dbPath))
-		mountFailClosed(app)
-		return nil
-	}
-
-	db, err := openStore(dbPath)
+	db, conn, err := openStore(dir)
 	if err != nil {
-		log.Error("iam store open failed — serving fail-closed 503 (cloud stays up; standalone iam pod unaffected)", "err", err, "path", dbPath)
+		log.Error("iam store open failed — serving fail-closed 503 (cloud stays up; standalone iam pod unaffected)", "err", err, "dir", dir)
 		mountFailClosed(app)
 		return nil
 	}
 	// Publish the opened store for in-process readers (DB()) — set only after a clean
 	// open so DB() is nil whenever the subsystem is fail-closed.
-	embeddedDB = db
+	embeddedDB, embeddedConn = db, conn
 	// The API-key resolver lives in the root cloud package, which cannot import this
 	// one (this package imports it), so the store is handed over rather than reached
 	// for. Before this it resolved keys over HTTP against iam.hanzo.svc — a network
@@ -179,63 +191,58 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// the shared binary — the same blast-radius isolation the whole fold gives.
 	if err := safeMount(app, db); err != nil {
 		log.Error("iam mount failed — serving fail-closed 503 (cloud stays up)", "err", err)
-		embeddedDB = nil // fail-closed: no half-mounted store leaks to in-process readers
-		cloud.SetIAMStore(nil)
+		// Fail-closed: no half-mounted store leaks to in-process readers, and the
+		// handle this package opened is released rather than left dangling.
+		_ = Shutdown()
 		mountFailClosed(app)
 		return nil
 	}
 
-	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — iam-v1 retired)", "db", dbPath, "prefixes", Prefixes)
+	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — iam-v1 retired)", "dir", dir, "store", storeSubsystem, "prefixes", Prefixes)
 	return nil
 }
 
-// The store's place and name. The directory is the namespace, so the file does not
-// repeat it; what the file says instead is which PRINCIPAL PARTITION it holds.
+// The store's name — which PRINCIPAL PARTITION it holds.
 //
 // This store is IAM's GLOBAL partition — the cross-org configuration every tenant is
-// resolved against: orgs, applications, providers, signing certs. That is not a label
-// chosen for flavour, it is the same word the key derivation uses: cek opens it under
-// sqlitedrv.PrincipalGlobal, whose own doc calls it "the cross-org global/platform
-// database (certs, providers, the admin org catalog)". Naming the file after its
-// principal means the name and the key agree, and it leaves room for the partitions
-// that do not exist yet — a per-org or per-user IAM store would derive under
-// PrincipalOrg/PrincipalUser and be named for THAT, so the split is visible on disk
-// instead of inferred.
+// resolved against: orgs, applications, providers, signing certs. Naming it after its
+// partition leaves room for the ones that do not exist yet: a per-org or per-user IAM
+// store would be a different namespace and be named for THAT, so the split is visible
+// on disk instead of inferred.
 //
 // A version number never appears here. One that exists only to not be a lower one is
-// scar tissue, and a version in a filename is a migration waiting to be mistaken for an
+// scar tissue, and a version in a name is a migration waiting to be mistaken for an
 // identity.
-const (
-	storeDir  = "iam"
-	storeFile = "global.db"
-)
+const storeSubsystem = "global"
 
-// openStore opens IAM's store through cek — the SAME encryption-at-rest gate every
-// other cloud store opens through — and layers the ORM over that handle.
+// openStore opens IAM's store through basedb — the SAME opener every other cloud store
+// opens through — and layers the ORM over that handle.
 //
 // It replaces iamserver.OpenSQLite, which builds its own pool from a plain path and
 // has no key to give it: orm's SQLiteDBConfig carries no master key, so that path
 // wrote the store with the literal `SQLite format 3` header — every identity, org
 // membership, and credential hash readable from a lifted PV snapshot or an in-cluster
-// volume read. That is precisely the exposure cek exists to remove, and cek's own doc
-// claims "encrypted at rest is a property of the open path"; this store was the
-// counterexample. The hashes are argon2id, so a lifted file was never a password
-// disclosure — but the identity graph and every credential record were in the clear.
-//
-// No new crypto: cek mints the per-file DEK, wraps it, migrates any existing plaintext
-// file in place and shreds the plaintext copy once the encrypted store is proven
-// readable, exactly as it does for ~50 other stores. ONE envelope, one owner.
+// volume read. That is precisely the exposure encryption-at-rest exists to remove; this
+// store was the counterexample. The hashes are argon2id, so a lifted file was never a
+// password disclosure — but the identity graph and every credential record were in the
+// clear. Now the key is derived from the process master and this database's name, and a
+// process with no master opens nothing.
 //
 // ONE connection serves reads and writes, which is what AdaptSQLDB documents and what
 // every per-org store already does (OrgDB pins MaxOpenConns(1)). It is also required
 // rather than merely tidy: on a pure-Go build the codec envelope is single-writer, so
 // a second pool over the same keyed file is not an option to begin with.
-func openStore(path string) (orm.DB, error) {
-	conn, err := cek.Open(cek.Global, path)
+//
+// It returns the ORM handle AND the connection it was adapted from: orm's adapter
+// borrows the handle and never closes one it did not open, so the connection is the
+// caller's to close — and it must be closed, because that is when the database is
+// written back.
+func openStore(dir string) (orm.DB, *sql.DB, error) {
+	conn, err := basedb.Open(namespace.System(), storeSubsystem, dir)
 	if err != nil {
-		return nil, fmt.Errorf("iam: open store: %w", err)
+		return nil, nil, fmt.Errorf("iam: open store: %w", err)
 	}
-	// The same serialized-writer + WAL posture openOrgDB applies. cek returns a keyed
+	// The same serialized-writer + WAL posture openOrgDB applies. basedb returns a keyed
 	// handle, not a configured one, so the pragmas are the caller's to set — and
 	// iamserver.OpenSQLite used to set them via its own config.
 	conn.SetMaxOpenConns(1)
@@ -246,35 +253,34 @@ func openStore(path string) (orm.DB, error) {
 	} {
 		if _, err := conn.Exec(pragma); err != nil {
 			_ = conn.Close()
-			return nil, fmt.Errorf("iam: pragma %q: %w", pragma, err)
+			return nil, nil, fmt.Errorf("iam: pragma %q: %w", pragma, err)
 		}
 	}
 	sdb, err := ormdb.AdaptSQLDB(conn)
 	if err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("iam: adapt store: %w", err)
+		return nil, nil, fmt.Errorf("iam: adapt store: %w", err)
 	}
-	return orm.AdaptDB(sdb), nil
+	return orm.AdaptDB(sdb), conn, nil
 }
 
-// paths derives IAM's SQLite file and init_data.json path from cloud.Deps. The store
-// lives under {DataDir}/iam — its OWN dir. DataDir empty falls back to CWD, exactly as
-// the standalone iam default does. init_data.json is CWD-relative "init_data.json" (the
-// standalone iam conf default), honoring the same `initDataFile` env override so a
-// deployment points BOTH the embedded and standalone iam at one file (DRY, one source
-// of seed truth).
-func paths(deps cloud.Deps) (dbPath, initDataPath string) {
-	root := deps.DataDir
-	if root == "" {
-		root = "."
+// paths derives the data directory IAM's store lives under and its init_data.json
+// path from cloud.Deps. DataDir empty falls back to CWD, exactly as the standalone
+// iam default does; namespace renders the file's place within it. init_data.json is
+// CWD-relative "init_data.json" (the standalone iam conf default), honoring the same
+// `initDataFile` env override so a deployment points BOTH the embedded and standalone
+// iam at one file (DRY, one source of seed truth).
+func paths(deps cloud.Deps) (dir, initDataPath string) {
+	dir = deps.DataDir
+	if dir == "" {
+		dir = "."
 	}
-	dbPath = filepath.Join(root, storeDir, storeFile)
 
 	initDataPath = os.Getenv("initDataFile")
 	if initDataPath == "" {
 		initDataPath = "init_data.json"
 	}
-	return dbPath, initDataPath
+	return dir, initDataPath
 }
 
 // patterns is the ONE list of route patterns the identity surface occupies — every

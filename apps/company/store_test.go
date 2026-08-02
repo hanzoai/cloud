@@ -3,13 +3,12 @@ package company
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 )
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(filepath.Join(t.TempDir(), "company.db"))
+	s, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

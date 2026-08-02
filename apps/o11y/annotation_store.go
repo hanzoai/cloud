@@ -9,7 +9,10 @@ import (
 	"math"
 	"strings"
 
-	"github.com/hanzoai/cloud/cek"
+	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -63,17 +66,17 @@ type annItem struct {
 	CompletedAt int64
 }
 
-// annStore is the annotation-queue metastore over one SQLite file
-// ({DataDir}/o11y_annotations.db). MaxOpenConns(1) serializes writes against the
+// annStore is the annotation-queue metastore over one SQLite file — the system
+// namespace's "o11y_annotations". MaxOpenConns(1) serializes writes against the
 // file lock (the same discipline the eval metastore uses).
 type annStore struct {
 	db *sql.DB
 }
 
-func openAnnStore(path string) (*annStore, error) {
-	db, err := cek.Open(cek.Global, path)
+func openAnnStore(dir string) (*annStore, error) {
+	db, err := basedb.Open(namespace.System(), "o11y_annotations", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open o11y_annotations store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

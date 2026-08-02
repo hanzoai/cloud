@@ -1009,6 +1009,8 @@ github.com/hanzoai/captable v1.0.0 h1:utXPsOaPL+QV0rJaoNDFHvWFv7etf2kfm1bsFh6JRD
 github.com/hanzoai/captable v1.0.0/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
 github.com/hanzoai/cd/gitops-engine v0.7.3 h1:NmPf8v3Ti8ejSI8M96wFmzOchQ2fgxZHhVA7F9RgAyI=
 github.com/hanzoai/cd/gitops-engine v0.7.3/go.mod h1:Jyc94hEnwpmaS4kBFmC4fP3t+VvZ8DZgxPtV4FdmL7M=
+github.com/hanzoai/cek v0.2.0 h1:EL2svcSchMhE8BVcnkTdlYO0uVwpCfV5ZXX5Akl1Fcc=
+github.com/hanzoai/cek v0.2.0/go.mod h1:+Aud0VRbBDw5oMxOL6ivIZW4cgTpDEdrMxFcMcBUytY=
 github.com/hanzoai/commerce v1.49.36 h1:xRv9s2y0eyEo+JeoMKPCl607D4pJLJ3ZrNdT6HnbWMM=
 github.com/hanzoai/commerce v1.49.36/go.mod h1:1Wy+0ULZtAPSGHEt4qb3nEVOv8evC6CxtzQzCyE9WjU=
 github.com/hanzoai/commerce v1.49.37 h1:E2r2ESoFfECYmatIhgk/KafPPBFRsLozvP/4VNZ5me0=

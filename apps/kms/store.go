@@ -100,7 +100,7 @@ func fileOrg(path string) (org string, facade bool) {
 func namespaceFor(path string) (namespace.Namespace, error) {
 	org, facade := fileOrg(path)
 	if facade {
-		return cloud.PlatformNamespace(), nil
+		return namespace.System(), nil
 	}
 	return cloud.OrgNamespace(org, "")
 }

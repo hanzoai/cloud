@@ -1,6 +1,10 @@
 package kms
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/hanzoai/cloud"
+)
 
 // TestDBFor_TenantCannotSpellReservedPartition pins the defense-in-depth the red
 // team flagged: a tenant path literally spelling "/orgs/_platform/…" must never

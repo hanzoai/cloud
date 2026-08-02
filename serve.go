@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/apps/sites"
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/openapi"
@@ -156,13 +156,11 @@ func Serve(plugins []Plugin, enable []string) error {
 	// Data-plane encryption posture. The KEY was installed by credz.Boot at the top
 	// of this function (BuildDeps logs which posture resolved it); this only READS
 	// the outcome. Installing a key here — which is what used to happen — is after
-	// BuildDeps has already opened a store, and cek memoizes on first use, so the
-	// install silently lost to the cached "no key" while this line reported success.
-	// Every build encrypts a keyed store (live SQLCipher codec in production, the
-	// pure-Go envelope in dev/CI); a build with no key fails closed at the first
-	// open rather than writing plaintext.
-	if cek.Encrypting() {
-		deps.Logger.Info("data-plane encryption ACTIVE (per-db DEK, keyed at rest)")
+	// BuildDeps has already opened a store, and the first open is the one that
+	// would have had to be keyed. Every database is derived from that master, so a
+	// process without one opens nothing rather than writing plaintext.
+	if cek.HasMaster() {
+		deps.Logger.Info("data-plane encryption ACTIVE (every database keyed from the master, at rest)")
 	} else {
 		deps.Logger.Warn("data-plane encryption posture: no usable key → store opens fail closed")
 	}

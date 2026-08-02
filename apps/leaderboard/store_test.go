@@ -2,13 +2,16 @@ package leaderboard
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
 func openTestStore(t *testing.T) *optinStore {
 	t.Helper()
-	s, err := openOptinStore(filepath.Join(t.TempDir(), "leaderboard.db"))
+	s, err := openOptinStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

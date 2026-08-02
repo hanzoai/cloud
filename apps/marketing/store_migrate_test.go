@@ -4,10 +4,10 @@ package marketing
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 )
 
 // TestMigrateUpgradesOldCampaignsTable is the regression for the prod 500
@@ -18,14 +18,14 @@ import (
 // every campaign write 500s. The store is an encrypted single-file SQLite only the
 // binary can open, so migrate-on-open is the ONLY upgrade path (no hand-patch).
 func TestMigrateUpgradesOldCampaignsTable(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "marketing.db")
+	dir := t.TempDir()
 
 	// Seed a prod-shaped OLD DB: marketing_campaigns WITHOUT scheduled_at, plus an
-	// existing row — exactly what a pre-scheduling prod deployment holds. Written
-	// through cek so the on-disk format matches what openStore reads back.
-	raw, err := cek.Open(cek.Global, path)
+	// existing row — exactly what a pre-scheduling prod deployment holds. Opened at
+	// the SAME (namespace, subsystem, dir) openStore uses, so this IS that file.
+	raw, err := basedb.Open(namespace.System(), "marketing", dir)
 	if err != nil {
-		t.Fatalf("cek.Open (seed old db): %v", err)
+		t.Fatalf("basedb.Open (seed old db): %v", err)
 	}
 	if _, err := raw.Exec(`CREATE TABLE marketing_campaigns (
   id         TEXT PRIMARY KEY,
@@ -50,7 +50,7 @@ func TestMigrateUpgradesOldCampaignsTable(t *testing.T) {
 
 	// Open through the real store: migrate() must ADD the scheduled_at column to the
 	// existing table (idempotent — swallows "duplicate column name" on a fresh DB).
-	s, err := openStore(path)
+	s, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("openStore (migrate must upgrade old table): %v", err)
 	}
@@ -87,16 +87,16 @@ func TestMigrateUpgradesOldCampaignsTable(t *testing.T) {
 // TestMigrateOnFreshDBIsIdempotent proves the additive ALTER is a no-op on a fresh
 // DB (the column already exists via the CREATE) and that re-opening never errors.
 func TestMigrateOnFreshDBIsIdempotent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "marketing.db")
+	dir := t.TempDir()
 
-	s, err := openStore(path)
+	s, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("openStore fresh: %v", err)
 	}
 	_ = s.Close()
 
 	// Re-open: migrate runs again; the ALTER must swallow "duplicate column name".
-	s2, err := openStore(path)
+	s2, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("re-open must be idempotent: %v", err)
 	}

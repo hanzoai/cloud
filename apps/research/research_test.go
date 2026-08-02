@@ -14,28 +14,18 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	sqlitedrv "github.com/hanzoai/sqlite"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
-
-// TestMain injects a dev master key so the per-org SQLite files open under an
-// encryption-capable build (sqlite v0.3.2's pure-Go codec always can encrypt) — the
-// repo's shared OrgDB-test setup (clients/sync/main_test.go). 32 zero bytes, dev-only,
-// temp dirs only.
-func TestMain(m *testing.M) {
-	if sqlitedrv.EncryptionAvailable() && os.Getenv("CLOUD_KMS_MASTER_KEY_REF") == "" {
-		_ = os.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
-	}
-	os.Exit(m.Run())
-}
 
 const proj = "enso-bench"
 

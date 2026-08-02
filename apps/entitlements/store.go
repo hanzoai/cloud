@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"sort"
 
+	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" database/sql name under both cgo and pure-Go build tags). Blank
 	// import registers the driver; importing modernc directly would double-register.
-	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -34,15 +37,15 @@ import (
 // the visibility toggle, entitlement is the billing gate.
 
 // Store is the entitlements metastore over one SQLite file
-// ({DataDir}/entitlements.db). Org-scoping is the (org, product) key.
+// (the deployment's own "entitlements"). Org-scoping is the (org, product) key.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "entitlements", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open entitlements store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{
