@@ -228,6 +228,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		}
 		return f(ctx, subject, namespace)
 	})
+	// The MCP door's inventory, registered BEFORE the wildcard below so the
+	// reading order is the routing order (see mcp.go — the router would pick the
+	// static path over All("/v1/*") either way).
+	mountMCP(app)
 	// The door: ONE `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy
 	// beego ControllerRegister through zip.AdaptNetHTTP, so ai's ~200 real routes —
 	// /v1/chat/completions, /v1/models, /v1/messages and the rest — reach the wire
