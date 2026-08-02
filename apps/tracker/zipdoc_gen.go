@@ -10,29 +10,29 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/tracker/projects/:key", zip.Doc{
-		Description: "DeleteProject removes one tracker project of the caller's org AND every issue\nfiled under it, and answers 204 with no body. 404 when the org has no project\nunder that key.\n\nThe cascade is the point: an issue has no meaning without the board whose key\nnames it, so deleting the board deletes them together rather than leaving\norphans addressable by an identifier that no longer resolves.",
+		Description: "Removes one tracker project of the caller's org AND every issue\nfiled under it, and answers 204 with no body. 404 when the org has no project\nunder that key.\n\nThe cascade is the point: an issue has no meaning without the board whose key\nnames it, so deleting the board deletes them together rather than leaving\norphans addressable by an identifier that no longer resolves.",
 		Fields: map[string]string{
 			"projectRef.key": "Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting\nwith a letter (\"ENG\", \"OPS2\"). Matched case-insensitively.",
 		},
 	})
 	zip.Describe("DELETE /v1/tracker/projects/:key/issues/:num", zip.Doc{
-		Description: "DeleteIssue removes one issue from a tracker project and answers 204 with no\nbody. 404 when the project or the issue does not exist in the caller's org.\n\nThe issue's number is NOT reused: the next issue on the board takes the next\nnumber, so a deleted identifier stays retired rather than silently pointing at\ndifferent work.",
+		Description: "Removes one issue from a tracker project and answers 204 with no\nbody. 404 when the project or the issue does not exist in the caller's org.\n\nThe issue's number is NOT reused: the next issue on the board takes the next\nnumber, so a deleted identifier stays retired rather than silently pointing at\ndifferent work.",
 		Fields: map[string]string{
 			"issueRef.key": "Key is the issue's project, from the path.",
 			"issueRef.num": "Num is the issue's number within that project — the digits of KEY-14.\nPositive; anything else is refused with 400.",
 		},
 	})
 	zip.Describe("GET /v1/tracker/projects", zip.Doc{
-		Description: "ListProjects returns every tracker project in the caller's org, newest first.\n\nA project is the board: it owns a KEY (the uppercase handle that prefixes every\nissue identifier, \"ENG-14\") and the issues filed under it. The listing is\norg-scoped server-side — the org is the validated bearer claim, never a\nclient-supplied header — so one org can never see another's boards.",
+		Description: "Returns every tracker project in the caller's org, newest first.\n\nA project is the board: it owns a KEY (the uppercase handle that prefixes every\nissue identifier, \"ENG-14\") and the issues filed under it. The listing is\norg-scoped server-side — the org is the validated bearer claim, never a\nclient-supplied header — so one org can never see another's boards.",
 	})
 	zip.Describe("GET /v1/tracker/projects/:key", zip.Doc{
-		Description: "GetProject returns one tracker project of the caller's org by its key —\nits name, description and timestamps. 404 when the org has no project\nunder that key.",
+		Description: "Returns one tracker project of the caller's org by its key —\nits name, description and timestamps. 404 when the org has no project\nunder that key.",
 		Fields: map[string]string{
 			"projectRef.key": "Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting\nwith a letter (\"ENG\", \"OPS2\"). Matched case-insensitively.",
 		},
 	})
 	zip.Describe("GET /v1/tracker/projects/:key/issues", zip.Doc{
-		Description: "ListIssues returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo and source.\n\nThis is the ONE place a surface takes its slice of the shared issue table:\nhanzo.team passes no filter or a status, a git repository's Issues tab passes\nkind=issue&repo=<r> and its Pull Requests tab kind=pr&repo=<r>. A filter value\noutside its closed set is refused with 400 rather than silently returning an\nempty board.",
+		Description: "Returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo and source.\n\nThis is the ONE place a surface takes its slice of the shared issue table:\nhanzo.team passes no filter or a status, a git repository's Issues tab passes\nkind=issue&repo=<r> and its Pull Requests tab kind=pr&repo=<r>. A filter value\noutside its closed set is refused with 400 rather than silently returning an\nempty board.",
 		Fields: map[string]string{
 			"issueQuery.key":       "Key is the project whose issues to list, from the path.",
 			"issueQuery.kind":      "Kind keeps only work items of that shape: issue, pr or epic. An unknown\nvalue is refused with 400.",
@@ -48,7 +48,7 @@ func init() {
 		Example: json.RawMessage(`{"key":"ENG","kind":"pr","repo":"hanzoai/cloud"}`),
 	})
 	zip.Describe("GET /v1/tracker/projects/:key/issues/:num", zip.Doc{
-		Description: "GetIssue returns one issue of one tracker project by its per-project number —\ntitle, description, status, priority, assignee, labels, kind, source and its\ngit bindings. 404 when the project or the issue does not exist in the caller's\norg.",
+		Description: "Returns one issue of one tracker project by its per-project number —\ntitle, description, status, priority, assignee, labels, kind, source and its\ngit bindings. 404 when the project or the issue does not exist in the caller's\norg.",
 		Fields: map[string]string{
 			"issueRef.key":         "Key is the issue's project, from the path.",
 			"issueRef.num":         "Num is the issue's number within that project — the digits of KEY-14.\nPositive; anything else is refused with 400.",
@@ -60,7 +60,7 @@ func init() {
 		},
 	})
 	zip.Describe("PATCH /v1/tracker/projects/:key", zip.Doc{
-		Description: "UpdateProject renames a tracker project or rewrites its description, and\nreturns the updated project. Both fields are optional: one the caller omits\nkeeps its stored value.\n\nThe project KEY is never editable — it prefixes every issue identifier already\nfiled under the board, so changing it would rewrite the human handle of every\nissue in it.",
+		Description: "Renames a tracker project or rewrites its description, and\nreturns the updated project. Both fields are optional: one the caller omits\nkeeps its stored value.\n\nThe project KEY is never editable — it prefixes every issue identifier already\nfiled under the board, so changing it would rewrite the human handle of every\nissue in it.",
 		Fields: map[string]string{
 			"projectPatch.description": "Description is the board's free-form blurb, at most 32768 characters.",
 			"projectPatch.key":         "Key is the project to update, from the path.",
@@ -69,7 +69,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"Platform Engineering"}`),
 	})
 	zip.Describe("PATCH /v1/tracker/projects/:key/issues/:num", zip.Doc{
-		Description: "UpdateIssue edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, or replace its\nlabels. Every field is optional: one the caller omits keeps its stored value,\nand `labels` REPLACES the set rather than adding to it.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
+		Description: "Edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, or replace its\nlabels. Every field is optional: one the caller omits keeps its stored value,\nand `labels` REPLACES the set rather than adding to it.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
 		Fields: map[string]string{
 			"issuePatch.assignee":    "Assignee is who owns the issue, at most 256 characters. Empty unassigns it.",
 			"issuePatch.description": "Description is the issue body, at most 32768 characters.",
@@ -86,5 +86,11 @@ func init() {
 			"issueView.source":       "team | git | crm | helpdesk | cms | agent",
 		},
 		Example: json.RawMessage(`{"key":"ENG","num":14,"status":"in_progress","assignee":"z"}`),
+	})
+	zip.Describe("POST /v1/tracker/projects", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
+	})
+	zip.Describe("POST /v1/tracker/projects/:key/issues", zip.Doc{
+		Description: "Binds a Service-scoped handler to a route: it adapts a\n`func(*Service[S], *zip.Ctx) error` to the plain `func(*zip.Ctx) error` the\nrouter takes, capturing s. One adapter, so packages write free-function\nhandlers and register them with `app.Get(\"/path\", cloud.Handle(s, myHandler))`.",
 	})
 }
