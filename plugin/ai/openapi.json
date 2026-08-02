@@ -1414,6 +1414,39 @@
         "x-app": "github.com/hanzoai/ai"
       }
     },
+    "/v1/ai/mcp/tools": {
+      "get": {
+        "operationId": "aiMCPTools",
+        "summary": "Tools reports what this binary's MCP door carries: every tool the build publishes, how many of them this process actually serves, and which subsystem each belongs to.",
+        "description": "Tools reports what this binary's MCP door carries: every tool the build\npublishes, how many of them this process actually serves, and which subsystem\neach belongs to. It is the answer to \"is the door up and does it have anything\nbehind it\" — a question a status code cannot answer, since an empty door and a\nfull one are both 200.",
+        "tags": [
+          "ai"
+        ],
+        "parameters": [
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "description": "App names one subsystem whose tool NAMES to list. Empty answers counts\nonly: nine hundred names is a page no operator reads and no model can\nafford to be handed by accident.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/aiMCPSurface"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/ai/messages": {
       "get": {
         "operationId": "get_v1_ai_messages",
@@ -5355,6 +5388,58 @@
           }
         ],
         "x-app": "github.com/hanzoai/ai"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "aiMCPApp": {
+        "properties": {
+          "name": {
+            "description": "Name is the subsystem, as the manifest names it.",
+            "type": "string"
+          },
+          "names": {
+            "description": "Names are its tool names, present only for the subsystem the query named.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "served": {
+            "description": "Served reports that THIS process actually mounted it, so its tools are on\nthe door a client can call rather than only in the build.",
+            "type": "boolean"
+          },
+          "tools": {
+            "description": "Tools is how many tools its committed catalogue publishes.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "aiMCPSurface": {
+        "properties": {
+          "apps": {
+            "description": "Apps is one row per subsystem the build publishes, in manifest order.",
+            "items": {
+              "$ref": "#/components/schemas/aiMCPApp"
+            },
+            "type": "array"
+          },
+          "local": {
+            "description": "Local is the part of Served this process registered ITSELF, rather than\ncomposing from a mounted child's catalogue.",
+            "type": "integer"
+          },
+          "published": {
+            "description": "Published is every tool this BUILD can serve — the union of every\nsubsystem's committed catalogue, which is a property of the artifact and\ntherefore the same answer in every process.",
+            "type": "integer"
+          },
+          "served": {
+            "description": "Served is what THIS PROCESS's door actually composed. It is the number that\ncan be far smaller than Published — a host that mounted nothing serves\nnothing — and the only one that describes the door a client is talking to.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }
