@@ -140,7 +140,9 @@ func run() error {
 // Installed BEFORE the mount because fiber runs middleware in registration order:
 // one added after the routes never runs.
 func newApp(deps cloud.Deps) *zip.App {
-	app := zip.New(zip.Config{AppName: "o11y", Logger: deps.Logger})
+	// cloud.ErrorHandler for the same reason cloud.Serve installs it: this main is
+	// hand-written, and without it a refusal this app propagates renders 500.
+	app := zip.New(zip.Config{AppName: "o11y", Logger: deps.Logger, ErrorHandler: cloud.ErrorHandler})
 	app.Use(cloud.EdgeCORS(deps.GatewayPolicy))
 	return app
 }

@@ -179,6 +179,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	exposeStarter()
 	exposeUsage()
 	exposeTxns()
+	exposeScopeRules()
 
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")

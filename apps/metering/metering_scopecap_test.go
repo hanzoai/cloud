@@ -9,14 +9,13 @@ import (
 	"github.com/hanzoai/cloud/apps/metering"
 )
 
-// routingCommerce is a fake commerce that answers the balance, spend-cap
-// authorize, and alerts endpoints independently — so AuthorizeVerdict's two
-// checks (funds, then cap) can be driven separately.
+// routingCommerce is a fake commerce that answers the balance and the spend-cap
+// authorize endpoints independently — so AuthorizeVerdict's two checks (funds,
+// then cap) can be driven separately.
 type routingCommerce struct {
 	balance   string // GET /v1/billing/balance
 	authorize string // GET /v1/billing/alerts/authorize
 	authCode  int    // status for the authorize endpoint (0 => 200)
-	alerts    string // GET /v1/billing/alerts
 }
 
 func (rc *routingCommerce) server(t *testing.T) *httptest.Server {
@@ -30,9 +29,6 @@ func (rc *routingCommerce) server(t *testing.T) *httptest.Server {
 			w.WriteHeader(rc.authCode)
 		}
 		_, _ = w.Write([]byte(rc.authorize))
-	})
-	mux.HandleFunc("/v1/billing/alerts", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(rc.alerts))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -158,17 +154,9 @@ func TestAuthorizeVerdict_ProjectValidatedForwarded(t *testing.T) {
 	}
 }
 
-// ScopeRules returns only the rate-limited rows, decoded from the alerts list.
-func TestScopeRules(t *testing.T) {
-	rc := &routingCommerce{
-		alerts: `[{"project":"","service":"","rateLimitRpm":0},{"project":"P","service":"ai","rateLimitRpm":5}]`,
-	}
-	c := capClient(t, rc.server(t))
-	rules, err := c.ScopeRules(context.Background(), "acme")
-	if err != nil {
-		t.Fatalf("ScopeRules err: %v", err)
-	}
-	if len(rules) != 1 || rules[0].Project != "P" || rules[0].Service != "ai" || rules[0].RateLimitRpm != 5 {
-		t.Fatalf("rules = %+v, want one {P,ai,5}", rules)
-	}
-}
+// The rate-limit rules are no longer read through this client. They come over the
+// internal plane (plane.FinanceScopeRules) because this client's GET
+// /v1/billing/alerts re-dispatched the whole shared app back into the middleware
+// that asked, to the transport's depth guard: 502. The rows-to-rules projection
+// now lives with the rows, in commerce (apps/commerce/scoperules_rpc.go), and is
+// covered there and at the edge (cloud middleware_ratelimit_plane_test.go).
