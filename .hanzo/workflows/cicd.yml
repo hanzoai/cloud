@@ -579,8 +579,17 @@ jobs:
       # parse YAML, so the missing package surfaced as
       #   json.decoder.JSONDecodeError: Expecting value: line 1 column 1
       # and read as a corrupt spec rather than an absent dependency.
+      #
+      # Installed with apt, not pip: the image is Ubuntu 24.04, where a
+      # system-wide `pip install` is refused under PEP 668 —
+      #   error: externally-managed-environment
+      #   ╰─> To install Python packages system-wide, try apt install python3-xyz
+      # which is what this does. python3-yaml IS PyYAML.
       - name: PyYAML for the spec reader
-        run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq python3-yaml
+          python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
 
       - name: Every published address is routed
         run: python3 openapi/reach.py openapi.yaml https://api.hanzo.ai openapi/unreachable.txt
