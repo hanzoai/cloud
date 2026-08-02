@@ -10,20 +10,20 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/pubsub/jetstream/streams/:stream", zip.Doc{
-		Description: "DeleteStream removes one stream of the caller's org — its retained messages\nand its consumers with it — and answers 204 with no body. 404 when the org\nhas no stream of that name.",
+		Description: "Removes one stream of the caller's org — its retained messages\nand its consumers with it — and answers 204 with no body. 404 when the org\nhas no stream of that name.",
 		Fields: map[string]string{
 			"streamRef.stream": "Stream is the stream's name, from the path.",
 		},
 	})
 	zip.Describe("DELETE /v1/pubsub/jetstream/streams/:stream/consumers/:name", zip.Doc{
-		Description: "DeleteConsumer removes one consumer — its cursor, not the stream's messages —\nand answers 204 with no body. 404 when the stream or the consumer does not\nexist.",
+		Description: "Removes one consumer — its cursor, not the stream's messages —\nand answers 204 with no body. 404 when the stream or the consumer does not\nexist.",
 		Fields: map[string]string{
 			"consumerRef.name":   "Name is the consumer, from the path.",
 			"consumerRef.stream": "Stream is the stream, from the path.",
 		},
 	})
 	zip.Describe("DELETE /v1/pubsub/kv/:bucket", zip.Doc{
-		Description: "DeleteBucket removes one bucket of the caller's org — every key and every\nrevision with it — and answers 204 with no body. 404 when the org has no\nbucket of that name.",
+		Description: "Removes one bucket of the caller's org — every key and every\nrevision with it — and answers 204 with no body. 404 when the org has no\nbucket of that name.",
 		Fields: map[string]string{
 			"bucketRef.bucket": "Bucket is the bucket's name, from the path.",
 		},
@@ -36,7 +36,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/pubsub/jetstream/streams", zip.Doc{
-		Description: "ListStreams returns the org's streams, sorted by name.\n\nA stream is the durable log: it captures every message published to its\nsubjects and retains them by its own limits, independent of any consumer.\nThe listing is org-scoped server-side — one org can never see another's\nstreams, and the platform's own planes never appear.",
+		Description: "Returns the org's streams, sorted by name.\n\nA stream is the durable log: it captures every message published to its\nsubjects and retains them by its own limits, independent of any consumer.\nThe listing is org-scoped server-side — one org can never see another's\nstreams, and the platform's own planes never appear.",
 		Fields: map[string]string{
 			"streamPage.data":        "Data are the org's streams.",
 			"streamRecord.bytes":     "Bytes is how many bytes the stream holds right now.",
@@ -56,7 +56,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/pubsub/jetstream/streams/:stream", zip.Doc{
-		Description: "GetStream returns one stream of the caller's org — its configuration and its\nlive state (messages, bytes, sequence range, consumer count). 404 when the\norg has no stream of that name.",
+		Description: "Returns one stream of the caller's org — its configuration and its\nlive state (messages, bytes, sequence range, consumer count). 404 when the\norg has no stream of that name.",
 		Fields: map[string]string{
 			"streamRecord.bytes":     "Bytes is how many bytes the stream holds right now.",
 			"streamRecord.consumers": "Consumers is how many consumers the stream carries.",
@@ -76,7 +76,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/pubsub/jetstream/streams/:stream/consumers", zip.Doc{
-		Description: "ListConsumers returns one stream's consumers, sorted by name. 404 when the\norg has no stream of that name.",
+		Description: "Returns one stream's consumers, sorted by name. 404 when the\norg has no stream of that name.",
 		Fields: map[string]string{
 			"consumerPage.data":          "Data are the stream's consumers.",
 			"consumerRecord.ack":         "Ack is the acknowledgement discipline: explicit, none or all.",
@@ -94,7 +94,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/pubsub/jetstream/streams/:stream/consumers/:name", zip.Doc{
-		Description: "GetConsumer returns one consumer of one org stream — its configuration and\nits cursor: delivered and acknowledged sequences, pending and redelivered\ncounts. 404 when the stream or the consumer does not exist.",
+		Description: "Returns one consumer of one org stream — its configuration and\nits cursor: delivered and acknowledged sequences, pending and redelivered\ncounts. 404 when the stream or the consumer does not exist.",
 		Fields: map[string]string{
 			"consumerRecord.ack":         "Ack is the acknowledgement discipline: explicit, none or all.",
 			"consumerRecord.ackWait":     "AckWait is the redelivery timeout in seconds.",
@@ -137,7 +137,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/pubsub/jetstream/streams", zip.Doc{
-		Description: "CreateStream creates a durable stream capturing the given subjects and\nreturns it. 409 when the org already has a stream of that name; the subjects\nare the org's own and cannot collide with another org's.",
+		Description: "Creates a durable stream capturing the given subjects and\nreturns it. 409 when the org already has a stream of that name; the subjects\nare the org's own and cannot collide with another org's.",
 		Fields: map[string]string{
 			"streamRecord.bytes":     "Bytes is how many bytes the stream holds right now.",
 			"streamRecord.consumers": "Consumers is how many consumers the stream carries.",
@@ -165,7 +165,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"ORDERS","subjects":["orders.>"],"maxAge":86400}`),
 	})
 	zip.Describe("POST /v1/pubsub/jetstream/streams/:stream/consumers", zip.Doc{
-		Description: "CreateConsumer creates a durable consumer on one stream and returns it. A\nconsumer is a named cursor: it tracks what has been delivered and what is\nacknowledged, so many workers can share it and none sees a message twice\noutside redelivery. 409 when the stream already has a consumer of that name\nwith a different configuration.",
+		Description: "Creates a durable consumer on one stream and returns it. A\nconsumer is a named cursor: it tracks what has been delivered and what is\nacknowledged, so many workers can share it and none sees a message twice\noutside redelivery. 409 when the stream already has a consumer of that name\nwith a different configuration.",
 		Fields: map[string]string{
 			"consumerRecord.ack":         "Ack is the acknowledgement discipline: explicit, none or all.",
 			"consumerRecord.ackWait":     "AckWait is the redelivery timeout in seconds.",
@@ -205,7 +205,7 @@ func init() {
 		Example: json.RawMessage(`{"batch":10,"waitMs":2000}`),
 	})
 	zip.Describe("POST /v1/pubsub/kv/:bucket", zip.Doc{
-		Description: "CreateBucket creates a KV bucket and returns it. A bucket is keyed state on\nthe same durable plane as the streams: each key holds up to History\nrevisions, entries can expire by TTL, and watchers on the NATS port see every\nwrite. 409 when the org already has a bucket of that name.",
+		Description: "Creates a KV bucket and returns it. A bucket is keyed state on\nthe same durable plane as the streams: each key holds up to History\nrevisions, entries can expire by TTL, and watchers on the NATS port see every\nwrite. 409 when the org already has a bucket of that name.",
 		Fields: map[string]string{
 			"bucketRecord.bucket":  "Bucket is the bucket's name within the org.",
 			"bucketRecord.history": "History is how many revisions each key keeps.",
@@ -247,7 +247,7 @@ func init() {
 		Example: json.RawMessage(`{"subject":"billing.quote","data":"{\"sku\":\"gpu_1\"}","timeoutMs":2000}`),
 	})
 	zip.Describe("PUT /v1/pubsub/jetstream/streams/:stream", zip.Doc{
-		Description: "UpdateStream rewrites a stream's configuration — subjects, limits, discard —\nand returns the updated stream. It is a PUT: the spec sent replaces the spec\nheld, with one reading for the enums a caller omits — an empty storage,\nretention or discard keeps the stream's current one, because JetStream holds\nstorage and retention immutable and refuses a change with a 400 rather than\nthis door pretending it took.",
+		Description: "Rewrites a stream's configuration — subjects, limits, discard —\nand returns the updated stream. It is a PUT: the spec sent replaces the spec\nheld, with one reading for the enums a caller omits — an empty storage,\nretention or discard keeps the stream's current one, because JetStream holds\nstorage and retention immutable and refuses a change with a 400 rather than\nthis door pretending it took.",
 		Fields: map[string]string{
 			"streamRecord.bytes":     "Bytes is how many bytes the stream holds right now.",
 			"streamRecord.consumers": "Consumers is how many consumers the stream carries.",

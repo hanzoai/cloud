@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/indexers", zip.Doc{
-		Description: "ListIndexers reports the deployment's chain indexer(s) and how far each has\nindexed. Identity and health come from the indexer's /health; the latest indexed\nblock (height + time) from its /v1/explorer/blocks. The row EXISTS if EITHER call\nreaches the indexer; when the indexer is entirely unreachable the answer degrades\nto an honest-EMPTY list at 200, not a 502. No chain HEAD is exposed by the indexer\nREST, so `lag` is honestly omitted rather than fabricated.",
+		Description: "Reports the deployment's chain indexer(s) and how far each has\nindexed. Identity and health come from the indexer's /health; the latest indexed\nblock (height + time) from its /v1/explorer/blocks. The row EXISTS if EITHER call\nreaches the indexer; when the indexer is entirely unreachable the answer degrades\nto an honest-EMPTY list at 200, not a 502. No chain HEAD is exposed by the indexer\nREST, so `lag` is honestly omitted rather than fabricated.",
 		Fields: map[string]string{
 			"indexerView.chain":     "Chain is the chain this indexer indexes, as the indexer names it.",
 			"indexerView.height":    "Height is the latest INDEXED block height, as a decimal string. Absent when\nnothing has been indexed yet.",
@@ -21,7 +21,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/oracles", zip.Doc{
-		Description: "ListOracles reports the on-chain price/data oracles from the graph's O-Chain\nPriceFeed registry. A reachable graph with no feeds answers an honest empty list;\nan unreachable or erroring graph likewise degrades to an empty list at 200 rather\nthan a 502, so the console never error-toasts. No feed is ever fabricated.",
+		Description: "Reports the on-chain price/data oracles from the graph's O-Chain\nPriceFeed registry. A reachable graph with no feeds answers an honest empty list;\nan unreachable or erroring graph likewise degrades to an empty list at 200 rather\nthan a 502, so the console never error-toasts. No feed is ever fabricated.",
 		Fields: map[string]string{
 			"oracleView.feed":      "Feed is the trading pair this feed prices.",
 			"oracleView.id":        "ID is the feed's own id, else its trading pair.",
