@@ -13,8 +13,22 @@ import (
 
 var t0 = time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 
+// sig is a VALIDATED caller: the identity boundary resolved the credential, so
+// the fingerprint is both what was presented and what the sensor may key on.
+// An empty cred is a caller that presented nothing at all.
 func sig(org, cred, ip, path string) Signal {
-	return Signal{Org: org, Cred: cred, IP: ip, Path: path, Agency: "agent"}
+	s := Signal{Org: org, Cred: cred, Presented: cred, IP: ip, Path: path, Class: CredSecret}
+	if cred == "" {
+		s.Class = CredAnonymous
+	}
+	return s
+}
+
+// forged is a caller that PRESENTED a credential the identity boundary refused.
+// It is the same shape a stolen-key probe, a stuffing run and a bad bot all have,
+// and the fingerprint it presents is a value it picks per request.
+func forged(org, presented, ip, path string) Signal {
+	return Signal{Org: org, Presented: presented, IP: ip, Path: path, Class: CredAnonymous}
 }
 
 func TestTraffic_CountsPerCredential(t *testing.T) {
@@ -188,15 +202,28 @@ func TestTraffic_TableIsBounded(t *testing.T) {
 	now := t0
 	for i := 0; i < maxCallers+5_000; i++ {
 		if i%1000 == 0 {
-			now = now.Add(2 * window) // let idle keys age out
+			now = now.Add(2 * window) // let dead keys age out
 		}
 		tr.Observe(sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models"), now)
 	}
 	tr.mu.Lock()
 	n := len(tr.tenants["acme"].callers.m)
 	tr.mu.Unlock()
-	if n >= maxCallers {
-		t.Fatalf("acme holds %d caller keys, at or past its %d ceiling", n, maxCallers)
+	if n > maxCallers {
+		t.Fatalf("acme holds %d caller keys, past its %d ceiling", n, maxCallers)
+	}
+
+	// And the ceiling must actually BIND: a run this long has to have reached it,
+	// or the test is asserting a bound that was never tested.
+	tr2 := NewTraffic()
+	for i := 0; i < maxCallers+1_000; i++ {
+		tr2.Observe(sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models"), t0)
+	}
+	tr2.mu.Lock()
+	n2 := len(tr2.tenants["acme"].callers.m)
+	tr2.mu.Unlock()
+	if n2 != maxCallers {
+		t.Fatalf("acme holds %d live caller keys against a %d ceiling: the bound never bound", n2, maxCallers)
 	}
 }
 
@@ -232,13 +259,13 @@ func TestTraffic_OneTenantCannotEvictAnother(t *testing.T) {
 	if v.Requests != 2 || len(v.Callers) != 1 {
 		t.Fatalf("the victim's own counts moved: %+v", v)
 	}
-	if v.Saturated != 0 {
-		t.Fatalf("the victim is reported saturated by another tenant's traffic: %d", v.Saturated)
+	if v.Refused != 0 || v.Strain != StrainClear {
+		t.Fatalf("the victim is reported strained by another tenant's traffic: %+v", v)
 	}
 
 	// The noisy tenant degraded ITSELF, and says so rather than going quiet.
-	if n := tr.View("noisy", ModeShadow, now); n.Saturated == 0 {
-		t.Fatal("a tenant at its own ceiling must report it (Saturated), not drop keys silently")
+	if n := tr.View("noisy", ModeShadow, now); n.Refused == 0 || n.Strain != StrainRefuse {
+		t.Fatalf("a tenant at its own ceiling must report it, got strain=%q refused=%d", n.Strain, n.Refused)
 	}
 }
 
@@ -251,13 +278,17 @@ func TestTraffic_HostTableIsBoundedPerTenant(t *testing.T) {
 	now := t0
 	for i := 0; i < maxHosts+2_000; i++ {
 		// A distinct address AND a credential, which is what opens a host row.
-		tr.Observe(Signal{Org: "", Cred: "fp", IP: fmt.Sprintf("198.51.%d.%d", i/256%256, i%256), Path: "/v1/models"}, now)
+		tr.Observe(Signal{Org: "", Cred: "fp", Presented: "fp", Class: CredSecret,
+			IP: fmt.Sprintf("198.51.%d.%d", i/256%256, i%256), Path: "/v1/models"}, now)
 	}
 	tr.mu.Lock()
 	n := len(tr.tenants[""].hosts.m)
 	tr.mu.Unlock()
-	if n >= maxHosts {
-		t.Fatalf("the anonymous lane holds %d address keys, at or past its %d ceiling", n, maxHosts)
+	if n > maxHosts {
+		t.Fatalf("the anonymous lane holds %d address keys, past its %d ceiling", n, maxHosts)
+	}
+	if n != maxHosts {
+		t.Fatalf("the address ceiling never bound: %d of %d after a flood", n, maxHosts)
 	}
 }
 
@@ -286,19 +317,24 @@ func TestTraffic_IdleTenantsAreReclaimed(t *testing.T) {
 	tr.Observe(sig("gone", "fp1", "203.0.113.1", "/v1/models"), t0)
 
 	tr.mu.Lock()
-	tr.sweepTenantsLocked(t0.Add(tenantIdle + time.Minute))
+	tr.sweepLocked(t0.Add(tenantIdle + time.Minute))
 	_, still := tr.tenants["gone"]
+	used := tr.budget.used
 	tr.mu.Unlock()
 	if still {
 		t.Fatal("a tenant idle for longer than any verdict can live was kept")
 	}
+	if used != 0 {
+		t.Fatalf("a reclaimed tenant left %d bytes charged against the budget", used)
+	}
 
 	// And an ACTIVE tenant is not swept, whatever else is happening.
-	tr.Observe(sig("live", "fp1", "203.0.113.1", "/v1/models"), t0)
-	tr.mu.Lock()
-	tr.sweepTenantsLocked(t0.Add(time.Second))
-	_, kept := tr.tenants["live"]
-	tr.mu.Unlock()
+	tr2 := NewTraffic()
+	tr2.Observe(sig("live", "fp1", "203.0.113.1", "/v1/models"), t0)
+	tr2.mu.Lock()
+	tr2.sweepLocked(t0.Add(bucketSpan + time.Second)) // past the sweep cadence, far short of idle
+	_, kept := tr2.tenants["live"]
+	tr2.mu.Unlock()
 	if !kept {
 		t.Fatal("an active tenant was swept")
 	}
@@ -383,8 +419,8 @@ func TestPolicy_ModeDefaultsToShadowAndIsValidated(t *testing.T) {
 func TestTraffic_CountsScreensPerTenant(t *testing.T) {
 	tr := NewTraffic()
 	tr.Observe(sig("acme", "fp1", "203.0.113.1", "/v1/models"), t0)
-	tr.Screen("acme", t0)
-	tr.Screen("acme", t0)
+	tr.Screen("acme", "", t0)
+	tr.Screen("acme", "", t0)
 	tr.Observe(sig("globex", "fp2", "203.0.113.2", "/v1/models"), t0)
 
 	if v := tr.View("acme", ModeLive, t0); v.Screens != 2 {
