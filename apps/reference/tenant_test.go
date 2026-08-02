@@ -11,17 +11,21 @@ package reference
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -29,22 +33,28 @@ import (
 
 const testTimeout = 30 * time.Second
 
-// TestMain seeds a random cek master key so the encrypted-at-rest per-org store
-// opens on an encryption-capable build.
+// TestMain seeds a cek master key so the encrypted-at-rest per-org store opens
+// on an encryption-capable build.
 func TestMain(m *testing.M) {
-	k := make([]byte, 32)
-	if _, err := rand.Read(k); err != nil {
+	if _, err := cek.SetDevMaster(); err != nil {
 		panic(err)
 	}
-	cek.SetMasterKey(k)
 	os.Exit(m.Run())
 }
 
-// mount brings the plane up on a bare app with a temp data dir, a frozen clock
-// and a downloader that refuses — every test here is about tenancy and
-// precedence, and neither needs the network.
+// mount brings the plane up on a bare app with a temp data dir and no
+// warehouse — every test here is about tenancy, precedence and bounds, and none
+// of them needs one.
+//
+// NO WAREHOUSE IS LOAD-BEARING, not incidental: with one, the first hydrate
+// succeeds and the mount sweeps, which would send this suite to eleven
+// publishers over the real network. The check is here rather than in a comment
+// so combining the two fails loudly instead of quietly dialling out.
 func mount(t *testing.T) *zip.App {
 	t.Helper()
+	if storeReady() {
+		t.Fatal("mount() is the no-warehouse harness; a test that wants one builds its own service (see plant)")
+	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
@@ -253,6 +263,37 @@ func TestRefreshIsPlatformWork(t *testing.T) {
 	if code, _ := call(t, app, http.MethodPost, "/v1/ml/reference/refresh", "acme", map[string]any{"set": "domain"}); code != http.StatusForbidden {
 		t.Errorf("a tenant refreshing the shared baseline answered %d, want 403", code)
 	}
+
+	// TWO ADMIN SCOPES, AND ONLY ONE OF THEM IS THIS ONE. An org admin is admin OF
+	// THEIR OWN ORG — self-service, org-scoped, not platform-privileged. This route
+	// writes the baseline EVERY org reads, so admitting the org-scoped bit here
+	// would let any customer's own administrator rewrite every other customer's
+	// reference data: the conflation IS the privilege escalation.
+	refresh := func(hdr map[string]string) int {
+		t.Helper()
+		rq := httptest.NewRequest(http.MethodPost, "/v1/ml/reference/refresh",
+			strings.NewReader(`{"set":"domain"}`))
+		rq.Header.Set("Content-Type", "application/json")
+		rq.Header.Set("X-Org-Id", "acme")
+		rq.Header.Set("X-User-Id", "u_acme")
+		for k, v := range hdr {
+			rq.Header.Set(k, v)
+		}
+		resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+		if err != nil {
+			t.Fatalf("refresh: %v", err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := refresh(map[string]string{"X-User-IsOrgAdmin": "true"}); code != http.StatusForbidden {
+		t.Errorf("an admin of their OWN org refreshing the shared baseline answered %d, want 403", code)
+	}
+	// And platform sudo is not refused by the gate. It stops at the warehouse this
+	// harness deliberately does not have, which is the next check and not this one.
+	if code := refresh(map[string]string{"X-User-IsAdmin": "true"}); code == http.StatusForbidden {
+		t.Error("SuperAdmin was refused by the gate meant to admit exactly it")
+	}
 }
 
 // ── precedence ───────────────────────────────────────────────────────────────
@@ -412,6 +453,206 @@ func TestBoundsAreRefusals(t *testing.T) {
 	if code, _ := call(t, app, http.MethodPut, "/v1/ml/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "a.example", "verdict": "maybe"}}}); code != http.StatusBadRequest {
 		t.Errorf("a verdict outside the vocabulary answered %d, want 400", code)
+	}
+}
+
+// TestOneRequestCannotSpendTheProcess is the ship-blocker, over the wire.
+//
+// Two amplifiers composed. A key had a COUNT bound and no BYTE bound, so one
+// 8 KB dotted key materialised every suffix of itself — O(labels x bytes) — and
+// [maxKeys] of them allocated 1.7 GB inside a single authenticated request. And
+// `sets` had no bound and no dedupe, so naming one set N times ran N times the
+// answers, multiplying whatever the first amplifier cost. On the one-replica
+// deployment this plane ships on, that is one request away from taking down every
+// other product in the process.
+//
+// Measured on the fix: the same call allocates what its own body weighs and is
+// refused. The assertion is on the allocation as well as the status, because a
+// 400 arrived at after doing the work is not a bound.
+func TestOneRequestCannotSpendTheProcess(t *testing.T) {
+	app := mount(t)
+	seed(t, "domain", []Entry{{Key: "tempbox.example"}})
+
+	long := strings.Repeat("a.", 4096) + "example"
+	keys := make([]string, maxKeys)
+	for i := range keys {
+		keys[i] = long
+	}
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	code, _ := call(t, app, http.MethodPost, "/v1/ml/reference/resolve", "acme",
+		map[string]any{"sets": []string{"domain"}, "keys": keys})
+	runtime.ReadMemStats(&after)
+	if code != http.StatusBadRequest {
+		t.Errorf("%d keys of %d bytes answered %d, want 400", len(keys), len(long), code)
+	}
+	if grew := (after.TotalAlloc - before.TotalAlloc) >> 20; grew > 64 {
+		t.Errorf("one refused request allocated %d MiB; a bound reached after the work is not a bound", grew)
+	}
+
+	// The same key, written as an override, is the other half of the same door.
+	if code, _ := call(t, app, http.MethodPut, "/v1/ml/reference/domain", "acme",
+		map[string]any{"entries": []any{map[string]any{"key": long, "verdict": Deny}}}); code != http.StatusBadRequest {
+		t.Errorf("an over-long override key answered %d, want 400", code)
+	}
+	// A removal takes its key in the query string, where the transport's own
+	// header buffer refuses anything really enormous before this plane sees it —
+	// so the case that matters is the one that gets through: past maxKey, inside
+	// the buffer.
+	overLong := strings.Repeat("d.", (maxKey+8)/2) + "example"
+	if code, _ := call(t, app, http.MethodDelete, "/v1/ml/reference/domain?key="+overLong, "acme", nil); code != http.StatusBadRequest {
+		t.Errorf("an over-long clear key of %d bytes answered %d, want 400", len(overLong), code)
+	}
+	// The page cursor is the last KEY of the previous page, so it crosses the same
+	// door: every door is the same door.
+	if code, _ := call(t, app, http.MethodGet, "/v1/ml/reference/domain?after="+overLong, "acme", nil); code != http.StatusBadRequest {
+		t.Errorf("an over-long page cursor of %d bytes answered %d, want 400", len(overLong), code)
+	}
+
+	// And the bound refuses nothing a caller legitimately asks about: the longest
+	// address RFC 5321 permits still resolves.
+	legit := strings.Repeat("a", 64) + "@" + strings.Repeat("b", 61) + "." + strings.Repeat("c", 61) + "." + strings.Repeat("d", 61) + ".example"
+	if len(legit) > maxKey {
+		t.Fatalf("the sample address is %d bytes, past the bound itself", len(legit))
+	}
+	if code, _ := call(t, app, http.MethodPost, "/v1/ml/reference/resolve", "acme",
+		map[string]any{"sets": []string{"domain"}, "keys": []string{legit}}); code != 200 {
+		t.Errorf("a %d-byte address answered %d; the bound must refuse nothing real", len(legit), code)
+	}
+
+	// The second amplifier: more names than there are sets is refused outright,
+	// and a set named twice is consulted once.
+	dup := make([]string, len(Catalog())+1)
+	for i := range dup {
+		dup[i] = "domain"
+	}
+	if code, _ := call(t, app, http.MethodPost, "/v1/ml/reference/resolve", "acme",
+		map[string]any{"sets": dup, "keys": []string{"x@tempbox.example"}}); code != http.StatusBadRequest {
+		t.Errorf("naming %d sets when the plane publishes %d answered %d, want 400", len(dup), len(Catalog()), code)
+	}
+	code, body := call(t, app, http.MethodPost, "/v1/ml/reference/resolve", "acme",
+		map[string]any{"sets": []string{"domain", "domain", "domain"}, "keys": []string{"x@tempbox.example"}})
+	if code != 200 {
+		t.Fatalf("a repeated set answered %d", code)
+	}
+	if answers, _ := body["answers"].([]any); len(answers) != 1 {
+		t.Errorf("one set named three times produced %d answers; a duplicate is a redundancy, not more work", len(answers))
+	}
+	if consulted, _ := body["consulted"].([]any); len(consulted) != 1 {
+		t.Errorf("one set named three times was consulted %d times", len(consulted))
+	}
+}
+
+// TestAnOverrideCannotFillTheVolumeEveryOrgSharesOn is the other ship-blocker.
+//
+// maxOverrides bounds one organisation's entries per set, which is a bound on
+// ROWS and was not a bound on BYTES: with no length on the key, one entry could
+// be the whole request body, so 10,000 entries x 11 sets was gigabytes of
+// attacker-chosen data on the one volume every other organisation's store lives
+// on. A per-tenant count bound only isolates tenants once one row is bounded.
+func TestAnOverrideCannotFillTheVolumeEveryOrgSharesOn(t *testing.T) {
+	app := mount(t)
+
+	big := strings.Repeat("x", 1<<20)
+	code, _ := call(t, app, http.MethodPut, "/v1/ml/reference/domain", "acme",
+		map[string]any{"entries": []any{map[string]any{"key": big, "verdict": Deny}}})
+	if code != http.StatusBadRequest {
+		t.Fatalf("a 1 MiB override key answered %d, want 400", code)
+	}
+	// Nothing landed: a refused write writes nothing.
+	_, read := call(t, app, http.MethodGet, "/v1/ml/reference/domain", "acme", nil)
+	if list, _ := read["overrides"].([]any); len(list) != 0 {
+		t.Fatalf("a refused write left %d entries behind", len(list))
+	}
+
+	// A note past its bound is refused rather than silently cut: an operator's
+	// stated reason for an adverse action is not a field to trim.
+	if code, _ := call(t, app, http.MethodPut, "/v1/ml/reference/domain", "acme",
+		map[string]any{"entries": []any{map[string]any{"key": "a.example", "verdict": Deny, "note": strings.Repeat("n", maxNote+1)}}}); code != http.StatusBadRequest {
+		t.Errorf("an over-long note answered %d, want 400", code)
+	}
+
+	// And a key at the bound is accepted and stored whole.
+	ok := strings.Repeat("k", maxKey-len(".example")) + ".example"
+	if code, _ := call(t, app, http.MethodPut, "/v1/ml/reference/domain", "acme",
+		map[string]any{"entries": []any{map[string]any{"key": ok, "verdict": Deny}}}); code != 200 {
+		t.Fatalf("a %d-byte key answered %d, want 200", len(ok), code)
+	}
+	_, read = call(t, app, http.MethodGet, "/v1/ml/reference/domain", "acme", nil)
+	list, _ := read["overrides"].([]any)
+	if len(list) != 1 {
+		t.Fatalf("want the one accepted entry, got %v", list)
+	}
+	if got, _ := list[0].(map[string]any)["key"].(string); len(got) != len(ok) {
+		t.Errorf("stored key is %d bytes, wrote %d — a key must never be trimmed", len(got), len(ok))
+	}
+}
+
+// TestAnAcknowledgedOverrideIsDurable: an override is a record, not a cache — it
+// is why a signup was refused. This deployment runs ONE replica with a recreate
+// rollout, so an unshipped write is lost by the next deploy, and a control an
+// operator believes is in force and is not is worse than one they know is absent.
+// So the write is acknowledged only once the store is fenced to its durable
+// object, exactly as apps/research and apps/books do it.
+func TestAnAcknowledgedOverrideIsDurable(t *testing.T) {
+	app := mount(t)
+
+	// This replica does not hold the organisation's write lease.
+	mounted.State.sync = func(namespace.Namespace) (bool, error) { return false, nil }
+	if code, _ := call(t, app, http.MethodPut, "/v1/ml/reference/domain", "acme",
+		map[string]any{"entries": []any{map[string]any{"key": "a.example", "verdict": Deny}}}); code != http.StatusServiceUnavailable {
+		t.Errorf("a write that could not be made durable answered %d, want 503", code)
+	}
+
+	// The ship errors outright.
+	mounted.State.sync = func(namespace.Namespace) (bool, error) { return false, errors.New("object store unreachable") }
+	if code, _ := call(t, app, http.MethodPut, "/v1/ml/reference/domain", "acme",
+		map[string]any{"entries": []any{map[string]any{"key": "b.example", "verdict": Deny}}}); code != http.StatusServiceUnavailable {
+		t.Errorf("a write whose ship failed answered %d, want 503", code)
+	}
+
+	// Acknowledged: the write lands, and so does the removal that follows it.
+	shipped := 0
+	mounted.State.sync = func(namespace.Namespace) (bool, error) { shipped++; return true, nil }
+	if code, _ := call(t, app, http.MethodPut, "/v1/ml/reference/domain", "acme",
+		map[string]any{"entries": []any{map[string]any{"key": "c.example", "verdict": Deny}}}); code != 200 {
+		t.Fatalf("an acknowledged write answered %d", code)
+	}
+	if code, cleared := call(t, app, http.MethodDelete, "/v1/ml/reference/domain?key=c.example", "acme", nil); code != 200 || cleared["cleared"] != true {
+		t.Fatalf("clear answered %d %v", code, cleared)
+	}
+	if shipped != 2 {
+		t.Errorf("the store shipped %d times for a write and a removal; both are writes", shipped)
+	}
+}
+
+// TestThisAppOwnsOnlyItsOwnLeaf: /v1/ml is a SHARED parent — a model-serving
+// plane answers on /v1/ml/models and a dataset plane on /v1/ml/datasets in the
+// same process — so a middleware installed there by this app would run inside two
+// other products' request paths, decided by nothing but mount order.
+func TestThisAppOwnsOnlyItsOwnLeaf(t *testing.T) {
+	app := mount(t)
+	var sawPrincipal bool
+	app.Fiber().Get("/v1/ml/models", func(c fiber.Ctx) error {
+		_, sawPrincipal = principal.OrgFrom(c.Context())
+		return c.SendString("neighbour")
+	})
+	rq := httptest.NewRequest(http.MethodGet, "/v1/ml/models", nil)
+	rq.Header.Set("X-Org-Id", "acme")
+	rq.Header.Set("X-User-Id", "u_acme")
+	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("neighbour: %v", err)
+	}
+	_ = resp.Body.Close()
+	if sawPrincipal {
+		t.Error("this app's bridge ran for a neighbouring app's route; an app owns its own leaf and nothing above it")
+	}
+	// And it still runs for every route this app DOES own — which the whole
+	// tenancy suite above depends on, and this states outright.
+	if code, _ := call(t, app, http.MethodGet, "/v1/ml/reference", "acme", nil); code != 200 {
+		t.Errorf("this app's own collection route answered %d", code)
 	}
 }
 
