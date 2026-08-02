@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/money"
@@ -550,5 +551,47 @@ func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
 	}
 	if crossed.Cmp(exact) != 0 {
 		t.Fatalf("debit crossed as %s, want %s (wire %q %q)", crossed, exact, in.Amount.Decimal, in.Amount.Currency)
+	}
+}
+
+// A debit must not be able to quote ANOTHER caller's bytes.
+//
+// A Usage assembled in a handler carries zero-copy views into the server's
+// reused request arena — c.User(), c.RequestID() and the forwarded client IP are
+// header reads that alias fasthttp's buffer — and MeterUsage records on a
+// background goroutine. The buffer is handed to the NEXT request on the same
+// connection the instant the handler returns, and connections are reused across
+// tenants, so the retained string does not merely go stale: it becomes somebody
+// else's request id, on this caller's row. No crash, no error, a wrong record.
+//
+// This reproduces it deterministically rather than waiting for -race to catch
+// it: the arena is a byte slice, the header read is the same unsafe view fiber
+// hands out, and the overwrite is the next request landing.
+//
+// Mutation proof: drop the u.Clone() in MeterUsage and the recorded requestId
+// below is the overwriting caller's.
+func TestResourceMeter_MeterOwnsTheStringsItRetains(t *testing.T) {
+	fc := &recCommerce{balanceAvailable: 5000}
+	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
+
+	arena := []byte("req-mine")
+	borrowed := unsafe.String(&arena[0], len(arena)) // exactly what c.RequestID() returns
+
+	rm.MeterUsage("acme", "sql", metering.Usage{AmountCents: 250, RequestID: borrowed})
+	copy(arena, "req-thrs") // the next request on this connection, same length
+
+	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
+		t.Fatalf("usage records = %d, want 1", fc.usages())
+	}
+	_, body := fc.lastUsage()
+	var u struct {
+		RequestID string `json:"requestId"`
+	}
+	if err := json.Unmarshal(body, &u); err != nil {
+		t.Fatalf("usage body decode: %v (body=%s)", err, body)
+	}
+	if u.RequestID != "req-mine" {
+		t.Fatalf("the debit recorded requestId %q, want %q — the meter retained a view into the "+
+			"caller's request arena, so the row quotes whoever used that connection next", u.RequestID, "req-mine")
 	}
 }
