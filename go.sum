@@ -1051,8 +1051,8 @@ github.com/hanzoai/namespace v1.2.0 h1:FLEHzR/GyE/OltXozMvT2n2FfUUxTuVVbILKZBkEj
 github.com/hanzoai/namespace v1.2.0/go.mod h1:vGuxMDHg5MdhH5q2bqqjZL/afINBWJubP4WD1YwZTm4=
 github.com/hanzoai/notify v1.7.2 h1:xHaVVcOWLvLMpmtSH128FRgskj4WyfG371K6CI3OC/I=
 github.com/hanzoai/notify v1.7.2/go.mod h1:GZXKmj6UNtNBz32h0XPugNkYf8R34wlJqWuRstytXZE=
-github.com/hanzoai/o11y v1.5.49 h1:wIdd77NLBT9OUhYuR4IaqN2UreY40Tq7lhzK2Kb0NDk=
-github.com/hanzoai/o11y v1.5.49/go.mod h1:Yym3g/WftittYXRi+uKx3cXowCIfgEM8s9bwjlpwegA=
+github.com/hanzoai/o11y v1.5.50 h1:S1twpMHkI38lAXtvI7ffSpSf16p3himrTy799SGunWM=
+github.com/hanzoai/o11y v1.5.50/go.mod h1:Yym3g/WftittYXRi+uKx3cXowCIfgEM8s9bwjlpwegA=
 github.com/hanzoai/orm v0.6.18 h1:yRVsJBp6xAzrugjxUWjK0OYY/f3BIIYTVcOYQ4nbbO4=
 github.com/hanzoai/orm v0.6.18/go.mod h1:PqGd9Jv+BOeBZ4UkR7lyb9hy45ROgF+EHk/fXFgwb4o=
 github.com/hanzoai/otel-collector v1.2.0 h1:lBDL5lKotq89JaqchcM+/oxEnjrjazEI2JJfDhotudc=
