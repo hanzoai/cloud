@@ -35,6 +35,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"sort"
@@ -196,6 +197,9 @@ func run(addr, zapAddr, enable string) error {
 	// whole fleet and no plugin can see past itself.
 	spec(app, composed)
 
+	// The bare /mcp, onto the one door. Before the console claims everything else.
+	mcpAlias(app)
+
 	// The console at "/" is the HOST's, because the host is the front door: every
 	// SPA route (/, /signin, /dashboard, …) is under no app prefix, so it reaches
 	// the host's catch-all rather than a plugin. Registered LAST — after every app
@@ -329,6 +333,28 @@ func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, abs
 // what "staged" vs "failed" needs (degraded.go): both answer 503 on the wire, so
 // without the reason an operator cannot tell a subsystem this deployment never
 // ran from one that died, and a release gate tolerates both.
+// mcpAlias points the bare /mcp at the one door, /v1/mcp.
+//
+// MCP clients are configured with a HOST and reach for the door at /mcp. Nothing
+// claimed that path, so it fell through to the console catch-all and answered
+// twice-wrong: POST /mcp got 405 (the SPA's route is GET-only) and GET /mcp got
+// 200 with the console shell. Both read like a server that is up, which is how it
+// survived — the host answers, the door never opens. That is also why the 404 on
+// mcp.hanzo.ai is the milder half of this bug: a 404 at least says no.
+//
+// 308, not 301/302. Only the permanent-redirect pair preserves the method and the
+// body, and MCP is a JSON-RPC POST; a 302 arrives at /v1/mcp as a bodiless GET —
+// the same dead end, one hop further along.
+//
+// It is an ALIAS, not a second handler: /v1/mcp stays the only place MCP is
+// served, so the tool list, the auth path and the transport cannot drift between
+// two doors. Registered before webui.Mount so it wins the path.
+func mcpAlias(app *zip.App) {
+	app.All("/mcp", func(c *zip.Ctx) error {
+		return c.Redirect(http.StatusPermanentRedirect, "/v1/mcp")
+	})
+}
+
 func health(app *zip.App, absent map[string]string) {
 	app.Get("/healthz", func(c *zip.Ctx) error {
 		out := map[string]any{"status": "ok"}
