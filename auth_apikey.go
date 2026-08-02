@@ -5,15 +5,13 @@ package cloud
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
-	"github.com/hanzoai/authz"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hanzoai/authz"
+	iamstore "github.com/hanzoai/iam/pkg/store"
 )
 
 // The identity boundary (SanitizeIdentity) validates a JWT and mints the identity
@@ -38,9 +36,6 @@ type keyResolver interface {
 // A brief cache keeps the hot auth path off the network; it caches misses too, so a
 // bad key cannot hammer IAM.
 type iamKeys struct {
-	base  string
-	auth  string // client_secret_basic, or "" when unconfigured
-	http  *http.Client
 	cache cache[string, *idClaims]  // secret key -> principal (get-user?accessKey)
 	orgs  cache[string, string]     // publishable key -> org, and no principal (resolve-key)
 	why   cache[string, KeyRefusal] // secret key -> WHY it did not resolve, for diagnosis only
@@ -51,9 +46,6 @@ type iamKeys struct {
 // never a fabricated principal), so a deployment lacking the credential is safe.
 func newIAMKeys() *iamKeys {
 	return &iamKeys{
-		base:  iamHost(),
-		auth:  iamCred(),
-		http:  &http.Client{Timeout: 5 * time.Second},
 		cache: newCache[string, *idClaims](60 * time.Second),
 		orgs:  newCache[string, string](60 * time.Second),
 		why:   newCache[string, KeyRefusal](60 * time.Second),
@@ -122,22 +114,6 @@ func OrgForKey(ctx context.Context, key string) (string, bool) {
 	return owner, true
 }
 
-// iamHost is the standalone IAM origin cloud talks to; iamCred is the service
-// credential (client_secret_basic) it presents — the ONE IAM identity, shared by
-// the API-key resolver here and the /v1/iam edge (iam_edge.go), so both
-// authenticate to IAM the same way. Empty cred → a deployment lacking the
-// credential stays safe (the caller treats "" as unconfigured).
-func iamHost() string { return strings.TrimRight(env("IAM_URL", "IAM_INTERNAL_URL"), "/") }
-
-func iamCred() string {
-	id := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_ID"))
-	secret := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_SECRET"))
-	if id == "" || secret == "" {
-		return ""
-	}
-	return "Basic " + base64.StdEncoding.EncodeToString([]byte(id+":"+secret))
-}
-
 func env(names ...string) string {
 	for _, n := range names {
 		if v := strings.TrimSpace(os.Getenv(n)); v != "" {
@@ -148,7 +124,7 @@ func env(names ...string) string {
 }
 
 func (k *iamKeys) resolve(ctx context.Context, key string) *idClaims {
-	if k.auth == "" || k.base == "" || key == "" {
+	if key == "" {
 		return nil
 	}
 	if c, ok := k.cache.get(key); ok {
@@ -167,7 +143,7 @@ func (k *iamKeys) resolve(ctx context.Context, key string) *idClaims {
 // let a pk- entry read as a principal or a sk- entry read as a bare org. The values
 // are different types precisely so they cannot be confused.
 func (k *iamKeys) resolveOrg(ctx context.Context, key string) string {
-	if k.auth == "" || k.base == "" || key == "" {
+	if key == "" {
 		return ""
 	}
 	if org, ok := k.orgs.get(key); ok {
@@ -182,32 +158,15 @@ func (k *iamKeys) resolveOrg(ctx context.Context, key string) string {
 // get-user?accessKey. It reads `org` and deliberately nothing else: the envelope
 // carries no principal, and this function would have nowhere to put one.
 func (k *iamKeys) lookupOrg(ctx context.Context, key string) string {
-	u := k.base + "/v1/iam/resolve-key?" + url.Values{"accessKey": {key}}.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
+	db := iamStore()
+	if db == nil {
+		return "" // IAM not mounted: cannot answer, so nothing is resolved
+	}
+	row, err := iamstore.PublishableKeyByAccessKey(ctx, db, key, time.Now())
+	if err != nil || row == nil {
 		return ""
 	}
-	req.Header.Set("Authorization", k.auth)
-	req.Header.Set("Accept", "application/json")
-	resp, err := k.http.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return ""
-	}
-	var env struct {
-		Status string `json:"status"`
-		Data   *struct {
-			Org string `json:"org"`
-		} `json:"data"`
-	}
-	if json.Unmarshal(raw, &env) != nil || env.Status != "ok" || env.Data == nil {
-		return ""
-	}
-	return strings.TrimSpace(env.Data.Org)
+	return strings.TrimSpace(row.Owner)
 }
 
 // KeyRefusal is the machine-readable reason IAM gives for not resolving a key —
@@ -266,57 +225,40 @@ func KeyHint(key string) string {
 // rendering IAM's generic "the entity does not exist" to users whose key had simply
 // been revoked.
 func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
-	u := k.base + "/v1/iam/get-user?" + url.Values{"accessKey": {key}}.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
+	db := iamStore()
+	if db == nil {
+		// IAM is not mounted. That is not a refusal — there is no answer to give —
+		// so no reason is recorded and the key simply stays anonymous.
 		return nil
 	}
-	req.Header.Set("Authorization", k.auth)
-	req.Header.Set("Accept", "application/json")
-	resp, err := k.http.Do(req)
-	if err != nil {
+	u, err := iamstore.UserByAccessKey(ctx, db, key)
+	if err != nil || u == nil {
+		// Reason() reads "" for a real store fault, so an infrastructure failure is
+		// never reported to a person as a bad credential.
+		k.why.put(key, KeyRefusal(iamstore.Reason(err)))
 		return nil
 	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
+	owner := strings.TrimSpace(u.Owner)
+	if owner == "" {
+		k.why.put(key, KeyRefusal(iamstore.Reason(err)))
 		return nil
 	}
-	var env struct {
-		Status string `json:"status"`
-		Code   string `json:"code"` // WHY, when IAM refused (iam store.KeyFailure)
-		Data   *struct {
-			Owner   string `json:"owner"`
-			Name    string `json:"name"`
-			Email   string `json:"email"`
-			IsAdmin bool   `json:"isAdmin"`
-		} `json:"data"`
-	}
-	if json.Unmarshal(raw, &env) != nil || env.Status != "ok" || env.Data == nil {
-		k.why.put(key, KeyRefusal(strings.TrimSpace(env.Code)))
-		return nil
-	}
-	if strings.TrimSpace(env.Data.Owner) == "" {
-		k.why.put(key, KeyRefusal(strings.TrimSpace(env.Code)))
-		return nil
-	}
-	owner := strings.TrimSpace(env.Data.Owner)
 	return &idClaims{
 		Claims: authz.Claims{
 			Owner:             owner,
-			Name:              strings.TrimSpace(env.Data.Name),
-			PreferredUsername: strings.TrimSpace(env.Data.Name),
-			Email:             strings.TrimSpace(env.Data.Email),
-			IsAdmin:           env.Data.IsAdmin,
+			Name:              strings.TrimSpace(u.Name),
+			PreferredUsername: strings.TrimSpace(u.Name),
+			Email:             strings.TrimSpace(u.Email),
+			IsAdmin:           u.IsAdmin,
 		},
 		// The org came from the SUBJECT: IAM resolved this accessKey to a user row,
 		// and that row's owner is the tenant. No application mints it and no claim
 		// carries it, so it is NOT the app-selected value homeOrg exists to reject —
 		// it is the same "the organization comes from the token subject" rule IAM
-		// states for itself in internal/authz/authz.go. Recorded here so the identity
-		// boundary can tell a KEY principal (which legitimately has no `orgs`, because
-		// a machine is a member of nothing) from a HUMAN token that has merely lost
-		// its claim — the latter must still fail closed.
+		// states for itself. Recorded here so the identity boundary can tell a KEY
+		// principal (which legitimately has no `orgs`, because a machine is a member
+		// of nothing) from a HUMAN token that has merely lost its claim — the latter
+		// must still fail closed.
 		subjectOrg: owner,
 	}
 }
@@ -360,4 +302,20 @@ func (c *cache[K, V]) put(k K, v V) {
 		c.m = make(map[K]entry[V])
 	}
 	c.m[k] = entry[V]{v: v, exp: time.Now().Add(c.ttl)}
+}
+
+// iamHost is the IAM origin the /v1/iam EDGE proxies to, and the signal serve.go
+// reads to decide whether a deployment that has not enabled the embedded "iam"
+// still has a standalone one to fall back on. The API-key resolver no longer uses
+// it: it reads the embedded store in process (iam_store.go). When the edge follows,
+// this and iamCred go with it.
+func iamHost() string { return strings.TrimRight(env("IAM_URL", "IAM_INTERNAL_URL"), "/") }
+
+func iamCred() string {
+	id := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_ID"))
+	secret := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_SECRET"))
+	if id == "" || secret == "" {
+		return ""
+	}
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(id+":"+secret))
 }
