@@ -59,8 +59,9 @@ func TestMount_HostCarve_EventDoorIngestsForSiteOrg(t *testing.T) {
 		`[{"event":"signup_completed","distinctId":"d"}]`,
 	} {
 		if code := postHost(t, app, "yadota.hanzo.app", "/v1/event", body,
-			map[string]string{"X-Org-Id": "attacker"}); code != http.StatusOK {
-			t.Fatalf("/v1/event bare-Event beacon %q want 200 (kind not anonymously admitted), got %d", body, code)
+			map[string]string{"X-Org-Id": "attacker"}); code != http.StatusUnauthorized {
+			t.Fatalf("/v1/event bare-Event beacon %q want 401 (kind not anonymously admitted, so "+
+				"nothing was stored and the door has to say so), got %d", body, code)
 		}
 	}
 }
@@ -91,12 +92,12 @@ func TestMount_HostCarve_EventEmptyBatchOK(t *testing.T) {
 // HOST-scoped: the SAME body on a NON-site host does not get a site org. The carve did
 // not fire, so the request runs the normal canonical gate — no principal and no key, so
 // it takes the ANONYMOUS lane, where the forged X-Org-Id and the custom event kind both
-// buy nothing: 200 with an all-dropped receipt, no row under `attacker`.
+// buy nothing: 401, nothing stored, no row under `attacker`.
 func TestMount_HostCarve_EventDirectNoHostGetsNoOrg(t *testing.T) {
 	app := carveApp(t, "hanzo")
 	code := postHost(t, app, "evil.example.com", "/v1/event",
 		`{"event":"signup_completed","distinctId":"d"}`, map[string]string{"X-Org-Id": "attacker"})
-	if code != http.StatusOK {
-		t.Fatalf("anonymous /v1/event on a non-site host want 200 (anonymous lane, kind dropped), got %d", code)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("anonymous /v1/event on a non-site host want 401 (anonymous lane, kind dropped), got %d", code)
 	}
 }
