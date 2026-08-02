@@ -542,7 +542,7 @@ func financePaymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 	// Portal read filters on customerId; the subject is pinned to the caller's own org.
-	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/portal/payment-methods", org, financeSubject(subjectFor(c, org), nil))
+	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/portal/methods", org, financeSubject(subjectFor(c, org), nil))
 	if err != nil {
 		s.Log.Warn("commerce payment-methods read failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
