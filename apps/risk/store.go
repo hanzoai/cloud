@@ -456,7 +456,11 @@ func (s *shelf) ship(t Tenant) error {
 // back on the tenant's next request, which is also why a search worker holding a
 // db for its whole budget cannot be handed a closed file by a sweep.
 func (s *shelf) retireLocked(now time.Time, idle time.Duration) {
+	kept := 0
 	for t, c := range s.cells {
+		if kept == retireBatch {
+			return
+		}
 		c.mu.Lock()
 		if now.Sub(c.touched) < idle || c.model == nil {
 			c.mu.Unlock()
@@ -474,10 +478,26 @@ func (s *shelf) retireLocked(now time.Time, idle time.Duration) {
 		c.vel, c.model = nil, nil
 		c.mu.Unlock()
 		delete(s.cells, t)
+		kept++
 		s.log.Info("risk: a tenant was retired after its own idleness; its learned state is on its own file",
 			"tenant", t.String(), "idle", idleFor.String())
 	}
 }
+
+// retireBatch is how many snapshots one pass may write.
+//
+// THE BOUND IS ON A LOCK HELD ACROSS I/O. A retire writes the tenant's model to
+// its own encrypted file, and the registry lock is held while it does — every
+// other tenant's cell lookup queues behind it. Unbounded, one sweep that finds
+// the whole shelf idle serialises tenantMax encrypted writes under that lock and
+// stalls the decision path for every organisation on the pod, which is the
+// fleet-wide-degradation shape this file exists to rule out, arriving through
+// the housekeeping door.
+//
+// Four is enough to unstick an admission at the ceiling (the caller needs ONE
+// slot) and small enough that the worst pass is four writes. The rest are picked
+// up by the next sweep — they are idle by definition, so nothing waits on them.
+const retireBatch = 4
 
 // sweep is the background retire. It runs on a timer so memory comes back from a
 // silent tenant without waiting for a busy one to need it — a version that only

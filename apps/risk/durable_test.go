@@ -63,89 +63,119 @@ func TestADecisionIsShippedBeforeItIsAcknowledged(t *testing.T) {
 //
 // EVERY MUTATING ROUTE IS IN THE TABLE, and that is what makes this the guard
 // rather than three examples. Durability applied one call site at a time is a
-// rule somebody has to remember, and the writes it is easiest to forget are the
-// DELETES — a retirement that does not ship brings the control back at the next
-// rollout, firing or blocking, after a 204 said it was gone. So the table is
-// built from the routes: a mutating op absent from it and from the read-only
-// list below fails the companion test, which reads the router.
+// rule somebody has to remember, and the writes easiest to forget are the
+// RETIREMENTS — a rule deleted, a mute lifted, a hold released — because an
+// unshipped delete brings the old state back at the next rollout, firing or
+// blocking, after a 204 said it was gone. A mutating op absent from the table
+// and from the records-nothing list fails the companion test below, which reads
+// the published subset.
+//
+// ONE app and ONE store for all of it. Every subject a retirement retires is
+// created first, while the store is up; then the store fails ONCE and every
+// write runs against it. A fresh durable harness per case would re-encrypt and
+// fsync the whole file per setup write, which is minutes of the suite's wall
+// clock to prove nothing the shared setup does not.
 func TestAWriteThatCannotBeShippedIsNotAcknowledged(t *testing.T) {
 	app, _, store := wireDurable(t)
-	for _, w := range durableWrites(t, app) {
-		t.Run(w.what, func(t *testing.T) {
-			app, _, store := wireDurable(t)
-			for _, s := range w.setup {
-				if code, body := req(t, app, s.method, s.path, "acme", "u_acme", s.body); code >= 500 {
-					t.Fatalf("setup %s %s = %d %s", s.method, s.path, code, body)
-				}
-			}
-			store.fail(errors.New("the object store is unreachable"))
-			code, body := req(t, app, w.method, w.path, "acme", "u_acme", w.body)
-			if code < 500 {
-				t.Errorf("%s answered %d %s while the durable object store was down — "+
-					"the record exists on this pod only and the caller was told otherwise", w.what, code, body)
-			}
-		})
+	ids := seedForRetirement(t, app)
+
+	store.fail(errors.New("the object store is unreachable"))
+	for _, w := range durableWrites(ids) {
+		code, body := req(t, app, w.method, w.path, "acme", "u_acme", w.body)
+		if code < 500 {
+			t.Errorf("%s (%s %s) answered %d %s while the durable object store was down — "+
+				"the record exists on this pod only and the caller was told otherwise",
+				w.what, w.method, w.path, code, body)
+		}
 	}
-	_ = store
 }
 
-// call is one request in a write's setup.
+// subjects are the server-minted identifiers a retirement needs. Every id here
+// is READ BACK from the create, never guessed: this plane mints its own, so a
+// literal in a test would be testing a 404 path.
+type subjects struct{ rule, spare, mute, control, decision string }
+
+func seedForRetirement(t *testing.T, app *zip.App) subjects {
+	t.Helper()
+	var s subjects
+	s.rule = mintedID(t, app, http.MethodPost, "/v1/risk/rules", ruleBody("durable"))
+	s.spare = mintedID(t, app, http.MethodPost, "/v1/risk/rules", ruleBody("spare"))
+	s.mute = mintedID(t, app, http.MethodPost, "/v1/risk/suppressions",
+		`{"rule":"`+s.rule+`","kind":"transaction","reason":"noisy under test"}`)
+	s.control = mintedID(t, app, http.MethodPost, "/v1/risk/controls",
+		`{"subject":{"kind":"account","id":"acct-1"},"control":"payout-hold","reason":"under review"}`)
+	s.decision = mintedID(t, app, http.MethodPost, "/v1/risk/decide",
+		`{"stage":"payment","subject":{"kind":"transaction","id":"tx-seed"}}`)
+	for _, c := range []call{
+		{http.MethodPost, "/v1/risk/lists", `{"name":"blocked-ips","kind":"deny"}`},
+		{http.MethodPost, "/v1/risk/lists/blocked-ips/entries", `{"values":["203.0.113.9"]}`},
+		{http.MethodPost, "/v1/ml/train", trainBody},
+	} {
+		if code, body := req(t, app, c.method, c.path, "acme", "u_acme", c.body); code >= 300 {
+			t.Fatalf("setup %s %s = %d %s", c.method, c.path, code, body)
+		}
+	}
+	return s
+}
+
+// mintedID performs one create and returns the id the SERVER chose.
+func mintedID(t *testing.T, app *zip.App, method, path, body string) string {
+	t.Helper()
+	code, out := req(t, app, method, path, "acme", "u_acme", body)
+	if code >= 300 {
+		t.Fatalf("setup %s %s = %d %s", method, path, code, out)
+	}
+	var v struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil || v.ID == "" {
+		t.Fatalf("setup %s %s did not answer with an id: %s", method, path, out)
+	}
+	return v.ID
+}
+
+// call is one request.
 type call struct{ method, path, body string }
 
-// durableWrite is a mutating route, the state it needs first, and the name it
-// fails under.
-type durableWrite struct {
-	what, method, path, body string
-	setup                    []call
+// durableWrite is a mutating route and the name it fails under.
+type durableWrite struct{ what, method, path, body string }
+
+func ruleBody(name string) string {
+	return `{"rule":{"name":"` + name + `","stage":"payment","action":"review","weight":0.5,"enabled":true,
+	   "all":[{"field":"subject.kind","op":"eq","value":"transaction"}]}}`
 }
 
-// seedRule, seedList and seedControl are the setups the delete routes need: you
-// cannot test that a retirement ships without something to retire.
-var (
-	seedRule = call{http.MethodPost, "/v1/risk/rules",
-		`{"rule":{"id":"r-dur","name":"durable","stage":"payment","action":"review","weight":0.5,"enabled":true,
-		   "all":[{"field":"subject.kind","op":"eq","value":"transaction"}]}}`}
-	seedList    = call{http.MethodPost, "/v1/risk/lists", `{"name":"blocked-ips","kind":"deny"}`}
-	seedEntry   = call{http.MethodPost, "/v1/risk/lists/blocked-ips/entries", `{"values":["203.0.113.9"]}`}
-	seedMute    = call{http.MethodPost, "/v1/risk/suppressions", `{"rule":"r-dur","kind":"transaction","reason":"noisy"}`}
-	seedControl = call{http.MethodPost, "/v1/risk/controls",
-		`{"control":"hold","kind":"account","subject":"acct-1","reason":"under review"}`}
-)
-
-func durableWrites(t *testing.T, _ *zip.App) []durableWrite {
-	t.Helper()
+// durableWrites is the table. The RETIREMENTS come last and each takes a
+// DIFFERENT subject from the one an earlier case needs, because a write's local
+// half lands even when its ship does not — that is the defect under test.
+func durableWrites(s subjects) []durableWrite {
 	return []durableWrite{
-		{what: "a decision", method: http.MethodPost, path: "/v1/risk/decide",
-			body: `{"stage":"payment","subject":{"kind":"transaction","id":"tx-2"}}`},
-		{what: "a policy version", method: http.MethodPut, path: "/v1/risk/policy",
-			body: `{"stage":"payment","floor":"allow","reason":"the dispute rate doubled","bands":[{"at":0.9,"action":"block"}]}`},
-		{what: "a rule", method: http.MethodPost, path: "/v1/risk/rules", body: seedRule.body},
-		{what: "a rule change", method: http.MethodPatch, path: "/v1/risk/rules/r-dur",
-			body: seedRule.body, setup: []call{seedRule}},
-		{what: "a rule RETIREMENT", method: http.MethodDelete, path: "/v1/risk/rules/r-dur",
-			setup: []call{seedRule}},
-		{what: "a list", method: http.MethodPost, path: "/v1/risk/lists", body: seedList.body},
-		{what: "a deny-list entry", method: http.MethodPost, path: "/v1/risk/lists/blocked-ips/entries",
-			body: seedEntry.body, setup: []call{seedList}},
-		{what: "a deny-list REMOVAL", method: http.MethodDelete, path: "/v1/risk/lists/blocked-ips/entries/203.0.113.9",
-			setup: []call{seedList, seedEntry}},
-		{what: "a mute", method: http.MethodPost, path: "/v1/risk/suppressions", body: seedMute.body,
-			setup: []call{seedRule}},
-		{what: "a mute LIFTED", method: http.MethodDelete, path: "/v1/risk/suppressions/r-dur:transaction:",
-			setup: []call{seedRule, seedMute}},
-		{what: "a control", method: http.MethodPost, path: "/v1/risk/controls", body: seedControl.body},
-		{what: "a control RELEASED", method: http.MethodDelete, path: "/v1/risk/controls/hold:account:acct-1",
-			setup: []call{seedControl}},
-		{what: "the live/shadow switch", method: http.MethodPut, path: "/v1/risk/mode", body: `{"mode":"shadow"}`},
-		{what: "the appetite", method: http.MethodPut, path: "/v1/ml/state/appetite", body: `{"review":0.01,"sample":0.001}`},
-		{what: "a model snapshot", method: http.MethodPost, path: "/v1/ml/snapshot", body: `{}`,
-			setup: []call{{http.MethodPost, "/v1/ml/train", trainBody}}},
-		{what: "a search run", method: http.MethodPost, path: "/v1/ml/search", body: `{"limit":10}`},
+		{"a decision", http.MethodPost, "/v1/risk/decide",
+			`{"stage":"payment","subject":{"kind":"transaction","id":"tx-2"}}`},
+		{"a label on a decision", http.MethodPost, "/v1/risk/decisions/" + s.decision + "/label",
+			`{"verdict":"fraud"}`},
+		{"a policy version", http.MethodPut, "/v1/risk/policy",
+			`{"stage":"payment","floor":"allow","reason":"the dispute rate doubled","bands":[{"at":0.9,"action":"block"}]}`},
+		{"a rule", http.MethodPost, "/v1/risk/rules", ruleBody("another")},
+		{"a rule change", http.MethodPatch, "/v1/risk/rules/" + s.rule, ruleBody("changed")},
+		{"a list", http.MethodPost, "/v1/risk/lists", `{"name":"watched-ips","kind":"allow"}`},
+		{"a deny-list entry", http.MethodPost, "/v1/risk/lists/blocked-ips/entries", `{"values":["198.51.100.4"]}`},
+		{"a deny-list REMOVAL", http.MethodDelete, "/v1/risk/lists/blocked-ips/entries/203.0.113.9", ""},
+		{"a mute", http.MethodPost, "/v1/risk/suppressions",
+			`{"rule":"` + s.spare + `","kind":"account","reason":"noisy too"}`},
+		{"a mute LIFTED", http.MethodDelete, "/v1/risk/suppressions/" + s.mute, ""},
+		{"a control", http.MethodPost, "/v1/risk/controls",
+			`{"subject":{"kind":"account","id":"acct-2"},"control":"block","reason":"card testing"}`},
+		{"a control RELEASED", http.MethodDelete, "/v1/risk/controls/" + s.control, ""},
+		{"the live/shadow switch", http.MethodPut, "/v1/risk/mode", `{"mode":"shadow"}`},
+		{"the appetite", http.MethodPut, "/v1/ml/state/appetite", `{"review":0.01,"sample":0.001}`},
+		{"a model snapshot", http.MethodPost, "/v1/ml/snapshot", `{}`},
+		{"a search run", http.MethodPost, "/v1/ml/search", `{"limit":10}`},
+		{"a rule RETIREMENT", http.MethodDelete, "/v1/risk/rules/" + s.spare, ""},
 	}
 }
 
-// trainBody is twenty observations, enough that the model has something to
-// snapshot.
+// trainBody is enough observations that the model has something to snapshot.
 const trainBody = `{"observations":[
  {"stage":"payment","subject":{"kind":"transaction","id":"t1"},"amount":{"nano":1000000000,"currency":"USD","direction":"in"}},
  {"stage":"payment","subject":{"kind":"transaction","id":"t2"},"amount":{"nano":2000000000,"currency":"USD","direction":"in"}},
@@ -156,28 +186,27 @@ const trainBody = `{"observations":[
 //
 // The table above is only a guard while it is complete, and the way it stops
 // being complete is somebody adding a route. This reads the app's OWN published
-// subset — the same artifact the SDKs are generated from — and insists every
-// mutating path is either exercised by the table or named below as recording
-// nothing.
+// subset — the artifact the SDKs are generated from — and insists every mutating
+// path is either exercised by the table or named below as recording nothing.
 func TestEveryMutatingRouteIsCoveredByTheDurabilityTable(t *testing.T) {
 	// Routes that record NOTHING: they answer from memory or from a read, so
 	// there is no row whose durability could be in question. Each is named, so
 	// admitting one is a decision somebody wrote down.
-	records := map[string]bool{
-		"POST /v1/ml/score":      false, // scores one observation and learns nothing
-		"POST /v1/ml/train":      false, // moves in-memory counters; /v1/ml/snapshot is the record
-		"POST /v1/ml/restore":    false, // reads a snapshot back into memory
-		"POST /v1/ml/evaluate":   false, // measures over rows already written
-		"POST /v1/risk/simulate": false, // tries a rule against history and writes nothing
+	//
+	// /v1/ml/calibrate and /v1/ml/replay DO record, and both ship — they are
+	// exercised by their own tests in skew_test.go, which need 200 judged rows
+	// apiece and would cost this table two more fits to say the same thing.
+	silent := map[string]bool{
+		"POST /v1/ml/score":      true, // scores one observation and learns nothing
+		"POST /v1/ml/train":      true, // moves in-memory counters; /v1/ml/snapshot is the record
+		"POST /v1/ml/restore":    true, // reads a snapshot back into memory
+		"POST /v1/ml/evaluate":   true, // measures over rows already written
+		"POST /v1/risk/simulate": true, // tries a rule against history and writes nothing
+		"POST /v1/ml/calibrate":  true, // records, and ships — covered in skew_test.go
+		"POST /v1/ml/replay":     true, // records, and ships — covered in skew_test.go
 	}
-	// /v1/ml/calibrate and /v1/ml/replay DO record, and they are covered by their
-	// own tests in skew_test.go, which assert the fitted map and the report come
-	// back — a durability run over them would re-fit 200 rows per case.
-	records["POST /v1/ml/calibrate"] = true
-	records["POST /v1/ml/replay"] = true
-
 	covered := map[string]bool{}
-	for _, w := range durableWrites(t, nil) {
+	for _, w := range durableWrites(subjects{rule: "R", spare: "S", mute: "M", control: "C", decision: "D"}) {
 		covered[w.method+" "+routePattern(w.path)] = true
 	}
 
@@ -199,20 +228,18 @@ func TestEveryMutatingRouteIsCoveredByTheDurabilityTable(t *testing.T) {
 				continue
 			}
 			key := method + " " + path
-			if _, named := records[key]; named {
+			if silent[key] || covered[key] {
 				continue
 			}
-			if !covered[key] {
-				t.Errorf("%s is a mutating route the durability table does not exercise: either it "+
-					"writes a record and must ship before it acknowledges, or it records nothing and "+
-					"must say so in the list above", key)
-			}
+			t.Errorf("%s is a mutating route the durability table does not exercise: either it "+
+				"writes a record and must ship before it acknowledges, or it records nothing and "+
+				"must say so in the list above", key)
 		}
 	}
 }
 
 // routePattern turns a concrete request path back into the pattern the published
-// subset names it by, so the table can be written with real ids.
+// subset names it by, so the table can be written with real, server-minted ids.
 func routePattern(path string) string {
 	switch {
 	case strings.HasPrefix(path, "/v1/risk/rules/"):

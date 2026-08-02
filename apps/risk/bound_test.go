@@ -277,6 +277,51 @@ func TestARetiredTenantHeldNothingButZeros(t *testing.T) {
 	}
 }
 
+// TestOneSweepWritesABoundedNumberOfSnapshots.
+//
+// The retire holds the REGISTRY lock while it writes a tenant's model to that
+// tenant's encrypted file, and every other organisation's cell lookup queues
+// behind that lock. Unbounded, a sweep that finds the whole shelf idle would
+// serialise a snapshot per resident tenant under it — a fleet-wide stall
+// arriving through the housekeeping door, which is the exact shape the rest of
+// this file rules out on the request path.
+func TestOneSweepWritesABoundedNumberOfSnapshots(t *testing.T) {
+	_, s := wireApp(t)
+	// More idle tenants than one pass may retire.
+	n := retireBatch + 3
+	for i := range n {
+		tn := Tenant(fmt.Sprintf("hanzo/idle-%d", i))
+		vel, model, _ := armsOf(t, s, tn)
+		vel.Record(velocity.Key{OrgID: tn.String(), Kind: "ip", Value: "203.0.113.1"}, time.Now(), 1, 1_000)
+		// Something learned, so the retire has a snapshot to write rather than a
+		// nil model it skips for free.
+		tx, ent := txOf(tn, observation{
+			id: "o", at: time.Now(), stage: StagePayment, kind: "transaction", subject: "tx",
+			amount: 1_000_000_000, currency: "USD", direction: "in", signals: map[string]string{},
+		})
+		_, _ = model.Assess(tx, ent)
+		c, err := s.State.shelf.of(tn)
+		if err != nil {
+			t.Fatalf("resolve: %v", err)
+		}
+		c.mu.Lock()
+		c.touched = time.Now().Add(-2 * idleReclaim())
+		c.mu.Unlock()
+	}
+	if got, _, _ := s.State.shelf.count(); got != n {
+		t.Fatalf("%d tenants resident, want %d", got, n)
+	}
+	s.State.shelf.sweep()
+	after, _, _ := s.State.shelf.count()
+	if n-after > retireBatch {
+		t.Fatalf("one sweep retired %d tenants, writing that many snapshots under the registry lock; "+
+			"the bound is %d per pass", n-after, retireBatch)
+	}
+	if n-after == 0 {
+		t.Fatal("the sweep retired nothing, so this test proves nothing about the bound")
+	}
+}
+
 // TestOnlyTheBoundedConstructorsBuildThePlanes is the guard that survives a
 // revert.
 //
