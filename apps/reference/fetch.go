@@ -23,14 +23,24 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
+	"strings"
 	"time"
 )
 
 const (
-	// maxBody bounds one download. The largest source in the catalog is a few
-	// megabytes; sixty-four leaves a wide margin without leaving the process
-	// exposed to whatever a compromised publisher decides to serve.
-	maxBody = 64 << 20
+	// maxBody bounds one download, and it is the bound that decides how much the
+	// PARSE may cost — a parser turns bytes into entries one at a time, so
+	// whatever arrives here is allocated before any later gate can look at it.
+	//
+	// Measured: the largest source in the catalog is AWS's ip-ranges.json at 2.6
+	// MB, and the next is under a tenth of that. Sixteen is six times the largest
+	// and leaves room for years of growth; the previous sixty-four was twenty-five
+	// times it, and twenty-five times a few megabytes of adversarial one-token
+	// lines is a heap this one-replica deployment does not have. A publisher that
+	// outgrows this refuses on its own row and ages out visibly, which is a
+	// condition an operator can see and raise — unlike an OOM.
+	maxBody = 16 << 20
 	// attempts is how many times a publisher is asked before its source is
 	// recorded failed.
 	attempts = 3
@@ -53,7 +63,7 @@ func wire(ctx context.Context, url string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "hanzo-reference/1")
-	client := &http.Client{Timeout: fetchTimeout}
+	client := &http.Client{Timeout: fetchTimeout, CheckRedirect: hop}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -70,6 +80,45 @@ func wire(ctx context.Context, url string) ([]byte, error) {
 		return nil, fmt.Errorf("%s reached the %d byte limit and may be truncated", url, maxBody)
 	}
 	return body, nil
+}
+
+// hop decides whether a publisher's redirect may be followed.
+//
+// Every Origin in the catalog is an HTTPS constant, so the ONE thing about the
+// address this process cannot state in code is where a redirect goes. This runs
+// inside the cluster, so "wherever the publisher says" reaches the pod network
+// and the instance metadata address; and a hop to http:// hands the whole
+// baseline every tenant's decisions read to anyone on the path.
+//
+// So a hop keeps the two properties the origin already had — TLS, and a
+// destination outside this network — and is refused otherwise. The literal
+// address forms are what a redirect can carry without a lookup; a name that
+// RESOLVES inward is not caught here and does not need to be, because it is the
+// publisher's own DNS and the same trust as the bytes themselves.
+func hop(req *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return fmt.Errorf("%s redirected %d times", via[0].URL, len(via))
+	}
+	if req.URL.Scheme != "https" {
+		return fmt.Errorf("%s redirected to %s, and a reference source is fetched over TLS or not at all", via[0].URL, req.URL.Scheme)
+	}
+	if inward(req.URL.Hostname()) {
+		return fmt.Errorf("%s redirected to %s, which is inside this network", via[0].URL, req.URL.Host)
+	}
+	return nil
+}
+
+// inward reports whether a host is a literal address this process should never
+// be sent to: private, loopback, link-local (the instance metadata address is
+// one), unspecified or multicast. A name is not judged here — resolving it is the
+// publisher's own DNS.
+func inward(host string) bool {
+	a, err := netip.ParseAddr(strings.Trim(host, "[]"))
+	if err != nil {
+		return false
+	}
+	a = a.Unmap()
+	return a.IsPrivate() || !a.IsGlobalUnicast()
 }
 
 // pull downloads one source and parses it, retrying transport failures.
