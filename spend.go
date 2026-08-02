@@ -207,11 +207,33 @@ func Billable(method, path string) bool {
 	}
 	for _, t := range meteredTrees {
 		if path == strings.TrimSuffix(t, "/") || strings.HasPrefix(path, t) {
+			// Prefixes NEST, and the shorter one here may belong to a different
+			// app than the one that actually serves this path. provisioning is
+			// routed /v1/vector and /v1/search; product is routed the more
+			// specific /v1/vector/collections and /v1/search/indexes and declares
+			// cloud.Free. A bare HasPrefix scan bills four of product's surfaces
+			// on provisioning's standing — gating a Free product behind a balance.
+			//
+			// The router resolves by longest prefix, so ownership does too. If the
+			// app that really serves this path is not metered, nothing is spent and
+			// nothing is owed.
+			if owner := manifest.OwnerOf(path); owner != "" && !meteredSet[owner] {
+				return false
+			}
 			return true
 		}
 	}
 	return false
 }
+
+// meteredSet is meteredApps by name, for the ownership check above.
+var meteredSet = func() map[string]bool {
+	m := make(map[string]bool, len(meteredApps))
+	for _, n := range meteredApps {
+		m[n] = true
+	}
+	return m
+}()
 
 // inference is the exact set of bare completion endpoints. zen's Claim owns
 // /v1/messages, /v1/chat/completions, /v1/chat and /v1/completions (zen proxy.go);
@@ -234,10 +256,10 @@ var inference = map[string]bool{
 // It used to be the paths, and a hand-copied routing table is a routing table that
 // goes stale. This one had, in four places, every one of them silently un-billable:
 //
-//   - "/v1/provisioning/", which provisioning does not answer. The manifest routes
-//     it at /v1/{datastore,docdb,kv,s3,search,sql,vector} — so vector, sql, kv,
-//     docdb, search and datastore creates, the EXACT set the non-LLM billing gap
-//     was opened for, were not billable paths at all.
+//   - provisioning's own tree was assumed to be /v1/provisioning. The manifest
+//     routes it at /v1/{datastore,docdb,kv,s3,search,sql,vector} instead, so
+//     vector, sql, kv, docdb, search and datastore creates — the EXACT set the
+//     non-LLM billing gap was opened for — were not billable paths at all.
 //   - projects answers /v1/sites and /v1/platform/sites, not only /v1/projects.
 //   - venue answers /v1/cloud. It was absent entirely.
 //   - tools answers /v1/skills, /v1/plugins and /v1/mcp/servers beside /v1/tools.
