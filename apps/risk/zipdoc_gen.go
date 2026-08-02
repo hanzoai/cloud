@@ -12,8 +12,17 @@ func init() {
 	zip.Describe("GET /v1/risk/features", zip.Doc{
 		Description: "Features is the feature catalogue in its two honest lenses.\n\nThe MODEL lens is the governed inventory: one entry per dimension of the model\nspace, each carrying the typology it serves, the supervisor's own words for the\nindicator, and the published standard those words come from — so a coverage\nclaim is checkable rather than asserted. It is the same for every organisation.\n\nThe SURFACE lens is what THIS organisation's own event surface actually carries,\nmeasured over the window: how many of its buckets carry each dimension at all,\nand what the dimension reads where it is present. A dimension present in no\nbucket is BLIND, and saying so is the difference between no risk and no data.",
 		Fields: map[string]string{
-			"riskCatalog.gap":            "Gap says why the surface could not be measured, when that is the case.",
+			"riskBand.day":               "Day is the day the band covers.",
+			"riskBand.dim":               "Dim is the dimension, named as this API publishes it.",
+			"riskBand.kind":              "Kind is the subject kind it was computed over.",
+			"riskBand.n":                 "N is how many subject-days went into it.",
+			"riskBand.orgs":              "Orgs is how many organisations contributed, each weighted exactly one vote\nwhatever its size. It is published so a reader can judge the band rather\nthan trust it.",
+			"riskBand.q10":               "Q10 is the quiet end of the network's day: a tenth of contributing\norganisations sit at or below it.",
+			"riskBand.q50":               "Q50 is the network's median day.",
+			"riskBand.q90":               "Q90 is the busy end: a tenth of contributing organisations sit at or above\nit. It is the highest level published.",
+			"riskCatalog.gap":            "Gap says why a lens could not be measured, when that is the case. Each\nreason names its own lens, because \"the surface is unreadable\" and \"the\nnetwork baseline is unreadable\" are different facts.",
 			"riskCatalog.model":          "Model is the governed inventory: one entry per dimension of the model\nspace, each carrying the typology it serves and the published standard that\nasks for it. It is the same for every organisation, because it is the\nmodel's shape.",
+			"riskCatalog.network":        "Network is the published cross-organisation baseline over the same window,\nso the surface above has something to be read AGAINST. It is the same for\nevery caller and it names nobody.\n\nIt carries no tenant and cannot be made to: the table it reads has no org\ncolumn, every figure is a quantile over at least kAnonOrgs organisations\nweighted one vote each, and a band that does not meet that floor is dropped\non the way out.",
 			"riskCatalog.surface":        "Surface is what this organisation's own event surface carries, per\ndimension, measured over the window. A dimension present in no bucket is\nblind here — the model reads its neutral value and a reviewer has to be able\nto see that.",
 			"riskCatalog.tenant":         "Tenant is whose surface was measured.",
 			"riskCatalogIn.days":         "Days is how far back to measure the organisation's own coverage, 1 to 400.\nZero takes thirty.",
