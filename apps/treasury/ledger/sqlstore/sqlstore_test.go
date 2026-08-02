@@ -5,14 +5,15 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/namespace"
 )
 
 func open(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(t.TempDir() + "/treasury.db")
+	s, err := Open(namespace.System(), houseSubsystem, t.TempDir())
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -84,7 +85,7 @@ func TestMigrateCentsToUnits(t *testing.T) {
 	ctx := context.Background()
 
 	// Hand-build the pre-migration schema and seed it as the old code would have.
-	db, err := cek.Open(cek.Global, t.TempDir()+"/legacy.db")
+	db, err := cek.Open(namespace.System(), "legacy", t.TempDir())
 	if err != nil {
 		t.Fatalf("open raw: %v", err)
 	}

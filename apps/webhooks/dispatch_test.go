@@ -24,7 +24,7 @@ import (
 // handle-level tests call deliver/handle directly.
 func newTestDispatcher(t *testing.T) *dispatcher {
 	t.Helper()
-	stores := cloud.NewOrgStore[*store](t.TempDir(), "webhooks", openStore)
+	stores := cloud.NewOrgStore[*store](cloud.Base{DataDir: t.TempDir()}, "webhooks", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
 	d := newDispatcher(stores, luxlog.New("test"))
 	d.sleep = func(time.Duration) {}
@@ -278,7 +278,7 @@ func TestBusEndToEnd(t *testing.T) {
 	}))
 	defer sub.Close()
 
-	stores := cloud.NewOrgStore[*store](t.TempDir(), "webhooks", openStore)
+	stores := cloud.NewOrgStore[*store](cloud.Base{DataDir: t.TempDir()}, "webhooks", openStore)
 	defer func() { _ = stores.CloseAll() }()
 	d := newDispatcher(stores, luxlog.New("test"))
 	// Seed an active subscriber for org "acme".

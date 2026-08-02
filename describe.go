@@ -17,7 +17,7 @@ package cloud
 // "every typed op is a tool" — is not tested, it is unfalsifiable by construction.
 //
 // It lives on Serve because Serve is the single entry every app binary shares:
-// plugin/<app>/main.go is generated as one cloud.Serve call, so putting the mode
+// plugin/<app>/main.go is generated as one cloud.Listen call, so putting the mode
 // here gives every one of them the target at a cost of zero per-app code. A binary
 // that mounts its own app (plugin/o11y) calls Describe directly.
 

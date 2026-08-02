@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hanzoai/cloud/sqlpool"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -103,7 +104,7 @@ func openRawStore(t *testing.T, path string) *store {
 	if err != nil {
 		t.Fatalf("open sqlite %q: %v", path, err)
 	}
-	db.SetMaxOpenConns(1) // the single-writer contract OrgDB applies
+	sqlpool.Single(db)
 	st, err := openStore(db)
 	if err != nil {
 		t.Fatalf("openStore %q: %v", path, err)
@@ -150,7 +151,7 @@ func seedLegacy(t *testing.T, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.SetMaxOpenConns(1)
+	sqlpool.Single(db)
 	defer func() { _ = db.Close() }()
 
 	if _, err := db.Exec(`

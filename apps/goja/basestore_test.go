@@ -9,13 +9,17 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
-// TestTenantSegmentInjective is the C1 proof: the tenant→filename mapping is
-// INJECTIVE (distinct orgs never share a file) and TRAVERSAL-SAFE (the segment is
-// always a single [a-z2-7] path component that can never escape the data subtree).
-// The previous slugify ToLower+folded — collapsing "Acme"/"acme" and "a b"/"a_b"
-// onto shared SQLite files, a cross-tenant break. This must never regress.
+// TestTenantSegmentInjective is the C1 proof: the tenant→object-key mapping is
+// INJECTIVE (distinct orgs never share a blob prefix) and TRAVERSAL-SAFE (the
+// segment is always a single [a-z2-7] component that can never escape its
+// subtree). The previous slugify ToLower+folded — collapsing "Acme"/"acme" and
+// "a b"/"a_b" onto shared storage, a cross-tenant break. This must never regress.
 func TestTenantSegmentInjective(t *testing.T) {
 	// An adversarial set that specifically includes the collision pairs the old
 	// slugify folded together, plus path-traversal payloads.
@@ -131,10 +135,12 @@ func TestConcurrentMultiTenantDispatch(t *testing.T) {
 	h := newTinyHost(t, nil)
 	ctx := context.Background()
 
-	// Distinct tenants, deliberately including collision-prone pairs the old
-	// slugify folded ("Acme"/"acme", "a b"/"a_b") so isolation is proven, not argued.
+	// Distinct tenants, deliberately including collision-prone pairs a lossy
+	// slugger folds ("Acme"/"acme", "a.b"/"a_b") so isolation is proven, not
+	// argued. An org carrying whitespace is not in the corpus because namespace
+	// refuses one outright — it never reaches a file to collide in.
 	tenants := []string{
-		"Acme", "acme", "a b", "a_b", "globex", "GLOBEX",
+		"Acme", "acme", "a.b", "a_b", "globex", "GLOBEX",
 		"initech", "umbrella", "stark", "wayne", "wonka", "hooli",
 	}
 	const perTenant = 25

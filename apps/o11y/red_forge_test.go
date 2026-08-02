@@ -57,11 +57,21 @@ func TestRed_O11yProxyGatesForgedOrgNoPrincipal(t *testing.T) {
 	}
 }
 
-// Health/liveness endpoints carry no tenant data and the o11y runtime serves them
-// without identity (that is how the k8s pod probes pass). The gate MUST let them
-// through unauthenticated so the admin System Health probe (CLOUD_O11Y_HEALTH_URL)
-// and the external o11y.* hosts keep working after the embed serves in-process —
+// The public ops carry no tenant data and the o11y runtime serves them without
+// identity (that is how the k8s pod probes pass, and how a logged-out console
+// learns what it is talking to). The gate MUST let them through unauthenticated
+// so the admin System Health probe (CLOUD_O11Y_HEALTH_URL), the external o11y.*
+// hosts and sign-in itself keep working after the embed serves in-process —
 // while still blocking unauthenticated DATA routes.
+//
+// THESE PATHS ARE THE POINT. This test asserted /v1/o11y/api/v1/health and two
+// /api/v2 siblings for as long as gate() exempted them, and both were wrong
+// together: that internal namespace was deleted when hanzoai/o11y stopped
+// rewriting paths, so the test proved the gate exempted four addresses nothing
+// served while every real public op answered 403 at api.hanzo.ai. A test that
+// spells the same dead path as the code cannot catch the code being dead. The
+// paths below are route literals in hanzoai/o11y, and o11y.Anonymous — the one
+// answer both this gate and its own census read — is what keeps them so.
 func TestGateExemptsHealthPathsButGatesData(t *testing.T) {
 	var reached atomic.Bool
 	backend := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -71,11 +81,14 @@ func TestGateExemptsHealthPathsButGatesData(t *testing.T) {
 	})
 	gated := gate(backend)
 
-	// Health under the /v1/o11y external prefix, NO principal → must pass (200).
+	// The public ops, NO principal → must pass (200).
 	for _, p := range []string{
-		"/v1/o11y/api/v1/health",
-		"/v1/o11y/api/v2/livez",
-		"/v1/o11y/api/v2/readyz",
+		"/v1/o11y/health",
+		"/v1/o11y/version",
+		"/v1/o11y/livez",
+		"/v1/o11y/healthz",
+		"/v1/o11y/readyz",
+		"/v1/o11y/global/config",
 	} {
 		reached.Store(false)
 		req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai"+p, nil)
@@ -91,7 +104,7 @@ func TestGateExemptsHealthPathsButGatesData(t *testing.T) {
 
 	// A data route with NO principal must STILL be gated (403), backend never reached.
 	reached.Store(false)
-	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/o11y/api/v1/query_range", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/o11y/logs", nil)
 	rec := httptest.NewRecorder()
 	gated.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {

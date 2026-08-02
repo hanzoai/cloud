@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
 )
 
 // AuthoredPlugin is one org-authored connector plugin: the TypeScript a person
@@ -43,19 +45,13 @@ type AuthoredStore struct {
 	db *sql.DB
 }
 
-// OpenAuthoredStore opens (and migrates) the authored-plugin store at path.
-func OpenAuthoredStore(path string) (*AuthoredStore, error) {
-	db, err := cek.Open(cek.Global, path)
+// OpenAuthoredStore opens (and migrates) the authored-plugin store under dir.
+func OpenAuthoredStore(dir string) (*AuthoredStore, error) {
+	db, err := cek.Open(namespace.System(), "tools-plugins", dir)
 	if err != nil {
-		return nil, fmt.Errorf("tools: open authored-plugin store %q: %w", path, err)
+		return nil, fmt.Errorf("tools: open authored-plugin store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON"} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("tools: authored-plugin pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &AuthoredStore{db: db}
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS authored_plugins (

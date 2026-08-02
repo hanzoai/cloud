@@ -38,7 +38,7 @@ import (
 // storeFor opens (on first touch) and returns the database holding org's agent
 // records. org MUST already be validated — principal.OrgFrom for a request, or
 // the caller's own server-side resolution for an in-process seam.
-// cloud.OrgNamespace folds it through SanitizeOrg, so an org that slugger
+// cloud.OrgNamespace folds it through namespace.Sanitize, so an org that slugger
 // refuses is an error here rather than a silent fall-through to another org's
 // file.
 func (st *state) storeFor(org string) (*Store, error) {
@@ -88,7 +88,7 @@ func tenantStore(ctx context.Context, st *state) (*Store, string, error) {
 // one of them to be written without it.
 //
 // The MaxOrgLen bound is NOT subsumed by cloud.OrgNamespace and must stay.
-// SanitizeOrg maps an over-long owner to a 49-byte slug rather than refusing it,
+// namespace.Sanitize maps an over-long owner to a 49-byte slug rather than refusing it,
 // so the namespace constructor would happily accept a ten-kilobyte org id. The
 // bound is the same one principal.OrgOf applies at the HTTP boundary: one rule,
 // two readers, so an in-process seam can never be granted an org key the HTTP

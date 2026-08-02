@@ -63,7 +63,7 @@ func stdio(id string) []map[string]any {
 func catalogOf(t *testing.T, ts *httptest.Server) *CatalogStore {
 	t.Helper()
 	t.Setenv("CLOUD_TOOLS_REGISTRY", ts.URL)
-	c, err := OpenCatalogStore(t.TempDir() + "/catalog.db")
+	c, err := OpenCatalogStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("OpenCatalogStore: %v", err)
 	}
@@ -754,6 +754,10 @@ func (k recordingKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
 }
 func (k recordingKMS) PutSecret(_ context.Context, ref string, v []byte) error {
 	k[ref] = v
+	return nil
+}
+func (k recordingKMS) DeleteSecret(_ context.Context, ref string) error {
+	delete(k, ref)
 	return nil
 }
 func (recordingKMS) Sign(context.Context, string, []byte) ([]byte, error) {

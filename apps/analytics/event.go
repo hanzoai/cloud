@@ -64,12 +64,15 @@
 package analytics
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
+	planeops "github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -247,6 +250,13 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 	if i >= len(body) {
 		return nil, nil
 	}
+	// The PostHog wire is probed FIRST because its batch envelope spells the same
+	// `batch` key as the canonical one — routing on the key alone would hand a
+	// PostHog batch to the canonical decoder, which cannot see `distinct_id` and
+	// yields events with no person and no kind. Shape wins over key.
+	if isInsightsWire(body, i) {
+		return decodeInsights(body)
+	}
 	if body[i] == '{' {
 		// An object is the CaptureBatch envelope iff it carries a batch/events key;
 		// otherwise it is a bare canonical Event. RawMessage is non-nil whenever the
@@ -278,6 +288,34 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 		caps[j] = e.toCapture()
 	}
 	return caps, nil
+}
+
+// isInsightsWire reports whether an OBJECT body speaks the PostHog wire, which
+// the canonical decode would otherwise mangle: PostHog spells the person
+// `distinct_id` where the canonical wire spells `distinctId`, so a bare PostHog
+// event decodes with an EMPTY person and an unnamed kind, and admitPublic then
+// drops the whole batch — a silent 200 that stores nothing, the same failure the
+// team wire had. The signal is that snake_case key, at the top level or on the
+// first batch element; the canonical wire never uses it, and the team wire is a
+// bare ARRAY, so the three are disjoint. Probing only element 0 keeps this
+// positive-signal-only: a miss falls through to the canonical decode unchanged.
+func isInsightsWire(body []byte, i int) bool {
+	if i >= len(body) || body[i] != '{' {
+		return false
+	}
+	var probe struct {
+		DistinctID json.RawMessage `json:"distinct_id"`
+		Batch      []struct {
+			DistinctID json.RawMessage `json:"distinct_id"`
+		} `json:"batch"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return false
+	}
+	if len(probe.DistinctID) > 0 {
+		return true
+	}
+	return len(probe.Batch) > 0 && len(probe.Batch[0].DistinctID) > 0
 }
 
 // isTeamArray reports whether a bare-array body speaks the team SPA's wire, so
@@ -325,6 +363,12 @@ func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, dropped i
 		return err
 	}
 	res.Dropped += dropped
+	// The admission receipt, counted. Every lane funnels through here, and the
+	// pair is reported together on purpose: the answerable question is a RATIO.
+	// "8,000 items were dropped" needs a second series before it means anything;
+	// "88% of what was offered was dropped" is an outage on its own — and that
+	// exact loss ran unnoticed because neither number left the response body.
+	cloud.ObserveIngest(source, res.Accepted, res.Dropped)
 	return c.JSON(http.StatusOK, res)
 }
 
@@ -425,18 +469,24 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 			return publicIngest(c, dec, a.org, source, a.subject)
 		}
 		// ONE door, every event kind: the observability plane gets first refusal
-		// on the canonical door's authenticated bodies (cloud.ObsEventIngest —
-		// the o11y subsystem claims LLM-obs ingestion batches and declines all
-		// else). Only the FULL lane offers: obs events are tenant data, so the
-		// anonymous and reduced projections never reach that plane.
+		// on the canonical door's authenticated bodies. It lives in ANOTHER
+		// PROCESS (a plugin is a process), so the offer goes over the plane
+		// socket — a package global was written in o11y and read here as nil,
+		// which silently sent every LLM-obs batch down the product wire. Only
+		// the FULL lane offers: obs events are tenant data, so the anonymous and
+		// reduced projections never reach that plane.
+		//
+		// FAIL-SOFT AND UNCLAIMED: any plane error (o11y absent, asleep past the
+		// wake budget, mid-restart) falls through to the product wire rather
+		// than failing the caller's ingest. A dropped claim costs one event in
+		// the obs store; a failed door costs every event.
 		if source == sourceEvent {
-			if obs := cloud.ObsEventIngest(); obs != nil {
-				if accepted, dropped, claimed, err := obs(c.Context(), a.org, c.Body()); claimed {
-					if err != nil {
-						return zip.ErrInternal("event ingest failed")
-					}
-					return c.JSON(http.StatusOK, CaptureResult{Accepted: accepted, Dropped: dropped})
-				}
+			cctx, cancel := context.WithTimeout(cloud.For(c.Context(), a.org), obsClaimTimeout)
+			out, err := cloud.Ask[planeops.ObsClaimIn, planeops.ObsClaimed](cctx, peerO11y, planeops.ObsEventClaim,
+				&planeops.ObsClaimIn{Org: a.org, Body: c.Body()})
+			cancel()
+			if err == nil && out != nil && out.Claimed {
+				return c.JSON(http.StatusOK, CaptureResult{Accepted: out.Accepted, Dropped: out.Dropped})
 			}
 		}
 		evs, err := dec(c.Body())
@@ -493,12 +543,15 @@ type door struct {
 //     {batch:[…]} | the team SPA's bare snake_case array, dispatched by shape —
 //     isTeamArray), which every current Hanzo client emits. The SAME door also
 //     carries LLM-observability ingestion batches: handle offers each
-//     authenticated body to the o11y plane's claim first (cloud.ObsEventIngest),
+//     authenticated body to the o11y plane's claim first (the plane op
+//     obs_event_claim, asked over the socket),
 //     which takes only {"batch":[{"type":"trace-create"|…}]} shapes — consumers
 //     and shapes behind ONE door, not more doors.
 //
-//   - /v1/insights/e — the PostHog wire. A second WIRE, not a second name for the
-//     first: PostHog SDKs emit this shape and no canonical-wire door can serve them.
+//   - the PostHog wire has NO door of its own: decodeIngest dispatches it by
+//     shape (isInsightsWire), so PostHog SDKs land on /v1/event like everything
+//     else. Its rows carry $source='event' now — the door they actually arrived
+//     on — because the path that used to name them is gone.
 //
 //     ALMOST NOTHING CALLS THIS PATH DIRECTLY. Its live traffic arrives through the
 //     insights-cloud-ingest-rewrite middleware on insights.hanzo.ai (universe
@@ -589,6 +642,14 @@ func decodeEvent(body []byte) ([]CaptureEvent, error) {
 	}
 	return decodeIngest(body)
 }
+
+// The observability peer and how long the door will wait on it. The budget is
+// short on purpose: the claim is an OFFER on the hot ingest path, and a slow
+// peer must degrade to the product wire rather than hold the caller.
+const (
+	peerO11y        = "o11y"
+	obsClaimTimeout = 3 * time.Second
+)
 
 var doors = []door{
 	{
@@ -709,7 +770,7 @@ func init() {
 	// /v1/event door). Its body is an opaque envelope stream the o11y consumer reads
 	// itself, so openapi.Binary is the whole truth — no struct describes it, exactly
 	// as none describes an upload. Its RESPONSE is deliberately undeclared: the
-	// handler relays cloud.ObsErrorIngest verbatim, so this package does not know
+	// handler relays the o11y plane op obs_error_post verbatim, so this package does not know
 	// what comes back and publishing a shape would be inventing one.
 	//
 	// The prose is PER ROW, not one blurb over both: these are two different Sentry

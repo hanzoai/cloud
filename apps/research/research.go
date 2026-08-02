@@ -206,12 +206,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 }
 
 func build(b cloud.Base) (state, error) {
-	// WithDurable routes each org's research.db through the HA path (ha-elected single
-	// writer + hydrate-on-open + fenced ship). b.Durable is nil on a local/dev
+	// Each org's research.db rides the HA path the deployment configured (ha-elected
+	// single writer + hydrate-on-open + fenced ship). b.Durable is nil on a local/dev
 	// deployment, where the store is exactly the pre-durability local cache.
 	return state{
-		stores: cloud.NewOrgStore(b.DataDir, "research", openStore,
-			cloud.WithDurable(b.Durable), cloud.WithStoreLogger(b.Log)),
+		stores: cloud.NewOrgStore(b, "research", openStore),
 		wh: &warehouse{},
 	}, nil
 }

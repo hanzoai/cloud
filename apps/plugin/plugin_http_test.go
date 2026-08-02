@@ -18,7 +18,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -47,7 +46,7 @@ var (
 // either way, which is exactly the surface list/disable read and write.
 func mount(t *testing.T) (*ops, func(method, path string, hdr map[string]string, body any) (*http.Response, []byte)) {
 	t.Helper()
-	rec, err := auditstore.Open(filepath.Join(t.TempDir(), "audit.db"), nil)
+	rec, err := auditstore.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}

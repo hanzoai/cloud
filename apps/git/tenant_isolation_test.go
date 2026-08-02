@@ -3,10 +3,9 @@ package git
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/hanzoai/cloud/cek"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
@@ -59,14 +58,19 @@ func TestPerOrgStoreFileIsolation(t *testing.T) {
 		t.Fatalf("orgB create (same name): %d %s", code, b)
 	}
 
+	// Close before stat: on the pure-Go codec the database is written back at
+	// CLOSE, so an open store has not yet landed its file. Shutdown is idempotent,
+	// so mountAppDir's Cleanup still runs harmlessly.
+	if err := Shutdown(); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+
 	// Two physically distinct per-org DBs exist.
 	fa := filepath.Join(dir, "orgs", "orga", "git.db")
 	fb := filepath.Join(dir, "orgs", "orgb", "git.db")
 	for _, p := range []string{fa, fb} {
-		// cek.Exists, not os.Stat: a store still OPEN has not materialized its
-		// database file on the pure-Go codec — only its sidecar is on disk.
-		if !cek.Exists(p) {
-			t.Fatalf("expected per-org git store at %s", p)
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("expected per-org git store at %s: %v", p, err)
 		}
 	}
 }

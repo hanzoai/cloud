@@ -51,12 +51,13 @@ func TestMountFailClosed503(t *testing.T) {
 	}
 }
 
-// TestPaths covers the store-path derivation: the SQLite file lands under {DataDir}/iam,
-// and init_data.json resolves the standalone-iam default unless `initDataFile` overrides.
+// TestPaths covers the store-location derivation: the store opens under DataDir (its
+// place within that is namespace's, not this package's), and init_data.json resolves
+// the standalone-iam default unless `initDataFile` overrides.
 func TestPaths(t *testing.T) {
-	dbPath, initData := paths(cloud.Deps{DataDir: "/var/data"})
-	if dbPath != "/var/data/iam/global.db" {
-		t.Errorf("dbPath = %q, want /var/data/iam/global.db", dbPath)
+	dir, initData := paths(cloud.Deps{DataDir: "/var/data"})
+	if dir != "/var/data" {
+		t.Errorf("dir = %q, want /var/data", dir)
 	}
 	if initData != "init_data.json" {
 		t.Errorf("initData = %q, want the CWD-relative default", initData)

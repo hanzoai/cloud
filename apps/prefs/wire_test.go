@@ -23,7 +23,7 @@ import (
 
 func mountPrefs(t *testing.T) *zip.App {
 	t.Helper()
-	store, err := openStore(t.TempDir() + "/prefs.db")
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

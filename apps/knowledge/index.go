@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/provisioning"
+	"github.com/hanzoai/namespace"
 )
 
 // index.go is the ONE per-org vector-write + search path for KB knowledge. Every
@@ -44,11 +44,11 @@ import (
 // holds no per-org state: the org is a parameter on every call, so ONE client
 // serves all tenants and the org can never be captured from a stale field.
 type indexer struct {
-	vectorURL  string // Qdrant REST base, e.g. http://vector.hanzo.svc.cluster.local:6333
-	vectorKey  string // Qdrant api-key header (empty ⇒ unauthenticated in-cluster)
+	vectorURL  string         // Qdrant REST base, e.g. http://vector.hanzo.svc.cluster.local:6333
+	vectorKey  string         // Qdrant api-key header (empty ⇒ unauthenticated in-cluster)
 	ai         cloud.AIClient // shared AI client — embeddings go the ONE org/project-aligned, metered path
 	embedModel string         // embedding model — SAME for index + query
-	dims       int    // embedding dimension the collection is created with
+	dims       int            // embedding dimension the collection is created with
 	http       *http.Client
 
 	mu          sync.Mutex
@@ -103,7 +103,7 @@ func (x *indexer) enabled() bool { return x.ai != nil && x.vectorURL != "" }
 
 // collection is the org's PHYSICAL vector namespace. The "kb_" prefix keeps KB's
 // collections disjoint from any other vector use of the same org slug. The org is
-// run through provisioning.SanitizeOrg — the codebase's ONE org-slug normalizer,
+// run through namespace.Sanitize — the codebase's ONE org-slug normalizer,
 // shared with S3/KMS/projects — so the PHYSICAL namespace is INJECTIVE in the
 // owner: distinct owners that would otherwise fold onto one Qdrant collection ("a b"
 // vs "a_b") get a hash-suffixed slug and stay distinct, and an unsafe-rune org folds
@@ -113,7 +113,7 @@ func (x *indexer) enabled() bool { return x.ai != nil && x.vectorURL != "" }
 // (RED LOW-1). Sanitizing happens HERE, the one place every caller funnels through,
 // so index and search always derive the same collection for the same org.
 func (x *indexer) collection(org string) string {
-	return "kb_" + provisioning.SanitizeOrg(org)
+	return "kb_" + namespace.Sanitize(org)
 }
 
 // pointID is the deterministic id for a document's vector: a UUIDv5-shaped hex of

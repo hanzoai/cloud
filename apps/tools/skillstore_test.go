@@ -2,8 +2,11 @@ package tools
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
 // A nil store is the pre-Mount / disabled case. It must be an EMPTY skill set,
@@ -44,7 +47,7 @@ func TestOrgSkillProviderIsNotDispatchable(t *testing.T) {
 // suite's peers' store tests run (Linux/CI) and fails for the same platform
 // reason elsewhere — not a reason to leave the behaviour unpinned.
 func TestSkillStoreRoundTripIsOrgScoped(t *testing.T) {
-	st, err := OpenSkillStore(filepath.Join(t.TempDir(), "skills.db"))
+	st, err := OpenSkillStore(t.TempDir())
 	if err != nil {
 		t.Skipf("OpenSkillStore: %v", err)
 	}
@@ -89,7 +92,7 @@ func TestSkillStoreRoundTripIsOrgScoped(t *testing.T) {
 }
 
 func TestSkillStoreRefusesEmptyOrgAndName(t *testing.T) {
-	st, err := OpenSkillStore(filepath.Join(t.TempDir(), "skills.db"))
+	st, err := OpenSkillStore(t.TempDir())
 	if err != nil {
 		t.Skipf("OpenSkillStore: %v", err)
 	}
