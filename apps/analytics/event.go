@@ -489,7 +489,7 @@ var (
 // tell them apart pages the wrong team.
 //
 // Both a counter and a log line, deliberately: the counter is what an alert rule reads
-// (it reaches VictoriaMetrics by scrape, via the registry apps/o11y publishes), and the
+// (it reaches the telemetry store in-process, via apps/o11y's metrics push), and the
 // log line is what names the tenant and door to whoever the alert wakes.
 func observeDropped(c *zip.Ctx, org, source string, unattributable, unroutable int) {
 	dropOnce.Do(func() {
