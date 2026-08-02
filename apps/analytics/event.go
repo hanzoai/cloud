@@ -363,6 +363,12 @@ func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, dropped i
 		return err
 	}
 	res.Dropped += dropped
+	// The admission receipt, counted. Every lane funnels through here, and the
+	// pair is reported together on purpose: the answerable question is a RATIO.
+	// "8,000 items were dropped" needs a second series before it means anything;
+	// "88% of what was offered was dropped" is an outage on its own — and that
+	// exact loss ran unnoticed because neither number left the response body.
+	cloud.ObserveIngest(source, res.Accepted, res.Dropped)
 	return c.JSON(http.StatusOK, res)
 }
 
