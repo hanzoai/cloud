@@ -10,7 +10,7 @@ Read-only Zoo capability derived from the `ai` OpenAPI service. Base URL `https:
 
 ## Authentication
 
-Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoo.id`). Send it as `Authorization: Bearer <token>`. The same token authenticates every Zoo service; a `hk-…` API key minted on `https://zoo.id` is also accepted.
+Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoo.id`). Send it as `Authorization: Bearer <token>`. The same token authenticates every Zoo service; a secret `sk-…` API key minted on `https://zoo.id` is also accepted. A publishable `pk-…` key identifies an org for ingest and never authenticates a request.
 
 ## Endpoints
 
