@@ -12,9 +12,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"runtime"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -78,7 +80,7 @@ func TestAPromotedModelSurvivesARollout(t *testing.T) {
 
 	// The rollout: shutdown snapshots every resident geometry, not only the
 	// shipped one.
-	if err := teardown(first); err != nil {
+	if err := teardown(context.Background(), first); err != nil {
 		t.Fatalf("teardown: %v", err)
 	}
 
@@ -133,7 +135,7 @@ func TestAChampionThatCannotBeRestoredRefusesToScore(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	id := seedFit(t, first, tn, db, roleChampion, quickShape)
-	if err := teardown(first); err != nil {
+	if err := teardown(context.Background(), first); err != nil {
 		t.Fatalf("teardown: %v", err)
 	}
 
@@ -1041,7 +1043,7 @@ func TestAFileThatCouldNotBeReadIsAskedAgain(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	id := seedFit(t, first, tn, db, roleChampion, quickShape)
-	if err := teardown(first); err != nil {
+	if err := teardown(context.Background(), first); err != nil {
 		t.Fatalf("teardown: %v", err)
 	}
 
@@ -1087,4 +1089,169 @@ func TestAFileThatCouldNotBeReadIsAskedAgain(t *testing.T) {
 		t.Fatal("the champion is still warming after the fault cleared — one unreadable moment silenced a " +
 			"control for the life of the process")
 	}
+}
+
+// TestADisplacedNeighboursStateIsKeptNotDiscarded is the deployment-wide bound's
+// own hazard, closed.
+//
+// stableSeats caps how many resident models this PROCESS holds across every
+// tenant, and any bound shared by tenants is a place where one tenant's traffic
+// spends another's. Dropping the least recently used seat is recoverable —
+// hydrate reloads it — but only back to what the tenant's FILE holds, so
+// everything the evicted model learned since the last snapshot was gone, thrown
+// away by somebody else's traffic. A tenant may only ever degrade itself, so the
+// seat is kept before it is dropped and the eviction costs a write and a later
+// read rather than a neighbour's memory.
+func TestADisplacedNeighboursStateIsKeptNotDiscarded(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	quiet, _ := qualify("hanzo", "quiet")
+	db, err := s.State.shelf.open(quiet)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	// The quiet tenant's champion, warm, and NOT snapshotted since — exactly the
+	// steady state, where the file holds the estimation's state and the store
+	// holds everything learned from the live stream since.
+	const fit = "fit-quiet"
+	held, err := s.State.stable.at(quiet, fit, quickShape)
+	if err != nil {
+		t.Fatalf("stable.at: %v", err)
+	}
+	drive(t, s, held, quiet, 300)
+	learned := held.State(quiet.String()).Learned
+	if learned == 0 {
+		t.Fatal("the quiet tenant learned nothing, so the test cannot tell a keep from a loss")
+	}
+	if _, err := getModel(db, fitKey(fit)); !errors.Is(err, errNoState) {
+		t.Fatalf("the file already holds this version's state (%v); the test would pass without the keep", err)
+	}
+
+	// Enough neighbours to overflow the deployment-wide bound. Each takes one
+	// seat, and the least recently used across every tenant is the quiet one's.
+	for i := 0; i < stableSeats+1; i++ {
+		other, _ := qualify("hanzo", "loud"+strconv.Itoa(i))
+		if _, err := s.State.stable.at(other, "fit-"+strconv.Itoa(i), quickShape); err != nil {
+			t.Fatalf("stable.at: %v", err)
+		}
+	}
+
+	s.State.stable.mu.Lock()
+	_, resident := s.State.stable.held[seat{tenant: quiet, fit: fit}]
+	s.State.stable.mu.Unlock()
+	if resident {
+		t.Fatalf("%d seats did not displace the quiet tenant's, so the deployment-wide bound never "+
+			"engaged and this test proves nothing", stableSeats+1)
+	}
+
+	// The eviction must have written what the seat held into the tenant's own
+	// file, or a neighbour's traffic just threw away 300 observations of somebody
+	// else's learning.
+	body, err := getModel(db, fitKey(fit))
+	if err != nil {
+		t.Fatalf("a displaced tenant's learned state was discarded rather than kept: %v", err)
+	}
+	var snap anomaly.Snapshot
+	if err := json.Unmarshal(body, &snap); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	back, err := s.State.stable.at(quiet, fit, quickShape)
+	if err != nil {
+		t.Fatalf("stable.at: %v", err)
+	}
+	if _, err := takeFit(db, back, quiet, fit); err != nil {
+		t.Fatalf("takeFit: %v", err)
+	}
+	if got := back.State(quiet.String()).Learned; got != learned {
+		t.Fatalf("the displaced tenant came back with %d learned, want %d — a neighbour's traffic cost it "+
+			"everything it had learned since its last snapshot", got, learned)
+	}
+}
+
+// TestAPruneBudgetIsOneTenantsNotOnePerTrial: the budget is what stops one
+// tenant's backlog from holding its single connection for the length of the
+// backlog, and a bound spent once per TRIAL is not that bound. A tenant with
+// four trials on file would remove four times what the constant says, on the
+// connection every one of its decisions is queued behind.
+func TestAPruneBudgetIsOneTenantsNotOnePerTrial(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	// Two trials, each holding more than the budget's worth of removable rows.
+	const each = trialDepth + pruneBudget
+	for _, fit := range []string{"chall-a", "chall-b"} {
+		fillFrom(t, db, fit, each)
+	}
+	before := count(t, db)
+	if err := pruneTrials(context.Background(), db); err != nil {
+		t.Fatalf("pruneTrials: %v", err)
+	}
+	if removed := before - count(t, db); removed > pruneBudget {
+		t.Fatalf("one tick removed %d rows, budget is %d — the budget is being spent once per trial, so "+
+			"the bound is the trial count times the number it states", removed, pruneBudget)
+	}
+}
+
+// fillFrom is fill for a test that needs two trials in one file: the decision id
+// is the primary key, so two trials cannot share the counter.
+func fillFrom(t *testing.T, db *sql.DB, fit string, n int) {
+	t.Helper()
+	at := time.Now().Add(-time.Duration(n) * time.Second)
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.Prepare(`INSERT INTO challenge (decision, at, champion, incumbent, fit, score, cut, alert, scored)
+		VALUES (?, ?, 'champ', 0, ?, 0.5, 0.4, 0, 1)`)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	for i := 0; i < n; i++ {
+		if _, err := stmt.Exec(fit+"-dec-"+strconv.Itoa(i), stamp(at.Add(time.Duration(i)*time.Second)), fit); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
+// TestResidencyIsReadUnderTheLock: `read` is a field on a SHARED seat, written
+// by the one function that resolves it and read by every request that asks
+// whether the file is still owed. Answering from the struct after the mutex is
+// released is a race, and the losing side re-reads the tenant's file on every
+// request — which is the cost hydrate exists to avoid, reintroduced invisibly.
+//
+// It runs under -race, which is where this is a failure rather than a habit.
+func TestResidencyIsReadUnderTheLock(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	tn, _ := qualify("hanzo", "acme")
+	const fit = "fit-race"
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				if _, _, err := s.State.stable.owed(tn, fit, quickShape); err != nil {
+					t.Errorf("owed: %v", err)
+					return
+				}
+			}
+		}()
+	}
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				s.State.stable.read(tn, fit)
+			}
+		}()
+	}
+	wg.Wait()
 }

@@ -73,6 +73,12 @@ type stable struct {
 	// runs and the one a fit inherits when the caller names none.
 	shape candidate
 	vel   *velocity.Store
+	// keep persists a seat that is about to be dropped, into the tenant's own
+	// file. It is what makes the deployment-wide bound below safe rather than
+	// merely bounded: without it, one tenant's traffic throws away another
+	// tenant's learning since process start. Called OUTSIDE the lock, on the
+	// request that caused the overflow, so the cost lands on whoever spent it.
+	keep func(Tenant, string, *anomaly.Store)
 
 	mu   sync.Mutex
 	held map[seat]*resident
@@ -144,15 +150,22 @@ const seatsPerTenant = 3
 // process will hold across every tenant. At the measured 336 KB per tenant model
 // that is about 172 MB.
 //
-// Overflow evicts the least recently used seat, and that is SAFE here in a way it
-// is not anywhere else in this fleet: hydrate() below reloads a tenant's state
-// whenever the seat has been dropped, so an eviction costs one file read on that
-// tenant's next request instead of leaving a control permanently quiet.
+// A DEPLOYMENT-WIDE BOUND IS A PLACE ONE TENANT SPENDS ANOTHER'S, so this one
+// is arranged so that what it takes is recoverable and nothing is lost. Overflow
+// drops the least recently used seat, and before it is dropped its learned state
+// is KEPT in that tenant's own file; hydrate() then reloads it on that tenant's
+// next request. Without the keep, a busy tenant's traffic would silently discard
+// a quiet tenant's counters back to its last snapshot — a tenant degrading
+// somebody else, which is the failure this fleet keeps finding and the one shape
+// a shared bound may never have.
 const stableSeats = 512
 
-func newStable(shape candidate, vel *velocity.Store) *stable {
+func newStable(shape candidate, vel *velocity.Store, keep func(Tenant, string, *anomaly.Store)) *stable {
+	if keep == nil {
+		keep = func(Tenant, string, *anomaly.Store) {}
+	}
 	return &stable{
-		shape: shape, vel: vel,
+		shape: shape, vel: vel, keep: keep,
 		held:  map[seat]*resident{},
 		roles: map[Tenant]serving{},
 	}
@@ -178,12 +191,32 @@ func shapeKey(c candidate) string {
 // declining to score with a model the tenant promoted.
 func (st *stable) at(t Tenant, fit string, c candidate) (*anomaly.Store, error) {
 	st.mu.Lock()
-	defer st.mu.Unlock()
-	r, err := st.hold(t, fit, c)
+	r, out, err := st.hold(t, fit, c)
+	var store *anomaly.Store
+	if r != nil {
+		store = r.store
+	}
+	st.mu.Unlock()
+	st.kept(out)
 	if err != nil {
 		return nil, err
 	}
-	return r.store, nil
+	return store, nil
+}
+
+// dropped is one seat the bound removed, on its way to the tenant's own file.
+type dropped struct {
+	seat
+	store *anomaly.Store
+}
+
+// kept persists what the bound removed. Called with the lock RELEASED: it writes
+// a file, and holding the stable's lock across a write would serialise every
+// tenant's model lookup behind one tenant's disk.
+func (st *stable) kept(out []dropped) {
+	for _, d := range out {
+		st.keep(d.tenant, d.fit, d.store)
+	}
 }
 
 // owed returns one version's store and whether this process still owes a read of
@@ -191,12 +224,21 @@ func (st *stable) at(t Tenant, fit string, c candidate) (*anomaly.Store, error) 
 // map lookup, no snapshot, no allocation.
 func (st *stable) owed(t Tenant, fit string, c candidate) (*anomaly.Store, bool, error) {
 	st.mu.Lock()
-	defer st.mu.Unlock()
-	r, err := st.hold(t, fit, c)
+	r, out, err := st.hold(t, fit, c)
+	// READ UNDER THE LOCK. The seat is shared and read is written by the one
+	// function that resolves it, so answering from the struct after the unlock is
+	// a race — and one whose losing side re-reads the tenant's file per request.
+	var store *anomaly.Store
+	var owed bool
+	if r != nil {
+		store, owed = r.store, !r.read
+	}
+	st.mu.Unlock()
+	st.kept(out)
 	if err != nil {
 		return nil, false, err
 	}
-	return r.store, !r.read, nil
+	return store, owed, nil
 }
 
 // read marks a seat resolved: this process has looked in the tenant's file for
@@ -226,20 +268,23 @@ func (st *stable) resident(t Tenant, fit string) (*anomaly.Store, bool) {
 	return r.store, true
 }
 
-// hold is the one place a seat is resolved or built. Caller holds st.mu.
-func (st *stable) hold(t Tenant, fit string, c candidate) (*resident, error) {
+// hold is the one place a seat is resolved or built. Caller holds st.mu, and
+// takes the seats the bound dropped so they can be kept with it released.
+func (st *stable) hold(t Tenant, fit string, c candidate) (*resident, []dropped, error) {
 	k := seat{tenant: t, fit: fit}
 	key := shapeKey(c)
 	st.clock++
 	if r, ok := st.held[k]; ok {
 		if r.shape == key {
 			r.used = st.clock
-			return r, nil
+			return r, nil, nil
 		}
 		// A sealed version's geometry cannot move, so this is a defect and not a
 		// state. Rebuilding is the fail-secure answer: state estimated under one
 		// geometry restored into another is refused by the engine anyway, and
-		// serving it under the wrong shape would not be.
+		// serving it under the wrong shape would not be. It is NOT kept: writing a
+		// forest of the wrong geometry into the version's row would overwrite the
+		// state a correct restore needs.
 		delete(st.held, k)
 	}
 	s, err := anomaly.New(anomaly.Config{
@@ -256,17 +301,18 @@ func (st *stable) hold(t Tenant, fit string, c candidate) (*resident, error) {
 		MaxOrgs: 1,
 	}, st.vel)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	r := &resident{store: s, shape: key, used: st.clock}
 	st.held[k] = r
-	st.trim(t)
-	return r, nil
+	return r, st.trim(t), nil
 }
 
 // trim enforces both bounds: the tenant's own, then the deployment's. Caller
-// holds st.mu.
-func (st *stable) trim(t Tenant) {
+// holds st.mu. It RETURNS what it removed rather than discarding it, because a
+// dropped seat holds counters that are not in the tenant's file yet.
+func (st *stable) trim(t Tenant) []dropped {
+	var out []dropped
 	for {
 		var oldest seat
 		var at int64
@@ -283,6 +329,7 @@ func (st *stable) trim(t Tenant) {
 		if n <= seatsPerTenant {
 			break
 		}
+		out = append(out, dropped{seat: oldest, store: st.held[oldest].store})
 		delete(st.held, oldest)
 	}
 	for len(st.held) > stableSeats {
@@ -293,8 +340,10 @@ func (st *stable) trim(t Tenant) {
 				oldest, at = k, r.used
 			}
 		}
+		out = append(out, dropped{seat: oldest, store: st.held[oldest].store})
 		delete(st.held, oldest)
 	}
+	return out
 }
 
 // serving reads this process's cached view of which versions a tenant runs.
@@ -637,10 +686,11 @@ const trialDepth = 5000
 // so a prune that is not chunked is a decision path that is not answering.
 const pruneChunk = 2000
 
-// pruneBudget is how many rows one tenant's prune may remove per tick. At the
-// tick's five minutes it clears several times the arrival rate of the busiest
-// tenant this plane has measured, so a backlog drains over a few ticks instead
-// of in one that blocks the tenant for the length of the backlog.
+// pruneBudget is how many rows ONE TENANT's prune may remove per tick, across
+// every trial on its file. At the tick's five minutes it clears several times
+// the arrival rate of the busiest tenant this plane has measured, so a backlog
+// drains over a few ticks instead of in one that blocks the tenant for the
+// length of the backlog.
 const pruneBudget = 20000
 
 // pruneTrials drops each trial's rows past trialDepth, oldest first.
@@ -663,7 +713,15 @@ func pruneTrials(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	// ONE budget for the tenant, not one per trial. Spent per trial it is not a
+	// bound at all: a tenant with eight trials on file would remove eight times
+	// what the constant says, on the single connection its decisions queue
+	// behind, and the number would say something the code does not do.
+	budget := pruneBudget
 	for _, fit := range fits {
+		if budget <= 0 {
+			return nil
+		}
 		var cut string
 		err := db.QueryRowContext(ctx,
 			`SELECT at FROM challenge WHERE fit = ? ORDER BY at DESC LIMIT 1 OFFSET ?`,
@@ -674,10 +732,11 @@ func pruneTrials(ctx context.Context, db *sql.DB) error {
 		if err != nil {
 			return err
 		}
-		for removed := 0; removed < pruneBudget; {
+		for budget > 0 {
+			chunk := min(pruneChunk, budget)
 			res, err := db.ExecContext(ctx, `DELETE FROM challenge WHERE decision IN (
 				SELECT decision FROM challenge WHERE fit = ? AND at < ? ORDER BY at ASC LIMIT ?)`,
-				fit, cut, pruneChunk)
+				fit, cut, chunk)
 			if err != nil {
 				return err
 			}
@@ -688,7 +747,7 @@ func pruneTrials(ctx context.Context, db *sql.DB) error {
 			if n == 0 {
 				break
 			}
-			removed += int(n)
+			budget -= int(n)
 		}
 	}
 	return nil
@@ -1160,7 +1219,18 @@ func watch(ctx context.Context, s *stateService, t Tenant, db *sql.DB, now time.
 			}
 		}
 	}
-	return alarm(ctx, s, t, db, now)
+	if err := alarm(ctx, s, t, db, now); err != nil {
+		return err
+	}
+	// The background paths write records too — a queued version, a raised drift
+	// alarm, a pruned trial — and no request is going to ship them. There is no
+	// caller here to refuse, so an unacked ship is said out loud and retried on
+	// the next tick, which is the same five minutes this walk already runs on.
+	if acked, err := s.State.shelf.ship(ctx, t, db); err != nil || !acked {
+		s.Log.Warn("risk: a tenant's background records were not shipped; the next tick retries",
+			"tenant", t.String(), "acked", acked, "err", err)
+	}
+	return nil
 }
 
 // ── enqueue: the one path a fit is created by ───────────────────────────────

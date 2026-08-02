@@ -3,11 +3,12 @@ package risk
 // store.go is the tenant's record plane: decisions, rules, lists, suppressions,
 // controls and the model's snapshot, in the tenant's OWN encrypted SQLite file.
 //
-// THE FILE IS THE TENANT BOUNDARY. cloud.OrgDB resolves
+// THE FILE IS THE TENANT BOUNDARY. cloud.OrgStore resolves
 // {DataDir}/orgs/{orgSlug}/risk.db through the injective SanitizeOrg slugger, so
 // two distinct orgs can never share a file and no segment can traverse out of
 // DataDir. There is no `org` column on any table here, and there cannot be a
-// cross-tenant read, because there is no statement that could express one.
+// cross-tenant read, because there is no statement that could express one. It is
+// also what makes the file DURABLE rather than merely local — see ship.go.
 //
 // DURABLE FIRST, ANALYTICS AFTER. Every decision lands here and in the audit
 // hash chain BEFORE the analytics copy is emitted to /v1/event. That door is
@@ -19,6 +20,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -26,6 +28,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
@@ -192,63 +195,104 @@ CREATE TABLE IF NOT EXISTS drift (
 CREATE INDEX IF NOT EXISTS drift_fit ON drift(fit, cleared);
 `
 
-// shelf holds the lazily-opened per-tenant handles. A file is opened, migrated
-// and seeded once on first touch and cached by tenant key. Opens are serialised
-// so a concurrent first touch opens exactly once.
-type shelf struct {
-	dataDir string
+// plane is one tenant's record file, as cloud.OrgStore holds it. The store
+// hands out a freshly-opened, pragma'd, encrypted-at-rest handle and takes back
+// something that owns its Close; the migration runs here, once per file.
+type plane struct{ db *sql.DB }
 
-	mu  sync.Mutex
-	dbs map[Tenant]*sql.DB
+func (p *plane) Close() error { return p.db.Close() }
+
+func openPlane(db *sql.DB) (*plane, error) {
+	if _, err := db.Exec(schema); err != nil {
+		return nil, err
+	}
+	if err := widen(db); err != nil {
+		return nil, err
+	}
+	if err := seed(db); err != nil {
+		return nil, err
+	}
+	return &plane{db: db}, nil
 }
 
-func newShelf(dataDir string) *shelf { return &shelf{dataDir: dataDir, dbs: map[Tenant]*sql.DB{}} }
-
-// open resolves the tenant's file. The ORG half is what cloud.OrgNamespace
-// takes — cloud does its own brand scoping through DataDir and the deployment,
-// so handing it the qualified key would put the brand in the path twice.
+// shelf is this app's per-tenant record planes, held by cloud.OrgStore.
 //
-// The namespace is minted here and nowhere else in this package, through the
-// one door cloud publishes: a namespace is the only thing OrgDB accepts, and the
-// only way to build one is from a validated org, so a file this app opens cannot
-// be addressed by anything a caller sent.
-func (s *shelf) open(t Tenant) (*sql.DB, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if db, ok := s.dbs[t]; ok {
-		return db, nil
+// IT IS OrgStore AND NOT A MAP OVER OrgDB, AND THAT IS THE DURABILITY. OrgDB
+// opens a file; OrgStore is the fleet's per-org file door — the same one
+// apps/research, apps/books and fifteen others walk through — and it is where
+// three properties live that a hand-rolled map does not have: the org's durable
+// snapshot is HYDRATED into the local file before it is opened, the ha election
+// decides WHETHER THIS REPLICA MAY WRITE it, and Sync ships the file back
+// FENCED at the lease round. cloud deploys Recreate at one replica, so without
+// them an ungraceful termination loses every acknowledged decision since the
+// volume was last intact and nothing hydrates it back. This app was the only one
+// in the fleet still opening OrgDB directly.
+//
+// The namespace is minted here and nowhere else in this package, through the one
+// door cloud publishes: the only way to build one is from a validated org, so a
+// file this app opens cannot be addressed by anything a caller sent. The ORG
+// half is what OrgNamespace takes — cloud does its own brand scoping through
+// DataDir and the deployment, so handing it the qualified key would put the
+// brand in the path twice.
+type shelf struct {
+	stores *cloud.OrgStore[*plane]
+	pier   *pier
+
+	mu    sync.Mutex
+	known map[Tenant]namespace.Namespace
+	// marks is the row-change count each tenant's file carried at its last
+	// ACKNOWLEDGED ship — the whole of the "did this request write anything"
+	// question. See ship.go's changed().
+	marks map[Tenant]int64
+}
+
+func newShelf(b cloud.Base) *shelf {
+	s := &shelf{
+		stores: cloud.NewOrgStore(b, "risk", openPlane),
+		known:  map[Tenant]namespace.Namespace{},
+		marks:  map[Tenant]int64{},
 	}
+	s.pier = newPier(s.shipOnce)
+	return s
+}
+
+// open resolves the tenant's file, hydrating and migrating it on first touch.
+func (s *shelf) open(t Tenant) (*sql.DB, error) {
 	ns, err := cloud.OrgNamespace(t.org(), "")
 	if err != nil {
 		return nil, err
 	}
-	db, err := cloud.OrgDB(s.dataDir, ns, "risk")
+	p, err := s.stores.For(ns)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(schema); err != nil {
-		_ = db.Close()
-		return nil, err
+	s.mu.Lock()
+	s.known[t] = ns
+	s.mu.Unlock()
+	return p.db, nil
+}
+
+// shipOnce ships ONE tenant's file to its durable object, fenced. It is the
+// pier's engine and the only caller — everything else asks the pier, which
+// coalesces, so a thousand concurrent writes cost one ship rather than a
+// thousand.
+func (s *shelf) shipOnce(t Tenant) (bool, error) {
+	s.mu.Lock()
+	ns, ok := s.known[t]
+	s.mu.Unlock()
+	if !ok {
+		return false, fmt.Errorf("risk: a tenant's file was shipped before it was opened")
 	}
-	if err := widen(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if err := seed(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	s.dbs[t] = db
-	return db, nil
+	return s.stores.Sync(ns)
 }
 
 func (s *shelf) close() {
+	_ = s.stores.CloseAll()
+	s.pier.reset()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for k, db := range s.dbs {
-		_ = db.Close()
-		delete(s.dbs, k)
-	}
+	s.known = map[Tenant]namespace.Namespace{}
+	s.marks = map[Tenant]int64{}
 }
 
 // tenants lists the tenants this process currently holds open. Used by the
@@ -257,8 +301,8 @@ func (s *shelf) close() {
 func (s *shelf) tenants() []Tenant {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]Tenant, 0, len(s.dbs))
-	for t := range s.dbs {
+	out := make([]Tenant, 0, len(s.known))
+	for t := range s.known {
 		out = append(out, t)
 	}
 	return out

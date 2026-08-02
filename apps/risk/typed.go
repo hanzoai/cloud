@@ -64,6 +64,13 @@ func mount(s *stateService, app cloud.Router) {
 	// package answers with 403 rather than with a guess.
 	g.Use(cloud.Bridge())
 	gml.Use(cloud.Bridge())
+	// SHIP-BEFORE-ACK, as a property of the surface rather than a line each op
+	// remembers. It runs after the leaf and before fasthttp writes the response,
+	// so a record is acknowledged only once the tenant's file reached its durable
+	// object; an op that wrote nothing costs one counter read. Installed on the
+	// group, an op added later inherits it instead of forgetting it. See ship.go.
+	g.Use(durable(s))
+	gml.Use(durable(s))
 	o := ops{s: s}
 
 	// ── decide ──────────────────────────────────────────────────────────────

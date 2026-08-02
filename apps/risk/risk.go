@@ -143,7 +143,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Shutdown is registered by the plugin (plugin/risk/main.go) and calls back
 	// here; holding the service in a package var would be a second owner of the
 	// state, so the closure captures it instead.
-	shutdown = func(context.Context) error { return teardown(s) }
+	shutdown = func(ctx context.Context) error { return teardown(ctx, s) }
 	return nil
 }
 
@@ -216,20 +216,46 @@ func build(deps cloud.Deps) (*stateService, error) {
 	}
 	shape, digest := shapeOf(tpl.Config()), tpl.Digest()
 
-	return &cloud.Service[state]{
-		Base: cloud.NewBase(deps, "risk"),
+	// ONE Base, read by both the service and the record planes. The shelf needs
+	// it because cloud.OrgStore reads the deployment's durability off it — whether
+	// there is an object store to fence against is a fact about the deployment,
+	// discovered once at boot, never a subsystem's opinion.
+	b := cloud.NewBase(deps, "risk")
+	s := &cloud.Service[state]{
+		Base: b,
 		State: state{
 			brand:   deps.Brand,
 			dataDir: deps.DataDir,
 			vel:     vel,
 			shape:   shape,
 			digest:  digest,
-			stable:  newStable(shape, vel),
 			bench:   newBench(),
-			shelf:   newShelf(deps.DataDir),
+			shelf:   newShelf(b),
 			bill:    cloud.NewResourceMeter(deps, "risk"),
 		},
-	}, nil
+	}
+	// A seat the stable drops is SNAPSHOTTED FIRST, into the tenant's own file.
+	// The deployment-wide seat bound is what keeps the pod's memory finite, and
+	// without this it is also a way for one tenant's traffic to throw away
+	// another tenant's learning since process start — a tenant degrading somebody
+	// else, which is the one thing a shared bound may not do. Kept first, an
+	// eviction costs a write and a later read and loses nothing.
+	s.State.stable = newStable(shape, vel, func(t Tenant, fit string, store *anomaly.Store) {
+		db, err := s.State.shelf.open(t)
+		if err != nil {
+			s.Log.Error("risk: an evicted model's state could not be kept", "tenant", t.String(), "fit", fit, "err", err)
+			return
+		}
+		if fit == "" {
+			err = saveModel(s.State.shelf, store, t)
+		} else {
+			err = keepFit(db, store, t, fit)
+		}
+		if err != nil {
+			s.Log.Error("risk: an evicted model's state could not be kept", "tenant", t.String(), "fit", fit, "err", err)
+		}
+	})
+	return s, nil
 }
 
 // stateService is the concrete service this package builds. An alias, so the
@@ -255,7 +281,7 @@ func Shutdown(ctx context.Context) error {
 	return shutdown(ctx)
 }
 
-func teardown(s *stateService) error {
+func teardown(ctx context.Context, s *stateService) error {
 	var kept, failed int
 	for _, t := range s.State.shelf.tenants() {
 		db, err := s.State.shelf.open(t)
@@ -270,6 +296,14 @@ func teardown(s *stateService) error {
 		if err := keepAll(s, t, db); err != nil {
 			failed++
 			s.Log.Error("risk: a tenant's learned state was not kept", "tenant", t.String(), "err", err)
+			continue
+		}
+		// And the file goes to the durable object before the process leaves. The
+		// snapshot above wrote to a local disk the next pod may not have.
+		if acked, err := s.State.shelf.ship(ctx, t, db); err != nil || !acked {
+			failed++
+			s.Log.Error("risk: a tenant's file was not shipped on shutdown",
+				"tenant", t.String(), "acked", acked, "err", err)
 			continue
 		}
 		kept++
