@@ -88,6 +88,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("pricing.Mount: load plans catalog: %w", err)
 	}
+	// The Datastore rate card is authored in the pricing repo rather than produced
+	// by the sync, so it is its own file and its own global.
+	datastoreCard, err := hpricing.Datastore()
+	if err != nil {
+		return fmt.Errorf("pricing.Mount: load datastore card: %w", err)
+	}
 
 	h, err := goja.New(goja.Config{
 		Name:   "pricing",
@@ -96,6 +102,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			"__PRICING_DATA__": pricingData,
 			"__PLANS_EXTRA__":  plansExtra,
 			"__PLANS_DATA__":   plansData,
+			"__DATASTORE__":    datastoreCard,
 			"__MARKUP__": map[string]any{
 				"thirdParty":     parseFloatEnv("THIRD_PARTY_MARKUP", 1.0),
 				"computeMonthly": parseFloatEnv("COMPUTE_MARKUP_MONTHLY", 1.0),
