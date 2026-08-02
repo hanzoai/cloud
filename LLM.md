@@ -241,7 +241,7 @@ entry, not a process. The apps that own a listener or a background loop
 (`manifest.App.Eager`) start WITH the host instead.
 
 Each subsystem is its OWN binary at `plugin/<app>`, linking only that app's graph
-through `cloud.Serve` — never the fleet. `ls cmd/` shows exactly `cloud/`; `ls
+through `cloud.Listen` — never the fleet. `ls cmd/` shows exactly `cloud/`; `ls
 plugin/` shows the ~116 per-app + tool dirs. A dedicated plugin binary is ~40 MB
 of which ~35 MB is the core every plugin also links; that duplication is the
 deliberate price of never linking the fleet union into one mega binary again.
@@ -284,7 +284,7 @@ An app the walk cannot reduce to prefixes gets no row and says why on stderr —
 `make generate` names them. The fix for an under-reported app is one line in its
 Wire entry: `Prefixes:` outranks the walk.
 
-`cloud.Serve` honours the plugin side of the contract in ONE place, `listenOn`:
+`cloud.Listen` honours the plugin side of the contract in ONE place, `listenOn`:
 with `ZIP_ADDR` set the process serves that socket and binds no ops port, so
 every generated `plugin/<app>` is a valid plugin with no code of its own. Without
 that, each child binds cfg's fixed `:8080/:9653/:9090`, the host never sees it
@@ -3943,7 +3943,7 @@ free-port allocation that seven of eight children used to lose.
 ## After the split: a store has one owner, and everyone else asks
 
 `cmd/cloud` is a light plugin HOST. Each app is its own binary (`plugin/<app>/main.go`
-→ `cloud.Serve`), started lazily on the first request to its prefix, and a child's
+→ `cloud.Listen`), started lazily on the first request to its prefix, and a child's
 `--enable` contains ONLY its own name. So `cfg.Enabled("commerce")` is false in every
 process but commerce, `finance.Current()` is nil in every process but commerce, and
 `iamclient.DB()` is nil in every process but iam.

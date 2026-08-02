@@ -29,18 +29,18 @@ import (
 // (plugin/<app>/main.go) calls it, so no boot logic is duplicated per subsystem.
 //
 // plugins is the composition root's subsystem list (apps.Wire()), threaded
-// in by the caller so cloud never imports subsystems (which would cycle). Serve
+// in by the caller so cloud never imports subsystems (which would cycle). Listen
 // mounts it in slice order and tears it down in reverse.
 //
 // enable==nil ⇒ honor cfg.Enable from flags/env (cloud mode; empty = all).
 // enable!=nil ⇒ force exactly that set (single-service mode), overriding
 // --enable so `hanzo kms` is unambiguous.
 //
-// Serve registers the HIP-0106 liveness contract (GET /v1/<name>/health for
+// Listen registers the HIP-0106 liveness contract (GET /v1/<name>/health for
 // every enabled subsystem) before MountAll, runs the canonical middleware
 // pipeline (Recover → RequestID → Logger), and shuts down gracefully on
 // SIGINT/SIGTERM.
-func Serve(plugins []Plugin, enable []string) error {
+func Listen(plugins []Plugin, enable []string) error {
 	// `<binary> describe <dir>` projects instead of serving. Before LoadConfig
 	// AND before credz.Boot because the artifacts must be a function of the code
 	// alone: both read the environment, and a route set that moved with a

@@ -12,7 +12,7 @@
 //
 // This is hand-written rather than scaffolded because o11y is its own composition
 // root: it builds its Deps, installs telemetry, and owns the OTLP collector /
-// trace sink / event Datastore lifetime — none of which the lean cloud.Serve stub
+// trace sink / event Datastore lifetime — none of which the lean cloud.Listen stub
 // expresses. cmd/gen-app-cmds leaves an existing main untouched, so this one
 // stays; it links only o11y's own graph, never the fleet.
 package main
@@ -50,7 +50,7 @@ func run() error {
 	// only Logger and DataDir out of it, but building it the one canonical way
 	// keeps this entrypoint honest about what a subsystem may reach for.
 	//
-	// `o11y describe` is the exception, and for the same reason cloud.Serve makes
+	// `o11y describe` is the exception, and for the same reason cloud.Listen makes
 	// it one: the artifacts are a projection of routes, so describing must be a
 	// function of the code alone and must not open the deployment's real stores
 	// (the default data dir is /var/lib/cloud, which a describe run cannot write).
@@ -67,7 +67,7 @@ func run() error {
 	deps := cloud.BuildDeps(cfg)
 
 	// A plugin is a host for its own requests, so it owns its own providers —
-	// the SAME bootstrap cloud.Serve runs, not a second one. Before the mount, so
+	// the SAME bootstrap cloud.Listen runs, not a second one. Before the mount, so
 	// the trace sink this process registers below is already the destination its
 	// own spans route to. Without this the child served /v1/o11y/* with the global
 	// no-op provider and emitted nothing.
@@ -79,7 +79,7 @@ func run() error {
 		return fmt.Errorf("mount: %w", err)
 	}
 
-	// The same self-description every generated app binary gets from cloud.Serve.
+	// The same self-description every generated app binary gets from cloud.Listen.
 	// This main is hand-written (it is a plugin, not a Wire stub), so it asks for
 	// the mode itself — through the same one producer.
 	if describing {
@@ -94,7 +94,7 @@ func run() error {
 
 	// Bind the CANONICAL plane socket before serving the edge.
 	//
-	// cloud.Serve does this for every generated app main; this one is
+	// cloud.Listen does this for every generated app main; this one is
 	// hand-written, so nothing else in the process will — and without it the app
 	// is unreachable over the plane while looking perfectly healthy: zip binds
 	// its own listener at a temp path, /var/lib/cloud/run/o11y.sock never
@@ -124,7 +124,7 @@ func run() error {
 // The host in front of every plugin is a pure router: it claims prefixes and
 // proxies them, and installs no middleware of its own (cmd/cloud/main.go). So the
 // browser-facing policy belongs to the process that answers the request, which is
-// this one. Every scaffolded app gets it from cloud.Serve; this main is
+// this one. Every scaffolded app gets it from cloud.Listen; this main is
 // hand-written (see the package doc), and that is exactly why it has to install
 // it explicitly — nothing else in this process will.
 //

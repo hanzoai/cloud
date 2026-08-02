@@ -294,7 +294,7 @@ comments at compile time.
   moment somebody closes it, that test goes red and names the wire change and this
   paragraph, so the decision cannot land as a silent side effect.
 - **`cloud.Bridge()` is installed by `MountO11y` on the `/v1/o11y` group, first.**
-  Not optional and not redundant with `cloud.Serve`: o11y runs as its OWN process
+  Not optional and not redundant with `cloud.Listen`: o11y runs as its OWN process
   (`plugin/o11y/main.go` builds a bare `zip.App`), and the host's context does not
   cross the socket — so without this install every typed op here 403s a caller the
   host already validated. Pinned by
@@ -429,7 +429,7 @@ signal, all four the same shape, all four on the event plane.**
 ## cloud's own telemetry — split host / sink
 
 The **host** owns the tracer + meter providers (`cloud/telemetry.go`,
-`cloud.InstallTelemetry`, called by `cloud.Serve` before `MountAll` and by
+`cloud.InstallTelemetry`, called by `cloud.Listen` before `MountAll` and by
 `cmd/o11y` for its own process). This package owns the SINK.
 
 That split is not cosmetic. The provider used to be BUILT here and handed to the
