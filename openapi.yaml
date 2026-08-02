@@ -7460,6 +7460,52 @@ components:
         updatedAt:
           type: string
       type: object
+    aiMCPApp:
+      properties:
+        name:
+          description: Name is the subsystem, as the manifest names it.
+          type: string
+        names:
+          description: Names are its tool names, present only for the subsystem the
+            query named.
+          items:
+            type: string
+          type: array
+        served:
+          description: |-
+            Served reports that THIS process actually mounted it, so its tools are on
+            the door a client can call rather than only in the build.
+          type: boolean
+        tools:
+          description: Tools is how many tools its committed catalogue publishes.
+          type: integer
+      type: object
+    aiMCPSurface:
+      properties:
+        apps:
+          description: Apps is one row per subsystem the build publishes, in manifest
+            order.
+          items:
+            $ref: '#/components/schemas/aiMCPApp'
+          type: array
+        local:
+          description: |-
+            Local is the part of Served this process registered ITSELF, rather than
+            composing from a mounted child's catalogue.
+          type: integer
+        published:
+          description: |-
+            Published is every tool this BUILD can serve — the union of every
+            subsystem's committed catalogue, which is a property of the artifact and
+            therefore the same answer in every process.
+          type: integer
+        served:
+          description: |-
+            Served is what THIS PROCESS's door actually composed. It is the number that
+            can be far smaller than Published — a host that mounted nothing serves
+            nothing — and the only one that describes the door a client is talking to.
+          type: integer
+      type: object
     aiMetrics:
       properties:
         end:
@@ -30532,6 +30578,38 @@ paths:
       tags:
       - ai
       x-app: github.com/hanzoai/ai
+  /v1/ai/mcp/tools:
+    get:
+      description: |-
+        Tools reports what this binary's MCP door carries: every tool the build
+        publishes, how many of them this process actually serves, and which subsystem
+        each belongs to. It is the answer to "is the door up and does it have anything
+        behind it" — a question a status code cannot answer, since an empty door and a
+        full one are both 200.
+      operationId: aiMCPTools
+      parameters:
+      - description: |-
+          App names one subsystem whose tool NAMES to list. Empty answers counts
+          only: nine hundred names is a page no operator reads and no model can
+          afford to be handed by accident.
+        in: query
+        name: app
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/aiMCPSurface'
+          description: ok
+      summary: 'Tools reports what this binary''s MCP door carries: every tool the
+        build publishes, how many of them this process actually serves, and which
+        subsystem each belongs to.'
+      tags:
+      - ai
+      x-app: ai
   /v1/ai/messages:
     get:
       description: List the caller's messages.
