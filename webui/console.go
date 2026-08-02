@@ -1,8 +1,9 @@
 // Package webui serves the embedded Hanzo Cloud console — the single-page app,
 // white-labelled per request Host.
 //
-// It is a LEAF: stdlib + the brand registry + zip's net/http bridge, and NOTHING
-// of package cloud. That is the whole reason it exists as its own package. The
+// It is a LEAF: stdlib + the brand registry + the fleet manifest's addresses +
+// zip's net/http bridge, and NOTHING of package cloud (all three of those are
+// themselves leaves). That is the whole reason it exists as its own package. The
 // console has to be served from TWO places — every per-app plugin mounts it as
 // its "/" catch-all through cloud.Listen, and the light host (cmd/cloud) owns "/"
 // at the front door and cannot import package cloud (that would relink the fleet
@@ -113,25 +114,44 @@ func newConsoleHandler(fsys fs.FS) (*consoleHandler, error) {
 }
 
 func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		// The console is static: only GET/HEAD. A non-GET that fell through to
-		// here (every real API route already matched) is genuinely unhandled.
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	upath := r.URL.Path
 	if !strings.HasPrefix(upath, "/") {
 		upath = "/" + upath
 	}
 
+	// The agent door, BEFORE the static-console gate — an MCP client speaks POST,
+	// and the gate below would have answered it "method not allowed" in the
+	// console's own voice, which is how POST /mcp came to look like a door that
+	// exists but is misconfigured. Both rules are self-scoping: this handler is
+	// TERMINAL, so it only ever sees a path no route claimed in THIS process. A
+	// plugin that serves its own door at FrameworkMCPPath matches a real route and
+	// never reaches here; the host, which moved its door to MCPPath, does.
+	if mcpDoor(w, r, upath) {
+		return
+	}
+
 	// API/ops namespaces: an unmatched path here is a real 404 in JSON, never
 	// the SPA shell. (Matched API routes never reach this handler.)
+	//
+	// This runs BEFORE the static-console gate below, and the order is load-bearing
+	// for the same reason the MCP rules are: WHAT the path is decides the answer,
+	// not what method a browser would have used. With the gate first, a POST to an
+	// unmatched API path was answered "method not allowed" — which tells a client
+	// the endpoint EXISTS and it used the wrong verb, when in fact nothing serves
+	// that address at all. 405 is a claim about a door; only a door may make it.
 	for _, p := range apiPrefixes {
 		if upath == strings.TrimSuffix(p, "/") || strings.HasPrefix(upath, p) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
+	}
+
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		// The console is static: only GET/HEAD. A non-GET that fell through to
+		// here (every real API route already matched, and the API namespaces have
+		// already 404'd above) is genuinely unhandled.
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
 
 	name := path.Clean(strings.TrimPrefix(upath, "/"))

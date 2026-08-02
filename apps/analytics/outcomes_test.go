@@ -26,27 +26,30 @@ func TestOutcomesSQL_TenantIsolation(t *testing.T) {
 	if strings.Contains(sql, "DROP TABLE") {
 		t.Fatalf("SQL carries injected text: %s", sql)
 	}
-	// org is bound; it is the trailing eventsWhere arg.
+	// org is bound, and it LEADS the scope.
 	if !strings.Contains(sql, "org = ?") {
 		t.Fatalf("query must bind org positionally: %s", sql)
 	}
-	// args order: [exposure, metric, start, end, org, exposure, metric].
-	if len(args) != 7 {
-		t.Fatalf("want 7 bound args, got %d: %v", len(args), args)
+	// args order: [exposure, metric, org, signal, start, end, exposure, metric].
+	if len(args) != 8 {
+		t.Fatalf("want 8 bound args, got %d: %v", len(args), args)
 	}
 	if args[0] != exposure || args[1] != metric {
 		t.Fatalf("SELECT maxIf binds must lead: %v", args[:2])
 	}
-	if args[4] != org {
-		t.Fatalf("org must be the eventsWhere trailing bound arg, got %v", args[4])
+	if args[2] != org {
+		t.Fatalf("org must be the FIRST scope bind, got %v", args[2])
 	}
-	if args[5] != exposure || args[6] != metric {
-		t.Fatalf("event-set IN binds must trail: %v", args[5:])
+	if args[3] != string(signalAct) {
+		t.Fatalf("signal must be the second scope bind, got %v", args[3])
+	}
+	if args[6] != exposure || args[7] != metric {
+		t.Fatalf("event-set IN binds must trail: %v", args[6:])
 	}
 }
 
 // TestOutcomesSQL_NoExposureEvent covers the metric-only shape (exposure "" -> every
-// subject exposed): one bound event + the three eventsWhere binds, org still bound.
+// subject exposed): one bound event + the four eventsWhere binds, org still leading.
 func TestOutcomesSQL_NoExposureEvent(t *testing.T) {
 	start := time.Now().Add(-24 * time.Hour)
 	end := time.Now()
@@ -57,7 +60,7 @@ func TestOutcomesSQL_NoExposureEvent(t *testing.T) {
 	if !strings.Contains(sql, "1 AS exposed") {
 		t.Fatalf("metric-only query marks every subject exposed: %s", sql)
 	}
-	if len(args) != 4 || args[0] != "signup" || args[3] != "acme" {
-		t.Fatalf("args must be [metric, start, end, org], got %v", args)
+	if len(args) != 5 || args[0] != "signup" || args[1] != "acme" || args[2] != string(signalAct) {
+		t.Fatalf("args must be [metric, org, signal, start, end], got %v", args)
 	}
 }

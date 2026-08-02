@@ -521,7 +521,21 @@ func (s *datastoreSink) Insert(ctx context.Context, table string, columns []stri
 			return fmt.Errorf("append row: %w", err)
 		}
 	}
-	return batch.Send()
+	if err := batch.Send(); err != nil {
+		return err
+	}
+	// Rows are counted HERE — the one choke point every plane row this process
+	// writes passes through (event.span from the ZAP span receiver and from the
+	// in-process trace sink, event.log from the log receiver) — and only AFTER
+	// Send returns, so the count is rows that LANDED, not rows that were
+	// offered. event.span going to zero here is the signal that was missing for
+	// four and a half months.
+	//
+	// The table name IS the stream name for these two, which is what lets the
+	// analytics bus drain (apps/analytics/warehouse.go) count onto the same
+	// series: a row of a given signal counts once, whichever writer carried it.
+	cloud.ObserveRows(table, len(rows))
+	return nil
 }
 
 // Close releases the native connection.

@@ -80,7 +80,7 @@ func landDirect(t *testing.T) {
 // datastore under test — cloud never creates it, so absence is a skip, not a failure.
 func requirePlane(t *testing.T, ctx context.Context) {
 	t.Helper()
-	for _, tbl := range []string{eventsTable, errorsTable} {
+	for _, tbl := range []string{factTable, factTable} {
 		if !tableExists(ctx, tbl) {
 			t.Skipf("%s not provisioned (the plane's DDL owner is hanzoai/o11y); skipping live round trip", tbl)
 		}
@@ -136,11 +136,11 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 	// Datastore MergeTree inserts are visible immediately to a direct SELECT.
 	// 1) Raw landing proof: per-name counts for THIS org on event.event.
 	rows, err := datastore.Query(ctx,
-		"SELECT name, count() AS n FROM "+eventsTable+" WHERE org = ? GROUP BY name ORDER BY name", org)
+		"SELECT name, count() AS n FROM "+factTable+" WHERE org = ? GROUP BY name ORDER BY name", org)
 	if err != nil {
 		t.Fatalf("readback query: %v", err)
 	}
-	t.Logf("── %s landed rows (org=%s) ──", eventsTable, org)
+	t.Logf("── %s landed rows (org=%s) ──", factTable, org)
 	total := 0
 	for _, r := range rows {
 		n := aInt64(r["n"])
@@ -154,7 +154,7 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 	// 2) Privacy proof: the scrubbed signup_submitted row must NOT contain the
 	//    password or the raw email anywhere in its stored attributes.
 	pr, err := datastore.Query(ctx,
-		"SELECT attributes FROM "+eventsTable+" WHERE org = ? AND name = 'signup_submitted'", org)
+		"SELECT attributes FROM "+factTable+" WHERE org = ? AND name = 'signup_submitted'", org)
 	if err != nil || len(pr) == 0 {
 		t.Fatalf("attrs readback: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 	where, args := eventsWhere(org, start, end)
 	overSQL := "SELECT countIf(kind = 'page') AS pageviews, uniqExact(distinct_id) AS visitors, " +
 		"uniqExact(session_id) AS sessions, countIf(name = 'order_completed') AS orders, " +
-		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue FROM " + eventsTable + " WHERE " + where
+		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue FROM " + factTable + " WHERE " + where
 	orows, err := datastore.Query(ctx, overSQL, args...)
 	if err != nil || len(orows) == 0 {
 		t.Fatalf("overview lens query: %v", err)
@@ -201,7 +201,7 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 	pwhere, pargs := eventsWhere(org, start, end)
 	prodSQL := "SELECT attributes['product_id'] AS productId, countIf(name = 'order_completed') AS orders, " +
 		"sum(toFloat64OrZero(attributes['revenue'])) AS revenue, sum(toUInt64OrZero(attributes['quantity'])) AS units " +
-		"FROM " + eventsTable +
+		"FROM " + factTable +
 		" WHERE " + pwhere + " AND attributes['product_id'] != '' GROUP BY productId ORDER BY revenue DESC LIMIT 10"
 	prows, err := datastore.Query(ctx, prodSQL, pargs...)
 	if err != nil {
@@ -213,7 +213,7 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 		t.Fatalf("top-products mismatch: %+v", tp.Items)
 	}
 
-	t.Logf("LIVE E2E OK: 10 events emitted via POST /v1/event landed in %s and read back through the analytics lenses", eventsTable)
+	t.Logf("LIVE E2E OK: 10 events emitted via POST /v1/event landed in %s and read back through the analytics lenses", factTable)
 }
 
 func attrsString(m map[string]string) string {
@@ -274,7 +274,7 @@ func TestLiveAnonymousCapture(t *testing.T) {
 	_ = resp.Body.Close()
 
 	rows, err := datastore.Query(ctx,
-		"SELECT org, kind, product FROM "+eventsTable+" WHERE session_id = ?", marker)
+		"SELECT org, kind, product FROM "+factTable+" WHERE session_id = ?", marker)
 	if err != nil {
 		t.Fatalf("readback: %v", err)
 	}
