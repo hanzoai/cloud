@@ -40,7 +40,7 @@
       "put": {
         "operationId": "put_v1_gateway_config",
         "summary": "Write updates one policy scope and returns the policy in force after the write.",
-        "description": "Write updates one policy scope and returns the policy in force after the write.\nA body carrying any PLATFORM field (cors_origins, per_ip_rpm, window_sec) is a\nplatform write and requires SuperAdmin; otherwise it is a per-org write (org_rpm,\ncache_ttl_sec, cache_paths, methods) scoped to the caller's own org — or, for a\nSuperAdmin, the tenant named by ?org=\u003cslug\u003e. A body that sets nothing is a 400.\nupdated_at and updated_by are server-stamped; a client-supplied value is ignored.",
+        "description": "Write updates one policy scope and returns the policy in force after the write.\nA body carrying any PLATFORM field (cors_origins, per_ip_rpm, window_sec) is a\nplatform write and requires SuperAdmin; otherwise it is a per-org write (org_rpm,\ncache_ttl_sec, cache_paths, methods) scoped to the caller's own org — or, for a\nSuperAdmin, the tenant named by ?org=\u003cslug\u003e. A body that sets nothing is a 400.\nThe abuse gate's mode is an OPERATOR field: setting it requires SuperAdmin,\nwhichever organization it lands on. updated_at and updated_by are\nserver-stamped; a client-supplied value is ignored.",
         "tags": [
           "gateway"
         ],
@@ -129,7 +129,7 @@
             "type": "array"
           },
           "mode": {
-            "description": "Mode is the abuse gate's posture for this org: \"shadow\" scores traffic and\nrecords the verdict without acting on it, \"live\" enforces it. Unset means\nshadow — a statistical judgement never starts refusing an org's traffic\nbecause the feature shipped, only because the org turned it on.",
+            "description": "Mode is the abuse gate's posture for THIS scope: \"shadow\" scores traffic and\nrecords the verdict without acting on it, \"live\" enforces it. Unset means\nshadow.\n\nIt is the one per-org field that does NOT inherit. Every other field here\nlayers a platform default under the org's own value, which is right for a\ndefault: a tenant that sets no rate ceiling should get the platform's. Mode\nis not a default, it is an ARMING DECISION — it is what makes a statistical\njudgement start refusing real traffic — and inheriting it means arming one\nscope arms every tenant that never asked for it, without a write to their\nrow and without anything in their config changing. So a tenant is live only\nif that tenant's OWN row says live, and the platform row's mode governs\nexactly one scope: the anonymous lane, which has no tenant of its own.\n\nIt is also not self-service. Writing it requires SuperAdmin (see the\n/v1/gateway config op): the subject of an abuse control does not get to\nswitch the control off.",
             "type": "string"
           },
           "org_rpm": {
@@ -218,6 +218,10 @@
           },
           "requests": {
             "description": "Requests is how many requests this org made in the window.",
+            "type": "integer"
+          },
+          "saturated": {
+            "description": "Saturated is how many of this org's own sensor keys its own ceiling has\nreclaimed. Non-zero means this organization is presenting more distinct\ncredentials or addresses than the sensor keeps state for, so its own numbers\nbelow are a sample rather than a census. It is reported rather than logged\nbecause the alternative — a bound that degrades a tenant silently — is the\nfailure this design exists to rule out. No other tenant can move it.",
             "type": "integer"
           },
           "screens": {
