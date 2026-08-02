@@ -35,6 +35,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/iam/pkg/pkce"
 )
 
 const (
@@ -97,12 +99,6 @@ func twitterVerifier(creds OAuthConfig) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-// twitterChallenge is the S256 code_challenge for a verifier: base64url(sha256(v)).
-func twitterChallenge(verifier string) string {
-	sum := sha256.Sum256([]byte(verifier))
-	return base64.RawURLEncoding.EncodeToString(sum[:])
-}
-
 func twitterAuthorize(creds OAuthConfig, redirectURI, state string) (string, error) {
 	q := url.Values{
 		"response_type":         {"code"},
@@ -110,7 +106,7 @@ func twitterAuthorize(creds OAuthConfig, redirectURI, state string) (string, err
 		"redirect_uri":          {redirectURI},
 		"scope":                 {strings.Join(twitterScopes, " ")},
 		"state":                 {state},
-		"code_challenge":        {twitterChallenge(twitterVerifier(creds))},
+		"code_challenge":        {pkce.Challenge(twitterVerifier(creds))},
 		"code_challenge_method": {"S256"},
 	}
 	return twitterAuthURL + "?" + q.Encode(), nil

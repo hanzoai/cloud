@@ -15,6 +15,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/iam/pkg/pkce"
 	"github.com/zap-proto/zip"
 )
 
@@ -144,21 +145,10 @@ func TestGuardRefusesNonAdmin(t *testing.T) {
 
 // ── PKCE ─────────────────────────────────────────────────────────────────────
 
-// TestPKCEChallenge pins the S256 transform against the RFC 7636 Appendix B
-// vector, so it stays byte-identical to IAM's own pkceChallenge.
-func TestPKCEChallenge(t *testing.T) {
-	const (
-		verifier  = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
-		challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
-	)
-	if got := pkceChallenge(verifier); got != challenge {
-		t.Errorf("pkceChallenge = %q, want the RFC 7636 vector %q", got, challenge)
-	}
-	// The challenge is not the verifier (the whole point of S256).
-	if pkceChallenge("x") == "x" {
-		t.Error("challenge must never equal the verifier")
-	}
-}
+// The S256 transform itself is pinned against the RFC 7636 Appendix B vector
+// where it lives, in github.com/hanzoai/iam/pkg/pkce. What is this package's
+// own is that the challenge it publishes derives from the verifier it stored —
+// see the authorize-redirect test below.
 
 // TestRandomTokenIsUnique guards against a constant/predictable state nonce.
 func TestRandomTokenIsUnique(t *testing.T) {
@@ -225,7 +215,7 @@ func TestLoginRedirectsToIAM(t *testing.T) {
 	if f.Nonce != q.Get("state") {
 		t.Errorf("state %q != flow cookie nonce %q", q.Get("state"), f.Nonce)
 	}
-	if pkceChallenge(f.Verifier) != q.Get("code_challenge") {
+	if pkce.Challenge(f.Verifier) != q.Get("code_challenge") {
 		t.Error("published code_challenge does not derive from the stored verifier")
 	}
 	if f.Return != "/applications" {

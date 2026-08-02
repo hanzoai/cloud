@@ -118,13 +118,19 @@ type Plan struct {
 }
 
 // subscriptionsWire is the /v1/billing/subscriptions list shape Plan folds over.
+//
+// MRRCents is commerce's own figure for what the subscription contributes per
+// month — interval-normalized and multiplied by its seats. This surface used to
+// re-derive it here from Price and Interval, with its own copy of commerce's
+// normalization and no knowledge of the seat count at all, so a 10-seat plan
+// read as one seat. Commerce bills Price x quantity; it is the authority on
+// what that subscription is worth, and this is a display surface.
 type subscriptionsWire struct {
 	Subscriptions []struct {
-		Status string `json:"status"`
-		Plan   struct {
-			Name     string      `json:"name"`
-			Price    money.Cents `json:"price"`
-			Interval string      `json:"interval"`
+		Status   string      `json:"status"`
+		MRRCents money.Cents `json:"mrrCents"`
+		Plan     struct {
+			Name string `json:"name"`
 		} `json:"plan"`
 	} `json:"subscriptions"`
 }
@@ -149,7 +155,7 @@ func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 	for _, s := range w.Subscriptions {
 		switch strings.ToLower(strings.TrimSpace(s.Status)) {
 		case "active", "trialing":
-			out.MRR += monthlyNormalized(s.Plan.Price, s.Plan.Interval)
+			out.MRR += s.MRRCents
 			out.Active = true
 			if name := strings.TrimSpace(s.Plan.Name); name != "" && out.Name == "pay-as-you-go" {
 				out.Name = name
@@ -157,21 +163,6 @@ func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 		}
 	}
 	return out, nil
-}
-
-// monthlyNormalized normalizes a plan price to a monthly figure by its billing
-// interval so annual and monthly plans are comparable in one MRR sum.
-func monthlyNormalized(price money.Cents, interval string) money.Cents {
-	switch strings.ToLower(strings.TrimSpace(interval)) {
-	case "year", "yearly", "annual", "annually":
-		return price / 12
-	case "week", "weekly":
-		return price * 52 / 12
-	case "day", "daily":
-		return price * 365 / 12
-	default: // month/monthly and anything unrecognized → treat as monthly
-		return price
-	}
 }
 
 // Entry is one ledger row. Kind is "deposit" (credit) or "withdraw" (usage). At is
