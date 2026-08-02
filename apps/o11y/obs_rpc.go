@@ -2,16 +2,19 @@
 
 package o11y
 
-// obs_rpc.go — the observability plane's two claims on the ONE event door,
-// published as plane ops.
+// obs_rpc.go — the observability plane's claim on the ONE event door, published
+// as a plane op.
 //
 // analytics owns POST /v1/event and its subtree, but THIS process owns the
-// LLM-obs sink and the Sentry runtime. A plugin is a process, so the package
-// globals these used to ride (cloud.SetObsEventIngest / SetObsErrorIngest) were
-// written here and read as nil in analytics — the Sentry alias answered 503
-// "error ingest not initialized" and every LLM-obs batch fell silently through
-// to the product wire. The door asks over the socket instead, exactly as x402
-// asks commerce to move money.
+// Sentry runtime. A plugin is a process, so the package global this used to ride
+// (cloud.SetObsErrorIngest) was written here and read as nil in analytics — the
+// Sentry alias answered 503 "error ingest not initialized". The door asks over
+// the socket instead, exactly as x402 asks commerce to move money.
+//
+// There were TWO claims here. The other offered every authenticated /v1/event
+// body to an LLM-observability sink before the product wire saw it; it is gone
+// with the sink (see planesink.go's datastoreSink for why), so the door now runs
+// its own wire with no cross-process round-trip in front of it.
 
 import (
 	"context"
@@ -25,31 +28,11 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// exposeObs publishes both claims. MountO11y calls it.
+// exposeObs publishes the claim. MountO11y calls it.
 func exposeObs() {
-	zip.Post[plane.ObsClaimIn, plane.ObsClaimed](cloud.Plane(), "/obs/event/claim", planeObsClaim,
-		zip.WithOperationID(plane.ObsEventClaim),
-		zip.WithSummary("Offer one /v1/event body to the LLM-obs sink; declines what is not its shape"))
 	zip.Post[plane.ObsErrorIn, plane.ObsErrorOut](cloud.Plane(), "/obs/error/post", planeObsError,
 		zip.WithOperationID(plane.ObsErrorPost),
 		zip.WithSummary("Relay one Sentry envelope/store request to the o11y runtime"))
-}
-
-// planeObsClaim offers a body to the LLM-obs sink. Claimed=false is the normal
-// answer for a product event and MUST leave the body untouched — the door then
-// runs its own wire, so a wrong claim here silently reroutes a tenant's data.
-func planeObsClaim(ctx context.Context, in *plane.ObsClaimIn) (*plane.ObsClaimed, error) {
-	if eventIngestSink == nil {
-		// No sink in this deployment: decline, never error. An absent sink must
-		// read as "not mine", so the product wire keeps working.
-		return &plane.ObsClaimed{}, nil
-	}
-	o := ingestOps{sink: eventIngestSink, threshold: blobThreshold(), log: eventIngestLog}
-	accepted, dropped, claimed, err := o.claim(ctx, in.Org, in.Body)
-	if err != nil {
-		return nil, err
-	}
-	return &plane.ObsClaimed{Accepted: accepted, Dropped: dropped, Claimed: claimed}, nil
 }
 
 // planeObsError relays one Sentry-wire request to the runtime and returns its

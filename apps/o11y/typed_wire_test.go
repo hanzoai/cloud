@@ -29,12 +29,11 @@ const sentryPrefix = "/v1/sentry"
 // the upstream module it ends with) shows up here without anyone remembering to
 // list it.
 //
-// Two branches are taken deliberately, and they are the SAME two `bin/o11y
-// openapi` takes (mk/plugin.mk runs it with GIT_SSH_ADDR and nothing else):
-// with no Datastore DSN the runtime installs its reverse-proxy fallback instead
-// of the in-process engine, and mountEventIngest returns before registering
-// POST /v1/event/ingestion. Probes are off because they knock on in-cluster
-// Services a test has no business reaching.
+// One branch is taken deliberately, and it is the SAME one `bin/o11y openapi`
+// takes (mk/plugin.mk runs it with GIT_SSH_ADDR and nothing else): with no
+// Datastore DSN the runtime installs its reverse-proxy fallback instead of the
+// in-process engine. Probes are off because they knock on in-cluster Services a
+// test has no business reaching.
 func surfaceApp(t *testing.T) *zip.App {
 	t.Helper()
 	t.Setenv("O11Y_PROBES", "false")
