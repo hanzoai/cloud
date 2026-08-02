@@ -55,6 +55,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // creditUnit is the asset the prepaid wallet is denominated in. One asset ships
@@ -187,7 +188,7 @@ func creditIn(ctx context.Context, w principal.Wallet) (ok, funded bool) {
 // The path sets are MEASURED, not invented:
 //   - inference — the exact paths zen's Claim owns (zen@v1.4.2 proxy.go) plus ai's
 //     own tree. These are the free-inference hole.
-//   - meteredTrees — the subsystems that construct a ResourceMeter (the non-LLM
+//   - meteredTrees — meteredApps resolved through the manifest (the non-LLM
 //     auth-not-balance gap). It must agree with the composition root: every surface
 //     that declares cloud.Metered spends a provider's money and therefore needs
 //     standing, and TestMeteredSurfacesRequireStanding fails if the two drift. The
@@ -225,22 +226,94 @@ var inference = map[string]bool{
 	"/v1/responses":        true,
 }
 
-// meteredTrees are the subsystem trees whose handlers debit a ledger — every
-// NewResourceMeter construction site, plus ai's own tree. Written as a root WITH its
-// trailing slash; the bare root matches too.
-var meteredTrees = []string{
-	"/v1/ai/",         // LLM token costs (ai self-meters).
-	"/v1/agents/",     // per-run agent fee.
-	"/v1/agent/",      // the agent orchestrator's round.
-	"/v1/tools/",      // per-tool dispatch (POST /v1/tools/call meters one unit).
-	"/v1/functions/",  // serverless invoke.
-	"/v1/s3/",         // object-storage data plane.
-	"/v1/storage/",    // clients/storage NewResourceMeter(deps, "s3").
-	"/v1/ml/",         // clients/ml NewResourceMeter(deps, "compute").
-	"/v1/visor/",      // clients/visor NewResourceMeter(deps, "compute").
-	"/v1/security/",   // clients/security scan fee.
-	"/v1/projects/",   // clients/projects hosting fee.
-	"/v1/cloudflare/", // clients/cloudflare provisioning.
+// meteredApps are the subsystems whose surface declares cloud.Metered: money moves
+// inside their handlers, so a request to one requires standing. It is a set of
+// NAMES, and that is the whole point — WHICH PATHS an app answers is the manifest's
+// fact, read from there rather than restated here.
+//
+// It used to be the paths, and a hand-copied routing table is a routing table that
+// goes stale. This one had, in four places, every one of them silently un-billable:
+//
+//   - "/v1/provisioning/", which provisioning does not answer. The manifest routes
+//     it at /v1/{datastore,docdb,kv,s3,search,sql,vector} — so vector, sql, kv,
+//     docdb, search and datastore creates, the EXACT set the non-LLM billing gap
+//     was opened for, were not billable paths at all.
+//   - projects answers /v1/sites and /v1/platform/sites, not only /v1/projects.
+//   - venue answers /v1/cloud. It was absent entirely.
+//   - tools answers /v1/skills, /v1/plugins and /v1/mcp/servers beside /v1/tools.
+//
+// And ten Metered surfaces were missing outright (ask, auto, automations, content,
+// flow, platform, provisioning, tracker, translate, venue). The list had to be
+// edited in lockstep with two other files and nothing checked that it was.
+// TestMeteredSurfacesRequireStanding now reads Price straight out of every
+// plugin/<name>/main.go and fails on a Metered surface missing from here — the check
+// spend.go's own comment claimed for a test that did not exist.
+var meteredApps = []string{
+	"agent",        // the agent orchestrator's round.
+	"agents",       // per-run agent fee.
+	"ai",           // LLM token costs (ai self-meters).
+	"ask",          // the answer engine's per-question fee.
+	"auto",         // durable flow runs on the tasks plane.
+	"automations",  // per-run automation fee.
+	"cloudflare",   // Workers AI + provisioning.
+	"content",      // studio renders (GPU).
+	"flow",         // flow executions.
+	"functions",    // serverless invoke.
+	"ml",           // predict + train (compute).
+	"platform",     // builds and runs (compute).
+	"projects",     // site hosting fee.
+	"provisioning", // sql/kv/vector/docdb/s3/search/datastore creates.
+	"security",     // scan fee.
+	"storage",      // object-storage data plane.
+	"tools",        // per-tool dispatch.
+	"tracker",      // per-project/issue fee.
+	"translate",    // per-character fee.
+	"venue",        // folded clusters (compute).
+	"visor",        // GPU clusters (compute).
+	"zen",          // zen SKU token costs (zen self-meters).
+}
+
+// meteredTrees is meteredApps resolved through the fleet's ONE routing table, at
+// init. Each entry is a root WITH its trailing slash; Billable matches the bare root
+// too.
+//
+// The union of the manifest's declared prefixes and the /v1/<name> convention is
+// deliberate. They answer different questions — the manifest names the paths the
+// light host ROUTES to an app, the convention names the tree the app OWNS — and a
+// surface answers both: ml is routed /v1/train/jobs and also owns /v1/ml/predict,
+// which appears in neither list alone. A union can only widen coverage, and this
+// gate's asymmetry is that gating too little is a leak while gating too much is an
+// outage only for paths that are NOT metered — which a union over metered apps
+// cannot reach.
+//
+// A bare "/v1" is the one prefix skipped. ai carries it as the router's TERMINAL
+// catch-all (the last rows of manifest.Apps), not as a claim to own every path;
+// honouring it would make every /v1 request billable and put a 402 in front of
+// notify, crm and tasks the moment enforcement is switched on. ai's real surface is
+// /v1/ai, which the convention supplies, and the bare completion endpoints it shares
+// with zen are the `inference` set above.
+var meteredTrees = meteredPrefixes()
+
+func meteredPrefixes() []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(meteredApps)*2)
+	add := func(p string) {
+		root := strings.TrimSuffix(p, "/")
+		if root == "" || root == "/v1" {
+			return
+		}
+		if root += "/"; !seen[root] {
+			seen[root] = true
+			out = append(out, root)
+		}
+	}
+	for _, name := range meteredApps {
+		add("/v1/" + name)                          // the tree the app OWNS.
+		for _, p := range manifest.PrefixesFor(name) { // the paths the host ROUTES to it.
+			add(p)
+		}
+	}
+	return out
 }
 
 // ── the invariant: the path to payment is never gated ───────────────────────────
