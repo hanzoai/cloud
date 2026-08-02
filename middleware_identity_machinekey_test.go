@@ -2,7 +2,7 @@ package cloud
 
 // A MACHINE credential must still resolve its org — from the token SUBJECT.
 //
-// An hk-/sk- API key is a customer credential, and IAM mints it no `orgs` claim,
+// An sk- API key is a customer credential, and IAM mints it no `orgs` claim,
 // because a machine is a member of nothing. Reading the membership set and failing
 // closed on it therefore 403'd every existing customer key on every ORG-SCOPED
 // route (v1.801.244: /v1/agents 403 "X-Org-Id required", /v1/gpus 403,
@@ -77,23 +77,19 @@ func keyValidator(t *testing.T, owner, name string) *identityValidator {
 	return v
 }
 
-// TestAPIKeyResolvesOrgOnScopedRoute is THE regression test: a customer's hk- key
+// TestAPIKeyResolvesOrgOnScopedRoute is THE regression test: a customer's sk- key
 // must reach an org-scoped route and land on its OWN org.
 func TestAPIKeyResolvesOrgOnScopedRoute(t *testing.T) {
 	v := keyValidator(t, "gotham-labs", "batkey")
 
-	for _, prefix := range []string{"hk-", "sk-"} {
-		t.Run(prefix, func(t *testing.T) {
-			status, org := orgScopedProbe(t, v, func(r *http.Request) {
-				r.Header.Set("Authorization", "Bearer "+prefix+"customer-key-123")
-			})
-			if status != http.StatusOK {
-				t.Fatalf("%s key on an org-scoped route = %d, want 200 (this is the .244 break)", prefix, status)
-			}
-			if org != "gotham-labs" {
-				t.Fatalf("%s key resolved org %q, want %q (the key owner's org, from the subject)", prefix, org, "gotham-labs")
-			}
-		})
+	status, org := orgScopedProbe(t, v, func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer sk-customer-key-123")
+	})
+	if status != http.StatusOK {
+		t.Fatalf("sk- key on an org-scoped route = %d, want 200 (this is the .244 break)", status)
+	}
+	if org != "gotham-labs" {
+		t.Fatalf("sk- key resolved org %q, want %q (the key owner's org, from the subject)", org, "gotham-labs")
 	}
 }
 

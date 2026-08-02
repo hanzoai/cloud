@@ -1,6 +1,6 @@
 package account
 
-// Per-IP rate limiting for the abuse-sensitive console write routes (hk- key
+// Per-IP rate limiting for the abuse-sensitive console write routes (API key
 // mint/rotate/revoke, HUSD wallet top-up). This is DISTINCT from commerce's spend-cap
 // (ScopeRateLimit): it caps request FREQUENCY per client IP to blunt brute-force /
 // enumeration / resource-exhaustion, restoring the edge protection cloud loses when a

@@ -349,7 +349,7 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 				//
 				// It is not a widening: the set is signed by IAM, so a caller can only
 				// ever land on an org it already belongs to, and a claim-less token (a
-				// legacy JWT, an hk-/sk- key, a client_credentials machine — IAM never
+				// legacy JWT, an sk- key, a client_credentials machine — IAM never
 				// mints `orgs` for one) has an EMPTY set and stays pinned to home. A
 				// selection outside the set is DISCARDED, not honored and not refused:
 				// the request continues in the caller's own org, so a stale localStorage
@@ -476,7 +476,7 @@ func sanitizeSubScopes(c *zip.Ctx, org, project, app, billingAccount string) {
 }
 
 // validatedPrincipal extracts a token (Bearer, Basic, then session cookie) and
-// validates it. Returns nil when the credential is absent, opaque (an hk-/sk-
+// validates it. Returns nil when the credential is absent, opaque (a pk-/sk-
 // API key — not a JWT), or invalid — so a bad credential yields anonymity, never
 // trust. A nil validator (unconfigured) also yields nil: the sanitizer still
 // strips authority headers, so forgery stays dead even with no validator.
@@ -616,7 +616,7 @@ func callerToken(c *zip.Ctx) string {
 // -- cloud substitutes NO service credential of its own, so tenant isolation carries
 // across the hop: a caller in org A relays an org-A token and can reach only org A.
 //
-// An opaque API key (hk-/sk-/...) is NOT a relayable bearer -- an OIDC target cannot
+// An opaque API key (pk-/sk-) is NOT a relayable bearer -- an OIDC target cannot
 // validate it and forwarding it would leak the key -- so it returns "". Empty when
 // the request carries no validatable bearer; the relay then sends no Authorization
 // and the downstream fails closed on its own gate.
