@@ -250,6 +250,13 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 	if i >= len(body) {
 		return nil, nil
 	}
+	// The PostHog wire is probed FIRST because its batch envelope spells the same
+	// `batch` key as the canonical one — routing on the key alone would hand a
+	// PostHog batch to the canonical decoder, which cannot see `distinct_id` and
+	// yields events with no person and no kind. Shape wins over key.
+	if isInsightsWire(body, i) {
+		return decodeInsights(body)
+	}
 	if body[i] == '{' {
 		// An object is the CaptureBatch envelope iff it carries a batch/events key;
 		// otherwise it is a bare canonical Event. RawMessage is non-nil whenever the
@@ -281,6 +288,34 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 		caps[j] = e.toCapture()
 	}
 	return caps, nil
+}
+
+// isInsightsWire reports whether an OBJECT body speaks the PostHog wire, which
+// the canonical decode would otherwise mangle: PostHog spells the person
+// `distinct_id` where the canonical wire spells `distinctId`, so a bare PostHog
+// event decodes with an EMPTY person and an unnamed kind, and admitPublic then
+// drops the whole batch — a silent 200 that stores nothing, the same failure the
+// team wire had. The signal is that snake_case key, at the top level or on the
+// first batch element; the canonical wire never uses it, and the team wire is a
+// bare ARRAY, so the three are disjoint. Probing only element 0 keeps this
+// positive-signal-only: a miss falls through to the canonical decode unchanged.
+func isInsightsWire(body []byte, i int) bool {
+	if i >= len(body) || body[i] != '{' {
+		return false
+	}
+	var probe struct {
+		DistinctID json.RawMessage `json:"distinct_id"`
+		Batch      []struct {
+			DistinctID json.RawMessage `json:"distinct_id"`
+		} `json:"batch"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return false
+	}
+	if len(probe.DistinctID) > 0 {
+		return true
+	}
+	return len(probe.Batch) > 0 && len(probe.Batch[0].DistinctID) > 0
 }
 
 // isTeamArray reports whether a bare-array body speaks the team SPA's wire, so
@@ -507,8 +542,10 @@ type door struct {
 //     which takes only {"batch":[{"type":"trace-create"|…}]} shapes — consumers
 //     and shapes behind ONE door, not more doors.
 //
-//   - /v1/insights/e — the PostHog wire. A second WIRE, not a second name for the
-//     first: PostHog SDKs emit this shape and no canonical-wire door can serve them.
+//   - the PostHog wire has NO door of its own: decodeIngest dispatches it by
+//     shape (isInsightsWire), so PostHog SDKs land on /v1/event like everything
+//     else. Its rows carry $source='event' now — the door they actually arrived
+//     on — because the path that used to name them is gone.
 //
 //     ALMOST NOTHING CALLS THIS PATH DIRECTLY. Its live traffic arrives through the
 //     insights-cloud-ingest-rewrite middleware on insights.hanzo.ai (universe
