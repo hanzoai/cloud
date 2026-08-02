@@ -17,7 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
@@ -167,17 +168,11 @@ type CatalogStore struct {
 
 // OpenCatalogStore opens (and migrates) the catalog under dir.
 func OpenCatalogStore(dir string) (*CatalogStore, error) {
-	db, err := basedb.Open(namespace.System(), "tools-catalog", dir)
+	db, err := cek.Open(namespace.System(), "tools-catalog", dir)
 	if err != nil {
 		return nil, fmt.Errorf("tools: open catalog store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON"} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("tools: catalog pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS catalog (
   id          TEXT PRIMARY KEY,

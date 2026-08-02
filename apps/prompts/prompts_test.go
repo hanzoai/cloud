@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
@@ -23,7 +23,7 @@ func TestMigrateSelfHealsFromLegacyPromptSchema(t *testing.T) {
 	// opens below are the SAME file.
 	dir := t.TempDir()
 
-	legacy, err := basedb.Open(namespace.System(), "prompts", dir)
+	legacy, err := cek.Open(namespace.System(), "prompts", dir)
 	if err != nil {
 		t.Fatalf("open legacy: %v", err)
 	}
