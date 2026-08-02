@@ -7,7 +7,7 @@
 //	READ/SERVE plane (specific /v1/o11y/* routes, registered BEFORE the
 //	hanzoai/o11y wildcard so Fiber's in-order match gives them precedence):
 //	  - tenant-scoped reads  /v1/o11y/{logs,metrics,status}   (scope.go)
-//	  - SuperAdmin VM proxy  /v1/o11y/vm/{query,query_range}   (vmproxy.go)
+//	  - fleet availability   /v1/o11y/availability             (availability.go)
 //	  - flat builder query   /v1/o11y/{query,query_range}      (query.go)
 //	  - event ingest         POST /v1/event/ingestion          (event_ingest.go)
 //	  - Sentry-wire ingest   POST /v1/event/{project}/envelope|store (via cloud.ObsErrorIngest)
