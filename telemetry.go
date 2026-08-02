@@ -55,7 +55,6 @@ package cloud
 import (
 	"context"
 	"errors"
-	"net/http"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -65,7 +64,6 @@ import (
 	luxtrace "github.com/luxfi/trace"
 	"github.com/luxfi/zap"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/otlptranslator"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -204,34 +202,17 @@ func TraceInprocEnabled() bool {
 // instrument, not whatever happened to be compiled in.
 var metricRegistry = prometheus.NewRegistry()
 
-// Metrics serves this process's measurements in Prometheus exposition format, so
-// a scrape can collect what InstallTelemetry's meter provider records.
+// MetricGatherer exposes the registry for the in-process push to the telemetry
+// store (apps/o11y/metricspush.go), which is the ONLY way measurements leave
+// this process now that Prometheus is retired.
 //
-// The handler is here, with the provider that fills it, and the LISTENER is not:
-// binding a port is a decision about one process, and every plugin child in this
-// fleet shares the host's environment, so a listener opened here would have every
-// child fighting for one address (the trap listenOn documents). The app that owns
-// the fleet prober owns the listener that publishes it — see apps/o11y.
-// MetricGatherer exposes this process's registry for the in-process push to the
-// telemetry store (apps/o11y/metricspush.go).
-//
-// The registry is no longer a PUBLISHED SURFACE. Prometheus is gone and nothing
-// scrapes this process; what remains is a buffer the meter provider renders into
-// and the push drains, in the same family model the datastore receiver already
-// speaks. Handing out the Gatherer rather than the *Registry is the point: the
-// caller may READ what was measured and cannot register anything, so the rule
-// this registry exists to enforce — what appears here is what this process chose
-// to instrument — survives having a second reader.
+// The registry is no longer a PUBLISHED SURFACE — there is no exposition and no
+// scraper — it is the buffer the meter provider renders into and the push
+// drains, in the same family model the datastore receiver already speaks.
+// Handing out the Gatherer rather than the *Registry keeps the rule this
+// registry exists to enforce: what appears here is what this process chose to
+// instrument, so a reader cannot quietly become a registrant.
 func MetricGatherer() prometheus.Gatherer { return metricRegistry }
-
-func Metrics() http.Handler {
-	return promhttp.HandlerFor(metricRegistry, promhttp.HandlerOpts{
-		// A scrape that fails should say so to the scraper, which records it as a
-		// failed scrape; writing a 200 with a partial body would report a healthy
-		// collection that did not happen.
-		ErrorHandling: promhttp.HTTPErrorOnError,
-	})
-}
 
 // installMeter installs this process's meter provider and returns it with a
 // shutdown. The provider is ALWAYS installed and the shutdown is ALWAYS non-nil,
