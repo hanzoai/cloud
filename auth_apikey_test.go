@@ -25,7 +25,7 @@ func TestIAMKeysLookup(t *testing.T) {
 	defer srv.Close()
 
 	k := &iamKeys{base: srv.URL, auth: "Basic test", http: srv.Client(), cache: newCache[string, *idClaims](time.Minute)}
-	c := k.resolve(context.Background(), "hk-abc123")
+	c := k.resolve(context.Background(), "sk-abc123")
 	if c == nil {
 		t.Fatal("resolve returned nil for a valid key")
 	}
@@ -33,8 +33,8 @@ func TestIAMKeysLookup(t *testing.T) {
 		t.Fatalf("claims = %+v, want owner=hanzo name=z email=z@hanzo.ai isAdmin=true", c)
 	}
 	// The key is passed as accessKey and the confidential credential is sent.
-	if gotKey != "hk-abc123" {
-		t.Errorf("IAM got accessKey=%q, want hk-abc123", gotKey)
+	if gotKey != "sk-abc123" {
+		t.Errorf("IAM got accessKey=%q, want sk-abc123", gotKey)
 	}
 	if gotAuth != "Basic test" {
 		t.Errorf("IAM got auth=%q, want the confidential Basic credential", gotAuth)
@@ -50,7 +50,7 @@ func TestIAMKeysLookup(t *testing.T) {
 // API key stays anonymous rather than mis-resolved.
 func TestIAMKeysUnconfigured(t *testing.T) {
 	k := &iamKeys{base: "http://iam", auth: "", cache: newCache[string, *idClaims](time.Minute)}
-	if c := k.resolve(context.Background(), "hk-abc"); c != nil {
+	if c := k.resolve(context.Background(), "sk-abc"); c != nil {
 		t.Fatalf("unconfigured resolver returned %+v, want nil", c)
 	}
 }
@@ -62,7 +62,7 @@ func TestIAMKeysUnknown(t *testing.T) {
 	}))
 	defer srv.Close()
 	k := &iamKeys{base: srv.URL, auth: "Basic test", http: srv.Client(), cache: newCache[string, *idClaims](time.Minute)}
-	if c := k.resolve(context.Background(), "hk-bad"); c != nil {
+	if c := k.resolve(context.Background(), "sk-bad"); c != nil {
 		t.Fatalf("unknown key resolved to %+v, want nil", c)
 	}
 }
@@ -78,7 +78,7 @@ func TestIAMKeysCache(t *testing.T) {
 	defer srv.Close()
 	k := &iamKeys{base: srv.URL, auth: "Basic test", http: srv.Client(), cache: newCache[string, *idClaims](time.Minute)}
 	for i := 0; i < 3; i++ {
-		if k.resolve(context.Background(), "hk-x") == nil {
+		if k.resolve(context.Background(), "sk-x") == nil {
 			t.Fatal("resolve nil")
 		}
 	}
@@ -155,7 +155,7 @@ func TestOrgForKey_EachPrefixUsesItsOwnDoor(t *testing.T) {
 	if org, ok := OrgForKey(context.Background(), "pk-live-abc"); !ok || org != "pub-org" {
 		t.Fatalf("publishable key resolved to (%q,%v), want pub-org — this is the pk- ingest path", org, ok)
 	}
-	// get-user?accessKey is the SECRET-key door: it resolves hk-/sk- to the owning
+	// get-user?accessKey is the SECRET-key door: it resolves sk- to the owning
 	// user behind CapKeyResolve, and refuses a pk- by design. resolve-key is the
 	// publishable door, org-only. /v1/iam/users/get is neither — it is the typed
 	// (owner, name) read, which carries no accessKey and cannot answer this
@@ -203,11 +203,11 @@ func TestIAMKeys_RefusalReasonIsCarried(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Query().Get("accessKey") {
-		case "hk-live-GOOD":
+		case "sk-live-GOOD":
 			_, _ = w.Write([]byte(`{"status":"ok","data":{"owner":"hanzo","name":"z"}}`))
-		case "hk-live-REVOKED":
+		case "sk-live-REVOKED":
 			_, _ = w.Write([]byte(`{"status":"error","msg":"the entity does not exist","code":"key_unknown"}`))
-		case "hk-live-FORGED":
+		case "sk-live-FORGED":
 			_, _ = w.Write([]byte(`{"status":"error","msg":"the entity does not exist","code":"key_foreign_user"}`))
 		default:
 			// An older IAM that gives no reason at all.
@@ -225,9 +225,9 @@ func TestIAMKeys_RefusalReasonIsCarried(t *testing.T) {
 		key  string
 		want KeyRefusal
 	}{
-		{"hk-live-REVOKED", "key_unknown"},
-		{"hk-live-FORGED", "key_foreign_user"},
-		{"hk-live-SILENT", ""}, // an IAM that sends no code yields no invented reason
+		{"sk-live-REVOKED", "key_unknown"},
+		{"sk-live-FORGED", "key_foreign_user"},
+		{"sk-live-SILENT", ""}, // an IAM that sends no code yields no invented reason
 	} {
 		if c := k.resolve(context.Background(), tc.key); c != nil {
 			t.Fatalf("%s resolved to %+v — a refused key must stay anonymous", tc.key, c)
@@ -238,10 +238,10 @@ func TestIAMKeys_RefusalReasonIsCarried(t *testing.T) {
 	}
 
 	// A key that RESOLVES records no refusal.
-	if c := k.resolve(context.Background(), "hk-live-GOOD"); c == nil {
+	if c := k.resolve(context.Background(), "sk-live-GOOD"); c == nil {
 		t.Fatal("a valid key must still resolve")
 	}
-	if got := k.refusal(context.Background(), "hk-live-GOOD"); got != "" {
+	if got := k.refusal(context.Background(), "sk-live-GOOD"); got != "" {
 		t.Errorf("a resolved key recorded refusal %q, want none", got)
 	}
 }
@@ -254,7 +254,7 @@ func TestRefusalForKey(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Query().Get("accessKey") == "hk-live-GOOD" {
+		if r.URL.Query().Get("accessKey") == "sk-live-GOOD" {
 			_, _ = w.Write([]byte(`{"status":"ok","data":{"owner":"hanzo","name":"z"}}`))
 			return
 		}
@@ -269,10 +269,10 @@ func TestRefusalForKey(t *testing.T) {
 	t.Setenv("IAM_MINT_CLIENT_SECRET", "s3cr3t")
 	t.Cleanup(func() { sharedKeysOnce = sync.Once{}; sharedKeysInst = nil })
 
-	if reason, ok := RefusalForKey(context.Background(), "hk-live-REVOKED"); ok || reason != "key_unknown" {
+	if reason, ok := RefusalForKey(context.Background(), "sk-live-REVOKED"); ok || reason != "key_unknown" {
 		t.Fatalf("RefusalForKey(revoked) = (%q,%v), want (key_unknown,false)", reason, ok)
 	}
-	if reason, ok := RefusalForKey(context.Background(), "hk-live-GOOD"); !ok || reason != "" {
+	if reason, ok := RefusalForKey(context.Background(), "sk-live-GOOD"); !ok || reason != "" {
 		t.Fatalf("RefusalForKey(valid) = (%q,%v), want (\"\",true)", reason, ok)
 	}
 	// A non-key string never reaches IAM at all.
@@ -285,7 +285,7 @@ func TestRefusalForKey(t *testing.T) {
 	}
 	// Asking again is free — the reason rides the cache the auth path already filled.
 	before = calls
-	if _, _ = RefusalForKey(context.Background(), "hk-live-REVOKED"); calls != before {
+	if _, _ = RefusalForKey(context.Background(), "sk-live-REVOKED"); calls != before {
 		t.Errorf("re-asking why cost %d extra IAM call(s), want 0", calls-before)
 	}
 }
@@ -293,10 +293,10 @@ func TestRefusalForKey(t *testing.T) {
 // KeyHint names a key without disclosing it — enough for a holder to tell WHICH key
 // failed, useless to anyone who reads the log.
 func TestKeyHint_NeverDisclosesTheKey(t *testing.T) {
-	const key = "hk-902abd8e-dead-beef-cafe-000000000000"
+	const key = "sk-902abd8e-dead-beef-cafe-000000000000"
 	hint := KeyHint(key)
-	if hint != "hk-902abd…" {
-		t.Fatalf("KeyHint = %q, want hk-902abd…", hint)
+	if hint != "sk-902abd…" {
+		t.Fatalf("KeyHint = %q, want sk-902abd…", hint)
 	}
 	if strings.Contains(key, hint) {
 		t.Fatalf("the hint %q is a literal prefix long enough to be a substring test failure", hint)
@@ -306,7 +306,7 @@ func TestKeyHint_NeverDisclosesTheKey(t *testing.T) {
 		t.Fatalf("KeyHint leaked key material: %q", hint)
 	}
 	// A short/empty value discloses nothing at all rather than the whole string.
-	for _, short := range []string{"", "hk-", "hk-abc"} {
+	for _, short := range []string{"", "sk-", "sk-abc"} {
 		if h := KeyHint(short); h != "…" {
 			t.Errorf("KeyHint(%q) = %q, want …", short, h)
 		}

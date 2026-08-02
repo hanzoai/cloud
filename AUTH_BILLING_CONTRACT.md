@@ -76,7 +76,7 @@ client of this; none of them holds a shared key or bills anything itself.
   equals the session principal) and unexpired. Fail secure: if no such token is
   available, DENY (401 / "sign in") — never fall back to an ambient or service
   credential, which would run as the wrong principal or drain a shared org.
-- NO shared keys. NO per-app keys. NO per-user minted `hk-` keys for chat. The
+- NO shared keys. NO per-app keys. NO per-user minted API keys for chat. The
   IAM token IS the credential and the billing identity.
 - Reference implementations:
   - `chat/api/server/routes/agents/cloud.js` +

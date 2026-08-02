@@ -39,7 +39,7 @@ func TestCallerBearer(t *testing.T) {
 	}{
 		{"jwt bearer relayed unchanged", func(r *http.Request) { r.Header.Set("Authorization", "Bearer jwt.header.sig") }, "jwt.header.sig"},
 		{"X-Authorization fallback", func(r *http.Request) { r.Header.Set("X-Authorization", "Bearer x.y.z") }, "x.y.z"},
-		{"opaque hk- api key is NOT relayable", func(r *http.Request) { r.Header.Set("Authorization", "Bearer hk-secret") }, ""},
+		{"opaque pk- api key is NOT relayable", func(r *http.Request) { r.Header.Set("Authorization", "Bearer pk-secret") }, ""},
 		{"opaque sk- api key is NOT relayable", func(r *http.Request) { r.Header.Set("Authorization", "Bearer sk-secret") }, ""},
 		{"no credential yields empty", nil, ""},
 	}

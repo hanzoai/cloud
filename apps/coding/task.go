@@ -28,7 +28,7 @@ import (
 const taskOp = "/v1/coding-tasks"
 
 // credential is the per-org agent git credential the sandbox presents to native
-// git. Token is the secret (an hk- key); Username is the basic-auth user label.
+// git. Token is the secret (an sk- key); Username is the basic-auth user label.
 // Encoded into the request body only — never logged.
 type credential struct {
 	Username string `json:"username"`
