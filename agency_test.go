@@ -1,8 +1,9 @@
 package cloud
 
-// The agency table IS the specification of the differentiator. It is a pure
-// function of two values, so this table is total: there is no fifth input, no
-// clock and no I/O that could make the classification depend on anything else.
+// Reading a REQUEST for the two facts the differentiator turns on: which class
+// of credential it presented, and whether the identity boundary validated it.
+// The lane rule those two feed is a pure function and is specified where it
+// lives, in edge (lane_test.go).
 
 import (
 	"crypto/sha256"
@@ -14,38 +15,6 @@ import (
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/zap-proto/zip"
 )
-
-func TestAgency(t *testing.T) {
-	quiet := edge.Pattern{Requests: 3, Paths: 2}
-	stuffing := edge.Pattern{Requests: 40, Peers: stuffPeers}
-	guessing := edge.Pattern{Requests: 40, Failures: guessFailures}
-	sweeping := edge.Pattern{Requests: 40, Paths: sweepPaths}
-
-	cases := []struct {
-		class string
-		p     edge.Pattern
-		want  string
-		why   string
-	}{
-		{CredSecret, quiet, AgencyAgent, "a machine credential we issued is attributable — that is the agent lane"},
-		{CredSecret, sweeping, AgencyAgent, "an agent walking many endpoints is an agent doing its job, not a scraper"},
-		{CredSecret, guessing, AgencyAgent, "a failing agent key is still an agent key; the pattern is the scorer's to weigh"},
-		{CredSession, quiet, AgencyHuman, "a browser session is a person"},
-		{CredSession, sweeping, AgencyHuman, "a busy person is still a person"},
-		{CredAnonymous, quiet, AgencyUnknown, "anonymous is not malicious — every new integration starts here"},
-		{CredPublishable, quiet, AgencyUnknown, "a publishable key names a tenant, not a caller; unremarkable use is unremarkable"},
-		{CredAnonymous, stuffing, AgencyBot, "one address, many credentials, no attribution: stuffing"},
-		{CredAnonymous, guessing, AgencyBot, "a wall of refusals from an unattributable caller: guessing"},
-		{CredAnonymous, sweeping, AgencyBot, "an unattributable caller walking the map: scraping"},
-		{CredPublishable, stuffing, AgencyBot, "a copied publishable key behaves the same way and is classed the same way"},
-		{"", quiet, AgencyUnknown, "an unrecognised class is unknown, never a lane with consequences"},
-	}
-	for _, tc := range cases {
-		if got := agency(tc.class, tc.p); got != tc.want {
-			t.Errorf("agency(%q, %+v) = %q, want %q — %s", tc.class, tc.p, got, tc.want, tc.why)
-		}
-	}
-}
 
 // The whole claim of the differentiator is that the classification reads OUR
 // issuance and not the client's self-description. If a user-agent string could
@@ -59,17 +28,17 @@ func TestCredentialClass_ReadsTheCredentialNotTheClient(t *testing.T) {
 		ua     string
 		want   string
 	}{
-		{"validated secret key", "acme", "Bearer sk-live-1", "", "curl/8", CredSecret},
-		{"validated hanzo key", "acme", "Bearer hk-live-1", "", "", CredSecret},
-		{"validated session bearer", "acme", "Bearer eyJhbGciOi.payload.sig", "", "Mozilla/5.0", CredSession},
-		{"publishable key, org resolved", "acme", "Bearer pk-live-1", "", "", CredPublishable},
-		{"publishable key, no org", "", "Bearer pk-live-1", "", "", CredPublishable},
-		{"secret-shaped but unvalidated", "", "Bearer sk-live-1", "", "", CredAnonymous},
-		{"session-shaped but unvalidated", "", "Bearer eyJhbGciOi.payload.sig", "", "", CredAnonymous},
-		{"no credential at all", "", "", "", "Mozilla/5.0", CredAnonymous},
-		{"key in the X-Api-Key header", "acme", "", "sk-live-1", "", CredSecret},
-		{"a browser user-agent cannot make a key a session", "acme", "Bearer sk-live-1", "", "Mozilla/5.0 Chrome/126", CredSecret},
-		{"a curl user-agent cannot make a session a key", "acme", "Bearer eyJhbGciOi.p.s", "", "curl/8.7", CredSession},
+		{"validated secret key", "acme", "Bearer sk-live-1", "", "curl/8", edge.CredSecret},
+		{"validated hanzo key", "acme", "Bearer hk-live-1", "", "", edge.CredSecret},
+		{"validated session bearer", "acme", "Bearer eyJhbGciOi.payload.sig", "", "Mozilla/5.0", edge.CredSession},
+		{"publishable key, org resolved", "acme", "Bearer pk-live-1", "", "", edge.CredPublishable},
+		{"publishable key, no org", "", "Bearer pk-live-1", "", "", edge.CredPublishable},
+		{"secret-shaped but unvalidated", "", "Bearer sk-live-1", "", "", edge.CredAnonymous},
+		{"session-shaped but unvalidated", "", "Bearer eyJhbGciOi.payload.sig", "", "", edge.CredAnonymous},
+		{"no credential at all", "", "", "", "Mozilla/5.0", edge.CredAnonymous},
+		{"key in the X-Api-Key header", "acme", "", "sk-live-1", "", edge.CredSecret},
+		{"a browser user-agent cannot make a key a session", "acme", "Bearer sk-live-1", "", "Mozilla/5.0 Chrome/126", edge.CredSecret},
+		{"a curl user-agent cannot make a session a key", "acme", "Bearer eyJhbGciOi.p.s", "", "curl/8.7", edge.CredSession},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -153,13 +122,13 @@ func TestCredentialClass_UsesTheBoundarysOwnResolution(t *testing.T) {
 	}{
 		{"Authorization bearer", func(r *http.Request) {
 			r.Header.Set("Authorization", "Bearer sk-live-1")
-		}, CredSecret, ""},
+		}, edge.CredSecret, ""},
 		{"X-Authorization bearer", func(r *http.Request) {
 			r.Header.Set("X-Authorization", "Bearer sk-live-1")
-		}, CredSecret, "Bearer sk-live-1"},
+		}, edge.CredSecret, "Bearer sk-live-1"},
 		{"X-Api-Key", func(r *http.Request) {
 			r.Header.Set("X-Api-Key", "sk-live-1")
-		}, CredSecret, "Bearer sk-live-1"},
+		}, edge.CredSecret, "Bearer sk-live-1"},
 	}
 	base := Fingerprint("sk-live-1")
 	for _, tc := range cases {

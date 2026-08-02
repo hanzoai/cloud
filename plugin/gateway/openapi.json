@@ -80,7 +80,7 @@
       "get": {
         "operationId": "gatewayTraffic",
         "summary": "Report who is calling this org's API right now",
-        "description": "Traffic reports who is calling this organization's API right now: the request\ncount for the last minute split by AGENCY LANE — agent, human, bot, unknown —\nand the busiest credentials behind it, each with its request count, its\nauthentication-failure count, how many distinct paths it touched, and any\nverdict currently held against it.\n\nThe lane split is the answer to the question a generic bot filter cannot\nanswer: which of this traffic is the customer's own automation and which is\nsomebody working through a list. It is computed from credentials we issued, not\nfrom the client's self-description, so a scraper cannot move itself into the\nagent lane by editing a header.\n\nA credential appears as a FINGERPRINT — a one-way, per-process digest. It is\nstable enough to recognise the same caller across a minute and cannot be turned\nback into a key, so this report is safe to read, screenshot and paste.\n\nScoped to the caller's own validated organization. A SuperAdmin may inspect a\nspecific tenant with ?org=\u003cslug\u003e.",
+        "description": "Traffic reports who is calling this organization's API right now: the request\ncount for the last minute split by AGENCY LANE — agent, human, bot, unknown —\nand the busiest callers behind it, each with its request count, its\nauthentication-failure count, how many distinct paths it touched, and any\nverdict currently held against it.\n\nThe lane split is the answer to the question a generic bot filter cannot\nanswer: which of this traffic is the customer's own automation and which is\nsomebody working through a list. It is computed from credentials we issued, not\nfrom the client's self-description, so a scraper cannot move itself into the\nagent lane by editing a header.\n\nA validated caller appears as a FINGERPRINT — a one-way, per-process digest. It\nis stable enough to recognise the same caller across a minute and cannot be\nturned back into a key, so this report is safe to read, screenshot and paste.\n\nIt also reports what the sensor's own ceilings are doing (strain, tracked,\nceiling, refused) and how many screens the scorer did not answer (unscored), so\na control that has stopped measuring or a judge that has stopped answering is a\nnumber here rather than a quiet day.\n\nScoped to the caller's own validated organization. A SuperAdmin may inspect a\nspecific tenant with ?org=\u003cslug\u003e, or the lane that has no tenant — every caller\nthe identity boundary could not validate — with an empty ?org=.",
         "tags": [
           "gateway"
         ],
@@ -162,7 +162,7 @@
             "type": "string"
           },
           "cred": {
-            "description": "Cred is the credential fingerprint — a per-process one-way digest, not a key.",
+            "description": "Cred is the caller's key: a credential fingerprint (a per-process one-way\ndigest, not a key) for a validated caller, and \"ip:\u003caddr\u003e\" for one that\npresented no credential we could validate.",
             "type": "string"
           },
           "failures": {
@@ -190,12 +190,20 @@
       },
       "TrafficView": {
         "properties": {
+          "blind": {
+            "description": "Blind is how many requests in the window carried no identity to attribute\nthem to — no validated credential and no client address. Non-zero on a\npublic plane means the client address is not reaching this process (a TCP\nload balancer with no PROXY protocol in front of it, typically), so this\nscope's callers cannot be told apart and nothing can be held against them.",
+            "type": "integer"
+          },
           "callers": {
-            "description": "Callers is the org's busiest credentials this window, by fingerprint. The\nfingerprint is a per-process one-way digest: enough to recognise the same\ncaller across requests, never enough to reconstruct the credential.",
+            "description": "Callers is the scope's busiest callers this window. A credentialed caller\nappears as a FINGERPRINT — a per-process one-way digest: enough to recognise\nthe same caller across requests, never enough to reconstruct the credential.",
             "items": {
               "$ref": "#/components/schemas/TrafficCaller"
             },
             "type": "array"
+          },
+          "ceiling": {
+            "description": "Ceiling is the most callers this scope may hold at once.",
+            "type": "integer"
           },
           "denied": {
             "description": "Denied is how many of them the gate refused.",
@@ -205,27 +213,39 @@
             "additionalProperties": {
               "type": "integer"
             },
-            "description": "Lanes is the request count per agency lane — agent, human, bot, unknown.\nThis is the split that separates a customer's automation from a scraper.",
+            "description": "Lanes is the request count per lane — agent, human, bot, unknown. This is\nthe split that separates a customer's automation from a scraper.",
             "type": "object"
           },
           "mode": {
-            "description": "Mode is the abuse gate's posture for this org: \"shadow\" records the scorer's\naction without enforcing it, \"live\" enforces it.",
+            "description": "Mode is the abuse gate's posture for this scope: \"shadow\" records the scorer's\naction without enforcing it, \"live\" enforces it.",
             "type": "string"
           },
           "org": {
-            "description": "Org is the tenant this view was taken for — the validated principal's own,\nnever a value the caller supplied.",
+            "description": "Org is the scope this view was taken for — the validated principal's own,\nnever a value the caller supplied. Empty names the anonymous lane, the one\nscope that has no tenant.",
             "type": "string"
           },
-          "requests": {
-            "description": "Requests is how many requests this org made in the window.",
+          "refused": {
+            "description": "Refused is how many callers this scope's ceilings turned away in the window.",
             "type": "integer"
           },
-          "saturated": {
-            "description": "Saturated is how many of this org's own sensor keys its own ceiling has\nreclaimed. Non-zero means this organization is presenting more distinct\ncredentials or addresses than the sensor keeps state for, so its own numbers\nbelow are a sample rather than a census. It is reported rather than logged\nbecause the alternative — a bound that degrades a tenant silently — is the\nfailure this design exists to rule out. No other tenant can move it.",
+          "requests": {
+            "description": "Requests is how many requests this scope made in the window.",
             "type": "integer"
           },
           "screens": {
             "description": "Screens is how many of them were put to the scorer — the billable unit of\nthe risk product. Counted from the first request, whatever the SKU costs.",
+            "type": "integer"
+          },
+          "strain": {
+            "description": "Strain is what this scope's ceilings are doing: \"clear\" below them, \"full\"\nat them, \"refuse\" once a caller has been turned away inside this window —\nwhich means that caller is UNMEASURED and the numbers here are a sample\nrather than a census. It is reported rather than logged because the\nalternative — a bound that degrades a scope silently — is the failure this\ndesign exists to rule out. No other scope can move it.",
+            "type": "string"
+          },
+          "tracked": {
+            "description": "Tracked is how many callers this scope holds state for right now, and\nCeiling is the most it may hold. Tracked == Ceiling is the fact a bound\nthat binds cannot hide.",
+            "type": "integer"
+          },
+          "unscored": {
+            "description": "Unscored is how many of those screens got NO answer — the scorer was absent,\nstuck, slow, erroring or silent. An unanswered screen allows ordinary\ntraffic, so this is the number that separates \"a quiet day\" from \"the judge\nstopped answering and nothing said so\".",
             "type": "integer"
           },
           "window_sec": {
