@@ -141,7 +141,6 @@ func DB() orm.DB { return embeddedDB }
 func Shutdown() error {
 	conn := embeddedConn
 	embeddedDB, embeddedConn = nil, nil
-	cloud.SetIAMStore(nil)
 	if conn == nil {
 		return nil
 	}
@@ -153,9 +152,8 @@ func Shutdown() error {
 // prefixes identity owns (Prefixes). Called once by cloud.MountAll when "iam" is
 // enabled.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	// The identity store lives here, so the reads that need it are published here.
+	// The identity store lives here, so the roster read is published here.
 	exposeRoster()
-	exposeKeys()
 
 	log := deps.Logger.New("subsystem", "iam")
 
@@ -170,11 +168,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Publish the opened store for in-process readers (DB()) — set only after a clean
 	// open so DB() is nil whenever the subsystem is fail-closed.
 	embeddedDB, embeddedConn = db, conn
-	// The API-key resolver lives in the root cloud package, which cannot import this
-	// one (this package imports it), so the store is handed over rather than reached
-	// for. Before this it resolved keys over HTTP against iam.hanzo.svc — a network
-	// round trip this process made to itself, forced by the import direction.
-	cloud.SetIAMStore(db)
 
 	// Seed is NON-FATAL: new-only + idempotent config bootstrap (orgs/apps/providers/
 	// certs) from the SAME init_data.json the standalone iam seeds from. A missing or
