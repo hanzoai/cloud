@@ -135,21 +135,23 @@ func measureCents(rows int) int64 {
 // the honest form of the same thing, and it leaves the tenant's own decide path
 // its connection.
 type inflight struct {
+	// what this holds a slot for, in the refusal a caller reads.
+	what string
 	mu   sync.Mutex
 	busy map[Tenant]bool
 }
 
-func newInflight() *inflight { return &inflight{busy: map[Tenant]bool{}} }
+func newInflight(what string) *inflight { return &inflight{what: what, busy: map[Tenant]bool{}} }
 
-// claim takes the tenant's measurement slot, or refuses. The release is the
-// returned func and it is idempotent.
+// claim takes the tenant's slot, or refuses. The release is the returned func
+// and it is idempotent.
 func (f *inflight) claim(t Tenant) (func(), error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.busy[t] {
-		return nil, zip.Errorf(429, "a measurement is already running for this organisation; "+
-			"these read the same single-writer file and a second one would queue behind the first "+
-			"holding the connection its own decisions need")
+		return nil, zip.Errorf(429, "%s is already running for this organisation; "+
+			"these hold the same single-writer file and a second one would queue behind the first "+
+			"holding the connection its own decisions need", f.what)
 	}
 	f.busy[t] = true
 	var once sync.Once
@@ -194,7 +196,7 @@ func (o ops) measuring(ctx context.Context, kind string, days, rows int) (
 	if err != nil {
 		return
 	}
-	shape, err = scoringShape(db, o.s.State.model.Digest())
+	shape, err = scoringShape(db, o.s.State.digest)
 	if err != nil {
 		release()
 		return
@@ -786,7 +788,7 @@ func (o ops) reasons(ctx context.Context, _ *riskNoInput) (*riskReasonBook, erro
 	codes := reason.Codes()
 	book := &riskReasonBook{
 		Items: make([]riskReasonCode, 0, len(codes)),
-		Model: o.s.State.model.Digest(),
+		Model: o.s.State.digest,
 	}
 	for _, c := range codes {
 		book.Items = append(book.Items, riskReasonCode{
@@ -883,6 +885,12 @@ func (o ops) setPolicy(ctx context.Context, in *riskPolicyBands) (*riskPolicyBan
 		Cost: policy.Cost{Miss: in.Cost.Miss, Alarm: in.Cost.Alarm},
 	})
 	if err != nil {
+		return nil, err
+	}
+	// A policy version is the answer to "what was in force on the day this
+	// customer was declined". It ships before it is acknowledged, like every
+	// other record on this plane.
+	if err := o.s.State.shelf.ship(sc.tenant); err != nil {
 		return nil, err
 	}
 	emit(sc.org, "risk.policy", map[string]any{
@@ -985,6 +993,9 @@ func (o ops) calibrate(ctx context.Context, in *mlCalibrateIn) (*mlCalibrationVi
 	// calibration is a governance record and "the org changed it" names nobody.
 	version, at, err := putCalibration(db, m, by(ctx, sc), in.Horizon)
 	if err != nil {
+		return nil, err
+	}
+	if err := o.s.State.shelf.ship(sc.tenant); err != nil {
 		return nil, err
 	}
 	emit(sc.org, "risk.calibration", map[string]any{
@@ -1279,6 +1290,11 @@ func (o ops) replay(ctx context.Context, in *mlReplayIn) (*mlReplayReport, error
 	// The AUTHOR is the person. A replay is the evidence attached to a threshold
 	// change, and evidence whose author is "the org" names nobody.
 	if err := putReplay(db, id, at, by(ctx, sc), rep); err != nil {
+		return nil, err
+	}
+	// A replay is the justification attached to a threshold change, so it is a
+	// record and ships before it is acknowledged.
+	if err := o.s.State.shelf.ship(sc.tenant); err != nil {
 		return nil, err
 	}
 	return wireReplay(id, at, rep), nil

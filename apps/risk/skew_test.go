@@ -193,7 +193,7 @@ func TestTheBoundedReadTakesTheNewestDecisionsAndSaysWhenItCut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	shape, err := scoringShape(db, s.State.model.Digest())
+	shape, err := scoringShape(db, s.State.digest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestARuleWideMuteMovesTheShapeAndASubjectMuteDoesNot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before, err := scoringShape(db, s.State.model.Digest())
+	before, err := scoringShape(db, s.State.digest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestARuleWideMuteMovesTheShapeAndASubjectMuteDoesNot(t *testing.T) {
 	if code != http.StatusOK && code != http.StatusCreated {
 		t.Fatalf("suppress = %d %s", code, body)
 	}
-	muted, err := scoringShape(db, s.State.model.Digest())
+	muted, err := scoringShape(db, s.State.digest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +284,7 @@ func TestARuleWideMuteMovesTheShapeAndASubjectMuteDoesNot(t *testing.T) {
 	if code != http.StatusOK && code != http.StatusCreated {
 		t.Fatalf("suppress subject = %d %s", code, body)
 	}
-	after, err := scoringShape(db, s.State.model.Digest())
+	after, err := scoringShape(db, s.State.digest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +446,7 @@ func TestGovernanceRecordsNameThePersonAndNotTheOrg(t *testing.T) {
 // no fleet-wide number, so a caller that loops this surface degrades itself and
 // nobody else.
 func TestMeasurementIsBoundedPerTenantAndOnlyPerTenant(t *testing.T) {
-	f := newInflight()
+	f := newInflight("a measurement")
 	release, err := f.claim(Tenant("hanzo/acme"))
 	if err != nil {
 		t.Fatal(err)
@@ -520,7 +520,7 @@ func TestAScoreMeansAProbabilityOnThePlateausThisPlaneProduces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	shape, err := scoringShape(db, s.State.model.Digest())
+	shape, err := scoringShape(db, s.State.digest)
 	if err != nil {
 		t.Fatal(err)
 	}

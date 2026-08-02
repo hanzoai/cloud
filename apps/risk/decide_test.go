@@ -13,17 +13,16 @@ import (
 	"time"
 
 	"github.com/luxfi/aml/pkg/anomaly"
-	"github.com/luxfi/aml/pkg/velocity"
 )
 
 // TestRecordHappensBeforeScoring pins step 1. Everything after reads the rings,
 // so the numbers quoted in a decision must be the ones an investigator sees when
 // they look at the subject — including THIS observation.
 func TestRecordHappensBeforeScoring(t *testing.T) {
-	vel := velocity.New(velocity.Config{})
-	model, err := anomaly.New(anomaly.Config{Shadow: true}, vel)
+	vel := aggregates()
+	model, err := forest(anomaly.Config{}, vel)
 	if err != nil {
-		t.Fatalf("anomaly.New: %v", err)
+		t.Fatalf("forest: %v", err)
 	}
 	tn := Tenant("hanzo/acme")
 
@@ -31,7 +30,7 @@ func TestRecordHappensBeforeScoring(t *testing.T) {
 	rules := []rule{{
 		ID: "r1", Name: "counted", Stage: StagePayment, Action: ActionReview,
 		Weight: 0.5, Enabled: true,
-		All:    []term{{Field: "velocity.ip.1h.count", Op: OpGte, Number: 1}},
+		All: []term{{Field: "velocity.ip.1h.count", Op: OpGte, Number: 1}},
 	}}
 	o := observation{
 		id: "d1", at: time.Now(), stage: StagePayment, kind: "transaction", subject: "tx1",
@@ -63,12 +62,12 @@ func TestModelEvidenceCannotExceedTheCeiling(t *testing.T) {
 // TestShadowActsOnNothing pins the default. In shadow every rule runs, the model
 // scores and learns, every decision is recorded, and the action is always allow.
 func TestShadowActsOnNothing(t *testing.T) {
-	vel := velocity.New(velocity.Config{})
-	model, _ := anomaly.New(anomaly.Config{Shadow: true}, vel)
+	vel := aggregates()
+	model, _ := forest(anomaly.Config{}, vel)
 	rules := []rule{{
 		ID: "block-all", Name: "would block", Stage: StagePayment, Action: ActionBlock,
 		Weight: 1, Enabled: true,
-		All:    []term{{Field: "subject.kind", Op: OpEq, Value: "transaction"}},
+		All: []term{{Field: "subject.kind", Op: OpEq, Value: "transaction"}},
 	}}
 	o := observation{
 		id: "d1", at: time.Now(), stage: StagePayment, kind: "transaction", subject: "tx1",
@@ -107,8 +106,8 @@ func TestShadowActsOnNothing(t *testing.T) {
 // TestSuppressedEvidenceIsRecordedNotDropped pins the doctrine: a muted control
 // that leaves no trace is indistinguishable from one that was never running.
 func TestSuppressedEvidenceIsRecordedNotDropped(t *testing.T) {
-	vel := velocity.New(velocity.Config{})
-	model, _ := anomaly.New(anomaly.Config{Shadow: true}, vel)
+	vel := aggregates()
+	model, _ := forest(anomaly.Config{}, vel)
 	rules := []rule{{
 		ID: "r1", Name: "noisy", Stage: StageSignup, Action: ActionBlock, Weight: 1, Enabled: true,
 		All: []term{{Field: "subject.kind", Op: OpEq, Value: "account"}},
@@ -406,14 +405,17 @@ func TestTrainIsOnlineAndPerTenant(t *testing.T) {
 	if out.Learned != 20 {
 		t.Fatalf("learned %d of 20", out.Learned)
 	}
-	if s.State.model.State("hanzo/acme").Learned == 0 {
+	_, acme, _ := armsOf(t, s, Tenant("hanzo/acme"))
+	_, beta, _ := armsOf(t, s, Tenant("hanzo/beta"))
+	if acme.State("hanzo/acme").Learned == 0 {
 		t.Fatal("the caller's model learned nothing")
 	}
-	if s.State.model.State("hanzo/beta").Learned != 0 {
+	if beta.State("hanzo/beta").Learned != 0 {
 		t.Fatal("another tenant's model learned from this tenant's data")
 	}
-	// And the tenant key really is qualified, not bare.
-	if s.State.model.State("acme").Learned != 0 {
+	// And the tenant key really is qualified, not bare — asked of the caller's
+	// OWN forest, which is the only one that could have been indexed wrongly.
+	if acme.State("acme").Learned != 0 {
 		t.Fatal("the model is indexed on the BARE org — two brands' same-named orgs would share it")
 	}
 }

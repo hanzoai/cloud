@@ -23,7 +23,9 @@ package risk
 //  2. PER TENANT INCLUDING THE GEOMETRY. The seed is mix(cfg.Seed, orgID), so two
 //     tenants do not merely hold different counters — they hold DIFFERENT TREES.
 //     Probing one reveals nothing about where another's regions lie.
-//  3. BOUNDED. 336 KB per tenant at the defaults, MaxOrgs 256, LRU eviction. A
+//  3. BOUNDED, PER TENANT. 336 KB of forest per tenant at the defaults, and a
+//     tenant's aggregates are capped by its OWN budget (bound.go) — one store per
+//     tenant, so an eviction can only ever drop a key that tenant put there. A
 //     tenant that goes idle costs nothing and one that comes back re-warms.
 //  4. ATTRIBUTION IS A COUNTERFACTUAL ON THE MODEL THAT RAISED THE ALERT. Move
 //     one coordinate to its neutral value, rescore, and the drop IS that
@@ -43,6 +45,7 @@ package risk
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -51,7 +54,6 @@ import (
 
 	"github.com/luxfi/aml/pkg/anomaly"
 	"github.com/luxfi/aml/pkg/types"
-	"github.com/luxfi/aml/pkg/velocity"
 )
 
 // snapshotKey names the row a tenant's learned state is kept under. One row: a
@@ -59,14 +61,21 @@ import (
 // question.
 const snapshotKey = "anomaly"
 
-// saveModel writes a tenant's learned state into its own encrypted file.
+// keep writes a tenant's learned state into its own encrypted file.
 //
 // This is what makes a rollout survivable. cloud is strategy Recreate at one
 // replica, so every deploy drops the process — and with it every warming model
 // and the appetite threshold it had computed. Without this, every deploy
 // silently resets every tenant to warming, and a warming model REFUSES to score,
 // which reads as "clean" to anything that does not check Refusal.
-func saveModel(s *shelf, model *anomaly.Store, t Tenant) error {
+//
+// It takes the tenant's own db and the tenant's own model, because both come off
+// one cell: a keep that resolved either of them for itself could pair one
+// tenant's file with another tenant's state.
+func keep(db *sql.DB, t Tenant, model *anomaly.Store) error {
+	if db == nil || model == nil {
+		return nil
+	}
 	snap, ok := model.Snapshot(t.String())
 	if !ok {
 		return nil // nothing learned for this tenant; nothing to keep
@@ -75,22 +84,14 @@ func saveModel(s *shelf, model *anomaly.Store, t Tenant) error {
 	if err != nil {
 		return err
 	}
-	db, err := s.open(t)
-	if err != nil {
-		return err
-	}
 	return putModel(db, snapshotKey, body)
 }
 
-// loadModel restores a tenant's learned state on first touch after a restart.
+// restore reinstates a tenant's learned state into that tenant's own model.
 // A snapshot whose shape does not match the running inventory is REFUSED by the
 // engine, not coerced: state the model would treat as its own memory has to have
 // come from this algorithm over this feature set.
-func loadModel(s *shelf, model *anomaly.Store, t Tenant) error {
-	db, err := s.open(t)
-	if err != nil {
-		return err
-	}
+func restore(db *sql.DB, model *anomaly.Store, t Tenant) error {
 	body, err := getModel(db, snapshotKey)
 	if err != nil {
 		return nil // no snapshot is the normal first-run state, not a failure
@@ -264,12 +265,16 @@ func candidates() []candidate {
 }
 
 // replayCandidate runs one topology over the history in a sandbox.
+//
+// The sandbox is built by the SAME two bounded constructors the live plane uses
+// (bound.go), so a search cannot be the one place a 100,000-key store shared by
+// everyone comes back — and the sandbox holds one tenant's replay, under that
+// tenant's own bound, exactly like the plane it is a model of.
 func replayCandidate(t Tenant, c candidate, history []observation) (trial, error) {
-	vel := velocity.New(velocity.Config{})
-	model, err := anomaly.New(anomaly.Config{
+	vel := aggregates()
+	model, err := forest(anomaly.Config{
 		Trees: c.Trees, Depth: c.Depth, Window: c.Window, Blend: c.Blend,
 		Appetite: anomaly.Appetite{Review: c.Review, Sample: 0.001},
-		Shadow:   true, // a sandbox never alerts for real
 	}, vel)
 	if err != nil {
 		return trial{}, err

@@ -16,9 +16,11 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
+	"github.com/luxfi/aml/pkg/anomaly"
+	"github.com/luxfi/aml/pkg/velocity"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -255,8 +257,10 @@ func TestModelGeometryIsPerTenant(t *testing.T) {
 	feed(t, s, a, 40)
 	feed(t, s, b, 40)
 
-	sa, _ := s.State.model.Snapshot(a.String())
-	sb, _ := s.State.model.Snapshot(b.String())
+	_, ma, _ := armsOf(t, s, a)
+	_, mb, _ := armsOf(t, s, b)
+	sa, _ := ma.Snapshot(a.String())
+	sb, _ := mb.Snapshot(b.String())
 	if sa.Seed == 0 || sb.Seed == 0 {
 		t.Fatal("a tenant model was planted with no seed")
 	}
@@ -267,10 +271,10 @@ func TestModelGeometryIsPerTenant(t *testing.T) {
 	// A restore of A's snapshot under B's key is refused: state the model would
 	// treat as its own memory has to have come from this tenant.
 	sa.OrgID = b.String()
-	if err := s.State.model.Restore(sa); err == nil {
+	if err := mb.Restore(sa); err == nil {
 		// The engine accepts a well-formed snapshot bearing B's id; the CLOUD
 		// side is what refuses it, by comparing the snapshot's tenant against the
-		// tenant that asked. loadModel is that check.
+		// tenant that asked. restore() is that check.
 		t.Log("engine accepted a relabelled snapshot; the cloud-side tenant check is what refuses it")
 	}
 }
@@ -287,10 +291,24 @@ func feed(t *testing.T, s *stateService, tn Tenant, n int) {
 			amount: int64(i+1) * 1_000_000_000, currency: "USD", direction: "in",
 			signals: map[string]string{"ip": "203.0.113.5", "device": "d-1"},
 		}
-		record(s.State.vel, tn, o)
+		vel, model, _ := armsOf(t, s, tn)
+		record(vel, tn, o)
 		tx, ent := txOf(tn, o)
-		_, _ = s.State.model.Assess(tx, ent)
+		_, _ = model.Assess(tx, ent)
 	}
+}
+
+// armsOf resolves ONE tenant's own aggregates and model — the same door every op
+// goes through. There is no process-wide store to reach for, which is the whole
+// point of bound.go: a test cannot accidentally assert against shared state
+// because there is none.
+func armsOf(t *testing.T, s *stateService, tn Tenant) (*velocity.Store, *anomaly.Store, time.Time) {
+	t.Helper()
+	c, err := s.State.shelf.of(tn)
+	if err != nil {
+		t.Fatalf("resolve %s: %v", tn, err)
+	}
+	return c.arms()
 }
 
 // wireApp mounts the surface over a real temp data directory. Routes register
@@ -304,7 +322,7 @@ func wireApp(t *testing.T) (*zip.App, *stateService) {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("risktest"), DisableStartupMessage: true})
 	mount(s, app)
-	t.Cleanup(s.State.shelf.close)
+	t.Cleanup(func() { s.State.shelf.close() })
 	return app, s
 }
 

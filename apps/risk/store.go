@@ -1,19 +1,35 @@
 package risk
 
 // store.go is the tenant's record plane: decisions, rules, lists, suppressions,
-// controls and the model's snapshot, in the tenant's OWN encrypted SQLite file.
+// controls and the model's snapshot, in the tenant's OWN encrypted SQLite file —
+// and the registry of live per-tenant state that holds it.
 //
-// THE FILE IS THE TENANT BOUNDARY. cloud.OrgDB resolves
+// THE FILE IS THE TENANT BOUNDARY. cloud.OrgStore resolves
 // {DataDir}/orgs/{orgSlug}/risk.db through the injective SanitizeOrg slugger, so
 // two distinct orgs can never share a file and no segment can traverse out of
 // DataDir. There is no `org` column on any table here, and there cannot be a
 // cross-tenant read, because there is no statement that could express one.
+//
+// IT IS AN OrgStore AND NOT A BARE OrgDB, and that is the durability of every
+// record in it. OrgDB is the encrypted open and nothing more: the pod's volume
+// is then the only copy, and cloud deploys Recreate at one replica. OrgStore
+// hydrates the org's file from the durable object BEFORE opening it, fences the
+// writer against a deposed one at a monotone lease round, and gives ship() the
+// ship-before-ack step the two sibling durable planes (apps/research,
+// apps/books) already take after every commit. A decision is the record an
+// adverse action is defended with; it is not a record if a rollout can lose it.
 //
 // DURABLE FIRST, ANALYTICS AFTER. Every decision lands here and in the audit
 // hash chain BEFORE the analytics copy is emitted to /v1/event. That door is
 // best-effort by design — it answers {accepted, dropped} and the anonymous lane
 // drops on purpose — so a compliance-grade record that rode it would be lost by
 // a bus hiccup, invisibly. The copy is a copy.
+//
+// ONE CELL PER TENANT, NOTHING SHARED. A cell holds this tenant's own velocity
+// rings and its own half-space forest beside its own file, each under its own
+// bound (bound.go). No map inside any of them is indexed by more than one
+// tenant, so there is no eviction, no read and no write that can cross a tenant
+// even by mistake.
 
 import (
 	"database/sql"
@@ -27,6 +43,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/luxfi/aml/pkg/anomaly"
+	"github.com/luxfi/aml/pkg/velocity"
 	"github.com/zap-proto/zip"
 )
 
@@ -145,75 +163,401 @@ func migrate(db *sql.DB) error {
 	return nil
 }
 
-// shelf holds the lazily-opened per-tenant handles. A file is opened, migrated
-// and seeded once on first touch and cached by tenant key. Opens are serialised
-// so a concurrent first touch opens exactly once.
-type shelf struct {
-	dataDir string
+// plane is one tenant's opened file, which is what the org store holds. It owns
+// its Close, which is the OrgStore contract.
+type plane struct{ db *sql.DB }
 
-	mu  sync.Mutex
-	dbs map[Tenant]*sql.DB
-}
+func (p *plane) Close() error { return p.db.Close() }
 
-func newShelf(dataDir string) *shelf { return &shelf{dataDir: dataDir, dbs: map[Tenant]*sql.DB{}} }
-
-// open resolves the tenant's file. The ORG half is what cloud.OrgNamespace
-// takes — it does its own brand scoping through DataDir and the deployment, so
-// handing it the qualified key would put the brand in the path twice.
-//
-// OrgDB takes the NAME and nothing a name is made of, so the fold from org to
-// namespace happens once, at the one door, and this package cannot pair one
-// namespace's path with another namespace's key.
-func (s *shelf) open(t Tenant) (*sql.DB, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if db, ok := s.dbs[t]; ok {
-		return db, nil
-	}
-	ns, err := cloud.OrgNamespace(t.org(), "")
-	if err != nil {
-		return nil, err
-	}
-	db, err := cloud.OrgDB(s.dataDir, ns, "risk")
-	if err != nil {
-		return nil, err
-	}
+// openPlane applies the schema, the forward migrations and the starter seed to a
+// freshly-opened, pragma'd, cek-encrypted file. It is the OrgStore's open hook,
+// so it runs exactly once per file per process.
+func openPlane(db *sql.DB) (*plane, error) {
 	if _, err := db.Exec(schema + qualitySchema); err != nil {
-		_ = db.Close()
 		return nil, err
 	}
 	if err := migrate(db); err != nil {
-		_ = db.Close()
 		return nil, err
 	}
 	if err := seed(db); err != nil {
-		_ = db.Close()
 		return nil, err
 	}
-	s.dbs[t] = db
-	return db, nil
+	return &plane{db: db}, nil
 }
 
-func (s *shelf) close() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for k, db := range s.dbs {
-		_ = db.Close()
-		delete(s.dbs, k)
+// cell is ONE tenant's live state: its file, its own aggregates, its own model
+// and when they started.
+//
+// The ARM is nil until the tenant's first request and nil again after its own
+// idleness retires it. Nothing durable lives here — the model is snapshotted to
+// the tenant's file before it is ever dropped — so a cell is a cache of exactly
+// one tenant's memory, bounded by exactly that tenant's budget.
+type cell struct {
+	t  Tenant
+	db *sql.DB
+
+	mu      sync.Mutex
+	vel     *velocity.Store
+	model   *anomaly.Store
+	since   time.Time
+	touched time.Time
+}
+
+// arms hands back this tenant's two in-memory planes and the instant they
+// started. Nil only for a cell that has been retired and not yet re-armed, which
+// no request path can observe: shelf.of arms before it returns.
+func (c *cell) arms() (*velocity.Store, *anomaly.Store, time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.vel, c.model, c.since
+}
+
+// strained reports that this tenant's aggregates are at their OWN cardinality
+// bound, so a count read from them may under-state this tenant's own traffic.
+// Published rather than logged, because the consumer is the tenant: a rule on
+// `velocity.ip.1h.count >= 5` stops firing when the key it counts was dropped,
+// and there is no other way for the tenant to learn its threshold is being
+// measured against a partial ring.
+func (c *cell) strained() bool {
+	vel, _, _ := c.arms()
+	return vel != nil && vel.Keys() >= maxKeys()
+}
+
+// shelf is the bounded registry of live tenants over the durable org store.
+//
+// Admission, the per-tenant bound, the reclaim and the model reload each have
+// exactly ONE site here, so a new op cannot reach a tenant's state by another
+// route and skip one of them.
+type shelf struct {
+	stores *cloud.OrgStore[*plane]
+	log    logger
+
+	mu    sync.Mutex
+	cells map[Tenant]*cell
+	// refused counts admissions turned away at the ceiling, and refusedAt is
+	// when the last one was. Both are on the probe: a pod that is refusing
+	// tenants must page an operator rather than be found in a support ticket.
+	refused   int64
+	refusedAt time.Time
+}
+
+// logger is the slice of the service's logger this file uses. Narrow on purpose:
+// the shelf is reached from teardown and from a background sweep as well as from
+// a request, and taking the whole service would be reaching for state it has no
+// business touching.
+type logger interface {
+	Info(msg string, args ...any)
+	Warn(msg string, args ...any)
+	Error(msg string, args ...any)
+}
+
+func newShelf(b cloud.Base) *shelf {
+	return &shelf{
+		stores: cloud.NewOrgStore[*plane](b, "risk", openPlane),
+		log:    b.Log,
+		cells:  map[Tenant]*cell{},
 	}
 }
 
-// tenants lists the tenants this process currently holds open. Used by the
-// shutdown path to snapshot every resident model — a rollout must not silently
-// reset every tenant to warming.
+// errFull is the capacity refusal. 503 and not 403: nothing about the caller is
+// wrong, this pod is out of room, and a retry against a pod with room succeeds.
+var errFull = zip.Errorf(503, "this node is at its tenant capacity and will not evict another tenant's state to make room")
+
+// of resolves the caller's cell, admitting and arming it when this process has
+// not seen it. Every op reaches its tenant through here.
+//
+// AT THE CEILING A NEW TENANT IS REFUSED, never admitted by dropping an
+// incumbent. The sweep runs first, so room that a tenant's own idleness has
+// freed is taken before anybody is turned away — but the only thing that can
+// ever free a ring is the silence of the tenant that owns it.
+func (s *shelf) of(t Tenant) (*cell, error) {
+	now := time.Now()
+	s.mu.Lock()
+	c, held := s.cells[t]
+	if !held {
+		if len(s.cells) >= tenantMax() {
+			s.retireLocked(now, idleReclaim())
+		}
+		if len(s.cells) >= tenantMax() {
+			s.refused, s.refusedAt = s.refused+1, now
+			s.mu.Unlock()
+			s.log.Error("risk: refusing a new tenant — this node is at its tenant ceiling and will not evict an incumbent to make room",
+				"tenant", t.String(), "tenants", tenantMax())
+			return nil, errFull
+		}
+		// Touched at BIRTH, so a sweep between this line and the tenant's first
+		// answer cannot retire a cell that has not served a request yet.
+		c = &cell{t: t, touched: now}
+		s.cells[t] = c
+	}
+	s.mu.Unlock()
+
+	c.mu.Lock()
+	c.touched = now
+	c.mu.Unlock()
+
+	if err := s.openCell(c); err != nil {
+		s.abandon(t, c, held)
+		return nil, err
+	}
+	if err := s.arm(c); err != nil {
+		s.abandon(t, c, held)
+		return nil, err
+	}
+	return c, nil
+}
+
+// abandon drops a cell THIS call created and could not bring up. Only that one:
+// a cell an earlier call published is another request's tenant, and removing it
+// because this one failed would be the cross-tenant reach in miniature.
+func (s *shelf) abandon(t Tenant, c *cell, held bool) {
+	if held {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cells[t] != c {
+		return
+	}
+	delete(s.cells, t)
+}
+
+// openCell resolves the tenant's file once, through the org store. The ORG half
+// is what cloud.OrgNamespace takes — the deployment does its own brand scoping
+// through DataDir, so handing it the qualified key would put the brand in the
+// path twice.
+func (s *shelf) openCell(c *cell) error {
+	c.mu.Lock()
+	if c.db != nil {
+		c.mu.Unlock()
+		return nil
+	}
+	c.mu.Unlock()
+
+	ns, err := cloud.OrgNamespace(c.t.org(), "")
+	if err != nil {
+		return err
+	}
+	p, err := s.stores.For(ns)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.db = p.db
+	c.mu.Unlock()
+	return nil
+}
+
+// arm gives a cell its aggregates and its model and restores what the tenant had
+// learned. Idempotent: an already-armed cell is untouched.
+//
+// THE RELOAD IS HERE AND ONLY HERE. A "restored" latch held beside the model —
+// which is what this package had — outlives the model it describes: a model
+// dropped by anything is then never reloaded, and the tenant scores nothing for
+// the rest of the process's life while reporting only that it is warming. A cell
+// that has no model has no latch either, because the latch IS the model.
+func (s *shelf) arm(c *cell) error {
+	c.mu.Lock()
+	if c.vel != nil && c.model != nil {
+		c.mu.Unlock()
+		return nil
+	}
+	db := c.db
+	c.mu.Unlock()
+
+	vel := aggregates()
+	model, err := forest(anomaly.Config{}, vel)
+	if err != nil {
+		return err
+	}
+	// Read before the cell is armed, so a concurrent arm cannot see a
+	// half-restored model. No snapshot is the normal first run.
+	if err := restore(db, model, c.t); err != nil {
+		s.log.Warn("risk: a tenant's learned state could not be restored; it starts warming",
+			"tenant", c.t.String(), "err", err)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.vel != nil && c.model != nil { // lost the race; the winner's arm stands
+		return nil
+	}
+	c.vel, c.model, c.since = vel, model, time.Now().UTC()
+	return nil
+}
+
+// open is the file-only door, for the paths that need the record plane and not
+// the arms.
+func (s *shelf) open(t Tenant) (*sql.DB, error) {
+	c, err := s.of(t)
+	if err != nil {
+		return nil, err
+	}
+	return c.db, nil
+}
+
+// commit is the ONE way a write to a tenant's record plane is acknowledged: the
+// write runs against that tenant's own file and the file ships before the call
+// returns.
+//
+// The two steps are one function so that "written" and "durable" cannot come
+// apart at a call site. A write followed by a remembered ship is a rule; a write
+// that IS a ship is a shape — and the failure it rules out is the one nobody
+// sees, where a plane answers 200, a rollout takes the pod, and the record the
+// answer promised is not there.
+func (s *shelf) commit(t Tenant, write func(db *sql.DB) error) error {
+	c, err := s.of(t)
+	if err != nil {
+		return err
+	}
+	if err := write(c.db); err != nil {
+		return err
+	}
+	return s.ship(t)
+}
+
+// ship is the ship-before-ack step: it names the same file the write went to and
+// ships THAT one, fenced at the lease round, so a write and its ship can never
+// address different files.
+//
+// A ship that is not acknowledged is an ERROR and never a warning. Unacked means
+// this pod is not the org's elected writer or was deposed mid-request, so the
+// local row is not the org's record — answering 200 over it would tell a caller
+// a decision is on file when a takeover will not find it. On a local-only
+// deployment (no object store configured) Sync acks trivially and this costs
+// nothing.
+func (s *shelf) ship(t Tenant) error {
+	ns, err := cloud.OrgNamespace(t.org(), "")
+	if err != nil {
+		return err
+	}
+	acked, err := s.stores.Sync(ns)
+	if err != nil {
+		return fmt.Errorf("risk: this record was written locally and not shipped, so it is not durable yet: %w", err)
+	}
+	if !acked {
+		return zip.Errorf(503, "this record was written locally but this node is not this organisation's elected writer, "+
+			"so it is not durable; retry — an idempotency key makes the retry exact")
+	}
+	return nil
+}
+
+// retireLocked releases the arms of every tenant that has been SILENT for at
+// least idle: its model is written to its own file first, then its aggregates
+// and its forest go and its cell is dropped. Caller holds s.mu.
+//
+// IT IS NOT EVICTION, AND THE DIFFERENCE IS THE WHOLE POINT. The trigger is the
+// retired tenant's own silence, so no tenant's traffic can ever cost another
+// tenant a ring. Nothing is lost either: idle is floored at the longest window
+// (bound.go), so every ring of every key this tenant owns has already rotated to
+// zero, and the model is snapshotted before it is dropped.
+//
+// The FILE is not closed. The org store owns that handle and hands the same one
+// back on the tenant's next request, which is also why a search worker holding a
+// db for its whole budget cannot be handed a closed file by a sweep.
+func (s *shelf) retireLocked(now time.Time, idle time.Duration) {
+	for t, c := range s.cells {
+		c.mu.Lock()
+		if now.Sub(c.touched) < idle || c.model == nil {
+			c.mu.Unlock()
+			continue
+		}
+		if err := keep(c.db, c.t, c.model); err != nil {
+			// Never drop a model we could not write down: the cell is HELD and the
+			// next sweep tries again. Losing learned state to a housekeeping pass is
+			// exactly the silent disarm this file exists to prevent.
+			s.log.Error("risk: a retiring tenant's learned state was not kept, so its cell is held", "tenant", t.String(), "err", err)
+			c.mu.Unlock()
+			continue
+		}
+		idleFor := now.Sub(c.touched)
+		c.vel, c.model = nil, nil
+		c.mu.Unlock()
+		delete(s.cells, t)
+		s.log.Info("risk: a tenant was retired after its own idleness; its learned state is on its own file",
+			"tenant", t.String(), "idle", idleFor.String())
+	}
+}
+
+// sweep is the background retire. It runs on a timer so memory comes back from a
+// silent tenant without waiting for a busy one to need it — a version that only
+// reclaimed under pressure would make one tenant's arrival the reason another's
+// rings went away, which is the thing being ruled out.
+func (s *shelf) sweep() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.retireLocked(time.Now(), idleReclaim())
+}
+
+// close snapshots every armed tenant and closes every file. It is what makes a
+// rollout survivable: cloud deploys Recreate at one replica, so every deploy
+// drops the process, and a model that comes back with nothing learned declines
+// to score for its whole warm period.
+func (s *shelf) close() (kept, failed int) {
+	s.mu.Lock()
+	for t, c := range s.cells {
+		c.mu.Lock()
+		if c.model != nil {
+			if err := keep(c.db, c.t, c.model); err != nil {
+				failed++
+				s.log.Error("risk: a tenant's learned state was not kept", "tenant", t.String(), "err", err)
+			} else {
+				kept++
+			}
+		}
+		c.vel, c.model, c.db = nil, nil, nil
+		c.mu.Unlock()
+		delete(s.cells, t)
+	}
+	s.mu.Unlock()
+	// CloseAll ships each file to its durable object one last time, so the state
+	// a rollout drops is the state the next process hydrates.
+	if err := s.stores.CloseAll(); err != nil {
+		s.log.Error("risk: an org store did not close cleanly", "err", err)
+	}
+	return kept, failed
+}
+
+// tenants lists the tenants this process currently holds armed, in a stable
+// order.
 func (s *shelf) tenants() []Tenant {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]Tenant, 0, len(s.dbs))
-	for t := range s.dbs {
+	out := make([]Tenant, 0, len(s.cells))
+	for t := range s.cells {
 		out = append(out, t)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out
+}
+
+// strained names the tenants whose own aggregates are at their own cardinality
+// bound. Each one is degrading ITSELF and nobody else, which is the property the
+// bound exists for — and it is still worth saying out loud, because the tenant's
+// own rules are now reading a partial ring.
+func (s *shelf) strained() []string {
+	s.mu.Lock()
+	cells := make([]*cell, 0, len(s.cells))
+	for _, c := range s.cells {
+		cells = append(cells, c)
+	}
+	s.mu.Unlock()
+	out := []string{}
+	for _, c := range cells {
+		if c.strained() {
+			out = append(out, c.t.String())
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// count reports how many tenants this process holds, how many admissions it has
+// refused and when the last refusal was. All three are on the probe.
+func (s *shelf) count() (tenants int, refused int64, at time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.cells), s.refused, s.refusedAt
 }
 
 // seed installs the starter rule set and the two lists the starter rules name,
@@ -561,8 +905,14 @@ func dropControl(db *sql.DB, id string) error {
 // exists, and the caller reads the winner's answer back. Which is what an
 // idempotency key promises: one decision, one set of counters moved.
 //
-// The unique index is PARTIAL (`WHERE idem != ''`), so decisions made without a
-// key do not collide with each other.
+// The unique index is PARTIAL —
+//
+//	WHERE idem != ''
+//
+// — so decisions made without a key do not collide with each other. (The
+// predicate is an indented block rather than prose because gofmt rewrites a
+// doubled apostrophe inside a doc sentence into a curly quote, and a predicate
+// nobody can paste into sqlite is not documentation.)
 //
 // THE VERDICT IS IN THE SAME TRANSACTION, and that is the whole reason this
 // takes one. Two independent statements can land one and not the other, and the

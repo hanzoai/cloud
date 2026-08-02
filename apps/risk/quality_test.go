@@ -439,7 +439,7 @@ func TestTheProbabilityIsTheRecordedScoreMapped(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("read the calibration: %v (found=%t)", err, ok)
 	}
-	shape, err := scoringShape(db, s.State.model.Digest())
+	shape, err := scoringShape(db, s.State.digest)
 	if err != nil {
 		t.Fatalf("shape: %v", err)
 	}
@@ -600,7 +600,7 @@ func wireAt(t *testing.T, dir string) (*zip.App, *stateService) {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("risktest"), DisableStartupMessage: true})
 	mount(s, app)
-	t.Cleanup(s.State.shelf.close)
+	t.Cleanup(func() { s.State.shelf.close() })
 	return app, s
 }
 
@@ -1010,7 +1010,7 @@ func seedJudged(t *testing.T, s *stateService, tn Tenant, n int) {
 	if err != nil {
 		t.Fatalf("open %s: %v", tn, err)
 	}
-	shape, err := scoringShape(db, s.State.model.Digest())
+	shape, err := scoringShape(db, s.State.digest)
 	if err != nil {
 		t.Fatalf("shape: %v", err)
 	}

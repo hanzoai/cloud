@@ -1240,10 +1240,12 @@ type mlSnapshotOut struct {
 // both the commerce identity and the org header, which is the anti-cross-org
 // property.
 func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error) {
-	sc, db, err := tenantState(ctx, o.s)
+	sc, cell, err := tenantCell(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
+	db := cell.db
+	vel, model, _ := cell.arms()
 	stage := strings.ToLower(strings.TrimSpace(in.Stage))
 	if !stages[stage] {
 		return nil, zip.Errorf(400, "%q is not a lifecycle stage", in.Stage)
@@ -1294,7 +1296,7 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	}
 	shadow := mode(db) != "live"
 
-	out := decide(ctx, o.s.State.vel, o.s.State.model, sc.tenant, obs, rules,
+	out := decide(ctx, vel, model, sc.tenant, obs, rules,
 		func(name, value string) bool { return lists[name][strings.ToLower(value)] },
 		func(h hit, ob observation) bool {
 			now := time.Now()
@@ -1306,7 +1308,7 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 			return false
 		}, shadow)
 
-	digest := o.s.State.model.Digest()
+	digest := o.s.State.digest
 
 	// THE SHAPE IS FOLDED FROM WHAT ACTUALLY SCORED, not re-read. The rules and
 	// the suppressions above are the values decide just used, so folding them
@@ -1350,7 +1352,9 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	// winner's answer; and the verdict cannot land without the decision or the
 	// decision without the verdict, so no action is ever served with nothing behind
 	// it.
-	if err := putDecision(db, obs, out, digest, shape, in.Idem, v); err != nil {
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error {
+		return putDecision(db, obs, out, digest, shape, in.Idem, v)
+	}); err != nil {
 		if errors.Is(err, errIdemTaken) {
 			id, found, ferr := byIdem(db, in.Idem)
 			if ferr != nil || !found {
@@ -1512,7 +1516,12 @@ func (o ops) label(ctx context.Context, in *riskLabelIn) (*riskDecisionView, err
 	if !labels[v] {
 		return nil, zip.Errorf(400, "%q is not a verdict", in.Verdict)
 	}
-	if err := label(db, in.ID, v, by(ctx, sc)); err != nil {
+	// A label is the supervision every fit and every measurement reads, and the
+	// outcome an analyst is answerable for, so it is committed: written to this
+	// tenant's file and shipped before this call returns.
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error {
+		return label(db, in.ID, v, by(ctx, sc))
+	}); err != nil {
 		return nil, err
 	}
 	emit(sc.org, "risk.label", map[string]any{"verdict": v})
@@ -1533,16 +1542,18 @@ func (o ops) label(ctx context.Context, in *riskLabelIn) (*riskDecisionView, err
 // aggregate BY CONSTRUCTION: the table has no tenant column, so there is no
 // query — here or anywhere — that could return another tenant's rows.
 func (o ops) subject(ctx context.Context, in *riskSubjectRef) (*riskSubjectView, error) {
-	sc, db, err := tenantState(ctx, o.s)
+	sc, cell, err := tenantCell(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
+	db := cell.db
 	kind := strings.ToLower(strings.TrimSpace(in.Kind))
 	if !subjectKinds[kind] {
 		return nil, zip.Errorf(400, "%q is not a subject kind", in.Kind)
 	}
+	vel, _, _ := cell.arms()
 	view := &riskSubjectView{Subject: riskSubject{Kind: kind, ID: in.ID}}
-	view.Velocity = velocityOf(o.s.State.vel, sc.tenant, observation{kind: kind, subject: in.ID})
+	view.Velocity = velocityOf(vel, sc.tenant, observation{kind: kind, subject: in.ID})
 
 	rows, err := decisionsPage(db, kind, in.ID, "", "", 50)
 	if err != nil {
@@ -1748,7 +1759,7 @@ func (o ops) rules(ctx context.Context, _ *riskNoInput) (*riskRuleList, error) {
 // no terms holds on everything, a rule naming a field that does not exist holds
 // on nothing, and both read as a working control from the outside.
 func (o ops) createRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) {
-	sc, db, err := tenantState(ctx, o.s)
+	sc, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -1757,7 +1768,7 @@ func (o ops) createRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) 
 	if err := admit(r); err != nil {
 		return nil, zip.Errorf(400, "%s", err.Error())
 	}
-	if err := putRule(db, r); err != nil {
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error { return putRule(db, r) }); err != nil {
 		return nil, err
 	}
 	emit(sc.org, "risk.rule.created", map[string]any{"rule": r.ID, "stage": r.Stage, "action": r.Action})
@@ -1769,7 +1780,7 @@ func (o ops) createRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) 
 // conjunction of terms, and merging a partial term list into an existing one is
 // a change nobody can read off the request.
 func (o ops) updateRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) {
-	_, db, err := tenantState(ctx, o.s)
+	sc, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -1781,7 +1792,7 @@ func (o ops) updateRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) 
 	if err := admit(r); err != nil {
 		return nil, zip.Errorf(400, "%s", err.Error())
 	}
-	if err := putRule(db, r); err != nil {
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error { return putRule(db, r) }); err != nil {
 		return nil, err
 	}
 	w := toWireRule(r)
@@ -1820,7 +1831,7 @@ func (o ops) lists(ctx context.Context, _ *riskNoInput) (*riskListPage, error) {
 
 // CreateList creates an allow or deny list a rule can name in an inlist term.
 func (o ops) createList(ctx context.Context, in *riskListIn) (*riskListView, error) {
-	_, db, err := tenantState(ctx, o.s)
+	sc, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -1832,7 +1843,7 @@ func (o ops) createList(ctx context.Context, in *riskListIn) (*riskListView, err
 	if kind != "allow" && kind != "deny" {
 		return nil, zip.Errorf(400, "a list either allows or denies")
 	}
-	if err := putList(db, name, kind); err != nil {
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error { return putList(db, name, kind) }); err != nil {
 		return nil, err
 	}
 	return &riskListView{Name: name, Kind: kind, CreatedAt: stamp(time.Now())}, nil
@@ -1905,7 +1916,7 @@ func (o ops) suppressions(ctx context.Context, _ *riskNoInput) (*riskSuppression
 // refusals: silence must never read as a clean result, and a compliance record
 // that can be silently muted by an operational knob is not a record.
 func (o ops) suppress(ctx context.Context, in *riskSuppressIn) (*riskSuppression, error) {
-	sc, db, err := tenantState(ctx, o.s)
+	sc, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -1926,7 +1937,7 @@ func (o ops) suppress(ctx context.Context, in *riskSuppressIn) (*riskSuppression
 		}
 		s.Until = u
 	}
-	if err := putSuppression(db, s); err != nil {
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error { return putSuppression(db, s) }); err != nil {
 		return nil, err
 	}
 	emit(sc.org, "risk.suppressed", map[string]any{"rule": s.Rule, "kind": s.Kind})
@@ -1973,7 +1984,7 @@ func (o ops) controls(ctx context.Context, in *riskControlsIn) (*riskControlPage
 
 // SetControl declares a reserve, a payout hold or a block on a subject.
 func (o ops) setControl(ctx context.Context, in *riskControlIn) (*riskControl, error) {
-	sc, db, err := tenantState(ctx, o.s)
+	sc, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -1998,7 +2009,7 @@ func (o ops) setControl(ctx context.Context, in *riskControlIn) (*riskControl, e
 		}
 		c.Until = u
 	}
-	if err := putControl(db, c); err != nil {
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error { return putControl(db, c) }); err != nil {
 		return nil, err
 	}
 	emit(sc.org, "risk.control", map[string]any{"control": c.Control, "kind": c.Kind})
@@ -2101,7 +2112,7 @@ func (o ops) setMode(ctx context.Context, in *riskModeIn) (*riskModeView, error)
 // answer, and it is the model's analogue of testing a rule: because it records
 // nothing, the aggregates it reads do not include the candidate.
 func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
-	sc, _, err := tenantState(ctx, o.s)
+	sc, cell, err := tenantCell(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -2109,12 +2120,13 @@ func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
 	if err != nil {
 		return nil, err
 	}
+	_, model, _ := cell.arms()
 	tx, ent := txOf(sc.tenant, obs)
-	a := o.s.State.model.Inspect(tx, ent)
+	a := model.Inspect(tx, ent)
 	return &mlScoreOut{
 		Scored: a.Scored, Refusal: a.Reason, Score: round4(a.Score), Cut: round4(a.Cut),
 		Alert: a.Alert, Shadow: a.Shadow, Causes: wireCauses(a.Causes),
-		Values: wireValues(a.Values), Model: o.s.State.model.Digest(),
+		Values: wireValues(a.Values), Model: o.s.State.digest,
 	}, nil
 }
 
@@ -2131,10 +2143,11 @@ func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
 // Any cross-org learning in this product is aggregate-only, lives in a table
 // with no tenant column, and is published only above a k-anonymity floor.
 func (o ops) train(ctx context.Context, in *mlTrainIn) (*mlTrainOut, error) {
-	sc, _, err := tenantState(ctx, o.s)
+	sc, cell, err := tenantCell(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
+	vel, model, _ := cell.arms()
 	if len(in.Observations) == 0 {
 		return nil, zip.Errorf(400, "nothing to learn from")
 	}
@@ -2156,18 +2169,18 @@ func (o ops) train(ctx context.Context, in *mlTrainIn) (*mlTrainOut, error) {
 			out.Refused["malformed"]++
 			continue
 		}
-		record(o.s.State.vel, sc.tenant, obs)
+		record(vel, sc.tenant, obs)
 		tx, ent := txOf(sc.tenant, obs)
-		a := o.s.State.model.Inspect(tx, ent)
+		a := model.Inspect(tx, ent)
 		if !a.Scored && a.Reason != "" && a.Reason != RefusalWarming {
 			out.Refused[a.Reason]++
 		}
 		// Assess is the LEARNING path; in shadow it contributes no hit and the
 		// counters still move, which is exactly training.
-		_, _ = o.s.State.model.Assess(tx, ent)
+		_, _ = model.Assess(tx, ent)
 		out.Learned++
 	}
-	st := o.s.State.model.State(sc.tenant.String())
+	st := model.State(sc.tenant.String())
 	out.Warm, out.Model = st.Warm, st.Digest
 	o.s.State.bill.Meter(sc.org, sc.project, "train", trainCents, sc.request, sc.clientIP)
 	return out, nil
@@ -2184,12 +2197,12 @@ const trainCents = 1
 // measured commitment or it is nothing, and a fixed threshold on a drifting
 // distribution silently becomes either silence or a flood.
 func (o ops) modelState(ctx context.Context, _ *mlNoInput) (*mlModelState, error) {
-	sc, _, err := tenantState(ctx, o.s)
+	sc, cell, err := tenantCell(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	st := o.s.State.model.State(sc.tenant.String())
-	return wireState(st), nil
+	_, model, _ := cell.arms()
+	return wireState(model.State(sc.tenant.String())), nil
 }
 
 // SetAppetite sets how much of the stream the model may examine.
@@ -2199,7 +2212,7 @@ func (o ops) modelState(ctx context.Context, _ *mlNoInput) (*mlModelState, error
 // what makes an alert level governed rather than tuned, and it is why the level
 // cannot be set to fit the size of the review team.
 func (o ops) setAppetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, error) {
-	sc, db, err := tenantState(ctx, o.s)
+	sc, cell, err := tenantCell(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -2209,8 +2222,9 @@ func (o ops) setAppetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, 
 	if in.Sample < 0 || in.Sample > 1 {
 		return nil, zip.Errorf(400, "sample is a share in [0, 1]")
 	}
+	_, model, _ := cell.arms()
 	body, _ := json.Marshal(mlAppetite{Review: in.Review, Sample: in.Sample})
-	if err := setSetting(db, "appetite", string(body)); err != nil {
+	if err := setSetting(cell.db, "appetite", string(body)); err != nil {
 		return nil, err
 	}
 	// The engine's appetite is a Store-level configuration, so a per-tenant
@@ -2218,7 +2232,7 @@ func (o ops) setAppetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, 
 	// so is better than pretending a per-tenant lever exists that does not: the
 	// stored value is what a search optimises against and what the next
 	// deployment-level change is measured from.
-	st := o.s.State.model.State(sc.tenant.String())
+	st := model.State(sc.tenant.String())
 	out := wireState(st)
 	out.Appetite = mlAppetite{Review: in.Review, Sample: in.Sample, Warm: out.Appetite.Warm}
 	return out, nil
@@ -2236,7 +2250,7 @@ func (o ops) features(ctx context.Context, _ *mlNoInput) (*mlFeatureInventory, e
 		return nil, err
 	}
 	inv := anomaly.Inventory()
-	out := &mlFeatureInventory{Digest: o.s.State.model.Digest()}
+	out := &mlFeatureInventory{Digest: o.s.State.digest}
 	for _, f := range inv {
 		out.Items = append(out.Items, mlFeature{
 			Name: f.Name, Window: f.Window, Typology: f.Typology, Indicator: f.Indicator,
@@ -2265,6 +2279,28 @@ func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
 	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "search", searchCents); err != nil {
 		return nil, zip.Errorf(402, "%s", err.Error())
 	}
+
+	// ONE SEARCH PER TENANT AT A TIME, and the bound is per tenant by
+	// construction — there is no fleet-wide number to exhaust, so a caller that
+	// loops this surface spends its own money and its own slot and nobody else's.
+	// Unbounded, this is the sharpest denial of service on the whole plane: each
+	// run is up to searchBudget of CPU across the grid, detached from the request,
+	// on a pod that serves every product on api.hanzo.ai.
+	//
+	// The slot is taken BEFORE the history read and handed to the worker that
+	// finishes the job. Every path that does not reach the worker releases it, so
+	// a refusal cannot leave a tenant locked out of its own search.
+	release, err := o.s.State.running.claim(sc.tenant)
+	if err != nil {
+		return nil, err
+	}
+	handed := false
+	defer func() {
+		if !handed {
+			release()
+		}
+	}()
+
 	limit := in.Limit
 	if limit <= 0 || limit > 5000 {
 		limit = 1000
@@ -2283,19 +2319,26 @@ func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
 	if len(obs) == 0 {
 		run.Status = "refused"
 		body, _ := json.Marshal(searchReport{Refusal: errNoHistory.Error()})
-		if err := putSearch(db, id, "refused", body); err != nil {
+		if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error {
+			return putSearch(db, id, "refused", body)
+		}); err != nil {
 			return nil, err
 		}
 		return run, nil
 	}
+
 	body, _ := json.Marshal(searchReport{Events: len(obs)})
-	if err := putSearch(db, id, "running", body); err != nil {
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error {
+		return putSearch(db, id, "running", body)
+	}); err != nil {
 		return nil, err
 	}
 
 	tenant := sc.tenant
+	handed = true
 	go func() {
-		bg, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer release()
+		bg, cancel := context.WithTimeout(context.Background(), searchBudget)
 		defer cancel()
 		rep, err := searchRun(bg, tenant, obs)
 		status := "done"
@@ -2304,7 +2347,9 @@ func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
 			rep.Refusal = err.Error()
 		}
 		b, _ := json.Marshal(rep)
-		if err := putSearch(db, id, status, b); err != nil {
+		if err := o.s.State.shelf.commit(tenant, func(db *sql.DB) error {
+			return putSearch(db, id, status, b)
+		}); err != nil {
 			o.s.Log.Error("risk: a search report could not be kept", "search", id, "err", err)
 		}
 	}()
@@ -2355,14 +2400,21 @@ func (o ops) searchResult(ctx context.Context, in *mlRef) (*mlSearchReport, erro
 // because cloud deploys Recreate at one replica and a model that comes back with
 // nothing learned refuses to score for its whole warm period.
 func (o ops) snapshot(ctx context.Context, _ *mlNoInput) (*mlSnapshotOut, error) {
-	sc, _, err := tenantState(ctx, o.s)
+	sc, cell, err := tenantCell(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	if err := saveModel(o.s.State.shelf, o.s.State.model, sc.tenant); err != nil {
+	_, model, _ := cell.arms()
+	if err := keep(cell.db, sc.tenant, model); err != nil {
 		return nil, err
 	}
-	st := o.s.State.model.State(sc.tenant.String())
+	// A pinned snapshot is a record an auditor asks for by name, so it is shipped
+	// before it is acknowledged: a snapshot that only exists on this pod's volume
+	// is not pinned, it is cached.
+	if err := o.s.State.shelf.ship(sc.tenant); err != nil {
+		return nil, err
+	}
+	st := model.State(sc.tenant.String())
 	return &mlSnapshotOut{Digest: st.Digest, Learned: st.Learned, At: stamp(time.Now())}, nil
 }
 
@@ -2374,15 +2426,15 @@ func (o ops) snapshot(ctx context.Context, _ *mlNoInput) (*mlSnapshotOut, error)
 // treat as its own memory has to have come from this algorithm over this feature
 // set for this tenant.
 func (o ops) restore(ctx context.Context, _ *mlNoInput) (*mlModelState, error) {
-	sc, _, err := tenantState(ctx, o.s)
+	sc, cell, err := tenantCell(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	if err := loadModel(o.s.State.shelf, o.s.State.model, sc.tenant); err != nil {
+	_, model, _ := cell.arms()
+	if err := restore(cell.db, model, sc.tenant); err != nil {
 		return nil, zip.Errorf(409, "%s", err.Error())
 	}
-	st := o.s.State.model.State(sc.tenant.String())
-	return wireState(st), nil
+	return wireState(model.State(sc.tenant.String())), nil
 }
 
 // ── conversions ─────────────────────────────────────────────────────────────
