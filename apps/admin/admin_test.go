@@ -292,7 +292,7 @@ func newFakeIAM() *fakeIAM {
 // subject ("org/org") resolves to an EMPTY wallet — so this fake is a regression
 // guard for the reconciliation bug that made every admin money panel read $0 while
 // real balances existed (lux $10,000, maxpower $20,498). Verified against live
-// commerce /v1/billing/{balance,usage-rollup}.
+// commerce /v1/billing/{balance,usage/rollup}.
 type fakeCommerce struct {
 	server          *httptest.Server
 	balances        map[string]int64 // org slug -> availableCents (credits)
@@ -320,7 +320,7 @@ func newFakeCommerce() *fakeCommerce {
 			bal, spend = f.balances[org], f.spend[org]
 		}
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/usage-rollup"):
+		case strings.HasSuffix(r.URL.Path, "/usage/rollup"):
 			fmt.Fprintf(w, `{"consumedCents":%d,"overageCents":0,"balance":{"balanceCents":%d,"availableCents":%d}}`, spend, bal, bal)
 		case strings.HasSuffix(r.URL.Path, "/balance"):
 			fmt.Fprintf(w, `{"user":%q,"currency":"usd","balance":%d,"holds":0,"available":%d}`, user, bal, bal)
@@ -589,7 +589,7 @@ func TestOverview_CommercePartialOnPerOrgError(t *testing.T) {
 			return
 		}
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/usage-rollup"):
+		case strings.HasSuffix(r.URL.Path, "/usage/rollup"):
 			io.WriteString(w, `{"consumedCents":1500,"overageCents":0}`)
 		case strings.HasSuffix(r.URL.Path, "/balance"):
 			io.WriteString(w, `{"available":5000,"balance":5000}`)
