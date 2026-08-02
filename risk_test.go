@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/apps/gateway/edge"
 )
 
 // resetScorer restores the seam after a test, so one test's installed scorer can
@@ -76,7 +78,6 @@ func TestDecide_FailsClosedOnAPrivilegedGrant(t *testing.T) {
 		name    string
 		install RiskScorer
 	}{
-		{"no scorer installed", nil},
 		{"scorer errors", func(context.Context, string, RiskQuery) (RiskVerdict, error) {
 			return RiskVerdict{}, errors.New("model unavailable")
 		}},
@@ -102,19 +103,108 @@ func TestDecide_FailsClosedOnAPrivilegedGrant(t *testing.T) {
 	}
 }
 
+// The fail policy turns on TWO facts, and this is the second one: a scorer that
+// is NOT THERE is not a scorer that refused to answer.
+//
+// Blocking on absence made every deployment without a risk plane — and every
+// deployment whose scorer WITHDREW, which is how a degraded scorer is meant to
+// step down — refuse to mint a credential, provision an identity or read a
+// secret. That is not a defense, it is an outage with a security-shaped name.
+// The exemption is narrow and it is loud: the verdict still carries the refusal,
+// so an allow that happened because nobody was listening is never a clean result.
+func TestDecide_AnAbsentScorerIsNotASilentOne(t *testing.T) {
+	resetScorer(t)
+	grant := RiskQuery{Stage: StageUsage, Subject: RiskSubject{Kind: "session", ID: "c1"}, Privileged: true}
+
+	// Never installed.
+	SetRiskScorer(nil)
+	v := Decide(context.Background(), "acme", grant)
+	if v.Action != ActionAllow || v.Refusal != RefusalAbsent {
+		t.Fatalf("no scorer in the process: %+v, want allow/%s", v, RefusalAbsent)
+	}
+	if v.Scored() {
+		t.Fatal("an allow reached because nothing was listening must not report itself as scored")
+	}
+
+	// Installed, then WITHDRAWN — the documented way a degraded scorer steps down.
+	SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
+		return RiskVerdict{ID: "d", Action: ActionAllow}, nil
+	})
+	if v := Decide(context.Background(), "acme", grant); !v.Scored() {
+		t.Fatalf("an installed scorer must be asked: %+v", v)
+	}
+	SetRiskScorer(nil)
+	if v := Decide(context.Background(), "acme", grant); v.Action != ActionAllow || v.Refusal != RefusalAbsent {
+		t.Fatalf("a withdrawn scorer 403s every armed org's key store: %+v", v)
+	}
+
+	// And a scorer that IS there and did not answer still denies the grant.
+	SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
+		return RiskVerdict{}, errors.New("model unavailable")
+	})
+	if v := Decide(context.Background(), "acme", grant); v.Action != ActionBlock {
+		t.Fatalf("a present-but-silent scorer must still deny a grant: %+v", v)
+	}
+}
+
+// A scorer that holds every slot and never returns is INSTALLED and NOT
+// ANSWERING, and the two facts are told apart by when a call last came back. A
+// slot is released by the goroutine holding it — never at the timeout, or the
+// ceiling would not be a ceiling — so a deadlocked scorer holds all of them
+// forever. Reading that as "busy" left every armed org's grant surface at 403
+// until someone restarted the pod, with nothing to tell an operator whether the
+// control was working or wedged.
+func TestDecide_AStuckScorerDoesNotWedgeTheGrantSurface(t *testing.T) {
+	resetScorer(t)
+	sem := newCalls(1)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
+		<-release
+		return RiskVerdict{Action: ActionAllow}, nil
+	})
+	grant := RiskQuery{Stage: StageUsage, Privileged: true}
+
+	// One call parks the only slot. Nothing has come back, but not for long.
+	if v := decide(sem, context.Background(), "acme", grant); v.Refusal != RefusalTimeout {
+		t.Fatalf("the parked call: %+v, want %s", v, RefusalTimeout)
+	}
+	if v := decide(sem, context.Background(), "acme", grant); v.Refusal != RefusalBusy || v.Action != ActionBlock {
+		t.Fatalf("a full ceiling is BUSY and a grant waits: %+v", v)
+	}
+
+	// Once nothing has come back for a whole stall, the scorer is not busy — it is
+	// gone, and a grant proceeds rather than waiting for a pod restart.
+	sem.answered(time.Now().Add(-ScorerStall - time.Second))
+	v := decide(sem, context.Background(), "acme", grant)
+	if v.Refusal != RefusalStuck || v.Action != ActionAllow {
+		t.Fatalf("a stuck scorer: %+v, want allow/%s", v, RefusalStuck)
+	}
+	if v.Scored() {
+		t.Fatal("an allow past a stuck scorer must not report itself as scored")
+	}
+
+	// A scorer that answers again is answering again: the state is a measurement,
+	// not a latch.
+	sem.answered(time.Now())
+	if v := decide(sem, context.Background(), "acme", grant); v.Refusal != RefusalBusy {
+		t.Fatalf("after an answer came back: %+v, want %s", v, RefusalBusy)
+	}
+}
+
 func TestDecide_PassesAScoredVerdictThrough(t *testing.T) {
 	resetScorer(t)
 	SetRiskScorer(func(_ context.Context, org string, q RiskQuery) (RiskVerdict, error) {
 		if org != "acme" {
 			t.Fatalf("the scorer was asked about org %q, not the one Decide was called for", org)
 		}
-		return RiskVerdict{ID: "d-1", Action: ActionBlock, Score: 0.97, Agency: AgencyBot, Cause: "peers"}, nil
+		return RiskVerdict{ID: "d-1", Action: ActionBlock, Score: 0.97, Agency: edge.AgencyBot, Cause: "peers"}, nil
 	})
 	v := Decide(context.Background(), "acme", RiskQuery{Stage: StageUsage})
 	if !v.Scored() {
 		t.Fatalf("a scored verdict must carry no refusal, got %q", v.Refusal)
 	}
-	if v.Action != ActionBlock || v.ID != "d-1" || v.Agency != AgencyBot {
+	if v.Action != ActionBlock || v.ID != "d-1" || v.Agency != edge.AgencyBot {
 		t.Fatalf("verdict was reshaped in transit: %+v", v)
 	}
 }
@@ -245,7 +335,7 @@ func TestRoutePath(t *testing.T) {
 // of the ceiling differs.
 func TestDecide_IsBoundedWhenTheScorerStops(t *testing.T) {
 	resetScorer(t)
-	sem := slots(2)
+	sem := newCalls(2)
 
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
@@ -287,7 +377,7 @@ func TestDecide_IsBoundedWhenTheScorerStops(t *testing.T) {
 // exists to prevent.
 func TestDecide_ReleasesItsSlotWhenTheScorerAnswers(t *testing.T) {
 	resetScorer(t)
-	sem := slots(1)
+	sem := newCalls(1)
 
 	SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
 		return RiskVerdict{Action: ActionAllow}, nil
@@ -296,5 +386,46 @@ func TestDecide_ReleasesItsSlotWhenTheScorerAnswers(t *testing.T) {
 		if v := decide(sem, context.Background(), "acme", RiskQuery{Stage: StageUsage}); v.Refusal != "" {
 			t.Fatalf("call %d was refused %q — a returned scorer must give its slot back", i, v.Refusal)
 		}
+	}
+}
+
+// A SCOPE KEY MUST NAME THE ROUTE. The service axis of the per-scope rate rule
+// and of the per-scope spend cap is derived from the path, and it was derived
+// from the RAW path — so "/V1/AI/chat" produced the service "AI" while reaching
+// exactly the "/v1/ai/chat" handler. A different scope key is a different rate
+// bucket and a different cap: an authenticated caller could multiply its own
+// ceiling by holding down the shift key.
+func TestCanonicalService_NamesTheRouteNotTheSpelling(t *testing.T) {
+	for _, spelling := range []string{
+		"/v1/ai/chat", "/V1/AI/chat", "/v1/AI/Chat", "/v1/ai/chat/", "/V1/Ai/",
+	} {
+		if got := canonicalService(spelling); got != "ai" {
+			t.Errorf("canonicalService(%q) = %q, want %q", spelling, got, "ai")
+		}
+	}
+	// The alias table is applied to the normalized segment, not before it.
+	if got := canonicalService("/V1/ML/models"); got != "compute" {
+		t.Errorf("canonicalService(/V1/ML/models) = %q, want compute", got)
+	}
+	// And a non-/v1 path still has no service.
+	if got := canonicalService("/healthz"); got != "" {
+		t.Errorf("canonicalService(/healthz) = %q, want empty", got)
+	}
+}
+
+// A fact we do not have is ABSENT, not empty. An empty string is a VALUE, and a
+// scorer keying velocity on one would group every request whose client address
+// never arrived — behind a TCP load balancer with no PROXY protocol, that is all
+// of them — into a single very busy caller, and refuse the lot.
+func TestFacts_AMissingFactIsAbsent(t *testing.T) {
+	got := Facts(map[string]string{"ip": "", "path": "/v1/models", "credential": "", "peers": "0"})
+	if _, ok := got["ip"]; ok {
+		t.Error("an empty ip was sent as a fact; the scorer will treat it as an identity")
+	}
+	if _, ok := got["credential"]; ok {
+		t.Error("an empty credential class was sent as a fact")
+	}
+	if got["path"] != "/v1/models" || got["peers"] != "0" {
+		t.Errorf("a real fact was dropped: %v", got)
 	}
 }

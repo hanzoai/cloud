@@ -85,6 +85,11 @@ const (
 	// RefusalBusy — the scorer was already answering as many questions at once as
 	// it is allowed to. The question was not asked.
 	RefusalBusy = "scorer-busy"
+	// RefusalStuck — the scorer holds every slot and has not returned from ANY
+	// call for longer than a stall. It is installed and it is not answering, which
+	// is a different fact from busy: busy clears in microseconds, this does not
+	// clear at all.
+	RefusalStuck = "scorer-stuck"
 )
 
 // RiskBudget bounds how long a decision may take. The gate sits on the request
@@ -183,14 +188,14 @@ func loadRiskScorer() RiskScorer {
 // It never returns an error. A gate needs an action, and "I could not tell you"
 // IS an action — stated by q.Privileged and carried in Refusal.
 func Decide(ctx context.Context, org string, q RiskQuery) RiskVerdict {
-	return decide(scorerSlots, ctx, org, q)
+	return decide(scorerCalls, ctx, org, q)
 }
 
 // decide is Decide with its ceiling passed in — the whole of the logic, over the
 // one piece of process state it holds. Decide supplies the process ceiling; a
 // test supplies its own, so the bound is asserted without mutating a global that
 // another test's parked goroutine is still reading.
-func decide(sem semaphore, ctx context.Context, org string, q RiskQuery) RiskVerdict {
+func decide(sem *calls, ctx context.Context, org string, q RiskQuery) RiskVerdict {
 	fn := loadRiskScorer()
 	if fn == nil {
 		return riskUnavailable(q, RefusalAbsent)
@@ -205,6 +210,14 @@ func decide(sem semaphore, ctx context.Context, org string, q RiskQuery) RiskVer
 	// policy answers, which is the same answer a timeout gives and reaches it
 	// without allocating anything.
 	if !sem.take() {
+		// FULL is not the same fact as STOPPED. A healthy scorer returns in
+		// microseconds, so every slot being held means either a burst (which clears
+		// before the caller could retry) or a scorer that has stopped returning at
+		// all — and the second one never clears, because a slot is released by the
+		// goroutine that holds it. Told apart by when a call last came back.
+		if sem.stalled(time.Now()) {
+			return riskUnavailable(q, RefusalStuck)
+		}
 		return riskUnavailable(q, RefusalBusy)
 	}
 
@@ -223,7 +236,8 @@ func decide(sem semaphore, ctx context.Context, org string, q RiskQuery) RiskVer
 		// The slot is released by the goroutine that holds it, when the scorer
 		// actually returns — NOT when the budget expires. Releasing it at the
 		// timeout would let the ceiling be exceeded without bound by exactly the
-		// scorer it exists to contain.
+		// scorer it exists to contain. The return is also the health signal: a
+		// scorer that keeps returning is busy, one that never returns is stuck.
 		defer sem.give()
 		defer func() {
 			// A panicking scorer is a scorer that did not answer. Contained here
@@ -259,25 +273,58 @@ func decide(sem semaphore, ctx context.Context, org string, q RiskQuery) RiskVer
 // asking it again is worthless.
 const MaxScorerCalls = 256
 
-// scorerSlots is the ceiling. A counting semaphore over a buffered channel: take
-// never blocks (a full channel means "busy", and busy is an answer), give always
-// succeeds because only a taker gives.
-var scorerSlots = slots(MaxScorerCalls)
+// ScorerStall is how long every slot may be held with nothing coming back before
+// the scorer is called stuck rather than busy. Twenty budgets: far past any burst
+// a healthy scorer produces, and reached in seconds by one that has deadlocked.
+const ScorerStall = 20 * RiskBudget
 
-type semaphore chan struct{}
+// calls is the ceiling on asking, and the ONE record of whether asking still
+// works: how many questions are in flight, and when an answer last came back.
+// The two facts live together because neither one alone can tell a burst from a
+// deadlock, and that difference decides whether a privileged grant waits or
+// proceeds.
+type calls struct {
+	// slots is a counting semaphore over a buffered channel: take never blocks (a
+	// full channel means "no room", which is an answer), give always succeeds
+	// because only a taker gives.
+	slots chan struct{}
+	// last is the unix-nano time a scorer call last RETURNED. Stamped when a
+	// scorer is installed, so a scorer that saturates immediately is busy rather
+	// than born stuck.
+	last atomic.Int64
+}
 
-func slots(n int) semaphore { return make(semaphore, n) }
+func newCalls(n int) *calls {
+	c := &calls{slots: make(chan struct{}, n)}
+	c.answered(time.Now())
+	return c
+}
 
-func (s semaphore) take() bool {
+// scorerCalls is the process ceiling.
+var scorerCalls = newCalls(MaxScorerCalls)
+
+func (c *calls) take() bool {
 	select {
-	case s <- struct{}{}:
+	case c.slots <- struct{}{}:
 		return true
 	default:
 		return false
 	}
 }
 
-func (s semaphore) give() { <-s }
+func (c *calls) give() {
+	c.answered(time.Now())
+	<-c.slots
+}
+
+func (c *calls) answered(at time.Time) { c.last.Store(at.UnixNano()) }
+
+// stalled reports that nothing has come back for longer than ScorerStall. Only
+// asked when every slot is held: a quiet deployment has an old timestamp and is
+// not stuck, it is unasked.
+func (c *calls) stalled(now time.Time) bool {
+	return now.UnixNano()-c.last.Load() > int64(ScorerStall)
+}
 
 // errScorerPanic is the error a contained panic reports as. Unexported and
 // never returned to a caller — Decide converts it to a refusal like any other.
@@ -287,13 +334,62 @@ type errScorer string
 
 func (e errScorer) Error() string { return string(e) }
 
-// riskUnavailable is THE fail policy. Two lines, one place: a privileged grant
-// denies, everything else proceeds, and both say why.
+// riskUnavailable is THE fail policy, in one place — and it turns on TWO facts,
+// not one. The second is what keeps it a defense rather than an outage.
+//
+//	privileged — the request grants standing authority, so silence must deny.
+//	answering  — there IS a scorer here and it is returning answers. Every
+//	             refusal except two means exactly that: it exists and it did not
+//	             answer THIS question, which is when a grant must wait.
+//
+// The two exemptions are the deployments where there is no judge at all:
+//
+//	absent — no scorer was ever installed in this process, or one withdrew (which
+//	         is how a degraded scorer is meant to step down). Refusing to mint a
+//	         credential or read a secret because a component is not deployed is
+//	         not security, it is a product that cannot be operated.
+//	stuck  — every slot is held and nothing has come back for a stall. A slot is
+//	         released by the goroutine holding it, so a deadlocked scorer holds
+//	         them forever: without this, one hung goroutine would 403 every armed
+//	         org's key store until someone restarted the pod, and no operator
+//	         could tell that apart from the control working as designed.
+//
+// This is the same rule hanzoai/iam applies at its own signup gate with a
+// different arming signal. Two mechanisms, one semantic: fail closed once there
+// is something to fail closed on, allow before.
+//
+// Neither exemption is silent. Every verdict carries the Refusal that produced
+// it, the gate logs it, and Traffic.Screen counts the unanswered screens on the
+// org's own report — so "allowed" and "allowed because nobody was listening" are
+// never the same row.
 func riskUnavailable(q RiskQuery, why string) RiskVerdict {
-	if q.Privileged {
+	if q.Privileged && answering(why) {
 		return RiskVerdict{Action: ActionBlock, Agency: q.Agency, Refusal: why}
 	}
 	return RiskVerdict{Action: ActionAllow, Agency: q.Agency, Refusal: why}
+}
+
+// answering reports whether a refusal came from a scorer that is present and
+// returning — the fact that separates "the judge is out today" from "the judge
+// did not answer this one".
+func answering(why string) bool { return why != RefusalAbsent && why != RefusalStuck }
+
+// Facts drops the empty values from a signal map, because a fact we do not have
+// must be ABSENT rather than empty. An empty string is a VALUE: a scorer keying
+// velocity on "ip" would group every request whose address never arrived — which,
+// behind a load balancer that does not pass the peer, is all of them — into one
+// very busy caller and refuse the lot. "We do not know" and "it is the empty
+// string" are different answers and only one of them is true.
+//
+// Stated once, at the seam every question passes through, so no gate has to
+// remember it.
+func Facts(m map[string]string) map[string]string {
+	for k, v := range m {
+		if v == "" {
+			delete(m, k)
+		}
+	}
+	return m
 }
 
 func riskActionKnown(a string) bool {
