@@ -335,7 +335,16 @@ func (s *datastoreSink) Insert(ctx context.Context, table string, columns []stri
 			return fmt.Errorf("append row: %w", err)
 		}
 	}
-	return batch.Send()
+	if err := batch.Send(); err != nil {
+		return err
+	}
+	// Rows are counted HERE — the one choke point every plane row passes
+	// through (spans, logs, traces, observations, scores) — and only after Send
+	// returns, so the count is rows that LANDED, not rows that were offered.
+	// event.span going to zero here is the signal that was missing for four and
+	// a half months.
+	cloud.ObserveRows(table, len(rows))
+	return nil
 }
 
 // Close releases the native connection.
