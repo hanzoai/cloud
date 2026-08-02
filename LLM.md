@@ -2640,18 +2640,37 @@ migration silently strips request shapes from every generated CLI and SDK.
   two structs — 1246 packages for a DTO. One definition, neither end importing the
   other. Measured: `plugin/admin` 2261 → 1115 packages, `apps/billing` 1246 → 945,
   and two boards that had been reporting zeros started reporting the truth.
-- **THE FLEET HAS ONE MCP DOOR: `POST /v1/mcp`, on the HOST.** zip serves it
-  (`zip.MCPConfig{Path:"/v1/mcp"}` in `cmd/cloud`), and its tool list is the union
-  of every mounted plugin's BUILD-TIME catalogue — `plugin/<app>/mcp.json`, written
-  by the same `<app> describe` run that writes that app's `openapi.json`, embedded
-  by the leaf `plugin/embed.go` and handed to zip as `Plugin.Tools`. So `tools/list`
-  is a memcpy of a constant and starts NO child; only a `tools/call` wakes one — the
-  single plugin that owns the name — over ZAP on its private socket, where the
-  child's OWN registry answers. There were THREE hand-rolled registries for this one
-  concept (`apps/tools/http.go`, `apps/tools/builtin.go`, `apps/automations/mcp.go`)
-  and the public one exposed none of the typed ops; all three are deleted. Type an
+- **THE FLEET HAS ONE MCP DOOR: `POST /v1/mcp`, on the HOST, AND IT IS A QUERY.**
+  The host serves it itself (`fleet.Mount` in `cmd/cloud`; zip's own door is
+  `Disabled` there so exactly one handler holds the address). A `tools/list`
+  forwards the CALLER's own message to every composed subsystem's own `/mcp` over
+  its private ZAP socket, in parallel, and unions the replies — so what the door
+  carries is what the subsystems serve at that instant, and a subsystem whose tools
+  depend on the tenant answers for THIS caller out of its own rows. `zip.App.Start`
+  resolves a cold child, which is the same single-flighted path a prefix request
+  takes, so the first list pays one start per app and nothing after it does.
+  **A subsystem that does not answer is NAMED** in `result._meta["hanzo.ai/unavailable"]`,
+  because a silently-short list and a stale file are the same defect. A `tools/call`
+  goes to the app that listed the name, verbatim; a name nobody has listed costs one
+  discovery, then `-32602`.
+  It used to read a BUILD-TIME catalogue — `plugin/<app>/mcp.json`, embedded by
+  `plugin/embed.go` and handed to zip as `Plugin.Tools` — and `tools/list` was a
+  memcpy. **Those 116 files are deleted (49,865 lines).** They were a second source
+  for a fact each child already knows, and they were wrong: `plugin/o11y/mcp.json`
+  held 12 tools while the o11y binary at the same commit served 365, because the
+  missing 353 ops live in `github.com/hanzoai/o11y` and a `go.mod` bump in ANOTHER
+  repository invalidated an artifact in this one with nothing in the diff to say so
+  — no generator on a hook here could ever have seen that trigger. There were also
+  THREE hand-rolled registries for this one concept (`apps/tools/http.go`,
+  `apps/tools/builtin.go`, `apps/automations/mcp.go`); all three are deleted. Type an
   op and it IS a tool — do not write a second JSON-RPC envelope, and note
   `manifest/mcp_test.go` turns one red (no served path may end in `/mcp`).
+  `plugin/<app>/openapi.json` SURVIVES, for the one reason the catalogue could not:
+  the fleet weave carries each subsystem's PROSE, and that prose is lifted from the
+  app's SOURCE at describe time (`openapi.Synopsis`) — a running child has no comment
+  to read and would answer with its deployment's brand blurb, which the weave would
+  publish as the description of every product tag. Making the synopsis a declared
+  value is what deleting that half is waiting on.
 - **The per-tenant tool plane is ONE typed op, and callable in-process.** An org's
   connectors, functions, agents, authored skills and external MCP servers are ROWS,
   not code, so no build-time catalogue can hold them: they are reached through
@@ -3324,9 +3343,15 @@ The file may only shrink: a 404 not listed fails the release, and a listed line
 that starts answering must be deleted in the same commit. Today it holds 14
 `/v1/pricing/*` lines, all owned by a Cloudflare worker that exists in no repo.
 
-**The projections are gated, not hoped for.** MCP needs no car — the door serves
-exactly the tools in the committed `plugin/*/mcp.json`, so car 3 checks the
-number rather than claiming it (833 = 833 at v1.801.350). The eight clients and
+**The projections are gated, not hoped for.** MCP needs no car — but the gate
+changed with the door. Car 3 used to compare the live tool count against
+`jq -s length` over the committed `plugin/*/mcp.json`; both sides came from the
+same files (the door was SERVING those bytes), so it proved only that the image
+carried the tree it was built from, and it passed for months while o11y's
+catalogue held 12 of 365. The door composes itself by asking now, so car 3 asks
+the better question: **did every subsystem answer** — any name in
+`result._meta["hanzo.ai/unavailable"]` fails the release. A broken deployment used
+to match the files exactly. The eight clients and
 the docs each run hanzoai/ci's `client:` lane, which fetches `openapi.yaml` at
 the release's sha, **refuses on a digest mismatch**, regenerates, compiles itself
 and its examples, writes `.spec-lock` and cuts a patch.
