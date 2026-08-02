@@ -110,6 +110,16 @@ func describeBilling() {
 			"without a round trip, and an org with no per-org credentials gets the deployment's "+
 			"own public app id.")
 
+	openapi.Describe("/v1/billing/credits", http.MethodGet,
+		"List the credit grants on your org's balance",
+		"Returns the caller org's credit grants — each with its original amount, what remains "+
+			"and when it expires — so a customer can see what was given and what is left before "+
+			"metered spend draws it down. It is a READ of the caller's own subject, pinned before "+
+			"the handler runs, so a grant belonging to another tenant is simply absent. Granting "+
+			"credit is not this route and never has been: minting lands on the mint-gated POST "+
+			"/v1/billing/credit, which no browser can reach. Reading an empty balance is an empty "+
+			"array, not an error.")
+
 	openapi.Describe("/v1/billing/payouts", http.MethodGet,
 		"List your org's payouts, newest first",
 		"Returns the caller org's payout records ordered by creation time descending, read from "+
@@ -486,7 +496,7 @@ func describeStore() {
 			"context, or provisioning fails, does it fall back to a placeholder store literally "+
 			"named default, which a storefront edge should treat as unconfigured.")
 
-	openapi.Describe("/v1/store/storefront-token", http.MethodPost,
+	openapi.Describe("/v1/store/token", http.MethodPost,
 		"Mint your org's least-privilege storefront read key",
 		"Answers a freshly minted token carrying ONLY the published-read permission — enough for "+
 			"a logged-out shopper's storefront to read your published catalog and nothing more, "+

@@ -80,7 +80,7 @@ func (f *financeFake) server(t *testing.T) *httptest.Server {
 			}
 		case "/v1/billing/transactions":
 			_, _ = io.WriteString(w, txnsJSON(org))
-		case "/v1/billing/portal/payment-methods":
+		case "/v1/billing/portal/methods":
 			if org == "acme" {
 				// pm_2 is an OVER-returning upstream: it leaks a full 16-digit number under a
 				// nested card. The projection MUST truncate it to the last four (defense in depth).
@@ -330,7 +330,7 @@ func TestFinancePaymentMethods_MaskedBrandLast4(t *testing.T) {
 		t.Fatalf("pm_2 must be masked to last4 1111: %+v", got)
 	}
 	// The portal read is customerId-scoped to the caller's own org.
-	if f.gotPath != "/v1/billing/portal/payment-methods" || f.gotCustomerID != "acme" {
+	if f.gotPath != "/v1/billing/portal/methods" || f.gotCustomerID != "acme" {
 		t.Fatalf("payment-methods scope: path=%q customerId=%q", f.gotPath, f.gotCustomerID)
 	}
 }
