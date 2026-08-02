@@ -273,18 +273,28 @@ func decide(
 		Timestamp:         o.at,
 		USD:               nanoUSD(o.amount),
 	}
-	assessment := model.Inspect(tx, types.Entity{ID: o.subject, OrgID: t.String()})
+	// NO MODEL IS A MODEL THAT REFUSES, NOT A PANIC. The champion's geometry can
+	// fail to be housed, and the caller's answer to that is a nil store — so the
+	// rules still run, the decision is still recorded, and it says WARMING: the
+	// same word the engine uses for a store that holds nothing, because two
+	// vocabularies for "the model has no memory" would eventually disagree.
+	var assessment anomaly.Assessment
 	var modelHit *hit
-	if mh, ok := model.Assess(tx, types.Entity{ID: o.subject, OrgID: t.String()}); ok {
-		action := mh.Rule.Action
-		if actionRank(action) > actionRank(modelCeiling) {
-			action = modelCeiling
+	if model == nil {
+		assessment.Reason = RefusalWarming
+	} else {
+		assessment = model.Inspect(tx, types.Entity{ID: o.subject, OrgID: t.String()})
+		if mh, ok := model.Assess(tx, types.Entity{ID: o.subject, OrgID: t.String()}); ok {
+			action := mh.Rule.Action
+			if actionRank(action) > actionRank(modelCeiling) {
+				action = modelCeiling
+			}
+			modelHit = &hit{
+				Rule: mh.Rule.ID, Name: mh.Rule.Name, Action: action,
+				Weight: mh.Rule.Weight, Severity: mh.Rule.Severity,
+			}
+			out.causes = mh.Causes
 		}
-		modelHit = &hit{
-			Rule: mh.Rule.ID, Name: mh.Rule.Name, Action: action,
-			Weight: mh.Rule.Weight, Severity: mh.Rule.Severity,
-		}
-		out.causes = mh.Causes
 	}
 	if !assessment.Scored && assessment.Reason != "" {
 		out.refusal = assessment.Reason

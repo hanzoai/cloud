@@ -59216,6 +59216,13 @@ paths:
         search can never move the live model, and no candidate can see another
         tenant's history because the replay reads this tenant's own file.
 
+        A CLOSED GRID IS NOT A BOUND ON CONCURRENCY. 243 candidates over a thousand
+        replayed rows is one bounded search; a caller looping the op is as many of
+        them at once as it cares to start, on a single replica that is also answering
+        authorisations for every other product on this host. So it queues on THE bench
+        — the same one estimation uses, with the same four bounds: one in flight per
+        tenant, two across the deployment, a wall-clock ceiling, and the row cap.
+
         It answers 202 with a run identifier; read the report back at
         GET /v1/ml/search/{id}.
       operationId: mlSearch

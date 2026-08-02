@@ -519,3 +519,111 @@ func TestADecisionNamesTheModelVersionThatMadeIt(t *testing.T) {
 		t.Fatalf("beta's decision names version %q", stored)
 	}
 }
+
+// TestAModelThatCannotBeHousedRefusesRatherThanPanics is the fail-secure edge of
+// "which model decides".
+//
+// champion() answers nil when a promoted geometry cannot be stood up, and the
+// docstring has always said the decision is then made on rules alone with the
+// model refusing. It was not: the nil went straight into Inspect, which is a
+// panic on the authorisation path — a 500 for a control that was supposed to
+// degrade to its rules.
+func TestAModelThatCannotBeHousedRefusesRatherThanPanics(t *testing.T) {
+	vel := velocity.New(velocity.Config{})
+	tn := Tenant("hanzo/acme")
+	o := observation{
+		id: newID("dec"), at: time.Now(), stage: StagePayment, kind: "account",
+		subject: "acct-1", amount: 5_000_000_000, currency: "USD", direction: "in",
+	}
+	out := decide(context.Background(), vel, nil, tn, o, nil,
+		func(string, string) bool { return false }, nil, false)
+	if out.refusal != RefusalWarming {
+		t.Fatalf("a decision with no model says refusal %q, want %q", out.refusal, RefusalWarming)
+	}
+	if out.action != ActionAllow {
+		t.Fatalf("a decision with no model and no rules acted %q", out.action)
+	}
+
+	// The rules still run and can still act — the model's absence removes the
+	// model's evidence, not the control.
+	r := rule{
+		ID: "r-1", Name: "any payment", Stage: StagePayment, Action: ActionReview,
+		Weight: 1, Severity: "medium", Enabled: true,
+		All: []term{{Field: "amount.nano", Op: OpGt, Number: 1}},
+	}
+	out = decide(context.Background(), vel, nil, tn, o, []rule{r},
+		func(string, string) bool { return false }, nil, false)
+	if out.action != ActionReview {
+		t.Fatalf("with no model the rules did not act: %q", out.action)
+	}
+	if out.refusal != RefusalWarming {
+		t.Fatalf("refusal %q, want %q — silence must never read as a clean result", out.refusal, RefusalWarming)
+	}
+}
+
+// TestAnExistingFileGrowsTheColumn is the half of "a fresh file and an existing
+// one converge" that CREATE TABLE IF NOT EXISTS does not cover.
+//
+// Every tenant deciding today has a decision table with no `fit` column. The
+// statement is a no-op against a table that exists, so without a widening pass
+// the first decision after this ships fails to insert and the tenant stops being
+// able to score at all — and the rows already written must still read back,
+// answering the honest "the shipped model decided this" rather than failing.
+func TestAnExistingFileGrowsTheColumn(t *testing.T) {
+	_, s := wireAt(t, t.TempDir())
+	tn, _ := qualify("hanzo", "acme")
+	db, err := s.State.shelf.open(tn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	// Rebuild the decision plane as it was BEFORE the column existed, with a row
+	// in it.
+	for _, stmt := range []string{
+		`DROP TABLE decision`,
+		`CREATE TABLE decision (
+			id TEXT PRIMARY KEY, at TEXT NOT NULL, stage TEXT NOT NULL, kind TEXT NOT NULL,
+			subject TEXT NOT NULL, action TEXT NOT NULL, score REAL NOT NULL, agency TEXT NOT NULL,
+			shadow INTEGER NOT NULL, refusal TEXT NOT NULL DEFAULT '', amount INTEGER NOT NULL DEFAULT 0,
+			currency TEXT NOT NULL DEFAULT '', direction TEXT NOT NULL DEFAULT '',
+			idem TEXT NOT NULL DEFAULT '', hits TEXT NOT NULL DEFAULT '[]',
+			causes TEXT NOT NULL DEFAULT '[]', signals TEXT NOT NULL DEFAULT '{}',
+			digest TEXT NOT NULL DEFAULT '', label TEXT NOT NULL DEFAULT '',
+			label_by TEXT NOT NULL DEFAULT '', label_at TEXT NOT NULL DEFAULT '')`,
+		`INSERT INTO decision (id, at, stage, kind, subject, action, score, agency, shadow)
+			VALUES ('dec-old', '2026-01-01T00:00:00Z', 'payment', 'account', 'acct-1', 'allow', 0, 'unknown', 1)`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+
+	if err := widen(db); err != nil {
+		t.Fatalf("widen: %v", err)
+	}
+	// Twice, because open() runs it on every touch and a migration that is not
+	// idempotent takes the tenant's whole record plane down on the second one.
+	if err := widen(db); err != nil {
+		t.Fatalf("widen is not idempotent: %v", err)
+	}
+
+	// The old row reads back, naming no version — which is the true answer.
+	rows, err := decisionsPage(db, "", "", "", "", 10)
+	if err != nil {
+		t.Fatalf("decisionsPage: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ID != "dec-old" || rows[0].Fit != "" {
+		t.Fatalf("the pre-existing decision reads back as %+v", rows)
+	}
+	// And a new one can be written.
+	o := observation{id: "dec-new", at: time.Now(), stage: StagePayment, kind: "account", subject: "acct-1"}
+	if err := putDecision(db, o, outcome{id: o.id, action: ActionAllow}, "digest", "fit-1", ""); err != nil {
+		t.Fatalf("putDecision after widen: %v", err)
+	}
+	var got string
+	if err := db.QueryRow(`SELECT fit FROM decision WHERE id = 'dec-new'`).Scan(&got); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if got != "fit-1" {
+		t.Fatalf("the widened column holds %q", got)
+	}
+}
