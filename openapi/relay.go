@@ -365,9 +365,7 @@ func Project(doc *Document, rs []Relay) error {
 		}
 	}
 
-	if err := n.into(doc); err != nil {
-		return err
-	}
+	n.into(doc)
 	// Tags are recomputed from the operations rather than appended to, for the
 	// reason [Weave] states: the tag list is a function of the document's
 	// operations, so a door that was one product's wildcard and is now twenty
