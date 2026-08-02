@@ -403,7 +403,7 @@ func (k *k8sClient) artifactJobSpec(jobName, repoURL, ref, tag, base, putBase st
 						"env":          []any{env("BASE", base), env("PUT_BASE", putBase), env("REPO", repoSlug(repoURL)), env("TAG", tag), secretEnv("S3_ADMIN_ACCESS_KEY", "access-key"), secretEnv("S3_ADMIN_SECRET_KEY", "secret-key"), env("S3_REGION", getenv("S3_REGION", "us-east-1"))},
 						"volumeMounts": []any{map[string]any{"name": "w", "mountPath": "/w"}},
 					}},
-					"volumes": []any{map[string]any{"name": "w", "emptyDir": map[string]any{}}},
+					"volumes": []any{map[string]any{"name": "w", "emptyDir": map[string]any{"sizeLimit": artifactWorkspaceLimit}}},
 				},
 			},
 		},
