@@ -186,7 +186,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 			fmt.Fprintf(w, `{"user":%q,"currency":"usd","available":%d,"balance":%d}`, user, bal, bal)
 		case strings.HasSuffix(r.URL.Path, "/subscriptions"):
 			if org == "acme" && user == "acme" {
-				io.WriteString(w, `{"subscriptions":[{"status":"active","plan":{"name":"Pro","price":5000,"currency":"usd","interval":"month"}}]}`)
+				io.WriteString(w, `{"subscriptions":[{"status":"active","mrrCents":5000,"plan":{"name":"Pro","price":5000,"currency":"usd","interval":"month"}}]}`)
 			} else {
 				io.WriteString(w, `{"subscriptions":[]}`)
 			}
