@@ -17,8 +17,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 )
 
@@ -65,22 +66,11 @@ func (p *dstPool) get(ctx context.Context, org, user string, t TableInfo) (*dstH
 		if err != nil {
 			return nil, err
 		}
-		db, err := basedb.Open(ns, dstSubsystem, p.root)
+		db, err := cek.Open(ns, dstSubsystem, p.root)
 		if err != nil {
 			return nil, fmt.Errorf("open %s: %w", ns, err)
 		}
-		for _, p := range []string{
-			"PRAGMA journal_mode=WAL",
-			"PRAGMA synchronous=NORMAL",
-			"PRAGMA foreign_keys=ON",
-			"PRAGMA busy_timeout=5000",
-		} {
-			if _, err := db.ExecContext(ctx, p); err != nil {
-				db.Close()
-				return nil, fmt.Errorf("pragma %q: %w", p, err)
-			}
-		}
-		db.SetMaxOpenConns(1)
+		sqlpool.Single(db)
 		h = &dstHandle{db: db, ns: ns, tables: map[string]bool{}}
 		p.handles[key] = h
 	}

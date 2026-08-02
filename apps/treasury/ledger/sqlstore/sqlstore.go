@@ -29,9 +29,10 @@ import (
 	// Base storage substrate, identical to every other clients/* store.
 	_ "github.com/hanzoai/sqlite"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 )
 
@@ -51,21 +52,11 @@ type Store struct {
 // what keys the file, so an opener cannot name one entity's ledger and unlock it
 // with another's key — that pairing is made once, inside cek, from this one value.
 func Open(ns namespace.Namespace, subsystem, dir string) (*Store, error) {
-	db, err := basedb.Open(ns, subsystem, dir)
+	db, err := cek.Open(ns, subsystem, dir)
 	if err != nil {
 		return nil, fmt.Errorf("open %s ledger for %s: %w", subsystem, ns, err)
 	}
-	db.SetMaxOpenConns(1) // serialize: the balance guard depends on it
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

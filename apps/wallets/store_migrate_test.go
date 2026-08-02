@@ -3,7 +3,7 @@ package wallets
 import (
 	"testing"
 
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/namespace"
 )
 
@@ -34,7 +34,7 @@ func TestMigrateOverLegacyWalletsTable(t *testing.T) {
 
 	// Stand up the legacy schema exactly as a pre-scoping prod DB has it, in the
 	// SAME database openStore opens.
-	raw, err := basedb.Open(namespace.System(), "wallets", dir)
+	raw, err := cek.Open(namespace.System(), "wallets", dir)
 	if err != nil {
 		t.Fatalf("open legacy db: %v", err)
 	}

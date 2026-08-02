@@ -34,11 +34,12 @@ import (
 	"sync"
 	"time"
 
-	// basedb opens the chain encrypted at rest, keyed from this process's master
+	// cek opens the chain encrypted at rest, keyed from this process's master
 	// and the name below. github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver
 	// it opens through; importing modernc directly instead would double-register
 	// "sqlite" under CGO and panic at init. Blank import registers the driver.
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
@@ -115,21 +116,11 @@ type CheckpointFunc func(cp Checkpoint)
 // single-writer discipline pricing/provisioning use, here doubling as the chain's
 // serialization guarantee.
 func Open(dir, subsystem string, mirror Mirror) (*Recorder, error) {
-	db, err := basedb.Open(namespace.System(), subsystem, dir)
+	db, err := cek.Open(namespace.System(), subsystem, dir)
 	if err != nil {
 		return nil, fmt.Errorf("audit: open %s: %w", subsystem, err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA synchronous=NORMAL",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("audit: pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	r := &Recorder{db: db, mirror: mirror}
 	if err := r.migrate(); err != nil {
 		_ = db.Close()

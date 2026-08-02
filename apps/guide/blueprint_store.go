@@ -6,9 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// cek is the ONE opener: the database is born encrypted under the key cek
 	// derives from the process master and this namespace.
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 )
 
@@ -41,20 +42,11 @@ type BlueprintStore struct {
 // entity — because a brand blueprint is platform content, not an org's.
 // MaxOpenConns(1) serializes writes.
 func openBlueprintStore(dir string) (*BlueprintStore, error) {
-	db, err := basedb.Open(namespace.System(), "guide-blueprint", dir)
+	db, err := cek.Open(namespace.System(), "guide-blueprint", dir)
 	if err != nil {
 		return nil, fmt.Errorf("open blueprint store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &BlueprintStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

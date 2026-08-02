@@ -11,15 +11,16 @@ import (
 	"sync"
 	"time"
 
-	// basedb is the ONE opener: cek derives this database's key from the process
+	// cek is the ONE opener: cek derives this database's key from the process
 	// master and the namespace that owns it, and opens the file under it. cloud
 	// holds no key material and no crypto of its own.
-	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/cek"
 
 	// internal/org is the HA-durable substrate: ha election (WHO writes) + vfs
 	// FencedStore ship/hydrate (HOW it ships) + envelope Cipher (at rest). Every
 	// per-org file routes through it when the deployment has one.
 	"github.com/hanzoai/cloud/internal/org"
+	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 )
@@ -39,8 +40,8 @@ import (
 // OrgDB is the ONE way any cloud subsystem opens a per-entity SQLite file
 // (HIP-0302 physical isolation). It resolves the namespace to its path, creates
 // the parent directory 0700, opens via the sole "sqlite" driver under that
-// namespace's own key, and applies the single-writer + WAL pragmas every store
-// shares. The caller owns migration (its schema is its own) and Close.
+// namespace's own key, and pins the pool to one connection. The caller owns
+// migration (its schema is its own) and Close.
 //
 // It takes the NAME rather than the parts a name is made of, so it cannot pair
 // one namespace's path with another namespace's key, and so the question "could
@@ -56,26 +57,17 @@ func OrgDB(dataDir string, ns namespace.Namespace, subsystem string) (*sql.DB, e
 	return openOrgDB(ns, subsystem, dataDir)
 }
 
-// openOrgDB opens the SQLite file with the single-writer + WAL pragmas shared by
-// every org store. MaxOpenConns(1) serializes writes against the file lock (and
+// openOrgDB opens the SQLite file under the single-writer discipline every org
+// store shares: one connection, which serializes writes against the file lock and
 // makes a read-modify-write such as tracker's per-project issue-number allocation
-// a safe transaction).
+// a safe transaction. The WAL/foreign-key/busy-timeout pragmas this used to set by
+// hand are the driver's, applied per connection (see sqlpool).
 func openOrgDB(ns namespace.Namespace, subsystem, dir string) (*sql.DB, error) {
-	db, err := basedb.Open(ns, subsystem, dir)
+	db, err := cek.Open(ns, subsystem, dir)
 	if err != nil {
 		return nil, fmt.Errorf("cloud: OrgDB open %s/%s: %w", ns, subsystem, err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("cloud: OrgDB pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	return db, nil
 }
 

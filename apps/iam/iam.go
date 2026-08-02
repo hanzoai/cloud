@@ -84,13 +84,14 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/hanzoai/cloud/sqlpool"
 	iamserver "github.com/hanzoai/iam/server"
 	"github.com/hanzoai/orm"
 	ormdb "github.com/hanzoai/orm/db"
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/basedb"
 	"github.com/hanzoai/namespace"
 )
 
@@ -215,7 +216,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // identity.
 const storeSubsystem = "global"
 
-// openStore opens IAM's store through basedb — the SAME opener every other cloud store
+// openStore opens IAM's store through cek — the SAME opener every other cloud store
 // opens through — and layers the ORM over that handle.
 //
 // It replaces iamserver.OpenSQLite, which builds its own pool from a plain path and
@@ -238,24 +239,13 @@ const storeSubsystem = "global"
 // caller's to close — and it must be closed, because that is when the database is
 // written back.
 func openStore(dir string) (orm.DB, *sql.DB, error) {
-	conn, err := basedb.Open(namespace.System(), storeSubsystem, dir)
+	conn, err := cek.Open(namespace.System(), storeSubsystem, dir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("iam: open store: %w", err)
 	}
-	// The same serialized-writer + WAL posture openOrgDB applies. basedb returns a keyed
-	// handle, not a configured one, so the pragmas are the caller's to set — and
-	// iamserver.OpenSQLite used to set them via its own config.
-	conn.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := conn.Exec(pragma); err != nil {
-			_ = conn.Close()
-			return nil, nil, fmt.Errorf("iam: pragma %q: %w", pragma, err)
-		}
-	}
+	// The same single-writer posture openOrgDB applies: cek returns a keyed handle,
+	// not a pooled one.
+	sqlpool.Single(conn)
 	sdb, err := ormdb.AdaptSQLDB(conn)
 	if err != nil {
 		_ = conn.Close()
