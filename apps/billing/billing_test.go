@@ -54,7 +54,7 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/v1/billing/balance", h)
 	mux.HandleFunc("/v1/billing/gpu/eligibility", h)
 	mux.HandleFunc("/v1/billing/gpu/charge", h)
-	mux.HandleFunc("/v1/billing/portal/payment-methods", h)
+	mux.HandleFunc("/v1/billing/portal/methods", h)
 	mux.HandleFunc("/v1/billing/methods", h)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -296,8 +296,8 @@ func TestPaymentMethods_ProxiesPortal_Scoped(t *testing.T) {
 	if code != 200 || string(body) != f.body {
 		t.Fatalf("payment-methods: want 200 verbatim, got %d (%s)", code, body)
 	}
-	if f.gotPath != "/v1/billing/portal/payment-methods" {
-		t.Fatalf("commerce path: want /v1/billing/portal/payment-methods, got %q", f.gotPath)
+	if f.gotPath != "/v1/billing/portal/methods" {
+		t.Fatalf("commerce path: want /v1/billing/portal/methods, got %q", f.gotPath)
 	}
 	// PortalPaymentMethods 400s without a customerId; the proxy pins it (and user/userId)
 	// to the caller's own org, so the list is scoped to the caller's cards — never widenable.

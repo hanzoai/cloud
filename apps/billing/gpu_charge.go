@@ -188,7 +188,7 @@ func gpuRefusal(c *zip.Ctx, code, message string, extra map[string]any) error {
 // An upstream that answers non-2xx or cannot be reached is an ERROR, never a false: "no
 // card" and "could not ask" must not look alike on a gate that refuses money.
 func cardOnFile(s *cloud.Service[state], c *zip.Ctx, org, subject string) (bool, error) {
-	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/portal/payment-methods", org, financeSubject(subject, nil))
+	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/portal/methods", org, financeSubject(subject, nil))
 	if err != nil {
 		return false, err
 	}
