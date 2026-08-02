@@ -14,7 +14,8 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.1
-	github.com/hanzoai/commerce v1.49.37
+	github.com/hanzoai/cek v0.2.0
+	github.com/hanzoai/commerce v1.49.39
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
@@ -74,7 +75,6 @@ require (
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
-	github.com/hanzoai/cek v0.2.0 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
