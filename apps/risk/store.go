@@ -531,25 +531,32 @@ func (s *shelf) tenants() []Tenant {
 	return out
 }
 
-// strained names the tenants whose own aggregates are at their own cardinality
+// strained COUNTS the tenants whose own aggregates are at their own cardinality
 // bound. Each one is degrading ITSELF and nobody else, which is the property the
-// bound exists for — and it is still worth saying out loud, because the tenant's
-// own rules are now reading a partial ring.
-func (s *shelf) strained() []string {
+// bound exists for; the count is an operator's capacity signal.
+//
+// A COUNT AND NOT A ROSTER. /v1/<app>/health is unauthenticated by design across
+// this fleet — the billing gate, the tracing filter and the identity middleware
+// all exempt it — so anything the probe names, it names to the internet. A list
+// of tenant keys there would publish which organisations are customers and which
+// pod holds each, from an anonymous GET. The tenant that needs to know its own
+// ring is partial is told on its own authenticated, tenant-scoped surface
+// (mlModelState.Strained, served by GET /v1/ml/state); a stranger is told a
+// number.
+func (s *shelf) strained() int {
 	s.mu.Lock()
 	cells := make([]*cell, 0, len(s.cells))
 	for _, c := range s.cells {
 		cells = append(cells, c)
 	}
 	s.mu.Unlock()
-	out := []string{}
+	n := 0
 	for _, c := range cells {
 		if c.strained() {
-			out = append(out, c.t.String())
+			n++
 		}
 	}
-	sort.Strings(out)
-	return out
+	return n
 }
 
 // count reports how many tenants this process holds, how many admissions it has

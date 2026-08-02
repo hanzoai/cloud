@@ -10,6 +10,7 @@ package risk
 // constructor appears, whichever file it appears in.
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -158,6 +159,79 @@ func TestTheProbeReportsAPodAtCapacity(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "tenant ceiling") {
 		t.Fatalf("the degraded probe does not name the capacity event: %s", body)
+	}
+}
+
+// TestTheProbeNamesNoTenant.
+//
+// GET /v1/<app>/health is unauthenticated BY DESIGN across this fleet — the
+// billing gate, the tracing filter and the identity middleware each exempt it by
+// suffix — so everything the probe says, it says to the internet. The capacity
+// report needs a strained COUNT; it must never carry the KEY of a strained
+// organisation, because that publishes who is a customer and which pod holds
+// them, from an anonymous GET.
+//
+// The tenant that needs the fact gets it on its own scoped surface.
+func TestTheProbeNamesNoTenant(t *testing.T) {
+	t.Setenv(envVelBytes, strconv.Itoa(1<<20)) // the smallest budget the knob allows
+	app, s := wireApp(t)
+	tn := Tenant("hanzo/acme")
+	vel, _, _ := armsOf(t, s, tn)
+	now := time.Now()
+	for i := range maxKeys() * 2 {
+		vel.Record(velocity.Key{OrgID: tn.String(), Kind: "ip", Value: fmt.Sprintf("198.51.100.%d", i)}, now, 1, 1_000)
+	}
+	c, err := s.State.shelf.of(tn)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if !c.strained() {
+		t.Fatal("the tenant is not at its own bound, so this test proves nothing")
+	}
+
+	code, body := req(t, app, http.MethodGet, "/v1/risk/health", "", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("probe = %d %s", code, body)
+	}
+	var report map[string]any
+	if err := json.Unmarshal(body, &report); err != nil {
+		t.Fatal(err)
+	}
+	if n, ok := report["strained"].(float64); !ok || n != 1 {
+		t.Fatalf("the probe does not report the strained COUNT an operator needs: %s", body)
+	}
+	for _, leak := range []string{tn.String(), tn.org(), "acme"} {
+		if strings.Contains(string(body), leak) {
+			t.Errorf("the unauthenticated probe names a tenant (%q): an anonymous GET reads this "+
+				"organisation's key off the customer list — %s", leak, body)
+		}
+	}
+
+	// And the organisation itself IS told, on its own authenticated state.
+	code, body = req(t, app, http.MethodGet, "/v1/ml/state", "acme", "u_acme", "")
+	if code != http.StatusOK {
+		t.Fatalf("state = %d %s", code, body)
+	}
+	var st mlModelState
+	if err := json.Unmarshal(body, &st); err != nil {
+		t.Fatal(err)
+	}
+	if !st.Strained {
+		t.Error("the organisation whose own rings are partial is not told so on its own state, " +
+			"so a velocity rule that stopped firing reads as a clean stream")
+	}
+
+	// A DIFFERENT organisation is told nothing about this one.
+	code, body = req(t, app, http.MethodGet, "/v1/ml/state", "beta", "u_beta", "")
+	if code != http.StatusOK {
+		t.Fatalf("beta state = %d %s", code, body)
+	}
+	var other mlModelState
+	if err := json.Unmarshal(body, &other); err != nil {
+		t.Fatal(err)
+	}
+	if other.Strained {
+		t.Error("one organisation's strain is reported on another organisation's state")
 	}
 }
 

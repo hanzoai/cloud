@@ -1960,6 +1960,10 @@
             "description": "Scored is how many observations the model was able to score — the\ndenominator of Realised.",
             "type": "integer"
           },
+          "strained": {
+            "description": "Strained is true when THIS organisation's sliding aggregates are at this\norganisation's own cardinality bound, so the oldest key it tracked was\ndropped to make room for a new one and a velocity count may under-state its\nown traffic. It is here, on the caller's own scoped state, because a rule\nwritten on `velocity.ip.1h.count \u003e= 5` stops firing when the key it counts\nwas dropped — and a control that went quiet reads exactly like a clean\nstream. The fleet-wide count is on the probe; the identity of a strained\norganisation is told only to that organisation.",
+            "type": "boolean"
+          },
           "threshold": {
             "description": "Threshold is the score cut currently in force, recomputed each window as\nthe quantile that admits the stated share.",
             "type": "number"

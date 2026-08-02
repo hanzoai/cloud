@@ -18258,6 +18258,17 @@ components:
             Scored is how many observations the model was able to score — the
             denominator of Realised.
           type: integer
+        strained:
+          description: |-
+            Strained is true when THIS organisation's sliding aggregates are at this
+            organisation's own cardinality bound, so the oldest key it tracked was
+            dropped to make room for a new one and a velocity count may under-state its
+            own traffic. It is here, on the caller's own scoped state, because a rule
+            written on `velocity.ip.1h.count >= 5` stops firing when the key it counts
+            was dropped — and a control that went quiet reads exactly like a clean
+            stream. The fleet-wide count is on the probe; the identity of a strained
+            organisation is told only to that organisation.
+          type: boolean
         threshold:
           description: |-
             Threshold is the score cut currently in force, recomputed each window as

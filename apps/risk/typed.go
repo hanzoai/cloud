@@ -1132,6 +1132,15 @@ type mlModelState struct {
 	Inventory []mlFeature `json:"inventory"`
 	// Digest is the model identity an auditor pins.
 	Digest string `json:"digest"`
+	// Strained is true when THIS organisation's sliding aggregates are at this
+	// organisation's own cardinality bound, so the oldest key it tracked was
+	// dropped to make room for a new one and a velocity count may under-state its
+	// own traffic. It is here, on the caller's own scoped state, because a rule
+	// written on `velocity.ip.1h.count >= 5` stops firing when the key it counts
+	// was dropped — and a control that went quiet reads exactly like a clean
+	// stream. The fleet-wide count is on the probe; the identity of a strained
+	// organisation is told only to that organisation.
+	Strained bool `json:"strained"`
 }
 
 // mlAppetiteIn sets the appetite.
@@ -1802,11 +1811,15 @@ func (o ops) updateRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) 
 // DeleteRule retires a detection. Answers 204, or 404 for an identifier this
 // tenant does not own.
 func (o ops) deleteRule(ctx context.Context, in *riskRef) (*struct{}, error) {
-	_, db, err := tenantState(ctx, o.s)
+	sc, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	if err := dropRule(db, in.ID); err != nil {
+	// A RETIREMENT IS A RECORD, and the one whose loss is worst. An unshipped
+	// create loses a control nobody was relying on yet; an unshipped delete makes
+	// a control the organisation switched OFF come back at the next rollout —
+	// firing, or blocking — after a 204 said it was gone.
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error { return dropRule(db, in.ID) }); err != nil {
 		return nil, err
 	}
 	return &struct{}{}, nil
@@ -1856,7 +1869,11 @@ func (o ops) addEntries(ctx context.Context, in *riskListEntriesIn) (*riskListVi
 	if err != nil {
 		return nil, err
 	}
-	if err := addEntries(db, strings.ToLower(in.Name), in.Values, by(ctx, sc)); err != nil {
+	// A deny-list entry is an input to an adverse action, so it ships before it
+	// is acknowledged.
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error {
+		return addEntries(db, strings.ToLower(in.Name), in.Values, by(ctx, sc))
+	}); err != nil {
 		return nil, err
 	}
 	items, err := listNames(db)
@@ -1875,11 +1892,15 @@ func (o ops) addEntries(ctx context.Context, in *riskListEntriesIn) (*riskListVi
 // RemoveListEntry removes one value from a list. Answers 204, or 404 when the
 // list does not hold it.
 func (o ops) removeEntry(ctx context.Context, in *riskListEntryRef) (*struct{}, error) {
-	_, db, err := tenantState(ctx, o.s)
+	sc, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	if err := dropEntry(db, strings.ToLower(in.Name), in.Value); err != nil {
+	// Removing a value from a deny list is how a wrongly-listed customer is let
+	// back in. It comes back at the next rollout unless the removal is durable.
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error {
+		return dropEntry(db, strings.ToLower(in.Name), in.Value)
+	}); err != nil {
 		return nil, err
 	}
 	return &struct{}{}, nil
@@ -1948,11 +1969,15 @@ func (o ops) suppress(ctx context.Context, in *riskSuppressIn) (*riskSuppression
 // Unsuppress lifts a mute. Answers 204, or 404 for an identifier this tenant
 // does not own.
 func (o ops) unsuppress(ctx context.Context, in *riskRef) (*struct{}, error) {
-	_, db, err := tenantState(ctx, o.s)
+	sc, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	if err := dropSuppression(db, in.ID); err != nil {
+	// Lifting a mute re-arms a control. Unshipped, the mute is back after the next
+	// rollout and the control the operator just restored is silent again.
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error {
+		return dropSuppression(db, in.ID)
+	}); err != nil {
 		return nil, err
 	}
 	return &struct{}{}, nil
@@ -2020,11 +2045,16 @@ func (o ops) setControl(ctx context.Context, in *riskControlIn) (*riskControl, e
 // ReleaseControl lifts a control. Answers 204, or 404 for an identifier this
 // tenant does not own.
 func (o ops) releaseControl(ctx context.Context, in *riskRef) (*struct{}, error) {
-	_, db, err := tenantState(ctx, o.s)
+	sc, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	if err := dropControl(db, in.ID); err != nil {
+	// A control is a reserve, a payout hold or a block the money plane reads.
+	// Releasing one is how a merchant gets paid; unshipped, the hold returns at
+	// the next rollout and the payout stops again with nothing saying why.
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error {
+		return dropControl(db, in.ID)
+	}); err != nil {
 		return nil, err
 	}
 	return &struct{}{}, nil
@@ -2086,7 +2116,7 @@ func (o ops) getMode(ctx context.Context, _ *riskNoInput) (*riskModeView, error)
 // traffic before anyone depends on it. A model that quietly went live and
 // started declining payments is the worst failure available here.
 func (o ops) setMode(ctx context.Context, in *riskModeIn) (*riskModeView, error) {
-	sc, db, err := tenantState(ctx, o.s)
+	sc, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -2094,11 +2124,18 @@ func (o ops) setMode(ctx context.Context, in *riskModeIn) (*riskModeView, error)
 	if m != "shadow" && m != "live" {
 		return nil, zip.Errorf(400, "a tenant either observes or acts")
 	}
-	if err := setSetting(db, "mode", m); err != nil {
-		return nil, err
-	}
+	// THE MOST CONSEQUENTIAL RECORD ON THE PLANE. This switch is what decides
+	// whether a decision acts or only observes, so an unshipped move to shadow is
+	// an organisation that answered 200, rolled, and went back to declining
+	// payments. Both settings are ONE commit: a mode without its timestamp is a
+	// change nobody can date.
 	now := stamp(time.Now())
-	if err := setSetting(db, "mode_at", now); err != nil {
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error {
+		if err := setSetting(db, "mode", m); err != nil {
+			return err
+		}
+		return setSetting(db, "mode_at", now)
+	}); err != nil {
 		return nil, err
 	}
 	emit(sc.org, "risk.mode", map[string]any{"mode": m, "by": by(ctx, sc)})
@@ -2202,7 +2239,9 @@ func (o ops) modelState(ctx context.Context, _ *mlNoInput) (*mlModelState, error
 		return nil, err
 	}
 	_, model, _ := cell.arms()
-	return wireState(model.State(sc.tenant.String())), nil
+	out := wireState(model.State(sc.tenant.String()))
+	out.Strained = cell.strained()
+	return out, nil
 }
 
 // SetAppetite sets how much of the stream the model may examine.
@@ -2224,7 +2263,12 @@ func (o ops) setAppetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, 
 	}
 	_, model, _ := cell.arms()
 	body, _ := json.Marshal(mlAppetite{Review: in.Review, Sample: in.Sample})
-	if err := setSetting(cell.db, "appetite", string(body)); err != nil {
+	// An appetite is the governed statement of how much of the stream may be
+	// examined — what a search optimises against and what the next change is
+	// measured from — so it is a record and ships before it is acknowledged.
+	if err := o.s.State.shelf.commit(sc.tenant, func(db *sql.DB) error {
+		return setSetting(db, "appetite", string(body))
+	}); err != nil {
 		return nil, err
 	}
 	// The engine's appetite is a Store-level configuration, so a per-tenant
@@ -2234,6 +2278,7 @@ func (o ops) setAppetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, 
 	// deployment-level change is measured from.
 	st := model.State(sc.tenant.String())
 	out := wireState(st)
+	out.Strained = cell.strained()
 	out.Appetite = mlAppetite{Review: in.Review, Sample: in.Sample, Warm: out.Appetite.Warm}
 	return out, nil
 }
@@ -2434,7 +2479,9 @@ func (o ops) restore(ctx context.Context, _ *mlNoInput) (*mlModelState, error) {
 	if err := restore(cell.db, model, sc.tenant); err != nil {
 		return nil, zip.Errorf(409, "%s", err.Error())
 	}
-	return wireState(model.State(sc.tenant.String())), nil
+	out := wireState(model.State(sc.tenant.String()))
+	out.Strained = cell.strained()
+	return out, nil
 }
 
 // ── conversions ─────────────────────────────────────────────────────────────

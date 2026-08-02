@@ -318,10 +318,14 @@ func health(s *stateService) func(*zip.Ctx) error {
 			"model":    s.State.digest,
 			"tenants":  tenants,
 			"capacity": tenantMax(),
-			// strained names the tenants whose own aggregates are at their own
+			// strained COUNTS the tenants whose own aggregates are at their own
 			// cardinality bound, so a count they read may under-state their own
 			// traffic. It is on the probe because a partial ring reads exactly like
-			// a quiet one, and nobody goes looking for a control that went quiet.
+			// a quiet one, and nobody goes looking for a control that went quiet —
+			// and it is a NUMBER, because this route is unauthenticated by design
+			// and a tenant roster served to an anonymous GET is a customer list.
+			// The tenant learns about its OWN ring on its own scoped surface,
+			// GET /v1/ml/state.
 			"strained":  s.State.shelf.strained(),
 			"warehouse": warehouse || datastore.Ready(),
 			"billing":   s.State.bill.Enabled(),
