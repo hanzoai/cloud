@@ -56,6 +56,48 @@ func parseLines(source string, value map[string]string) func([]byte) ([]Entry, e
 	}
 }
 
+// mailbox is the closed list of domains that are NOT disposable-inbox providers
+// and that no disposable-domain list may name.
+//
+// It exists because the disposable list is fetched from a public repository with
+// no pin, no signature and no digest to check against — the honest state of that
+// source — so anyone who can land a commit on it can change what every
+// organisation's decisions read. The size gate (swung) catches a list that
+// arrives at a fraction or a multiple of itself; it cannot catch ONE added row,
+// and one added row is the whole attack: "gmail.com is disposable" refuses a
+// large share of every tenant's legitimate signups at once.
+//
+// Bounded coverage, stated plainly: this is the blast radius of that one row, not
+// a proof the list is honest. A publisher naming one of these is wrong about
+// something we know, so the whole take is refused and the previous version stands
+// — a poisoned list must not land at all rather than land minus the row we
+// happened to recognise.
+var mailbox = map[string]bool{
+	"gmail.com": true, "googlemail.com": true,
+	"outlook.com": true, "hotmail.com": true, "live.com": true, "msn.com": true,
+	"yahoo.com": true, "ymail.com": true,
+	"icloud.com": true, "me.com": true, "mac.com": true,
+	"aol.com": true, "gmx.com": true, "gmx.net": true, "mail.com": true,
+	"proton.me": true, "protonmail.com": true, "pm.me": true,
+	"zoho.com": true, "fastmail.com": true, "yandex.ru": true, "qq.com": true,
+	"163.com": true, "126.com": true, "naver.com": true, "web.de": true,
+}
+
+// parseDisposable reads the throwaway-inbox list and refuses a take that names a
+// domain we know is a mailbox provider.
+func parseDisposable(body []byte) ([]Entry, error) {
+	entries, err := parseLines("disposable", map[string]string{"class": "disposable"})(body)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range entries {
+		if mailbox[e.Key] {
+			return nil, fmt.Errorf("reference: the disposable list names %q, which hands out mailboxes rather than throwaway inboxes; the whole take is refused rather than landing a list that is wrong about something we can check", e.Key)
+		}
+	}
+	return entries, nil
+}
+
 // prefix normalises one CIDR (or a bare address, which is its own /32 or /128)
 // into the canonical masked form entries are keyed by. A bare address is
 // accepted because two of the publishers here list addresses rather than blocks.

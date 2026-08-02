@@ -31,6 +31,24 @@ import (
 // maxOverrides is how many entries one organisation may hold in one set.
 const maxOverrides = 10_000
 
+// row bounds ONE stored override in bytes: the two bounded strings plus the
+// verdict, the timestamp and the writer, generously rounded up.
+const row = maxKey + maxNote + 128
+
+// ownVolume is what one organisation may occupy on the shared volume: rows per
+// set, times the sets the catalog publishes, times [row].
+//
+// It is COMPUTED rather than asserted, because the three constants that decide
+// it live in three files and the product is the thing that actually matters —
+// every org's SQLite file sits on the ONE volume this deployment mounts, so a
+// per-tenant bound is only a tenant-isolation property once somebody can say
+// what it comes to. Adding a set moves it, which is the point.
+//
+// TestTheVolumeOneOrgMayOccupyIsStated pins the figure, so raising any of the
+// three is an act with the consequence next to it rather than a side effect
+// three files away.
+func ownVolume() int64 { return int64(maxOverrides) * int64(len(Catalog())) * row }
+
 // The two verdicts an override can carry. An override is a DECISION, unlike a
 // baseline entry, which carries facts and leaves the decision to policy — the
 // tenant is the only party entitled to say "for us, this one is fine".

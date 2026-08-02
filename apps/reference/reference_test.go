@@ -10,7 +10,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -64,6 +67,80 @@ func TestCatalogStatesItsTerms(t *testing.T) {
 	if seams == 0 {
 		t.Error("the catalog declares no seams at all, which would mean every source we want is licensed to us")
 	}
+}
+
+// TestEverySourceStatesABasisItsKindPermits is the licence gate with teeth.
+//
+// Terms alone could not be gated: it carried "CC0-1.0" (a licence) and
+// "operator-published range list" (a description of where a file came from) in
+// the same field, and the only assertion over it was that the string was not
+// empty — so eight of fourteen sources stated a CATEGORY where a grant was
+// implied and passed. An unlicensed source wearing a licence field is the mirror
+// image of the seam argument this plane is built on.
+//
+// Basis is a closed vocabulary, so the position is now machine-checkable: what
+// each kind of set may rest on is stated here once, and a source whose basis is
+// unset — which is what re-introducing a free-text-only catalog entry looks like —
+// is not in the vocabulary and fails.
+func TestEverySourceStatesABasisItsKindPermits(t *testing.T) {
+	// What each kind of set may rest on, and why.
+	allowed := map[Kind]map[Grant]bool{
+		// Downloaded from someone else, so it must rest on something that lets
+		// their bytes reach a tenant.
+		KindFetch: {GrantLicence: true, GrantRegistry: true, GrantOperator: true},
+		// Computed here, so nothing of anyone else's is redistributed.
+		KindLocal: {GrantOwn: true},
+		// Held by the component that screens against it: nothing reaches a tenant.
+		KindAttest: {GrantNone: true},
+	}
+	for _, s := range Catalog() {
+		if s.Kind == KindSeam {
+			continue
+		}
+		for _, src := range s.Sources {
+			if !grants[src.Basis] {
+				t.Errorf("%s/%s states basis %q, which is not one of the five; a basis outside the vocabulary is a licence claim nothing can check", s.Name, src.Name, src.Basis)
+				continue
+			}
+			if !allowed[s.Kind][src.Basis] {
+				t.Errorf("%s/%s is a %s source resting on %q, which that kind may not rest on", s.Name, src.Name, s.Kind, src.Basis)
+			}
+			if src.Basis.Redistributes() != (s.Kind == KindFetch) {
+				t.Errorf("%s/%s: basis %q redistributes=%v but the set is kind %s", s.Name, src.Name, src.Basis, src.Basis.Redistributes(), s.Kind)
+			}
+			// "We hold a licence" is a claim, and a claim is only checkable if it
+			// says WHICH. So a licence basis has to name one of the identifiers this
+			// catalog actually redistributes under — which is what stops the
+			// substitution the old field allowed, a category sentence sitting in the
+			// place a grant belongs.
+			if src.Basis == GrantLicence && !named(src.Terms) {
+				t.Errorf("%s/%s rests on a licence and cites %q, which names no licence", s.Name, src.Name, src.Terms)
+			}
+		}
+	}
+
+	// And the position is on the WIRE, so the licence audit is one an operator can
+	// run without reading this file.
+	for _, s := range Catalog() {
+		view := project(s, nil, time.Now())
+		for _, src := range view.Sources {
+			if src.Basis == "" {
+				t.Errorf("%s/%s publishes no basis", s.Name, src.Source)
+			}
+		}
+	}
+}
+
+// named reports whether a citation identifies a licence, from the closed list of
+// the ones this catalog redistributes under. Adding a source under a new licence
+// is adding it here — deliberately, because that is the moment somebody read it.
+func named(terms string) bool {
+	for _, id := range []string{"CC0-1.0", "MIT", "CC BY"} {
+		if strings.Contains(terms, id) {
+			return true
+		}
+	}
+	return false
 }
 
 // TestFetchSourcesParseAndLocalSourcesProduce holds that every source has
@@ -207,6 +284,40 @@ func TestDeviceStatementIsConstantAndExcludesTheAnonymousLane(t *testing.T) {
 	}
 	if !strings.Contains(deviceStatement, "org != ?") {
 		t.Error("the anonymous lane must be excluded at the source, not filtered later")
+	}
+}
+
+// TestTheDeviceAggregationStatesItsBudget.
+//
+// The LIMIT bounds the ROWS RETURNED and says nothing about the work: the inner
+// GROUP BY visits every distinct browser identity the whole fleet saw in the
+// window before a single row meets the floor. That is potentially hundreds of
+// millions of groups against the ONE warehouse that analytics, insights, sentry,
+// commerce and gateway usage all read from, run unattended roughly daily. A
+// statement with no ceiling on memory and no ceiling on time can stall every
+// other plane in the fleet to refresh one reference set.
+//
+// So the statement carries its own budget: spill rather than grow, stop rather
+// than spill forever, give up rather than run past its window. Exceeding one
+// fails THIS take, which is a case the plane already handles — the previous
+// version stands and ages out visibly.
+func TestTheDeviceAggregationStatesItsBudget(t *testing.T) {
+	for _, want := range []string{
+		"max_execution_time",
+		"max_memory_usage",
+		"max_bytes_before_external_group_by",
+	} {
+		if !strings.Contains(deviceStatement, want) {
+			t.Errorf("the one cross-fleet aggregation states no %s; a LIMIT bounds the answer, not the work", want)
+		}
+	}
+	// The budget is part of the statement CONSTANT, so nothing a caller sends can
+	// raise it and no call site can forget it.
+	if !strings.Contains(deviceStatement, "SETTINGS") || strings.Index(deviceStatement, "SETTINGS") < strings.Index(deviceStatement, "LIMIT") {
+		t.Error("the budget must ride the statement itself, after the LIMIT")
+	}
+	if strings.Contains(deviceBudget, "?") {
+		t.Error("a budget with a placeholder in it is a budget a caller can set")
 	}
 }
 
@@ -385,6 +496,51 @@ func TestCandidatesAreBoundedAndMostSpecificFirst(t *testing.T) {
 		if len(got) > c.max {
 			t.Errorf("%s/%s produced %d candidates, which is not a bounded lookup", c.set, c.key, len(got))
 		}
+	}
+}
+
+// TestASuffixWalkIsLinearInTheKey is the allocation half of the fan-out
+// ship-blocker, stated on the function rather than on the wire.
+//
+// candidates claimed to be "bounded", and it was — in COUNT. It split the host
+// into labels and re-joined every tail, so an L-label host allocated a fresh copy
+// of each of its L suffixes: O(L x len(key)) BYTES. One 8 KB dotted key
+// materialised 16.8 MB, and [maxKeys] of them 1.7 GB in a single request. A Go
+// string is immutable, so a suffix is the same bytes with a different header:
+// walking the dot offsets is the identical answer in O(L) headers over one
+// backing array.
+//
+// The door refuses a key this long. This measures at a size the door would never
+// admit precisely so the SHAPE is pinned and not just the bound — the two are
+// independent, and either one alone is one edit away from the outage.
+func TestASuffixWalkIsLinearInTheKey(t *testing.T) {
+	set := setNamed(t, "domain")
+	key := strings.Repeat("a.", 4096) + "example"
+
+	// The answer is unchanged: the same suffixes, most specific first, as the
+	// split-and-join it replaces.
+	got := candidates(set, "user@mail.tempbox.example")
+	want := []string{"mail.tempbox.example", "tempbox.example"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("candidates = %v, want %v", got, want)
+	}
+	if one := candidates(set, "example"); !reflect.DeepEqual(one, []string{"example"}) {
+		t.Fatalf("a single-label host = %v, want the host itself", one)
+	}
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	sink := candidates(set, key)
+	runtime.ReadMemStats(&after)
+	if len(sink) != 4096 {
+		t.Fatalf("a %d-label host produced %d candidates", strings.Count(key, ".")+1, len(sink))
+	}
+	// The headers are 16 bytes each; the bytes themselves are shared. Linear is
+	// ~64 KB, quadratic is ~16 MB, so a 1 MiB ceiling separates them by a factor
+	// of sixteen and is nowhere near either.
+	if grew := after.TotalAlloc - before.TotalAlloc; grew > 1<<20 {
+		t.Errorf("one %d-byte key allocated %d bytes of suffixes; a suffix is a slice, not a copy", len(key), grew)
 	}
 }
 
@@ -756,11 +912,17 @@ func TestEveryValueBindsAndNothingIsInterpolated(t *testing.T) {
 	}
 }
 
-// TestPruneKeepsTheCurrentAndThePreviousVersion: a decision taken a moment
-// before a refresh names the version it consulted, and an auditor asking what
-// that version contained deserves an answer rather than a manifest row pointing
-// at nothing.
-func TestPruneKeepsTheCurrentAndThePreviousVersion(t *testing.T) {
+// TestPruneStatementSparesTwoVersions is about the STATEMENT, and only the
+// statement: that it takes two versions to spare, and that it touches the
+// membership and never the manifest.
+//
+// It does NOT prove the plane keeps two versions, and it never did. The
+// statement was always correct; the call site passed the current version for
+// both placeholders, so `version != ? AND version != ?` spared one — and this
+// test passed the whole time, which is what a test written against a constant
+// instead of against behaviour buys. What the plane actually does is
+// TestPruneSparesTheVersionADecisionMayStillCite, over a warehouse.
+func TestPruneStatementSparesTwoVersions(t *testing.T) {
 	if n := strings.Count(pruneStatement, "?"); n != 4 {
 		t.Fatalf("prune binds %d parameters; it takes a set, a source and the two versions to keep", n)
 	}
@@ -783,5 +945,79 @@ func TestTheManifestIsNeverPruned(t *testing.T) {
 	}
 	if strings.Contains(createEntry, "TTL") {
 		t.Error("the membership table's lifetime is decided by the ingest that supersedes it, not by a fleet-wide clock")
+	}
+}
+
+// TestAPublisherCannotRedirectThePlaneInwards.
+//
+// Every Origin in the catalog is an HTTPS constant, so the one thing about the
+// address this process cannot state in code is where a REDIRECT goes. The fetch
+// runs inside the cluster, where "wherever the publisher says" reaches the pod
+// network and the instance metadata address, and a hop to http:// hands the
+// baseline every tenant's decisions read to anyone on the path.
+//
+// The hop rule is pinned twice on purpose: on the predicate, and through `wire`,
+// because a rule the client never installs is a rule that holds in a test and
+// nowhere else.
+func TestAPublisherCannotRedirectThePlaneInwards(t *testing.T) {
+	from := httptest.NewRequest(http.MethodGet, "https://publisher.example/list", nil)
+	to := func(u string) *http.Request { return httptest.NewRequest(http.MethodGet, u, nil) }
+
+	for _, c := range []struct {
+		what    string
+		req     *http.Request
+		via     []*http.Request
+		refused bool
+	}{
+		{"a public https hop", to("https://cdn.example/list"), []*http.Request{from}, false},
+		{"a downgrade to http", to("http://publisher.example/list"), []*http.Request{from}, true},
+		{"the instance metadata address", to("https://169.254.169.254/latest/meta-data/"), []*http.Request{from}, true},
+		{"a private address", to("https://10.0.1.7/list"), []*http.Request{from}, true},
+		{"loopback", to("https://127.0.0.1:8080/list"), []*http.Request{from}, true},
+		{"an ipv6 literal loopback", to("https://[::1]/list"), []*http.Request{from}, true},
+		{"a chain that will not end", to("https://cdn.example/list"), []*http.Request{from, from, from, from, from}, true},
+	} {
+		if got := hop(c.req, c.via) != nil; got != c.refused {
+			t.Errorf("%s: refused = %v, want %v", c.what, got, c.refused)
+		}
+	}
+
+	// And the rule is the CLIENT's, not just the function's: a publisher that
+	// redirects off TLS is refused by the downloader this plane actually uses.
+	landed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("tempbox.example\n"))
+	}))
+	defer landed.Close()
+	sends := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, landed.URL, http.StatusFound)
+	}))
+	defer sends.Close()
+
+	body, err := wire(context.Background(), sends.URL)
+	if err == nil {
+		t.Fatalf("the downloader followed a redirect off TLS and took %d bytes", len(body))
+	}
+}
+
+// TestTheVolumeOneOrgMayOccupyIsStated.
+//
+// The per-tenant bound is what keeps this plane out of the defect class the
+// other risk tracks kept landing in — one shared store with a fleet-wide cap,
+// where a tenant degrades its neighbours. It is only a tenancy property once
+// somebody can say what it comes to: every org's SQLite file sits on the ONE
+// volume this deployment mounts, and the figure is the product of three
+// constants in three files.
+//
+// So the figure is pinned. Raising any of the three moves it and fails here,
+// which makes the consequence an act rather than a side effect.
+func TestTheVolumeOneOrgMayOccupyIsStated(t *testing.T) {
+	const stated = 128 << 20 // 128 MiB, the volume one organisation may claim
+	got := ownVolume()
+	if got > stated {
+		t.Errorf("one org may now occupy %d bytes and the stated bound is %d; every org's store shares one volume, so raising rows (%d), a key (%d) or a note (%d) — or adding a set (%d now) — is a decision about the volume, not about a limit",
+			got, stated, maxOverrides, maxKey, maxNote, len(Catalog()))
+	}
+	if got < stated/2 {
+		t.Errorf("one org may occupy %d bytes and the stated bound is %d; a bound twice the truth stops describing anything", got, stated)
 	}
 }

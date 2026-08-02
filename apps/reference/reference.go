@@ -66,7 +66,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
@@ -90,6 +89,35 @@ const (
 	subsystem = "reference"
 	// maxKeys bounds one resolve call, so a lookup cannot be turned into a scan.
 	maxKeys = 100
+	// maxKey bounds ONE key, in bytes, everywhere a key crosses this plane's door
+	// — looked up, written as an override, or removed. It is one constant because
+	// it is one concept: the longest value any published reference list could
+	// carry as a member.
+	//
+	// Every matcher in the catalog is comfortably inside it. A hostname is at most
+	// 253 bytes (RFC 1035) and an address at most 254 (RFC 5321); an IPv6 literal
+	// with a zone is under 64; an issuer identification number is 8 digits; a
+	// device digest is 64 hex; the longest real user-agent string is a few hundred
+	// bytes. So the bound refuses nothing a caller legitimately asks about.
+	//
+	// WHY A BOUND AT ALL, when the matchers are "bounded": a count bound is not a
+	// byte bound. Without this, one 8 KB dotted key produced 16 MB of suffixes and
+	// [maxKeys] of them produced 1.7 GB in a single authenticated request — enough
+	// to OOM a one-replica deployment and take every product on the host with it.
+	// It also bounds the stored side: [maxOverrides] entries per (org, set) is only
+	// a byte bound once one entry is.
+	maxKey = 512
+	// maxMembers bounds how many members ONE source may land, which is the same
+	// bound seen from the publisher's end. [maxBody] bounds the bytes a publisher
+	// may serve and [swing] bounds how far a take may move from the version it
+	// replaces — but a FIRST take has no previous version to be measured against,
+	// and after a cold start into an empty warehouse every take is a first take.
+	//
+	// A million is nine times the largest list in this catalog (the
+	// disposable-inbox list, ~110,000 members) and twenty times the derived device
+	// set's own cap, so it refuses nothing a publisher plausibly serves and refuses
+	// the take that would spend the process.
+	maxMembers = 1_000_000
 	// maxWrite bounds one override write.
 	maxWrite = 1000
 	// maxNote bounds an override's free-text note.
@@ -112,8 +140,14 @@ type state struct {
 	plane *plane
 	own   *cloud.OrgStore[*overrides]
 	get   download
-	now   func() time.Time
-	work  *work
+	// sync makes one organisation's store durable and reports whether the ship was
+	// ACKNOWLEDGED. It is a value rather than a direct call for the same reason
+	// `get` is: the behaviour it decides — whether an acknowledged write can be
+	// lost to a rollout — is the contract, and a contract that can only be
+	// exercised against a live object store is a contract nothing holds.
+	sync func(namespace.Namespace) (bool, error)
+	now  func() time.Time
+	work *work
 }
 
 // work is the refresh worker's own coordination, held behind a pointer so the
@@ -150,12 +184,24 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("reference.Mount: empty DataDir")
 	}
+	base := cloud.NewBase(deps, subsystem)
+	// The base carries the deployment's durability, so each organisation's
+	// reference.db takes the HA path — elected single writer, hydrate on open,
+	// fenced ship — the same as the two other planes in this binary that hold
+	// records (apps/research, apps/books). An override is a record and not a cache:
+	// it is why a signup was refused, so it has to survive the rollout that took the
+	// pod away. This deployment is one replica with a recreate strategy, which means
+	// every rollout is exactly that failure. A nil Durable on a local deployment
+	// leaves the store the plain local cache it has always been, and Sync
+	// acknowledges immediately.
+	own := cloud.NewOrgStore[*overrides](base, subsystem, openOverrides)
 	s := &cloud.Service[state]{
-		Base: cloud.NewBase(deps, subsystem),
+		Base: base,
 		State: state{
 			plane: newPlane(),
-			own:   cloud.NewOrgStore[*overrides](deps.DataDir, subsystem, openOverrides),
+			own:   own,
 			get:   wire,
+			sync:  own.Sync,
 			now:   func() time.Time { return time.Now().UTC() },
 			work:  &work{stop: make(chan struct{})},
 		},
@@ -179,12 +225,19 @@ func Shutdown() error {
 	return s.State.own.CloseAll()
 }
 
-// tend hydrates from the warehouse until it succeeds, then re-hydrates and
-// re-takes half-aged sets on a slow beat.
+// tend hydrates from the warehouse until it succeeds, sweeps once the moment it
+// does, and then re-hydrates and re-sweeps on a slow beat.
 //
 // It re-takes at HALF the freshness bound rather than at the bound: a set that
 // is only refreshed once it is already stale is stale for the whole interval
 // between the two, and the point of the bound is that crossing it is news.
+//
+// THE FIRST SWEEP IS NOT THE SECOND ONE'S EARLY COPY, it is the deployment's cold
+// start. Into an EMPTY warehouse — a first deploy, a wipe, a migration — the first
+// hydrate legitimately finds nothing and succeeds, and with the sweep only on the
+// beat every set then refused for a whole [beat] with an operator's only lever
+// being one hand-made refresh call per set. A control that answers "never loaded"
+// for six hours after a deploy is a control that is not there.
 func tend(s *cloud.Service[state]) {
 	defer s.State.work.done.Done()
 	warm := time.NewTicker(settle)
@@ -201,6 +254,7 @@ func tend(s *cloud.Service[state]) {
 			if err == nil {
 				loaded = true
 				s.Log.Info("reference hydrated", "sets", len(s.State.plane.all()))
+				sweep(s)
 			}
 		}
 		select {
@@ -209,16 +263,24 @@ func tend(s *cloud.Service[state]) {
 		case <-warm.C:
 			continue
 		case <-pulse.C:
-			ctx, cancel := context.WithTimeout(context.Background(), refreshEvery())
-			for _, set := range Catalog() {
-				if got := s.State.plane.get(set.Name); got != nil && !halfAged(got, s.State.now()) {
-					continue
-				}
-				if _, err := take(ctx, s, set, nil); err != nil {
-					s.Log.Warn("reference refresh", "set", set.Name, "err", err)
-				}
-			}
-			cancel()
+			sweep(s)
+		}
+	}
+}
+
+// sweep re-takes every set that has never loaded or has used up half its
+// freshness allowance. It is ONE function because the cold start and the beat
+// want exactly the same pass — two copies would be two answers to "which sets
+// need taking", and the drift would be invisible until a set went quiet.
+func sweep(s *cloud.Service[state]) {
+	ctx, cancel := context.WithTimeout(context.Background(), refreshEvery())
+	defer cancel()
+	for _, set := range Catalog() {
+		if got := s.State.plane.get(set.Name); got != nil && !halfAged(got, s.State.now()) {
+			continue
+		}
+		if _, err := take(ctx, s, set, nil, false); err != nil {
+			s.Log.Warn("reference refresh", "set", set.Name, "err", err)
 		}
 	}
 }
@@ -265,7 +327,8 @@ func hydrate(ctx context.Context, s *cloud.Service[state]) error {
 
 // take refreshes one set: fetch or compute each source, land it, then rebuild
 // the snapshot. receipts, when present, are the loader's word for an attest set.
-func take(ctx context.Context, s *cloud.Service[state], set Set, receipts []ReferenceReceipt) ([]ReferenceTaken, error) {
+// force is the operator saying a size change past [swing] is real.
+func take(ctx context.Context, s *cloud.Service[state], set Set, receipts []ReferenceReceipt, force bool) ([]ReferenceTaken, error) {
 	s.State.work.taking.Lock()
 	defer s.State.work.taking.Unlock()
 
@@ -274,6 +337,10 @@ func take(ctx context.Context, s *cloud.Service[state], set Set, receipts []Refe
 	}
 	now := s.State.now()
 	out := make([]ReferenceTaken, 0, len(set.Sources))
+	// What this plane held BEFORE the take, captured while it still can be: the
+	// previous version is what prune spares, and the previous size is what the
+	// swing gate measures against.
+	was := holding(s.State.plane.get(set.Name))
 
 	switch set.Kind {
 	case KindSeam:
@@ -291,14 +358,29 @@ func take(ctx context.Context, s *cloud.Service[state], set Set, receipts []Refe
 				Keys: uint64(r.Keys), Landed: uint64(r.Keys),
 				Status: statusReady, Refusal: r.Refusal,
 			}
+			// A RECEIPT IS EVIDENCE, NOT AN ASSERTION. The loader's word is the only
+			// thing this plane has about a set whose membership it does not hold, so
+			// the one check it CAN make it makes: a load that names no version, or
+			// carries no designations, is a failed load wearing a successful one's
+			// clothes. Recording it ready would make the compliance freshness signal
+			// say the designation lists are current when the loader served nothing.
+			// Refused instead: the previous ready version stands and ages out visibly,
+			// which is exactly what a source that stopped answering should look like.
+			if why := unattested(r); why != "" {
+				v.Status, v.Refusal, v.Keys, v.Landed = statusRefused, why, 0, 0
+			}
 			if err := mark(ctx, v, now); err != nil {
 				return nil, err
 			}
-			out = append(out, ReferenceTaken{Source: src.Name, Version: r.Version, Keys: r.Keys})
+			out = append(out, ReferenceTaken{Source: src.Name, Version: r.Version, Keys: r.Keys, Refusal: v.Refusal})
 		}
 	default:
 		for _, src := range set.Sources {
 			entries, err := gather(ctx, s, src, now)
+			if err == nil && !force && swung(was[src.Name].Keys, uint64(len(entries))) {
+				err = fmt.Errorf("this take carries %d members and the version it would replace carries %d, a change past the %dx bound; refresh with force to accept it",
+					len(entries), was[src.Name].Keys, swing)
+			}
 			if err != nil {
 				// One publisher failing does not abandon the others, and it does not
 				// shrink the set either: the previous version of THIS source stays
@@ -326,30 +408,73 @@ func take(ctx context.Context, s *cloud.Service[state], set Set, receipts []Refe
 	// costs storage, and turning that into a refresh failure would trade a
 	// housekeeping problem for a freshness one.
 	if got := s.State.plane.get(set.Name); got != nil && set.Kind != KindAttest {
-		for _, v := range got.took {
-			if err := prune(ctx, set.Name, v.Source, v.Version, v.Version); err != nil {
-				s.Log.Warn("reference prune", "set", set.Name, "source", v.Source, "err", err)
-			}
+		if err := sweepOld(ctx, prune, set.Name, was, got.took); err != nil {
+			s.Log.Warn("reference prune", "set", set.Name, "err", err)
 		}
 	}
 	return out, nil
 }
 
+// unattested names why a load receipt is not evidence of a load, or "" when it
+// is. PURE, so the one judgement this plane makes about a set it does not hold is
+// testable on its own.
+func unattested(r ReferenceReceipt) string {
+	switch {
+	case strings.TrimSpace(r.Refusal) != "":
+		return r.Refusal
+	case strings.TrimSpace(r.Version) == "":
+		return "this receipt names no version, so there is nothing an auditor could resolve it back to"
+	case r.Keys <= 0:
+		return "this receipt carries no designations, which no designation list is — the load failed"
+	default:
+		return ""
+	}
+}
+
 // gather produces one source's entries: downloaded for a published source,
-// computed for a local one.
+// computed for a local one — and puts what comes back through the SAME door a
+// caller's key crosses.
+//
+// The door is the same because a member is the same thing from either side. A
+// key longer than [maxKey] is refused at the lookup, so a MEMBER longer than
+// [maxKey] is one no lookup can ever reach: dead weight in the warehouse, in
+// every hydrate, and in the snapshot every request reads. And a source that
+// lands more than [maxMembers] is the resolve amplifier from the publisher's
+// end — the swing gate bounds GROWTH against the version it replaces and a first
+// take has nothing to grow from, which after a cold start is every take.
+//
+// Refused WHOLE rather than filtered, like the mailbox-provider gate: a list
+// silently missing the rows we dropped is a list that answers "not listed" and
+// reads exactly like a clean world.
 func gather(ctx context.Context, s *cloud.Service[state], src Source, now time.Time) ([]Entry, error) {
+	var (
+		entries []Entry
+		err     error
+	)
 	switch {
 	case src.parse != nil:
-		return pull(ctx, s.State.get, src, pause)
+		entries, err = pull(ctx, s.State.get, src, pause)
 	case src.produce != nil:
 		p := producer{ctx: ctx, now: now}
-		if datastore.Ready() {
-			p.query = datastore.Query
+		if storeReady() {
+			p.query = storeQuery
 		}
-		return src.produce(p)
+		entries, err = src.produce(p)
 	default:
 		return nil, fmt.Errorf("source %q states neither a parser nor a producer", src.Name)
 	}
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) > maxMembers {
+		return nil, fmt.Errorf("this take carries %d members and a published set holds at most %d; the largest list in this catalog is nine times smaller than the bound", len(entries), maxMembers)
+	}
+	for _, e := range entries {
+		if over(e.Key) {
+			return nil, fmt.Errorf("this take carries a %d byte member and a key is at most %d; no lookup could ever reach it, so landing it would only cost the memory every request reads", len(e.Key), maxKey)
+		}
+	}
+	return entries, nil
 }
 
 // stamp reads a caller-supplied instant, defaulting to now. A receipt with no
@@ -371,13 +496,21 @@ func stamp(s string, now time.Time) time.Time {
 // can never be named "resolve": first match wins, and the addressing has to be
 // decided here rather than by whatever a caller sends.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// The Bridge FIRST, on the subtree this app owns: a typed op receives only a
-	// context, so the validated principal has to be parked there, and fiber runs
-	// middleware in registration order — one installed after these leaves would
-	// never run.
+	// The Bridge FIRST, on the subtree this app owns and NOT ONE SEGMENT WIDER: a
+	// typed op receives only a context, so the validated principal has to be parked
+	// there, and fiber runs middleware in registration order — one installed after
+	// these leaves would never run.
+	//
+	// It goes on /v1/ml/reference rather than on /v1/ml because a prefix
+	// middleware runs for every route under that prefix, whoever registered it.
+	// /v1/ml is a shared parent: a model-serving plane already answers on
+	// /v1/ml/models and a dataset plane on /v1/ml/datasets in the same process, and
+	// a middleware this app installs one segment up would run inside two other
+	// products' request paths depending only on mount order. An app owns its own
+	// leaf and nothing above it.
 	ml := app.Group(parentPrefix)
-	ml.Use(cloud.Bridge())
 	g := ml.Group(leaf)
+	g.Use(cloud.Bridge())
 
 	o := ops{s: s}
 	zip.Post(g, "/resolve", o.resolve,
@@ -466,6 +599,32 @@ func (o ops) held(ctx context.Context) (*overrides, error) {
 	return own, nil
 }
 
+// ship is the ship-before-ack step: it names the SAME store the write went to
+// and ships THAT one, so a write and its ship can never address different files.
+//
+// AN UNACKED SHIP IS AN ERROR, not a warning, and that is the whole contract. An
+// override is why a signup was refused; an operator who was told the write landed
+// and then loses it to a rollout has a control they believe is in force and is
+// not. This deployment runs ONE replica with a recreate strategy, so a rollout is
+// exactly the ungraceful termination that loses an unshipped write. Failing the
+// call instead is honest and safe: the write is idempotent on (set, key), so a
+// retry costs nothing. Local deployments hold no durable object, where Sync
+// acknowledges immediately and this is a no-op.
+func (o ops) ship(ctx context.Context) error {
+	ns, err := nsOf(ctx)
+	if err != nil {
+		return err
+	}
+	acked, err := o.s.State.sync(ns)
+	if err != nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "reference override taken but not made durable: %v", err)
+	}
+	if !acked {
+		return zip.Errorf(http.StatusServiceUnavailable, "reference override taken but not made durable: this replica does not hold your organisation's write lease")
+	}
+	return nil
+}
+
 // actor names who wrote an override, for the record.
 //
 // An override is an adverse-action input — it is why a signup was refused — so
@@ -530,8 +689,17 @@ type ReferenceSource struct {
 	Source string `json:"source"`
 	// Origin is exactly where it was taken from, so it can be taken again.
 	Origin string `json:"origin"`
-	// Terms is the licence or permission this data is redistributed under. A
-	// source with no stated terms is not in the catalog.
+	// Basis is the KIND of permission this publisher's data reaches you under:
+	// licence (an explicit grant), registry (the registry of record publishing for
+	// anyone to consult), operator (an operator's own machine-readable statement
+	// about its own network, published for third parties to filter by — not a
+	// licence, and not claimed as one), own (computed here), or none (nothing
+	// reaches you: the membership is held by the component that screens against
+	// it). It is on the wire so the licence position is an audit you can run.
+	Basis string `json:"basis"`
+	// Terms is the CITATION that basis points at — the licence identifier, the
+	// registry, or the operator publication. A source with no stated terms is not
+	// in the catalog.
 	Terms string `json:"terms"`
 	// Version is the content digest of what this publisher last supplied. Two
 	// refreshes that agree on it took the same data.
@@ -599,7 +767,10 @@ func project(set Set, s *snap, now time.Time) ReferenceSet {
 		Stale: true, Refusal: set.Refusal,
 	}
 	for _, src := range set.Sources {
-		view.Sources = append(view.Sources, ReferenceSource{Source: src.Name, Origin: src.Origin, Terms: src.Terms})
+		view.Sources = append(view.Sources, ReferenceSource{
+			Source: src.Name, Origin: src.Origin,
+			Basis: string(src.Basis), Terms: src.Terms,
+		})
 	}
 	if s == nil {
 		if view.Refusal == "" {
@@ -668,6 +839,12 @@ func (o ops) set(ctx context.Context, in *ReferenceIn) (*ReferenceOut, error) {
 	set, ok := byName(strings.ToLower(strings.TrimSpace(in.Set)))
 	if !ok {
 		return nil, zip.ErrNotFound("this plane publishes no set by that name")
+	}
+	// The cursor is a KEY — the last one of the previous page — so it crosses the
+	// same door, and every door is the same door. A cursor past [maxKey] cannot
+	// equal any stored key, so it is a nonsense position rather than a page.
+	if err := bounded(in.After); err != nil {
+		return nil, err
 	}
 	own, err := o.held(ctx)
 	if err != nil {
@@ -768,14 +945,24 @@ func (o ops) write(ctx context.Context, in *SetReferenceIn) (*SetReferenceOut, e
 		if key == "" {
 			return nil, zip.ErrBadRequest("an override needs a key")
 		}
+		// The SAME bound the lookup door applies, because this is the same key seen
+		// from the other side. It is what makes [maxOverrides] a bound on BYTES and
+		// not merely on rows: without it one entry could be the whole request body,
+		// and the count bound would let one organisation put gigabytes of its own
+		// choosing on the volume every other organisation's store lives on.
+		if err := bounded(key); err != nil {
+			return nil, err
+		}
 		if !verdictOK(e.Verdict) {
 			return nil, zip.ErrBadRequest("verdict is allow or deny")
 		}
-		note := e.Note
-		if len(note) > maxNote {
-			note = note[:maxNote]
+		// The note is refused rather than trimmed, like every other bound here. A
+		// silently shortened note is an operator's stated reason for an adverse
+		// action cut off mid-sentence, which is worse than being asked to shorten it.
+		if len(e.Note) > maxNote {
+			return nil, zip.ErrBadRequest(fmt.Sprintf("a note is at most %d bytes and this one is %d", maxNote, len(e.Note)))
 		}
-		batch = append(batch, ReferenceOverride{Key: normal(set, key), Verdict: e.Verdict, Note: note})
+		batch = append(batch, ReferenceOverride{Key: normal(set, key), Verdict: e.Verdict, Note: e.Note})
 	}
 	own, err := o.mine(ctx)
 	if err != nil {
@@ -785,9 +972,34 @@ func (o ops) write(ctx context.Context, in *SetReferenceIn) (*SetReferenceOut, e
 	if err != nil {
 		return nil, zip.ErrConflict(err.Error())
 	}
-	held, _ := own.count(set.Name)
-	return &SetReferenceOut{Set: set.Name, Written: n, Overrides: held}, nil
+	if err := o.ship(ctx); err != nil {
+		return nil, err
+	}
+	got, _ := own.count(set.Name)
+	return &SetReferenceOut{Set: set.Name, Written: n, Overrides: got}, nil
 }
+
+// bounded is the [maxKey] door, and it is ONE function because it is one bound:
+// a key too long to look up is too long to store and too long to remove.
+//
+// It REFUSES rather than truncating. A truncated key is a DIFFERENT key —
+// shortening "mail.tempbox.example" denies some other domain — so silently
+// cutting an over-long input would turn a bound into a wrong answer, which is the
+// one outcome a plane whose whole argument is "silence is never clean" cannot
+// have.
+func bounded(key string) error {
+	if over(key) {
+		return zip.ErrBadRequest(fmt.Sprintf("a key is at most %d bytes and this one is %d; no published set carries a member that long", maxKey, len(key)))
+	}
+	return nil
+}
+
+// over is [maxKey] as a PURE PREDICATE, and it is what makes the door one door:
+// the wire refuses an over-long key with a 400 (bounded) and the ingest path
+// refuses an over-long member by refusing the take (gather). Two presentations of
+// one bound, never two bounds — a second spelling is a bound that can drift, and
+// the drift always favours the side that forgot.
+func over(key string) bool { return len(key) > maxKey }
 
 // normal renders a key the way the baseline holds it, so an override written as
 // "10.0.0.0/8 " and a baseline entry written as "10.0.0.0/8" are the same key.
@@ -840,10 +1052,14 @@ func (o ops) clear(ctx context.Context, in *ClearReferenceIn) (*ClearReferenceOu
 	if !ok {
 		return nil, zip.ErrNotFound("this plane publishes no set by that name")
 	}
-	key := normal(set, strings.ToLower(strings.TrimSpace(in.Key)))
-	if key == "" {
+	asked := strings.ToLower(strings.TrimSpace(in.Key))
+	if asked == "" {
 		return nil, zip.ErrBadRequest("which key")
 	}
+	if err := bounded(asked); err != nil {
+		return nil, err
+	}
+	key := normal(set, asked)
 	own, err := o.held(ctx)
 	if err != nil {
 		return nil, err
@@ -855,8 +1071,16 @@ func (o ops) clear(ctx context.Context, in *ClearReferenceIn) (*ClearReferenceOu
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "reference overrides: %v", err)
 	}
-	held, _ := own.count(set.Name)
-	return &ClearReferenceOut{Set: set.Name, Key: key, Cleared: gone, Overrides: held}, nil
+	// A removal is a write, and it is the write whose loss is the dangerous one: an
+	// allow that was withdrawn and comes back is a control an operator turned off
+	// and that turned itself on again.
+	if gone {
+		if err := o.ship(ctx); err != nil {
+			return nil, err
+		}
+	}
+	got, _ := own.count(set.Name)
+	return &ClearReferenceOut{Set: set.Name, Key: key, Cleared: gone, Overrides: got}, nil
 }
 
 // ── POST /v1/ml/reference/resolve ────────────────────────────────────────────
@@ -917,17 +1141,23 @@ type ReferenceVersion struct {
 //
 // Example: {"sets": ["domain", "net"], "keys": ["user@tempbox.example", "3.5.140.1"]}
 func (o ops) resolve(ctx context.Context, in *ResolveReferenceIn) (*ResolveReferenceOut, error) {
+	// The count bound is read BEFORE the keys are walked, so an oversized call
+	// costs the length of a slice rather than a pass over whatever it carries.
+	if len(in.Keys) > maxKeys {
+		return nil, zip.ErrBadRequest(fmt.Sprintf("at most %d keys per call", maxKeys))
+	}
 	keys := make([]string, 0, len(in.Keys))
 	for _, k := range in.Keys {
-		if k = strings.TrimSpace(k); k != "" {
-			keys = append(keys, k)
+		if k = strings.TrimSpace(k); k == "" {
+			continue
 		}
+		if err := bounded(k); err != nil {
+			return nil, err
+		}
+		keys = append(keys, k)
 	}
 	if len(keys) == 0 {
 		return nil, zip.ErrBadRequest("no keys")
-	}
-	if len(keys) > maxKeys {
-		return nil, zip.ErrBadRequest(fmt.Sprintf("at most %d keys per call", maxKeys))
 	}
 	wanted, err := chosen(in.Sets)
 	if err != nil {
@@ -979,16 +1209,33 @@ func (o ops) resolve(ctx context.Context, in *ResolveReferenceIn) (*ResolveRefer
 // name the catalog does not carry is refused rather than skipped: a caller who
 // misspells a set and gets a silent pass has been told the key is clean by a set
 // that was never consulted.
+//
+// THE CATALOG IS THE BOUND, and it is the honest one: there is no work to do on a
+// set that does not exist, and no second answer to give about one that does. So a
+// call naming more sets than the plane publishes is refused before anything is
+// walked, and a set named twice is consulted once. Without both, `sets` repeated
+// N times ran N times the answers — the count multiplier that composed with the
+// per-key one to turn a single request into gigabytes.
 func chosen(names []string) ([]Set, error) {
+	catalog := Catalog()
 	if len(names) == 0 {
-		return Catalog(), nil
+		return catalog, nil
+	}
+	if len(names) > len(catalog) {
+		return nil, zip.ErrBadRequest(fmt.Sprintf("this plane publishes %d sets and a call may name each one once; this one names %d", len(catalog), len(names)))
 	}
 	out := make([]Set, 0, len(names))
+	seen := make(map[string]bool, len(names))
 	for _, n := range names {
-		set, ok := byName(strings.ToLower(strings.TrimSpace(n)))
+		name := strings.ToLower(strings.TrimSpace(n))
+		set, ok := byName(name)
 		if !ok {
 			return nil, zip.ErrNotFound(fmt.Sprintf("this plane publishes no set named %q", n))
 		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
 		out = append(out, set)
 	}
 	return out, nil
@@ -1046,6 +1293,12 @@ type RefreshReferenceIn struct {
 	// is refused without them: this plane never invents a freshness it did not
 	// observe.
 	Receipts []ReferenceReceipt `json:"receipts,omitempty" url:"-"`
+	// Force accepts a take whose size moved past the change bound. A publisher
+	// serving a tenth or ten times its previous list is refused by default and the
+	// previous version is left standing; this is the operator saying the change is
+	// real. It cannot make an empty, truncated or unparseable take land — those are
+	// errors, not magnitudes.
+	Force bool `json:"force,omitempty"`
 }
 
 // RefreshReferenceOut is the outcome, per publisher.
@@ -1078,7 +1331,7 @@ type RefreshReferenceOut struct {
 // Example: {"set": "domain"}
 func (o ops) refresh(ctx context.Context, in *RefreshReferenceIn) (*RefreshReferenceOut, error) {
 	c, ok := cloud.Request(ctx)
-	if !ok || !c.IsAdmin() {
+	if !ok || !principal.IsSuperAdmin(c) {
 		return nil, zip.ErrForbidden("SuperAdmin required: this writes the baseline every org reads")
 	}
 	set, ok2 := byName(strings.ToLower(strings.TrimSpace(in.Set)))
@@ -1093,10 +1346,10 @@ func (o ops) refresh(ctx context.Context, in *RefreshReferenceIn) (*RefreshRefer
 	case set.Kind != KindAttest && len(in.Receipts) > 0:
 		return nil, zip.ErrBadRequest("this set is taken here; a receipt would be a freshness nobody observed")
 	}
-	if !datastore.Ready() {
+	if !storeReady() {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "the warehouse is not connected, so a version cannot be recorded")
 	}
-	took, err := take(ctx, o.s, set, in.Receipts)
+	took, err := take(ctx, o.s, set, in.Receipts, in.Force)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "reference refresh: %v", err)
 	}

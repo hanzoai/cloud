@@ -163,10 +163,21 @@ func build(set Set, took []version, entries []Entry) *snap {
 // should try. It is the ONE place a set's matching shape becomes concrete, and
 // both the override store and the baseline snapshot consult it.
 //
-// Every case is BOUNDED: at most one key for an exact set, at most as many as a
-// hostname has labels, at most nineteen for a card number, at most 129 for an
-// address. A matcher that could enumerate unboundedly would be a lookup a caller
-// could turn into a scan.
+// Every case is bounded in COUNT by the key's own length — at most one key for an
+// exact set, one per label for a hostname, eight for a card number, 129 for an
+// address — and every case is bounded in BYTES by that length too, which is the
+// property that matters and the one this function used to lack.
+//
+// A DOMAIN SUFFIX IS A SLICE, NEVER A JOIN. Splitting a host into labels and
+// re-joining each tail allocates a fresh copy of every suffix: an L-label host
+// costs O(L * len(key)) bytes, so one 8 KB dotted key materialised 16 MB and one
+// [maxKey]-bounded resolve call of [maxKeys] such keys was 1.7 GB in a single
+// request — on a one-replica deployment, an OOM every product on the host shares.
+// A Go string is immutable, so host[o:] is the SAME bytes with a different header:
+// walking the dot offsets gives the identical suffixes in O(L) headers over one
+// backing array. The bound at the door ([maxKey], reference.go) and this shape are
+// the two halves of one property — the door refuses a key no published list could
+// carry, and this makes the work linear in whatever the door admits.
 func candidates(set Set, key string) []string {
 	key = strings.TrimSpace(key)
 	if key == "" {
@@ -178,10 +189,18 @@ func candidates(set Set, key string) []string {
 		if at := strings.LastIndexByte(host, '@'); at >= 0 {
 			host = host[at+1:]
 		}
-		labels := strings.Split(host, ".")
-		out := make([]string, 0, len(labels))
-		for i := 0; i+2 <= len(labels); i++ {
-			out = append(out, strings.Join(labels[i:], "."))
+		// Every suffix that still has two labels in it, most specific first. A bare
+		// public suffix is deliberately not a candidate: a deny on ".example" would
+		// be a deny on a registry, not on a member.
+		out := make([]string, 0, 8)
+		for o := 0; ; {
+			rest := host[o:]
+			dot := strings.IndexByte(rest, '.')
+			if dot < 0 {
+				break
+			}
+			out = append(out, rest)
+			o += dot + 1
 		}
 		if len(out) == 0 {
 			out = append(out, host)
