@@ -20,7 +20,7 @@
 // read/write/delete another org's data.
 //
 // THE GATE. X-User-Id is set ONLY by the middleware, ONLY from a credential it
-// verified (a JWT bearer or session cookie — an opaque hk-/sk- API key does NOT
+// verified (a JWT bearer or session cookie — an opaque pk-/sk- API key does NOT
 // validate to a principal). So c.User() != "" is the authoritative "this request
 // carries a validated principal" signal. It is the SAME gate the S3 data plane
 // (clients/s3) and the audit trail (audit_middleware.go actorFromCtx) already
@@ -362,7 +362,7 @@ func ValidatedProject(c *zip.Ctx) (string, bool) {
 // the caller's own org and falls back when it is absent.
 //
 // Empty when IAM minted no account: a token from before the claim shipped, or an
-// opaque hk-/sk- key that never carried claims. Payer's legacy rule answers for
+// opaque pk-/sk- key that never carried claims. Payer's legacy rule answers for
 // those, so an empty value bills the same account it always did — never nothing.
 // The value is CLONED because it is retained past the request for telemetry.
 func BillingAccount(c *zip.Ctx) string {

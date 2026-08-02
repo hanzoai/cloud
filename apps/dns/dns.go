@@ -58,7 +58,7 @@ const dnsRelay = " The plane owns the authoritative zone and record store behind
 	"plane directly. The upstream host comes only from deployment config, never from " +
 	"the request, so no path can re-target another host.\n\n" +
 	"Fails closed before a byte leaves cloud: no validated principal is 403; an API " +
-	"key is 401, because an hk-/sk- key is not a JWT the OIDC-gated plane can " +
+	"key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can " +
 	"validate and there is no substitute credential to send in its place; a path that " +
 	"normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one " +
 	"decode, is 400; an unconfigured plane is 503 and an unreachable one 502."
@@ -222,7 +222,7 @@ func (e *edge) forward(c *zip.Ctx) error {
 	//
 	// REFUSE HERE when there is no relayable bearer, rather than forwarding without
 	// one. CallerBearer returns "" for an API KEY (middleware_identity: `tok == "" ||
-	// isAPIKey(tok)`), because an hk-/sk- key is not a JWT and the OIDC-gated DNS
+	// isAPIKey(tok)`), because a pk-/sk- key is not a JWT and the OIDC-gated DNS
 	// plane cannot validate it. This head was written for the console, which carries
 	// a session bearer, so that case went unhandled: the request was forwarded with
 	// NO Authorization at all and the caller got the DNS plane's own

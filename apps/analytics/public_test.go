@@ -494,7 +494,7 @@ func TestPublic_PresentedKeyStillFailsClosed(t *testing.T) {
 	app := mountApp(t)
 	stubResolver(t, func(string) (string, bool) { return "", false })
 	if code := postKeyed(t, app, "/v1/event", "hanzo.ai",
-		`{"api_key":"hk-bad","batch":[{"type":"pageview"}]}`, nil); code != http.StatusForbidden {
+		`{"api_key":"sk-bad","batch":[{"type":"pageview"}]}`, nil); code != http.StatusForbidden {
 		t.Fatalf("presented-but-unresolvable api_key want 403 (fail closed, not anonymous), got %d", code)
 	}
 	// Same for a publishable key IAM cannot resolve, on the sendBeacon-friendly carriers.

@@ -37,7 +37,7 @@ const (
 	// user's monthly plan; the registry meters it for visibility only.
 	KindSubscription = "subscription"
 	// KindAPIKey is an account credentialed by an API key (a raw provider key,
-	// or a Hanzo hk- key). Its inference bills via commerce on the gateway path.
+	// or a Hanzo sk- key). Its inference bills via commerce on the gateway path.
 	KindAPIKey = "apikey"
 )
 

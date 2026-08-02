@@ -577,7 +577,7 @@ func TestTrustOrderPrefersTheApiCredential(t *testing.T) {
 	// Stand in for IAM's key seam: this key belongs to org "keyorg".
 	prev := resolveKeyOrg
 	resolveKeyOrg = func(_ context.Context, key string) (string, bool) {
-		if key == "hk-the-key" {
+		if key == "sk-the-key" {
 			return "keyorg", true
 		}
 		return "", false
@@ -587,7 +587,7 @@ func TestTrustOrderPrefersTheApiCredential(t *testing.T) {
 	tok := teamToken(t, "teamorg", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
 	got, ok := tenantWith(t, map[string]string{
 		"Authorization": "Bearer " + tok, // team token -> teamorg
-		"x-api-key":     "hk-the-key",    // API key    -> keyorg
+		"x-api-key":     "sk-the-key",    // API key    -> keyorg
 	})
 	if !ok {
 		t.Fatal("nothing resolved with both credentials present")
