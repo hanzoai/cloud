@@ -22,9 +22,9 @@ func TestCampaignWhere_BindsOrgAndCampaignPositionally(t *testing.T) {
 	if strings.Contains(where, "utm_content") {
 		t.Fatalf("no variant clause expected for whole-campaign read, got %q", where)
 	}
-	// args order: start, end, org, campaign.
-	if len(args) != 4 || args[2] != "acme" || args[3] != "cmp_1" {
-		t.Fatalf("args must bind [ts, ts, org, campaign], got %v", args)
+	// args order: org, signal, start, end, campaign — eventsWhere's leading pair first.
+	if len(args) != 5 || args[0] != "acme" || args[4] != "cmp_1" {
+		t.Fatalf("args must bind [org, signal, ts, ts, campaign], got %v", args)
 	}
 	// The hostile-slug proof: the org value is a bound arg, never text in the SQL.
 	if strings.Contains(where, "acme") || strings.Contains(where, "cmp_1") {
@@ -41,8 +41,39 @@ func TestCampaignWhere_VariantAppended(t *testing.T) {
 	if !strings.Contains(where, "attributes['utm_content'] = ?") {
 		t.Fatalf("variant must add a bound attributes['utm_content'] clause, got %q", where)
 	}
-	if len(args) != 5 || args[4] != "hero-b" {
+	if len(args) != 6 || args[5] != "hero-b" {
 		t.Fatalf("variant must be the trailing bound arg, got %v", args)
+	}
+}
+
+// TestCampaignWhere_ScopesTheSignal is the regression gate for the read that
+// counted the whole plane. On ONE fact table the signal is a PREDICATE, and a
+// predicate can be forgotten: campaignWhere named org + time + utm_campaign and
+// no signal, so uniqExact(distinct_id) and sum(revenue) ranged over logs, spans
+// and errors as well as acts. It was latent only because nothing carries a
+// utm_campaign yet. campaignWhere composes eventsWhere so it cannot be forgotten
+// again — this pins the composition, not merely the string.
+func TestCampaignWhere_ScopesTheSignal(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+
+	base, baseArgs := eventsWhere("acme", start, end)
+	for _, variant := range []string{"", "hero-b"} {
+		where, args := campaignWhere("acme", "cmp_1", variant, start, end)
+		if !strings.HasPrefix(where, base) {
+			t.Fatalf("campaign read must NARROW eventsWhere, not restate it:\n got %q\nwant prefix %q", where, base)
+		}
+		if !strings.Contains(where, "signal = ?") {
+			t.Fatalf("campaign read must bind the signal, got %q", where)
+		}
+		if got, ok := args[1].(string); !ok || got != string(signalAct) {
+			t.Fatalf("campaign read must scope to acts, got %v", args[1])
+		}
+		for i, want := range baseArgs {
+			if args[i] != want {
+				t.Fatalf("leading args must be eventsWhere's, got %v want prefix %v", args, baseArgs)
+			}
+		}
 	}
 }
 
