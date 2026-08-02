@@ -218,21 +218,22 @@ func TestLandableIsExactlyTheWriterSet(t *testing.T) {
 // TestMetricIsRefusedNotAccepted is the other half, at the door. Answering 200
 // {"accepted":1} to something stored nowhere is a lie whether the discard happens in the
 // handler or four hops later on a stream nothing drains; the receipt has to say what
-// actually happened. It stays 200 because the request was well-formed and the batch may
-// carry other signals that DID land — `dropped` is the field that already means "this one
-// did not", and a second refusal mechanism beside it would be one too many.
+// actually happened.
+//
+// It used to stay 200, on the argument that the request was well-formed and the batch
+// MAY carry other signals that did land. When it does, it still 200s — that is
+// TestAMixedBatchDropsOnlyTheMetric below, and the reason the rule is `accepted == 0`
+// rather than `dropped > 0`. But when the batch is ONE metric, nothing landed at all,
+// and "well-formed" is not the question a caller is asking. `dropped` was the field that
+// already meant "this one did not" and no client ever read it, which is how three
+// separate ingest outages stayed invisible. So the status carries it: 400, because this
+// caller HAS capability and it is the body that has nowhere to go.
 func TestMetricIsRefusedNotAccepted(t *testing.T) {
 	w := fakeWarehouse(t)
 	app := mountApp(t)
 	code, resp := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme",
 		`{"batch":[{"type":"metric","metric":{"name":"page_load_ms","value":812}}]}`)
-	if code != http.StatusOK {
-		t.Fatalf("metric ingest = %d (%s), want 200 with an honest receipt", code, resp)
-	}
-	if !strings.Contains(string(resp), `"accepted":0`) || !strings.Contains(string(resp), `"dropped":1`) {
-		t.Fatalf("metric receipt = %s, want accepted:0 dropped:1 — a 200 that means 'discarded' "+
-			"is the bug", resp)
-	}
+	refused(t, "metric ingest", code, resp, http.StatusBadRequest, "unroutable_events")
 	if len(w.facts) != 0 {
 		t.Errorf("published %d metric facts onto a subject no writer drains", len(w.facts))
 	}
