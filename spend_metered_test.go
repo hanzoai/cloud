@@ -153,3 +153,50 @@ func pluginIsMetered(file *ast.File) bool {
 	})
 	return found
 }
+
+// A Free app's surface is not billable just because a metered app is routed a
+// SHORTER prefix over the same tree.
+//
+// provisioning is metered and routed /v1/vector and /v1/search; product is Free
+// and routed the more specific /v1/vector/collections, /v1/vector/stats,
+// /v1/search/indexes and /v1/search/stats. A bare HasPrefix scan bills all four
+// on provisioning's standing, which gates a Free product behind a balance. The
+// router resolves by longest prefix; ownership has to as well.
+func TestFreeSurfaceUnderAMeteredPrefixIsNotBillable(t *testing.T) {
+	for _, p := range []string{
+		"/v1/vector/collections",
+		"/v1/vector/stats",
+		"/v1/search/indexes",
+		"/v1/search/stats",
+	} {
+		if Billable("POST", p) {
+			t.Errorf("Billable(POST %s) = true; product declares cloud.Free and owns this path", p)
+		}
+	}
+
+	// The metered tree around them still bills — this must not become a hole.
+	for _, p := range []string{"/v1/vector", "/v1/vector/anything-else", "/v1/search/query"} {
+		if !Billable("POST", p) {
+			t.Errorf("Billable(POST %s) = false; provisioning is metered and owns this path", p)
+		}
+	}
+}
+
+// OwnerOf resolves by LONGEST prefix, which is what makes the check above sound.
+func TestOwnerOfPrefersTheMoreSpecificApp(t *testing.T) {
+	if got := manifest.OwnerOf("/v1/vector/collections"); got != "product" {
+		t.Errorf("OwnerOf(/v1/vector/collections) = %q, want product", got)
+	}
+	if got := manifest.OwnerOf("/v1/vector"); got != "provisioning" {
+		t.Errorf("OwnerOf(/v1/vector) = %q, want provisioning", got)
+	}
+	// ai is declared the bare /v1 catch-all, so an otherwise-unmatched /v1 path
+	// legitimately resolves to it — that IS the routing, not a miss. Only a path
+	// outside every declared prefix is unowned.
+	if got := manifest.OwnerOf("/v1/nothing-routes-here"); got != "ai" {
+		t.Errorf("OwnerOf(unmatched /v1) = %q, want ai (the catch-all)", got)
+	}
+	if got := manifest.OwnerOf("/healthz"); got != "" {
+		t.Errorf("OwnerOf(outside every prefix) = %q, want empty", got)
+	}
+}
