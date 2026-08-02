@@ -232,13 +232,19 @@ func TestAbuseGate_HoldsAVerdictSoTheScorerIsAskedOnce(t *testing.T) {
 // -------------------------------------------------------------------- fail policy
 
 func TestAbuseGate_FailsOpenForOrdinaryTrafficAndClosedForAGrant(t *testing.T) {
+	// A scorer that is INSTALLED and cannot answer. Absence is the other case and
+	// it is deliberately not here: a deployment with no risk plane, or one whose
+	// scorer withdrew, must not have its grant surface refused — see
+	// TestDecide_AnAbsentScorerIsNotASilentOne and the case below.
 	broken := []struct {
 		name    string
 		install RiskScorer
 	}{
-		{"scorer absent", nil},
 		{"scorer erroring", func(context.Context, string, RiskQuery) (RiskVerdict, error) {
 			return RiskVerdict{}, errors.New("down")
+		}},
+		{"scorer silent", func(context.Context, string, RiskQuery) (RiskVerdict, error) {
+			return RiskVerdict{}, nil
 		}},
 	}
 	for _, b := range broken {
@@ -258,6 +264,23 @@ func TestAbuseGate_FailsOpenForOrdinaryTrafficAndClosedForAGrant(t *testing.T) {
 			}
 		})
 	}
+
+	// AND THE OTHER HALF, on the same live org: with NO scorer in the process the
+	// grant surface stays open. An armed org whose scorer was never installed, or
+	// withdrew, must not have its key store answer 403 to everyone.
+	t.Run("scorer absent", func(t *testing.T) {
+		resetScorer(t)
+		SetRiskScorer(nil)
+		app, _ := abuseApp(t, edge.ModeLive)
+		for _, p := range []string{"/v1/kms/orgs/acme/secrets/db"} {
+			if got := abuseHit(app, "GET", p, "acme", "sk-live-4", "198.51.100.4").StatusCode; got != 200 {
+				t.Fatalf("%s → %d with no scorer installed; want 200", p, got)
+			}
+		}
+		if got := abuseHit(app, "POST", "/v1/iam/mint-user-keys", "acme", "sk-live-5", "198.51.100.4").StatusCode; got != 200 {
+			t.Fatalf("credential minting → %d with no scorer installed; want 200", got)
+		}
+	})
 }
 
 // The fail-CLOSED branch is reachable only in live mode. An unarmed deployment —
@@ -384,7 +407,7 @@ func TestAbuseGate_ClassesAgentTrafficApartFromBots(t *testing.T) {
 
 	// A machine credential we issued: the agent lane, whatever the user-agent says.
 	abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "203.0.113.5")
-	if len(lanes) == 0 || lanes[0] != AgencyAgent {
+	if len(lanes) == 0 || lanes[0] != edge.AgencyAgent {
 		t.Fatalf("attributable machine traffic must be the agent lane, got %v", lanes)
 	}
 
@@ -399,7 +422,7 @@ func TestAbuseGate_ClassesAgentTrafficApartFromBots(t *testing.T) {
 	if _, err := app.Fiber().Test(req); err != nil {
 		t.Fatal(err)
 	}
-	if lanes[len(lanes)-1] != AgencyAgent {
+	if lanes[len(lanes)-1] != edge.AgencyAgent {
 		t.Fatalf("a user-agent string must not move a caller between lanes, got %q", lanes[len(lanes)-1])
 	}
 }
@@ -561,7 +584,7 @@ func TestAbuseGate_HeadersAloneDoNotBuyTheAgentLane(t *testing.T) {
 	if len(lanes) == 0 {
 		t.Fatal("the anonymous lane must still be screened — it is the lane a bad bot calls from")
 	}
-	if lanes[0] == AgencyAgent {
+	if lanes[0] == edge.AgencyAgent {
 		t.Fatal("two headers moved an unattributable caller into the agent lane")
 	}
 	// And the tenant is not the one the header named: an unverified caller must
@@ -586,7 +609,7 @@ func TestAbuseGate_AVerifiedMachineCredentialIsTheAgentLane(t *testing.T) {
 	app, _ := abuseAppWith(t, edge.ModeLive, withBoundary)
 	abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "203.0.113.5")
 
-	if len(lanes) == 0 || lanes[0] != AgencyAgent {
+	if len(lanes) == 0 || lanes[0] != edge.AgencyAgent {
 		t.Fatalf("a verified machine credential must be the agent lane, got %v", lanes)
 	}
 	if orgs[0] != "acme" {
@@ -607,7 +630,12 @@ func TestAbuseGate_AGrantIsAGrantHoweverItIsSpelled(t *testing.T) {
 		"/v1/kms/orgs/acme/secrets/db/",
 	} {
 		t.Run(path, func(t *testing.T) {
-			resetScorer(t) // no scorer: the fail policy answers.
+			// A scorer that is THERE and does not answer: the fail policy's
+			// closed branch, which is the one a grant path must take.
+			resetScorer(t)
+			SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
+				return RiskVerdict{}, errors.New("model unavailable")
+			})
 			app, _ := abuseApp(t, edge.ModeLive)
 			got := abuseHit(app, "GET", path, "acme", "sk-live-1", "203.0.113.9").StatusCode
 			if got != 403 {

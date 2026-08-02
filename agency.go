@@ -28,6 +28,14 @@ package cloud
 //	          traffic is here and stays here, which is the point: "anonymous" is
 //	          not "malicious".
 //
+// THIS FILE ANSWERS ONE HALF OF THAT AND THE SENSOR ANSWERS THE OTHER. Reading a
+// request for its credential CLASS needs the request, so it is here. Turning a
+// class plus a traffic pattern into a LANE needs the pattern, so it is
+// edge.Lane — inside the observation that produced the counts, which is the only
+// place that can compute it before it is counted. Splitting it the other way is
+// what made every request in the lane report land in "unknown": the gate had to
+// state the lane before it had asked what the caller had been doing.
+//
 // The gate's classification is a PRIOR. It is sent to the scorer as a signal and
 // the scorer — which holds the agent registry, the session plane and the metered
 // shape — may overrule it. Its answer is the authoritative one. That split is
@@ -46,37 +54,11 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The credential classes. A syntactic fact about HOW a caller authenticated —
-// derived from the credential's own shape plus whether the identity boundary
-// validated it. Nothing here is a judgement.
-const (
-	// CredSession is a validated bearer that is not an opaque key: a browser or
-	// CLI session minted by IAM for a person.
-	CredSession = "session"
-	// CredSecret is an sk-/hk- key: a machine credential issued to a principal.
-	// It may not be shipped to a browser, so possession attributes.
-	CredSecret = "secret"
-	// CredPublishable is a pk- key: org-only by design, shipped in client
-	// bundles, and therefore trivially copied. It names a tenant, not a caller.
-	CredPublishable = "publishable"
-	// CredAnonymous is no credential, or one the identity boundary refused.
-	CredAnonymous = "anonymous"
-)
-
-// The lanes. Values, not booleans, because "we could not tell" is a distinct
-// state from "we decided it is a bot", and collapsing them is how a false
-// positive becomes a blocked customer.
-const (
-	AgencyAgent   = "agent"
-	AgencyHuman   = "human"
-	AgencyBot     = "bot"
-	AgencyUnknown = "unknown"
-)
-
 // credentialClass reads the class off a request. It looks at the Authorization
 // header for the credential's SHAPE and at the validated principal for whether
 // the identity boundary accepted it — never at the body, never at a client
-// header the boundary does not mint.
+// header the boundary does not mint. The vocabulary is edge's (edge.CredSecret
+// and friends), because the lane rule that consumes it lives there.
 //
 // A credential that was presented and did NOT validate is anonymous, not
 // secret: possession of a string that fails is possession of nothing.
@@ -84,17 +66,17 @@ func credentialClass(c *zip.Ctx) string {
 	tok := callerCredential(c)
 	switch {
 	case tok == "":
-		return CredAnonymous
+		return edge.CredAnonymous
 	case IsPublishableKey(tok):
 		// A pk- names an org and no principal. It is a tenant label, not an
 		// authentication, so it stays publishable whether or not an org resolved.
-		return CredPublishable
+		return edge.CredPublishable
 	case !principalValidated(c):
-		return CredAnonymous
+		return edge.CredAnonymous
 	case isAPIKey(tok):
-		return CredSecret
+		return edge.CredSecret
 	default:
-		return CredSession
+		return edge.CredSession
 	}
 }
 
@@ -137,55 +119,35 @@ func verifiedOrg(c *zip.Ctx) string {
 	return p.Org
 }
 
-// agency classes a request into a lane from its credential class and the pattern
-// its caller has been showing. Pure and total: same inputs, same lane, no clock,
-// no I/O — which is what makes the table test in agency_test.go the whole
-// specification.
+// observation is the ONE place an observation is built from a request, and the reason
+// it is one place is that two of its fields are the same fingerprint under
+// different trust:
 //
-// The bot rule is deliberately CONJUNCTIVE. Unattributable alone is not bot:
-// every first request from every new integration is unattributable. It takes an
-// abuse SHAPE as well — many credentials from one address (stuffing), a wall of
-// refusals (guessing), or a path sweep (scraping) — and then the caller is
-// judged, not the anonymity.
-func agency(class string, p edge.Pattern) string {
-	switch class {
-	case CredSecret:
-		return AgencyAgent
-	case CredSession:
-		return AgencyHuman
-	case CredPublishable, CredAnonymous:
-		if abusive(p) {
-			return AgencyBot
-		}
-		return AgencyUnknown
+//	Cred      — set ONLY when the identity boundary validated the credential. It
+//	            is what the sensor keys on, so it must be a fact we stated. A
+//	            caller keyed on a string it chooses can leave its own hold by
+//	            typing a different one, and can open a table entry per request.
+//	Presented — set for whatever the request carried, valid or not. It is counted
+//	            only as spread, because a wall of invalid credentials from one
+//	            address IS the stuffing signature and refusing to count it would
+//	            blind the sensor to the attack it exists to see.
+//
+// Building this anywhere else would mean deciding that trust question a second
+// time, and the second answer is the one that would be wrong.
+func observation(c *zip.Ctx, path string) edge.Signal {
+	presented := credentialOf(c)
+	s := edge.Signal{
+		Org:       verifiedOrg(c),
+		Presented: presented,
+		IP:        ClientIP(c),
+		Path:      path,
+		Class:     credentialClass(c),
 	}
-	return AgencyUnknown
+	if principalValidated(c) {
+		s.Cred = presented
+	}
+	return s
 }
-
-// The shapes that make unattributable traffic a bot. Constants, not per-org
-// configuration: they are properties of the protocol, not preferences of a
-// tenant, and a knob here is a knob an attacker's target can be talked into
-// widening. They are deliberately far above anything a normal client produces.
-const (
-	// stuffPeers — distinct credentials presented from one address in a window.
-	// A browser presents one. A CI runner presents one. Eight is a script.
-	stuffPeers = 8
-	// guessFailures — 401/403 outcomes in a window. A client with a stale token
-	// retries a few times and stops; twenty-five is someone trying keys.
-	guessFailures = 25
-	// sweepPaths — distinct paths one unattributable caller touched in a window.
-	// A real integration walks a handful of endpoints; a crawler walks the map.
-	sweepPaths = 40
-)
-
-func abusive(p edge.Pattern) bool {
-	return p.Peers >= stuffPeers || p.Failures >= guessFailures || p.Paths >= sweepPaths
-}
-
-// Agency reports the lane the edge places a request in, given what the sensor
-// already knows about its caller. The exported entry point, so a subsystem
-// reporting on traffic names the lane the same way the gate did.
-func Agency(c *zip.Ctx, p edge.Pattern) string { return agency(credentialClass(c), p) }
 
 // fingerprintSalt is a per-PROCESS secret. A credential fingerprint is only ever
 // compared with another fingerprint from the same process and the same window,
