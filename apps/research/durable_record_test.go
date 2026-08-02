@@ -9,22 +9,20 @@ package research
 // (experiments A/B evidence) must ship its write fenced before returning, exactly
 // like the HTTP ingest path, so a takeover keeps it and a non-owner fails closed.
 // It runs a durable research OrgStore over an in-process CAS (no live SeaweedFS) and
-// opens through cek, so it also exercises the key-sidecar cross-pod restore with the
-// process master key. Requires CLOUD_KMS_MASTER_KEY_REF, as the whole research suite
-// does (cek opens fail closed without it).
+// opens through cek, so it also exercises the cross-pod restore: the successor's
+// file is keyed from the SAME process master and the SAME namespace, so it opens
+// with nothing carried beside it.
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/internal/org"
 	sqlitedrv "github.com/hanzoai/sqlite"
 	"github.com/hanzoai/vfs/replica"
@@ -97,56 +95,17 @@ func soleMembership(t *testing.T, id string) *org.Membership {
 	return m
 }
 
-// cekCanReopen reports whether cek can create a store and reopen it on THIS build —
-// the exact capability the successor's cross-pod restore needs. It holds on a pure-Go
-// (plaintext) build and on a real CGO+libsqlcipher build; it fails only on a CGO build
-// whose SQLite lacks SQLCipher, where cek writes a plaintext file it then cannot
-// migrate on reopen (sqlcipher_export is absent). A throwaway temp store, no global
-// state touched.
-func cekCanReopen(t *testing.T) bool {
-	t.Helper()
-	p := filepath.Join(t.TempDir(), "cek-probe.db")
-	db, err := cek.Open(cek.Global, p)
-	if err != nil {
-		return false
-	}
-	if _, err := db.Exec(`CREATE TABLE probe(x)`); err != nil {
-		_ = db.Close()
-		return false
-	}
-	_ = db.Close()
-	db2, err := cek.Open(cek.Global, p) // the reopen a broken-SQLCipher build fails (migrate → sqlcipher_export)
-	if err != nil {
-		return false
-	}
-	_ = db2.Close()
-	return true
-}
-
 // TestRecordShipsSoTakeoverKeepsIt: Record() on the owner ingests AND ships; a fresh
 // successor that takes over hydrates the shipped snapshot and SEES the row. Before the
 // fix (ingest with no Sync) the row was never shipped, so the successor saw zero rows
 // — the lost acked write H1 names.
 func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
-	// Gate on the cek capability THIS build actually has, not on what it advertises.
-	// The successor reopens the shipped store through cek; on a CGO build whose SQLite
-	// lacks SQLCipher, PRAGMA key is silently ignored so cek writes a PLAINTEXT file it
-	// then cannot migrate ("sqlcipher_export: no such function"), and the whole-suite
-	// TestMain still injects a dev key because sqlitedrv.EncryptionAvailable() reports a
-	// (false-positive) yes. cekCanReopen probes the real round-trip: it holds under
-	// pure-Go (plaintext) AND real libsqlcipher (encrypted, exercising the .dek sidecar
-	// cross-pod restore), and skips only on that broken-capability build so
-	// `go test ./...` stays green everywhere. Ship-before-return is proven regardless by
-	// TestRecordOnNonOwnerFailsClosed and by this test under CGO_ENABLED=0.
-	if !cekCanReopen(t) {
-		t.Skip("cek cannot reopen a store on this build (SQLite lacks SQLCipher) — the encrypted cross-pod sidecar round-trip runs in the CGO+libsqlcipher CI lane")
-	}
 	ctx := context.Background()
 	cas := newMemCAS()
 	const orgID = "acme"
 
 	ownerDur := org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipCheckpoint())
-	ownerStore := cloud.NewOrgStore(t.TempDir(), "research", openStore, cloud.WithDurable(ownerDur))
+	ownerStore := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: ownerDur}, "research", openStore)
 	t.Cleanup(func() { _ = ownerStore.CloseAll() })
 	mountedStores = ownerStore
 	t.Cleanup(func() { mountedStores = nil })
@@ -157,11 +116,12 @@ func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
 	}
 
 	// Successor pod (fresh data dir) takes over: For() hydrates the shipped snapshot
-	// (its cek key sidecar restored under the SAME master, into a nested orgs/<slug>/
-	// dir that did not exist), then reads the evidence back. A logger surfaces a
-	// degraded hydrate as a test failure rather than a silent empty store.
+	// into a nested orgs/<slug>/ dir that did not exist, then opens it under the key
+	// cek derives from the SAME master and the SAME namespace, and reads the evidence
+	// back. A logger surfaces a degraded hydrate as a test failure rather than a
+	// silent empty store.
 	succDur := org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint())
-	succStore := cloud.NewOrgStore(t.TempDir(), "research", openStore, cloud.WithDurable(succDur), cloud.WithStoreLogger(luxlog.New("succ")))
+	succStore := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: succDur, Log: luxlog.New("succ")}, "research", openStore)
 	t.Cleanup(func() { _ = succStore.CloseAll() })
 	st, err := succStore.For(cloud.MustOrgNamespace(orgID, ""))
 	if err != nil {
@@ -183,7 +143,7 @@ func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
 func TestDurableForDedupsConcurrentOpens(t *testing.T) {
 	cas := newMemCAS()
 	dur := org.NewDurability(cas, soleMembership(t, "pod-a"), nil, shipCheckpoint())
-	stores := cloud.NewOrgStore(t.TempDir(), "research", openStore, cloud.WithDurable(dur))
+	stores := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: dur}, "research", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
 
 	const n = 8
@@ -224,7 +184,7 @@ func TestRecordOnNonOwnerFailsClosed(t *testing.T) {
 	}
 	t.Cleanup(m.Stop)
 
-	store := cloud.NewOrgStore(t.TempDir(), "research", openStore, cloud.WithDurable(org.NewDurability(cas, m, nil)))
+	store := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: org.NewDurability(cas, m, nil)}, "research", openStore)
 	t.Cleanup(func() { _ = store.CloseAll() })
 	mountedStores = store
 	t.Cleanup(func() { mountedStores = nil })

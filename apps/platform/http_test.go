@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -47,7 +46,7 @@ func seedProject(t *testing.T, app *zip.App, org, name string) {
 
 func mountSvcK8s(t *testing.T, k *k8sClient) (*zip.App, *cloud.Service[state]) {
 	t.Helper()
-	store, err := openStore(filepath.Join(t.TempDir(), "platform.db"))
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

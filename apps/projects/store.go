@@ -8,13 +8,17 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/sites"
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
-	// the "sqlite" database/sql name under both build tags (cgo →
-	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
-	// modernc directly instead would double-register "sqlite" under CGO and
-	// panic at init. Blank import registers the driver.
+	// the "sqlite" database/sql name under both build tags. Importing modernc
+	// directly instead would double-register "sqlite" under CGO and panic at
+	// init. Blank import registers the driver.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -175,29 +179,20 @@ type Deployment struct {
 	UpdatedAt int64
 }
 
-// Store is the projects metadata database. ONE SQLite file
-// ({DataDir}/projects.db) holds every org's records; org-scoping is the org column.
-// MaxOpenConns(1) serializes writes against the file lock without busy retries.
+// Store is the projects metadata database. ONE SQLite file — the system
+// namespace's "projects" — holds every org's records; org-scoping is the org
+// column. MaxOpenConns(1) serializes writes against the file lock without busy
+// retries.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "projects", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open projects store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/apps/sites"
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/openapi"
@@ -29,18 +29,18 @@ import (
 // (plugin/<app>/main.go) calls it, so no boot logic is duplicated per subsystem.
 //
 // plugins is the composition root's subsystem list (apps.Wire()), threaded
-// in by the caller so cloud never imports subsystems (which would cycle). Serve
+// in by the caller so cloud never imports subsystems (which would cycle). Listen
 // mounts it in slice order and tears it down in reverse.
 //
 // enable==nil ⇒ honor cfg.Enable from flags/env (cloud mode; empty = all).
 // enable!=nil ⇒ force exactly that set (single-service mode), overriding
 // --enable so `hanzo kms` is unambiguous.
 //
-// Serve registers the HIP-0106 liveness contract (GET /v1/<name>/health for
+// Listen registers the HIP-0106 liveness contract (GET /v1/<name>/health for
 // every enabled subsystem) before MountAll, runs the canonical middleware
 // pipeline (Recover → RequestID → Logger), and shuts down gracefully on
 // SIGINT/SIGTERM.
-func Serve(plugins []Plugin, enable []string) error {
+func Listen(plugins []Plugin, enable []string) error {
 	// `<binary> describe <dir>` projects instead of serving. Before LoadConfig
 	// AND before credz.Boot because the artifacts must be a function of the code
 	// alone: both read the environment, and a route set that moved with a
@@ -156,13 +156,11 @@ func Serve(plugins []Plugin, enable []string) error {
 	// Data-plane encryption posture. The KEY was installed by credz.Boot at the top
 	// of this function (BuildDeps logs which posture resolved it); this only READS
 	// the outcome. Installing a key here — which is what used to happen — is after
-	// BuildDeps has already opened a store, and cek memoizes on first use, so the
-	// install silently lost to the cached "no key" while this line reported success.
-	// Every build encrypts a keyed store (live SQLCipher codec in production, the
-	// pure-Go envelope in dev/CI); a build with no key fails closed at the first
-	// open rather than writing plaintext.
-	if cek.Encrypting() {
-		deps.Logger.Info("data-plane encryption ACTIVE (per-db DEK, keyed at rest)")
+	// BuildDeps has already opened a store, and the first open is the one that
+	// would have had to be keyed. Every database is derived from that master, so a
+	// process without one opens nothing rather than writing plaintext.
+	if cek.HasMaster() {
+		deps.Logger.Info("data-plane encryption ACTIVE (every database keyed from the master, at rest)")
 	} else {
 		deps.Logger.Warn("data-plane encryption posture: no usable key → store opens fail closed")
 	}

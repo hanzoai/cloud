@@ -83,6 +83,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -92,6 +93,7 @@ import (
 	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
+	planeops "github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -230,6 +232,13 @@ func installHostCarve(b cloud.Base) {
 //
 // Health owns /v1/analytics/health explicitly (not JWT-gated: liveness must be
 // probe-able); every read lens is org-gated on the validated principal.
+// Bounds on the Sentry relay. The envelope cap mirrors what the runtime accepts;
+// the timeout keeps a slow o11y from holding an SDK's request open.
+const (
+	maxEnvelopeBytes = 32 << 20
+	obsErrorTimeout  = 15 * time.Second
+)
+
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	// A typed op receives ONLY a context, so the validated org has to be PARKED
 	// there — never carried as an In field, which is caller-supplied and would make
@@ -288,17 +297,37 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 	// The Sentry error wire, on the SAME door: POST /v1/event/{project}/envelope|store.
 	// The project segment is variable, so the door's owner carries the route and
-	// forwards to the obs plane's installed consumer (cloud.ObsErrorIngest — the
-	// o11y runtime, which authenticates the DSN key itself; no principal here by
-	// design). Resolved per-request: the o11y subsystem installs it during its own
-	// mount, order-independent of this one.
+	// relays to the o11y PROCESS over the plane socket (plane.ObsErrorPost). It
+	// used to call a package global that o11y set in its own process, which read
+	// nil here and answered 503 "error ingest not initialized" for every SDK.
+	//
+	// The runtime authenticates the DSN key itself — there is no Hanzo principal
+	// on this path by design — so the whole request travels: path, query, headers
+	// and body. Its answer is relayed VERBATIM, because a 401 "invalid ingest
+	// key" is the SDK's signal to stop retrying and must not be reshaped.
 	obsError := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := cloud.ObsErrorIngest()
-		if h == nil {
-			http.Error(w, "error ingest not initialized", http.StatusServiceUnavailable)
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxEnvelopeBytes))
+		if err != nil {
+			http.Error(w, "read body", http.StatusBadRequest)
 			return
 		}
-		h.ServeHTTP(w, r)
+		hdr := make([]planeops.Header, 0, len(r.Header))
+		for k := range r.Header {
+			hdr = append(hdr, planeops.Header{Name: k, Value: r.Header.Get(k)})
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), obsErrorTimeout)
+		defer cancel()
+		out, err := cloud.Ask[planeops.ObsErrorIn, planeops.ObsErrorOut](ctx, peerO11y, planeops.ObsErrorPost,
+			&planeops.ObsErrorIn{Path: r.URL.Path, Query: r.URL.RawQuery, Headers: hdr, Body: body})
+		if err != nil || out == nil {
+			http.Error(w, "error ingest unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if out.ContentType != "" {
+			w.Header().Set("Content-Type", out.ContentType)
+		}
+		w.WriteHeader(out.Status)
+		_, _ = w.Write(out.Body)
 	}))
 	app.Post("/v1/event/:project/envelope", obsError)
 	app.Post("/v1/event/:project/store", obsError)

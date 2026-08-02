@@ -431,7 +431,7 @@ func TestScalarCarriesEveryJSONToken(t *testing.T) {
 // ROOT. zip's own projections of the typed-op registry — the MCP endpoint at /mcp
 // and the call plane at /.well-known/zip/op/ — are ordinary routes on the app
 // itself, so they sit OUTSIDE the /v1/captable group and the group's own Bridge
-// never runs for them. cloud.Serve installs the root one, which is what gives them
+// never runs for them. cloud.Listen installs the root one, which is what gives them
 // a validated org in production.
 func newAppMCP(t *testing.T) *zip.App {
 	t.Helper()

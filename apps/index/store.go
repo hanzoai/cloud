@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,9 +13,13 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	// cek opens the store encrypted at rest (migrate-on-open + shred).
-	"github.com/hanzoai/cloud/cek"
-	// The ONE "sqlite" driver, kept registered for cek's no-key plaintext fallback.
+	// cek is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
+	// The ONE "sqlite" driver.
 	_ "github.com/hanzoai/sqlite"
 	"golang.org/x/text/unicode/norm"
 )
@@ -36,8 +38,8 @@ type Index struct {
 	UpdatedAt            string   `json:"updatedAt"`
 }
 
-// Store is the index database. ONE SQLite file ({DataDir}/index.db) holds
-// every org's indexes and documents; tenant isolation is the `org` column,
+// Store is the index database. ONE SQLite file — the deployment's own "index" —
+// holds every org's indexes and documents; tenant isolation is the `org` column,
 // enforced on EVERY query — the same storage shape clients/ads and clients/crm
 // use. MaxOpenConns(1) serializes writes against the single-writer file.
 //
@@ -62,54 +64,12 @@ type Store struct {
 	db *sql.DB
 }
 
-// migrateStore carries a store written under a previous name over to path.
-//
-// It moves the WHOLE family, not just the database: cek keeps the wrapped data
-// key beside the file as "<path>.dek", so renaming the .db alone would leave the
-// old key stranded, cek would mint a fresh one, and every existing document
-// would be undecryptable — data loss that looks like an empty index. The -wal
-// and -shm sidecars carry committed pages that have not been checkpointed yet,
-// so they move too.
-//
-// One-time and idempotent: it acts only when the previous store exists and the
-// current one does not. When BOTH exist it leaves them alone — merging two
-// encrypted stores is not something to guess at.
-func migrateStore(dir, previous, current string) error {
-	old, cur := filepath.Join(dir, previous), filepath.Join(dir, current)
-	if _, err := os.Stat(old); err != nil {
-		return nil // fresh deployment, or already carried over
-	}
-	if _, err := os.Stat(cur); err == nil {
-		return nil
-	}
-	for _, suffix := range []string{"", "-wal", "-shm", ".dek"} {
-		src, dst := old+suffix, cur+suffix
-		if _, err := os.Stat(src); err != nil {
-			continue // not every sidecar exists at every moment
-		}
-		if err := os.Rename(src, dst); err != nil {
-			return fmt.Errorf("index: carry %s over to %s: %w", src, dst, err)
-		}
-	}
-	return nil
-}
-
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "index", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open index store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

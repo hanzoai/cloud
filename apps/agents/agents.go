@@ -292,9 +292,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("agents.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("agents.Mount: data dir: %w", err)
-	}
 	// The typed-op registry lives on the App: it is what makes each op a document
 	// operation, an MCP tool, a CLI command and an SDK method rather than only a
 	// route. A Router that cannot reach it must fail the mount rather than serve
@@ -306,10 +303,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// deps.AI may be nil when no gateway is configured; run() degrades honestly.
 	// agents is a "complex" mount (package-global `mounted`, a background scheduler,
 	// a shutdown teardown), so it builds the Service value directly.
+	b := cloud.NewBase(deps, "agents")
 	s := &cloud.Service[state]{
-		Base: cloud.NewBase(deps, "agents"),
+		Base: b,
 		State: state{
-			stores: cloud.NewOrgStore[*Store](deps.DataDir, "agents", openStore),
+			stores: cloud.NewOrgStore[*Store](b, "agents", openStore),
 			ai:     deps.AI,
 			// cloud.ZenModel guards the CONFIG boundary: an operator who points
 			// CLOUD_AI_DEFAULT_MODEL at an upstream name still gets the Hanzo name
@@ -326,8 +324,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			tasks: disabledTaskController{},
 		},
 	}
-	// Split a pre-existing fleet-wide agents.db into per-org files BEFORE a route
-	// exists to read them, and fail the mount if it cannot be done: an empty
+	// Split a pre-existing fleet-wide agents database into per-org files BEFORE a
+	// route exists to read them, and fail the mount if it cannot be done: an empty
 	// registry served over live rows is the one outcome worse than not booting.
 	if err := fanOutLegacy(context.Background(), deps.DataDir, &s.State); err != nil {
 		_ = s.State.stores.CloseAll()

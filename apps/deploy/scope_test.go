@@ -15,7 +15,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/provisioning"
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -131,21 +131,21 @@ func TestResolveScope_Boundary(t *testing.T) {
 	if sc, ok := probeScope(t, orgHeaders("acme")); !ok || sc.superAdmin || sc.org != "acme" {
 		t.Fatalf("org scope = %+v ok=%v, want {org:acme}", sc, ok)
 	}
-	// resolveScope keys the org through the SAME injective provisioning.SanitizeOrg the CR
+	// resolveScope keys the org through the SAME injective namespace.Sanitize the CR
 	// label filter uses — so a resolved org and the hanzo.ai/org label compare like-for-like,
 	// and two distinct owners never collide onto one tenant. (Uppercase/dirty inputs are NOT
 	// identity-mapped; they carry a hash suffix, which is exactly the injectivity guarantee.)
 	for _, raw := range []string{"acme", "ACME", "team1"} {
 		sc, ok := probeScope(t, map[string]string{"X-Org-Id": raw, "X-User-Id": "u"})
-		want := provisioning.SanitizeOrg(raw)
+		want := namespace.Sanitize(raw)
 		if want == "" {
 			t.Fatalf("test input %q unexpectedly sanitized to empty", raw)
 		}
 		if !ok || sc.org != want {
-			t.Fatalf("org(%q) scope = %+v ok=%v, want org %q (SanitizeOrg)", raw, sc, ok, want)
+			t.Fatalf("org(%q) scope = %+v ok=%v, want org %q (namespace.Sanitize)", raw, sc, ok, want)
 		}
 	}
-	// An org carrying an unsafe rune (whitespace) is refused by SanitizeOrg (→ "") — a
+	// An org carrying an unsafe rune (whitespace) is refused by namespace.Sanitize (→ "") — a
 	// non-injective identifier — so resolveScope fails closed, never a fabricated tenant.
 	if sc, ok := probeScope(t, map[string]string{"X-Org-Id": "bad org", "X-User-Id": "u"}); ok {
 		t.Fatalf("whitespace org resolved a scope %+v — must fail closed", sc)

@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"strings"
 
-	// cek opens the store encrypted at rest (migrate-on-open + shred).
-	"github.com/hanzoai/cloud/cek"
-	// The ONE "sqlite" driver, kept registered for cek's no-key plaintext fallback.
+	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/namespace"
+
+	// The ONE Hanzo "sqlite" driver; blank import registers it.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -22,30 +24,20 @@ var (
 	errConflict = errors.New("social: already exists")
 )
 
-// Store is the social database. ONE SQLite file ({DataDir}/social.db) holds every
-// org's records; tenant isolation is the `org` column, enforced on EVERY query.
-// This mirrors clients/crm exactly (the ONE storage pattern). MaxOpenConns(1)
-// serializes writes against the single-writer file.
+// Store is the social database. ONE SQLite file — the deployment's own "social"
+// subsystem — holds every org's records; tenant isolation is the `org` column,
+// enforced on EVERY query. This mirrors clients/crm exactly (the ONE storage
+// pattern). MaxOpenConns(1) serializes writes against the single-writer file.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := cek.Open(namespace.System(), "social", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open social store: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
@@ -142,11 +134,9 @@ type Account struct {
 	// Token is the account's provider access token (written by the connect/OAuth
 	// flow, which has NOT landed yet). It is NEVER serialized to an API response
 	// (`json:"-"`), so it cannot leak to the browser; only the publisher reads it.
-	// NOT yet encrypted at rest: the store opens via cek.Open, which today runs the
-	// no-key PLAINTEXT fallback — real column encryption (WithRawKey sourced from KMS)
-	// lands together with the connect flow that first writes a token. The column is
-	// empty today, so no plaintext secret ships. (The live Postiz stack stores this
-	// token in PLAINTEXT in Postgres.)
+	// At rest it is covered by the database's own key: the store is born encrypted
+	// or it does not open. (The live Postiz stack stores this token in PLAINTEXT
+	// in Postgres.)
 	Token     string `json:"-"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`

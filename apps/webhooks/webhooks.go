@@ -71,8 +71,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("webhooks.Mount: empty deps.DataDir")
 	}
 	b := cloud.NewBase(deps, "webhooks")
-	stores := cloud.NewOrgStore[*store](deps.DataDir, "webhooks", openStore,
-		cloud.WithDurable(b.Durable), cloud.WithStoreLogger(b.Log))
+	stores := cloud.NewOrgStore[*store](b, "webhooks", openStore)
 
 	st := &state{stores: stores, disp: newDispatcher(stores, b.Log)}
 	mounted = st
@@ -136,7 +135,7 @@ func routes(app cloud.Router, s *cloud.Service[*state]) error {
 	// The Bridge FIRST, bounded to the subtree webhooks owns: a typed op receives
 	// only a context, so the validated org has to be parked there, and fiber runs
 	// middleware in registration order — one installed after these leaves would
-	// never run. cloud.Serve installs one app-wide too; nesting is harmless (the
+	// never run. cloud.Listen installs one app-wide too; nesting is harmless (the
 	// inner one is what the handler sees), and having it here is what makes this
 	// package's own tests — which mount on a bare app — exercise the same tenancy
 	// the binary does.

@@ -98,7 +98,7 @@ func newBilledService(t *testing.T, commerceURL, execUpstream string) *cloud.Ser
 	return &cloud.Service[state]{
 		Base: cloud.NewBase(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "functions"),
 		State: state{
-			stores: cloud.NewOrgStore(t.TempDir(), "functions", openStore),
+			stores: cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir()}, "functions", openStore),
 			exec:   &execClient{upstream: execUpstream, apiKey: "k", http: &http.Client{}},
 		},
 	}

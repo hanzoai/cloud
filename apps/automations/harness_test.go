@@ -35,7 +35,7 @@ func newApp(t *testing.T) *zip.App {
 // app ROOT. zip's own projections of the typed-op registry — the MCP endpoint at
 // /mcp and the call plane at /.well-known/zip/op/ — are ordinary routes on the app
 // itself, so they sit OUTSIDE every subsystem's group and the group's own Bridge
-// never runs for them. cloud.Serve installs the root one (serve.go), which is what
+// never runs for them. cloud.Listen installs the root one (serve.go), which is what
 // gives them a validated org in production; newApp above does not, so a tools/call
 // there refuses before it reaches a handler. Use this harness to exercise an op
 // through MCP.
@@ -93,12 +93,12 @@ func derivedTools(app *zip.App) []string {
 	return names
 }
 
-// newAppWithAudit mounts the subsystem with a REAL in-memory audit recorder so a
-// test can read the tamper-evident trail back and assert outcomes (LOW-1) and
+// newAppWithAudit mounts the subsystem with a REAL audit recorder so a test can
+// read the tamper-evident trail back and assert outcomes (LOW-1) and
 // exactly-once run bookkeeping (MED-1). Returns the recorder for querying.
 func newAppWithAudit(t *testing.T) (*zip.App, *audit.Recorder) {
 	t.Helper()
-	rec, err := audit.Open(":memory:", nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}
@@ -173,7 +173,7 @@ func reqRaw(t *testing.T, app *zip.App, path, org string, raw string) httpResult
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(t.TempDir() + "/automations.db")
+	s, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

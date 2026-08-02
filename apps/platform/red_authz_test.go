@@ -23,15 +23,15 @@ func TestNamespaceIsDerivedFromOrgNotInput(t *testing.T) {
 	}
 }
 
-// TestSanitizeOrgIsInjective is the CRIT-2 regression guard: the org normalizer
-// (the ONE, shared provisioning.SanitizeOrg, reached through tenantNamespace)
+// TestSanitizeIsInjective is the CRIT-2 regression guard: the org normalizer
+// (the ONE, shared namespace.Sanitize, reached through tenantNamespace)
 // must be INJECTIVE — distinct raw owners can NEVER collapse onto the same
 // tenant namespace. The prior lossy fold mapped "Acme"→"acme" and
 // "acme/../hanzo"→"acme----hanzo", so a fold-sibling of a target org (registrable
 // because IAM has no org-name shape validator) minted a valid token into the
 // victim's namespace. Each pair below folds together under the OLD rule; here
 // they MUST stay distinct.
-func TestSanitizeOrgIsInjective(t *testing.T) {
+func TestSanitizeIsInjective(t *testing.T) {
 	collidingPairs := [][2]string{
 		{"Acme", "acme"},             // case fold
 		{"team.a", "team-a"},         // '.'→'-' fold

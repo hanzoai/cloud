@@ -8,7 +8,7 @@ package org
 // snapshotcodec.go is the SWAPPABLE ship mechanism — the seam that lets HOW the durable
 // payload is produced/applied change without touching WHEN it ships (the fence, the
 // monotone round, CarryForward). Today the default codec checkpoints the WAL and copies
-// the whole file (framed with the cek key sidecar); a WAL-frame delta codec
+// the whole file; a WAL-frame delta codec
 // (github.com/hanzoai/replicate — low-memory streaming) drops in behind this same
 // interface later, and the fence ships whatever bytes produce() returns and hands
 // whatever bytes it admitted to apply(). The codec works on PLAINTEXT payloads; envelope
@@ -19,24 +19,11 @@ package org
 import (
 	"context"
 	"database/sql"
-	"encoding/binary"
-	"errors"
 	"fmt"
 	"os"
 
 	"github.com/hanzoai/vfs/replica"
 )
-
-// dekSuffix is cek's key-sidecar suffix (github.com/hanzoai/cloud/cek): the file holding
-// a database's wrapped page key. The wholeFile codec ships it beside the database bytes
-// so a successor can open the encrypted file. Kept as a local constant (a stable on-disk
-// convention) so this package stays dep-free of cek.
-const dekSuffix = ".dek"
-
-// errCorruptFrame is returned when a payload does not decode as a (sidecar, database)
-// frame this package wrote — fail closed rather than restore arbitrary bytes over a live
-// database.
-var errCorruptFrame = errors.New("org: durable payload is not a valid (sidecar,db) frame")
 
 // snapshotCodec produces a durable payload from the bound local database and applies a
 // restored payload back onto it. produce reads through db's sole connection so the
@@ -52,10 +39,13 @@ type snapshotCodec interface {
 }
 
 // wholeFile is the default codec: fold the WAL into the real on-disk file so it holds
-// every committed page, copy the file bytes, and frame them with the cek key sidecar so a
-// successor can open the encrypted file. It is correct whether the file is encrypted
-// (production, sidecar present) or plaintext (pure-Go dev, no sidecar) — the same path, no
-// per-build branch.
+// every committed page, and ship those bytes.
+//
+// The bytes are the WHOLE payload. There is no key material to carry beside them: a
+// database's key is DERIVED from the deployment's master and the namespace that owns
+// it, so a successor holding the same master reopens the restored file by naming it,
+// with nothing shipped and nothing to lose. This used to ship a wrapped-key sidecar
+// framed ahead of the database, which is the thing that could go missing.
 //
 // checkpoint is the crypto-integration seam. The SQLCipher page-level and plaintext
 // backends encrypt on WRITE, so the default nil path (a raw TRUNCATE checkpoint, fail
@@ -71,15 +61,14 @@ type wholeFile struct {
 
 // produce folds the WAL into the real file, then copies it: the checkpoint runs FIRST so
 // the real path holds every committed page (and, on the envelope backend, fresh
-// ciphertext); the <db>.dek key sidecar (present only on an encrypting build) is read too
-// and framed with the database bytes.
+// ciphertext).
 func (wf wholeFile) produce(ctx context.Context, db *sql.DB, dbPath string) ([]byte, error) {
 	if wf.checkpoint != nil {
 		// Envelope backend: its Checkpoint folds the WAL AND re-encrypts the real path.
 		if err := wf.checkpoint(ctx, db); err != nil {
 			return nil, fmt.Errorf("org: snapshot checkpoint %s: %w", dbPath, err)
 		}
-		return readFramed(dbPath)
+		return readSnapshot(dbPath)
 	}
 	// Default backend (write-time encryption): hold db's SOLE connection (MaxOpenConns(1))
 	// across the TRUNCATE checkpoint AND the file read so no writer folds new frames
@@ -98,66 +87,25 @@ func (wf wholeFile) produce(ctx context.Context, db *sql.DB, dbPath string) ([]b
 	if busy != 0 {
 		return nil, fmt.Errorf("org: snapshot checkpoint %s did not complete (busy=%d, log=%d, checkpointed=%d) — snapshot would miss committed WAL frames", dbPath, busy, logFrames, checkpointed)
 	}
-	return readFramed(dbPath)
+	return readSnapshot(dbPath)
 }
 
-// readFramed reads the real-path database bytes and the cek key sidecar (absent on a
-// plaintext build) and frames them into one durable payload.
-func readFramed(dbPath string) ([]byte, error) {
-	main, err := os.ReadFile(dbPath)
+// readSnapshot reads the real-path database bytes — the durable payload, entire.
+func readSnapshot(dbPath string) ([]byte, error) {
+	b, err := os.ReadFile(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("org: snapshot read %s: %w", dbPath, err)
 	}
-	sidecar, err := os.ReadFile(dbPath + dekSuffix)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("org: snapshot read sidecar %s: %w", dbPath, err)
-	}
-	return frame(sidecar, main), nil
+	return b, nil
 }
 
-// apply splits the (sidecar, database) frame, atomically swaps the database bytes into
-// place (replica.RestoreFile, which MkdirAll's the parent), then writes the sidecar into
-// the now-existing directory. RestoreFile FIRST so a fresh successor whose orgs/<slug>/
-// dir does not exist yet gets the directory before the sidecar write. An empty payload is
-// a no-op.
+// apply atomically swaps the database bytes into place (replica.RestoreFile, which
+// MkdirAll's the parent so a fresh successor whose orgs/<slug>/ dir does not exist yet
+// gets one). An empty payload — nothing shipped yet — is a no-op that keeps whatever the
+// local file holds.
 func (wholeFile) apply(dbPath string, payload []byte) error {
 	if len(payload) == 0 {
 		return nil
 	}
-	sidecar, main, err := unframe(payload)
-	if err != nil {
-		return err
-	}
-	if err := replica.RestoreFile(dbPath, main); err != nil {
-		return err
-	}
-	if len(sidecar) > 0 {
-		if err := os.WriteFile(dbPath+dekSuffix, sidecar, 0o600); err != nil {
-			return fmt.Errorf("org: write sidecar %s: %w", dbPath, err)
-		}
-	}
-	return nil
-}
-
-// frame prepends the sidecar under a uvarint length so a successor can split it from the
-// database bytes. len(sidecar)==0 ⇒ a leading 0 byte, i.e. a plaintext store.
-func frame(sidecar, main []byte) []byte {
-	buf := make([]byte, 0, binary.MaxVarintLen64+len(sidecar)+len(main))
-	var n [binary.MaxVarintLen64]byte
-	m := binary.PutUvarint(n[:], uint64(len(sidecar)))
-	buf = append(buf, n[:m]...)
-	buf = append(buf, sidecar...)
-	return append(buf, main...)
-}
-
-// unframe splits a framed payload back into (sidecar, database). The bound is checked as
-// sl > len(b)-m (a SUBTRACTION, never m+sl) so a maliciously large uvarint length cannot
-// wrap uint64 addition past the guard and panic the slice — it fails closed.
-func unframe(b []byte) (sidecar, main []byte, err error) {
-	sl, m := binary.Uvarint(b)
-	if m <= 0 || sl > uint64(len(b)-m) {
-		return nil, nil, errCorruptFrame
-	}
-	off := m + int(sl)
-	return b[m:off], b[off:], nil
+	return replica.RestoreFile(dbPath, payload)
 }

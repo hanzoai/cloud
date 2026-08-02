@@ -3,20 +3,18 @@ package agents
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 )
 
-// seedLegacy writes one org's worth of every kind of row into a pre-split
-// agents.db at dir/agents.db, exactly as the shipped single-file store wrote
-// them, and returns the path.
-func seedLegacy(t *testing.T, dir string, orgs ...string) string {
+// seedLegacy writes one org's worth of every kind of row into the pre-split
+// platform-wide agents database under dir, exactly as the shipped single-file
+// store wrote them.
+func seedLegacy(t *testing.T, dir string, orgs ...string) {
 	t.Helper()
-	path := filepath.Join(dir, legacyDBName)
-	st, err := openStoreAt(path)
+	st, err := openStoreAt(dir)
 	if err != nil {
 		t.Fatalf("open legacy: %v", err)
 	}
@@ -56,7 +54,6 @@ func seedLegacy(t *testing.T, dir string, orgs ...string) string {
 	if err := st.Close(); err != nil {
 		t.Fatalf("close legacy: %v", err)
 	}
-	return path
 }
 
 // TestFanOutLegacyCarriesEveryOrgForward is the upgrade guard. The agents plane
@@ -69,7 +66,7 @@ func TestFanOutLegacyCarriesEveryOrgForward(t *testing.T) {
 	seedLegacy(t, dir, "acme", "globex")
 	ctx := context.Background()
 
-	st := &state{stores: cloud.NewOrgStore[*Store](dir, "agents", openStore)}
+	st := &state{stores: cloud.NewOrgStore[*Store](cloud.Base{DataDir: dir}, "agents", openStore)}
 	t.Cleanup(func() { _ = st.stores.CloseAll() })
 	if err := fanOutLegacy(ctx, dir, st); err != nil {
 		t.Fatalf("fan-out: %v", err)
@@ -129,10 +126,10 @@ func TestFanOutLegacyCarriesEveryOrgForward(t *testing.T) {
 // already has.
 func TestFanOutLegacyIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
-	path := seedLegacy(t, dir, "acme")
+	seedLegacy(t, dir, "acme")
 	ctx := context.Background()
 
-	st := &state{stores: cloud.NewOrgStore[*Store](dir, "agents", openStore)}
+	st := &state{stores: cloud.NewOrgStore[*Store](cloud.Base{DataDir: dir}, "agents", openStore)}
 	t.Cleanup(func() { _ = st.stores.CloseAll() })
 	if err := fanOutLegacy(ctx, dir, st); err != nil {
 		t.Fatalf("fan-out 1: %v", err)
@@ -154,7 +151,7 @@ func TestFanOutLegacyIsIdempotent(t *testing.T) {
 		t.Fatalf("fan-out 2: %v", err)
 	}
 	// Drop the marker so the copy itself is exercised again, not just skipped.
-	raw := rawAt(t, path)
+	raw := rawAt(t, dir)
 	if _, err := raw.Exec(`DELETE FROM agent_fanout`); err != nil {
 		t.Fatalf("clear marker: %v", err)
 	}
@@ -184,7 +181,7 @@ func TestFanOutLegacyIsIdempotent(t *testing.T) {
 // no legacy file means nothing to carry, and nothing is created looking for it.
 func TestFanOutLegacyNoopsWithoutALegacyFile(t *testing.T) {
 	dir := t.TempDir()
-	st := &state{stores: cloud.NewOrgStore[*Store](dir, "agents", openStore)}
+	st := &state{stores: cloud.NewOrgStore[*Store](cloud.Base{DataDir: dir}, "agents", openStore)}
 	t.Cleanup(func() { _ = st.stores.CloseAll() })
 	if err := fanOutLegacy(context.Background(), dir, st); err != nil {
 		t.Fatalf("fresh install fan-out: %v", err)

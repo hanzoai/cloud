@@ -66,6 +66,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/cloud/types"
 	kmsstore "github.com/luxfi/kms/pkg/store"
 	luxlog "github.com/luxfi/log"
@@ -137,6 +139,13 @@ type Config struct {
 	MPCAddr      string // MPC daemon host:port(,...) — CLOUD_KMS_MPC_ADDR
 	MPCVaultID   string // MPC vault id — CLOUD_KMS_MPC_VAULT_ID
 
+	// Durable is the deployment's HA-durability factory, handed in rather than
+	// read off cloud.Deps: this client is a DEPENDENCY of that value, built by
+	// BuildDeps before it exists, so it cannot ask the deps set for anything.
+	// nil ⇒ local-only, which is what a test wants and what a deployment with no
+	// object store gets anyway.
+	Durable *org.Durability
+
 	// ReadOnly opens the store in reader mode: mutations fail closed so a replica
 	// never forks the authoritative writer's state, and a reader with no restored
 	// store under {DataDir}/orgs fails closed at New rather than serving nothing.
@@ -171,15 +180,20 @@ func New(cfg Config, log luxlog.Logger) (*Client, error) {
 	// of a valid master key (Ready()): with a key, secret ops seal/open and cek
 	// encrypts each file at rest; without one, every secret op fails closed with
 	// ErrMasterKeyMissing and NO org file is created (nothing to persist, nothing to
-	// brick). The former ZapDB KEYREGISTRY brick foot-gun is gone: cek rotates by
-	// re-wrapping a per-file sidecar (no page is rewritten), and a wrong/absent key
-	// makes cek.Open FAIL at first access — never a silent plaintext downgrade.
+	// brick). The former ZapDB KEYREGISTRY brick foot-gun is gone: a file's key is
+	// DERIVED from the master and the namespace that owns it, with nothing stored
+	// beside the file to lose, and a wrong or absent master makes the open FAIL at
+	// first access — never a silent plaintext downgrade.
 	//
 	// Reader HA role fails CLOSED at New (not at first read) so a mis-provisioned
 	// reader never boots "healthy" over nothing:
 	//   no master key → cannot decrypt any file at rest → refuse.
 	//   no restored store under {DataDir}/orgs → nothing to serve → refuse.
-	store := newSecretStore(dir, cfg.ReadOnly)
+	store := newSecretStore(cloud.Base{
+		DataDir: dir,
+		Durable: cfg.Durable,
+		Log:     log.New("subsystem", "kms"),
+	}, cfg.ReadOnly)
 	if cfg.ReadOnly {
 		if keyErr != nil {
 			return nil, fmt.Errorf("kms.New: reader mode requires a master key to open the encrypted store: %w", keyErr)

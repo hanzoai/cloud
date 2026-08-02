@@ -12,7 +12,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -266,7 +265,7 @@ func TestOrgCannotRouteThroughAnotherOrgsAccount(t *testing.T) {
 	// A real SQLite store is the tenant boundary: ListLinked(org, subject) can only
 	// ever return that scope's rows, so the router — whose ONLY candidate source is
 	// ListLinked — cannot construct a cross-org candidate. We prove it end to end.
-	store, err := openStore(filepath.Join(t.TempDir(), "link.db"))
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

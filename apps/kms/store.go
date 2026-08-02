@@ -20,7 +20,7 @@ package kms
 // handler folds :org into /orgs/{org}, and the in-process facade's refs carry it
 // too). A path with no such segment is genuinely deployment-wide and routes to
 // the reserved {DataDir}/orgs/_platform/kms.db partition. cloud.OrgDB folds the
-// org through the INJECTIVE SanitizeOrg slugger, so two distinct orgs can never
+// org through the INJECTIVE namespace.Sanitize slugger, so two distinct orgs can never
 // collide on one file — physical isolation ON TOP OF the REST authz gate.
 //
 // CRYPTO STAYS IN THE CLIENT. This layer persists ALREADY-SEALED records: Seal /
@@ -59,12 +59,12 @@ type secretStore struct {
 	stores   *cloud.OrgStore[*sql.DB]
 }
 
-func newSecretStore(dataDir string, readOnly bool) *secretStore {
+func newSecretStore(b cloud.Base, readOnly bool) *secretStore {
 	return &secretStore{
 		readOnly: readOnly,
 		// A reader performs no DDL: the writer already migrated the file it
 		// hydrated, and a reader must never fork the authoritative state.
-		stores: cloud.NewOrgStore(dataDir, "kms", func(db *sql.DB) (*sql.DB, error) {
+		stores: cloud.NewOrgStore(b, "kms", func(db *sql.DB) (*sql.DB, error) {
 			if readOnly {
 				return db, nil
 			}
@@ -100,7 +100,7 @@ func fileOrg(path string) (org string, facade bool) {
 func namespaceFor(path string) (namespace.Namespace, error) {
 	org, facade := fileOrg(path)
 	if facade {
-		return cloud.PlatformNamespace(), nil
+		return namespace.System(), nil
 	}
 	return cloud.OrgNamespace(org, "")
 }

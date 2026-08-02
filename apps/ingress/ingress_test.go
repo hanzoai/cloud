@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/hanzoai/cloud"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+
 	luxlog "github.com/luxfi/log"
 )
 
@@ -22,7 +26,7 @@ func mustJSON(v any) string {
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	st, err := openStore(filepath.Join(t.TempDir(), "ingress.db"))
+	st, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

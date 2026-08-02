@@ -137,10 +137,12 @@ var Apps = []App{
 	// called its own routes(); it became the router when the mega-build died, so a
 	// missing prefix is now an outage.
 	//
-	// "/v1/event" is the ONE canonical ingest door — the product, team, LLM-obs and
-	// Sentry-envelope wires all arrive on it. "/v1/insights/e" is the PostHog wire,
-	// held open by an ingress rewrite on insights.hanzo.ai rather than by a caller
-	// that names it. The other four prefixes are READ ONLY: bare "/v1/analytics" now
+	// "/v1/event" is the ONE canonical ingest door — the product, team, PostHog,
+	// LLM-obs and Sentry-envelope wires ALL arrive on it, dispatched by SHAPE. The
+	// PostHog wire's own path is gone; insights.hanzo.ai's /e, /batch and /capture
+	// rewrite onto /v1/event, so no caller moved. "/v1/insights/e" stays listed only
+	// so the fleet router still delivers a stale beacon here to be answered, rather
+	// than handing it to whichever app owns the next-shortest prefix. The other four prefixes are READ ONLY: bare "/v1/analytics" now
 	// carries only the four lenses (overview, timeseries, top, health) — the ingest
 	// aliases under it are retired — and /v1/errors, /v1/insights/events and
 	// /v1/insights/health are GET lenses. /v1/tracker is NOT here and never was:

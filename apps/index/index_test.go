@@ -3,19 +3,21 @@ package index
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
-// newStore opens a throwaway store on a temp file. It exercises the real
-// openStore path (cek + pragmas + migrate), not an in-memory shortcut, so a
-// migration that only works on :memory: cannot pass here.
+// newStore opens a throwaway store on a temp dir. It exercises the real
+// openStore path (pragmas + migrate), not an in-memory shortcut, so a migration
+// that only works on :memory: cannot pass here.
 func newStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(filepath.Join(t.TempDir(), "index.db"))
+	s, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
@@ -531,10 +533,9 @@ func TestEmptyIndexUIDIsNeverStored(t *testing.T) {
 // the property a pod restart depends on.
 func TestPersistenceAcrossReopen(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "index.db")
 	ctx := context.Background()
 
-	first, err := openStore(path)
+	first, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
@@ -549,7 +550,7 @@ func TestPersistenceAcrossReopen(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	second, err := openStore(path)
+	second, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -665,96 +666,15 @@ func mustUpsert(t *testing.T, s *Store, org, uid string, docs []map[string]any) 
 	}
 }
 
-// TestMigrateStoreCarriesTheKeyToo is the property that makes the rename safe.
-// cek keeps the wrapped data key beside the database as "<path>.dek"; moving the
-// .db without it strands the key, cek mints a fresh one, and every existing
-// document becomes undecryptable — data loss that presents as an empty index.
-func TestMigrateStoreCarriesTheKeyToo(t *testing.T) {
-	dir := t.TempDir()
-	for name, body := range map[string]string{
-		"search.db": "pages", "search.db-wal": "wal", "search.db-shm": "shm",
-		"search.db.dek": "wrapped-key",
-	} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-			t.Fatalf("seed %s: %v", name, err)
-		}
-	}
-	if err := migrateStore(dir, "search.db", "index.db"); err != nil {
-		t.Fatalf("migrateStore: %v", err)
-	}
-	for name, want := range map[string]string{
-		"index.db": "pages", "index.db-wal": "wal", "index.db-shm": "shm",
-		"index.db.dek": "wrapped-key",
-	} {
-		got, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil {
-			t.Errorf("%s did not survive the rename: %v", name, err)
-			continue
-		}
-		if string(got) != want {
-			t.Errorf("%s = %q, want %q", name, got, want)
-		}
-	}
-	if _, err := os.Stat(filepath.Join(dir, "search.db")); !os.IsNotExist(err) {
-		t.Error("the previous store still exists; two stores would drift apart")
-	}
-}
-
-// TestMigrateStoreIsIdempotentAndSafe proves repeated boots are a no-op, a fresh
-// deployment creates nothing, and two existing stores are left alone rather than
-// merged — guessing which encrypted store wins is not something to automate.
-func TestMigrateStoreIsIdempotentAndSafe(t *testing.T) {
-	t.Run("repeat is a no-op", func(t *testing.T) {
-		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, "search.db"), []byte("pages"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		for i := range 3 {
-			if err := migrateStore(dir, "search.db", "index.db"); err != nil {
-				t.Fatalf("call %d: %v", i+1, err)
-			}
-		}
-		if got, err := os.ReadFile(filepath.Join(dir, "index.db")); err != nil || string(got) != "pages" {
-			t.Errorf("repeated migration damaged the store: %q err=%v", got, err)
-		}
-	})
-	t.Run("fresh deployment creates nothing", func(t *testing.T) {
-		dir := t.TempDir()
-		if err := migrateStore(dir, "search.db", "index.db"); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := os.Stat(filepath.Join(dir, "index.db")); !os.IsNotExist(err) {
-			t.Error("migration created a store on a fresh deployment")
-		}
-	})
-	t.Run("both present are left alone", func(t *testing.T) {
-		dir := t.TempDir()
-		for name, body := range map[string]string{"search.db": "previous", "index.db": "current"} {
-			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if err := migrateStore(dir, "search.db", "index.db"); err != nil {
-			t.Fatal(err)
-		}
-		for name, want := range map[string]string{"search.db": "previous", "index.db": "current"} {
-			if got, _ := os.ReadFile(filepath.Join(dir, name)); string(got) != want {
-				t.Errorf("%s = %q, want %q untouched", name, got, want)
-			}
-		}
-	})
-}
-
 // TestAdoptLegacyTables proves a store whose TABLES were renamed still yields its
-// documents. Moving the store file is not enough on its own: the rows stay under
-// the previous table names, nothing queries them, and the index reads as empty
-// while every document sits intact one identifier away.
+// documents: the rows stay under the previous table names, nothing queries them,
+// and the index reads as empty while every document sits intact one identifier
+// away.
 func TestAdoptLegacyTables(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "index.db")
 
 	// A store in the PREVIOUS schema: same columns, previous table names.
-	first, err := openStore(path)
+	first, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
@@ -783,7 +703,7 @@ func TestAdoptLegacyTables(t *testing.T) {
 	}
 
 	// Reopening runs migrate(), which must adopt those rows.
-	s, err := openStore(path)
+	s, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}

@@ -91,14 +91,15 @@ func TestPerProjectStoreFileIsolation(t *testing.T) {
 
 	// Two nested per-project stores exist, each at its own path.
 	//
-	// Asserted on the .dek sidecar, not the .db: cek mints exactly one sidecar per
-	// store eagerly at open, while the encrypted database itself is materialized by
-	// the codec on close — so while the stores are still open the sidecar is what is
-	// on disk. It is 1:1 with its database and per-file keyed, so two sidecars at two
-	// nested paths prove precisely what this test is about: two physically distinct
-	// per-project stores.
-	fAlpha := filepath.Join(dir, "orgs", "acme", "projects", "alpha", "tracker.db.dek")
-	fBeta := filepath.Join(dir, "orgs", "acme", "projects", "beta", "tracker.db.dek")
+	// Closed first: on the pure-Go codec the encrypted database is materialized
+	// only when the handle closes, so a stat while the stores are still open finds
+	// nothing. Two files at two nested paths are what this test is about — two
+	// physically distinct per-project stores.
+	if err := Shutdown(); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	fAlpha := filepath.Join(dir, "orgs", "acme", "projects", "alpha", "tracker.db")
+	fBeta := filepath.Join(dir, "orgs", "acme", "projects", "beta", "tracker.db")
 	for _, p := range []string{fAlpha, fBeta} {
 		if _, err := os.Stat(p); err != nil {
 			t.Fatalf("expected a nested per-project tracker store at %s: %v", p, err)

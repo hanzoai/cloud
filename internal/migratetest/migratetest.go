@@ -16,25 +16,29 @@ import (
 	"io"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cek"
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/namespace"
 )
 
 // Case is one store's legacy-schema migration regression.
 //
-//   - Name      names the store (temp-file + failure label).
+//   - Name      is the store's SUBSYSTEM — what names its database, and so the
+//     failure label too. It must be the store's own name, because the harness
+//     seeds the legacy schema into the SAME database Open then opens.
 //   - LegacyDDL is the store's table(s) EXACTLY as a pre-migration production DB
 //     carries them — i.e. WITHOUT the columns the store later ALTER-adds. This is
 //     the shape over which an index-before-column ordering bug fails.
-//   - Open opens a store at path and runs its migrate() (the caller's
+//   - Open opens a store under dir and runs its migrate() (the caller's
 //     package-local openStore), returning the store as an io.Closer. It is called
-//     AFTER the harness seeds LegacyDDL at that same path, so it exercises the
-//     exact boot path that crashloops on a legacy DB.
+//     AFTER the harness seeds LegacyDDL into that same database, so it exercises
+//     the exact boot path that crashloops on a legacy DB.
 //   - Probe, if set, runs one write after a successful migrate to prove the
 //     forward-added columns (and their now-safe indexes) are usable.
 type Case struct {
 	Name      string
 	LegacyDDL string
-	Open      func(path string) (io.Closer, error)
+	Open      func(dir string) (io.Closer, error)
 	Probe     func(t *testing.T, store io.Closer)
 }
 
@@ -42,11 +46,12 @@ type Case struct {
 // prove migrate() is idempotent (a warm restart must not fail).
 func (c Case) Run(t *testing.T) {
 	t.Helper()
-	path := t.TempDir() + "/" + c.Name + ".db"
+	dir := t.TempDir()
 
-	// Stand up the legacy schema exactly as a pre-migration prod DB has it, using
-	// the SAME driver the store opens with.
-	raw, err := cek.Open(cek.Global, path)
+	// Stand up the legacy schema exactly as a pre-migration prod DB has it, in the
+	// SAME database — same namespace, same subsystem, same directory — the store
+	// opens. Naming it any other way would seed a file the store never reads.
+	raw, err := cek.Open(namespace.System(), c.Name, dir)
 	if err != nil {
 		t.Fatalf("%s: open legacy db: %v", c.Name, err)
 	}
@@ -57,7 +62,7 @@ func (c Case) Run(t *testing.T) {
 	_ = raw.Close()
 
 	// The boot path that crashloops when an index precedes its ALTER-added column.
-	store, err := c.Open(path)
+	store, err := c.Open(dir)
 	if err != nil {
 		t.Fatalf("%s: migrate over legacy schema: %v", c.Name, err)
 	}
@@ -70,7 +75,7 @@ func (c Case) Run(t *testing.T) {
 
 	// Re-open the SAME db: migrate() must be idempotent (ALTERs no-op via
 	// duplicate-column, indexes via IF NOT EXISTS) with no error on a warm restart.
-	store2, err := c.Open(path)
+	store2, err := c.Open(dir)
 	if err != nil {
 		t.Fatalf("%s: re-migrate (idempotency): %v", c.Name, err)
 	}

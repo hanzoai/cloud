@@ -18,11 +18,11 @@ import (
 // without marketplace — which is every process that mounts x402 — the table is nil,
 // and a passthrough here is a priced route served for nothing, forever, silently.
 //
-// The tool path is deliberately the other way round (see Settle): it offers EVERY
-// dispatch to the seam, free ones included, so a missing table there means "nothing
-// is priced" and free tools must keep working. Two different questions, two
-// different safe answers — which is why the distinction is stated in code rather
-// than left to a shared default.
+// The tool path asks a different question — it offers EVERY dispatch to the seam,
+// free ones included, so it must be able to answer "this costs nothing" — and it
+// reaches this same safe answer the other way round: it asks the process that OWNS
+// the table (peer.go), and refuses when that process cannot answer. Neither path
+// renders a missing table as free.
 func TestEnforceRefusesWithNoPriceTable(t *testing.T) {
 	h := newHarness(t)
 	Publish(nil) // no marketplace in this process — the shipped topology

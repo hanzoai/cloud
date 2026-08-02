@@ -12,7 +12,7 @@ package deploy
 //     on X-User-IsAdmin — a header principal.OrgFrom does not carry — and an org
 //     is not merely absent from it, it would be wrong: the SuperAdmin reads every
 //     platform namespace, not one tenant's.
-//   - a normal org's scope is the INJECTIVE provisioning.SanitizeOrg slug, which
+//   - a normal org's scope is the INJECTIVE namespace.Sanitize slug, which
 //     is the name of the tenant-<org> namespace its App CRs live in, not the
 //     verbatim owner claim OrgFrom returns.
 //

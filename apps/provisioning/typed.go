@@ -129,7 +129,7 @@ type provisionedResource struct {
 // and asks tenant().
 //
 // It cannot read principal.OrgFrom alone, and that is a WIRE fact rather than a
-// preference. tenant() folds the org through sanitizeOrg — the slug every
+// preference. tenant() folds the org through namespace.Sanitize — the slug every
 // physical name, bucket name and tenant namespace is keyed on, so a typed read
 // that skipped the fold would look in a different bucket than the create wrote —
 // and it buckets an ORG-LESS SuperAdmin under the literal "admin" org, which

@@ -77,8 +77,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "books")
 	src := newCommerceReader(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
 	mounted = &state{
-		live:    cloud.NewOrgStore[*store](deps.DataDir, "books", openStore, cloud.WithDurable(b.Durable), cloud.WithStoreLogger(b.Log)),
-		sandbox: cloud.NewOrgStore[*store](deps.DataDir, "books-sandbox", openStore, cloud.WithDurable(b.Durable), cloud.WithStoreLogger(b.Log)),
+		live:    cloud.NewOrgStore[*store](b, "books", openStore),
+		sandbox: cloud.NewOrgStore[*store](b, "books-sandbox", openStore),
 		source:  src,
 		cost:    noCost{}, // revenue-only until the cloud_usage cost projection is wired (see costSource)
 		ai:      deps.AI,

@@ -61,8 +61,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -109,15 +107,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("index.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("index.Mount: data dir: %w", err)
-	}
-	// Carry a store written under the subsystem's previous name over before
-	// opening, so a rename never presents an existing tenant with an empty index.
-	if err := migrateStore(deps.DataDir, "search.db", "index.db"); err != nil {
-		return fmt.Errorf("index.Mount: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "index.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("index.Mount: open store: %w", err)
 	}

@@ -146,6 +146,12 @@ func start(ctx context.Context, log luxlog.Logger) {
 		log.Error("cron: reconcile self-schedule", "err", err)
 		return
 	}
+	// Publish what the engine believes about its own schedules. Without this the
+	// durable engine's record of a missed fire never leaves the process, which
+	// is how moving off CronJobs quietly cost the fleet the one cron signal it
+	// had.
+	publishScheduleMetrics(view)
+
 	log.Info("platform cron live on the durable tasks engine",
 		"org", org(), "namespace", namespace, "queue", taskQueue, "reconcile", reconcileEvery)
 }

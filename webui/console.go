@@ -4,7 +4,7 @@
 // It is a LEAF: stdlib + the brand registry + zip's net/http bridge, and NOTHING
 // of package cloud. That is the whole reason it exists as its own package. The
 // console has to be served from TWO places — every per-app plugin mounts it as
-// its "/" catch-all through cloud.Serve, and the light host (cmd/cloud) owns "/"
+// its "/" catch-all through cloud.Listen, and the light host (cmd/cloud) owns "/"
 // at the front door and cannot import package cloud (that would relink the fleet
 // it was split to avoid). One console implementation, reachable from both.
 //
@@ -73,7 +73,7 @@ func consoleTitle(host string) string {
 // handler. Its caller registers it LAST — after every /v1 subsystem route, the
 // /zap plane, and the health contract — so the router's in-order matching gives
 // all real API routes precedence and only unmatched paths reach the SPA. Both
-// cloud.Serve (every plugin) and cmd/cloud (the host front door) call it, so the
+// cloud.Listen (every plugin) and cmd/cloud (the host front door) call it, so the
 // "/" catch-all is spelled ONE way.
 func Mount(app *zip.App) error {
 	h, err := Handler()
