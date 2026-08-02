@@ -101,7 +101,7 @@ func TestEventStreamIdentity(t *testing.T) {
 		t.Errorf("EventOrgKey = %q, want org", EventOrgKey)
 	}
 	// Every fact-plane signal must fall inside the ONE wildcard the stream binds.
-	for _, s := range []signal{signalEvent, signalError, signalLog, signalSpan, signalMetric} {
+	for _, s := range []signal{signalAct, signalError, signalLog, signalSpan, signalSample} {
 		if got := s.subject(); got[:len(plane)+1] != plane+"." {
 			t.Errorf("signal %q publishes to %q, outside %v", s, got, EventSubjects)
 		}
