@@ -464,3 +464,30 @@ func TestTraffic_ARequestWithNoIdentityIsNotACaller(t *testing.T) {
 		t.Fatalf("an addressed caller was swept into the blind state: %+v", q)
 	}
 }
+
+// The report is an expensive read on the same lock every request needs to be
+// observed under, so the SCAN happens under the lock and the SORT does not.
+// These two say what that costs: a full-table report, and the observation path
+// it must not stall.
+func BenchmarkViewAtTheCeiling(b *testing.B) {
+	tr := NewTraffic()
+	for i := 0; i < maxCallers; i++ {
+		tr.Observe(sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models"), t0)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tr.View("acme", ModeLive, t0)
+	}
+}
+
+func BenchmarkObserveAtTheCeiling(b *testing.B) {
+	tr := NewTraffic()
+	for i := 0; i < maxCallers; i++ {
+		tr.Observe(sig("acme", fmt.Sprintf("fp%06d", i), "203.0.113.1", "/v1/models"), t0)
+	}
+	s := sig("acme", "fp000001", "203.0.113.1", "/v1/models")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tr.Observe(s, t0)
+	}
+}
