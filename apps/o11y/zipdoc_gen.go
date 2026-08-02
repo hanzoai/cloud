@@ -10,15 +10,18 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/o11y/reviews/:id", zip.Doc{
-		Description: "DeleteAnnotationQueue removes one review queue and every item in it. A queue\nid belonging to another org answers the same 404 an unknown id does, so a\nprobe learns nothing about what exists.",
+		Description: "Removes one review queue and every item in it. A queue\nid belonging to another org answers the same 404 an unknown id does, so a\nprobe learns nothing about what exists.",
 		Fields: map[string]string{
 			"annQueueDeleted.deleted": "Deleted is true when the queue (and its items) were removed.",
 			"annQueueRef.id":          "ID is the annotation queue to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"annq_1"}`),
 	})
+	zip.Describe("GET /v1/o11y/alerts/last", zip.Doc{
+		Description: "Serves the ring as plain text, newest last, so `curl … | tail` reads\nin the order the pages arrived.",
+	})
 	zip.Describe("GET /v1/o11y/logs", zip.Doc{
-		Description: "GetO11yLogs returns a page of one product's logs for the caller's org. A\nnormal caller sees its OWN request stream, derived from org-tagged spans; a\nvalidated platform SuperAdmin sees the product's raw infra stdout stream\ninstead. Poll for a live tail by passing the previous response's nextCursor\nback as sinceNs. A well-formed product with no backing workload answers an\nempty page rather than an error; a malformed slug is a 400.",
+		Description: "Returns a page of one product's logs for the caller's org. A\nnormal caller sees its OWN request stream, derived from org-tagged spans; a\nvalidated platform SuperAdmin sees the product's raw infra stdout stream\ninstead. Poll for a live tail by passing the previous response's nextCursor\nback as sinceNs. A well-formed product with no backing workload answers an\nempty page rather than an error; a malformed slug is a 400.",
 		Fields: map[string]string{
 			"logLine.severity":        "INFO | WARN | ERROR | ...",
 			"logLine.source":          "\"infra\" (stdout) | \"request\" (org request log)",
@@ -34,7 +37,7 @@ func init() {
 		Example: json.RawMessage(`{"product":"kms","limit":200}`),
 	})
 	zip.Describe("GET /v1/o11y/metrics", zip.Doc{
-		Description: "GetO11yMetrics returns one product's RED series — request rate, errors, p50\nand p95 latency — for the caller's org, plus that org's LLM usage rollup over\nthe same window. The series come from org-tagged request spans, so a tenant\nonly ever aggregates its own traffic; a validated platform SuperAdmin sees the\nwhole product's RED, while usage stays the caller's own org either way. A\nwell-formed product with no backing workload answers empty series; a malformed\nslug is a 400.",
+		Description: "Returns one product's RED series — request rate, errors, p50\nand p95 latency — for the caller's org, plus that org's LLM usage rollup over\nthe same window. The series come from org-tagged request spans, so a tenant\nonly ever aggregates its own traffic; a validated platform SuperAdmin sees the\nwhole product's RED, while usage stays the caller's own org either way. A\nwell-formed product with no backing workload answers empty series; a malformed\nslug is a 400.",
 		Fields: map[string]string{
 			"metricsIn.product":     "Product is the console product slug to read, e.g. \"kms\". Required.",
 			"metricsIn.range":       "Range is the window in seconds. Default 3600, capped at 604800 (7d).",
@@ -49,7 +52,7 @@ func init() {
 		Example: json.RawMessage(`{"product":"kms","range":3600}`),
 	})
 	zip.Describe("GET /v1/o11y/reviews", zip.Doc{
-		Description: "ListAnnotationQueues returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project. Another org's queues are never\nvisible.",
+		Description: "Returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project. Another org's queues are never\nvisible.",
 		Fields: map[string]string{
 			"annPage.limit":               "Limit is how many rows to return. Default 20, capped at 100.",
 			"annPage.page":                "Page is the 1-based page to read. Default 1.",
@@ -69,7 +72,7 @@ func init() {
 		Example: json.RawMessage(`{"page":1,"limit":20}`),
 	})
 	zip.Describe("GET /v1/o11y/reviews/:id", zip.Doc{
-		Description: "GetAnnotationQueue returns one review queue with its pending and completed\ncounts and its first page of items. A queue id belonging to another org is a\n404, never a cross-tenant read.",
+		Description: "Returns one review queue with its pending and completed\ncounts and its first page of items. A queue id belonging to another org is a\n404, never a cross-tenant read.",
 		Fields: map[string]string{
 			"annItemView.assignee":              "Assignee is the reviewer it is for, omitted when unassigned.",
 			"annItemView.completedAt":           "CompletedAt is when it was reviewed, omitted while pending.",
@@ -97,7 +100,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"annq_1"}`),
 	})
 	zip.Describe("GET /v1/o11y/reviews/:id/items", zip.Doc{
-		Description: "ListAnnotationQueueItems returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED. A queue id belonging to\nanother org is a 404, never a cross-tenant list.",
+		Description: "Returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED. A queue id belonging to\nanother org is a 404, never a cross-tenant list.",
 		Fields: map[string]string{
 			"annItemList.data":          "Data is the page of items.",
 			"annItemList.meta":          "Meta is the paging that produced it.",
@@ -125,14 +128,14 @@ func init() {
 		Example: json.RawMessage(`{"id":"annq_1","status":"PENDING"}`),
 	})
 	zip.Describe("GET /v1/o11y/status", zip.Doc{
-		Description: "GetO11yStatus reports whether a product's service is live: an in-cluster\nhealth probe with its measured latency, fused with the per-replica up\ninventory. Infra health is not tenant-partitioned — a service is up or down\nfor everyone — so any validated caller is served, but an unvalidated one is\nrefused. A product with no backing workload answers down/unknown-service\nwithout probing anything; a malformed slug is a 400.",
+		Description: "Reports whether a product's service is live: an in-cluster\nhealth probe with its measured latency, fused with the per-replica up\ninventory. Infra health is not tenant-partitioned — a service is up or down\nfor everyone — so any validated caller is served, but an unvalidated one is\nrefused. A product with no backing workload answers down/unknown-service\nwithout probing anything; a malformed slug is a 400.",
 		Fields: map[string]string{
 			"statusIn.product": "Product is the console product slug to probe, e.g. \"kms\". Required.",
 		},
 		Example: json.RawMessage(`{"product":"kms"}`),
 	})
 	zip.Describe("GET /v1/summary", zip.Doc{
-		Description: "GetSummary reports whether the platform is up. It returns the public status\ndocument: the incidents currently open against Hanzo's own services, derived\nfrom the fleet health probes, plus the address of the human status page. No\nauthentication is required and no tenant data is involved — the answer is the\nsame for every caller.\n\nA service that fails its health probe becomes one incident naming that service.\nWhen the availability source itself cannot be read the endpoint answers 503\nrather than an empty incident list, because \"we cannot tell\" and \"everything is\nfine\" are different answers and only one of them is true.",
+		Description: "Reports whether the platform is up. It returns the public status\ndocument: the incidents currently open against Hanzo's own services, derived\nfrom the fleet health probes, plus the address of the human status page. No\nauthentication is required and no tenant data is involved — the answer is the\nsame for every caller.\n\nA service that fails its health probe becomes one incident naming that service.\nWhen the availability source itself cannot be read the endpoint answers 503\nrather than an empty incident list, because \"we cannot tell\" and \"everything is\nfine\" are different answers and only one of them is true.",
 		Fields: map[string]string{
 			"StatusComponent.current_status":      "CurrentStatus is this component's own condition: \"full_outage\" for a\nservice that did not answer its health probe at all.",
 			"StatusIncident.current_worst_impact": "CurrentWorstImpact is the incident's impact on the PLATFORM, which is not\nthe same question as the component's own condition above.",
@@ -143,7 +146,7 @@ func init() {
 		Example: json.RawMessage(`{}`),
 	})
 	zip.Describe("PATCH /v1/o11y/reviews/:id", zip.Doc{
-		Description: "UpdateAnnotationQueue changes a review queue's name, description or\nscore-config set. A field the request omits is left alone. A name another\nqueue in the same project already uses is a 409; a queue id belonging to\nanother org is a 404.",
+		Description: "Changes a review queue's name, description or\nscore-config set. A field the request omits is left alone. A name another\nqueue in the same project already uses is a 409; a queue id belonging to\nanother org is a 404.",
 		Fields: map[string]string{
 			"annQueueView.createdAt":       "CreatedAt is when it was created, RFC3339 in UTC.",
 			"annQueueView.description":     "Description is its free text, omitted when empty.",
@@ -159,7 +162,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"annq_1","name":"hallucination review v2"}`),
 	})
 	zip.Describe("PATCH /v1/o11y/reviews/:id/items/:itemId", zip.Doc{
-		Description: "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED\nand sets its assignee. Completing an item stamps its completedAt. An item that\nexists under a different queue answers the same 404 an unknown item does, and\nso does a queue belonging to another org.",
+		Description: "Moves one queue item between PENDING and COMPLETED\nand sets its assignee. Completing an item stamps its completedAt. An item that\nexists under a different queue answers the same 404 an unknown item does, and\nso does a queue belonging to another org.",
 		Fields: map[string]string{
 			"annItemView.assignee":      "Assignee is the reviewer it is for, omitted when unassigned.",
 			"annItemView.completedAt":   "CompletedAt is when it was reviewed, omitted while pending.",
@@ -180,8 +183,17 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"annq_1","itemId":"annqi_1","status":"COMPLETED"}`),
 	})
+	zip.Describe("POST /obs/error/post", zip.Doc{
+		Description: "Relays one Sentry-wire request to the runtime and returns its\nanswer VERBATIM — a 401 \"invalid ingest key\" must reach the SDK as a 401, not\nbe reshaped into a plane error. The request is rebuilt here rather than\nforwarded as bytes because the runtime is an http.Handler.",
+	})
+	zip.Describe("POST /obs/event/claim", zip.Doc{
+		Description: "Offers a body to the LLM-obs sink. Claimed=false is the normal\nanswer for a product event and MUST leave the body untouched — the door then\nruns its own wire, so a wrong claim here silently reroutes a tenant's data.",
+	})
+	zip.Describe("POST /v1/o11y/alerts/:receiver", zip.Doc{
+		Description: "Records one Alertmanager notification and pages Slack. Always 200\nwith body \"ok\": Alertmanager retries on any other status, and a receipt that\npushes back is a receipt that changes the thing it is measuring.",
+	})
 	zip.Describe("POST /v1/o11y/reviews", zip.Doc{
-		Description: "CreateAnnotationQueue creates a human-review queue in the caller's org and\nproject. A name already used by another queue in the same project is a 409.",
+		Description: "Creates a human-review queue in the caller's org and\nproject. A name already used by another queue in the same project is a 409.",
 		Fields: map[string]string{
 			"annQueueView.createdAt":        "CreatedAt is when it was created, RFC3339 in UTC.",
 			"annQueueView.description":      "Description is its free text, omitted when empty.",
@@ -196,7 +208,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"hallucination review","scoreConfigIds":["quality"]}`),
 	})
 	zip.Describe("POST /v1/o11y/reviews/:id/items", zip.Doc{
-		Description: "AddAnnotationQueueItems enqueues traces, observations or sessions on a review\nqueue. Each item names exactly one object, either by traceId / observationId /\nsessionId or by objectType plus objectId; every item enters PENDING. A queue\nid belonging to another org is a 404.",
+		Description: "Enqueues traces, observations or sessions on a review\nqueue. Each item names exactly one object, either by traceId / observationId /\nsessionId or by objectType plus objectId; every item enters PENDING. A queue\nid belonging to another org is a 404.",
 		Fields: map[string]string{
 			"addItemsIn.id":             "ID is the annotation queue to add to, from the path.",
 			"addItemsIn.items":          "Items are the objects to enqueue for review, 1–200 per request. Each names\nexactly one object.",
