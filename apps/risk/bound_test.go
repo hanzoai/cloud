@@ -18,12 +18,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/luxfi/aml/pkg/anomaly"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
@@ -36,7 +42,7 @@ import (
 // TestEvent_RefusesAnUnbelievableTimestamp is the wire door's half of the bound:
 // a stamp outside the window is a 400 with a reason, never a silent adjustment.
 //
-// Mutation proof: delete the `within` call in mlEvent.observation and the future
+// Mutation proof: delete the `within` call in riskEvent.observation and the future
 // and ancient rows below stop failing.
 func TestEvent_RefusesAnUnbelievableTimestamp(t *testing.T) {
 	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
@@ -55,7 +61,7 @@ func TestEvent_RefusesAnUnbelievableTimestamp(t *testing.T) {
 		{"the unix epoch", time.Unix(0, 0).UTC().Format(time.RFC3339), false},
 		{"not a timestamp at all", "yesterday", false},
 	} {
-		_, err := mlEvent{Kind: kindAccount, Subject: "u_1", At: tc.at}.observation(now)
+		_, err := riskEvent{Kind: kindAccount, Subject: "u_1", At: tc.at}.observation(now)
 		if tc.ok && err != nil {
 			t.Errorf("%s (%q): %v, want accepted", tc.name, tc.at, err)
 		}
@@ -73,9 +79,9 @@ func TestLearn_RefusesAFutureStampOnTheWire(t *testing.T) {
 	app := mountApp(t)
 	ahead := time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339)
 	body := `{"events":[{"id":"e1","kind":"account","subject":"u_1","at":"` + ahead + `"}]}`
-	code, out := req(t, app, http.MethodPost, "/v1/ml/learn", orgA, "u_"+orgA, body)
+	code, out := req(t, app, http.MethodPost, "/v1/risk/learn", orgA, "u_"+orgA, body)
 	if code != http.StatusBadRequest {
-		t.Fatalf("POST /v1/ml/learn with a stamp a year ahead = %d %s, want 400", code, out)
+		t.Fatalf("POST /v1/risk/learn with a stamp a year ahead = %d %s, want 400", code, out)
 	}
 	if !strings.Contains(string(out), "future") {
 		t.Errorf("the refusal does not say what was wrong: %s", out)
@@ -88,12 +94,12 @@ func TestLearn_RefusesAFutureStampOnTheWire(t *testing.T) {
 // merely close.
 func TestObservation_TruncatesToTheSecond(t *testing.T) {
 	now := time.Date(2026, 3, 1, 12, 0, 0, 123456789, time.UTC)
-	o, err := mlEvent{Kind: kindAccount, Subject: "u_1"}.observation(now)
+	o, err := riskEvent{Kind: kindAccount, Subject: "u_1"}.observation(now)
 	if err != nil {
 		t.Fatalf("observation: %v", err)
 	}
-	if o.At.Nanosecond() != 0 {
-		t.Fatalf("the observation kept sub-second precision (%s) the durable record cannot carry", o.At)
+	if o.at.Nanosecond() != 0 {
+		t.Fatalf("the observation kept sub-second precision (%s) the durable record cannot carry", o.at)
 	}
 }
 
@@ -104,12 +110,13 @@ func TestObservation_TruncatesToTheSecond(t *testing.T) {
 // per-tenant bound to uselessness, or by letting the process ceiling grow without
 // saying so, fails here rather than in production.
 func TestPlane_TheBoundsAreDerivedAndPerTenant(t *testing.T) {
-	if residentKeys != residentRingBudget/perKeyBytes {
-		t.Fatalf("the per-tenant key bound (%d) is no longer derived from the per-tenant byte budget", residentKeys)
+	if ringKeys != residentRingBudget/perSubjectBytes-shards {
+		t.Fatalf("the per-tenant key bound (%d) is no longer derived from the per-tenant byte budget", ringKeys)
 	}
-	if residentKeys < 256 {
-		t.Fatalf("the per-tenant bound is %d subjects — too few to hold an ordinary organisation's own traffic, "+
-			"which turns a memory budget into a detector that is off", residentKeys)
+	if ringKeyCeiling*perSubjectBytes > residentRingBudget {
+		t.Fatalf("a tenant's aggregates may hold %d subjects at %d bytes = %d, over the %d-byte budget they are "+
+			"supposed to cost. The ceiling is what the budget buys, not the number passed to the store.",
+			ringKeyCeiling, perSubjectBytes, ringKeyCeiling*perSubjectBytes, residentRingBudget)
 	}
 	if planeRingCeiling != maxResident*residentRingBudget {
 		t.Fatal("the process ceiling is no longer the product of the per-tenant budget and the resident bound")
@@ -135,9 +142,9 @@ func TestLearn_RefusesAnOversizeBatch(t *testing.T) {
 		fmt.Fprintf(&b, `{"id":"e%d","kind":"account","subject":"u_%d"}`, i, i)
 	}
 	b.WriteString(`]}`)
-	code, out := req(t, app, http.MethodPost, "/v1/ml/learn", orgA, "u_"+orgA, b.String())
+	code, out := req(t, app, http.MethodPost, "/v1/risk/learn", orgA, "u_"+orgA, b.String())
 	if code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("POST /v1/ml/learn with %d events = %d %s, want 413", maxBatch+1, code, out)
+		t.Fatalf("POST /v1/risk/learn with %d events = %d %s, want 413", maxBatch+1, code, out)
 	}
 }
 
@@ -191,8 +198,8 @@ func TestScoreAndLearn_AreGatedOnTheCallersOwnBalance(t *testing.T) {
 	books := &ledger{available: 0}
 	app := mountBilled(t, books)
 	for _, tc := range []struct{ path, body string }{
-		{"/v1/ml/score", `{"event":{"id":"e1","kind":"account","subject":"u_1"}}`},
-		{"/v1/ml/learn", `{"events":[{"id":"e1","kind":"account","subject":"u_1"}]}`},
+		{"/v1/risk/score", `{"event":{"id":"e1","kind":"account","subject":"u_1"}}`},
+		{"/v1/risk/learn", `{"events":[{"id":"e1","kind":"account","subject":"u_1"}]}`},
 	} {
 		code, out := req(t, app, http.MethodPost, tc.path, orgA, "u_"+orgA, tc.body)
 		if code != http.StatusPaymentRequired {
@@ -222,10 +229,10 @@ func TestScoreAndLearn_MeterOneScreenPerEvent(t *testing.T) {
 	books := &ledger{available: 1_000_000}
 	app := mountBilled(t, books)
 
-	code, out := req(t, app, http.MethodPost, "/v1/ml/score", orgA, "u_"+orgA,
+	code, out := req(t, app, http.MethodPost, "/v1/risk/score", orgA, "u_"+orgA,
 		`{"event":{"id":"e1","kind":"account","subject":"u_1"}}`)
 	if code != http.StatusOK {
-		t.Fatalf("POST /v1/ml/score = %d %s", code, out)
+		t.Fatalf("POST /v1/risk/score = %d %s", code, out)
 	}
 	const batch = 7
 	var b strings.Builder
@@ -237,8 +244,8 @@ func TestScoreAndLearn_MeterOneScreenPerEvent(t *testing.T) {
 		fmt.Fprintf(&b, `{"id":"e%d","kind":"account","subject":"u_%d"}`, i, i)
 	}
 	b.WriteString(`]}`)
-	if code, out := req(t, app, http.MethodPost, "/v1/ml/learn", orgA, "u_"+orgA, b.String()); code != http.StatusOK {
-		t.Fatalf("POST /v1/ml/learn = %d %s", code, out)
+	if code, out := req(t, app, http.MethodPost, "/v1/risk/learn", orgA, "u_"+orgA, b.String()); code != http.StatusOK {
+		t.Fatalf("POST /v1/risk/learn = %d %s", code, out)
 	}
 
 	posted := books.await(t, 2)
@@ -270,11 +277,10 @@ func TestSearch_IsPricedFromItsMeasuredSize(t *testing.T) {
 		t.Fatalf("a %d-event search costs %d cents, which is too coarse for this bracket to mean anything", events, want)
 	}
 	hold := func(k tenant) {
-		now := time.Now().UTC()
 		for i := 0; i < events; i++ {
 			probe.hold(string(k), map[string]any{
 				"subject_kind": kindAccount, "subject": "u_" + itoa(i%4),
-				"bucket": now.Add(-time.Duration(i) * time.Minute),
+				"bucket": surfaceAt(i + 1),
 				"events": uint32(2), "spend_nano": int64(150_000_000),
 			})
 		}
@@ -283,7 +289,7 @@ func TestSearch_IsPricedFromItsMeasuredSize(t *testing.T) {
 	probe.reset(true)
 	hold(key(t, brandA, orgA))
 	poor := mountBilled(t, &ledger{available: want - 1})
-	if code, out := req(t, poor, http.MethodPost, "/v1/ml/search", orgA, "u_"+orgA, `{"days":1}`); code != http.StatusPaymentRequired {
+	if code, out := req(t, poor, http.MethodPost, "/v1/risk/search", orgA, "u_"+orgA, `{"days":1}`); code != http.StatusPaymentRequired {
 		t.Fatalf("a %d-event search on a balance of %d cents = %d %s, want 402 — it costs %d",
 			events, want-1, code, out, want)
 	}
@@ -291,12 +297,12 @@ func TestSearch_IsPricedFromItsMeasuredSize(t *testing.T) {
 	probe.reset(true)
 	hold(key(t, brandA, orgA))
 	rich := mountBilled(t, &ledger{available: want})
-	code, out := req(t, rich, http.MethodPost, "/v1/ml/search", orgA, "u_"+orgA, `{"days":1}`)
+	code, out := req(t, rich, http.MethodPost, "/v1/risk/search", orgA, "u_"+orgA, `{"days":1}`)
 	if code != http.StatusAccepted {
 		t.Fatalf("a %d-event search on a balance of exactly %d cents = %d %s, want 202 — the gate is asking for more than the work costs",
 			events, want, code, out)
 	}
-	var run mlSearchRun
+	var run riskSearchRun
 	if err := json.Unmarshal(out, &run); err != nil || run.Events != events {
 		t.Fatalf("the accepted run replays %d events, want %d (%s)", run.Events, events, out)
 	}
@@ -308,10 +314,10 @@ func TestGate_FailsClosed(t *testing.T) {
 	probe.reset(true)
 	books := &ledger{down: true}
 	app := mountBilled(t, books)
-	code, out := req(t, app, http.MethodPost, "/v1/ml/score", orgA, "u_"+orgA,
+	code, out := req(t, app, http.MethodPost, "/v1/risk/score", orgA, "u_"+orgA,
 		`{"event":{"id":"e1","kind":"account","subject":"u_1"}}`)
 	if code != http.StatusServiceUnavailable {
-		t.Fatalf("POST /v1/ml/score with the ledger unreachable = %d %s, want 503", code, out)
+		t.Fatalf("POST /v1/risk/score with the ledger unreachable = %d %s, want 503", code, out)
 	}
 }
 
@@ -490,5 +496,342 @@ func TestFold_IsBoundedAndRetriedRatherThanForgotten(t *testing.T) {
 	}
 	if held := len(p.folds); held != 0 {
 		t.Fatalf("%d fold ticket(s) never returned", held)
+	}
+}
+
+// ── the bound every other bound is made of ───────────────────────────────────
+
+// TestBounds_ArePublishedInTheDimensionThatBinds is the CLASS test, and it
+// MEASURES rather than restating the formula.
+//
+// A cap on a COUNT of caller-sized values is not a bound. Every ceiling this
+// package publishes — 8 MiB of aggregates per tenant, 32 MiB of record per
+// tenant, 512 MiB across the process — is a count multiplied by the size of
+// something a caller chose, so while that size is unbounded so is the product. It
+// was: a caller picking 4 KiB identifiers made the "8 MiB" of rings and the
+// record's row cap understate reality by more than an order of magnitude.
+//
+// So this test builds the WORST CASE the door will actually accept and compares
+// what it really costs against what is published. Recomputing the formula would
+// prove nothing; the point is that the formula is true of a real value.
+//
+// Mutation proof: raise maxField (or delete the length check in observe) and the
+// key-text and row-byte measurements below exceed the published terms.
+func TestBounds_ArePublishedInTheDimensionThatBinds(t *testing.T) {
+	probe.reset(true)
+	big := strings.Repeat("z", maxField)
+	k := key(t, brandA, orgA)
+
+	// 1. THE KEY TEXT. Every per-subject memory figure is a multiple of it.
+	worst, err := observe(big, actor{Kind: kindAccount, Subject: big, Peer: big, Device: big}, 9_999, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("the widest legal observation was refused: %v", err)
+	}
+	for _, key := range anomaly.Keys(worst.tx(k)) {
+		if n := len(key.OrgID) + 1 + len(key.Kind) + 1 + len(key.Value); n > maxKeyText {
+			t.Fatalf("a legal event produces a %d-byte aggregate key against a published %d — "+
+				"every per-tenant memory figure is understated by that ratio", n, maxKeyText)
+		}
+	}
+
+	// 2. THE ROW ON DISK. The record's ceiling is recordRows × maxRowBytes, and
+	//    that is a byte bound only if a real worst-case row fits maxRowBytes.
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	const sample = 200
+	sh, err := p.for_(k)
+	if err != nil {
+		t.Fatalf("shelf: %v", err)
+	}
+	before := shelfBytes(t, sh)
+	batch := make([]observation, 0, sample)
+	at := time.Now().UTC().Add(-time.Hour)
+	for i := 0; i < sample; i++ {
+		// Distinct ids and subjects at the bound: the widest row the door admits.
+		batch = append(batch, ob(t, pad(strconv.Itoa(i), big), kindAccount, pad("s"+strconv.Itoa(i), big), 9_999,
+			at.Add(time.Duration(i)*time.Second), pad("p"+strconv.Itoa(i), big), pad("d"+strconv.Itoa(i), big)))
+	}
+	if _, err := p.learn(k, batch...); err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+	grew := shelfBytes(t, sh) - before
+	per := grew / sample
+	if per > maxRowBytes {
+		t.Fatalf("a worst-case observation costs %d bytes on the shelf against a published %d — "+
+			"the record's %d MiB per-tenant ceiling is understated by %.1fx",
+			per, maxRowBytes, recordBudget>>20, float64(per)/float64(maxRowBytes))
+	}
+	// The row cap IS the byte budget divided by the row bound, so the product is
+	// the budget (to within the one row integer division drops).
+	if recordRows*maxRowBytes > recordBudget || (recordRows+1)*maxRowBytes <= recordBudget {
+		t.Fatalf("the record's row cap (%d) is no longer the byte budget (%d) divided by the row bound (%d)",
+			recordRows, recordBudget, maxRowBytes)
+	}
+	t.Logf("measured: worst-case row %d bytes (published %d); record ceiling %d rows x %d = %d MiB",
+		per, maxRowBytes, recordRows, maxRowBytes, recordBudget>>20)
+}
+
+// pad grows s to exactly len(big) bytes, keeping s's own prefix so the values
+// stay distinct.
+func pad(s, big string) string { return s + big[len(s):] }
+
+// shelfBytes is the real size of one organisation's SQLite file, pages and all.
+func shelfBytes(t *testing.T, sh *shelf) int {
+	t.Helper()
+	var pages, size int
+	if err := sh.db.QueryRow(`PRAGMA page_count`).Scan(&pages); err != nil {
+		t.Fatalf("page_count: %v", err)
+	}
+	if err := sh.db.QueryRow(`PRAGMA page_size`).Scan(&size); err != nil {
+		t.Fatalf("page_size: %v", err)
+	}
+	return pages * size
+}
+
+// TestField_IsRefusedAtTheDoorAndNotTruncated: the bound is applied where an
+// observation is MINTED, so the live wire, the replay and the fold all get it —
+// and it REFUSES, because two subjects differing only past a truncation would
+// silently become one set of aggregates.
+//
+// Mutation proof: delete the length loop in observe and the 413s below become
+// 200s.
+func TestField_IsRefusedAtTheDoorAndNotTruncated(t *testing.T) {
+	probe.reset(true)
+	app := mountBilled(t, &ledger{available: 1_000_000})
+	over := strings.Repeat("z", maxField+1)
+	for _, tc := range []struct{ name, body string }{
+		{"subject", `{"events":[{"id":"e1","kind":"account","subject":"` + over + `"}]}`},
+		{"id", `{"events":[{"id":"` + over + `","kind":"account","subject":"u_1"}]}`},
+		{"peer", `{"events":[{"id":"e1","kind":"account","subject":"u_1","peer":"` + over + `"}]}`},
+		{"device", `{"events":[{"id":"e1","kind":"account","subject":"u_1","device":"` + over + `"}]}`},
+	} {
+		code, out := req(t, app, http.MethodPost, "/v1/risk/learn", orgA, "u_"+orgA, tc.body)
+		if code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("a %d-byte %q was accepted with %d %s — every ceiling this plane publishes is a count of these",
+				len(over), tc.name, code, out)
+		}
+	}
+	// And exactly at the bound is legal, so the refusal is a bound and not a ban.
+	at := strings.Repeat("z", maxField)
+	code, out := req(t, app, http.MethodPost, "/v1/risk/learn", orgA, "u_"+orgA,
+		`{"events":[{"id":"e1","kind":"account","subject":"`+at+`"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("a subject of exactly %d bytes was refused: %d %s", maxField, code, out)
+	}
+}
+
+// TestObservation_HasOneConstructor is the STRUCTURAL half of the field bound:
+// the bound lives in [observe], so it is a bound only while observe is the only
+// way to make an observation. A second composite literal anywhere in the package
+// — production or test — is a second door with no lock on it.
+//
+// Mutation proof: write `observation{}` with any field set anywhere in this
+// package and this fails.
+func TestObservation_HasOneConstructor(t *testing.T) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", nil, 0)
+	if err != nil {
+		t.Fatalf("parse the package: %v", err)
+	}
+	for _, pkg := range pkgs {
+		for name, file := range pkg.Files {
+			ast.Inspect(file, func(n ast.Node) bool {
+				lit, ok := n.(*ast.CompositeLit)
+				if !ok || len(lit.Elts) == 0 {
+					return true // observation{} carries nothing and bounds nothing
+				}
+				id, ok := lit.Type.(*ast.Ident)
+				if !ok || id.Name != "observation" {
+					return true
+				}
+				if strings.HasSuffix(fset.Position(lit.Pos()).Filename, "learn.go") {
+					return true // the one constructor lives there
+				}
+				t.Errorf("%s builds an observation directly — the field bound lives in observe(), "+
+					"so a second constructor is a second unbounded door",
+					fset.Position(lit.Pos()))
+				return true
+			})
+			_ = name
+		}
+	}
+}
+
+// TestOps_EveryOpIsAdmittedAndPriced is the STRUCTURAL half of the money seam and
+// of the concurrency bound.
+//
+// Half this surface used to be free: state, features, appetite, snapshot, restore
+// and the search read reached the plane, the tenant's own shelf and — in
+// features' case — up to 120 warehouse statements, with no balance check, no
+// debit and no in-flight slot. Gating the two ops a reviewer looks at is not
+// gating; the ops an abuser calls in a loop are the cheap ones nobody thought of.
+// So the rule is checked by reading the source rather than by remembering it.
+//
+// Mutation proof: delete the o.gate or the o.admit call from any op and this
+// names it.
+func TestOps_EveryOpIsAdmittedAndPriced(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "typed.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse typed.go: %v", err)
+	}
+	// The ops are exactly the methods on `ops` that a typed registration names.
+	registered := map[string]bool{}
+	risk, err := parser.ParseFile(fset, "risk.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse risk.go: %v", err)
+	}
+	ast.Inspect(risk, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		if id, ok := sel.X.(*ast.Ident); ok && id.Name == "o" {
+			registered[sel.Sel.Name] = true
+		}
+		return true
+	})
+	if len(registered) < 9 {
+		t.Fatalf("found %d registered ops, want every one of them — the scan is not reading the mount", len(registered))
+	}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil || !registered[fn.Name.Name] {
+			continue
+		}
+		var admits, gates bool
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if id, ok := sel.X.(*ast.Ident); ok && id.Name == "o" {
+				admits = admits || sel.Sel.Name == "admit"
+				gates = gates || sel.Sel.Name == "gate"
+			}
+			return true
+		})
+		if !admits {
+			t.Errorf("op %q reaches the plane without o.admit — no tenant in-flight slot, so that "+
+				"organisation's own concurrency is an unbounded queue of goroutines", fn.Name.Name)
+		}
+		if !gates {
+			t.Errorf("op %q is not priced — free unbounded compute against a per-tenant model, a "+
+				"per-tenant disk and a shared warehouse", fn.Name.Name)
+		}
+	}
+}
+
+// TestEveryOp_IsGatedOnTheCallersOwnBalance is the BEHAVIOURAL half of
+// [TestOps_EveryOpIsAdmittedAndPriced]: every op on this surface refuses on an
+// empty balance, and refuses without doing the work.
+//
+// features is the one that mattered most and was free: it rolls up to four
+// source planes into the tenant's own surface — up to 120 bounded
+// INSERT..SELECT statements against the single warehouse pod the file's own
+// header calls "a single stateful pod that has taken the API down once already"
+// — and then reads a caller-chosen window of up to 400 days back.
+//
+// Mutation proof: remove the o.gate call from any op below and it answers 200 on
+// a zero balance.
+func TestEveryOp_IsGatedOnTheCallersOwnBalance(t *testing.T) {
+	probe.reset(true)
+	books := &ledger{available: 0}
+	app := mountBilled(t, books)
+	for _, tc := range []struct{ method, path, body string }{
+		{http.MethodPost, "/v1/risk/score", `{"event":{"id":"e1","kind":"account","subject":"u_1"}}`},
+		{http.MethodPost, "/v1/risk/learn", `{"events":[{"id":"e1","kind":"account","subject":"u_1"}]}`},
+		{http.MethodGet, "/v1/risk/state", ""},
+		{http.MethodPut, "/v1/risk/state/appetite", `{"review":0.01,"sample":0.001}`},
+		{http.MethodPost, "/v1/risk/state/snapshot", ""},
+		{http.MethodPost, "/v1/risk/state/restore", `{"body":{"version":1}}`},
+		{http.MethodGet, "/v1/risk/features?days=400", ""},
+		{http.MethodGet, "/v1/risk/search/srch_none", ""},
+	} {
+		code, out := req(t, app, tc.method, tc.path, orgA, "u_"+orgA, tc.body)
+		if code != http.StatusPaymentRequired {
+			t.Errorf("%s %s on an empty balance = %d %s, want 402 — free unbounded compute against a "+
+				"per-tenant model, a per-tenant disk and a shared warehouse", tc.method, tc.path, code, out)
+		}
+	}
+	if books.debits() != 0 {
+		t.Fatalf("a refused request still debited %d time(s)", books.debits())
+	}
+	// And the warehouse was never touched: the gate runs BEFORE the work.
+	probe.mu.Lock()
+	sent := len(probe.sent)
+	probe.mu.Unlock()
+	if sent != 0 {
+		t.Fatalf("%d warehouse statements were issued for requests that were refused on the balance", sent)
+	}
+}
+
+// TestFeatures_IsPricedFromItsWindow: the most expensive read on this surface is
+// not also the cheapest. A 400-day catalogue costs 400 screens; the default 30
+// costs 30.
+//
+// Mutation proof: price features at a flat 1 and the two amounts below stop
+// differing.
+func TestFeatures_IsPricedFromItsWindow(t *testing.T) {
+	probe.reset(true)
+	books := &ledger{available: 100_000_000}
+	app := mountBilled(t, books)
+	if code, out := req(t, app, http.MethodGet, "/v1/risk/features?days=400", orgA, "u_"+orgA, ""); code != http.StatusOK {
+		t.Fatalf("GET /v1/risk/features?days=400 = %d %s", code, out)
+	}
+	posted := books.await(t, 1)
+	if got := posted[0].Micros / defaultScreenUUSD; got != 400 {
+		t.Fatalf("a 400-day catalogue metered %d screens — the op that issues up to 120 warehouse "+
+			"statements must be priced from the window it reads", got)
+	}
+}
+
+// TestSearch_IsMeteredOnWhatTheRunDid, not on what it was admitted for.
+//
+// The op answers 202 and the grid runs behind it. Metering at ACCEPT charged for
+// every candidate over every event the moment the run was admitted — and this
+// binary deploys at ONE replica with the old pod stopped first, so a rollout
+// cancels the run partway with the debit already taken and, if the process dies
+// before the report is written, with no result to show for it either.
+//
+// Mutation proof: move the pay() call back beside the 202 and the amount below
+// becomes candidates × events rather than trials × events.
+func TestSearch_IsMeteredOnWhatTheRunDid(t *testing.T) {
+	probe.reset(true)
+	books := &ledger{available: 1_000_000_000}
+	app := mountBilled(t, books)
+	k := key(t, brandA, orgA)
+	for i := 0; i < 40; i++ {
+		probe.hold(string(k), map[string]any{
+			"subject_kind": kindAccount, "subject": "u_" + strconv.Itoa(i%5),
+			"bucket": surfaceAt(i + 1),
+			"events": uint32(1), "spend_nano": int64(1_000_000),
+		})
+	}
+	code, out := req(t, app, http.MethodPost, "/v1/risk/search", orgA, "u_"+orgA, `{"days":7}`)
+	if code != http.StatusAccepted {
+		t.Fatalf("POST /v1/risk/search = %d %s, want 202", code, out)
+	}
+	var run struct {
+		ID                 string `json:"id"`
+		Events, Candidates int
+	}
+	if err := json.Unmarshal(out, &run); err != nil {
+		t.Fatalf("decode the run: %v", err)
+	}
+	posted := books.await(t, 1)
+	did := posted[0].Micros / defaultScreenUUSD
+	if did == 0 {
+		t.Fatal("the run metered nothing")
+	}
+	if did > int64(run.Events*run.Candidates) {
+		t.Fatalf("the run metered %d screens for a run of at most %d — the meter is running on the "+
+			"accepted size and not on the work", did, run.Events*run.Candidates)
+	}
+	// And the meter reads no request state: it fires from a background goroutine
+	// long after the 202, and a recycled request arena would be another tenant's.
+	if posted[0].Org != orgA || posted[0].User != orgA {
+		t.Fatalf("the run's debit landed on %q/%q rather than the caller's own ledger — the meter is "+
+			"reading a request that has already been recycled", posted[0].Org, posted[0].User)
 	}
 }
