@@ -156,6 +156,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Publish the opened store for in-process readers (DB()) — set only after a clean
 	// open so DB() is nil whenever the subsystem is fail-closed.
 	embeddedDB = db
+	// The API-key resolver lives in the root cloud package, which cannot import this
+	// one (this package imports it), so the store is handed over rather than reached
+	// for. Before this it resolved keys over HTTP against iam.hanzo.svc — a network
+	// round trip this process made to itself, forced by the import direction.
+	cloud.SetIAMStore(db)
 
 	// Seed is NON-FATAL: new-only + idempotent config bootstrap (orgs/apps/providers/
 	// certs) from the SAME init_data.json the standalone iam seeds from. A missing or
@@ -174,6 +179,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := safeMount(app, db); err != nil {
 		log.Error("iam mount failed — serving fail-closed 503 (cloud stays up)", "err", err)
 		embeddedDB = nil // fail-closed: no half-mounted store leaks to in-process readers
+		cloud.SetIAMStore(nil)
 		mountFailClosed(app)
 		return nil
 	}
