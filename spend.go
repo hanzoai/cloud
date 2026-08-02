@@ -237,6 +237,7 @@ var meteredTrees = []string{
 	"/v1/s3/",         // object-storage data plane.
 	"/v1/storage/",    // clients/storage NewResourceMeter(deps, "s3").
 	"/v1/ml/",         // clients/ml NewResourceMeter(deps, "compute").
+	"/v1/risk/",       // apps/risk gates and meters per SCREEN inside each op.
 	"/v1/visor/",      // clients/visor NewResourceMeter(deps, "compute").
 	"/v1/security/",   // clients/security scan fee.
 	"/v1/projects/",   // clients/projects hosting fee.

@@ -3,9 +3,15 @@
 //
 // # What this app owns
 //
-// The NATIVE leaves of /v1/ml — score, learn, state, features, search. Model
-// serving and Kubeflow training keep their own app at /v1/ml/models and
-// /v1/train/*; longest-prefix match separates the two and no route moves.
+// /v1/risk — score, learn, state, features, search. ONE face for deciding and
+// learning, because they are one act: the model IS the decision, and a score is
+// only meaningful against what that organisation's model has learned.
+//
+// It does NOT own /v1/ml. That prefix belongs to the model-SERVING plane
+// (apps/ml): InferenceServices, /v1/ml/models, /v1/ml/models/{name}/predict.
+// Serving a model somebody else trained and learning a model from an
+// organisation's own behaviour are two different products, and putting them
+// under one name would make /v1/ml/models mean two things at once.
 //
 // It is ONE app because the model is IN-PROCESS MUTABLE STATE. If one binary
 // learned and another scored, the two would hold different mass counters and
@@ -32,7 +38,7 @@
 // have different trees.
 //
 // Cross-organisation learning is AGGREGATE-ONLY and it is one table with no
-// tenant column at all (baseline.go): four quantiles of one dimension over one
+// tenant column at all (baseline.go): three interpolated quantiles of one dimension over one
 // day, published only when at least twenty-five organisations contributed. The
 // leak is uncomputable rather than disallowed, and no model reads it — it is
 // published for a human to compare against, never folded into a score.
@@ -88,7 +94,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		// is a fact an operator can act on. A model plane that cannot be built and
 		// pretends otherwise is the failure this whole app exists to avoid.
 		s.State.gap = err.Error()
-		s.Log.Error("model plane unavailable; /v1/ml native leaves will fail closed", "err", err)
+		s.Log.Error("model plane unavailable; every /v1/risk op will fail closed", "err", err)
 	} else {
 		s.State.plane = p
 	}
@@ -105,66 +111,72 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 	// ONE `g := <router>.Group("/prefix")` per line: cmd/zipdoc resolves a group's
 	// prefix by reading that exact assignment form and FAILS the generate rather
 	// than filing prose under a path that does not exist.
-	gml := app.Group("/v1/ml")
-	grisk := app.Group("/v1/risk")
-	// cloud.Bridge FIRST on each group. A typed op receives only a context, so the
-	// validated identity it reads has to be parked there; fiber runs middleware in
+	//
+	// ONE GROUP, AND IT IS /v1/risk. This surface used to mount its leaves under
+	// /v1/ml, which is a prefix a DIFFERENT live product already owns — the
+	// Kubernetes model-SERVING plane at /v1/ml/models and /v1/ml/models/{name}/
+	// predict (apps/ml), with customers on it. Two concepts under one name is the
+	// one thing the naming rule exists to prevent: /v1/ml/models would have meant
+	// "models you serve" and "models that learn" at once. Deciding and learning are
+	// the same act here, so they are one face.
+	g := app.Group("/v1/risk")
+	// cloud.Bridge FIRST. A typed op receives only a context, so the validated
+	// identity it reads has to be parked there; fiber runs middleware in
 	// registration order, so one installed after its leaves never runs.
 	//
-	// cloud.DenyEnvelope beside it on the priced group, for the same
-	// registration-order reason: every op that costs compute gates on the caller's
-	// balance, and the envelope is what makes the refusal the fleet's own nested
-	// {"error":{"code","message"}} 402 rather than a second vocabulary for a
-	// refusal the platform already has words for.
-	gml.Use(cloud.Bridge(), cloud.DenyEnvelope())
-	grisk.Use(cloud.Bridge())
+	// cloud.DenyEnvelope beside it, for the same registration-order reason: every
+	// op that costs compute gates on the caller's balance, and the envelope is what
+	// makes the refusal the fleet's own nested {"error":{"code","message"}} 402
+	// rather than a second vocabulary for a refusal the platform already has words
+	// for.
+	g.Use(cloud.Bridge(), cloud.DenyEnvelope())
 	o := ops{s: s}
 
-	zip.Post(gml, "/score", o.score,
-		zip.WithOperationID("mlScore"),
+	zip.Post(g, "/score", o.score,
+		zip.WithOperationID("riskScore"),
 		zip.WithSummary("Score one event against your organisation's own model"),
-		zip.WithTags("ml"))
-	zip.Post(gml, "/learn", o.learn,
-		zip.WithOperationID("mlLearn"),
+		zip.WithTags("risk"))
+	zip.Post(g, "/learn", o.learn,
+		zip.WithOperationID("riskLearn"),
 		zip.WithSummary("Teach your organisation's own model from its own events"),
-		zip.WithTags("ml"))
-	zip.Get(gml, "/state", o.state,
-		zip.WithOperationID("mlState"),
+		zip.WithTags("risk"))
+	zip.Get(g, "/state", o.state,
+		zip.WithOperationID("riskState"),
 		zip.WithSummary("Report your organisation's model: what it learned, and what it realised"),
-		zip.WithTags("ml"))
-	zip.Put(gml, "/state/appetite", o.appetite,
-		zip.WithOperationID("mlSetAppetite"),
+		zip.WithTags("risk"))
+	zip.Put(g, "/state/appetite", o.appetite,
+		zip.WithOperationID("riskSetAppetite"),
 		zip.WithSummary("Restate the risk appetite, and whether the model is live"),
-		zip.WithTags("ml"))
-	zip.Post(gml, "/state/snapshot", o.snapshot,
-		zip.WithOperationID("mlSnapshot"),
+		zip.WithTags("risk"))
+	zip.Post(g, "/state/snapshot", o.snapshot,
+		zip.WithOperationID("riskSnapshot"),
 		zip.WithSummary("Pin your organisation's learned state so a decision can be reproduced"),
 		zip.WithStatus(http.StatusCreated),
-		zip.WithTags("ml"))
-	zip.Post(gml, "/state/restore", o.restore,
-		zip.WithOperationID("mlRestore"),
+		zip.WithTags("risk"))
+	zip.Post(g, "/state/restore", o.restore,
+		zip.WithOperationID("riskRestore"),
 		zip.WithSummary("Install previously pinned state into your organisation's model"),
-		zip.WithTags("ml"))
-	zip.Get(gml, "/features", o.features,
-		zip.WithOperationID("mlFeatures"),
+		zip.WithTags("risk"))
+	zip.Get(g, "/features", o.features,
+		zip.WithOperationID("riskFeatures"),
 		zip.WithSummary("The feature catalogue: what the model reads, and what your surface carries"),
-		zip.WithTags("ml"))
-	zip.Post(gml, "/search", o.search,
-		zip.WithOperationID("mlSearch"),
+		zip.WithTags("risk"))
+	zip.Post(g, "/search", o.search,
+		zip.WithOperationID("riskSearch"),
 		zip.WithSummary("Search exhaustively for the model shape that fits your own history"),
 		zip.WithStatus(http.StatusAccepted),
-		zip.WithTags("ml"))
-	zip.Get(gml, "/search/:id", o.result,
-		zip.WithOperationID("mlSearchResult"),
+		zip.WithTags("risk"))
+	zip.Get(g, "/search/:id", o.result,
+		zip.WithOperationID("riskSearchResult"),
 		zip.WithSummary("Read back one exhaustive search"),
-		zip.WithTags("ml"))
+		zip.WithTags("risk"))
 
 	// UNTYPED BY DESIGN — a REAL probe answers 503 CARRYING THE DEGRADED REPORT as
 	// its body, which is the whole point of a probe. A typed op reaches a non-2xx
 	// only by returning an error, and zip renders that as its own envelope,
 	// dropping exactly the detail the probe exists to deliver. Held to the closed
 	// list in typed_wire_test.go.
-	grisk.Get("/health", cloud.Handle(s, health))
+	g.Get("/health", cloud.Handle(s, health))
 }
 
 // health is a REAL probe: it reports whether the model plane exists, whether the
@@ -188,11 +200,17 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	res["shelf"] = true
 	res["surface"] = storeReady()
-	// Both are COUNTS and neither names a tenant, so the probe stays a fact about
-	// the process. `evicted` is here because the resident bound is the one bound
-	// whose pressure a tenant cannot see for itself: eviction is lossless, so the
-	// only sign it is happening at all is this number climbing.
-	res["resident"], res["evicted"] = s.State.plane.residents()
+	// COUNTS, and none of them names a tenant, so the probe stays a fact about the
+	// process.
+	//
+	// `evicted` is here because the resident bound is one whose pressure a tenant
+	// cannot see for itself: eviction is lossless, so the only sign it is happening
+	// at all is this number climbing. `strained` is here because the OTHER bound —
+	// a tenant's own aggregates — degrades that tenant silently by construction:
+	// at it, its least-recently-active subject is forgotten and reads as inactive.
+	// A control that switches itself off must be visible from outside.
+	held, built, evicted, strained := s.State.plane.residents()
+	res["resident"], res["built"], res["evicted"], res["strained"] = held, built, evicted, strained
 	return c.JSON(http.StatusOK, res)
 }
 
@@ -219,13 +237,25 @@ func Shutdown(context.Context) error {
 // closure — one binary, one mount, one plane. Same shape as apps/dataroom.
 var mounted *plane
 
-// residents is how many tenants' models are held right now, and how many have
-// been evicted to hold that bound. Both name a COUNT and never a tenant, so the
-// probe reveals nothing about who is using the plane.
-func (p *plane) residents() (held int, evicted int64) {
+// residents is how many tenants' models are held right now, how many residencies
+// have been BUILT, how many have been evicted to hold that bound, and how many of
+// those held are at their OWN aggregate bound and therefore forgetting their own
+// subjects. All four name a COUNT and never a tenant, so the probe reveals
+// nothing about who is using the plane.
+func (p *plane) residents() (held int, built, evicted int64, strained int) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	return len(p.res), p.evicted
+	all := make([]*resident, 0, len(p.res))
+	for _, r := range p.res {
+		all = append(all, r)
+	}
+	built, evicted = p.built, p.evicted
+	p.mu.Unlock()
+	for _, r := range all {
+		if r.vel.strain().Saturated {
+			strained++
+		}
+	}
+	return len(all), built, evicted, strained
 }
 
 // The prose for the one route that is untyped by design. zipdoc lifts prose from
@@ -245,10 +275,14 @@ func init() {
 			"An unreachable event surface is REPORTED and is not a failure. Scoring reads "+
 			"in-memory aggregates and never the warehouse, so a warm that cannot run degrades how "+
 			"much history a model has seen and does not stop it deciding.\n\n"+
-			"It also reports how many organisations' models are resident and how many have been "+
-			"evicted to hold that bound. Eviction is lossless — learned state is written to that "+
+			"It also reports how many organisations' models are resident, how many have been "+
+			"evicted to hold that bound, and how many of the resident ones are at their own "+
+			"aggregate bound. Eviction is lossless — learned state is written to that "+
 			"organisation's own store first and its aggregates rebuild from its own record — so a "+
-			"climbing count is a capacity signal, not a loss.\n\n"+
+			"climbing count is a capacity signal, not a loss. A STRAINED model is different: it "+
+			"has started forgetting its own least-recently-active subjects, and each forgotten "+
+			"subject reads as inactive until it is active again. That is a control degrading, and "+
+			"it is reported here because it is otherwise silent.\n\n"+
 			"It answers about the process, not about a tenant: it takes no organisation and names "+
 			"none.")
 }

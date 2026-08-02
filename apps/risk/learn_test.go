@@ -17,9 +17,30 @@ package risk
 import (
 	"context"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 )
+
+// ob is the tests' own way to build an observation, and it goes through the ONE
+// constructor exactly like production does. A test that could build one another
+// way would be a test of a type the package does not have — and the source test
+// [TestObservation_HasOneConstructor] scans these files too.
+func ob(t *testing.T, id, kind, subject string, usd float64, at time.Time, axes ...string) observation {
+	t.Helper()
+	a := actor{Kind: kind, Subject: subject}
+	if len(axes) > 0 {
+		a.Peer = axes[0]
+	}
+	if len(axes) > 1 {
+		a.Device = axes[1]
+	}
+	o, err := observe(id, a, usd, at)
+	if err != nil {
+		t.Fatalf("observe(%q): %v", id, err)
+	}
+	return o
+}
 
 // stream is a fixed sequence of events, so two organisations can be given
 // IDENTICAL input and any difference in the result is a difference in the model
@@ -27,14 +48,15 @@ import (
 func stream(n int, at time.Time) []observation {
 	out := make([]observation, 0, n)
 	for i := 0; i < n; i++ {
-		out = append(out, observation{
-			ID:      "e_" + itoa(i),
+		o, err := observe("e_"+itoa(i), actor{
 			Kind:    kindAccount,
 			Subject: "u_" + itoa(i%7),
-			USD:     float64(100 + (i*37)%900),
 			Device:  "d_" + itoa(i%3),
-			At:      at.Add(time.Duration(i) * time.Second),
-		})
+		}, float64(100+(i*37)%900), at.Add(time.Duration(i)*time.Second))
+		if err != nil {
+			panic(err)
+		}
+		out = append(out, o)
 	}
 	return out
 }
@@ -105,13 +127,13 @@ func TestModel_LearningIsNotShared(t *testing.T) {
 		t.Fatal("two brands produced one tenant key")
 	}
 	// Touch B first so it exists, then teach only A.
-	if _, err := p.state(b); err != nil {
+	if _, _, err := p.state(b); err != nil {
 		t.Fatalf("state(B): %v", err)
 	}
 	teach(t, p, a, stream(400, time.Now().UTC().Add(-4*time.Hour)))
 
-	sa, _ := p.state(a)
-	sb, _ := p.state(b)
+	sa, _, _ := p.state(a)
+	sb, _, _ := p.state(b)
 	if sa.Learned == 0 {
 		t.Fatal("organisation A learned nothing — the test proves nothing")
 	}
@@ -140,12 +162,12 @@ func TestRestore_RefusesAnotherOrganisationsState(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("pin(A): ok=%v err=%v", ok, err)
 	}
-	if _, err := p.adopt(b, snap); err == nil {
+	if _, _, err := p.adopt(b, snap); err == nil {
 		t.Fatal("organisation B adopted organisation A's learned state")
 	}
 	// ...and A can still adopt its own, so the refusal above is about WHOSE state
 	// it is and not about the state being unusable.
-	if _, err := p.adopt(a, snap); err != nil {
+	if _, _, err := p.adopt(a, snap); err != nil {
 		t.Fatalf("an organisation could not adopt its own snapshot: %v", err)
 	}
 }
@@ -163,7 +185,7 @@ func TestSnapshot_SurvivesARestart(t *testing.T) {
 
 	first := planeAt(t, dir)
 	teach(t, first, k, evs)
-	before, _ := first.state(k)
+	before, _, _ := first.state(k)
 	if before.Learned == 0 {
 		t.Fatal("nothing was learned — the test proves nothing")
 	}
@@ -173,7 +195,7 @@ func TestSnapshot_SurvivesARestart(t *testing.T) {
 
 	second := planeAt(t, dir)
 	defer func() { _ = second.close() }()
-	after, err := second.state(k)
+	after, _, err := second.state(k)
 	if err != nil {
 		t.Fatalf("state after restart: %v", err)
 	}
@@ -194,7 +216,7 @@ func TestAppetite_IsPerOrganisationAndShadowIsTheDefault(t *testing.T) {
 	p := newTestPlane(t)
 	a, b := key(t, brandA, orgA), key(t, brandA, orgB)
 
-	st, err := p.state(a)
+	st, _, err := p.state(a)
 	if err != nil {
 		t.Fatalf("state: %v", err)
 	}
@@ -202,11 +224,11 @@ func TestAppetite_IsPerOrganisationAndShadowIsTheDefault(t *testing.T) {
 		t.Fatal("a brand-new model is LIVE — shadow must be the default, or a model nobody reviewed can refuse a payment")
 	}
 
-	if _, err := p.appetite(a, 0.05, 0.01, true); err != nil {
+	if _, _, err := p.appetite(a, 0.05, 0.01, true); err != nil {
 		t.Fatalf("appetite: %v", err)
 	}
-	sa, _ := p.state(a)
-	sb, _ := p.state(b)
+	sa, _, _ := p.state(a)
+	sb, _, _ := p.state(b)
 	if sa.Config.Appetite.Review != 0.05 || sa.Config.Shadow {
 		t.Fatalf("organisation A's appetite did not take: %+v", sa.Config)
 	}
@@ -223,9 +245,9 @@ func TestAppetite_KeepsWhatWasLearned(t *testing.T) {
 	p := newTestPlane(t)
 	k := key(t, brandA, orgA)
 	teach(t, p, k, stream(400, time.Now().UTC().Add(-4*time.Hour)))
-	before, _ := p.state(k)
+	before, _, _ := p.state(k)
 
-	after, err := p.appetite(k, 0.02, 0.001, false)
+	after, _, err := p.appetite(k, 0.02, 0.001, false)
 	if err != nil {
 		t.Fatalf("appetite: %v", err)
 	}
@@ -242,7 +264,7 @@ func TestSearch_IsDry(t *testing.T) {
 	k := key(t, brandA, orgA)
 	hist := stream(400, time.Now().UTC().Add(-4*time.Hour))
 	teach(t, p, k, hist)
-	before, _ := p.state(k)
+	before, _, _ := p.state(k)
 
 	rep := p.search(context.Background(), k, "srch_test", hist)
 	if len(rep.Trials) == 0 {
@@ -251,7 +273,7 @@ func TestSearch_IsDry(t *testing.T) {
 	if rep.Winner == nil {
 		t.Fatal("the search ranked no winner")
 	}
-	after, _ := p.state(k)
+	after, _, _ := p.state(k)
 	if after.Learned != before.Learned || after.Scored != before.Scored {
 		t.Fatalf("the search moved the LIVE model: learned %d->%d, scored %d->%d",
 			before.Learned, after.Learned, before.Scored, after.Scored)
@@ -280,7 +302,7 @@ func TestSearch_RefusesAnEmptyHistory(t *testing.T) {
 	}
 	// And the accepting path refuses too, rather than starting a run that proves
 	// nothing.
-	if _, err := p.begin(context.Background(), k, 24*time.Hour, nil); err == nil {
+	if _, err := p.begin(context.Background(), k, 24*time.Hour, nil, nil); err == nil {
 		t.Fatal("begin accepted a search over an empty surface")
 	}
 }
@@ -292,15 +314,14 @@ func TestSearch_ReadsOnlyItsOwnHistory(t *testing.T) {
 	probe.reset(true)
 	p := newTestPlane(t)
 	k := key(t, brandA, orgA)
-	now := time.Now().UTC()
 	for i := 0; i < 50; i++ {
 		probe.hold(string(k), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_" + itoa(i%5),
-			"bucket": now.Add(-time.Duration(i) * time.Minute),
+			"bucket": surfaceAt(i + 1),
 			"events": uint32(3), "spend_nano": int64(250_000_000 + i),
 		})
 	}
-	run, err := p.begin(context.Background(), k, 24*time.Hour, nil)
+	run, err := p.begin(context.Background(), k, 24*time.Hour, nil, nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
@@ -322,11 +343,10 @@ func TestWarm_FoldsOnlyThisOrganisationsSurface(t *testing.T) {
 	p := newTestPlane(t)
 	holdFolds(t, p) // this test drives the fold; the plane must not also be folding
 	a, b := key(t, brandA, orgA), key(t, brandA, orgB)
-	now := time.Now().UTC()
 	for i := 0; i < 30; i++ {
 		probe.hold(string(a), map[string]any{
 			"subject_kind": kindAccount, "subject": "u_a",
-			"bucket": now.Add(-time.Duration(i) * time.Minute),
+			"bucket": surfaceAt(i + 1),
 			"events": uint32(2), "spend_nano": int64(100_000_000),
 		})
 	}
@@ -392,4 +412,396 @@ type snapshotView struct {
 	Seed     uint64
 	Learned  int64
 	Ref, Cur [][]float64
+}
+
+// ── the residency, and the three ways it used to go quiet ────────────────────
+
+// TestResident_IsBuiltOnceHoweverManyAskAtOnce: building a residency replays up
+// to [recordRows] of a tenant's own record and allocates a whole ring set and
+// model. Unserialised, N concurrent first touches each did the whole thing and
+// N−1 were thrown away at the end — N × 8 MiB of rings allocated to discard, for
+// free, and every rollout is exactly when every tenant touches at once.
+//
+// Mutation proof: remove the p.opening single flight from plane.resident and
+// `built` below rises with the concurrency.
+func TestResident_IsBuiltOnceHoweverManyAskAtOnce(t *testing.T) {
+	probe.reset(true)
+	dir := t.TempDir()
+	k := key(t, brandA, orgA)
+
+	first := planeAt(t, dir)
+	holdFolds(t, first)
+	teach(t, first, k, stream(2_000, time.Now().UTC().Add(-6*time.Hour)))
+	if err := first.close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	p := planeAt(t, dir)
+	defer func() { _ = p.close() }()
+	holdFolds(t, p)
+	const callers = 32
+	var wg sync.WaitGroup
+	seen := make([]*resident, callers)
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			r, err := p.resident(k)
+			if err != nil {
+				t.Errorf("resident: %v", err)
+				return
+			}
+			seen[i] = r
+		}(i)
+	}
+	wg.Wait()
+	_, built, _, _ := p.residents()
+	if built != 1 {
+		t.Fatalf("%d concurrent first touches of ONE organisation built %d residencies — each one "+
+			"replays that tenant's whole record and allocates its own %d MiB of rings, and %d of them "+
+			"are discarded", callers, built, residentRingBudget>>20, built-1)
+	}
+	for i, r := range seen {
+		if r != seen[0] {
+			t.Fatalf("caller %d was handed a different model from caller 0 — two models for one "+
+				"organisation answer one question two ways", i)
+		}
+	}
+}
+
+// TestFold_AGapIsRetried: the fold is the moat, and it used to be given exactly
+// one chance per residency. A warehouse blip on a tenant's first touch wrote the
+// sentinel with a gap in it, and foldSoon returned early on ANY sentinel — so
+// that organisation's own history was never folded again for the life of its
+// residency, with the reason sitting on its state and nothing acting on it.
+//
+// Mutation proof: set f.again unconditionally false and the second fold below
+// never runs.
+func TestFold_AGapIsRetried(t *testing.T) {
+	probe.reset(false) // the warehouse is down on this tenant's first touch
+	p := newTestPlane(t)
+	holdFolds(t, p) // this test drives every fold; the plane must start none of its own
+	k := key(t, brandA, orgA)
+
+	r, err := p.resident(k)
+	if err != nil {
+		t.Fatalf("resident: %v", err)
+	}
+	if f := letFold(t, p, r); f.Gap == "" {
+		t.Fatalf("the fold reported no gap with the warehouse down: %+v", f)
+	}
+
+	// The warehouse comes back and the tenant has history waiting.
+	probe.reset(true)
+	for i := 0; i < 10; i++ {
+		probe.hold(string(k), map[string]any{
+			"subject_kind": kindAccount, "subject": "u_" + itoa(i),
+			"bucket": surfaceAt(i + 1),
+			"events": uint32(2), "spend_nano": int64(120_000_000),
+		})
+	}
+	// Ordinary traffic: the next touch is what re-arms it.
+	got := letFold(t, p, r)
+	if got.Folded == 0 {
+		t.Fatalf("the fold never ran again after a warehouse blip: %+v — the moat silently "+
+			"never applies to that organisation", got)
+	}
+	if got.Gap != "" {
+		t.Fatalf("the retry still reports a gap: %+v", got)
+	}
+
+	// ...and a fold that SUCCEEDED is not re-armed, which is the other half of the
+	// rule and the reason a plain "always retry" would not do: without it every
+	// touch of every resident re-folds, and the ticket pool is the warehouse's only
+	// protection from that.
+	p.mu.Lock()
+	again := p.folded[k].again
+	p.mu.Unlock()
+	if again {
+		t.Fatal("a clean fold re-armed itself — every touch would re-fold this organisation")
+	}
+}
+
+// TestFold_MarksOnlyWhatTheSurfaceCanHold: the fold watermark may name only what
+// the surface is known to CONTAIN.
+//
+// The rollup deliberately stops [rollLag] behind the present, because the source
+// planes are written asynchronously and the newest minutes are not complete. The
+// fold used to read and mark to `now` regardless — 10 to 15 minutes past anything
+// the rollup had written. The watermark then said "folded through now" about
+// buckets that did not exist yet; the next rollup wrote them; and because the
+// mark was already past them the fold never came back. Every fold cycle dropped
+// that organisation's most recent history, permanently, while the model went on
+// reporting itself warm — which is the silent-quiet failure this app exists to
+// refuse, on a schedule.
+//
+// Mutation proof: in [plane.warm] set `end := now` instead of `end := horizon(now)`
+// and the late bucket below is never folded.
+func TestFold_MarksOnlyWhatTheSurfaceCanHold(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+
+	base := time.Now().UTC().Truncate(featureBucket)
+	clock := base
+	p.now = func() time.Time { return clock }
+
+	// A fold over an EMPTY surface. It still moves the mark — the question this
+	// test asks is HOW FAR.
+	if n, err := p.warm(context.Background(), k); err != nil || n != 0 {
+		t.Fatalf("warm over an empty surface read %d, err=%v", n, err)
+	}
+	r, err := p.resident(k)
+	if err != nil {
+		t.Fatalf("resident: %v", err)
+	}
+	r.mu.Lock()
+	warmed := r.warmed
+	r.mu.Unlock()
+	if warmed.After(horizon(base)) {
+		t.Fatalf("the fold marked %s, past the surface's horizon of %s — it has claimed buckets the rollup is not allowed to have written",
+			warmed, horizon(base))
+	}
+
+	// The rollup now writes the bucket that was still filling when that fold ran.
+	// It is in the PAST relative to the fold that already happened, which is the
+	// ordinary case and not an exotic one.
+	late := horizon(base)
+	probe.hold(string(k), map[string]any{
+		"subject_kind": kindAccount, "subject": "u_late", "bucket": late,
+		"events": uint32(3), "spend_nano": int64(100_000_000),
+	})
+	clock = base.Add(2 * rollLag) // ...and time moves on, so that bucket is now inside the horizon
+
+	n, err := p.warm(context.Background(), k)
+	if err != nil {
+		t.Fatalf("warm: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("the fold read %d buckets, want 1 — the watermark was advanced past a bucket the "+
+			"rollup had not written yet, so that organisation's history is gone and nothing says so", n)
+	}
+}
+
+// letFold releases ONE fold ticket, arms this tenant's fold the way a request
+// does, waits for the report, and takes the ticket back.
+//
+// Every other ticket stays held by [holdFolds], so the fold this drives is the
+// only one in the process. Driving it through [plane.foldSoon] rather than
+// calling [plane.fold] directly is the point: the ARMING RULE is what is under
+// test, and calling the fold by hand would step over it.
+func letFold(t *testing.T, p *plane, r *resident) fold {
+	t.Helper()
+	select {
+	case <-p.folds:
+	default:
+		t.Fatal("no fold ticket to release")
+	}
+	p.mu.Lock()
+	p.foldSoon(r)
+	armed := p.folded[r.key]
+	p.mu.Unlock()
+	if armed.Gap != foldRunning {
+		t.Fatalf("the fold was not armed; foldSoon declined to retry: %+v", armed)
+	}
+	f := awaitFold(t, p, r.key, func(f fold) bool { return f.Gap != foldRunning })
+	// Back to "every ticket held" — which is also how this waits for the goroutine
+	// to have finished with it.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		select {
+		case p.folds <- struct{}{}:
+			return f
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the fold never released its ticket")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// awaitFold waits for the plane's own background fold to reach a state. The
+// fold is a goroutine on the plane's waitgroup, and that group also carries the
+// scheduler and the snapshot sweeper — which run for the life of the plane — so
+// a test cannot simply Wait on it.
+func awaitFold(t *testing.T, p *plane, k tenant, done func(fold) bool) fold {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		f := p.surface(k)
+		if done(f) {
+			return f
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the fold never reached the expected state: %+v", f)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// TestFold_APartialFoldDoesNotReTeach: a fold reads up to maxRows under a
+// two-minute deadline, so stopping partway is the ORDINARY case. The watermark
+// used to move only after the LAST row, so every retry re-taught everything the
+// last attempt had already applied — and the masses stopped describing the
+// traffic and started describing how often the fold was interrupted.
+//
+// Mutation proof: move the r.warmed advance back out of the loop (set it only
+// after the last row) and the model below learns the early buckets twice.
+func TestFold_APartialFoldDoesNotReTeach(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	// Enough buckets that the cancellation below lands MID-LOOP with three orders
+	// of magnitude of margin: the watcher reacts in tens of microseconds and the
+	// remaining buckets are milliseconds of work.
+	const buckets = 5_000
+	for i := 0; i < buckets; i++ {
+		probe.hold(string(k), map[string]any{
+			"subject_kind": kindAccount, "subject": "u_" + itoa(i%4),
+			"bucket": surfaceAt(i + 1),
+			"events": uint32(1), "spend_nano": int64(1_000_000),
+		})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	stopAfter(t, p, k, cancel, 100)
+	applied, err := p.warm(ctx, k)
+	if err == nil {
+		t.Fatalf("the fold ran to completion (%d of %d) — this test proves nothing unless the fold "+
+			"is interrupted", applied, buckets)
+	}
+	if applied == 0 {
+		t.Fatal("the fold was interrupted before it applied anything — this test proves nothing " +
+			"unless some buckets were applied and some were not")
+	}
+	// The retry, unbounded this time.
+	rest, err := p.warm(context.Background(), k)
+	if err != nil {
+		t.Fatalf("the retry failed: %v", err)
+	}
+	st, _, err := p.state(k)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if st.Learned > int64(buckets) {
+		t.Fatalf("a %d-bucket surface taught the model %d times (%d applied, then %d) — a partial fold "+
+			"re-teaches everything it already applied, and its masses count the interruptions",
+			buckets, st.Learned, applied, rest)
+	}
+	if st.Learned < int64(buckets) {
+		t.Fatalf("a %d-bucket surface taught the model only %d times — the partial fold lost the "+
+			"buckets it had not reached", buckets, st.Learned)
+	}
+}
+
+// stopAfter cancels once the tenant's model has learned n events, which is how a
+// deadline lands mid-fold.
+func stopAfter(t *testing.T, p *plane, k tenant, cancel context.CancelFunc, n int) {
+	t.Helper()
+	r, err := p.resident(k)
+	if err != nil {
+		t.Fatalf("resident: %v", err)
+	}
+	stop := make(chan struct{})
+	t.Cleanup(func() { close(stop) })
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			r.mu.Lock()
+			learned := r.mod.State(string(k)).Learned
+			r.mu.Unlock()
+			if learned >= int64(n) {
+				cancel()
+				return
+			}
+			time.Sleep(50 * time.Microsecond)
+		}
+	}()
+}
+
+// TestMasses_SurviveAnUngracefulStop: the learned state used to be written down
+// only at shutdown — and a shutdown hook runs on the graceful path and on no
+// other. An OOM kill, a lost node or a forced delete threw away everything a
+// long-lived resident had learned, and a model that comes back empty REFUSES to
+// score, which reads as clean to anything that does not check the refusal.
+//
+// This test never calls close: the second plane reads what the first wrote while
+// it was running.
+//
+// Mutation proof: delete the saveEvery watermark in plane.learn and the second
+// plane comes back with nothing.
+func TestMasses_SurviveAnUngracefulStop(t *testing.T) {
+	probe.reset(true)
+	dir := t.TempDir()
+	k := key(t, brandA, orgA)
+
+	p := planeAt(t, dir)
+	holdFolds(t, p)
+	teach(t, p, k, stream(saveEvery+50, time.Now().UTC().Add(-3*time.Hour)))
+	before, _, err := p.state(k)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if before.Learned == 0 {
+		t.Fatal("the first plane learned nothing — the test proves nothing")
+	}
+	// NO close(). The pod was killed: the context is cancelled and the files are
+	// released, and nothing writes a shutdown snapshot.
+	p.stop()
+	if err := p.shelf.CloseAll(); err != nil {
+		t.Fatalf("release the files: %v", err)
+	}
+
+	second := planeAt(t, dir)
+	defer func() { _ = second.close() }()
+	holdFolds(t, second)
+	after, _, err := second.state(k)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if after.Learned == 0 {
+		t.Fatalf("an ungraceful stop lost every one of %d learned events — the model comes back "+
+			"refusing to score, which reads as clean", before.Learned)
+	}
+	if after.Learned < int64(saveEvery) {
+		t.Fatalf("an ungraceful stop kept %d of %d learned events, which is more than the %d-event "+
+			"watermark allows to be at risk", after.Learned, before.Learned, saveEvery)
+	}
+}
+
+// TestRestore_CannotChooseTheGeometry: the engine regenerates a model's trees
+// from the snapshot's SEED, so a caller that supplies the seed chooses WHERE THE
+// REGIONS ARE — the one thing a snapshot is supposed not to disclose, arriving
+// through the other door. The geometry is this plane's, minted here and carried
+// with the tenant's own state.
+//
+// Mutation proof: delete the seed comparison in plane.install and the tampered
+// snapshot below is adopted.
+func TestRestore_CannotChooseTheGeometry(t *testing.T) {
+	probe.reset(true)
+	p := newTestPlane(t)
+	holdFolds(t, p)
+	k := key(t, brandA, orgA)
+	teach(t, p, k, stream(120, time.Now().UTC().Add(-2*time.Hour)))
+	snap, ok, err := p.pin(k)
+	if err != nil || !ok {
+		t.Fatalf("pin: %v (ok=%v)", err, ok)
+	}
+	// Its own state, unchanged, is adoptable.
+	if _, _, err := p.adopt(k, snap); err != nil {
+		t.Fatalf("an organisation could not adopt its own snapshot: %v", err)
+	}
+	// The same masses under a geometry the caller picked is not.
+	chosen := snap
+	chosen.Seed = snap.Seed ^ 0xdeadbeef
+	if _, _, err := p.adopt(k, chosen); err == nil {
+		t.Fatal("a caller chose its model's tree geometry — which is choosing where the dense " +
+			"regions are, and therefore where activity can be hidden")
+	}
 }

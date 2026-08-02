@@ -124,7 +124,7 @@ func TestFeatureRead_ForeignSubjectReturnsZeroRows(t *testing.T) {
 	a := key(t, brandA, orgA)
 	b := key(t, brandA, orgB)
 	probe.hold(string(a), map[string]any{
-		"subject_kind": kindAccount, "subject": "u_secret", "bucket": time.Now().UTC(),
+		"subject_kind": kindAccount, "subject": "u_secret", "bucket": surfaceAt(1),
 		"events": uint32(9), "spend_nano": int64(1_000_000_000),
 	})
 
@@ -155,7 +155,7 @@ func TestFeatureRead_TwoBrandsAreTwoTenants(t *testing.T) {
 		t.Fatal("two brands produced one tenant key")
 	}
 	probe.hold(string(ha), map[string]any{
-		"subject_kind": kindPerson, "subject": "p_1", "bucket": time.Now().UTC(), "events": uint32(3),
+		"subject_kind": kindPerson, "subject": "p_1", "bucket": surfaceAt(1), "events": uint32(3),
 	})
 	end := time.Now().UTC()
 	got, err := rows(context.Background(), za, query{start: end.Add(-time.Hour), end: end})
@@ -424,7 +424,7 @@ func TestDictionary_ReportsBlindDimensionsHonestly(t *testing.T) {
 	probe.reset(true)
 	k := key(t, brandA, orgA)
 	probe.hold(string(k), map[string]any{
-		"subject_kind": kindPerson, "subject": "p_1", "bucket": time.Now().UTC(),
+		"subject_kind": kindPerson, "subject": "p_1", "bucket": surfaceAt(1),
 		"events": uint32(4), "sessions": uint32(1),
 	})
 	end := time.Now().UTC()
@@ -522,7 +522,7 @@ func TestSearch_RollsBeforeItReadsItsHistory(t *testing.T) {
 			At: now.Add(-time.Duration(i+1) * 20 * time.Minute), Spend: 100_000_000,
 		})
 	}
-	run, err := p.begin(context.Background(), k, 24*time.Hour, nil)
+	run, err := p.begin(context.Background(), k, 24*time.Hour, nil, nil)
 	if err != nil {
 		t.Fatalf("the first search over an unrolled surface: %v", err)
 	}
