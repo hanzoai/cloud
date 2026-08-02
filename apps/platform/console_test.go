@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -17,7 +16,7 @@ import (
 // cluster is touched (fakeK8s / in-memory dynamic client).
 func mountConsole(t *testing.T) (*cloud.Service[state], *zip.App) {
 	t.Helper()
-	store, err := openStore(filepath.Join(t.TempDir(), "platform.db"))
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

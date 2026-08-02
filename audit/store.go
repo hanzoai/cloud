@@ -34,12 +34,12 @@ import (
 	"sync"
 	"time"
 
-	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
-	// the "sqlite" database/sql name under both build tags (cgo →
-	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
-	// modernc directly instead would double-register "sqlite" under CGO and
-	// panic at init. Blank import registers the driver.
-	"github.com/hanzoai/cloud/cek"
+	// basedb opens the chain encrypted at rest, keyed from this process's master
+	// and the name below. github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver
+	// it opens through; importing modernc directly instead would double-register
+	// "sqlite" under CGO and panic at init. Blank import registers the driver.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -104,17 +104,20 @@ type Recorder struct {
 // the cloud wiring adapts luxlog to it.
 type CheckpointFunc func(cp Checkpoint)
 
-// Open opens (creating if needed) the append-only audit DB at path and recovers
-// the chain head from it, so a restart continues the SAME chain rather than
-// forking a new one. path may be ":memory:" for tests. mirror may be nil.
+// Open opens (creating if needed) the append-only audit chain named by subsystem
+// under dir, and recovers the chain head from it, so a restart continues the SAME
+// chain rather than forking a new one. mirror may be nil.
 //
-// the hanzoai/sqlite "sqlite" driver; MaxOpenConns(1) serializes every statement against
-// the file lock — the same single-writer discipline pricing/provisioning use,
-// here doubling as the chain's serialization guarantee.
-func Open(path string, mirror Mirror) (*Recorder, error) {
-	db, err := cek.Open(cek.Global, path)
+// The trail belongs to the DEPLOYMENT and not to any tenant, so it is keyed under
+// the system namespace. Which chain — one process's — is the subsystem.
+//
+// MaxOpenConns(1) serializes every statement against the file lock — the same
+// single-writer discipline pricing/provisioning use, here doubling as the chain's
+// serialization guarantee.
+func Open(dir, subsystem string, mirror Mirror) (*Recorder, error) {
+	db, err := basedb.Open(namespace.System(), subsystem, dir)
 	if err != nil {
-		return nil, fmt.Errorf("audit: open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("audit: open %s: %w", subsystem, err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

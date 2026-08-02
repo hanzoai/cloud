@@ -21,6 +21,7 @@ func main() {
 		Name:     "iam",
 		Price:    cloud.Free,
 		Mount:    iam.Mount,
+		Shutdown: cloud.CtxShutdown(iam.Shutdown),
 		Prefixes: manifest.PrefixesFor("iam"),
 	}}, []string{"iam"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

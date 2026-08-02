@@ -8,27 +8,30 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
-	// The ONE "sqlite" driver, kept registered for cek's no-key plaintext fallback.
+	// basedb is the ONE opener: the database is born encrypted under the key cek
+	// derives from the process master and this namespace.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
+	// The ONE "sqlite" driver.
 	_ "github.com/hanzoai/sqlite"
 )
 
 // errNotFound is mapped to 404 by handlers.
 var errNotFound = errors.New("destinations: not found")
 
-// Store is the destinations database. ONE SQLite file ({DataDir}/destinations.db)
-// holds every org's connected destinations; tenant isolation is the `org` column,
-// enforced on EVERY query (the ads/integrations pattern). The row holds only the
-// NON-SECRET config (measurement/pixel ids) as JSON — the API secret lives in KMS,
-// never here. MaxOpenConns(1) serializes writes against the single-writer file.
+// Store is the destinations database. ONE SQLite file — the system namespace's
+// "destinations" — holds every org's connected destinations; tenant isolation is
+// the `org` column, enforced on EVERY query (the ads/integrations pattern). The
+// row holds only the NON-SECRET config (measurement/pixel ids) as JSON — the API
+// secret lives in KMS, never here. MaxOpenConns(1) serializes writes against the single-writer file.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "destinations", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open destinations store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

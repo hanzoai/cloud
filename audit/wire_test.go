@@ -44,7 +44,7 @@ func TestToWire_MapsEveryField(t *testing.T) {
 }
 
 func TestQuery_ResourceIDFilter(t *testing.T) {
-	rec, err := Open(":memory:", nil)
+	rec, err := Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

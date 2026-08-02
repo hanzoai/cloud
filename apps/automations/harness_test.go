@@ -93,12 +93,12 @@ func derivedTools(app *zip.App) []string {
 	return names
 }
 
-// newAppWithAudit mounts the subsystem with a REAL in-memory audit recorder so a
-// test can read the tamper-evident trail back and assert outcomes (LOW-1) and
+// newAppWithAudit mounts the subsystem with a REAL audit recorder so a test can
+// read the tamper-evident trail back and assert outcomes (LOW-1) and
 // exactly-once run bookkeeping (MED-1). Returns the recorder for querying.
 func newAppWithAudit(t *testing.T) (*zip.App, *audit.Recorder) {
 	t.Helper()
-	rec, err := audit.Open(":memory:", nil)
+	rec, err := audit.Open(t.TempDir(), "audit", nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}
@@ -173,7 +173,7 @@ func reqRaw(t *testing.T, app *zip.App, path, org string, raw string) httpResult
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(t.TempDir() + "/automations.db")
+	s, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

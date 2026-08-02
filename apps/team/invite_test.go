@@ -65,7 +65,7 @@ func TestSendInviteGuestOverCapObserved(t *testing.T) {
 	const inviteeSub = "113d4dd4-2486-40de-be2b-88d6e3e0b718"
 	iamSrv := inviteIAM(t, org, inviteeSub)
 
-	store, err := openAccountStore(t.TempDir() + "/account.db")
+	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestSendInviteGuestInfraErrorAdmits(t *testing.T) {
 	const inviteeSub = "113d4dd4-2486-40de-be2b-88d6e3e0b718"
 	iamSrv := inviteIAM(t, org, inviteeSub)
 
-	store, err := openAccountStore(t.TempDir() + "/account.db")
+	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

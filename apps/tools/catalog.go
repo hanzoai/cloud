@@ -17,7 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -37,8 +38,8 @@ import (
 // upstream fields, replaced wholesale on every sync, and the CURATION fields,
 // which a sync never touches.
 //
-// One store, the shared discipline: one SQLite file under DataDir, opened through
-// cek (encrypted at rest wherever the build can encrypt). Unlike every other store
+// One store, the shared discipline: one SQLite file under DataDir, born encrypted
+// under its own derived key. Unlike every other store
 // in this package it has NO org column, and that is the point — a catalog is the
 // same for everyone, which is exactly why an org's own enablement of an entry
 // lives in the org-scoped store instead.
@@ -164,11 +165,11 @@ type CatalogStore struct {
 	http *http.Client
 }
 
-// OpenCatalogStore opens (and migrates) the catalog at path.
-func OpenCatalogStore(path string) (*CatalogStore, error) {
-	db, err := cek.Open(cek.Global, path)
+// OpenCatalogStore opens (and migrates) the catalog under dir.
+func OpenCatalogStore(dir string) (*CatalogStore, error) {
+	db, err := basedb.Open(namespace.System(), "tools-catalog", dir)
 	if err != nil {
-		return nil, fmt.Errorf("tools: open catalog store %q: %w", path, err)
+		return nil, fmt.Errorf("tools: open catalog store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON"} {

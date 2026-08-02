@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -62,9 +61,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("compliance.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("compliance.Mount: data dir: %w", err)
-	}
 	provider, err := idv.FromConfig(kmsGetter(deps), os.Getenv)
 	if err != nil {
 		return fmt.Errorf("compliance.Mount: idv provider: %w", err)
@@ -77,7 +73,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("compliance.Mount: idv webhook: %w", err)
 	}
-	store, err := openStore(filepath.Join(deps.DataDir, "compliance.db"))
+	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("compliance.Mount: open store: %w", err)
 	}

@@ -7,7 +7,7 @@ import (
 )
 
 // Durable, provider-keyed event de-duplication on the existing integrations Store
-// (same {DataDir}/integrations.db). The table is created in the store's migrate()
+// (the same "integrations" store). The table is created in the store's migrate()
 // (store.go) — fail-loud at Mount, one place. It exists because an agent turn is
 // BILLED: a platform retry (Slack re-delivers on a non-2xx; Telegram re-delivers on
 // a non-2xx; Discord retries interactions; Teams retries activities) must never

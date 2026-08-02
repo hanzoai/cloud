@@ -2,11 +2,15 @@ package prompts
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/cek"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/basedb"
+	// devmaster keys this test binary: cek opens nothing without a master and a
+	// test process has no KMS.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/namespace"
 )
 
 // TestMigrateSelfHealsFromLegacyPromptSchema reproduces the removed
@@ -15,9 +19,11 @@ import (
 // List/Upsert work instead of 500'ing "no such column: id" (the live 1.786.5
 // regression on the persisted PVC).
 func TestMigrateSelfHealsFromLegacyPromptSchema(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "prompts.db")
+	// Seeded at the SAME (namespace, subsystem, dir) openStore uses, so the two
+	// opens below are the SAME file.
+	dir := t.TempDir()
 
-	legacy, err := cek.Open(cek.Global, path)
+	legacy, err := basedb.Open(namespace.System(), "prompts", dir)
 	if err != nil {
 		t.Fatalf("open legacy: %v", err)
 	}
@@ -33,7 +39,7 @@ func TestMigrateSelfHealsFromLegacyPromptSchema(t *testing.T) {
 	}
 	_ = legacy.Close()
 
-	s, err := openStore(path) // opens the SAME file — must self-heal, not error
+	s, err := openStore(dir) // opens the SAME file — must self-heal, not error
 	if err != nil {
 		t.Fatalf("openStore over legacy file: %v", err)
 	}
@@ -57,7 +63,7 @@ func TestMigrateSelfHealsFromLegacyPromptSchema(t *testing.T) {
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(filepath.Join(t.TempDir(), "prompts.db"))
+	s, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

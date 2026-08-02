@@ -22,7 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -30,10 +31,9 @@ func TestShareability_ReaderSharesLiveWriterStore(t *testing.T) {
 	requireSharedStore(t)
 
 	dir := t.TempDir()
-	path := dir + "/audit.db"
 
 	// Writer: the real serialized Recorder (WAL, MaxOpenConns(1)).
-	w, err := Open(path, nil)
+	w, err := Open(dir, "audit", nil)
 	if err != nil {
 		t.Fatalf("writer Open: %v", err)
 	}
@@ -55,12 +55,12 @@ func TestShareability_ReaderSharesLiveWriterStore(t *testing.T) {
 
 	// Reader: a SECOND, independent connection opened READ-ONLY against the SAME
 	// files while the writer appends. This is what a reader-role pod does.
-	// Opened through cek: the store is encrypted at rest, so a bare sql.Open has no
-	// key and cannot read it. cek has no read-only mode, so this is a second RW
-	// handle that only ever reads — it still proves the reader sees the live
+	// Opened the same keyed way: the store is encrypted at rest, so a bare sql.Open
+	// has no key and cannot read it. There is no read-only mode, so this is a second
+	// RW handle that only ever reads — it still proves the reader sees the live
 	// writer's committed records, which is the claim, but it does not by itself
 	// prove the reader takes no write lock.
-	ro, err := cek.Open(cek.Global, path)
+	ro, err := basedb.Open(namespace.System(), "audit", dir)
 	if err != nil {
 		t.Fatalf("reader Open: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestShareability_ReaderSharesLiveWriterStore(t *testing.T) {
 
 	// "Promotion": a fresh RW opener (the reader taking over) recovers the head
 	// from disk == the writer's last synchronously-persisted record. No fork.
-	promoted, err := Open(path, nil)
+	promoted, err := Open(dir, "audit", nil)
 	if err != nil {
 		t.Fatalf("promotion RW re-open: %v", err)
 	}

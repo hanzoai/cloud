@@ -4,10 +4,10 @@ package social
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 )
 
 // TestMigrateAddsMediaColumnToOldPosts is the regression for a social_posts table
@@ -19,14 +19,15 @@ import (
 // migrate-on-open is the ONLY upgrade path (no hand-patch). Mirrors marketing's
 // store_migrate_test.go for the scheduled_at column.
 func TestMigrateAddsMediaColumnToOldPosts(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "social.db")
+	dir := t.TempDir()
 
 	// Seed a prod-shaped OLD DB: social_posts WITH the publish-state columns but
 	// WITHOUT media, plus an existing row — exactly what a pre-media prod deployment
-	// holds. Written through cek so the on-disk format matches what openStore reads.
-	raw, err := cek.Open(cek.Global, path)
+	// holds. Seeded into the SAME database openStore opens: same namespace, same
+	// subsystem, same directory.
+	raw, err := basedb.Open(namespace.System(), "social", dir)
 	if err != nil {
-		t.Fatalf("cek.Open (seed old db): %v", err)
+		t.Fatalf("basedb.Open (seed old db): %v", err)
 	}
 	if _, err := raw.Exec(`CREATE TABLE social_posts (
   id           TEXT PRIMARY KEY,
@@ -52,7 +53,7 @@ func TestMigrateAddsMediaColumnToOldPosts(t *testing.T) {
 
 	// Open through the real store: migrate() must ADD the media column to the existing
 	// table (idempotent — swallows "duplicate column name" on a fresh DB).
-	s, err := openStore(path)
+	s, err := openStore(dir)
 	if err != nil {
 		t.Fatalf("openStore (migrate must upgrade old table): %v", err)
 	}
