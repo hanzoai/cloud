@@ -215,7 +215,7 @@ func TestPathTraversal_CannotEscapeEmbedFS(t *testing.T) {
 		// Belt-and-suspenders: the body must never contain source we know lives
 		// outside the embed (go.mod's module line, serve.go's package clause).
 		if bytes.Contains(body, []byte("module github.com/hanzoai/cloud")) ||
-			bytes.Contains(body, []byte("func Serve(")) {
+			bytes.Contains(body, []byte("func Listen(")) {
 			t.Errorf("GET %s leaked repo source outside the embed FS", evil)
 		}
 	}

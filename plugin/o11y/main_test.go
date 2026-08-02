@@ -1,7 +1,7 @@
 package main
 
 // The o11y app is the ONE app binary that composes its own root instead of going
-// through cloud.Serve, and the host in front of it installs no middleware. That
+// through cloud.Listen, and the host in front of it installs no middleware. That
 // combination is how its three prefixes — /v1/o11y, /v1/sentry and, the one a
 // browser reads, /v1/summary — became the only public surface answering 200 with
 // no Access-Control-Allow-Origin: the browser received the status document and
