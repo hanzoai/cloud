@@ -16,6 +16,16 @@
 // which tenant space its org lands in, which is the collision qualification
 // exists to prevent, arrived at from the other side.
 //
+// THE BRAND HALF IS CANONICAL AND REGISTERED, and both halves of that are
+// load-bearing. `hanzo` and `Hanzo` are one brand and must be one key, or a
+// deployment started with CLOUD_BRAND=Hanzo reads a tenant nobody ever wrote.
+// And a brand no registry vouches for mints nothing at all: the planes that
+// WRITE the surfaces read here (apps/risk's rollup) already refuse an
+// unregistered brand, so a mint that accepted one would key rows under a tenant
+// the writer can never produce — a reader and a writer disagreeing about whose a
+// row is, which is the same defect as a cross-tenant read with the sign flipped.
+// [brand.Registered] is the one registry both sides ask.
+//
 // WHY [Key] IS A STRUCT AND NOT A STRING. Its single field is unexported, so:
 // no other package can write a Key literal, encoding/json cannot decode one (it
 // has no exported field to decode into), and therefore no request body, query
@@ -32,9 +42,11 @@ package tenant
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/brand"
 	"github.com/zap-proto/zip"
 )
 
@@ -81,22 +93,53 @@ func (k Key) Org() string {
 	return org
 }
 
+// canon is the key's brand half: lower-cased, trimmed, and REGISTERED. It is one
+// function so the boot check, the per-request mint and the shape validator cannot
+// drift from each other, and so there is exactly one answer to "what is the brand
+// half of a key" in the fleet.
+func canon(id string) (string, error) {
+	id = strings.ToLower(strings.TrimSpace(id))
+	switch {
+	case id == "":
+		return "", zip.ErrForbidden("no brand is configured, so nothing vouches for this tenant")
+	case !brand.Registered(id):
+		// A brand the registry does not carry is not a brand: it has no issuer, so
+		// nothing signs for its orgs, and the planes that write these surfaces
+		// already refuse it. Minting one here would file rows under a tenant the
+		// writer can never produce.
+		return "", zip.ErrForbidden("this deployment's brand is not one the registry vouches for, so it has no tenants")
+	}
+	return id, nil
+}
+
+// Vouches reports whether id names a brand this process can mint keys under, as
+// an error a boot path can print. Derived from [canon], so a deployment that
+// would 403 every request learns it once at mount instead of once per caller.
+func Vouches(id string) error {
+	_, err := canon(id)
+	return err
+}
+
 // Mint builds the key from the deployment's brand and a validated org. It is THE
 // mint.
 //
 // Every branch below refuses to serve rather than falling back, because every
-// fallback available is a cross-tenant one: an empty brand puts two brands in one
-// space, an empty org names no tenant at all, and an org containing the separator
-// is not readable back to the institution it names (`zoo/lux/acme` does not say
-// whose it is).
-func Mint(brand, org string) (Key, error) {
-	brand = strings.TrimSpace(brand)
+// fallback available is a cross-tenant one: an unvouched brand puts rows under a
+// tenant no writer can produce, an empty org names no tenant at all, and an org
+// containing the separator is not readable back to the institution it names
+// (`zoo/lux/acme` does not say whose it is).
+//
+// The brand half is CANONICALISED, never merely trimmed. A case fold here is not
+// a niceness: `Hanzo/acme` and `hanzo/acme` would be two tenant spaces for one
+// business, and whichever spelling a deployment happened to be started with would
+// decide which of them it could see.
+func Mint(id, org string) (Key, error) {
+	b, err := canon(id)
+	if err != nil {
+		return Key{}, err
+	}
 	org = strings.TrimSpace(org)
 	switch {
-	case brand == "":
-		return Key{}, zip.ErrForbidden("no brand is configured, so nothing vouches for this tenant")
-	case strings.Contains(brand, Sep):
-		return Key{}, zip.ErrForbidden("the configured brand is not a single label")
 	case org == "":
 		return Key{}, zip.ErrForbidden("no org, so the request acts for no tenant")
 	case org == Public:
@@ -104,15 +147,19 @@ func Mint(brand, org string) (Key, error) {
 	case strings.Contains(org, Sep):
 		return Key{}, zip.ErrForbidden("org contains the tenant separator, so the tenant it names is not readable back")
 	}
-	return Key{s: brand + Sep + org}, nil
+	return Key{s: b + Sep + org}, nil
 }
 
-// Qualified reports whether k is a key Mint would have produced for brand.
+// Qualified reports whether k is a key Mint would have produced for id.
 // Derived from Mint rather than restated, so there is ONE definition of the shape
 // and a change to it cannot leave a validator behind.
-func Qualified(brand string, k Key) bool {
+func Qualified(id string, k Key) bool {
 	b, org, found := strings.Cut(k.s, Sep)
-	if !found || b != strings.TrimSpace(brand) {
+	if !found {
+		return false
+	}
+	want, err := canon(id)
+	if err != nil || b != want {
 		return false
 	}
 	again, err := Mint(b, org)
@@ -125,10 +172,29 @@ func Qualified(brand string, k Key) bool {
 // FAIL CLOSED off the HTTP path. A CLI LocalInvoke has no request, so there is no
 // validated principal and no tenant to act for — the same 403 a forged X-Org-Id
 // gets, from the same line, with no second gate to keep in sync.
-func Of(ctx context.Context, brand string) (Key, error) {
+//
+// TWO FACTS, COMPARED. The brand half is the DEPLOYMENT's, because that is the
+// value the planes writing these surfaces key by. But which brand's IAM actually
+// vouched for the caller is a SERVER-OBSERVED fact of its own — resolved from the
+// token's verified `iss` — and cloud trusts every white-label brand's issuer, so
+// the two can legitimately differ. When they do, this refuses: minting `hanzo/acme`
+// for an org whose only attestation came from lux.id puts two unrelated businesses
+// in one key space, which is precisely what qualification exists to prevent. A
+// principal with no issuer to resolve (an hk-/sk- key this deployment's own IAM
+// issued) carries no second fact, and nothing is compared.
+func Of(ctx context.Context, deployment string) (Key, error) {
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return Key{}, zip.ErrForbidden("no validated principal")
 	}
-	return Mint(brand, org)
+	k, err := Mint(deployment, org)
+	if err != nil {
+		return Key{}, err
+	}
+	if vouched, ok := principal.BrandFrom(ctx); ok && strings.ToLower(strings.TrimSpace(vouched)) != k.Brand() {
+		return Key{}, zip.ErrForbidden(fmt.Sprintf(
+			"this token was minted by the %s brand's IAM and this deployment serves %s; one brand's org is not the other's",
+			vouched, k.Brand()))
+	}
+	return k, nil
 }
