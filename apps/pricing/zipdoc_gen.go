@@ -148,6 +148,9 @@ func init() {
 			"pricingProviderList.updated":   "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
 		},
 	})
+	zip.Describe("GET /v1/pricing/services", zip.Doc{
+		Description: "Returns the managed-service rate cards — Search, Crawl,\nVector, Console and Managed Services — each with its own tiers, and some with\nusage rates or a comparison table. It is the section as authored, un-gated.\n\nThese are DISPLAY rate cards: what a product costs, not what a plan grants. No\nentitlement or limit fields ride here, so nothing can bill off them.",
+	})
 	zip.Describe("GET /v1/pricing/subscriptions", zip.Doc{
 		Description: "Returns the API subscription plans — the account-level\ntiers a customer subscribes to, each with its monthly and annual price,\nincluded credit, rate limits and feature list.",
 		Fields: map[string]string{
