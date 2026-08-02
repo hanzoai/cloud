@@ -15,6 +15,8 @@ package risk
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"reflect"
 	"regexp"
 	"strings"
@@ -206,8 +208,7 @@ func TestBaseline_RefusesBelowKAnon(t *testing.T) {
 			"q10": 1.0, "q50": 2.0, "q90": 3.0,
 			"orgs": uint32(kAnonOrgs), "n": uint64(kAnonRows)},
 	}
-	// The baseline read binds the window first, so the recorder files under it.
-	probe.hold(tsLiteral(time.Now().UTC().Add(-24*time.Hour)), rows...)
+	probe.holdBands(rows...)
 	end := time.Now().UTC()
 	got, err := baseline(context.Background(), "", end.Add(-24*time.Hour), end)
 	if err != nil {
@@ -496,10 +497,60 @@ func TestBaseline_TheScheduleOnlyPublishesCompleteDays(t *testing.T) {
 	}
 }
 
+// TestBaseline_ThePublishedTableHasAReader: the daily recompute writes
+// hanzo.risk_baseline whether or not anything reads it, and for a while nothing
+// did — a warehouse cost paid every day and collected on never. That is the same
+// "declared but unwired" defect as a reader with no writer, inverted, and it is
+// invisible from either half on its own.
+//
+// The reader is the catalogue's NETWORK lens, and it carries no tenant: the same
+// bands go to every caller, drawn from a table whose shape has no org column.
+//
+// Mutation proof: drop the `out.Network, err = bands(...)` line from ops.features
+// and the published table goes back to having no reader.
+func TestBaseline_ThePublishedTableHasAReader(t *testing.T) {
+	probe.reset(true)
+	day := time.Now().UTC().Add(-24 * time.Hour).Truncate(24 * time.Hour)
+	// Two bands, one of which the k-anonymity floor must drop on the way out — so
+	// this proves the READER applies the floor too, not only that it reads.
+	probe.holdBands(
+		map[string]any{"bucket": day, "subject_kind": kindAccount, "dim": "events",
+			"q10": 1.0, "q50": 7.0, "q90": 9.0, "orgs": uint32(kAnonOrgs), "n": uint64(kAnonRows)},
+		map[string]any{"bucket": day, "subject_kind": kindAccount, "dim": "spend",
+			"q10": 1.0, "q50": 2.0, "q90": 3.0, "orgs": uint32(kAnonOrgs - 1), "n": uint64(kAnonRows)},
+	)
+
+	app := mountBilled(t, &ledger{available: 100_000_000})
+	code, out := req(t, app, http.MethodGet, "/v1/risk/features?days=400", orgA, "u_"+orgA, "")
+	if code != http.StatusOK {
+		t.Fatalf("GET /v1/risk/features?days=400 = %d %s", code, out)
+	}
+	var cat riskCatalog
+	if err := json.Unmarshal(out, &cat); err != nil {
+		t.Fatalf("decode catalogue: %v", err)
+	}
+	if len(cat.Network) != 1 {
+		t.Fatalf("the catalogue published %d network band(s), want 1 — the baseline is written "+
+			"every day and read by nobody: %s", len(cat.Network), out)
+	}
+	if b := cat.Network[0]; b.Dim != "events" || b.Q50 != 7 || b.Orgs != kAnonOrgs {
+		t.Fatalf("the published band is %+v, want the events band over exactly the floor", b)
+	}
+	// ...and it names no organisation, which is the whole shape of the table.
+	if strings.Contains(string(out), orgA) && !strings.Contains(string(out), `"tenant"`) {
+		t.Fatalf("the network lens leaked an organisation: %s", out)
+	}
+}
+
 // TestBaseline_TheScheduleIsNotReachableFromARequest: there is no route to the
 // job, and that is a security property rather than a missing feature. A caller
 // who could choose the window could choose one only their own organisation was
 // active in, and read their own rows back out of a k-anonymous aggregate.
+//
+// The published table's READER is a different thing and is allowed: it returns
+// whole days the schedule already computed and re-applies the floor on the way
+// out, so a window choice selects which published bands come back and never what
+// went into one.
 func TestBaseline_TheScheduleIsNotReachableFromARequest(t *testing.T) {
 	served, _, _ := riskOps(t)
 	for op := range served {

@@ -171,8 +171,16 @@ func (w *warehouse) query(sql string, args []any) ([]map[string]any, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
-	org, _ := args[0].(string)
-	rows := w.table[org]
+	// The BASELINE table has no org column — that is the whole property it exists
+	// to have — so its rows are filed under the table and not under a tenant. A
+	// fake that keyed them by args[0] would be keying them by the window's start,
+	// which is a value the caller has to guess to a second in order to see its own
+	// fixture.
+	key, _ := args[0].(string)
+	if strings.Contains(sql, baselineTable) {
+		key = baselineTable
+	}
+	rows := w.table[key]
 	from, to, bounded := boundWindow(args)
 	if !bounded {
 		return rows, nil
@@ -190,6 +198,12 @@ func (w *warehouse) query(sql string, args []any) ([]map[string]any, error) {
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+// holdBands files rows of the NETWORK BASELINE. They are filed under the table
+// because that table has no tenant to file them under.
+func (w *warehouse) holdBands(rows ...map[string]any) {
+	w.hold(baselineTable, rows...)
 }
 
 // boundWindow recovers the half-open window a statement bound. [featureWhere] binds it
