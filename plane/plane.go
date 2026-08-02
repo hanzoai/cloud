@@ -54,6 +54,17 @@ const (
 	FinanceTxns      = "finance_txns"
 	FinanceUsage     = "finance_usage"
 
+	// FinanceScopeRules reads the org's per-scope request-rate ceilings — the
+	// rate-limited subset of its spend-alert rows. It is on the plane for the
+	// same reason the balance is, plus one of its own: the READER is a cloud
+	// EDGE middleware. Asking commerce for it over HTTP re-dispatched the whole
+	// shared app back into this process, which re-ran that same middleware,
+	// which asked again — an unbounded self-call the commerce transport's depth
+	// guard turns into a 502 (and, before that guard, into a stack overflow).
+	// A socket to the process that owns the rows has no edge chain on it at all,
+	// so the recursion is not bounded here but structurally absent.
+	FinanceScopeRules = "finance_scope_rules"
+
 	KMSGet  = "kms_get"
 	KMSPut  = "kms_put"
 	KMSSign = "kms_sign"
@@ -95,13 +106,13 @@ const (
 	// process that owns it, over the socket, exactly like a debit asks commerce.
 	IntegrationsSlackSend = "integrations_slack_send"
 
-	// The observability plane's two claims on the ONE event door. analytics owns
-	// POST /v1/event and its subtree, but the o11y PROCESS owns the LLM-obs sink
-	// and the Sentry runtime — so the door asks over the socket rather than
-	// through a package global, which a peer process reads as nil (the 503
-	// "error ingest not initialized" that this replaces).
-	ObsEventClaim = "obs_event_claim" // offer a /v1/event body to the LLM-obs sink
-	ObsErrorPost  = "obs_error_post"  // the Sentry envelope/store wire
+	// The observability plane's claim on the ONE event door. analytics owns POST
+	// /v1/event and its subtree, but the o11y PROCESS owns the Sentry runtime —
+	// so the door asks over the socket rather than through a package global,
+	// which a peer process reads as nil (the 503 "error ingest not initialized"
+	// that this replaces). A second op (obs_event_claim) offered every body to an
+	// LLM-obs sink first; it retired with that sink.
+	ObsErrorPost = "obs_error_post" // the Sentry envelope/store wire
 
 	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
 	HostStart = "host_start"
@@ -276,6 +287,24 @@ type Txn struct {
 // Txns is a page of ledger entries.
 type Txns struct {
 	Rows []Txn `json:"rows"`
+}
+
+// ScopeRule is one scope's request-rate ceiling: the axes it covers and the
+// requests/minute it allows. "" on an axis is the wildcard, so an org-wide row
+// carries neither — the SAME covering rule the cap verdict reads, because both
+// derive from one spend-alert row and a second spelling would let a rate limit
+// and a spend cap disagree about which requests they bind.
+type ScopeRule struct {
+	Project      string `json:"project,omitempty"`
+	Service      string `json:"service,omitempty"`
+	RateLimitRpm int    `json:"rateLimitRpm"`
+}
+
+// ScopeRules is the org's whole rate-limit config in one reply. Only rows that
+// SET a ceiling travel: a row with none is not a rule, and shipping it would
+// make "no limit" and "a limit of zero" the same value on the wire.
+type ScopeRules struct {
+	Rules []ScopeRule `json:"rules"`
 }
 
 // ---- kms -------------------------------------------------------------------
@@ -550,21 +579,6 @@ type Payee struct {
 }
 
 // ---- finance.credit — the payee side of a settlement -----------------------
-
-// ObsClaimIn offers ONE authenticated /v1/event body to the observability sink.
-// The ORG is the door's server-resolved tenant. Claimed=false means "not mine —
-// let the product wire have it", so a nil/absent o11y must never claim.
-type ObsClaimIn struct {
-	Org  string `json:"org" validate:"required"`
-	Body []byte `json:"body"`
-}
-
-// ObsClaimed reports what the sink did with the body it was offered.
-type ObsClaimed struct {
-	Accepted int  `json:"accepted"`
-	Dropped  int  `json:"dropped"`
-	Claimed  bool `json:"claimed"`
-}
 
 // ObsErrorIn carries one Sentry-wire request across the plane. The DSN key rides
 // the headers or the query, and the runtime authenticates it itself — there is no

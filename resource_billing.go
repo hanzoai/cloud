@@ -232,18 +232,18 @@ func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 // so an untyped handler and a typed op can never describe the same refusal two
 // different ways.
 func denial(err error) (int, string, string) {
-	switch {
-	// Funded but over a per-scope cap (issue #70): the DISTINCT 402, mirroring the
-	// edge gate — never the 503 out-of-funds/unavailable shape (wrong code + a
-	// retry storm against a cap that will not clear until the period rolls over).
-	case errors.Is(err, metering.ErrSpendCapExceeded):
-		return http.StatusPaymentRequired, "spend_cap_exceeded",
-			"Spend cap reached for this scope. Raise it at console.hanzo.ai/limits"
-	case errors.Is(err, metering.ErrInsufficientBalance):
-		return http.StatusPaymentRequired, "insufficient_balance", "Add credits at console.hanzo.ai"
-	default:
-		return http.StatusServiceUnavailable, "balance_unavailable", "Billing temporarily unavailable"
+	// The ONE classifier (errmap.go), so the money wire and the app's error
+	// renderer answer one refusal identically. It keeps the DISTINCT 402s — a
+	// per-scope cap (issue #70) is never the out-of-funds shape, which would be
+	// the wrong code plus a retry storm against a ceiling that will not clear
+	// until the period rolls over — and it keeps an UPSTREAM'S status, so a 402
+	// commerce already decided is not re-decided into 503 here.
+	if he, ok := refused(err); ok {
+		return he.Status, he.Code, he.Msg
 	}
+	// The gate could not decide. Unknown is not free, and it is not a refusal the
+	// caller can act on either.
+	return http.StatusServiceUnavailable, "balance_unavailable", "Billing temporarily unavailable"
 }
 
 // denyBody is the money wire's body: the NESTED {"error":{"code","message"}} the

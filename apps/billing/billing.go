@@ -335,7 +335,7 @@ func init() {
 // identifies its subject. Kept identical to commerce's edge-auth billingSubjectKeys
 // {user,userId,customerId} AND clients/account's billingData: pinning ALL of them is what
 // scopes EVERY endpoint no matter which one it filters on — usage/balance/gpu-eligibility
-// read `user`, portal/payment-methods requires `customerId`. Change all three in lockstep.
+// read `user`, portal/methods requires `customerId`. Change all three in lockstep.
 var billingSubjectKeys = []string{"user", "userId", "customerId"}
 
 // readerOrg is the ONE tenant resolution the billing READ surface shares: the org of
@@ -551,14 +551,14 @@ func gpuEligibility(s *cloud.Service[state], c *zip.Ctx) error {
 	return proxy(s, c, "/v1/billing/gpu/eligibility", "amountCents", "minPrepaidCents", "currency")
 }
 
-// paymentMethods → commerce GET /v1/billing/portal/payment-methods: the org's saved cards
+// paymentMethods → commerce GET /v1/billing/portal/methods: the org's saved cards
 // as the masked descriptor commerce returns (brand + last4 + expiry — never a PAN/CVV/
 // token). The console requests the same-origin /v1/billing/methods (mounted here);
 // this proxies to commerce's admin-group PORTAL read, which filters CustomerId on the
 // pinned subject (commerce 400s without a customerId — proxy always pins it), so a caller
 // sees ONLY its OWN org's methods. Backs the launch gate's card-on-file check.
 func paymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
-	return proxy(s, c, "/v1/billing/portal/payment-methods")
+	return proxy(s, c, "/v1/billing/portal/methods")
 }
 
 // createPaymentMethod → commerce POST /v1/billing/methods: vault the Square
