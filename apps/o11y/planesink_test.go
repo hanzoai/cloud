@@ -467,3 +467,53 @@ func TestSdkSpanRowsOf_RecordedSpan(t *testing.T) {
 		t.Errorf("attributes = %v", spanCol(t, row, "attributes"))
 	}
 }
+
+// TestPlaneWritersNeverBindIngestedAt is the RETENTION pin, and it is the twin of
+// apps/analytics' TestRetentionIsNotARequestParameter — restated here because the
+// rule is a property of the INSERT list, and these two lists live in this package.
+//
+// event.span's DDL measures both retention and layout from ingested_at
+// (TTL toDateTime(ingested_at) + toIntervalDay(30), PARTITION BY toDate(ingested_at))
+// and defaults it to now64(3). A writer that names the column takes that clock from
+// the server and gives it to the wire, so a caller could post a batch that is
+// TTL-eligible before its own 200 arrives. It is also the ReplacingMergeTree version
+// column, so two writers disagreeing about who stamps it is a dedup that resolves by
+// whichever clock ran fast.
+//
+// The guard is on the COLUMN LIST rather than the emitted SQL because the list is
+// what Insert interpolates: a column cannot be bound without appearing here first.
+func TestPlaneWritersNeverBindIngestedAt(t *testing.T) {
+	for _, w := range []struct {
+		table   string
+		columns []string
+	}{
+		{planeSpanTable, planeSpanColumns},
+		{planeLogTable, planeLogColumns},
+	} {
+		for _, c := range w.columns {
+			if strings.Contains(c, "ingested_at") {
+				t.Errorf("%s writer binds %q — the wire can then set the column "+
+					"retention, partitioning and Replacing versioning are measured from", w.table, c)
+			}
+		}
+	}
+}
+
+// TestPlaneTablesAreQualified pins the other half of the same INSERT: the DSN this
+// package connects with (O11Y_DATASTORE_DSN) names NO database, so an unqualified
+// table silently addresses `default` — an empty database on the live datastore.
+// That is not hypothetical: it is exactly how the deleted LLM-obs ingest path came
+// to write `traces`/`observations`/`scores` that no migration ever created and no
+// INSERT ever reached. Every table this sink names states its database.
+func TestPlaneTablesAreQualified(t *testing.T) {
+	for _, table := range []string{planeSpanTable, planeLogTable} {
+		db, _, ok := strings.Cut(table, ".")
+		if !ok || db == "" {
+			t.Errorf("plane table %q is unqualified — it would resolve to `default`", table)
+			continue
+		}
+		if db != "event" {
+			t.Errorf("plane table %q names database %q, want the canonical `event`", table, db)
+		}
+	}
+}

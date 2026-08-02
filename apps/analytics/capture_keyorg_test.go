@@ -109,9 +109,10 @@ func TestKeyOrg_UnresolvableKeyFailsClosed(t *testing.T) {
 
 // TestKeyOrg_KeylessRequestNeverConsultsResolver: with NO key presented the key
 // resolver is never consulted — the key path triggers only on a real key — and the
-// request is not refused either: it takes the anonymous lane, where its custom event
-// kind is dropped and reported honestly (200), never stored. It used to be admitted
-// here at FULL capability into the brand org named by the Host.
+// request is not refused at the GATE either: it takes the anonymous lane, where its
+// custom event kind is dropped, and the door says so (401 ingest_key_required, which is
+// the projection's refusal; the gate's is 403). It used to be admitted here at FULL
+// capability into the brand org named by the Host.
 func TestKeyOrg_KeylessRequestNeverConsultsResolver(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
@@ -121,7 +122,7 @@ func TestKeyOrg_KeylessRequestNeverConsultsResolver(t *testing.T) {
 	})
 	code := postKeyed(t, app, "/v1/event", "hanzo.ai",
 		`{"event":"e","distinct_id":"d"}`, nil)
-	if code != http.StatusOK {
-		t.Fatalf("keyless PostHog event want 200 (anonymous lane, kind dropped), got %d", code)
+	if code != http.StatusUnauthorized {
+		t.Fatalf("keyless PostHog event want 401 (anonymous lane, kind dropped, nothing stored), got %d", code)
 	}
 }

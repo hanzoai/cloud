@@ -617,9 +617,20 @@ func publicIngest(c *zip.Ctx, dec decode, org, source string, subject ...string)
 	}
 	// Rejoin the ONE pipeline: admission decided the projection, the door decided the
 	// tenant, and ingestDecoded (event.go) does the rest exactly as it does for a bearer.
+	//
+	// The projection's refusals travel WITH their reason (refusal), because this is the
+	// only lane that has one: a caller here either presented nothing (401 — a key is the
+	// fix) or presented a guest token that resolved (403 — a second key is not). The tail
+	// answers with it when NOTHING else landed, which is what the anonymous lane's 200
+	// used to hide.
 	admitted, dropped := admitPublic(evs)
-	if len(subject) > 0 && subject[0] != "" {
+	signed := len(subject) > 0 && subject[0] != ""
+	if signed {
 		admitted = attribute(admitted, subject[0])
 	}
-	return ingestDecoded(c, org, source, admitted, dropped)
+	refused := refusal{n: dropped}
+	if dropped > 0 {
+		refused.why = cannotWrite(signed)
+	}
+	return ingestDecoded(c, org, source, admitted, refused)
 }
