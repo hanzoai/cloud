@@ -102,13 +102,13 @@ const (
 	// process that owns it, over the socket, exactly like a debit asks commerce.
 	IntegrationsSlackSend = "integrations_slack_send"
 
-	// The observability plane's two claims on the ONE event door. analytics owns
-	// POST /v1/event and its subtree, but the o11y PROCESS owns the LLM-obs sink
-	// and the Sentry runtime — so the door asks over the socket rather than
-	// through a package global, which a peer process reads as nil (the 503
-	// "error ingest not initialized" that this replaces).
-	ObsEventClaim = "obs_event_claim" // offer a /v1/event body to the LLM-obs sink
-	ObsErrorPost  = "obs_error_post"  // the Sentry envelope/store wire
+	// The observability plane's claim on the ONE event door. analytics owns POST
+	// /v1/event and its subtree, but the o11y PROCESS owns the Sentry runtime —
+	// so the door asks over the socket rather than through a package global,
+	// which a peer process reads as nil (the 503 "error ingest not initialized"
+	// that this replaces). A second op (obs_event_claim) offered every body to an
+	// LLM-obs sink first; it retired with that sink.
+	ObsErrorPost = "obs_error_post" // the Sentry envelope/store wire
 
 	// HostStart is the fleet ROUTER's own op, not an app's. See [HostApp].
 	HostStart = "host_start"
@@ -595,21 +595,6 @@ type Payee struct {
 }
 
 // ---- finance.credit — the payee side of a settlement -----------------------
-
-// ObsClaimIn offers ONE authenticated /v1/event body to the observability sink.
-// The ORG is the door's server-resolved tenant. Claimed=false means "not mine —
-// let the product wire have it", so a nil/absent o11y must never claim.
-type ObsClaimIn struct {
-	Org  string `json:"org" validate:"required"`
-	Body []byte `json:"body"`
-}
-
-// ObsClaimed reports what the sink did with the body it was offered.
-type ObsClaimed struct {
-	Accepted int  `json:"accepted"`
-	Dropped  int  `json:"dropped"`
-	Claimed  bool `json:"claimed"`
-}
 
 // ObsErrorIn carries one Sentry-wire request across the plane. The DSN key rides
 // the headers or the query, and the runtime authenticates it itself — there is no
