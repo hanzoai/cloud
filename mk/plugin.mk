@@ -76,16 +76,17 @@ test: ## Run this app's tests.
 vet: ## go vet this app and its entrypoint(s).
 	@CGO_ENABLED=$(CGO_ENABLED) $(GO) vet $(APPDIR)/... $(foreach a,$(APPS),$(ROOT)/plugin/$(a))
 
-# The app's OWN projections, from the app's OWN live router: the binary mounts one
+# The app's OWN projection, from the app's OWN live router: the binary mounts one
 # subsystem and projects it through the same openapi.FleetSpec the whole-fleet
-# golden is projected through AND the same zip MCPTools the host's agent door is
-# composed from (describe.go). Never sliced out of the fleet spec by prefix — that
-# would make the fleet the source and the app a derivative, which is backwards and
-# is exactly how a catch-all silently swallows a neighbour's routes.
+# golden is projected through (describe.go). Never sliced out of the fleet spec by
+# prefix — that would make the fleet the source and the app a derivative, which is
+# backwards and is exactly how a catch-all silently swallows a neighbour's routes.
 #
-# ONE invocation writes BOTH openapi.json and mcp.json, from one mount at one
-# instant over one registry, so the document and the tool catalogue cannot be
-# generated apart and therefore cannot disagree.
+# It used to write mcp.json beside it — the same registry projected as MCP tools —
+# and the argument was that generating them together kept them honest. They were
+# BOTH stale by the same 353 ops for o11y, because the trigger was a go.mod bump in
+# another repository. The tool catalogue is not generated any anymore: the host
+# ASKS each subsystem for its tools at the moment it is asked (package fleet).
 #
 # `build` first, because a projection taken from a stale binary is a lie.
 #
@@ -97,13 +98,13 @@ vet: ## go vet this app and its entrypoint(s).
 # The binary is handed the DIRECTORY, never a redirect: a subsystem's dependencies
 # write to stdout at mount (hanzoai/commerce prints a sqlite-vec warning and GORM
 # debug lines), and `> file` splices those into the front of the document.
-describe: build ## Emit this app's own OpenAPI subset + MCP tool catalogue into plugin/<app>/.
+describe: build ## Emit this app's own OpenAPI subset into plugin/<app>/.
 	@for a in $(APPS); do \
 	  echo ">> describe $$a"; \
 	  GIT_SSH_ADDR=127.0.0.1:0 $(BIN)/$$a describe $(ROOT)/plugin/$$a || exit 1; \
 	done
 
-# Binaries only. plugin/<app>/{openapi,mcp}.json are committed artifacts, like the
+# Binaries only. plugin/<app>/openapi.json is a committed artifact, like the
 # fleet's openapi.yaml — `clean` removes what a build wrote, not what it publishes.
 clean: ## Remove this app's built binary.
 	@rm -f $(foreach a,$(APPS),$(BIN)/$(a))
