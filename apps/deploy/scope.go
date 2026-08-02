@@ -10,7 +10,7 @@
 //
 // The tenant boundary is the SAME one the rest of cloud trusts (clients/platform
 // .tenant / clients/s3.tenant): the gateway-minted, IAM-validated identity headers
-// (c.IsAdmin/c.Org), the injective provisioning.SanitizeOrg normalizer, and the
+// (c.IsAdmin/c.Org), the injective namespace.Sanitize normalizer, and the
 // principal.Validated gate. There is NO third slug rule — resolveScope keys the
 // SAME (org → tenant-<org>) boundary the PaaS writes into.
 //
@@ -38,15 +38,15 @@ import (
 	"github.com/hanzoai/cloud"
 	iamclient "github.com/hanzoai/cloud/apps/iam"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/provisioning"
 	model "github.com/hanzoai/iam/pkg/model"
 	iamstore "github.com/hanzoai/iam/pkg/store"
+	"github.com/hanzoai/namespace"
 )
 
 // Operator App CRs carry two labels this plane READS (never writes): clients/platform
 // serviceCR and the fleet crs/*.yaml stamp them.
 //
-//	hanzo.ai/org               — the TENANT: the injective provisioning.SanitizeOrg slug.
+//	hanzo.ai/org               — the TENANT: the injective namespace.Sanitize slug.
 //	app.kubernetes.io/part-of  — the IAM Project NAME (tenant-provisioned apps carry it).
 const (
 	orgLabel     = "hanzo.ai/org"
@@ -82,7 +82,7 @@ func resolveScope(c *zip.Ctx) (scope, bool) {
 	if !principal.Validated(c) {
 		return scope{}, false
 	}
-	if org := provisioning.SanitizeOrg(c.Org()); org != "" {
+	if org := namespace.Sanitize(c.Org()); org != "" {
 		return scope{org: org}, true
 	}
 	return scope{}, false
@@ -151,7 +151,7 @@ func projectName(cr *unstructured.Unstructured) string {
 
 // allows reports whether an App CR is visible to this scope. A SuperAdmin sees every CR; a
 // normal org sees ONLY a CR whose hanzo.ai/org label equals its slug — the injective
-// SanitizeOrg slug, so two orgs can never collide. This is the cross-tenant boundary,
+// namespace.Sanitize slug, so two orgs can never collide. This is the cross-tenant boundary,
 // applied to EVERY projected/accessed CR (list, detail, clusters, stream).
 func (sc scope) allows(cr *unstructured.Unstructured) bool {
 	if sc.superAdmin {
@@ -171,11 +171,11 @@ func (sc scope) namespaces() []string {
 }
 
 // tenantNS is the tenant namespace for an ALREADY-sanitized org slug: "tenant-"+slug — the
-// read twin of clients/platform.tenantNamespace (which is "tenant-"+SanitizeOrg(org)).
+// read twin of clients/platform.tenantNamespace (which is "tenant-"+namespace.Sanitize(org)).
 // sc.org is never empty here (resolveScope gates it to a non-empty injective slug), so no
 // "unknown" fallback is needed. The "tenant-" prefix is a frozen infra convention (renaming
 // it is a gated namespace migration — see clients/platform/k8s.go); sc.org is the SAME
-// SanitizeOrg slug platform stamps, so the two derive the same namespace.
+// namespace.Sanitize slug platform stamps, so the two derive the same namespace.
 func tenantNS(org string) string { return "tenant-" + org }
 
 // appCRs collects every App CR VISIBLE to this scope across its namespaces, filtered by the
@@ -299,7 +299,7 @@ func (sc scope) iamProjects() []argoProject {
 func projectFromIAM(p *model.Project) argoProject {
 	proj := synthProject(p.Name)
 	proj.Spec.Description = firstNonEmpty(p.DisplayName, p.Description)
-	if org := provisioning.SanitizeOrg(firstNonEmpty(p.Organization, p.Owner)); org != "" {
+	if org := namespace.Sanitize(firstNonEmpty(p.Organization, p.Owner)); org != "" {
 		proj.Metadata.Labels = map[string]string{orgLabel: org}
 	}
 	return proj

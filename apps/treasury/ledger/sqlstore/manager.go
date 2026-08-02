@@ -59,8 +59,8 @@ const hashMarker = "h-"
 //
 // It lives under a different root — {DataDir}/finance/{slug}.db, not
 // {DataDir}/orgs/{slug}/ — so cloud's org-DB layout does not describe it at all;
-// and like finance's, its slug disagrees with SanitizeOrg for any tenant that is
-// not a short clean label. Unifying both would relocate live reserve and customer
+// and like finance's, its slug disagrees with namespace.Sanitize for any org
+// that is not a short clean label. Unifying both would relocate live reserve and customer
 // ledgers, which is a migration with money in it.
 //
 // There is also a deliberate boundary: this package is the storage adapter the

@@ -119,7 +119,7 @@ type Principal struct {
 // has no owner to bind to.
 var Global = Principal{typ: sqlitedrv.PrincipalGlobal}
 
-// Org binds a store to one tenant. slug MUST be the value SanitizeOrg produced (the
+// Org binds a store to one tenant. slug MUST be the value namespace.Sanitize produced (the
 // injective slugger OrgDB already folds every org through), so two distinct orgs can
 // never derive the same key.
 func Org(slug string) Principal { return Principal{typ: sqlitedrv.PrincipalOrg, id: slug} }
@@ -138,7 +138,7 @@ func (p Principal) String() string {
 // derivationID is the HKDF/AAD identity of one file under this principal: the owner
 // and the file, in that order, so neither alone determines the key.
 //
-// SanitizeOrg emits no "/", so owner and file id cannot run together into an ambiguous
+// namespace.Sanitize emits no "/", so owner and file id cannot run together into an ambiguous
 // string — and lengthPrefixedInfo (which DeriveKey and PrincipalAAD both use) is
 // injective over (type, id) regardless, so the separator is for reading, not safety.
 // The platform partition keeps the bare file id, which is what its stores already use.

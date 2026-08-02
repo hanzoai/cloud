@@ -74,6 +74,7 @@ import (
 	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
@@ -353,7 +354,7 @@ func reqOrg(ctx *zip.Ctx) string {
 // SuperAdmin (HIP-0026), and that fallback reaches the admin bucket, never a real
 // tenant's.
 //
-// NORMALIZATION — this uses provisioning.SanitizeOrg (case-folds to a DNS slug),
+// NORMALIZATION — this uses namespace.Sanitize (case-folds to a DNS slug),
 // NOT KMS's exact-match, ON PURPOSE: the S3 bucket name is derived through
 // provisioning's SAME sanitized slug (BucketName), so a bucket provisioned via
 // POST /v1/s3 is findable here — exact-match would break that lockstep. A real
@@ -361,7 +362,7 @@ func reqOrg(ctx *zip.Ctx) string {
 // validated input (and, post the gate, only a validated principal reaches it).
 // The divergence from KMS is intentional per-subsystem, not drift.
 func tenant(ctx *zip.Ctx) (string, bool) {
-	if org := provisioning.SanitizeOrg(ctx.Org()); org != "" {
+	if org := namespace.Sanitize(ctx.Org()); org != "" {
 		return org, true
 	}
 	if principal.IsSuperAdmin(ctx) {

@@ -48,7 +48,7 @@ func TestTenantDBPathConvention(t *testing.T) {
 		if err != nil {
 			return "", err
 		}
-		return nsPath(dir, ns, subsystem)
+		return namespace.Path(dir, ns, subsystem)
 	}
 
 	// org-scoped: {DataDir}/orgs/{org}/{subsystem}.db
@@ -77,7 +77,7 @@ func TestTenantDBPathConvention(t *testing.T) {
 
 	// the deployment's own partition is a different KIND of namespace, so it
 	// cannot collide with a tenant's however the slugger changes.
-	got, err = nsPath(dir, PlatformNamespace(), "kms")
+	got, err = namespace.Path(dir, PlatformNamespace(), "kms")
 	if err != nil {
 		t.Fatalf("platform path: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestTenantDBPathConvention(t *testing.T) {
 	}
 	// the zero namespace names no database — the mistake Go's zero value would
 	// otherwise turn into one file quietly shared by everyone who forgot to set one.
-	if _, err := nsPath(dir, namespace.Namespace{}, "git"); err == nil {
+	if _, err := namespace.Path(dir, namespace.Namespace{}, "git"); err == nil {
 		t.Fatal("the zero namespace must error")
 	}
 }
@@ -300,26 +300,26 @@ func TestOrgStoreEach(t *testing.T) {
 	}
 }
 
-// TestSanitizeOrgInjectiveAndSafe locks the properties OrgDB relies on: a
+// TestSanitizeInjectiveAndSafe locks the properties OrgDB relies on: a
 // clean DNS label is the identity, case-only siblings do NOT fold onto one slug
 // (a case-insensitive-filesystem cross-org break), and unsafe-rune orgs are
 // refused.
-func TestSanitizeOrgInjectiveAndSafe(t *testing.T) {
-	if got := SanitizeOrg("acme"); got != "acme" {
+func TestSanitizeInjectiveAndSafe(t *testing.T) {
+	if got := namespace.Sanitize("acme"); got != "acme" {
 		t.Fatalf("clean DNS label should be identity, got %q", got)
 	}
-	if SanitizeOrg("") != "" {
+	if namespace.Sanitize("") != "" {
 		t.Fatal("empty org must be refused")
 	}
-	if SanitizeOrg("acme ") != "" { // trailing space is an unsafe (trimmable) rune
+	if namespace.Sanitize("acme ") != "" { // trailing space is an unsafe (trimmable) rune
 		t.Fatal("whitespace-bearing org must be refused")
 	}
 	// "Acme" and "acme" are DISTINCT owners and must NOT share a slug.
-	if SanitizeOrg("Acme") == SanitizeOrg("acme") {
+	if namespace.Sanitize("Acme") == namespace.Sanitize("acme") {
 		t.Fatal("case-only siblings folded onto one slug (cross-org break)")
 	}
 	// Folded (non-identity) output carries the disambiguation suffix.
-	if got := SanitizeOrg("Acme"); got == "acme" || got == "Acme" {
+	if got := namespace.Sanitize("Acme"); got == "acme" || got == "Acme" {
 		t.Fatalf("non-identity owner must be re-suffixed, got %q", got)
 	}
 }

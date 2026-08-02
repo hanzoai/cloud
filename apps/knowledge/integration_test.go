@@ -240,7 +240,7 @@ func TestKBSpinePerOrgRAG(t *testing.T) {
 
 	// The hook must have upserted exactly one point into A's collection, org-pinned.
 	// The collection name is derived through the SAME collection() helper the indexer
-	// uses (which runs the org through provisioning.SanitizeOrg for an injective
+	// uses (which runs the org through namespace.Sanitize for an injective
 	// physical namespace), so the test asserts the REAL collection, not a hardcoded
 	// one — and the payload.org pin stays the raw org ("A").
 	colA := (&indexer{}).collection("A")

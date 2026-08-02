@@ -40,9 +40,9 @@ var pathSanitize = regexp.MustCompile(`[^a-zA-Z0-9_.-]`)
 // cloud.OrgNamespace is the one name a database should have, and it would fix a
 // real defect here — seg is NOT injective. Every character outside
 // [A-Za-z0-9_.-] becomes "_", so the distinct orgs "a/b" and "a_b" both land on
-// orgs/a_b, which is a cross-tenant collision, and SanitizeOrg exists precisely
+// orgs/a_b, which is a cross-tenant collision, and namespace.Sanitize exists precisely
 // because that class of fold is a tenant break. But seg is also the IDENTITY on
-// anything already clean, while SanitizeOrg truncates at 32 characters and
+// anything already clean, while namespace.Sanitize truncates at 32 characters and
 // hash-suffixes anything that is not a short DNS label — so orgs/acme_corp
 // becomes orgs/acme-corp-cca8c7942f8c15a2 and every workspace under it is a file
 // that has moved. Switching the encoder without moving those files does not fix
