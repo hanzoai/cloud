@@ -69,11 +69,9 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/openapi"
-	planeops "github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel"
 	// attr, not attribute: this package already has an attribute() — the function that
@@ -605,33 +603,27 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 			// principal does not name the person; its token does.
 			return publicIngest(c, dec, a.org, source, a.subject)
 		}
-		// ONE door, every event kind: the observability plane gets first refusal
-		// on the canonical door's authenticated bodies. It lives in ANOTHER
-		// PROCESS (a plugin is a process), so the offer goes over the plane
-		// socket — a package global was written in o11y and read here as nil,
-		// which silently sent every LLM-obs batch down the product wire. Only
-		// the FULL lane offers: obs events are tenant data, so the anonymous and
-		// reduced projections never reach that plane.
+		// THE DOOR RUNS ITS OWN WIRE, and there is no longer anything in front of
+		// it. Every authenticated body used to be offered to the observability
+		// plane first (plane op obs_event_claim) so an LLM-observability batch
+		// could be filed in its own store instead of the product warehouse. That
+		// sink is deleted: it inserted UNQUALIFIED `traces`/`observations`/
+		// `scores` over a DSN naming no database, so the names resolved to
+		// `default` — where no migration in this platform has ever created them,
+		// and where the datastore's query log records no such INSERT, ever. The
+		// concept it claimed is served twice over already: LLM observability is
+		// READ off gen_ai spans in event.span by the o11y runtime, and the eval
+		// product owns the grounded projections (apps/eval/telemetry.go).
 		//
-		// FAIL-SOFT AND UNCLAIMED: any plane error (o11y absent, asleep past the
-		// wake budget, mid-restart) falls through to the product wire rather
-		// than failing the caller's ingest. A dropped claim costs one event in
-		// the obs store; a failed door costs every event.
-		if source == sourceEvent {
-			cctx, cancel := context.WithTimeout(cloud.For(c.Context(), a.org), obsClaimTimeout)
-			out, err := cloud.Ask[planeops.ObsClaimIn, planeops.ObsClaimed](cctx, peerO11y, planeops.ObsEventClaim,
-				&planeops.ObsClaimIn{Org: a.org, Body: c.Body()})
-			cancel()
-			// Through the SAME receipt as every other lane. A claimed batch that
-			// landed NOTHING is the o11y half of the silent 200 — and o11y is where
-			// the logs, spans and exception envelopes that went missing were headed,
-			// so exempting the claim would leave the defect in the lane it cost the
-			// most. refused is 0: the caller held a full credential here, so a total
-			// loss is the body's fault and answers 400, never 401.
-			if err == nil && out != nil && out.Claimed {
-				return answer(c, a.org, source, CaptureResult{Accepted: out.Accepted, Dropped: out.Dropped}, refusal{})
-			}
-		}
+		// So the claim could only ever decline, at the cost of a synchronous
+		// cross-process round-trip per event on the fleet's busiest door.
+		//
+		// IT IS ALSO ONE FEWER LANE REACHING `answer`, and the receipt is the
+		// same either way. An LLM-obs-shaped body names no event kind, so the
+		// canonical decode yields nothing routable, and a caller holding a full
+		// credential that stored nothing is told 400 — which is exactly what the
+		// claim's own branch was made to answer. The lane that used to be
+		// exempt from the honest receipt is now the ordinary path through it.
 		evs, err := dec(c.Body())
 		if err != nil {
 			return zip.ErrBadRequest("malformed event payload")
@@ -684,12 +676,10 @@ type door struct {
 //
 //   - /v1/event — the canonical door and the canonical wire (Event | [Event] |
 //     {batch:[…]} | the team SPA's bare snake_case array, dispatched by shape —
-//     isTeamArray), which every current Hanzo client emits. The SAME door also
-//     carries LLM-observability ingestion batches: handle offers each
-//     authenticated body to the o11y plane's claim first (the plane op
-//     obs_event_claim, asked over the socket),
-//     which takes only {"batch":[{"type":"trace-create"|…}]} shapes — consumers
-//     and shapes behind ONE door, not more doors.
+//     isTeamArray), which every current Hanzo client emits. Nothing gets first
+//     refusal on it: the o11y plane's claim on this door (obs_event_claim) is
+//     retired with the sink behind it, so the wire the shape selects is the wire
+//     that runs — consumers and shapes behind ONE door, not more doors.
 //
 //   - the PostHog wire has NO door of its own: decodeIngest dispatches it by
 //     shape (isInsightsWire), so PostHog SDKs land on /v1/event like everything
@@ -786,13 +776,11 @@ func decodeEvent(body []byte) ([]CaptureEvent, error) {
 	return decodeIngest(body)
 }
 
-// The observability peer and how long the door will wait on it. The budget is
-// short on purpose: the claim is an OFFER on the hot ingest path, and a slow
-// peer must degrade to the product wire rather than hold the caller.
-const (
-	peerO11y        = "o11y"
-	obsClaimTimeout = 3 * time.Second
-)
+// peerO11y is the observability peer this package asks over the plane socket.
+// The ONE thing it is asked for is the Sentry relay (obs_error_post, whose
+// budget is obsErrorTimeout in analytics.go): the Sentry wire's project segment
+// is variable, so analytics has to own the route while o11y owns the runtime.
+const peerO11y = "o11y"
 
 var doors = []door{
 	{
