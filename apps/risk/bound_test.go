@@ -400,6 +400,19 @@ func (l *ledger) debits() int {
 	return len(l.posted)
 }
 
+// screens is everything booked so far, in screens. It does not wait: a caller
+// uses it where the work is already known to have finished, and "nothing was
+// booked" is a real answer there rather than a timeout.
+func (l *ledger) screens() int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var micros int64
+	for _, d := range l.posted {
+		micros += d.Micros
+	}
+	return micros / defaultScreenUUSD
+}
+
 // await waits for n debits. They are posted on a background context by design —
 // a debit must not add latency to a decision — so a test that read immediately
 // would be measuring the scheduler.
@@ -767,22 +780,45 @@ func TestEveryOp_IsGatedOnTheCallersOwnBalance(t *testing.T) {
 }
 
 // TestFeatures_IsPricedFromItsWindow: the most expensive read on this surface is
-// not also the cheapest. A 400-day catalogue costs 400 screens; the default 30
-// costs 30.
+// not also the cheapest. A 400-day catalogue costs 400 screens, and it is charged
+// at BOTH seams — the gate before the work and the meter after it.
 //
-// Mutation proof: price features at a flat 1 and the two amounts below stop
-// differing.
+// Both, because they fail differently and only one of them is a refusal. A meter
+// that reports the right number while the gate asks for nothing is an op that
+// bills a caller who has no balance and does the work anyway; the amount looks
+// perfect in the books and the control is off. So the gate is proved as a
+// BRACKET — one cent under the measured cost refuses, exactly the cost admits —
+// which nothing but the real number satisfies.
+//
+// Mutation proof: price the GATE at zero screens and the 402 below becomes a 200;
+// price the METER at a flat 1 and the amount stops tracking the window.
 func TestFeatures_IsPricedFromItsWindow(t *testing.T) {
+	const days = 400
+	want := cloud.MicrosToGateCents(screenMicros(days))
+	if want < 2 {
+		t.Fatalf("a %d-day catalogue costs %d cents, too coarse for this bracket to mean anything", days, want)
+	}
+
+	// A cent under the cost is REFUSED. The gate is asking for the window.
 	probe.reset(true)
-	books := &ledger{available: 100_000_000}
+	poor := mountBilled(t, &ledger{available: want - 1})
+	if code, out := req(t, poor, http.MethodGet, "/v1/risk/features?days=400", orgA, "u_"+orgA, ""); code != http.StatusPaymentRequired {
+		t.Fatalf("a %d-day catalogue on a balance of %d cents = %d %s, want 402 — it costs %d, and an "+
+			"op gated at zero is an op with no gate wearing one", days, want-1, code, out, want)
+	}
+
+	// Exactly the cost admits, and the meter books exactly the window.
+	probe.reset(true)
+	books := &ledger{available: want}
 	app := mountBilled(t, books)
 	if code, out := req(t, app, http.MethodGet, "/v1/risk/features?days=400", orgA, "u_"+orgA, ""); code != http.StatusOK {
-		t.Fatalf("GET /v1/risk/features?days=400 = %d %s", code, out)
+		t.Fatalf("GET /v1/risk/features?days=400 on a balance of exactly %d cents = %d %s — the gate "+
+			"is asking for more than the work costs", want, code, out)
 	}
 	posted := books.await(t, 1)
-	if got := posted[0].Micros / defaultScreenUUSD; got != 400 {
-		t.Fatalf("a 400-day catalogue metered %d screens — the op that issues up to 120 warehouse "+
-			"statements must be priced from the window it reads", got)
+	if got := posted[0].Micros / defaultScreenUUSD; got != days {
+		t.Fatalf("a %d-day catalogue metered %d screens — the op that issues up to 120 warehouse "+
+			"statements must be priced from the window it reads", days, got)
 	}
 }
 
@@ -794,8 +830,15 @@ func TestFeatures_IsPricedFromItsWindow(t *testing.T) {
 // cancels the run partway with the debit already taken and, if the process dies
 // before the report is written, with no result to show for it either.
 //
+// It is proved on a run that is CUT SHORT, because that is the only place the two
+// rules differ: a run that finishes tries every candidate, so "what it was
+// admitted for" and "what it did" are the same number and an assertion on a
+// completed run cannot tell them apart. The rollout is the case that matters
+// anyway — one replica, old pod stopped first — and it is the case where metering
+// at accept charges in full for work that never happened.
+//
 // Mutation proof: move the pay() call back beside the 202 and the amount below
-// becomes candidates × events rather than trials × events.
+// becomes the full candidates × events even though the grid was cancelled.
 func TestSearch_IsMeteredOnWhatTheRunDid(t *testing.T) {
 	probe.reset(true)
 	books := &ledger{available: 1_000_000_000}
@@ -819,17 +862,47 @@ func TestSearch_IsMeteredOnWhatTheRunDid(t *testing.T) {
 	if err := json.Unmarshal(out, &run); err != nil {
 		t.Fatalf("decode the run: %v", err)
 	}
+	accepted := int64(run.Events * run.Candidates)
+	if accepted == 0 {
+		t.Fatal("the accepted run is empty — this test proves nothing")
+	}
+	// THE ROLLOUT, MID-GRID. Shutdown cancels the plane's context and waits for the
+	// run goroutine, which is exactly what the old pod does while the new one is
+	// starting. Nothing is charged until that goroutine ends, so by the time this
+	// returns the books are final and there is no interval to poll.
+	if err := Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+	if did := books.screens(); did >= accepted {
+		t.Fatalf("a run cancelled by a rollout metered %d screens, the full %d it was ADMITTED for — "+
+			"the meter is running on the accepted size and not on the work, so every deploy bills "+
+			"every caller in flight for a grid that never ran", did, accepted)
+	}
+}
+
+// TestSearch_TheDebitLandsOnTheCallerThatAskedForIt: the meter fires from a
+// background goroutine long after the 202, so it must carry the identity it was
+// given rather than read a request arena that has since been recycled — on a
+// connection two tenants took turns on, that arena is the OTHER tenant.
+func TestSearch_TheDebitLandsOnTheCallerThatAskedForIt(t *testing.T) {
+	probe.reset(true)
+	books := &ledger{available: 1_000_000_000}
+	app := mountBilled(t, books)
+	k := key(t, brandA, orgA)
+	for i := 0; i < 40; i++ {
+		probe.hold(string(k), map[string]any{
+			"subject_kind": kindAccount, "subject": "u_" + strconv.Itoa(i%5),
+			"bucket": surfaceAt(i + 1),
+			"events": uint32(1), "spend_nano": int64(1_000_000),
+		})
+	}
+	if code, out := req(t, app, http.MethodPost, "/v1/risk/search", orgA, "u_"+orgA, `{"days":7}`); code != http.StatusAccepted {
+		t.Fatalf("POST /v1/risk/search = %d %s, want 202", code, out)
+	}
 	posted := books.await(t, 1)
-	did := posted[0].Micros / defaultScreenUUSD
-	if did == 0 {
-		t.Fatal("the run metered nothing")
+	if posted[0].Micros == 0 {
+		t.Fatal("a completed run metered nothing")
 	}
-	if did > int64(run.Events*run.Candidates) {
-		t.Fatalf("the run metered %d screens for a run of at most %d — the meter is running on the "+
-			"accepted size and not on the work", did, run.Events*run.Candidates)
-	}
-	// And the meter reads no request state: it fires from a background goroutine
-	// long after the 202, and a recycled request arena would be another tenant's.
 	if posted[0].Org != orgA || posted[0].User != orgA {
 		t.Fatalf("the run's debit landed on %q/%q rather than the caller's own ledger — the meter is "+
 			"reading a request that has already been recycled", posted[0].Org, posted[0].User)

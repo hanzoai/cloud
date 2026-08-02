@@ -522,6 +522,49 @@ func TestFold_AGapIsRetried(t *testing.T) {
 	}
 }
 
+// TestFoldMark_SurvivesTheWire: a watermark is only a watermark if the READ can
+// express it.
+//
+// [bucketMark] names a bucket in order to EXCLUDE it, and the exclusion happens
+// in the warehouse: the read is `bucket >= ?` with the bound rendered by
+// [tsLiteral], whose format is second-grained. A mark one nanosecond past the
+// bucket is therefore truncated back ONTO the bucket it meant to exclude the
+// moment it is bound, and the fold re-reads a window it has already applied on
+// every retry. The mark and the transport have to agree about resolution or the
+// mark is decoration.
+//
+// This is measured as the round trip rather than through the fold, deliberately:
+// [replayable] applies the window a SECOND time in memory, where the nanosecond
+// still exists, so the re-read row is silently dropped downstream and no
+// behavioural test upstream of it can see the defect. A property that is only
+// visible at one seam is asserted at that seam.
+//
+// Mutation proof: step [bucketMark] by a nanosecond and this fails.
+func TestFoldMark_SurvivesTheWire(t *testing.T) {
+	bucket := horizon(time.Now().UTC())
+	mark := bucketMark(bucket, time.Time{})
+	if !mark.After(bucket) {
+		t.Fatalf("the mark %s does not exclude the bucket %s it names", mark, bucket)
+	}
+	// ...and it still excludes it after a round trip through the wire, which is
+	// where the exclusion actually happens.
+	onWire, err := time.Parse("2006-01-02 15:04:05", tsLiteral(mark))
+	if err != nil {
+		t.Fatalf("the mark does not render as a bound: %v", err)
+	}
+	if !bucket.Before(onWire.UTC()) {
+		t.Fatalf("the mark %s binds as %q, which does NOT exclude the bucket %s it names — every "+
+			"retry re-reads and re-applies a bucket the fold already folded",
+			mark.Format(time.RFC3339Nano), tsLiteral(mark), bucket)
+	}
+	// And it cannot skip the NEXT bucket: surface buckets are a whole grain apart,
+	// so a mark that excluded one would lose that history for good.
+	if next := bucket.Add(featureBucket); next.Before(onWire.UTC()) {
+		t.Fatalf("the mark %s binds as %q, which also excludes the next bucket %s — the fold "+
+			"would skip it for good", mark, tsLiteral(mark), next)
+	}
+}
+
 // TestFold_MarksOnlyWhatTheSurfaceCanHold: the fold watermark may name only what
 // the surface is known to CONTAIN.
 //
@@ -772,6 +815,71 @@ func TestMasses_SurviveAnUngracefulStop(t *testing.T) {
 	if after.Learned < int64(saveEvery) {
 		t.Fatalf("an ungraceful stop kept %d of %d learned events, which is more than the %d-event "+
 			"watermark allows to be at risk", after.Learned, before.Learned, saveEvery)
+	}
+}
+
+// TestMasses_AreWrittenDownOnAnIntervalToo: the OTHER half of surviving an
+// ungraceful stop, and the half a count watermark cannot cover.
+//
+// [saveEvery] bounds the loss of a model learning in a LOOP. A model that learned
+// a little and then went quiet never reaches it, so without the interval its last
+// few events sit in memory indefinitely and an OOM kill takes them — and the
+// tenant comes back with a model that refuses to score, which reads as clean.
+// Two triggers because there are two ways to be at risk, and neither covers the
+// other.
+//
+// Mutation proof: delete the save inside [plane.sweep] and the second plane below
+// comes back having learned nothing.
+func TestMasses_AreWrittenDownOnAnIntervalToo(t *testing.T) {
+	probe.reset(true)
+	dir := t.TempDir()
+	k := key(t, brandA, orgA)
+
+	p := planeAt(t, dir)
+	holdFolds(t, p)
+	// FEWER than the watermark, so the count trigger cannot fire and only the
+	// interval can. A test that taught saveEvery events would pass either way.
+	teach(t, p, k, stream(saveEvery/10, time.Now().UTC().Add(-3*time.Hour)))
+	before, _, err := p.state(k)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if before.Learned == 0 || before.Learned >= int64(saveEvery) {
+		t.Fatalf("the first plane learned %d events; this test needs some, and fewer than the "+
+			"%d-event watermark, or it proves nothing", before.Learned, saveEvery)
+	}
+
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go p.sweep(ctx, time.Millisecond)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if snap, _, _, err := p.load(k); err == nil && snap != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the sweeper never wrote a resident down — a model that learns a little and then " +
+				"goes quiet is lost by any ungraceful stop, and comes back refusing to score")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	stop()
+
+	// The pod is killed: no close(), so nothing writes a shutdown snapshot.
+	p.stop()
+	if err := p.shelf.CloseAll(); err != nil {
+		t.Fatalf("release the files: %v", err)
+	}
+	second := planeAt(t, dir)
+	defer func() { _ = second.close() }()
+	holdFolds(t, second)
+	after, _, err := second.state(k)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if after.Learned != before.Learned {
+		t.Fatalf("an ungraceful stop kept %d of %d learned events — the interval trigger is what "+
+			"covers a model below the %d-event watermark", after.Learned, before.Learned, saveEvery)
 	}
 }
 
