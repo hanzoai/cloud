@@ -4183,6 +4183,24 @@ is nothing for platform authority to reach and conflating the two scopes would b
 a privilege escalation. Scoring, deciding, reading and labelling are unchanged for
 an ordinary member. Every governance write emits with its actor.
 
+**A value that outlives its request OWNS ITS BYTES.** fasthttp owns the buffers
+behind header values and the request path and REUSES them for the next request on
+the connection, so `sc.org`, `by(sc)` and every path parameter are strings
+pointing at memory the server is about to overwrite. `emit` published those from a
+goroutine, which marshalled whatever the NEXT request wrote there — another
+tenant's user id under this tenant's `DistinctID`, a data race under `-race` and a
+silent wrong analytics record without it. `detach` (store.go) takes ownership at
+the ONE publish site, and `analytics.PublishEvents` is spelled exactly once in the
+package so a second detach cannot skip it.
+
+**An op cannot obtain a file handle without the error that says it has none.**
+`residency.close` retires EVERY cell the instant teardown runs — no idle
+requirement — and `(*sql.DB)(nil).QueryRow` locks a nil mutex, so on a Recreate
+one-replica rollout a request already holding a cell could nil-dereference and
+take every tenant on the pod with it. `resident.file()` answers `(handle, error)`
+and `tenantState` resolves it once for all 27 op sites, so the nil is
+unrepresentable downstream rather than a rule each caller has to remember.
+
 ### The operating point an operator has to know
 
 **ONE BOUND, AND IT IS BYTES.** `RISK_MEMORY` (default 512 MiB) is the node's
