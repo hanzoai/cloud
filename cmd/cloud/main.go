@@ -44,6 +44,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/credz/launch"
+	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plugin"
@@ -96,23 +97,24 @@ func forward(kv map[string]string) {
 }
 
 func run(addr, zapAddr, enable string) error {
-	// THE FLEET'S ONE AGENT DOOR, at POST /v1/mcp. zip serves it: initialize, ping,
-	// tools/list and tools/call are its handleMCP, and the tool list is the union
-	// of every mounted plugin's build-time catalogue (mount below), rendered once
-	// as bytes. So tools/list — the method an MCP client calls constantly — is a
-	// memcpy and starts NO child; only a tools/call wakes one, the single plugin
-	// that owns the named tool, over ZAP on its private socket.
+	// THE FLEET'S ONE AGENT DOOR is served BY THIS HOST, at POST /v1/mcp, and
+	// zip's is switched off so that exactly one handler holds the address.
 	//
-	// The host is the only process that can own it. MCPTools() is in-process, so a
-	// plugin cannot enumerate a lazy sibling, and a plugin-hosted door would cost
-	// its own wake on the very first list.
+	// zip's door answers out of an app's own typed-op registry plus the build-time
+	// catalogues a host hands it. This host has neither: it registers no op, and
+	// the catalogues are deleted. What it has is CHILDREN, and the honest content
+	// of the fleet's door is what they serve RIGHT NOW — so the host asks them
+	// (fleet.Mount, below, after the mount loops have built the plugin table).
+	//
+	// The host is still the only process that can own it: a plugin's MCPTools() is
+	// in-process, so no subsystem can enumerate a lazy sibling.
 	//
 	// The address comes from manifest, not from a literal here: the console's
 	// terminal handler has to know it too (to refuse to answer a machine door with
 	// the SPA shell, and to send an agent that guessed zip's default to the real
 	// one), and when those two were written down separately the second one was
 	// simply missing — GET /mcp answered 200 text/html for as long as that lasted.
-	app := zip.New(zip.Config{AppName: "cloud", MCP: zip.MCPConfig{Path: manifest.MCPPath}})
+	app := zip.New(zip.Config{AppName: "cloud", MCP: zip.MCPConfig{Disabled: true}})
 
 	// Mint this host's child-signing secret and take the KMS root key OUT of the
 	// host's own environment — both BEFORE the first Load spawns an eager child.
@@ -203,6 +205,16 @@ func run(addr, zapAddr, enable string) error {
 	// whole fleet and no plugin can see past itself.
 	spec(app, composed)
 
+	// THE AGENT DOOR, at POST /v1/mcp — composed by ASKING, at the moment of
+	// asking. Registered after the mount loops so the plugin table it starts from
+	// is the finished one, and before anything listens.
+	//
+	// It is the composed set minus the CORESIDENT apps: a coresident app is
+	// middleware on a sibling's router (zen on ai's), so it is not a child this
+	// host can start and its ops are already in the sibling's registry — asking
+	// for it by name would report a permanent outage for an app that is serving.
+	fleet.Mount(app, manifest.MCPPath, routed(composed), locate(app))
+
 	// The bare /mcp needs no route here. webui's terminal handler answers it from
 	// manifest.MCPPath (webui/mcp.go) — one rule, in the one place that can tell a
 	// machine door from a client-side console route. A route registered here would
@@ -292,10 +304,13 @@ func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, abs
 	}
 	p := a.Plugin()
 	p.Lazy = !eager
-	// This app's MCP tools, from the artifact its own binary wrote when it was
-	// built. Given them, zip serves this app's tools on the host's door and
-	// forwards a tools/call to this app alone — without ever running it to ask.
-	p.Tools = plugin.Tools(a.Name)
+	// NO BUILD-TIME TOOL CATALOGUE. zip.Plugin.Tools took the array this app's
+	// binary projected when it was BUILT (plugin/<app>/mcp.json) so the host could
+	// answer tools/list without running anything. That artifact was a second
+	// source for a fact the child already knows, and it was wrong: o11y's held 12
+	// tools while the o11y binary at the same commit served 365. The door asks the
+	// child now (fleet.Mount), so there is nothing to hand over here.
+	//
 	// Per-plugin, on the plugin's OWN Env, which zip appends to that ONE child's
 	// environment: a scoped token for every child, and — for the broker alone —
 	// the launch secret and the root key. A token or key placed in the host's
@@ -335,6 +350,51 @@ func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, abs
 		return fmt.Errorf("%s: mounting it absent failed too: %w", a.Name, err)
 	}
 	return nil
+}
+
+// routed drops the CORESIDENT apps from a composed set: the ones that mount as
+// middleware on a sibling's router and are therefore not children this host can
+// reach by name. Their ops are registered on the sibling's app, so the sibling
+// already answers for them; asking for one by name would report a permanent
+// outage for a subsystem that is serving perfectly.
+func routed(composed []string) []string {
+	co := map[string]bool{}
+	for _, a := range manifest.Apps {
+		if a.Coresident {
+			co[a.Name] = true
+		}
+	}
+	out := make([]string, 0, len(composed))
+	for _, name := range composed {
+		if !co[name] {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// locate is how the door reaches ONE app: the child this host started, or the
+// instance an operator pointed CLOUD_<NAME>_ADDR at.
+//
+// Both are needed because they are reached differently and only the composition
+// root knows which is which. zip.App.Start covers a spawned child and is the
+// right door for it — idempotent, and the same single-flighted path a request to
+// the app's prefix takes, so a burst of askers still produces one process. A
+// remotely mounted app is never started, so Start has nothing to report about it
+// and would name it unavailable forever.
+func locate(app *zip.App) fleet.At {
+	remote := map[string]string{}
+	for _, a := range manifest.Apps {
+		if addr := a.Plugin().Addr; addr != "" {
+			remote[a.Name] = addr
+		}
+	}
+	return func(name string) (string, error) {
+		if addr := remote[name]; addr != "" {
+			return addr, nil
+		}
+		return app.Start(name)
+	}
 }
 
 // draining flips true when this host is shutting down, and is read lock-free by

@@ -265,9 +265,10 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 #      prose and examples reach the document. `-run zipdoc` picks the directives
 #      out of ./... by name, so a typed op added anywhere is covered and no
 #      unrelated generator fires.
-#   2. each app describes ITSELF: `<app> openapi` mounts that one subsystem and
+#   2. each app describes ITSELF: `<app> describe` mounts that one subsystem and
 #      projects its own router into plugin/<app>/openapi.json (mk/fleet.mk — one lean
-#      binary per app, no fused build and no mega link).
+#      binary per app, no fused build and no mega link). It no longer writes an MCP
+#      catalogue beside it: the door asks the subsystems (package fleet).
 #   3. the weave composes those subsets into openapi.yaml (openapi/weave.go),
 #      refusing when two apps claim one path or one schema name. There is no
 #      monolith left to read: the woven document IS the published spec.
@@ -293,7 +294,7 @@ describe: ## Regenerate every app's projections, then weave them into openapi.ya
 	$(GO) generate -run zipdoc ./...
 	$(MAKE) -f mk/fleet.mk describe-apps
 	$(MAKE) -f mk/fleet.mk openapi-weave OUT=openapi.yaml
-	@echo ">> openapi.yaml — $$(grep -c '^  /' openapi.yaml) paths, $$(cat plugin/*/mcp.json | grep -c '\"name\":') MCP tools"
+	@echo ">> openapi.yaml — $$(grep -c '^  /' openapi.yaml) paths. The MCP tool list is NOT an artifact: POST /v1/mcp asks every subsystem."
 
 test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend via -tags sqlite_purego so the embedded modernc importers don't double-register "sqlite".
 	$(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags "sqlite_purego $(TEST_TAGS)" ./...
