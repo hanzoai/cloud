@@ -9,27 +9,29 @@ package audit
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/namespace"
 )
 
-// openTemp opens a Recorder backed by a fresh on-disk SQLite file (not :memory:,
-// because tamper tests re-open the same file via a second connection to edit it
-// out-of-band — exactly what an attacker with DB access would do).
+// openTemp opens a Recorder backed by a fresh on-disk database, and reports the
+// directory holding it so a tamper test can re-open the SAME store on a second
+// connection and edit it out-of-band — exactly what an attacker with DB access
+// would do.
 func openTemp(t *testing.T) (*Recorder, string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := Open(path, nil)
+	dir := t.TempDir()
+	rec, err := Open(dir, "audit", nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { _ = rec.Close() })
-	return rec, path
+	return rec, dir
 }
 
 // sampleRecord is a representative security event (a SuperAdmin org deletion).
@@ -121,7 +123,7 @@ func TestVerify_PassesOnUntamperedChain(t *testing.T) {
 // property — an audit trail that can be silently forged is worse than none.
 func TestVerify_DetectsFieldTamper(t *testing.T) {
 	requireSharedStore(t) // tampers through a second handle while the Recorder holds the store open
-	rec, path := openTemp(t)
+	rec, dir := openTemp(t)
 	ctx := context.Background()
 	for i := 0; i < 10; i++ {
 		if _, err := rec.Append(ctx, sampleRecord("DELETE /v1/admin/orgs")); err != nil {
@@ -135,7 +137,7 @@ func TestVerify_DetectsFieldTamper(t *testing.T) {
 
 	// Tamper OUT OF BAND — a second connection issues an UPDATE the application
 	// never would. This models an attacker who owns the file / a rogue DBA.
-	tamperOutOfBand(t, path, `UPDATE audit_log SET actor_sub='attacker', result='success' WHERE seq=4`)
+	tamperOutOfBand(t, dir, `UPDATE audit_log SET actor_sub='attacker', result='success' WHERE seq=4`)
 
 	iv, err := rec.Verify(ctx)
 	if err != nil {
@@ -157,7 +159,7 @@ func TestVerify_DetectsFieldTamper(t *testing.T) {
 // now-preceding record, and the seq sequence gaps. Either way Verify flags it.
 func TestVerify_DetectsDeletion(t *testing.T) {
 	requireSharedStore(t) // tampers through a second handle while the Recorder holds the store open
-	rec, path := openTemp(t)
+	rec, dir := openTemp(t)
 	ctx := context.Background()
 	for i := 0; i < 10; i++ {
 		if _, err := rec.Append(ctx, sampleRecord("POST /v1/admin/roles")); err != nil {
@@ -165,7 +167,7 @@ func TestVerify_DetectsDeletion(t *testing.T) {
 		}
 	}
 	// Delete a MIDDLE record — the classic "cover your tracks" edit.
-	tamperOutOfBand(t, path, `DELETE FROM audit_log WHERE seq=5`)
+	tamperOutOfBand(t, dir, `DELETE FROM audit_log WHERE seq=5`)
 
 	iv, err := rec.Verify(ctx)
 	if err != nil {
@@ -186,7 +188,7 @@ func TestVerify_DetectsDeletion(t *testing.T) {
 // trying to reorder events) breaks the prev-hash linkage.
 func TestVerify_DetectsReorder(t *testing.T) {
 	requireSharedStore(t) // tampers through a second handle while the Recorder holds the store open
-	rec, path := openTemp(t)
+	rec, dir := openTemp(t)
 	ctx := context.Background()
 	for i := 0; i < 6; i++ {
 		if _, err := rec.Append(ctx, sampleRecord("POST /v1/kms/secrets")); err != nil {
@@ -195,7 +197,7 @@ func TestVerify_DetectsReorder(t *testing.T) {
 	}
 	// Swap the hashes of seq 2 and seq 3 (content stays, linkage corrupts). Any
 	// out-of-band shuffle that doesn't recompute the WHOLE suffix is detectable.
-	tamperOutOfBand(t, path, `
+	tamperOutOfBand(t, dir, `
 UPDATE audit_log SET hash = (SELECT hash FROM audit_log WHERE seq=3) WHERE seq=2;`)
 
 	iv, _ := rec.Verify(ctx)
@@ -211,10 +213,10 @@ UPDATE audit_log SET hash = (SELECT hash FROM audit_log WHERE seq=3) WHERE seq=2
 // (recovers seq + head) rather than forking — so a pod restart cannot silently
 // reset the trail.
 func TestChain_RestartContinues(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.db")
+	dir := t.TempDir()
 	ctx := context.Background()
 
-	rec1, err := Open(path, nil)
+	rec1, err := Open(dir, "audit", nil)
 	if err != nil {
 		t.Fatalf("open 1: %v", err)
 	}
@@ -228,7 +230,7 @@ func TestChain_RestartContinues(t *testing.T) {
 	}
 	_ = rec1.Close()
 
-	rec2, err := Open(path, nil)
+	rec2, err := Open(dir, "audit", nil)
 	if err != nil {
 		t.Fatalf("open 2: %v", err)
 	}
@@ -471,9 +473,9 @@ func (m *checkpointMirror) last() (Checkpoint, bool) {
 // CheckpointSink, to the independent digest store — and a final checkpoint fires
 // on Close. This is what an external monitor compares to detect tail-truncation.
 func TestCheckpoint_EmitsHeadDigest(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.db")
+	dir := t.TempDir()
 	mirror := &checkpointMirror{}
-	rec, err := Open(path, mirror)
+	rec, err := Open(dir, "audit", mirror)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -524,8 +526,8 @@ func TestCheckpoint_EmitsHeadDigest(t *testing.T) {
 // ignored (no re-arm, no field/WaitGroup race) — the Red-review robustness fix.
 // Run under -race to catch a regression.
 func TestCheckpoint_DoubleStartIsSafe(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := Open(path, nil)
+	dir := t.TempDir()
+	rec, err := Open(dir, "audit", nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -545,9 +547,9 @@ func TestCheckpoint_DoubleStartIsSafe(t *testing.T) {
 // the final count before Close returns, not on a detached goroutine that might
 // not run before process exit.
 func TestCheckpoint_CloseSyncsToSink(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.db")
+	dir := t.TempDir()
 	mirror := &checkpointMirror{}
-	rec, err := Open(path, mirror)
+	rec, err := Open(dir, "audit", mirror)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -573,8 +575,8 @@ func TestCheckpoint_CloseSyncsToSink(t *testing.T) {
 // after a tail truncation the head reported by Head() drops below a prior
 // checkpoint — the signal the o11y alert fires on.
 func TestCheckpoint_CountMonotonicDetectsTruncation(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := Open(path, nil)
+	dir := t.TempDir()
+	rec, err := Open(dir, "audit", nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -591,9 +593,9 @@ func TestCheckpoint_CountMonotonicDetectsTruncation(t *testing.T) {
 	_ = rec.Close()
 
 	// Attacker truncates the tail (deletes the last 4 records) out of band.
-	tamperOutOfBand(t, path, `DELETE FROM audit_log WHERE seq >= 6`)
+	tamperOutOfBand(t, dir, `DELETE FROM audit_log WHERE seq >= 6`)
 
-	rec2, err := Open(path, nil)
+	rec2, err := Open(dir, "audit", nil)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -610,17 +612,17 @@ func TestCheckpoint_CountMonotonicDetectsTruncation(t *testing.T) {
 	t.Logf("truncation detected by count regression: %d → %d (chain-internal verify is OK; external anchor catches it)", before, after)
 }
 
-// tamperOutOfBand opens the SAME sqlite file on a SEPARATE connection and runs a
+// tamperOutOfBand opens the SAME database on a SEPARATE connection and runs a
 // mutating statement the audit application itself never issues — modeling an
 // attacker with direct database/file access. The Recorder's own connection is
 // unaffected; Verify then re-reads and must catch the damage.
-func tamperOutOfBand(t *testing.T, path, stmt string) {
+func tamperOutOfBand(t *testing.T, dir, stmt string) {
 	t.Helper()
-	// Opened through cek, like the Recorder itself: the store is encrypted at rest,
-	// so a bare sql.Open cannot read it. The modelled adversary is one with database
+	// Opened the same way the Recorder itself is: the store is encrypted at rest, so
+	// a bare sql.Open cannot read it. The modelled adversary is one with database
 	// access AND the key (an insider, or a compromised process) — file access alone
 	// no longer suffices, which is the point of encrypting it.
-	db, err := cek.Open(cek.Global, path)
+	db, err := basedb.Open(namespace.System(), "audit", dir)
 	if err != nil {
 		t.Fatalf("tamper open: %v", err)
 	}

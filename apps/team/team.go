@@ -61,11 +61,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("team.Mount: empty DataDir")
 	}
 	root := filepath.Join(deps.DataDir, "team")
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return fmt.Errorf("team.Mount: data dir: %w", err)
-	}
 
-	accounts, err := openAccountStore(filepath.Join(root, "account.db"))
+	accounts, err := openAccountStore(root)
 	if err != nil {
 		return fmt.Errorf("team.Mount: open account store: %w", err)
 	}

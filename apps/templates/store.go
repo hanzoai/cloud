@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (see the same
 	// blank import in clients/projects/store.go for why it must not be modernc).
@@ -18,8 +19,8 @@ import (
 // errConflict is returned when the caller's org already owns that slug.
 var errConflict = errors.New("templates: slug taken")
 
-// Store holds every org's PRIVATE templates — ONE SQLite file
-// ({DataDir}/templates.db) whose isolation key is the org column, the same
+// Store holds every org's PRIVATE templates — ONE SQLite file (the deployment's
+// own "templates" subsystem) whose isolation key is the org column, the same
 // discipline clients/projects and clients/marketplace keep.
 //
 // The PUBLIC catalog is deliberately NOT in this table: it stays the embedded
@@ -33,10 +34,10 @@ var errConflict = errors.New("templates: slug taken")
 // — the only two things ever queried on — stay real columns.
 type Store struct{ db *sql.DB }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "templates", dir)
 	if err != nil {
-		return nil, fmt.Errorf("templates: open store %q: %w", path, err)
+		return nil, fmt.Errorf("templates: open store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON"} {

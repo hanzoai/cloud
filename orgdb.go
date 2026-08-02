@@ -11,8 +11,10 @@ import (
 	"sync"
 	"time"
 
-	// cek opens every org file encrypted at rest (the SOLE org-open seam).
-	"github.com/hanzoai/cloud/cek"
+	// basedb is the ONE opener: cek derives this database's key from the process
+	// master and the namespace that owns it, and opens the file under it. cloud
+	// holds no key material and no crypto of its own.
+	"github.com/hanzoai/cloud/basedb"
 
 	// internal/org is the HA-durable substrate: ha election (WHO writes) + vfs
 	// FencedStore ship/hydrate (HOW it ships) + envelope Cipher (at rest). Every
@@ -20,14 +22,6 @@ import (
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
-
-	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers the
-	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
-	// encrypted at rest + FTS5; !cgo → pure-Go modernc, FTS5 incl. the trigram
-	// tokenizer). Importing modernc/mattn directly would double-register "sqlite"
-	// under CGO and panic at init. OrgDB is the SOLE place cloud opens an org SQLite
-	// file; the blank import keeps the driver registered for cek's no-key fallback.
-	_ "github.com/hanzoai/sqlite"
 )
 
 // Durability answers a question namespace does not ask, and keeping the two
@@ -59,45 +53,17 @@ import (
 //	org/{slug}/{project}  →  {DataDir}/orgs/{slug}/projects/{project}/{subsystem}.db
 //	system                →  {DataDir}/orgs/_platform/{subsystem}.db
 func OrgDB(dataDir string, ns namespace.Namespace, subsystem string) (*sql.DB, error) {
-	path, err := namespace.Path(dataDir, ns, subsystem)
-	if err != nil {
-		return nil, err
-	}
-	return openOrgDB(nsPrincipal(ns), path)
+	return openOrgDB(ns, subsystem, dataDir)
 }
 
-// openOrgDB creates the parent dir 0700 and opens the SQLite file with the
-// single-writer + WAL pragmas shared by every org store. MaxOpenConns(1)
-// serializes writes against the file lock (and makes a read-modify-write such as
-// tracker's per-project issue-number allocation a safe transaction).
-func openOrgDB(p cek.Principal, path string) (*sql.DB, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, fmt.Errorf("cloud: OrgDB mkdir: %w", err)
-	}
-	db, err := cek.Open(p, path)
+// openOrgDB opens the SQLite file with the single-writer + WAL pragmas shared by
+// every org store. MaxOpenConns(1) serializes writes against the file lock (and
+// makes a read-modify-write such as tracker's per-project issue-number allocation
+// a safe transaction).
+func openOrgDB(ns namespace.Namespace, subsystem, dir string) (*sql.DB, error) {
+	db, err := basedb.Open(ns, subsystem, dir)
 	if err != nil {
-		// A store whose sidecar predates "a store's key names its owner" is wrapped
-		// under the legacy Global derivation, so the owner-bound open above cannot
-		// unwrap it. Rewrap carries the SAME DEK to the owner-bound wrapping and we
-		// retry, ONCE — the migration runs where the need is discovered rather than
-		// in a tool someone has to remember.
-		//
-		// It shipped as cmd/cek-rewrap alone and nothing invoked it, so the
-		// derivation changed under stores that were never migrated and two of them
-		// (git, sync) simply stopped opening in production — which took the native
-		// git plane and the mirror engine down, and with them every deploy. A
-		// migration that must be run by hand is a migration that has not shipped.
-		//
-		// Idempotent and conservative: Rewrap reports Already when the owner-bound
-		// key already opens it, and refuses when NEITHER identity does — a genuinely
-		// wrong master key or a corrupt sidecar stays an error, and is not papered
-		// over by rewriting a sidecar we could not read.
-		if res := cek.Rewrap(p, path); res.Err == nil && res.Rewrapped {
-			db, err = cek.Open(p, path)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("cloud: OrgDB open %q: %w", path, err)
-		}
+		return nil, fmt.Errorf("cloud: OrgDB open %s/%s: %w", ns, subsystem, err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{
@@ -209,11 +175,30 @@ func (c *OrgStore[T]) For(ns namespace.Namespace) (T, error) { return c.forNS(ns
 // An authenticated, org-scoped caller does NOT want this: its org is real by
 // construction and its store must be created on first touch.
 func (c *OrgStore[T]) Has(ns namespace.Namespace) bool {
+	c.mu.Lock()
+	_, open := c.byNS[ns]
+	c.mu.Unlock()
+	if open {
+		return true
+	}
 	path, err := namespace.Path(c.dataDir, ns, c.subsystem)
 	if err != nil {
 		return false
 	}
-	return cek.Exists(path)
+	return exists(path)
+}
+
+// exists reports whether a database file is on disk.
+//
+// It is the disk half of Has, and it is only half on purpose: the pure-Go codec
+// holds a database in its envelope and writes the real file back when the handle
+// CLOSES, so a store that is open right now has nothing here to find. The other
+// half is the open set above — the handle is the only thing that knows about a
+// store no byte of which has been sealed yet, and a sweep that consulted only
+// the disk would skip precisely the stores that are in use.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // forNS opens (and migrates on first use) the store the namespace names, caching
@@ -272,7 +257,7 @@ func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 	// pre-durability cache.
 	if c.dur == nil {
 		defer c.mu.Unlock()
-		db, err := openOrgDB(nsPrincipal(ns), path)
+		db, err := openOrgDB(ns, c.subsystem, c.dataDir)
 		if err != nil {
 			return zero, err
 		}
@@ -337,7 +322,7 @@ func (c *OrgStore[T]) openDurable(ns namespace.Namespace, path string) (T, *org.
 	if err != nil && c.log != nil {
 		c.log.Warn("org store hydrate degraded — opening read-only", "subsystem", c.subsystem, "namespace", ns, "key", dbKey, "err", err)
 	}
-	db, err := openOrgDB(nsPrincipal(ns), path)
+	db, err := openOrgDB(ns, c.subsystem, c.dataDir)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -439,10 +424,6 @@ func (c *OrgStore[T]) Each(fn func(ns namespace.Namespace, st T, err error)) err
 		if !e.IsDir() || strings.HasPrefix(e.Name(), "_") {
 			continue
 		}
-		path := filepath.Join(root, e.Name(), c.subsystem+".db")
-		if !cek.Exists(path) {
-			continue // this org has no store for this subsystem
-		}
 		// e.Name() IS the on-disk org slug — the value OrgNamespace wrote there, and
 		// the one the election hashes; Each is org-root scoped, so no project group.
 		ns, err := nsOnDisk(e.Name())
@@ -452,6 +433,9 @@ func (c *OrgStore[T]) Each(fn func(ns namespace.Namespace, st T, err error)) err
 			// hide a store the sweep is meant to reach, so it is reported.
 			fn(namespace.Namespace{}, zero, fmt.Errorf("cloud: %q under %s names no namespace: %w", e.Name(), root, err))
 			continue
+		}
+		if !c.Has(ns) {
+			continue // this org has no store for this subsystem
 		}
 		st, openErr := c.forNS(ns)
 		fn(ns, st, openErr)
@@ -465,13 +449,13 @@ func (c *OrgStore[T]) Each(fn func(ns namespace.Namespace, st T, err error)) err
 // It is the boot question a reader replica asks — has my volume been hydrated at
 // all? — and it has to be answerable without opening, because a reader that
 // opened every org's file to find out would pay the whole fleet's I/O for one
-// boolean. It is Each's walk without the opens, and it shares Each's rendering
-// of where a store lives, so the two cannot disagree about what counts as one.
+// boolean. It is Each's walk without the opens, and it shares Has, so the two
+// cannot disagree about what counts as a store.
 func (c *OrgStore[T]) Stored() bool {
 	// The deployment's own partition counts: a volume holding only the system
 	// namespace's file still has something to serve, and a boot check that said
 	// otherwise would refuse to start a replica that was in fact hydrated.
-	if c.Has(PlatformNamespace()) {
+	if c.Has(namespace.System()) {
 		return true
 	}
 	ents, err := os.ReadDir(filepath.Join(c.dataDir, orgsRoot))
@@ -486,7 +470,7 @@ func (c *OrgStore[T]) Stored() bool {
 		if err != nil {
 			continue
 		}
-		if path, err := namespace.Path(c.dataDir, ns, c.subsystem); err == nil && cek.Exists(path) {
+		if c.Has(ns) {
 			return true
 		}
 	}

@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"time"
 
-	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers the
-	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
-	// encrypted at rest; !cgo → pure-Go modernc). Blank import registers it. This
-	// mirrors clients/crm exactly — the ONE storage pattern.
-	"github.com/hanzoai/cloud/cek"
+	// basedb is the ONE opener: it renders this subsystem's path from the
+	// namespace and opens it under the key cek derives for that name.
+	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver; the blank import
+	// registers the "sqlite" database/sql name. Mirrors clients/crm exactly — the
+	// ONE storage pattern.
+	"github.com/hanzoai/cloud/basedb"
+	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -23,18 +25,19 @@ var (
 	errBadRef   = errors.New("automations: referenced record not found in org")
 )
 
-// Store is the automations database. ONE SQLite file ({DataDir}/automations.db)
-// holds every org's flows, versions, and runs; tenant isolation is the `org`
-// column, physical on EVERY uniqueness + lookup index (each leads with org).
-// MaxOpenConns(1) serializes writes against the single-writer WAL file.
+// Store is the automations database. ONE SQLite file — the system namespace's
+// "automations" — holds every org's flows, versions, and runs; tenant isolation
+// is the `org` column, physical on EVERY uniqueness + lookup index (each leads
+// with org). MaxOpenConns(1) serializes writes against the single-writer WAL
+// file.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := cek.Open(cek.Global, path)
+func openStore(dir string) (*Store, error) {
+	db, err := basedb.Open(namespace.System(), "automations", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+		return nil, fmt.Errorf("open automations store: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{

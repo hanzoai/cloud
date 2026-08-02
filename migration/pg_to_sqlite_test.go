@@ -3,10 +3,14 @@ package migration
 import (
 	"context"
 	"database/sql"
-	"github.com/hanzoai/cloud/cek"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud/basedb"
+	_ "github.com/hanzoai/cloud/internal/devmaster"
+	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags (cgo →
@@ -147,22 +151,10 @@ CREATE TABLE legacy_audit (
 	// safe twice.
 	pool.Close()
 
-	// Verify each routing path materialised the expected dst files.
-	for _, expected := range []string{
-		filepath.Join(dstRoot, "hanzo", "z@hanzo.ai", "cloud.sqlite"),
-		filepath.Join(dstRoot, "lux", "z@lux.network", "cloud.sqlite"),
-		filepath.Join(dstRoot, "hanzo", "_org", "cloud.sqlite"),
-		filepath.Join(dstRoot, "lux", "_org", "cloud.sqlite"),
-		filepath.Join(dstRoot, "_global", "_org", "cloud.sqlite"),
-	} {
-		if _, err := openCheck(expected, "projects").ReadDir(""); err != nil {
-			// Just an existence check; openCheck normalises this.
-		}
-	}
-	// Stronger check — count rows in the per-user file.
-	// Read through cek: the dst files the migration writes are encrypted at rest,
-	// so a bare sql.Open cannot read them.
-	dst1, err := cek.Open(cek.Global, filepath.Join(dstRoot, "hanzo", "z@hanzo.ai", "cloud.sqlite"))
+	// Count rows in the per-user file. Read the same keyed way the migration wrote
+	// it: the dst databases are encrypted at rest, so a bare sql.Open cannot read
+	// them, and naming them any other way would open an empty one.
+	dst1, err := openDst(t, dstRoot, "hanzo", "z@hanzo.ai")
 	if err != nil {
 		t.Fatalf("open dst1: %v", err)
 	}
@@ -176,7 +168,7 @@ CREATE TABLE legacy_audit (
 	}
 
 	// org_settings row should land under _org sentinel.
-	dst2, err := cek.Open(cek.Global, filepath.Join(dstRoot, "hanzo", "_org", "cloud.sqlite"))
+	dst2, err := openDst(t, dstRoot, "hanzo", sentinelOrgUser)
 	if err != nil {
 		t.Fatalf("open dst2: %v", err)
 	}
@@ -190,7 +182,7 @@ CREATE TABLE legacy_audit (
 	}
 
 	// legacy_audit row should land under the _global sentinel.
-	dst3, err := cek.Open(cek.Global, filepath.Join(dstRoot, "_global", "_org", "cloud.sqlite"))
+	dst3, err := openDst(t, dstRoot, sentinelOrg, sentinelOrgUser)
 	if err != nil {
 		t.Fatalf("open dst3: %v", err)
 	}
@@ -298,15 +290,51 @@ func TestMapPGTypeCoverage(t *testing.T) {
 	}
 }
 
-func TestDestinationPathRejectsInvalidTokens(t *testing.T) {
-	if _, err := destinationPath("/data", "../etc", "user"); err == nil {
-		t.Error("expected error for org with ..")
+// A hostile org or user cannot leave the data directory. The property is NOT
+// "rejected" — namespace folds every separator and dot into one safe segment and
+// disambiguates it with a hash of the raw value, so a legacy PG row naming
+// "../etc" gets its own database rather than an error — it is "cannot escape".
+// Asserting the wrong one of those would be a test that passes for the wrong
+// reason.
+func TestDestinationNamespaceNeutralisesTraversal(t *testing.T) {
+	for _, tc := range []struct{ org, user string }{
+		{"../etc", "user"},
+		{"org", "/abs"},
+		{"..", ".."},
+		{`a\b`, "c/d"},
+	} {
+		ns, err := destinationNamespace(tc.org, tc.user)
+		if err != nil {
+			continue // refused outright is also fine
+		}
+		path, err := namespace.Path("/data", ns, dstSubsystem)
+		if err != nil {
+			t.Fatalf("namespace.Path(%q): %v", ns, err)
+		}
+		if !strings.HasPrefix(path, "/data/") || strings.Contains(path, "..") {
+			t.Errorf("(%q, %q) rendered to %q, which can leave the data directory", tc.org, tc.user, path)
+		}
 	}
-	if _, err := destinationPath("/data", "org", "/abs"); err == nil {
-		t.Error("expected error for user with /")
+
+	// The two sentinels are absences. A row with no user lands in the ORG's own
+	// database; a row with neither lands in the deployment's, which is a different
+	// KIND — so no org, however spelled, can be routed into it.
+	orgNS, err := destinationNamespace("hanzo", sentinelOrgUser)
+	if err != nil {
+		t.Fatalf("org-scoped sentinel: %v", err)
 	}
-	if p, err := destinationPath("/data", "hanzo", "_org"); err != nil || p != "/data/hanzo/_org/cloud.sqlite" {
-		t.Errorf("unexpected: %q %v", p, err)
+	if orgNS.Group().String() != "" {
+		t.Errorf("the org-scoped sentinel became a group %q — it is an absence, not a name", orgNS.Group())
+	}
+	globalNS, err := destinationNamespace(sentinelOrg, sentinelOrgUser)
+	if err != nil {
+		t.Fatalf("global sentinel: %v", err)
+	}
+	if globalNS != namespace.System() {
+		t.Errorf("the global sentinel named %q, want the system namespace", globalNS)
+	}
+	if globalNS == orgNS {
+		t.Error("an org was routed into the deployment's own database")
 	}
 }
 
@@ -331,11 +359,14 @@ func equalStringSlices(a, b []string) bool {
 	return true
 }
 
-// openCheck is a tiny helper used to make the file-existence asserts in
-// TestRoundTripPerOrgUserRouting compile cleanly; we use it as a
-// no-op (errors get surfaced by the sql.Open checks below) so the
-// test stays readable.
-type fileCheck struct{ path string }
-
-func openCheck(path, _ string) fileCheck          { return fileCheck{path} }
-func (f fileCheck) ReadDir(_ string) (any, error) { return nil, nil }
+// openDst opens a destination database the way the migration wrote it: same
+// namespace, same subsystem, same root. Any other spelling opens an empty file
+// and the assertion that follows would be meaningless.
+func openDst(t *testing.T, root, org, user string) (*sql.DB, error) {
+	t.Helper()
+	ns, err := destinationNamespace(org, user)
+	if err != nil {
+		t.Fatalf("destinationNamespace(%q, %q): %v", org, user, err)
+	}
+	return basedb.Open(ns, dstSubsystem, root)
+}

@@ -133,9 +133,9 @@ var Prefixes = []string{
 // boot at all, and the whole money plane is 503 in every local dev build and every
 // `go test`. That is the state this function exists to end.
 //
-// CodecLinked is the SAME predicate commerce's own resolveMasterKey gates on, and
-// the same one cek.EnsureDevKey uses for cloud's stores, so asking it here keeps ONE
-// posture decision across the process rather than three that can disagree:
+// CodecLinked is the SAME predicate commerce's own resolveMasterKey gates on, so
+// asking it here keeps ONE posture decision across the process rather than two that
+// can disagree:
 //
 //   - codec linked (the production image: CGO_ENABLED=1 -tags libsqlite3) → inject.
 //     commerce encrypts, and its resolveMasterKey still fails closed if the key is

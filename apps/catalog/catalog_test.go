@@ -6,24 +6,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/index"
-	sqlitedrv "github.com/hanzoai/sqlite"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
-
-// Same build-tag-agnostic harness as the index suite it borrows the store from.
-func TestMain(m *testing.M) {
-	if sqlitedrv.EncryptionAvailable() && os.Getenv("CLOUD_KMS_MASTER_KEY_REF") == "" {
-		_ = os.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
-	}
-	os.Exit(m.Run())
-}
 
 // mount brings up the index (the store) and the catalog (the lens) on one app,
 // exactly as apps.go orders them.

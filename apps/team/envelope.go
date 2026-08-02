@@ -15,7 +15,7 @@
 //   - transactor: org = the `extra.org` claim of the HS256 workspace token in the
 //     :token path segment, minted by selectWorkspace and VERIFIED (token.Decode
 //     verify=true) against SERVER_SECRET before the WebSocket upgrade. Every docs
-//     SQLite file lives at {DataDir}/team/workspaces/orgs/<org>/ws/<ws>.db.
+//     SQLite file lives at {DataDir}/team/workspaces/orgs/<org>/projects/<ws>/docs.db.
 //   - account RPC: org = the `extra.org` claim of the HS256 session token in the
 //     bearer/cookie, likewise VERIFIED. Every account-store query filters by org;
 //     selectWorkspace resolves the workspace scoped to (org, slug) so a foreign

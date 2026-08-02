@@ -33,8 +33,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -118,11 +116,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("pricing.Mount: empty DataDir — the catalog enablement overlay requires a persistent data dir (set CLOUD_DATA_DIR); refusing to boot with a non-persistent overlay that would re-expose admin-hidden models on restart")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("pricing.Mount: data dir: %w", err)
-	}
-	dbPath := filepath.Join(deps.DataDir, "catalog.db")
-	cstore, err := openCatalog(dbPath)
+	cstore, err := openCatalog(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("pricing.Mount: open catalog overlay: %w", err)
 	}
@@ -218,7 +212,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		"section_routes", 14, // the fixed plans/infra/tools/gpu/policy sections
 		"gated_routes", 6, // models, free, featured, providers, summary, model/:name
 		"admin_routes", 3, // GET /v1/admin/catalog + PATCH models/* + PATCH providers/:name
-		"overlay_db", dbPath,
+		"overlay_db", "catalog", // the subsystem; build.go already logs the data dir
 		"express", false,
 		"goja", true,
 		"brand", deps.Brand,

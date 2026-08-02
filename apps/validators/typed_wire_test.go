@@ -28,7 +28,7 @@ var untypedByDesign = map[string]string{}
 // status — and stops before any chain read.
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
-	store, err := openStore(t.TempDir() + "/validators.db")
+	store, err := openStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

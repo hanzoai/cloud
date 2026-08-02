@@ -31,8 +31,8 @@ func TestMigrateOverLegacyProvisioned(t *testing.T) {
 	migratetest.Case{
 		Name:      "provisioning",
 		LegacyDDL: legacyProvisionedDDL,
-		Open: func(path string) (io.Closer, error) {
-			st, err := openStore(path)
+		Open: func(dir string) (io.Closer, error) {
+			st, err := openStore(dir)
 			if err != nil {
 				return nil, err
 			}

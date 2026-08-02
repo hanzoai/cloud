@@ -9,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -80,10 +78,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// idempotently: the embedded fixtures (base + each brand) are seeded-if-absent, so
 	// a redeploy never clobbers a SuperAdmin's live edits. After seeding the DB is
 	// authoritative; the embedded fixture is only the seed source + fail-safe fallback.
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("guide.Mount: data dir: %w", err)
-	}
-	blueprints, err := openBlueprintStore(filepath.Join(deps.DataDir, "guide-blueprint.db"))
+	blueprints, err := openBlueprintStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("guide.Mount: open blueprint store: %w", err)
 	}
