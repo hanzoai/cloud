@@ -319,15 +319,11 @@ func decode(c *zip.Ctx, v any) error {
 	return c.Bind(v)
 }
 
-func clientIP(c *zip.Ctx) string {
-	if xff := c.Header("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
-	}
-	return c.Header("X-Real-Ip")
-}
+// clientIP is the caller's address, by the ONE rule — cloud.ClientIP. It lands in
+// a durable audit record, and the LEFT-most X-Forwarded-For entry (and X-Real-Ip)
+// are values the client writes: an address chosen by the party being audited is
+// not evidence.
+func clientIP(c *zip.Ctx) string { return cloud.ClientIP(c) }
 
 func nowUnix() int64 { return time.Now().Unix() }
 
