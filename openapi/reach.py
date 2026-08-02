@@ -156,14 +156,23 @@ def main():
     check_instrument()
     spec, base, ratchet_path = sys.argv[1:]
 
+    # PyYAML is REQUIRED, not optional. The runner does not ship it, and the
+    # json fallback that used to sit here could never have helped: this is
+    # always called on openapi.yaml, and json.load on YAML fails with
+    #
+    #   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+    #
+    # which names neither the file nor the missing package, so a missing
+    # dependency read as a corrupt spec. Fail on the real reason instead.
     try:
-        import yaml  # PyYAML when present (the forge runner has it)
-
-        doc = yaml.safe_load(open(spec))
+        import yaml
     except ImportError:
-        import json
+        sys.exit(
+            "reach.py needs PyYAML to read the OpenAPI spec; install it "
+            "(pip install pyyaml) before running this check"
+        )
 
-        doc = json.load(open(spec))
+    doc = yaml.safe_load(open(spec))
 
     ops = probed_ops(doc)
     ratchet = {
