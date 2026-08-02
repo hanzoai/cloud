@@ -25,17 +25,12 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// iamKeyServer stands in for IAM's get-user?accessKey lookup, returning the user
-// row that owns the key. This is the SUBJECT resolution the fix depends on.
-func iamKeyServer(t *testing.T, owner, name string) *httptest.Server {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","data":{"owner":"` + owner + `","name":"` + name + `","email":"` + name + `@example.test","isAdmin":false}}`))
-	}))
-	t.Cleanup(srv.Close)
-	return srv
-}
+// testKey is the customer credential these tests present, in all three halves. The
+// same secret suffix is minted as an hk- (on the user row), an sk- (a key's
+// confidential half) and a pk- (its publishable half), so the three shapes are
+// distinguished by PREFIX alone and a test cannot pass because it happened to use an
+// unknown value.
+const testKey = "customer-key-123"
 
 // orgScopedProbe runs a request through SanitizeIdentity into a handler that gates
 // exactly like every org-scoped route does (principal.Org → 403 when absent), and
@@ -63,17 +58,21 @@ func orgScopedProbe(t *testing.T, v *identityValidator, mutate func(*http.Reques
 	return resp.StatusCode, org
 }
 
-// keyValidator builds an identity validator whose key resolver points at a stub IAM.
+// keyValidator builds an identity validator over a real IAM store holding the
+// customer's credential — the SUBJECT resolution the fix depends on.
 func keyValidator(t *testing.T, owner, name string) *identityValidator {
 	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("rsa: %v", err)
 	}
-	jwks := jwksServer(t, &key.PublicKey)
+	jwks := jwksServer(t, &rsaKey.PublicKey)
 	v := newIdentityValidator(testIssuer, jwks.URL, 0)
-	iam := iamKeyServer(t, owner, name)
-	v.keys = &iamKeys{base: iam.URL, auth: "Basic test", http: iam.Client(), cache: newCache[string, *idClaims](time.Minute)}
+
+	db := store(t)
+	user(t, db, owner, name, name+"@example.test", "hk-"+testKey, false)
+	key(t, db, owner, name+"-key", owner+"/"+name, "pk-"+testKey, "sk-"+testKey, "")
+	v.keys = newIAMKeys()
 	return v
 }
 
@@ -85,7 +84,7 @@ func TestAPIKeyResolvesOrgOnScopedRoute(t *testing.T) {
 	for _, prefix := range []string{"hk-", "sk-"} {
 		t.Run(prefix, func(t *testing.T) {
 			status, org := orgScopedProbe(t, v, func(r *http.Request) {
-				r.Header.Set("Authorization", "Bearer "+prefix+"customer-key-123")
+				r.Header.Set("Authorization", "Bearer "+prefix+testKey)
 			})
 			if status != http.StatusOK {
 				t.Fatalf("%s key on an org-scoped route = %d, want 200 (this is the .244 break)", prefix, status)
@@ -100,10 +99,14 @@ func TestAPIKeyResolvesOrgOnScopedRoute(t *testing.T) {
 // TestPublishableKeyStillGrantsNothing: pk- ships in browser bundles, so it must
 // NOT gain an org from this path. The subject resolution is for secret credentials
 // only.
+//
+// The key presented here is the REAL publishable half of the very credential whose
+// sk- half resolves above, seeded in the same store — so this cannot pass merely
+// because the value is unknown. A pk- is refused for being a pk-.
 func TestPublishableKeyStillGrantsNothing(t *testing.T) {
 	v := keyValidator(t, "gotham-labs", "batkey")
 	status, _ := orgScopedProbe(t, v, func(r *http.Request) {
-		r.Header.Set("Authorization", "Bearer pk-public-bundle-key")
+		r.Header.Set("Authorization", "Bearer pk-"+testKey)
 	})
 	if status == http.StatusOK {
 		t.Fatal("a publishable key resolved an org — pk- must never authenticate")

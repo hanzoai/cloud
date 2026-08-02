@@ -388,8 +388,17 @@ func TestRequestEscapeHatchIsPinned(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
+			// A DOT-directory is never this module's source: .git, and equally
+			// .claude/worktrees, which holds whole checkouts of this same repo. Naming
+			// ".git" alone let those checkouts be walked, so the gate reported every
+			// call site two or three times over — under paths that do not exist for
+			// anyone else — and a real new call site was indistinguishable from a
+			// leftover working copy. One rule, so nothing has to be added here again.
+			if path != "." && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
 			switch d.Name() {
-			case ".git", "node_modules", "vendor", "webui", "testdata":
+			case "node_modules", "vendor", "webui", "testdata":
 				return filepath.SkipDir
 			}
 			return nil
