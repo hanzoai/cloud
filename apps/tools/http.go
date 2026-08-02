@@ -117,6 +117,11 @@ func (o toolOps) callTool(ctx context.Context, in *toolCall) (*toolResult, error
 	if !validToolName(name) {
 		return nil, zip.ErrBadRequest("name is required and must be a tool name")
 	}
+	// Balance BEFORE work. o.meter debits a unit at the bottom of this function; this
+	// is the question that debit assumed somebody had already asked.
+	if err := o.gate(ctx); err != nil {
+		return nil, err
+	}
 	out, err := Default().Dispatch(ctx, p, name, in.Arguments)
 	if err != nil {
 		switch {
