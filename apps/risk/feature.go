@@ -110,9 +110,22 @@ func qualify(brandID, org string) (tenant, error) {
 		return "", fmt.Errorf("%q is the anonymous lane, not an organisation", public)
 	case strings.Contains(org, sep):
 		return "", fmt.Errorf("org %q contains %q, so the tenant it names is not readable back", org, sep)
+	case len(id)+len(sep)+len(org) > maxTenant:
+		return "", fmt.Errorf("the tenant key is %d bytes, over the %d-byte bound every per-tenant ceiling is a multiple of",
+			len(id)+len(sep)+len(org), maxTenant)
 	}
 	return tenant(id + sep + org), nil
 }
+
+// maxTenant bounds the qualified tenant key IN BYTES, and it is a bound for the
+// same reason [maxField] is: the key is the leading term of every velocity key
+// and of every recorded row, so the per-tenant memory and disk ceilings are
+// multiples of it. Org creation is self-service, so its length is chosen outside
+// this process even though a request cannot choose it per call.
+//
+// 128 bytes is twice the 64 the fleet's own namespace segment allows, which is
+// what actually names the organisation's file on disk.
+const maxTenant = 128
 
 // qualified reports whether a key is one qualify would have produced. Derived
 // from qualify rather than stated again, so there is one definition of the shape
@@ -604,6 +617,24 @@ const (
 // so a surface read can bring itself current without becoming a write amplifier.
 const featureBucket = 5 * time.Minute
 
+// horizon is HOW CURRENT THE SURFACE CAN BE: the newest instant a rollup is
+// allowed to have written, aligned down to the surface's own grain. It is ONE
+// function because two readers of it disagreeing is a silent hole.
+//
+// [plane.roll] stops here — [rollLag] behind the present, because the source
+// planes are written asynchronously and the newest minutes are not complete.
+// [plane.warm] therefore has to stop here too, and MARK here too. It used to
+// read and mark to `now`, which is 10 to 15 minutes past anything the rollup had
+// written: the watermark then said "folded through now" about buckets that did
+// not exist yet, the next rollup wrote them, and the fold never came back for
+// them. Every fold cycle lost that organisation's most recent history —
+// permanently, and with the model reporting itself warm.
+//
+// A mark may only name what the surface is known to CONTAIN. That is this.
+func horizon(now time.Time) time.Time {
+	return now.UTC().Add(-rollLag).Truncate(featureBucket)
+}
+
 // rolled reads how far a source plane has been folded for this tenant. A tenant
 // with no watermark starts at the floor rather than at the epoch.
 func (p *plane) rolled(t tenant, name string) (time.Time, error) {
@@ -678,8 +709,8 @@ func (p *plane) roll(ctx context.Context, t tenant) (int, error) {
 	defer release()
 	// The edge is aligned DOWN to the surface's own grain, and every watermark is
 	// therefore an aligned instant too, so no window this issues can ever split a
-	// bucket. See [featureBucket].
-	edge := p.now().UTC().Add(-rollLag).Truncate(featureBucket)
+	// bucket. See [featureBucket] and [plane.horizon].
+	edge := horizon(p.now())
 	var folded int
 	var first error
 	for _, r := range rollups {
@@ -821,9 +852,14 @@ func text(v any) string {
 	return ""
 }
 
+// stamp decodes a bucket to the ONE resolution this package represents a bucket
+// at: a whole second. The surface's own column is second-grained and [tsLiteral]
+// can bind nothing finer, so a sub-second stamp reaching a reader would be a
+// second representation of the same fact — and the fold watermark, which names a
+// bucket in order to exclude it, would name a value the next read cannot match.
 func stamp(v any) time.Time {
 	if t, ok := v.(time.Time); ok {
-		return t.UTC()
+		return t.UTC().Truncate(time.Second)
 	}
 	return time.Time{}
 }

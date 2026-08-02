@@ -12,6 +12,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zap-proto/zip"
 )
@@ -80,8 +81,8 @@ func TestTenantOf_FailsClosedWithoutAValidatedPrincipal(t *testing.T) {
 // pool two behaviours into one baseline and make each look ordinary.
 func TestObservation_SubjectIsNamespacedByKind(t *testing.T) {
 	k := key(t, brandA, orgA)
-	a := observation{Kind: kindPerson, Subject: "x"}.tx(k)
-	b := observation{Kind: kindAccount, Subject: "x"}.tx(k)
+	a := ob(t, "e_a", kindPerson, "x", 0, time.Now()).tx(k)
+	b := ob(t, "e_b", kindAccount, "x", 0, time.Now()).tx(k)
 	if a.AccountID == b.AccountID {
 		t.Fatalf("two kinds of subject %q folded onto one aggregate key %q", "x", a.AccountID)
 	}

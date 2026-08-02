@@ -41,13 +41,14 @@ package risk
 // SHADOW IS THE DEFAULT, PER TENANT. A model that quietly went live and started
 // refusing payments is the worst failure available here, so a new tenant's model
 // scores, learns and records what it WOULD have alerted on, and contributes
-// nothing, until its organisation states otherwise. GET /v1/ml/state reports the
+// nothing, until its organisation states otherwise. GET /v1/risk/state reports the
 // stated appetite beside the realised one, which is what makes the appetite a
 // measured commitment rather than an intention.
 
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
@@ -57,12 +58,12 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/luxfi/aml/pkg/anomaly"
 	"github.com/luxfi/aml/pkg/types"
-	"github.com/luxfi/aml/pkg/velocity"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
@@ -87,23 +88,92 @@ const warmWindow = ringWindow
 // is deliberately NOT the wire shape: the wire is a contract with callers and
 // this is a contract with the engine, and folding them into one type is how a
 // caller ends up able to name a tenant.
+//
+// Its fields are unexported and it has ONE constructor, [observe], because every
+// ceiling in this package — the ring budget, the record budget, the process
+// ceiling — is a COUNT multiplied by the size of one of these. A second way to
+// build one is a second place the size is unbounded.
 type observation struct {
-	// ID identifies the event. It selects the below-the-line review sample by
+	// id identifies the event. It selects the below-the-line review sample by
 	// hash, so it must be the caller's own stable id and not a counter.
-	ID string
-	// Kind and Subject are whose behaviour this is. Kind is one of [kinds].
-	Kind, Subject string
-	// USD is the value moved, already converted. Zero where the event moves no
+	id string
+	// kind and subject are whose behaviour this is. kind is one of [kinds].
+	kind, subject string
+	// usd is the value moved, already converted. Zero where the event moves no
 	// money, which leaves the value features blind rather than fabricating a
 	// currency for an activity event.
-	USD float64
-	// Peer is the counterparty, and Device the device fingerprint. Each is an
+	usd float64
+	// peer is the counterparty, and device the device fingerprint. Each is an
 	// aggregation AXIS: the pair axis is what makes "unfamiliar" a fact about a
 	// relationship, and the device axis is what surfaces several nominally
 	// unrelated subjects acting as one.
+	peer, device string
+	// at is when it happened.
+	at time.Time
+}
+
+// actor is WHOSE behaviour an observation is, on every axis the model aggregates
+// over. It is the caller-chosen half of an observation, which is exactly the half
+// that has to be bounded.
+type actor struct {
+	// Kind namespaces Subject, so a person and an account sharing an identifier
+	// stay two subjects. It is one of [kinds] and is therefore already bounded by
+	// a closed set.
+	Kind string
+	// Subject is the identifier on that kind.
+	Subject string
+	// Peer is the counterparty and Device the device fingerprint, each an
+	// aggregation axis of its own.
 	Peer, Device string
-	// At is when it happened.
-	At time.Time
+}
+
+// observe is the ONE constructor of an [observation] and the only place
+// [maxField] is applied.
+//
+// There is no other way to build one — [TestObservation_HasOneConstructor] walks
+// the package's own syntax tree and fails on a second composite literal — because
+// a bound applied at some of the doors is a bound at none of them: the live wire,
+// the replay from the tenant's own record and the fold from its own feature
+// surface all reach the same rings and the same disk.
+//
+// It REFUSES rather than truncating. Two subjects differing only past the cut
+// would silently become one set of aggregates, which is a wrong answer wearing a
+// right one's clothes.
+//
+// The stamp is truncated to ONE SECOND, the resolution the durable record carries,
+// so a rebuild from that record is identical to the live rings rather than merely
+// close to them.
+func observe(id string, a actor, usd float64, at time.Time) (observation, error) {
+	if !known(a.Kind) {
+		return observation{}, zip.ErrBadRequest("'kind' must be one of " + strings.Join(kinds, ", "))
+	}
+	if a.Subject == "" {
+		return observation{}, zip.ErrBadRequest("'subject' is required — an event that names nobody has nobody to be unusual for")
+	}
+	for _, f := range []struct{ name, value string }{
+		{"id", id}, {"subject", a.Subject}, {"peer", a.Peer}, {"device", a.Device},
+	} {
+		if len(f.value) > maxField {
+			return observation{}, zip.Errorf(413, "'%s' is %d bytes — at most %d, because every ceiling this plane publishes is a count of these",
+				f.name, len(f.value), maxField)
+		}
+	}
+	return observation{
+		id: id, kind: a.Kind, subject: a.Subject,
+		usd: usd, peer: a.Peer, device: a.Device,
+		at: at.UTC().Truncate(time.Second),
+	}, nil
+}
+
+// bucketID names the one observation a surface bucket becomes. It is a DIGEST and
+// not the parts concatenated, for two reasons that are both bounds: the parts
+// together can exceed [maxField] while every one of them is legal on its own, and
+// a digest is the same length whatever the subject is. Deterministic, so the same
+// bucket folded again after an eviction is the same event and lands in the
+// below-the-line review sample the same way.
+func bucketID(kind, subject string, bucket time.Time) string {
+	sum := sha256.Sum256([]byte(kind + "\x00" + subject + "\x00" + strconv.FormatInt(bucket.Unix(), 10)))
+	return "fold_" + hex.EncodeToString(sum[:16])
 }
 
 // tx renders an observation as the engine's transaction, under the QUALIFIED
@@ -114,15 +184,15 @@ type observation struct {
 // to share an identifier are two subjects and never one aggregate.
 func (o observation) tx(t tenant) types.Transaction {
 	return types.Transaction{
-		ID:                o.ID,
+		ID:                o.id,
 		OrgID:             string(t),
-		AccountID:         o.Kind + ":" + o.Subject,
-		Counterparty:      o.Peer,
-		DeviceFingerprint: o.Device,
-		USD:               o.USD,
-		Notional:          o.USD,
+		AccountID:         o.kind + ":" + o.subject,
+		Counterparty:      o.peer,
+		DeviceFingerprint: o.device,
+		USD:               o.usd,
+		Notional:          o.usd,
 		Currency:          "USD",
-		Timestamp:         o.At,
+		Timestamp:         o.at,
 	}
 }
 
@@ -137,12 +207,11 @@ func (o observation) tx(t tenant) types.Transaction {
 // the quietest one's keys and the quiet one's velocity features go blind with no
 // error and no alert. Held here they have one owner, one bound and one lifetime.
 type resident struct {
-	mu   sync.Mutex
-	key  tenant
-	cfg  anomaly.Config
-	mod  *anomaly.Store
-	vel  *velocity.Store // THIS tenant's aggregates; see ring.go
-	warm bool            // the tenant's own surface has been folded in
+	mu  sync.Mutex
+	key tenant
+	cfg anomaly.Config
+	mod *anomaly.Store
+	vel *rings // THIS tenant's aggregates; see ring.go
 	// edge is the newest timestamp the rings carry. The rings only move forward
 	// (see [placeable]), so this is what a backdated observation is measured
 	// against before it is allowed to claim it happened now.
@@ -151,6 +220,16 @@ type resident struct {
 	// rings when it became resident. Held here so the fold can quote it whenever
 	// the fold actually starts, which is not always the request that planted it.
 	replayed int
+	// refused counts buckets of this tenant's own surface a fold had to skip
+	// because a subject on them is longer than [maxField].
+	refused int
+	// unsaved is how many events this model has learned since its state was last
+	// written down. It is the SIZE OF WHAT AN UNGRACEFUL STOP WOULD LOSE — an OOM
+	// kill, a lost node, a forced delete — and it is why the masses are not written
+	// only at shutdown: a shutdown hook runs on the graceful path and on no other,
+	// and a model that came back empty refuses to score, which reads as clean to
+	// anything that does not check the refusal.
+	unsaved int
 	// warmed is how far this tenant's own surface has ALREADY been folded into the
 	// masses this model holds. It travels with the snapshot (one row, one fact) and
 	// it is what stops a fold from being a re-fold.
@@ -185,6 +264,15 @@ type fold struct {
 	Folded int
 	Window time.Duration
 	Gap    string
+	// again is whether the next touch should try this tenant's fold AGAIN. A fold
+	// in flight is not retried and a fold that finished clean is not either; a
+	// fold that hit a GAP is, and that is the correction.
+	//
+	// The sentinel used to be written for every outcome, so a warehouse blip on a
+	// tenant's first touch marked it folded for the life of its residency: the moat
+	// never applied to that organisation again, with the gap sitting on its state
+	// and nothing retrying. Only a fold that SUCCEEDED is a fold that happened.
+	again bool
 	// Rolled is how many windows of this tenant's SOURCE planes were folded into
 	// its feature surface before the read. Zero with no gap means the surface was
 	// already current, which is a different fact from the rollup never running.
@@ -193,6 +281,12 @@ type fold struct {
 	// aggregates when it became resident. It is what says a rollout was a rebuild
 	// rather than a blindness.
 	Replayed int
+	// Refused is how many buckets of this organisation's own surface the fold could
+	// not fold, because a subject on them is longer than [maxField]. Reported
+	// because it is history the model does not have: a fold that quietly skipped
+	// part of an organisation's past is a model that reads clean for the wrong
+	// reason.
+	Refused int
 }
 
 // plane holds every resident model. It holds NO tenant data of its own: every
@@ -202,7 +296,7 @@ type fold struct {
 // learned and another scored, the two would hold different counters and give two
 // different answers to one question, with no error and no log. So the learn path
 // and the score path are the same binary, and the app that owns them owns every
-// /v1/ml leaf that touches them.
+// /v1/risk op that touches them.
 //
 // THERE IS NO SHARED TENANT STORE HERE, and [TestPlane_HoldsNoSharedTenantState]
 // keeps it that way by reflecting over these fields. It used to hold one
@@ -222,6 +316,14 @@ type plane struct {
 	now func() time.Time
 	// folded records what each resident's warm managed, guarded by mu.
 	folded map[tenant]fold
+	// built counts residencies CONSTRUCTED, guarded by mu. With `evicted` it is the
+	// churn: a rebuild replays that tenant's whole record, so a built count far
+	// above the resident count is a plane spending its time rebuilding.
+	//
+	// It is also what makes the single flight measurable — N concurrent first
+	// touches of one tenant must build ONE residency
+	// ([TestResident_IsBuiltOnceHoweverManyAskAtOnce]).
+	built int64
 	// evicted counts tenants dropped to keep the resident bound, guarded by mu.
 	// Eviction here is LOSSLESS — learned state is written down first and the
 	// aggregates rebuild from the tenant's own record — but a bound being hit is a
@@ -251,10 +353,39 @@ type plane struct {
 	// A tenant that finds every ticket taken is NOT marked folded, so its next
 	// request tries again. Deferred and reported, never dropped and silent.
 	folds chan struct{}
+	// opening serialises everything that builds or writes down ONE tenant's
+	// residency, guarded by mu. Whoever finds no entry creates one and does the
+	// work; everyone else for that tenant waits on its channel and takes the
+	// result.
+	//
+	// TWO DEFECTS, ONE SEAM, because they are the same fact — "this tenant's
+	// residency is being changed right now" — and two mechanisms for one fact is
+	// how they disagree:
+	//
+	//   - THE STAMPEDE. Building a residency replays up to [recordRows] of that
+	//     tenant's own record and allocates a whole ring set and model. Unserialised,
+	//     N concurrent first touches each did the whole thing and N−1 were thrown
+	//     away at the end — N × 8 MiB of rings allocated to discard, free, after
+	//     every rollout, which is when every tenant touches at once.
+	//   - THE STALE READ ON EVICTION. The evicted tenant's state is written down
+	//     OUTSIDE p.mu, because a disk write under the plane's lock stalls every
+	//     other tenant. Between the drop and the write, a request for that same
+	//     tenant would read the shelf as it was BEFORE the save and come back with
+	//     an older model, silently.
+	//
+	// Both are "one tenant, one residency change at a time", so both are this.
+	opening map[tenant]*opening
 	// ctx bounds every background fold and search; close cancels it and waits.
 	ctx  context.Context
 	stop context.CancelFunc
 	wg   sync.WaitGroup
+}
+
+// opening is one tenant's residency change in flight.
+type opening struct {
+	done chan struct{}
+	r    *resident
+	err  error
 }
 
 // maxFolds is how many tenants may be folding at once. Each fold holds at most
@@ -271,7 +402,7 @@ func newPlane(base cloud.Base) (*plane, error) {
 	// Construct one store against a throwaway tenant ring set purely to validate
 	// the pair. A configuration that cannot be built is a boot failure, not a
 	// per-request surprise on some tenant's first event.
-	if _, err := anomaly.New(defaultConfig(), newRings()); err != nil {
+	if _, err := anomaly.New(defaultConfig(), newRings().vel); err != nil {
 		return nil, fmt.Errorf("risk: model plane: %w", err)
 	}
 	ctx, stop := context.WithCancel(context.Background())
@@ -283,6 +414,7 @@ func newPlane(base cloud.Base) (*plane, error) {
 		folded:  map[tenant]fold{},
 		running: map[tenant]report{},
 		busy:    map[tenant]int{},
+		opening: map[tenant]*opening{},
 		folds:   make(chan struct{}, maxFolds),
 		ctx:     ctx,
 		stop:    stop,
@@ -294,6 +426,11 @@ func newPlane(base cloud.Base) (*plane, error) {
 	go func() {
 		defer p.wg.Done()
 		schedule(ctx, base.Log)
+	}()
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sweep(ctx)
 	}()
 	return p, nil
 }
@@ -328,16 +465,48 @@ func (p *plane) resident(t tenant) (*resident, error) {
 	if !t.qualified() {
 		return nil, fmt.Errorf("risk: unqualified tenant key %q", string(t))
 	}
-	p.mu.Lock()
-	if r, held := p.res[t]; held {
-		r.touch = p.now()
-		p.foldSoon(r)
+	for {
+		p.mu.Lock()
+		if r, held := p.res[t]; held {
+			r.touch = p.now()
+			p.foldSoon(r)
+			p.mu.Unlock()
+			return r, nil
+		}
+		// SINGLE FLIGHT, PER TENANT. Whoever finds no opening does the work; every
+		// other caller for the same tenant waits on it and then re-reads the map,
+		// because between that open finishing and this wakeup the tenant may already
+		// have been evicted again — the map is the one answer to who is resident.
+		if o, held := p.opening[t]; held {
+			p.mu.Unlock()
+			<-o.done
+			if o.err != nil {
+				return nil, o.err
+			}
+			continue
+		}
+		mine := &opening{done: make(chan struct{})}
+		p.opening[t] = mine
 		p.mu.Unlock()
-		return r, nil
+		return p.open(t, mine)
 	}
-	p.mu.Unlock()
+}
 
-	vel, edge, replayed, err := p.rings(t)
+// open builds one tenant's residency under the slot the caller took for it, and
+// releases that slot in the SAME critical section that publishes the resident —
+// so a tenant is never both resident and opening, and the evicted tenant's slot
+// below can never collide with an open of its own.
+func (p *plane) open(t tenant, mine *opening) (r *resident, err error) {
+	defer func() {
+		mine.r, mine.err = r, err
+		if err != nil {
+			p.mu.Lock()
+			delete(p.opening, t)
+			p.mu.Unlock()
+		}
+		close(mine.done)
+	}()
+	vel, edge, replayed, err := p.rebuild(t)
 	if err != nil {
 		// Empty rings are HONEST: every velocity feature then reads blind and the
 		// model reports it. What must not happen is a tenant being handed anything
@@ -345,7 +514,7 @@ func (p *plane) resident(t tenant) (*resident, error) {
 		p.log.Warn("aggregates could not be rebuilt; this tenant's velocity features start blind",
 			"tenant", string(t), "err", err)
 	}
-	r, err := p.plant(t, defaultConfig(), vel)
+	r, err = p.plant(t, defaultConfig(), vel)
 	if err != nil {
 		return nil, err
 	}
@@ -359,14 +528,19 @@ func (p *plane) resident(t tenant) (*resident, error) {
 	} else {
 		if cfg != nil {
 			r.cfg.Appetite, r.cfg.Shadow = cfg.Appetite, cfg.Shadow
-			mod, err := anomaly.New(r.cfg, r.vel)
+			mod, err := anomaly.New(r.cfg, r.vel.vel)
 			if err != nil {
 				// The stated appetite could not be rebuilt. Keep the DEFAULT posture,
 				// which is shadow — refusing to honour a policy is survivable, quietly
 				// running live because a policy failed to load is not — and say so.
+				//
+				// The geometry seed is NOT reset with it: r.cfg has to keep describing
+				// the store [plane.plant] built.
 				p.log.Warn("stated appetite could not be restored; the tenant keeps the default shadow posture",
 					"tenant", string(t), "err", err)
+				seed := r.cfg.Seed
 				r.cfg = defaultConfig()
+				r.cfg.Seed, r.cfg.MaxOrgs = seed, 1
 			} else {
 				r.mod = mod
 			}
@@ -383,28 +557,48 @@ func (p *plane) resident(t tenant) (*resident, error) {
 			}
 		}
 	}
+	// PLANT BEFORE ANYTHING ELSE CAN. The engine plants a tenant's trees lazily,
+	// so a model that has never been touched has no geometry — and no geometry is
+	// what makes a caller-supplied seed adoptable. State() is the read that plants
+	// it, deterministically from this process's own randomness, and it moves no
+	// counter. After this line every restore has something to be checked against.
+	r.mod.State(string(t))
 
 	p.mu.Lock()
-	if held, ok := p.res[t]; ok { // another caller won the race; theirs is the one
-		held.touch = p.now()
-		p.mu.Unlock()
-		return held, nil
-	}
+	p.built++
 	gone := p.evict()
+	var closing *opening
+	if gone != nil {
+		// TAKE THE EVICTED TENANT'S OWN SLOT before releasing the lock. Its state is
+		// written down below, outside the lock, and until that write lands the shelf
+		// still holds the model as it was BEFORE this residency learned anything — so
+		// a request for that tenant arriving in between would rebuild from stale
+		// state and lose everything since its last save, silently. Holding its slot
+		// makes such a request wait for the write instead. It cannot collide with an
+		// open of that tenant's own: it was resident, and resident and opening are
+		// mutually exclusive.
+		closing = &opening{done: make(chan struct{})}
+		p.opening[gone.key] = closing
+	}
 	r.touch = p.now()
 	p.res[t] = r
+	delete(p.opening, t)
 	p.foldSoon(r)
 	p.mu.Unlock()
 
-	// The evicted tenant's state is written OUTSIDE the lock. Holding the plane's
-	// lock across a disk write would make every other tenant's first request wait
-	// on one tenant's eviction, which is the shape of an outage rather than a
+	// The evicted tenant's state is written OUTSIDE the plane's lock. Holding it
+	// across a disk write would make every other tenant's first request wait on
+	// one tenant's eviction, which is the shape of an outage rather than a
 	// slowdown.
 	if gone != nil {
 		if err := p.save(gone); err != nil {
 			p.log.Warn("evicted a model without saving it; that tenant rebuilds from its own record",
 				"tenant", string(gone.key), "err", err)
 		}
+		p.mu.Lock()
+		delete(p.opening, gone.key)
+		p.mu.Unlock()
+		close(closing.done)
 	}
 	return r, nil
 }
@@ -429,7 +623,7 @@ func (p *plane) resident(t tenant) (*resident, error) {
 // thousand tenants arriving after a rollout is a thousand of those at once.
 func (p *plane) foldSoon(r *resident) {
 	t := r.key
-	if _, attempted := p.folded[t]; attempted {
+	if f, attempted := p.folded[t]; attempted && !f.again {
 		return
 	}
 	select {
@@ -438,7 +632,7 @@ func (p *plane) foldSoon(r *resident) {
 		return // every ticket is taken; the next touch tries again
 	}
 	replayed := r.replayed
-	p.folded[t] = fold{Window: warmWindow, Replayed: replayed, Gap: "folding this organisation's own surface in"}
+	p.folded[t] = fold{Window: warmWindow, Replayed: replayed, Gap: foldRunning}
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -447,6 +641,11 @@ func (p *plane) foldSoon(r *resident) {
 		defer cancel()
 		f := p.fold(ctx, t)
 		f.Replayed = replayed
+		// A GAP RE-ARMS. Whatever did not land — an unreachable warehouse, a
+		// rollup error, the deadline — is a reason to try again on this tenant's
+		// next touch, not a reason to stop. The mark the fold advances makes the
+		// retry cheap: it reads only what it has not already applied.
+		f.again = f.Gap != ""
 		p.mu.Lock()
 		// Only if this is still the resident the fold ran for. A tenant evicted
 		// mid-fold and touched again has a NEW model, and writing this report against
@@ -475,15 +674,45 @@ func (p *plane) fold(ctx context.Context, t tenant) fold {
 	}
 	n, err := p.warm(ctx, t)
 	f.Folded = n
+	f.Refused = p.refused(t)
 	if err != nil {
 		f.Gap = err.Error()
 	}
+	// A FOLD IS LEARNING, so it is written down like any other. Without this a
+	// fold's masses live only in memory until the next graceful shutdown, and an
+	// ungraceful one — an OOM kill, a lost node, a forced delete — throws away
+	// however much of that organisation's own history was just read.
+	if n > 0 {
+		if err := p.saveOf(t); err != nil {
+			p.log.Warn("folded surface could not be written down; it will be folded again",
+				"tenant", string(t), "err", err)
+		}
+	}
 	return f
+}
+
+// saveOf writes down a tenant's model IF it is still resident. It never builds a
+// residency: a save is a consequence of work already done, and rebuilding a
+// tenant in order to save it would be this plane teaching itself.
+func (p *plane) saveOf(t tenant) error {
+	p.mu.Lock()
+	r := p.res[t]
+	p.mu.Unlock()
+	if r == nil {
+		return nil
+	}
+	return p.save(r)
 }
 
 // warmDeadline bounds one fold. A warehouse that is slow must not hold a model
 // warming forever with nothing said about it.
 const warmDeadline = 2 * time.Minute
+
+// foldRunning is the gap a fold IN FLIGHT reports. It is a named value because
+// two states of this app read it — a caller polling its own model state, and the
+// arming rule in [plane.foldSoon] — and a sentinel spelled twice is a sentinel
+// that eventually differs in one of the places.
+const foldRunning = "folding this organisation's own surface in"
 
 // surface reports what the tenant's fold managed.
 func (p *plane) surface(t tenant) fold {
@@ -504,14 +733,14 @@ func (p *plane) surface(t tenant) fold {
 // per tenant per process is geometry an outsider cannot predict and therefore
 // cannot probe for a region to hide activity in; a snapshot carries its own seed,
 // so reproducing a past score never needs this one.
-func (p *plane) plant(t tenant, cfg anomaly.Config, vel *velocity.Store) (*resident, error) {
+func (p *plane) plant(t tenant, cfg anomaly.Config, vel *rings) (*resident, error) {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return nil, fmt.Errorf("risk: seed: %w", err)
 	}
 	cfg.Seed = binary.LittleEndian.Uint64(b[:])
 	cfg.MaxOrgs = 1 // one store, one tenant: the store IS the tenant boundary here
-	mod, err := anomaly.New(cfg, vel)
+	mod, err := anomaly.New(cfg, vel.vel)
 	if err != nil {
 		return nil, fmt.Errorf("risk: model for %q: %w", string(t), err)
 	}
@@ -545,6 +774,23 @@ func (r *resident) hold(ctx context.Context) (func(), error) {
 func (p *plane) install(r *resident, snap anomaly.Snapshot) error {
 	if tenant(snap.OrgID) != r.key {
 		return zip.ErrForbidden("this snapshot names another organisation's model")
+	}
+	// THE GEOMETRY IS OURS, not the caller's. The engine regenerates the trees from
+	// the snapshot's SEED, so a caller that chooses the seed chooses WHERE THE
+	// REGIONS ARE — precisely the state a snapshot is supposed not to disclose,
+	// arriving through the other door. A model that has already been planted has a
+	// geometry of its own, minted here from this process's own randomness or
+	// restored with this tenant's own state, and a snapshot carrying a different
+	// seed did not come from it.
+	//
+	// The seed is CARRIED rather than dropped because it is what makes the check
+	// possible: masses learned in one geometry and scored in another are wrong in a
+	// way nothing reports, so the two must be compared, and the only safe answer to
+	// a mismatch is to refuse. Every residency plants before it accepts a restore
+	// ([plane.open]), so the "no geometry yet" branch below is reachable only on the
+	// tenant's own state coming off its own shelf.
+	if cur, planted := r.mod.Snapshot(string(r.key)); planted && cur.Seed != snap.Seed {
+		return zip.ErrBadRequest("this snapshot was taken under a different geometry than this organisation's model holds, so its counters do not describe these trees")
 	}
 	if err := r.mod.Restore(snap); err != nil {
 		return zip.ErrBadRequest(err.Error())
@@ -648,6 +894,14 @@ func (p *plane) score(t tenant, o observation) (anomaly.Assessment, error) {
 // sees when they look at the subject, and every baseline in the feature set has
 // this event removed from it arithmetically, so nothing is measured against
 // itself.
+//
+// A RETRY CONVERGES, IN MEMORY TOO. The record deduplicates on the caller's own
+// event id and says which rows were new ([plane.note]); only those move the rings
+// and the masses. Idempotence of the durable half alone is not idempotence at all
+// — the rings and the counters are what a decision is made from, and a retried
+// batch that skipped the rows and still moved them counts every event twice in
+// exactly the numbers that matter. Duplicates are still JUDGED, because the
+// caller asked what its model makes of them and the answer costs the same work.
 func (p *plane) learn(t tenant, obs ...observation) ([]anomaly.Assessment, error) {
 	if len(obs) == 0 {
 		return nil, nil
@@ -658,22 +912,29 @@ func (p *plane) learn(t tenant, obs ...observation) ([]anomaly.Assessment, error
 	}
 	// DURABLE FIRST. The aggregates are a projection of this record; writing the
 	// counters and not the record is how a deploy blinds a tenant.
-	if err := p.note(t, obs); err != nil {
+	first, err := p.note(t, obs)
+	if err != nil {
 		return nil, err
 	}
 	now := p.now().UTC()
 	out := make([]anomaly.Assessment, 0, len(obs))
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, o := range obs {
+	for i, o := range obs {
 		tx := o.tx(t)
+		if !first[i] {
+			// Already in this tenant's record, so already in the projection of it. Judge
+			// it against the model as it stands and move nothing.
+			out = append(out, r.mod.Inspect(tx, types.Entity{OrgID: string(t)}))
+			continue
+		}
 		// THE RINGS ONLY MOVE FORWARD. An observation the aggregates cannot hold at
 		// its own bucket would be folded to the leading edge — counted as having
 		// happened NOW — so it is kept out of them. The model still learns from it.
-		if placeable(o.At, r.edge, now) {
-			record(r.vel, tx)
-			if o.At.After(r.edge) {
-				r.edge = o.At
+		if placeable(o.at, r.edge, now) {
+			r.vel.record(tx)
+			if o.at.After(r.edge) {
+				r.edge = o.at
 			}
 		}
 		// TWO PASSES, IN THIS ORDER, and the order is the whole point.
@@ -694,20 +955,84 @@ func (p *plane) learn(t tenant, obs ...observation) ([]anomaly.Assessment, error
 		r.mod.Assess(tx, types.Entity{OrgID: string(t)})
 		out = append(out, a)
 	}
+	// ONCE PER BATCH, never per event: it locks every shard. This is what turns
+	// velocity's silent LRU into a number — see [rings].
+	r.vel.reconcile()
+	for _, applied := range first {
+		if applied {
+			r.unsaved++
+		}
+	}
+	due := r.unsaved >= saveEvery
+	r.mu.Unlock()
+	if due {
+		// OUTSIDE the tenant's lock. A snapshot is a disk write and holding the
+		// model lock across it would put that organisation's own live traffic behind
+		// its own durability.
+		if err := p.save(r); err != nil {
+			p.log.Warn("learned state could not be written down; an ungraceful stop would lose it",
+				"tenant", string(t), "err", err)
+		}
+	}
+	r.mu.Lock()
 	return out, nil
+}
+
+// saveEvery is how many events one organisation's model may learn before its
+// state is written down. It bounds the LOSS of an ungraceful stop in events, and
+// [saveInterval] bounds the same loss in time; a model that learned a little and
+// then went quiet is covered by the second, one learning in a loop by the first.
+const saveEvery = 500
+
+// saveInterval is how often every resident with unwritten learning is written
+// down.
+const saveInterval = 30 * time.Second
+
+// sweep writes down every resident that has learned since its last save. ONE
+// goroutine for the whole plane, and it takes no tenant's lock for longer than a
+// snapshot.
+func (p *plane) sweep(ctx context.Context) {
+	tick := time.NewTicker(saveInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			p.mu.Lock()
+			all := make([]*resident, 0, len(p.res))
+			for _, r := range p.res {
+				all = append(all, r)
+			}
+			p.mu.Unlock()
+			for _, r := range all {
+				r.mu.Lock()
+				due := r.unsaved > 0
+				r.mu.Unlock()
+				if !due {
+					continue
+				}
+				if err := p.save(r); err != nil {
+					p.log.Warn("learned state could not be written down; an ungraceful stop would lose it",
+						"tenant", string(r.key), "err", err)
+				}
+			}
+		}
+	}
 }
 
 // state reports the tenant's model: what it has learned, the threshold in force,
 // the stated appetite beside the realised one, every refusal by reason, and every
 // feature that took its neutral value for want of data.
-func (p *plane) state(t tenant) (anomaly.State, error) {
+func (p *plane) state(t tenant) (anomaly.State, strain, error) {
 	r, err := p.resident(t)
 	if err != nil {
-		return anomaly.State{}, err
+		return anomaly.State{}, strain{}, err
 	}
+	r.vel.reconcile()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mod.State(string(t)), nil
+	return r.mod.State(string(t)), r.vel.strain(), nil
 }
 
 // appetite restates the share of the stream the tenant's model may send for
@@ -718,30 +1043,30 @@ func (p *plane) state(t tenant) (anomaly.State, error) {
 // state, build the model the tenant asked for, restore into it. The digest covers
 // the model's SHAPE (the inventory and the geometry parameters) and not the
 // appetite, so the restore is exact and nothing is unlearned by a policy change.
-func (p *plane) appetite(t tenant, review, sample float64, live bool) (anomaly.State, error) {
+func (p *plane) appetite(t tenant, review, sample float64, live bool) (anomaly.State, strain, error) {
 	r, err := p.resident(t)
 	if err != nil {
-		return anomaly.State{}, err
+		return anomaly.State{}, strain{}, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	cfg := r.cfg
 	cfg.Appetite.Review, cfg.Appetite.Sample, cfg.Shadow = review, sample, !live
-	next, err := anomaly.New(cfg, r.vel)
+	next, err := anomaly.New(cfg, r.vel.vel)
 	if err != nil {
-		return anomaly.State{}, fmt.Errorf("risk: appetite: %w", err)
+		return anomaly.State{}, strain{}, fmt.Errorf("risk: appetite: %w", err)
 	}
 	if snap, held := r.mod.Snapshot(string(t)); held {
 		if err := next.Restore(snap); err != nil {
-			return anomaly.State{}, fmt.Errorf("risk: appetite: carry learned state: %w", err)
+			return anomaly.State{}, strain{}, fmt.Errorf("risk: appetite: carry learned state: %w", err)
 		}
 	}
 	r.cfg, r.mod = cfg, next
 	if err := p.persist(r); err != nil {
-		return anomaly.State{}, err
+		return anomaly.State{}, strain{}, err
 	}
-	return r.mod.State(string(t)), nil
+	return r.mod.State(string(t)), r.vel.strain(), nil
 }
 
 // pin returns a copy of the tenant's learned state, and writes it to the
@@ -756,7 +1081,11 @@ func (p *plane) pin(t tenant) (anomaly.Snapshot, bool, error) {
 	snap, held := r.mod.Snapshot(string(t))
 	cfg, warmed := r.cfg, r.warmed
 	r.mu.Unlock()
-	if !held {
+	// PLANTED IS NOT LEARNED. Every residency plants its geometry so a restore has
+	// something to be checked against, so "the engine holds a model" no longer
+	// means "this organisation has taught it anything" — and pinning an empty
+	// model would hand back a snapshot that reproduces nothing.
+	if !held || snap.Learned == 0 {
 		return anomaly.Snapshot{}, false, nil
 	}
 	if err := p.write(t, snap, cfg, warmed); err != nil {
@@ -767,20 +1096,20 @@ func (p *plane) pin(t tenant) (anomaly.Snapshot, bool, error) {
 
 // adopt installs pinned state into the tenant's model and persists it, refusing a
 // snapshot that names another organisation.
-func (p *plane) adopt(t tenant, snap anomaly.Snapshot) (anomaly.State, error) {
+func (p *plane) adopt(t tenant, snap anomaly.Snapshot) (anomaly.State, strain, error) {
 	r, err := p.resident(t)
 	if err != nil {
-		return anomaly.State{}, err
+		return anomaly.State{}, strain{}, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err := p.install(r, snap); err != nil {
-		return anomaly.State{}, err
+		return anomaly.State{}, strain{}, err
 	}
 	if err := p.persist(r); err != nil {
-		return anomaly.State{}, err
+		return anomaly.State{}, strain{}, err
 	}
-	return r.mod.State(string(t)), nil
+	return r.mod.State(string(t)), r.vel.strain(), nil
 }
 
 // ── warming from the tenant's own surface ────────────────────────────────────
@@ -793,6 +1122,13 @@ func (p *plane) adopt(t tenant, snap anomaly.Snapshot) (anomaly.State, error) {
 // It reports how much it folded, so "the model is warming" can be told apart from
 // "the surface is empty" — which is the difference between a control that is
 // coming up and a control that will never come up.
+//
+// THE MARK ADVANCES AS IT GOES, bucket by completed bucket, in the same lock that
+// applies them. A fold reads up to [maxRows] under a two-minute deadline, so
+// stopping partway is the ORDINARY case and not the exotic one — and a mark
+// written only at the end means every retry re-teaches everything the last
+// attempt already applied. The mark moves to the newest bucket applied IN FULL,
+// so a retry loses nothing and repeats nothing.
 func (p *plane) warm(ctx context.Context, t tenant) (int, error) {
 	r, err := p.resident(t)
 	if err != nil {
@@ -807,7 +1143,12 @@ func (p *plane) warm(ctx context.Context, t tenant) (int, error) {
 		return 0, err
 	}
 	defer release()
-	end := p.now().UTC()
+	now := p.now().UTC()
+	// TO THE SURFACE'S OWN HORIZON, never to the present. [plane.horizon] is the
+	// newest instant the rollup is allowed to have written; reading — and, the part
+	// that bites, MARKING — past it says "folded through now" about buckets the
+	// rollup has not produced yet, and the fold never returns for them.
+	end := horizon(now)
 	// FROM WHERE THIS MODEL LEFT OFF, never from the window's start again. The
 	// masses restored with the snapshot already contain everything folded before
 	// r.warmed; reading it a second time teaches the model the same history twice,
@@ -820,48 +1161,145 @@ func (p *plane) warm(ctx context.Context, t tenant) (int, error) {
 	if warmed.After(from) {
 		from = warmed
 	}
-	back := end.Sub(from)
+	if !from.Before(end) {
+		// The surface has not advanced a whole bucket since the last fold. Nothing to
+		// read, and NO mark: the mark already names this horizon.
+		return 0, nil
+	}
 	rs, err := rows(ctx, t, query{start: from, end: end})
 	if err != nil {
 		return 0, err
 	}
-	obs := replayable(rs, end, back)
+	// Judged against the real clock, not the horizon: "is this stamp believable"
+	// is a question about now, while "is it inside the window I read" is a question
+	// about the read. Conflating them would refuse every bucket between the horizon
+	// and the present as if it were from the future.
+	obs, refused := replayable(rs, now, now.Sub(from))
+	if refused > 0 {
+		r.refuse(refused)
+	}
 	if len(obs) == 0 {
-		// Nothing new to fold is still a fold that happened: the mark moves, so the
-		// next one does not re-read this window either.
-		r.mu.Lock()
-		r.warm, r.warmed = true, end
-		r.mu.Unlock()
+		// Nothing new to fold is still a fold that happened: the mark moves to the
+		// horizon — which is bounded by what the surface can contain — so the next one
+		// does not re-read this window either.
+		r.mark(end)
 		return 0, nil
 	}
+	// ONE BUCKET AT A TIME, AND NEVER HALF OF ONE.
+	//
+	// A fold reads up to [maxRows] under a two-minute deadline, so stopping partway
+	// is the ORDINARY case and not the exotic one — which makes the watermark's
+	// exactness the whole property. The mark's grain is a BUCKET, because
+	// [replayable] returns one observation per (subject, bucket) and several
+	// subjects share a bucket; a mark that could name a bucket whose subjects were
+	// only partly applied would either re-teach those subjects on the retry or lose
+	// the rest of them for good.
+	//
+	// So the interruption point is moved to where the mark is exact: [ctx.Err] is
+	// consulted at BUCKET BOUNDARIES only, the bucket is applied whole, and the mark
+	// then names it. A partly-applied bucket is not a state this loop can be in, so
+	// "resume exactly where it stopped" is arithmetic rather than a hope. The
+	// overrun that buys is one bucket of work past the deadline.
+	//
 	// The tenant's lock is taken and released PER OBSERVATION, not held across the
-	// whole fold: a fold is bounded by rows and by a deadline, but two minutes of
-	// held lock is two minutes in which that organisation's own live requests
-	// queue. The forward-only rule below is evaluated under the lock each time, so
-	// interleaving with live traffic is correct rather than merely tolerated.
-	for i, o := range obs {
+	// whole fold: two minutes of held lock is two minutes in which that
+	// organisation's own live requests queue. The forward-only rule below is
+	// evaluated under the lock each time, so interleaving with live traffic is
+	// correct rather than merely tolerated.
+	applied := 0
+	for applied < len(obs) {
 		if err := ctx.Err(); err != nil {
-			return i, err
+			return applied, err
 		}
-		tx := o.tx(t)
-		r.mu.Lock()
-		// Same forward-only rule as the live path. A tenant whose aggregates were
-		// already rebuilt from its own record must not have them rewound by a
-		// month-old bucket landing at the leading edge; the model learns from the
-		// history either way.
-		if placeable(o.At, r.edge, end) {
-			record(r.vel, tx)
-			if o.At.After(r.edge) {
-				r.edge = o.At
+		at := obs[applied].at
+		last := applied
+		for last < len(obs) && obs[last].at.Equal(at) {
+			last++
+		}
+		for _, o := range obs[applied:last] {
+			tx := o.tx(t)
+			r.mu.Lock()
+			// Same forward-only rule as the live path, against the real clock — the
+			// question is whether the stamp is believable, not whether the rollup has
+			// caught up to it. A tenant whose aggregates were already rebuilt from its
+			// own record must not have them rewound by a month-old bucket landing at
+			// the leading edge; the model learns from the history either way.
+			if placeable(o.at, r.edge, now) {
+				r.vel.record(tx)
+				if o.at.After(r.edge) {
+					r.edge = o.at
+				}
 			}
+			r.mod.Assess(tx, types.Entity{OrgID: string(t)})
+			r.mu.Unlock()
 		}
-		r.mod.Assess(tx, types.Entity{OrgID: string(t)})
-		r.mu.Unlock()
+		r.markBucket(at)
+		applied = last
+	}
+	r.vel.reconcile()
+	r.mark(end)
+	return applied, nil
+}
+
+// refuse counts buckets of this tenant's own surface the fold could not read.
+func (r *resident) refuse(n int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.refused += n
+}
+
+// refused is how many buckets of this tenant's surface the folds have had to
+// skip. It never builds a residency: a fact about a tenant that is not here is
+// not a fact worth planting a model for.
+func (p *plane) refused(t tenant) int {
+	p.mu.Lock()
+	r := p.res[t]
+	p.mu.Unlock()
+	if r == nil {
+		return 0
 	}
 	r.mu.Lock()
-	r.warm, r.warmed = true, end
-	r.mu.Unlock()
-	return len(obs), nil
+	defer r.mu.Unlock()
+	return r.refused
+}
+
+// mark records that this tenant's surface has been folded up to `to`.
+func (r *resident) mark(to time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if to.After(r.warmed) {
+		r.warmed = to
+	}
+}
+
+// markBucket records that every bucket up to and including `done` was applied.
+func (r *resident) markBucket(done time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.warmed = bucketMark(done, r.warmed)
+}
+
+// bucketMark is the watermark that EXCLUDES a bucket already applied in full.
+//
+// The step is ONE SECOND because that is the finest value the transport can
+// carry: the surface read is half-open [start, end) on `bucket >= ?`, the bound
+// is rendered by [tsLiteral], and tsLiteral's format is second-grained. A finer
+// mark — a nanosecond past the bucket, say — is TRUNCATED BACK ONTO THE BUCKET
+// IT MEANT TO EXCLUDE the moment it is bound, so every retry re-reads and
+// re-teaches the last bucket it had already applied. The mark and the wire have
+// to agree about resolution or the mark is decoration.
+//
+// One second cannot skip a bucket either: surface buckets are whole seconds
+// apart (five minutes, by toStartOfFiveMinute), so done+1s is at or before the
+// next one and the half-open read still includes it.
+func bucketMark(done, held time.Time) time.Time {
+	if done.IsZero() {
+		return held
+	}
+	if next := done.Add(time.Second); next.After(held) {
+		return next
+	}
+	return held
 }
 
 // replayable reduces a window of the feature surface to the observations a model
@@ -881,9 +1319,9 @@ func (p *plane) warm(ctx context.Context, t tenant) (int, error) {
 // from metered spend where the plane carries it and is ZERO where it does not,
 // which leaves the value features blind rather than fabricating a currency for an
 // activity event.
-func replayable(rs []row, now time.Time, back time.Duration) []observation {
+func replayable(rs []row, now time.Time, back time.Duration) (out []observation, refused int) {
 	rs = ordered(rs)
-	out := make([]observation, 0, len(rs))
+	out = make([]observation, 0, len(rs))
 	for _, r := range rs {
 		if r.Subject == "" || r.Bucket.IsZero() {
 			continue
@@ -891,15 +1329,23 @@ func replayable(rs []row, now time.Time, back time.Duration) []observation {
 		if within(r.Bucket, now, back) != nil {
 			continue
 		}
-		out = append(out, observation{
-			ID:      r.Kind + ":" + r.Subject + "@" + strconv.FormatInt(r.Bucket.Unix(), 10),
-			Kind:    r.Kind,
-			Subject: r.Subject,
-			USD:     r.Value["spend"] / 1e9, // nano-USD on the wire, USD in the model
-			At:      r.Bucket,
-		})
+		// THROUGH THE ONE DOOR, and the refusals are COUNTED. The surface is written
+		// from an ingest door that takes a caller's own subject, so [maxField] has to
+		// hold here too or the fold is the way around it — but a bucket dropped in
+		// silence is a piece of that organisation's own history the model never sees
+		// and nobody can find out about. The count travels on the fold report.
+		o, err := observe(
+			bucketID(r.Kind, r.Subject, r.Bucket),
+			actor{Kind: r.Kind, Subject: r.Subject},
+			r.Value["spend"]/1e9, // nano-USD on the wire, USD in the model
+			r.Bucket)
+		if err != nil {
+			refused++
+			continue
+		}
+		out = append(out, o)
 	}
-	return out
+	return out, refused
 }
 
 // ── exhaustive search ────────────────────────────────────────────────────────
@@ -1016,7 +1462,13 @@ const searchDeadline = 10 * time.Minute
 // read and before any candidate is tried. That is where the caller's ledger is
 // checked, because it is the first moment the cost of the run is a number rather
 // than a guess; a refusal there aborts before the first tree is planted.
-func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, admit func(events int) error) (report, error) {
+//
+// book is called ONCE when the grid ENDS, however it ends, with the screens the
+// run actually performed — trials completed × events replayed. It is separate
+// from admit for the reason the money seam states: the gate runs on the upper
+// bound before the work, the meter runs on what was done. A run cancelled by a
+// rollout after four of sixty-four candidates is billed for four.
+func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, admit func(events int) error, book func(screens int)) (report, error) {
 	if _, err := p.resident(t); err != nil {
 		return report{}, err
 	}
@@ -1042,7 +1494,7 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 	if err != nil {
 		return report{}, err
 	}
-	hist := replayable(rs, end, lookback)
+	hist, _ := replayable(rs, end, lookback)
 	if len(hist) == 0 {
 		return report{}, zip.ErrNotFound("this organisation's history over the window is empty, so a replay would prove nothing")
 	}
@@ -1075,6 +1527,9 @@ func (p *plane) begin(ctx context.Context, t tenant, lookback time.Duration, adm
 			p.mu.Unlock()
 		}()
 		rep := p.search(runCtx, t, id, hist)
+		if book != nil {
+			book(len(rep.Trials) * rep.Events)
+		}
 		if err := p.keep(t, rep); err != nil {
 			p.log.Warn("search finished but could not be saved", "tenant", string(t), "run", id, "err", err)
 		}
@@ -1152,7 +1607,7 @@ func replay(t tenant, c topology, hist []observation) (trial, error) {
 		MaxOrgs:  1,
 		Seed:     1, // fixed: a comparison between candidates must not also vary the geometry
 	}
-	mod, err := anomaly.New(cfg, vel)
+	mod, err := anomaly.New(cfg, vel.vel)
 	if err != nil {
 		return trial{}, err
 	}
@@ -1167,13 +1622,13 @@ func replay(t tenant, c topology, hist []observation) (trial, error) {
 	// The sandbox replays HISTORY, so "now" for the forward-only rule is the end of
 	// that history and not the wall clock — otherwise a replay of last month would
 	// place nothing and every candidate would read blind for the same reason.
-	now := hist[len(hist)-1].At
+	now := hist[len(hist)-1].at
 	for i, o := range hist {
 		tx := o.tx(t)
-		if placeable(o.At, edge, now) {
-			record(vel, tx)
-			if o.At.After(edge) {
-				edge = o.At
+		if placeable(o.at, edge, now) {
+			vel.record(tx)
+			if o.at.After(edge) {
+				edge = o.at
 			}
 		}
 		mod.Assess(tx, types.Entity{OrgID: string(t)})
@@ -1308,21 +1763,38 @@ func (p *plane) for_(t tenant) (*shelf, error) {
 func (p *plane) save(r *resident) error {
 	r.mu.Lock()
 	snap, held := r.mod.Snapshot(string(r.key))
+	held = held && snap.Learned > 0
 	cfg, warmed := r.cfg, r.warmed
+	// Cleared against the state ABOUT to be written, and restored if the write
+	// fails: the counter says "learning this snapshot does not contain", so
+	// clearing it for a write that never landed would leave the loss unmeasured
+	// and the next sweep uninterested.
+	cleared := r.unsaved
+	r.unsaved = 0
 	r.mu.Unlock()
 	if !held {
 		return nil // nothing learned yet; there is no state to lose
 	}
-	return p.write(r.key, snap, cfg, warmed)
+	if err := p.write(r.key, snap, cfg, warmed); err != nil {
+		r.mu.Lock()
+		r.unsaved += cleared
+		r.mu.Unlock()
+		return err
+	}
+	return nil
 }
 
 // persist writes a resident whose lock the caller already holds.
 func (p *plane) persist(r *resident) error {
 	snap, held := r.mod.Snapshot(string(r.key))
-	if !held {
+	if !held || snap.Learned == 0 {
 		return nil
 	}
-	return p.write(r.key, snap, r.cfg, r.warmed)
+	if err := p.write(r.key, snap, r.cfg, r.warmed); err != nil {
+		return err
+	}
+	r.unsaved = 0
+	return nil
 }
 
 func (p *plane) write(t tenant, snap anomaly.Snapshot, cfg anomaly.Config, warmed time.Time) error {
