@@ -106,7 +106,13 @@ func run(addr, zapAddr, enable string) error {
 	// The host is the only process that can own it. MCPTools() is in-process, so a
 	// plugin cannot enumerate a lazy sibling, and a plugin-hosted door would cost
 	// its own wake on the very first list.
-	app := zip.New(zip.Config{AppName: "cloud", MCP: zip.MCPConfig{Path: "/v1/mcp"}})
+	//
+	// The address comes from manifest, not from a literal here: the console's
+	// terminal handler has to know it too (to refuse to answer a machine door with
+	// the SPA shell, and to send an agent that guessed zip's default to the real
+	// one), and when those two were written down separately the second one was
+	// simply missing — GET /mcp answered 200 text/html for as long as that lasted.
+	app := zip.New(zip.Config{AppName: "cloud", MCP: zip.MCPConfig{Path: manifest.MCPPath}})
 
 	// Mint this host's child-signing secret and take the KMS root key OUT of the
 	// host's own environment — both BEFORE the first Load spawns an eager child.
