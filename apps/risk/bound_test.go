@@ -20,8 +20,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/luxfi/aml/pkg/velocity"
 )
 
 // TestOneTenantCannotEvictAnothersAggregates is the load-bearing one.
@@ -45,33 +43,35 @@ func TestOneTenantCannotEvictAnothersAggregates(t *testing.T) {
 	// B records five observations on ONE subject.
 	const bCount = 5
 	for i := 0; i < bCount; i++ {
-		record(bvel, b, observation{
+		bees.record(observation{
 			at: time.Now(), kind: "account", subject: "b-account",
 			amount: 1_000_000_000, signals: map[string]string{"ip": "198.51.100.7"},
 		})
 	}
 
 	// A floods, well past its OWN bound.
-	avel, _, _ := resOf(t, s, a).arms()
+	ay := resOf(t, s, a)
+	avel, _, _ := ay.arms()
 	flood := maxKeys() * 3
 	for i := 0; i < flood; i++ {
-		record(avel, a, observation{
+		ay.record(observation{
 			at: time.Now(), kind: "account", subject: fmt.Sprintf("a-account-%d", i),
 			amount: 1_000_000_000,
 		})
 	}
 
-	// A's own store really did evict — otherwise this test proves nothing,
-	// because nothing was ever under pressure.
-	if got := avel.Keys(); got > maxKeys()+shardSlack {
-		t.Fatalf("the flooding tenant holds %d keys against a bound of %d — nothing evicted, so this test is not exercising eviction", got, maxKeys())
+	// A really did hit its own bound — otherwise this test proves nothing,
+	// because nothing was ever under pressure. And it hit it AT the bound: the
+	// gate refuses, the engine never evicts.
+	if got := avel.keys(); got != maxKeys() {
+		t.Fatalf("the flooding tenant holds %d keys against a bound of %d — the gate is not what bound it", got, maxKeys())
 	}
-	if avel.Keys() < 2 {
-		t.Fatalf("the flooding tenant holds %d keys — the flood did not land", avel.Keys())
+	if !ay.strained() {
+		t.Fatal("the flooding tenant is past its own bound and does not say so")
 	}
 
 	// B is untouched. This is the property.
-	obs := bvel.Observe(velocity.Key{OrgID: b.String(), Kind: "account", Value: "b-account"})
+	obs := bvel.observe(b, "account", "b-account")
 	var got int
 	for _, o := range obs {
 		if o.Window == "24h" {
@@ -85,12 +85,6 @@ func TestOneTenantCannotEvictAnothersAggregates(t *testing.T) {
 		t.Fatal("two tenants share one velocity store — the eviction boundary is a hash, not a tenant")
 	}
 }
-
-// shardSlack is how far over the nominal bound a sharded store may sit. velocity
-// spreads keys over 64 shards and bounds each at MaxKeys/64+1, so a full store
-// holds up to 64 more keys than the number asked for. Stated rather than fudged:
-// the ceiling this file publishes has to account for it.
-const shardSlack = 64
 
 // TestTheWorstCaseIsArithmeticAndConservative pins the memory bound as something
 // computed rather than hoped for, and proves the computation is an OVER-estimate
@@ -106,23 +100,27 @@ func TestTheWorstCaseIsArithmeticAndConservative(t *testing.T) {
 	for _, w := range windows() {
 		buckets += w.Buckets
 	}
-	if want := buckets*bucketBytes + keyOverhead; bytesPerKey() != want {
-		t.Fatalf("bytesPerKey() = %d, want %d — the estimate has drifted from the windows it is computed over", bytesPerKey(), want)
+	if want := buckets*bucketBytes + keyOverhead + 3*textMax; bytesPerKey() != want {
+		t.Fatalf("bytesPerKey() = %d, want %d — the estimate has drifted from the windows and the text cap it is computed over", bytesPerKey(), want)
 	}
 	// And the budget really does bound the key count.
 	if maxKeys()*bytesPerKey() > velBytes() {
 		t.Fatalf("%d keys x %d B = %d B exceeds the %d B budget", maxKeys(), bytesPerKey(), maxKeys()*bytesPerKey(), velBytes())
 	}
 
-	// MEASURED. Fill one store with distinct keys and weigh it.
-	const n = 4000
+	// MEASURED. Fill one tenant's rings with distinct keys and weigh it. An
+	// ORDINARY identifier here; the WORST case the door admits is measured by
+	// TestThePublishedCeilingHoldsForTheLongestValueTheDoorAccepts, which is the
+	// one that matters and the one this test used to be missing.
+	tn := Tenant("hanzo/acme")
+	n := maxKeys()
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	vel := velocity.New(velocity.Config{Windows: windows(), MaxKeys: n * 2})
+	vel := aggregates()
 	at := time.Now()
 	for i := 0; i < n; i++ {
-		vel.Record(velocity.Key{OrgID: "hanzo/acme", Kind: "account", Value: fmt.Sprintf("s-%d", i)}, at, 1, 0)
+		vel.record(tn, observation{at: at, kind: "account", subject: fmt.Sprintf("s-%d", i), amount: 1_000_000_000}, nil)
 	}
 	runtime.GC()
 	runtime.ReadMemStats(&after)
@@ -132,32 +130,40 @@ func TestTheWorstCaseIsArithmeticAndConservative(t *testing.T) {
 	if measured > bytesPerKey() {
 		t.Fatalf("a key measures %d B against a published ceiling of %d B — the per-tenant budget buys more keys than it can hold", measured, bytesPerKey())
 	}
-	t.Logf("per key: measured %d B, published ceiling %d B; per tenant %d keys in %d B; process ceiling %d tenants",
-		measured, bytesPerKey(), maxKeys(), velBytes(), tenantMax())
+	t.Logf("per key: measured %d B, published ceiling %d B; per tenant %d keys in %d B; node budget %d B",
+		measured, bytesPerKey(), maxKeys(), velBytes(), memBytes())
 }
 
 // TestTheDefaultCeilingIsWhatIsDocumented pins the published numbers. The whole
 // point of a computable worst case is that it is written down somewhere an
 // operator reads, so a change to a default has to be a change to the document.
 func TestTheDefaultCeilingIsWhatIsDocumented(t *testing.T) {
-	for _, k := range []string{envVelBytes, envTenantMax, envIdle} {
+	for _, k := range []string{envVelBytes, envMemory, envIdle} {
 		t.Setenv(k, "")
 	}
 	if got := velBytes(); got != 8<<20 {
 		t.Errorf("default per-tenant aggregate budget = %d, want 8 MiB", got)
 	}
-	if got := tenantMax(); got != 48 {
-		t.Errorf("default tenant ceiling = %d, want 48", got)
+	if got := memBytes(); got != 512<<20 {
+		t.Errorf("default node budget = %d, want 512 MiB", got)
 	}
 	if got := idleReclaim(); got != 6*time.Hour {
 		t.Errorf("default reclaim idleness = %s, want 6h", got)
 	}
-	// The whole-process ceiling, stated. If this number moves, the comment at the
-	// top of bound.go must move with it.
-	perTenant := velBytes() + modelBytes + governBytes
-	if ceiling := tenantMax() * perTenant; ceiling > 768<<20 {
-		t.Fatalf("the process ceiling is %d B (%d MiB) — beyond what a shared pod may promise", ceiling, ceiling>>20)
+	// The per-tenant CEILING, stated, and the node budget it is charged against.
+	// If either number moves, the comment at the top of bound.go must move with
+	// it. Note what this is NOT: a count of tenants. A tenant is charged for what
+	// it holds, so the node serves memBytes/cellBytes ordinary tenants and
+	// memBytes/perTenant simultaneously at their ceiling.
+	perTenant := cellBytes + velBytes() + governMemo
+	if perTenant > 16<<20 {
+		t.Fatalf("one tenant may hold %d B (%d MiB) — beyond what a shared pod may promise any single org", perTenant, perTenant>>20)
 	}
+	if memBytes() < 8*perTenant {
+		t.Fatalf("the node budget (%d B) is under eight tenants at their ceiling (%d B) — a node that cannot hold a handful of busy orgs is not an operating point", memBytes(), perTenant)
+	}
+	t.Logf("per tenant ceiling %d B; node %d B = %d ordinary cells or %d at their ceiling",
+		perTenant, memBytes(), memBytes()/cellBytes, memBytes()/perTenant)
 }
 
 // TestARetirementCannotRaceAWorker pins the invariant that lets a retire CLOSE a
@@ -181,14 +187,6 @@ func TestARetirementCannotRaceAWorker(t *testing.T) {
 		}
 	}
 }
-
-// modelBytes and governBytes are the two non-aggregate halves of an armed
-// tenant, for the ceiling above. The first is luxfi/aml's own measured figure
-// for a forest at the defaults; the second is the governance cache at its caps.
-const (
-	modelBytes  = 336 << 10
-	governBytes = 2 << 20
-)
 
 // TestOnlyOneConstructorIsBounded is the structural half: it is not enough that
 // today's call sites are bounded, it must be hard to add an unbounded one.
@@ -268,9 +266,9 @@ func TestAStrainedTenantSaysSo(t *testing.T) {
 	}
 
 	// Fill this tenant's own store past its own bound.
-	vel, _, _ := resOf(t, s, Tenant("hanzo/acme")).arms()
+	acme := resOf(t, s, Tenant("hanzo/acme"))
 	for i := 0; i < maxKeys()*2; i++ {
-		record(vel, Tenant("hanzo/acme"), observation{
+		acme.record(observation{
 			at: time.Now(), kind: "account", subject: fmt.Sprintf("filler-%d", i), amount: 1,
 		})
 	}

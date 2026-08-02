@@ -4,12 +4,17 @@
 //
 // THREE VERBS, ONE CORE: decide, record, learn.
 //
-//	/v1/risk   decide + record. One hot op (POST /v1/risk/decide) answers
-//	           allow / challenge / review / restrict / block WITH A REASON, and
-//	           the planes around it (decisions, rules, lists, suppressions,
-//	           controls, dictionary, activity) are how a tenant governs it.
-//	/v1/ml     learn. train, exhaustive-search, score, plus the state a reviewer
-//	           reads and the snapshot an auditor pins.
+// ONE FACE, AND IT IS /v1/risk. POST /v1/risk/decide answers allow / challenge /
+// review / restrict / block WITH A REASON; the planes around it (decisions,
+// rules, lists, suppressions, controls, dictionary, activity) are how a tenant
+// governs it; and score, train, search, state, features, snapshot and restore
+// are how it learns. Deciding and learning are the same state, so they are the
+// same face.
+//
+// THE THREE FACES DO NOT OVERLAP. /v1/aml is compliance — cases, sanctions,
+// retention. /v1/ml is SERVING — apps/ml deploys InferenceServices there and
+// /v1/ml/models means "models you serve", which is a different concept from
+// "models that learn"; this app claims nothing under it. /v1/risk is this one.
 //
 // Fraud is a USE of /v1/risk, not a sibling of it, and neither is abuse, bots,
 // account takeover, spam or pay-as-you-go abuse. There is no /v1/fraud.
@@ -32,6 +37,7 @@ package risk
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"sync"
@@ -85,7 +91,7 @@ type state struct {
 	warehouse bool
 }
 
-// Mount wires /v1/risk and the native /v1/ml leaves onto app.
+// Mount wires /v1/risk onto app.
 //
 // EVERY INHERITED CAPABILITY IS WIRED HERE, EXPLICITLY. Being embedded in cloud
 // makes each one AVAILABLE; none of them is automatic:
@@ -105,7 +111,7 @@ type state struct {
 //	                otlp transport, deliberately.
 //	health          OwnsHealth on the plugin plus the real probe below.
 //
-// The route registration follows apps/ml exactly, including the one form
+// The route registration follows apps/ml's own form, including the one shape
 // cmd/zipdoc can read: ONE `g := <router>.Group("/prefix")` per line.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
@@ -129,8 +135,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s.Log.Info("risk surface mounted",
 		"brand", deps.Brand, "env", deps.Env,
 		"billing", s.State.bill.Enabled(), "model", s.State.digest,
-		"tenant_bytes", velBytes(), "tenant_keys", maxKeys(),
-		"tenant_max", tenantMax(), "reclaim_idle", idleReclaim().String())
+		"text_max", textMax, "tenant_bytes", velBytes(), "tenant_keys", maxKeys(),
+		"cell_bytes", cellBytes, "node_bytes", memBytes(), "reclaim_idle", idleReclaim().String())
 
 	// Shutdown is registered by the plugin (plugin/risk/main.go) and calls back
 	// here; holding the service in a package var would be a second owner of the
@@ -280,22 +286,61 @@ func teardown(s *stateService) error {
 //
 // Every typed op starts here, so there is ONE place the tenant is established,
 // ONE place the bound is applied, and ONE place the learned state is reloaded.
-func tenantState(ctx context.Context, s *stateService) (scope, *resident, error) {
+// IT ALSO RESOLVES THE TENANT'S FILE, and that is what keeps a closed handle
+// off the query path. residency.close retires EVERY cell the moment teardown
+// runs — no idle requirement, and cloud deploys Recreate at ONE replica — so a
+// request already holding a cell can find its handle gone, and a nil *sql.DB
+// locks a nil mutex on its first use. Handing the handle out HERE, resolved and
+// checked once, is what makes that unrepresentable downstream: an op cannot
+// obtain a file without also obtaining the error that says it has none.
+func tenantState(ctx context.Context, s *stateService) (scope, *resident, *sql.DB, error) {
 	sc, err := tenantOf(ctx, s.State.brand)
 	if err != nil {
-		return scope{}, nil, err
+		return scope{}, nil, nil, err
 	}
 	// The mint's own shape check, asserted at the boundary rather than assumed.
 	// A regression here is the whole product: the key is the store index, the
 	// history org column and the model's tree seed at once.
 	if !qualified(s.State.brand, sc.tenant) {
-		return scope{}, nil, zip.ErrForbidden("the tenant key is not qualified")
+		return scope{}, nil, nil, zip.ErrForbidden("the tenant key is not qualified")
 	}
 	r, err := s.State.res.of(sc.tenant, s.Log)
 	if err != nil {
-		return scope{}, nil, err
+		return scope{}, nil, nil, err
 	}
-	return sc, r, nil
+	db, err := r.file()
+	if err != nil {
+		return scope{}, nil, nil, err
+	}
+	return sc, r, db, nil
+}
+
+// governState is tenantState plus the ONE predicate that separates USING this
+// plane from GOVERNING it: the caller must be an admin of its own org.
+//
+// EVERY WRITE BEHIND IT CAN TURN A CONTROL OFF. Shadow mode makes every rule
+// observe and nothing act; retiring a rule deletes a detection; a blanket
+// suppression mutes one; an allow-list entry is a bypass; appetite decides how
+// much of the stream the model may even look at. A leaked low-privilege customer
+// key that can reach any of those turns the customer's fraud plane off, and the
+// customer finds out from a chargeback.
+//
+// It is org-scoped and org-scoped only. There is no cross-tenant surface in this
+// app, so there is nothing for platform authority to reach and no reason to ask
+// for it — conflating the two scopes is a privilege escalation, not a
+// convenience.
+//
+// A governance write is also EMITTED with its actor, so the change is readable
+// after the fact by whoever has to explain why a control was off.
+func governState(ctx context.Context, s *stateService) (scope, *resident, *sql.DB, error) {
+	sc, res, db, err := tenantState(ctx, s)
+	if err != nil {
+		return scope{}, nil, nil, err
+	}
+	if !sc.admin {
+		return scope{}, nil, nil, zip.ErrForbidden("governing this tenant's risk controls requires an admin of this org; scoring and reading do not")
+	}
+	return sc, res, db, nil
 }
 
 // health is the app's real, fail-closed probe.
@@ -309,16 +354,27 @@ func health(s *stateService) func(*zip.Ctx) error {
 		s.State.mu.Lock()
 		warehouse := s.State.warehouse
 		s.State.mu.Unlock()
-		tenants, refused, refusedAt := s.State.res.count()
+		tenants, refused, reclaimed, refusedAt := s.State.res.count()
 
+		// THE SATURATION VIEW, and every number on it is one an operator acts
+		// on. A bound that binds silently is the defect this app was held for,
+		// so each way this node can run short says so here: `bytes` against
+		// `bytes_max` is the headroom, `reclaimed` is how many cells the node
+		// has taken back under pressure, `refused` is how many tenants it turned
+		// away, and `strained` is how many resident tenants are reading partial
+		// rings right now. A control that switches off quietly is worse than no
+		// control.
 		report := map[string]any{
-			"status":     "ok",
-			"model":      s.State.digest,
-			"tenants":    tenants,
-			"tenant_max": tenantMax(),
-			"refused":    refused,
-			"warehouse":  warehouse || datastore.Ready(),
-			"billing":    s.State.bill.Enabled(),
+			"status":    "ok",
+			"model":     s.State.digest,
+			"tenants":   tenants,
+			"bytes":     s.State.res.bytes(),
+			"bytes_max": memBytes(),
+			"refused":   refused,
+			"reclaimed": reclaimed,
+			"strained":  s.State.res.strained(),
+			"warehouse": warehouse || datastore.Ready(),
+			"billing":   s.State.bill.Enabled(),
 		}
 		// The DECISION plane is what this app promises, and it does not need the
 		// warehouse: rings are in memory, rules and lists are the tenant's own
@@ -343,7 +399,7 @@ func health(s *stateService) func(*zip.Ctx) error {
 		// report either way, so nothing is hidden.
 		if !refusedAt.IsZero() && time.Since(refusedAt) < capacityAlarm {
 			report["status"] = "degraded"
-			report["error"] = "this node is at its tenant capacity and has refused admissions; it will not evict a tenant to make room"
+			report["error"] = "this node has no memory left for another tenant and has refused admissions; it will not take a live tenant's state to make room"
 			return c.JSON(http.StatusServiceUnavailable, report)
 		}
 		return c.JSON(http.StatusOK, report)

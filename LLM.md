@@ -4059,21 +4059,30 @@ SDK and every MCP tool list that answer 404 in production: the same dark hole th
 `api-hanzo-ai-catalog` router opened under `/v1/models` and `/v1/pricing`, which
 cost 17 documented-but-uncallable operations. Re-home that surface only after the
 upstream ships it, and prove the upstream answers before declaring anything.
-## Hanzo Risk (`apps/risk`) — `/v1/risk` + the native `/v1/ml` leaves
+## Hanzo Risk (`apps/risk`) — `/v1/risk`
 
-One app, two prefix families, one core. `/v1/risk` is the DECISION plane for any
-entity (account, transaction, session, agent, merchant, payout); `/v1/ml` is the
-MODEL plane it is built on. Fraud is a USE of `/v1/risk` — so is abuse, so are
-bots, account takeover, spam and pay-as-you-go abuse. **There is no `/v1/fraud`.**
+ONE app, ONE prefix, one core: `/v1/risk` DECIDES and LEARNS for any entity
+(account, transaction, session, agent, merchant, payout). Fraud is a USE of
+`/v1/risk` — so is abuse, so are bots, account takeover, spam and pay-as-you-go
+abuse. **There is no `/v1/fraud`.**
 
-**The ml leaves are on THIS row, not on `ml`'s, and that is the load-bearing
-decision.** A manifest row is a BINARY, and the model is in-process MUTABLE state
-(one half-space forest per tenant, held as mass counters). If `plugin/ml` trained
-and `plugin/risk` scored, the two processes would hold different counters and
-there would be NO error — just two different answers to one question. `ml`'s row
-is unchanged and nothing moves: it never claimed bare `/v1/ml`, so longest-prefix
-match separates `/v1/ml/models` (ml) from `/v1/ml/score` (risk), exactly as it
-already separates `storage`'s `/v1/s3/buckets` from `provisioning`'s `/v1/s3`.
+**THREE FACES, NO OVERLAP.** `/v1/aml` is compliance (cases, sanctions,
+retention — LIVE at v0.3.7, served by the amld pod). `/v1/ml` is model SERVING
+(`apps/ml`: InferenceServices, `/v1/ml/models`, predict — LIVE, other customers).
+`/v1/risk` is this one. An earlier cut put the learning leaves — score, train,
+state, features, search, snapshot, restore — under `/v1/ml`, on the premise that
+the prefix was free. **It is not: `/v1/ml/health` answers 200 in production and
+`/v1/ml/models` is auth-gated at 403 today.** "Models you serve" and "models that
+learn" are two concepts, and two concepts under one name is what the manifest
+exists to refuse. The move is a declaration change (typed zip ops), the risk row
+is now `{"/v1/risk"}` alone, and the live serving paths are byte-identical in the
+woven document. There is no alias from the old spelling: it never shipped.
+
+Deciding and learning stay in ONE binary because they are ONE state — one
+half-space forest per tenant, held as mass counters that every score reads and
+every train writes. Split across two rows they would be two processes holding
+different counters, with no error, no log and no 404: just two different answers
+to one question.
 
 **The engine is a MODULE DEP, and only part of it is linked.** `github.com/luxfi/aml`
 enters the way `luxfi/kms` and `hanzoai/o11y` do — no source vendored. Only four
@@ -4156,6 +4165,79 @@ nested body from them and a typed 402 costs nothing.
 carrying the degraded REPORT as its body. `apps/risk/typed_wire_test.go` holds the
 closed list, and it also pins the whole served surface as a diffable list —
 34 operations, 33 MCP tools.
+
+**Using this plane is not GOVERNING it.** One predicate, one place
+(`governState`): a write that can turn a control off — `PUT /v1/risk/mode`,
+retiring a rule, a blanket suppression, an allow-list entry, appetite, snapshot,
+restore — requires `principal.IsOrgAdmin` for the caller's OWN org. It is
+org-scoped and org-scoped only; there is no cross-tenant surface here, so there
+is nothing for platform authority to reach and conflating the two scopes would be
+a privilege escalation. Scoring, deciding, reading and labelling are unchanged for
+an ordinary member. Every governance write emits with its actor.
+
+### The operating point an operator has to know
+
+**ONE BOUND, AND IT IS BYTES.** `RISK_MEMORY` (default 512 MiB) is the node's
+whole budget for resident risk state. There is no tenant COUNT: a count over
+state the tenant sizes is not a bound, and pricing every tenant at its worst case
+is what refused the 49th concurrently-active org the entire risk surface. A
+tenant is charged for what it HOLDS.
+
+    textMax        256 B    the cap on ANY caller-supplied text — subject id,
+                            signal value, agent ref, list entry, rule term, path
+                            segment. Enforced ONCE at the wire door (door.go) so
+                            every count below is a byte figure. 400 past it.
+    bodyMax        4 MiB    per request, under the edge's fleet-wide 16 MiB.
+    bytesPerKey    6,560 B  94 buckets x 48 + 1,280 overhead + 3 x textMax.
+                            MEASURED at 5,965 B for the longest value the door
+                            accepts (hold_test.go), so the published figure over-
+                            states, which is the direction a ceiling must err in.
+    velBytes       8 MiB    per-tenant aggregate budget -> maxKeys = 1,278.
+    cellBytes      784 KiB  an armed cell before it counts anything: forest
+                            336 KiB + file 64 KiB + agency memo 384 KiB.
+    governMemo    ≤3.5 MiB  rules 1 MiB + suppressions 512 KiB + lists 2 MiB.
+                            Priced LIVE, never reserved and never refused —
+                            refusing to load a tenant's rules would disarm its
+                            controls to save memory.
+    per tenant    ≤12.2 MiB cellBytes + velBytes + governMemo.
+    recordBudget   256 MiB  per tenant on the DISK volume: the decision log is a
+                            RING (recordCap = 16,384 rows at recordMax 16 KiB),
+                            pruned at open and every 256 writes. Refusing a
+                            decision would refuse the authorization; dropping the
+                            oldest is only honest if the window is published, so
+                            `GET /v1/risk/decisions` carries `retained`+`oldest`.
+
+    RISK_MEMORY 512 MiB  =  ~660 ordinary tenants, or 42 simultaneously at their
+                            full ceiling. Scaling past that is a SHARDING answer:
+                            the shard router pins an org to one pod.
+
+**EVERY DEGRADATION IS NAMED, AND READABLE.** `GET /v1/risk/health` carries
+`{tenants, bytes, bytes_max, refused, reclaimed, strained, model, warehouse,
+billing}` and goes 503 for `capacityAlarm` after a refusal.
+
+    strained (decision + probe)  this tenant's rings refused a NEW key — its own
+                                 cardinality bound or the node's memory. Its
+                                 counts may under-report its OWN traffic, so a
+                                 rule on `velocity.ip.1h.count` is reading a
+                                 partial ring. The gate refuses EXACTLY at the
+                                 bound and counts it; the engine's own per-shard
+                                 LRU is put out of reach (MaxKeys x 64) because
+                                 its eviction is silent and starts at ~72% of the
+                                 nominal bound.
+    reclaimed (probe)            cells taken back under memory pressure. Only a
+                                 cell silent past `idleFloor` (16 min) may go, so
+                                 no tenant's arrival ever costs a tenant that is
+                                 working its rings.
+    refused (probe, 503)         a newcomer turned away: the node had no memory
+                                 AND nothing idle to reclaim. Add a writer or
+                                 raise RISK_MEMORY.
+    disarmed (decision)          learned state existed and this process does not
+                                 have it. `POST /v1/risk/restore` reinstates.
+
+**`luxfi/aml` v0.3.5 pulls `luxfi/fhe` v1.8.2 -> v1.8.8 (indirect).** Not a bump
+anyone chose: `go mod graph` shows `luxfi/aml@v0.3.5 -> luxfi/fhe@v1.8.8` and MVS
+takes the max against `hanzoai/base`'s v1.8.2. It stays inside v1.x. Removing the
+aml dependency is the only way to avoid it.
 
 **Build:** `-tags sqlite_math_functions` under CGO (hanzoai/base's gate).
 `modernc.org/sqlite` is NOT in the risk graph, so the image's SQLITE-GATE stays

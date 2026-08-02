@@ -30,6 +30,7 @@ package risk
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -233,17 +234,24 @@ const kAnonMin = 25
 // contributing one row is k-anonymous and still statistically meaningless.
 const nMin = 1000
 
-// baselinePopulate is the WHOLE cross-org surface, and it is a package CONSTANT.
-// It is never composed from request data, has no placeholder a caller could
-// reach, and its projection carries no org, no subject, no id and no pseudonym —
-// only quantiles and two counts. The HAVING clause is the k-anonymity gate and
-// is part of the statement rather than a filter applied to its result, so a
-// bucket below the threshold is never materialised at all.
+// baselinePopulate is the WHOLE cross-org surface. It is never composed from
+// request data, has no placeholder a caller could reach, and its projection
+// carries no org, no subject, no id and no pseudonym — only quantiles and two
+// counts. The HAVING clause is the k-anonymity gate and is part of the statement
+// rather than a filter applied to its result, so a bucket below the threshold is
+// never materialised at all.
+//
+// THE FLOOR IS SPELLED ONCE. It used to be a package constant with the numbers
+// written into the SQL as literals AND declared again as kAnonMin/nMin above, so
+// raising the constant raised only the read-side belt: the writer kept
+// publishing below the intended floor and the reader silently discarded
+// everything it wrote. Two spellings of one number is one number that will drift,
+// and the direction it drifts in here is a privacy floor.
 //
 // The reserved `$public` tenant is excluded here as well as at the mint: an
 // unauthenticated stranger writes into that lane, and a stranger who can move
 // the network baseline can move every tenant's comparison against it.
-const baselinePopulate = `
+var baselinePopulate = `
 	INSERT INTO hanzo.risk_baseline (bucket, subject_kind, feature, q10, q50, q90, q99, orgs, n)
 	SELECT
 		toDate(bucket)                     AS bucket,
@@ -259,7 +267,7 @@ const baselinePopulate = `
 	WHERE org != '$public' AND org NOT LIKE '%/$public'
 	  AND bucket >= toDateTime(toDate(now()) - 1) AND bucket < toDateTime(toDate(now()))
 	GROUP BY bucket, subject_kind
-	HAVING orgs >= 25 AND n >= 1000`
+	HAVING orgs >= ` + strconv.Itoa(kAnonMin) + ` AND n >= ` + strconv.Itoa(nMin)
 
 // baselineRow is one published quantile bucket. Reflection over this type is
 // part of the isolation proof: a field naming a tenant, a subject or a person

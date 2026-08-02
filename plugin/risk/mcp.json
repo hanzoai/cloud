@@ -1,234 +1,5 @@
 [
   {
-    "description": "Stops a search this tenant started.\n\nAn expensive op that cannot be stopped is an expensive op a caller cannot take\nback — and the run holds a worker every other tenant is queued behind. It is\nidempotent: cancelling a search that has already answered is not an error, and\nthe reply says which happened.",
-    "inputSchema": {
-      "properties": {
-        "id": {
-          "description": "ID is the record to read, from the path.",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "mlCancelSearch"
-  },
-  {
-    "description": "Features is the typology-to-feature inventory the model is built on: what each\ndimension measures, the risk indicator it serves, and the published source\nthose words come from.\n\nIt is code rather than a document because a mapping kept beside the model\ncannot drift away from what the model actually reads — and the attributability\nit makes possible is why this is a tree and not a net.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "mlFeatures"
-  },
-  {
-    "description": "Restore reinstates this tenant's learned state from its pinned snapshot.\n\nA snapshot whose shape does not match the running inventory is REFUSED, not\ncoerced, and a snapshot belonging to another tenant is refused twice — here,\nby the tenant that asked, and again inside the engine. State the model would\ntreat as its own memory has to have come from this algorithm over this feature\nset for this tenant.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "mlRestore"
-  },
-  {
-    "description": "Score scores one observation and LEARNS NOTHING from it. It is how a candidate\nis tried against a tenant's real behaviour before anything depends on the\nanswer, and it is the model's analogue of testing a rule: because it records\nnothing, the aggregates it reads do not include the candidate.",
-    "inputSchema": {
-      "$defs": {
-        "mlObservation": {
-          "properties": {
-            "amount": {
-              "$ref": "#/$defs/riskAmount",
-              "description": "Amount is the money involved, if any."
-            },
-            "at": {
-              "description": "At is when it happened, RFC 3339. Absent means now.",
-              "type": "string"
-            },
-            "signals": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "description": "Signals are the observations: ip, device, counterparty and the rest.",
-              "type": "object"
-            },
-            "subject": {
-              "$ref": "#/$defs/riskSubject",
-              "description": "Subject is whose behaviour this is."
-            }
-          },
-          "type": "object"
-        },
-        "riskAmount": {
-          "properties": {
-            "currency": {
-              "description": "Currency is the ISO 4217 code.",
-              "type": "string"
-            },
-            "direction": {
-              "description": "Direction is whether value came in or went out: \"in\" or \"out\". Without it\nthe model cannot see funds passing through, which is the layering shape.",
-              "type": "string"
-            },
-            "nano": {
-              "description": "Nano is the amount in billionths of one unit of Currency.",
-              "type": "integer"
-            }
-          },
-          "type": "object"
-        },
-        "riskSubject": {
-          "properties": {
-            "id": {
-              "description": "ID is the subject's identifier within the caller's own org. It is never\ninterpreted, only aggregated on, so it may be any stable string.",
-              "type": "string"
-            },
-            "kind": {
-              "description": "Kind is the sort of thing this is: account, transaction, session, agent,\nmerchant or payout. It selects the aggregation axes, not the tenant gate.",
-              "type": "string"
-            }
-          },
-          "type": "object"
-        }
-      },
-      "properties": {
-        "observation": {
-          "$ref": "#/$defs/mlObservation",
-          "description": "Observation is what to score."
-        }
-      },
-      "type": "object"
-    },
-    "name": "mlScore"
-  },
-  {
-    "description": "Search exhaustively tries the model topology over this tenant's own history\nand returns the learning curve and the winning shape.\n\nThe grid is CLOSED — trees x depth x window x blend x appetite — because an\nunbounded grid is an unbounded amount of a shared pod's CPU reachable by\nanyone with a key. Each candidate runs in a sandbox over fresh counters\ncarrying the SAME per-tenant memory bound the live plane does, so a search can\nnever move the live model, can never cost more than a tenant is allowed to\ncost, and can never see another tenant's history because the replay reads this\ntenant's own file.\n\nIT IS QUEUED, AND THE QUEUE IS THE BOUND. One run per tenant (a second answers\n409 naming the one already going), a fixed number of workers for the whole\nprocess, a short backlog beyond which a start answers 429, and a deadline every\ncandidate polls. Priced before the work and metered after it, on the caller's\nown ledger. See search.go.\n\nIt answers 202 with a run identifier; read the report back at\nGET /v1/ml/search/{id} and stop it at DELETE /v1/ml/search/{id}.",
-    "inputSchema": {
-      "properties": {
-        "limit": {
-          "description": "Limit bounds how many recorded observations are replayed, 1..5000. The\ngrid itself is closed and needs no bound from the caller.",
-          "type": "integer"
-        }
-      },
-      "type": "object"
-    },
-    "name": "mlSearch"
-  },
-  {
-    "description": "Reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
-    "inputSchema": {
-      "properties": {
-        "id": {
-          "description": "ID is the record to read, from the path.",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "name": "mlSearchResult"
-  },
-  {
-    "description": "Sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
-    "inputSchema": {
-      "properties": {
-        "review": {
-          "description": "Review is the share of the stream that may be examined, in (0, 0.5].",
-          "type": "number"
-        },
-        "sample": {
-          "description": "Sample is the share of non-alerting traffic retained, in [0, 1].",
-          "type": "number"
-        }
-      },
-      "type": "object"
-    },
-    "name": "mlSetAppetite"
-  },
-  {
-    "description": "Snapshot pins this tenant's learned state into its own encrypted file.\n\nIt is what an auditor asks for: the exact model that raised an alert, kept so\nthat the same input can be scored again a year later. It is also what makes a\nrollout survivable — the shutdown path snapshots every resident tenant,\nbecause cloud deploys Recreate at one replica and a model that comes back with\nnothing learned refuses to score for its whole warm period.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "mlSnapshot"
-  },
-  {
-    "description": "ModelState is what a review of the model reads: the appetite it was given, the\nthreshold that appetite produced, and the share it ACTUALLY reached.\n\nStated against realised is the whole governance report. An appetite is a\nmeasured commitment or it is nothing, and a fixed threshold on a drifting\ndistribution silently becomes either silence or a flood.",
-    "inputSchema": {
-      "properties": {},
-      "type": "object"
-    },
-    "name": "mlState"
-  },
-  {
-    "description": "Train teaches this tenant's model from this tenant's own observations.\n\nIt is online: there is no job, no queue and no window in which the tenant is\nprotected by a stale model, because the half-space geometry is built before\nany data arrives and the model IS a set of mass counters. One observation is\none increment.\n\nTHERE IS NO CROSS-TENANT TRAINING INPUT AND NO WAY TO EXPRESS ONE. The model\nis indexed by the tenant key and its tree GEOMETRY is seeded from it, so two\ntenants do not merely hold different counters — they hold different trees.\nAny cross-org learning in this product is aggregate-only, lives in a table\nwith no tenant column, and is published only above a k-anonymity floor.",
-    "inputSchema": {
-      "$defs": {
-        "mlObservation": {
-          "properties": {
-            "amount": {
-              "$ref": "#/$defs/riskAmount",
-              "description": "Amount is the money involved, if any."
-            },
-            "at": {
-              "description": "At is when it happened, RFC 3339. Absent means now.",
-              "type": "string"
-            },
-            "signals": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "description": "Signals are the observations: ip, device, counterparty and the rest.",
-              "type": "object"
-            },
-            "subject": {
-              "$ref": "#/$defs/riskSubject",
-              "description": "Subject is whose behaviour this is."
-            }
-          },
-          "type": "object"
-        },
-        "riskAmount": {
-          "properties": {
-            "currency": {
-              "description": "Currency is the ISO 4217 code.",
-              "type": "string"
-            },
-            "direction": {
-              "description": "Direction is whether value came in or went out: \"in\" or \"out\". Without it\nthe model cannot see funds passing through, which is the layering shape.",
-              "type": "string"
-            },
-            "nano": {
-              "description": "Nano is the amount in billionths of one unit of Currency.",
-              "type": "integer"
-            }
-          },
-          "type": "object"
-        },
-        "riskSubject": {
-          "properties": {
-            "id": {
-              "description": "ID is the subject's identifier within the caller's own org. It is never\ninterpreted, only aggregated on, so it may be any stable string.",
-              "type": "string"
-            },
-            "kind": {
-              "description": "Kind is the sort of thing this is: account, transaction, session, agent,\nmerchant or payout. It selects the aggregation axes, not the tenant gate.",
-              "type": "string"
-            }
-          },
-          "type": "object"
-        }
-      },
-      "properties": {
-        "observations": {
-          "description": "Observations are what to learn from. They are this tenant's own data and\nnothing else: there is no cross-tenant training input and no way to\nexpress one, because the model is indexed by the tenant key and its tree\nGEOMETRY is seeded from it.",
-          "items": {
-            "$ref": "#/$defs/mlObservation"
-          },
-          "type": "array"
-        }
-      },
-      "type": "object"
-    },
-    "name": "mlTrain"
-  },
-  {
     "description": "Activity is the watcher: what is firing right now, what is being muted, and\nwhich way the decisions are going.\n\nIt reads the DECISION LOG rather than a second bus. The log is already the\nrecord and the analytics copies already reach the platform stream; a dedicated\nactivation bus would be a third representation of one fact and a third thing\nthat can be behind.",
     "inputSchema": {
       "properties": {
@@ -260,6 +31,19 @@
       "type": "object"
     },
     "name": "riskAddListEntries"
+  },
+  {
+    "description": "Stops a search this tenant started.\n\nAn expensive op that cannot be stopped is an expensive op a caller cannot take\nback — and the run holds a worker every other tenant is queued behind. It is\nidempotent: cancelling a search that has already answered is not an error, and\nthe reply says which happened.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, taken from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskCancelSearch"
   },
   {
     "description": "Controls lists the platform controls declared on this tenant's subjects:\nreserves, payout holds and blocks.\n\nThey are DECLARATIONS the money plane reads. Risk never moves money —\nhanzoai/commerce owns payouts, disputes and balances — so a marketplace reads\nthis before a payout and calls decide at authorization, and risk touches no\nprocessor. That is what \"processor-agnostic\" is: a structural property, not a\nfeature.",
@@ -527,6 +311,14 @@
     "name": "riskDictionary"
   },
   {
+    "description": "Features is the typology-to-feature inventory the model is built on: what each\ndimension measures, the risk indicator it serves, and the published source\nthose words come from.\n\nIt is code rather than a document because a mapping kept beside the model\ncannot drift away from what the model actually reads — and the attributability\nit makes possible is why this is a tree and not a net.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskFeatures"
+  },
+  {
     "description": "Label records what a human concluded about a decision — fraud, legitimate,\nchargeback, abuse or unknown.\n\nTHE DECIDER IS SERVER-SET. It comes from the validated principal and never\nfrom the request body: the engine's own resolutions carry an unauthenticated\n`by`, and importing that gap into a product that bills on the decision would\nmake the attribution worthless the moment anyone asked who cleared what.\n\nThis is also the only supervision this product has. Everything the model knows\nabout its own miss rate comes from these labels against the below-the-line\nsample.",
     "inputSchema": {
       "properties": {
@@ -560,6 +352,14 @@
     "name": "riskMode"
   },
   {
+    "description": "ModelState is what a review of the model reads: the appetite it was given, the\nthreshold that appetite produced, and the share it ACTUALLY reached.\n\nStated against realised is the whole governance report. An appetite is a\nmeasured commitment or it is nothing, and a fixed threshold on a drifting\ndistribution silently becomes either silence or a flood.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskModelState"
+  },
+  {
     "description": "Lifts a control. Answers 204, or 404 for an identifier this\ntenant does not own.",
     "inputSchema": {
       "properties": {
@@ -590,12 +390,132 @@
     "name": "riskRemoveListEntry"
   },
   {
+    "description": "Restore reinstates this tenant's learned state from its pinned snapshot.\n\nA snapshot whose shape does not match the running inventory is REFUSED, not\ncoerced, and a snapshot belonging to another tenant is refused twice — here,\nby the tenant that asked, and again inside the engine. State the model would\ntreat as its own memory has to have come from this algorithm over this feature\nset for this tenant.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskRestore"
+  },
+  {
     "description": "Rules lists this tenant's detections. A tenant starts with a starter set\ncovering the lifecycle the product names — signup burst, shared device,\ndisposable email, card testing, denied address, spend spike, payout velocity,\nundeclared automation — all of which it may read, copy, edit and retire.",
     "inputSchema": {
       "properties": {},
       "type": "object"
     },
     "name": "riskRules"
+  },
+  {
+    "description": "Score scores one observation and LEARNS NOTHING from it. It is how a candidate\nis tried against a tenant's real behaviour before anything depends on the\nanswer, and it is the model's analogue of testing a rule: because it records\nnothing, the aggregates it reads do not include the candidate.",
+    "inputSchema": {
+      "$defs": {
+        "riskAmount": {
+          "properties": {
+            "currency": {
+              "description": "Currency is the ISO 4217 code.",
+              "type": "string"
+            },
+            "direction": {
+              "description": "Direction is whether value came in or went out: \"in\" or \"out\". Without it\nthe model cannot see funds passing through, which is the layering shape.",
+              "type": "string"
+            },
+            "nano": {
+              "description": "Nano is the amount in billionths of one unit of Currency.",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "riskObservation": {
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/riskAmount",
+              "description": "Amount is the money involved, if any."
+            },
+            "at": {
+              "description": "At is when it happened, RFC 3339. Absent means now.",
+              "type": "string"
+            },
+            "signals": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Signals are the observations: ip, device, counterparty and the rest.",
+              "type": "object"
+            },
+            "subject": {
+              "$ref": "#/$defs/riskSubject",
+              "description": "Subject is whose behaviour this is."
+            }
+          },
+          "type": "object"
+        },
+        "riskSubject": {
+          "properties": {
+            "id": {
+              "description": "ID is the subject's identifier within the caller's own org. It is never\ninterpreted, only aggregated on, so it may be any stable string.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "Kind is the sort of thing this is: account, transaction, session, agent,\nmerchant or payout. It selects the aggregation axes, not the tenant gate.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "observation": {
+          "$ref": "#/$defs/riskObservation",
+          "description": "Observation is what to score."
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskScore"
+  },
+  {
+    "description": "Search exhaustively tries the model topology over this tenant's own history\nand returns the learning curve and the winning shape.\n\nThe grid is CLOSED — trees x depth x window x blend x appetite — because an\nunbounded grid is an unbounded amount of a shared pod's CPU reachable by\nanyone with a key. Each candidate runs in a sandbox over fresh counters\ncarrying the SAME per-tenant memory bound the live plane does, so a search can\nnever move the live model, can never cost more than a tenant is allowed to\ncost, and can never see another tenant's history because the replay reads this\ntenant's own file.\n\nIT IS QUEUED, AND THE QUEUE IS THE BOUND. One run per tenant (a second answers\n409 naming the one already going), a fixed number of workers for the whole\nprocess, a short backlog beyond which a start answers 429, and a deadline every\ncandidate polls. Priced before the work and metered after it, on the caller's\nown ledger. See search.go.\n\nIt answers 202 with a run identifier; read the report back at\nGET /v1/risk/search/{id} and stop it at DELETE /v1/risk/search/{id}.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit bounds how many recorded observations are replayed, 1..5000. The\ngrid itself is closed and needs no bound from the caller.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSearch"
+  },
+  {
+    "description": "Reads an exhaustive search's report: every candidate tried, the\nwinner, and the winner's learning curve.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, taken from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSearchResult"
+  },
+  {
+    "description": "Sets how much of the stream the model may examine.\n\nReview is the lever, and the threshold is derived from it as a quantile of the\nscores actually observed rather than fixed at a number someone liked. That is\nwhat makes an alert level governed rather than tuned, and it is why the level\ncannot be set to fit the size of the review team.",
+    "inputSchema": {
+      "properties": {
+        "review": {
+          "description": "Review is the share of the stream that may be examined, in (0, 0.5].",
+          "type": "number"
+        },
+        "sample": {
+          "description": "Sample is the share of non-alerting traffic retained, in [0, 1].",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskSetAppetite"
   },
   {
     "description": "Declares a reserve, a payout hold or a block on a subject.",
@@ -746,6 +666,14 @@
     "name": "riskSimulate"
   },
   {
+    "description": "Snapshot pins this tenant's learned state into its own encrypted file.\n\nIt is what an auditor asks for: the exact model that raised an alert, kept so\nthat the same input can be scored again a year later. It is also what makes a\nrollout survivable — the shutdown path snapshots every resident tenant,\nbecause cloud deploys Recreate at one replica and a model that comes back with\nnothing learned refuses to score for its whole warm period.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "riskSnapshot"
+  },
+  {
     "description": "Reads one subject's current risk state: every live velocity\naggregate it has, its recent decisions, whatever controls are declared on it,\nits thirty-day history, and where this KIND of subject sits across the\nplatform. This is the continuous-monitoring read — a merchant, an account or\nan agent, on one page.\n\nThe last two come from the warehouse and are BEST EFFORT: an unreachable\nwarehouse omits them and names the gap, because a zeroed history would say the\nsubject did nothing and a zeroed baseline would say the platform did.\n\nThe network comparison is the only cross-org value this API returns and it is\naggregate BY CONSTRUCTION: the table has no tenant column, so there is no\nquery — here or anywhere — that could return another tenant's rows.",
     "inputSchema": {
       "properties": {
@@ -798,6 +726,78 @@
       "type": "object"
     },
     "name": "riskSuppressions"
+  },
+  {
+    "description": "Train teaches this tenant's model from this tenant's own observations.\n\nIt is online: there is no job, no queue and no window in which the tenant is\nprotected by a stale model, because the half-space geometry is built before\nany data arrives and the model IS a set of mass counters. One observation is\none increment.\n\nTHERE IS NO CROSS-TENANT TRAINING INPUT AND NO WAY TO EXPRESS ONE. The model\nis indexed by the tenant key and its tree GEOMETRY is seeded from it, so two\ntenants do not merely hold different counters — they hold different trees.\nAny cross-org learning in this product is aggregate-only, lives in a table\nwith no tenant column, and is published only above a k-anonymity floor.",
+    "inputSchema": {
+      "$defs": {
+        "riskAmount": {
+          "properties": {
+            "currency": {
+              "description": "Currency is the ISO 4217 code.",
+              "type": "string"
+            },
+            "direction": {
+              "description": "Direction is whether value came in or went out: \"in\" or \"out\". Without it\nthe model cannot see funds passing through, which is the layering shape.",
+              "type": "string"
+            },
+            "nano": {
+              "description": "Nano is the amount in billionths of one unit of Currency.",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "riskObservation": {
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/riskAmount",
+              "description": "Amount is the money involved, if any."
+            },
+            "at": {
+              "description": "At is when it happened, RFC 3339. Absent means now.",
+              "type": "string"
+            },
+            "signals": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Signals are the observations: ip, device, counterparty and the rest.",
+              "type": "object"
+            },
+            "subject": {
+              "$ref": "#/$defs/riskSubject",
+              "description": "Subject is whose behaviour this is."
+            }
+          },
+          "type": "object"
+        },
+        "riskSubject": {
+          "properties": {
+            "id": {
+              "description": "ID is the subject's identifier within the caller's own org. It is never\ninterpreted, only aggregated on, so it may be any stable string.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "Kind is the sort of thing this is: account, transaction, session, agent,\nmerchant or payout. It selects the aggregation axes, not the tenant gate.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "observations": {
+          "description": "Observations are what to learn from. They are this tenant's own data and\nnothing else: there is no cross-tenant training input and no way to\nexpress one, because the model is indexed by the tenant key and its tree\nGEOMETRY is seeded from it.",
+          "items": {
+            "$ref": "#/$defs/riskObservation"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "riskTrain"
   },
   {
     "description": "Unsuppress lifts a mute. Answers 204, or 404 for an identifier this tenant\ndoes not own.",

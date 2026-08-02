@@ -6,7 +6,9 @@ package risk
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -200,11 +202,11 @@ func TestBaselineRefusesBelowKAnon(t *testing.T) {
 	if kAnonMin < 25 {
 		t.Fatalf("kAnonMin = %d; below 25 a quantile is close enough to one business's numbers to be them", kAnonMin)
 	}
-	if !strings.Contains(baselinePopulate, "HAVING orgs >= 25") {
-		t.Error("the population statement does not carry the k-anonymity floor in its HAVING clause")
-	}
-	if !strings.Contains(baselinePopulate, "n >= 1000") {
-		t.Error("the population statement does not carry the observation floor; k orgs at one row each is meaningless")
+	// ONE SPELLING. The statement's HAVING must be the SAME numbers the reader
+	// checks: written twice, raising the constant raises only the read-side belt
+	// and the writer keeps publishing below the intended privacy floor.
+	if want := fmt.Sprintf("HAVING orgs >= %d AND n >= %d", kAnonMin, nMin); !strings.Contains(baselinePopulate, want) {
+		t.Errorf("the population statement does not carry %q — the floor is spelled twice and the two can drift", want)
 	}
 	// The read-side belt: a row below either floor is dropped rather than
 	// returned. Exercised through the same predicate the reader applies.
@@ -288,6 +290,17 @@ func resOf(t *testing.T, s *stateService, tn Tenant) *resident {
 	return r
 }
 
+// dbOf resolves a tenant's file the way an op does — through the one door that
+// answers with an error rather than with a handle nobody may use.
+func dbOf(t *testing.T, r *resident) *sql.DB {
+	t.Helper()
+	db, err := r.file()
+	if err != nil {
+		t.Fatalf("resolving the tenant's file: %v", err)
+	}
+	return db
+}
+
 // feed drives n observations through a tenant's model so it has state to
 // snapshot.
 func feed(t *testing.T, s *stateService, tn Tenant, n int) {
@@ -300,8 +313,9 @@ func feed(t *testing.T, s *stateService, tn Tenant, n int) {
 			amount: int64(i+1) * 1_000_000_000, currency: "USD", direction: "in",
 			signals: map[string]string{"ip": "203.0.113.5", "device": "d-1"},
 		}
-		vel, model, _ := resOf(t, s, tn).arms()
-		record(vel, tn, o)
+		r := resOf(t, s, tn)
+		_, model, _ := r.arms()
+		r.record(o)
 		tx, ent := txOf(tn, o)
 		_, _ = model.Assess(tx, ent)
 	}
@@ -324,9 +338,23 @@ func wireApp(t *testing.T) (*zip.App, *stateService) {
 
 // ── the wire ────────────────────────────────────────────────────────────────
 
-// req drives one request through the mounted router with the identity headers
-// the edge would have minted.
+// req drives one request as an ORDINARY member of the org — a validated
+// principal with no admin bit. That is the default on purpose: governing this
+// tenant's controls takes more than using them, and a helper that quietly minted
+// an admin would make every governance test prove nothing.
 func req(t *testing.T, app *zip.App, method, path, org, user, body string) (int, []byte) {
+	t.Helper()
+	return call(t, app, method, path, org, user, body, false)
+}
+
+// reqAdmin drives one request as an admin OF THIS ORG — the principal a
+// governance write requires.
+func reqAdmin(t *testing.T, app *zip.App, method, path, org, user, body string) (int, []byte) {
+	t.Helper()
+	return call(t, app, method, path, org, user, body, true)
+}
+
+func call(t *testing.T, app *zip.App, method, path, org, user, body string, admin bool) (int, []byte) {
 	t.Helper()
 	var r *http.Request
 	if body == "" {
@@ -340,6 +368,9 @@ func req(t *testing.T, app *zip.App, method, path, org, user, body string) (int,
 	}
 	if user != "" {
 		r.Header.Set("X-User-Id", user)
+	}
+	if admin {
+		r.Header.Set("X-User-IsOrgAdmin", "true")
 	}
 	resp, err := app.Fiber().Test(r, fiber.TestConfig{Timeout: fiberTimeout})
 	if err != nil {
@@ -366,10 +397,10 @@ func TestEveryOpRefusesAnUnvalidatedPrincipal(t *testing.T) {
 		{http.MethodGet, "/v1/risk/dictionary", ""},
 		{http.MethodGet, "/v1/risk/activity", ""},
 		{http.MethodGet, "/v1/risk/controls", ""},
-		{http.MethodGet, "/v1/ml/state", ""},
-		{http.MethodGet, "/v1/ml/features", ""},
-		{http.MethodPost, "/v1/ml/score", `{"observation":{"subject":{"kind":"account","id":"a1"}}}`},
-		{http.MethodPost, "/v1/ml/train", `{"observations":[{"subject":{"kind":"account","id":"a1"}}]}`},
+		{http.MethodGet, "/v1/risk/state", ""},
+		{http.MethodGet, "/v1/risk/features", ""},
+		{http.MethodPost, "/v1/risk/score", `{"observation":{"subject":{"kind":"account","id":"a1"}}}`},
+		{http.MethodPost, "/v1/risk/train", `{"observations":[{"subject":{"kind":"account","id":"a1"}}]}`},
 	} {
 		code, body := req(t, app, tc.method, tc.path, "acme", "", tc.body)
 		if code != http.StatusForbidden {
@@ -558,9 +589,11 @@ func TestNetworkReadTakesNoTenant(t *testing.T) {
 	}
 }
 
+// mustOK drives a governance write as the org's own admin and requires the
+// status it names.
 func mustOK(t *testing.T, app *zip.App, method, path, org, user, body string, want int) {
 	t.Helper()
-	code, got := req(t, app, method, path, org, user, body)
+	code, got := reqAdmin(t, app, method, path, org, user, body)
 	if code != want {
 		t.Fatalf("%s %s = %d %s, want %d", method, path, code, got, want)
 	}

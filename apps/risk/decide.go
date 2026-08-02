@@ -33,7 +33,6 @@ import (
 
 	"github.com/luxfi/aml/pkg/anomaly"
 	"github.com/luxfi/aml/pkg/types"
-	"github.com/luxfi/aml/pkg/velocity"
 )
 
 // Agency is what kind of actor this is. It is the differentiator: we run the
@@ -157,20 +156,6 @@ func (o observation) axisOf(axis string) string {
 	return ""
 }
 
-// record writes the observation onto every ring it has a value for. The rings
-// are keyed {OrgID, Kind, Value} with the tenant leading, so two tenants naming
-// the same device or the same address never share a counter.
-func record(vel *velocity.Store, t Tenant, o observation) {
-	usd := nanoUSD(o.amount)
-	for axis := range velocityAxes {
-		v := o.axisOf(axis)
-		if v == "" {
-			continue
-		}
-		vel.Record(velocity.Key{OrgID: t.String(), Kind: axis, Value: v}, o.at, usd, structuringThreshold)
-	}
-}
-
 // structuringThreshold is the reporting threshold the "just under" counters are
 // measured against — the standard USD 10,000 figure. It is a constant because a
 // per-tenant threshold is a per-tenant policy and this is the statutory one.
@@ -185,7 +170,7 @@ func nanoUSD(nano int64) float64 { return float64(nano) / 1e9 }
 // observe builds the fact set the rules read. Every velocity number the closed
 // vocabulary can name is materialised here, once, so a rule set of any size
 // reads the rings a bounded number of times.
-func observe(vel *velocity.Store, t Tenant, o observation, modelScore float64, warming bool) factSet {
+func observe(vel *rings, t Tenant, o observation, modelScore float64, warming bool) factSet {
 	f := factSet{
 		scalar: map[string]string{
 			"stage":            o.stage,
@@ -211,7 +196,7 @@ func observe(vel *velocity.Store, t Tenant, o observation, modelScore float64, w
 		if v == "" {
 			continue
 		}
-		for _, obs := range vel.Observe(velocity.Key{OrgID: t.String(), Kind: axis, Value: v}) {
+		for _, obs := range vel.observe(t, axis, v) {
 			p := "velocity." + axis + "." + obs.Window + "."
 			f.number[p+"count"] = float64(obs.Count)
 			f.number[p+"sum"] = obs.Sum
@@ -235,7 +220,7 @@ type bench struct {
 	t Tenant
 	// vel and model are THIS tenant's own aggregates and forest. Nothing here is
 	// shared with another tenant; see bound.go.
-	vel   *velocity.Store
+	vel   *rings
 	model *anomaly.Store
 	// rules is this tenant's rule set, already loaded.
 	rules []rule
@@ -246,6 +231,9 @@ type bench struct {
 	mute func(h hit, o observation) bool
 	// shadow is the tenant observing rather than acting.
 	shadow bool
+	// room is the node's memory gate, asked before a NEW counter is taken. Nil
+	// when nothing is accounting — a bench built by a test, or a search sandbox.
+	room func(int) bool
 	// grade turns the model's own refusal into the word that is true of it —
 	// `warming` for a control coming up, `disarmed` for one that is off. Nil
 	// grades nothing, which is what a test without a store wants.
@@ -271,8 +259,10 @@ func decide(ctx context.Context, b bench, o observation) outcome {
 	}
 
 	// 1. Record first: everything after reads these rings, and the numbers in the
-	// decision must be the ones an investigator sees on the subject.
-	record(b.vel, b.t, o)
+	// decision must be the ones an investigator sees on the subject. It goes
+	// through the tenant's own gate, so a key the bound refuses is counted and
+	// published as `strained` rather than silently dropped inside the engine.
+	b.vel.record(b.t, o, b.room)
 
 	// 2. Score the model. Assess LEARNS; the tenant's own traffic is its training
 	// set and there is no separate training pass.

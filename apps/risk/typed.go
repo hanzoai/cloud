@@ -32,7 +32,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/luxfi/aml/pkg/anomaly"
 	"github.com/luxfi/aml/pkg/types"
-	"github.com/luxfi/aml/pkg/velocity"
 	"github.com/zap-proto/zip"
 )
 
@@ -57,13 +56,17 @@ func mount(s *stateService, app cloud.Router) {
 	// group's prefix by reading that exact assignment form and FAILS the generate
 	// rather than filing prose under a path that does not exist.
 	g := app.Group("/v1/risk")
-	gml := app.Group("/v1/ml")
-	// cloud.Bridge FIRST on each group. fiber runs middleware in registration
+	// cloud.Bridge FIRST on the group. fiber runs middleware in registration
 	// order, so one installed after its leaves never runs, and a typed op with no
 	// Bridge in front of it has no validated principal to read — which this
 	// package answers with 403 rather than with a guess.
+	//
+	// The wire door is SECOND, before every leaf and after the principal: every
+	// bound in bound.go is a count multiplied by textMax, and that multiplication
+	// is only arithmetic if no value longer than textMax reaches the store. One
+	// middleware, not a rule per field — see door.go.
 	g.Use(cloud.Bridge())
-	gml.Use(cloud.Bridge())
+	g.Use(door())
 	o := ops{s: s}
 
 	// ── decide ──────────────────────────────────────────────────────────────
@@ -182,56 +185,60 @@ func mount(s *stateService, app cloud.Router) {
 	// typed_wire_test.go.
 	g.Get("/health", health(s))
 
-	// ── /v1/ml — the shared model plane, owned by THIS app ───────────────────
+	// ── learn ───────────────────────────────────────────────────────────────
 	//
-	// The native ML leaves are on THIS app's manifest row and not on apps/ml's,
-	// and that is the sharpest structural decision in the design. A manifest row
-	// is a BINARY, and the model is in-process MUTABLE state: if plugin/ml
-	// trained and plugin/risk scored, the two processes would hold different
-	// mass counters and there would be NO ERROR — just two different answers to
-	// one question. One owner of the state, one row.
-	zip.Post(gml, "/score", o.score,
-		zip.WithOperationID("mlScore"),
+	// ONE FACE FOR DECIDE AND LEARN, and it is /v1/risk. An earlier cut put these
+	// nine leaves under /v1/ml, which is a LIVE prefix belonging to another
+	// product — apps/ml serves InferenceServices there, and /v1/ml/models already
+	// means "models you serve". "Models that learn" is a different concept, and
+	// two concepts under one name is the collision the manifest exists to refuse.
+	// Serving is /v1/ml, deciding and learning is /v1/risk, compliance is
+	// /v1/aml: three faces, no overlap, each one complete.
+	//
+	// There is no alias from the old spelling. It never shipped, so there is
+	// nothing to be compatible with.
+	zip.Post(g, "/score", o.score,
+		zip.WithOperationID("riskScore"),
 		zip.WithSummary("Score an observation without learning from it"),
-		zip.WithTags("ml"))
-	zip.Post(gml, "/train", o.train,
-		zip.WithOperationID("mlTrain"),
+		zip.WithTags("risk"))
+	zip.Post(g, "/train", o.train,
+		zip.WithOperationID("riskTrain"),
 		zip.WithSummary("Train this tenant's model on its own observations"),
-		zip.WithTags("ml"))
-	zip.Get(gml, "/state", o.modelState,
-		zip.WithOperationID("mlState"),
+		zip.WithTags("risk"))
+	zip.Get(g, "/state", o.modelState,
+		zip.WithOperationID("riskModelState"),
 		zip.WithSummary("Read the model's governance state"),
-		zip.WithTags("ml"))
-	zip.Put(gml, "/state/appetite", o.setAppetite,
-		zip.WithOperationID("mlSetAppetite"),
+		zip.WithTags("risk"))
+	zip.Put(g, "/state/appetite", o.setAppetite,
+		zip.WithOperationID("riskSetAppetite"),
 		zip.WithSummary("Set the share of the stream the model may examine"),
-		zip.WithTags("ml"))
-	zip.Get(gml, "/features", o.features,
-		zip.WithOperationID("mlFeatures"),
+		zip.WithTags("risk"))
+	zip.Get(g, "/features", o.features,
+		zip.WithOperationID("riskFeatures"),
 		zip.WithSummary("Read the typology-to-feature inventory the model is built on"),
-		zip.WithTags("ml"))
-	zip.Post(gml, "/search", o.search,
-		zip.WithOperationID("mlSearch"),
+		zip.WithTags("risk"))
+	zip.Post(g, "/search", o.search,
+		zip.WithOperationID("riskSearch"),
 		zip.WithSummary("Exhaustively search the model topology over this tenant's own history"),
 		zip.WithStatus(202),
-		zip.WithTags("ml"))
-	zip.Get(gml, "/search/:id", o.searchResult,
-		zip.WithOperationID("mlSearchResult"),
+		zip.WithTags("risk"))
+	zip.Get(g, "/search/:id", o.searchResult,
+		zip.WithOperationID("riskSearchResult"),
 		zip.WithSummary("Read an exhaustive search's report"),
-		zip.WithTags("ml"))
-	zip.Delete(gml, "/search/:id", o.cancelSearch,
-		zip.WithOperationID("mlCancelSearch"),
+		zip.WithTags("risk"))
+	zip.Delete(g, "/search/:id", o.cancelSearch,
+		zip.WithOperationID("riskCancelSearch"),
 		zip.WithSummary("Stop a running exhaustive search"),
-		zip.WithTags("ml"))
-	zip.Post(gml, "/snapshot", o.snapshot,
-		zip.WithOperationID("mlSnapshot"),
+		zip.WithTags("risk"))
+	zip.Post(g, "/snapshot", o.snapshot,
+		zip.WithOperationID("riskSnapshot"),
 		zip.WithSummary("Pin this tenant's learned state"),
 		zip.WithStatus(201),
-		zip.WithTags("ml"))
-	zip.Post(gml, "/restore", o.restore,
-		zip.WithOperationID("mlRestore"),
+		zip.WithTags("risk"))
+	zip.Post(g, "/restore", o.restore,
+		zip.WithOperationID("riskRestore"),
 		zip.WithSummary("Restore this tenant's learned state from its pinned snapshot"),
-		zip.WithTags("ml"))
+		zip.WithTags("risk"))
 }
 
 // ── the shapes ──────────────────────────────────────────────────────────────
@@ -461,10 +468,22 @@ type riskDecisionBrief struct {
 	Strained bool `json:"strained,omitempty"`
 }
 
-// riskDecisionPage is a page of the decision log.
+// riskDecisionPage is a page of the decision log, and the window that log
+// covers.
 type riskDecisionPage struct {
 	// Items is the page, newest first.
 	Items []riskDecisionBrief `json:"items"`
+	// Retained is how many decisions this tenant's log holds. The log is a ring:
+	// past its retention the OLDEST decisions are dropped so a new one can
+	// always be recorded, because refusing a decision would be refusing the
+	// authorization the caller asked for.
+	Retained int `json:"retained"`
+	// Oldest is the instant of the oldest decision still retained, RFC 3339 in
+	// UTC — the far edge of the window every read of this log looks through. It
+	// is published rather than left to be inferred: a query that finds nothing
+	// before a date and a period that was never retained are the same empty
+	// answer and opposite facts.
+	Oldest string `json:"oldest,omitempty"`
 }
 
 // riskDecisionView is one decision with its evidence — the dispute packet: what
@@ -913,21 +932,17 @@ type riskModeView struct {
 	Since string `json:"since,omitempty"`
 }
 
-// ── the /v1/ml shapes ───────────────────────────────────────────────────────
+// ── the learning shapes ─────────────────────────────────────────────────────
+//
+// An op that takes nothing off the wire uses riskNoInput and one addressed by a
+// path segment uses riskRef; the learning plane had its own copies of both, byte
+// for byte, which is two names for one shape in a schema namespace that is flat
+// across the whole fleet.
 
-// mlNoInput is the In of a model-plane op that takes nothing off the wire.
-type mlNoInput struct{}
-
-// mlRef addresses one model-plane record.
-type mlRef struct {
-	// ID is the record to read, from the path.
-	ID string `json:"id"`
-}
-
-// mlObservation is one thing for the model to score or learn from. It is the
+// riskObservation is one thing for the model to score or learn from. It is the
 // decide input minus the governance: no stage, no rules, no action — just the
 // coordinates.
-type mlObservation struct {
+type riskObservation struct {
 	// Subject is whose behaviour this is.
 	Subject riskSubject `json:"subject"`
 	// Amount is the money involved, if any.
@@ -938,16 +953,16 @@ type mlObservation struct {
 	At string `json:"at,omitempty"`
 }
 
-// mlScoreIn is one observation to score.
-type mlScoreIn struct {
+// riskScoreIn is one observation to score.
+type riskScoreIn struct {
 	// Observation is what to score.
-	Observation mlObservation `json:"observation"`
+	Observation riskObservation `json:"observation"`
 }
 
-// mlValue is one coordinate as the model read it, including the ones that
+// riskValue is one coordinate as the model read it, including the ones that
 // contributed nothing — so a reviewer sees what the model read and not only what
 // it concluded.
-type mlValue struct {
+type riskValue struct {
 	// Feature is the dimension.
 	Feature string `json:"feature"`
 	// X is the coordinate the model used, in [0,1].
@@ -964,10 +979,10 @@ type mlValue struct {
 	Blind bool `json:"blind"`
 }
 
-// mlScoreOut is the model's verdict on one observation. This op LEARNS NOTHING:
+// riskScoreOut is the model's verdict on one observation. This op LEARNS NOTHING:
 // it is how a candidate is tried against a tenant's real behaviour before
 // anything depends on the answer.
-type mlScoreOut struct {
+type riskScoreOut struct {
 	// Scored is false when the model declined; Refusal says which refusal.
 	Scored bool `json:"scored"`
 	// Refusal names the decline: warming or unidentified.
@@ -984,28 +999,28 @@ type mlScoreOut struct {
 	// Causes is the per-feature attribution, ordered by contribution.
 	Causes []riskCause `json:"causes,omitempty"`
 	// Values is every coordinate, including the blind ones.
-	Values []mlValue `json:"values,omitempty"`
+	Values []riskValue `json:"values,omitempty"`
 	// Model is the digest of the model that produced this.
 	Model string `json:"model"`
 }
 
-// mlTrainIn is a batch of this tenant's own observations to learn from.
+// riskTrainIn is a batch of this tenant's own observations to learn from.
 //
 // There is no training JOB, because there is no training PASS: the half-space
 // geometry is built before any data arrives and the model IS a set of mass
 // counters, so training is one online increment per observation. That is why a
 // tenant is never protected by a stale model and why a deploy that snapshots is
 // the whole of the durability story.
-type mlTrainIn struct {
+type riskTrainIn struct {
 	// Observations are what to learn from. They are this tenant's own data and
 	// nothing else: there is no cross-tenant training input and no way to
 	// express one, because the model is indexed by the tenant key and its tree
 	// GEOMETRY is seeded from it.
-	Observations []mlObservation `json:"observations"`
+	Observations []riskObservation `json:"observations"`
 }
 
-// mlTrainOut is what the model took in.
-type mlTrainOut struct {
+// riskTrainOut is what the model took in.
+type riskTrainOut struct {
 	// Learned is how many observations were incorporated.
 	Learned int `json:"learned"`
 	// Refused is how many were not, by reason.
@@ -1017,8 +1032,8 @@ type mlTrainOut struct {
 	Model string `json:"model"`
 }
 
-// mlAppetite is how much of the stream the model may examine.
-type mlAppetite struct {
+// riskAppetite is how much of the stream the model may examine.
+type riskAppetite struct {
 	// Review is the share of the stream that may be sent for examination. The
 	// alert threshold is derived from it as a quantile of the scores actually
 	// observed, rather than fixed at a number someone liked — so an alert level
@@ -1033,10 +1048,10 @@ type mlAppetite struct {
 	Warm int `json:"warm"`
 }
 
-// mlFeature is one dimension of the model space and the obligation it serves.
+// riskFeature is one dimension of the model space and the obligation it serves.
 // The mapping is code rather than a document because a mapping kept beside the
 // model cannot drift away from what the model actually reads.
-type mlFeature struct {
+type riskFeature struct {
 	// Name is the dimension.
 	Name string `json:"name"`
 	// Window is the span it is measured over, when it has one.
@@ -1056,22 +1071,22 @@ type mlFeature struct {
 	Neutral float64 `json:"neutral"`
 }
 
-// mlFeatureInventory is the typology-to-feature mapping the model is built on.
-type mlFeatureInventory struct {
+// riskFeatureInventory is the typology-to-feature mapping the model is built on.
+type riskFeatureInventory struct {
 	// Items is every dimension, in coordinate order. The ORDER is part of the
 	// model's identity: adding, removing or reordering one invalidates learned
 	// state, which the digest enforces.
-	Items []mlFeature `json:"items"`
+	Items []riskFeature `json:"items"`
 	// Digest is the identity of this shape.
 	Digest string `json:"digest"`
 }
 
-// mlModelState is what a review of the model reads. It covers ONE tenant: a
+// riskModelState is what a review of the model reads. It covers ONE tenant: a
 // caller scoped to a tenant cannot learn another's volumes, alert rate or
 // behaviour from it.
-type mlModelState struct {
+type riskModelState struct {
 	// Appetite is the stated share of the stream that may be examined.
-	Appetite mlAppetite `json:"appetite"`
+	Appetite riskAppetite `json:"appetite"`
 	// Threshold is the score cut currently in force, recomputed each window as
 	// the quantile that admits the stated share.
 	Threshold float64 `json:"threshold"`
@@ -1104,28 +1119,28 @@ type mlModelState struct {
 	Distribution []float64 `json:"distribution"`
 	// Inventory is the feature set, so the state and the shape are read
 	// together.
-	Inventory []mlFeature `json:"inventory"`
+	Inventory []riskFeature `json:"inventory"`
 	// Digest is the model identity an auditor pins.
 	Digest string `json:"digest"`
 }
 
-// mlAppetiteIn sets the appetite.
-type mlAppetiteIn struct {
+// riskAppetiteIn sets the appetite.
+type riskAppetiteIn struct {
 	// Review is the share of the stream that may be examined, in (0, 0.5].
 	Review float64 `json:"review"`
 	// Sample is the share of non-alerting traffic retained, in [0, 1].
 	Sample float64 `json:"sample"`
 }
 
-// mlSearchIn asks for an exhaustive topology search.
-type mlSearchIn struct {
+// riskSearchIn asks for an exhaustive topology search.
+type riskSearchIn struct {
 	// Limit bounds how many recorded observations are replayed, 1..5000. The
 	// grid itself is closed and needs no bound from the caller.
 	Limit int `json:"limit,omitempty"`
 }
 
-// mlCandidate is one point in the topology grid.
-type mlCandidate struct {
+// riskCandidate is one point in the topology grid.
+type riskCandidate struct {
 	// Trees is how many half-space trees the model holds.
 	Trees int `json:"trees"`
 	// Depth is how deep each tree splits.
@@ -1138,10 +1153,10 @@ type mlCandidate struct {
 	Review float64 `json:"review"`
 }
 
-// mlTrial is what one candidate did over the replayed history.
-type mlTrial struct {
+// riskTrial is what one candidate did over the replayed history.
+type riskTrial struct {
 	// Candidate is the topology tried.
-	Candidate mlCandidate `json:"candidate"`
+	Candidate riskCandidate `json:"candidate"`
 	// Scored is how many observations it was able to score.
 	Scored int `json:"scored"`
 	// Alerted is how many of those it would have alerted on.
@@ -1156,9 +1171,9 @@ type mlTrial struct {
 	Warm int `json:"warm"`
 }
 
-// mlSearchRun is the receipt for a started search.
-type mlSearchRun struct {
-	// ID identifies the run; read it back at GET /v1/ml/search/{id}.
+// riskSearchRun is the receipt for a started search.
+type riskSearchRun struct {
+	// ID identifies the run; read it back at GET /v1/risk/search/{id}.
 	ID string `json:"id"`
 	// Status is "running" or "done".
 	Status string `json:"status"`
@@ -1166,8 +1181,8 @@ type mlSearchRun struct {
 	Candidates int `json:"candidates"`
 }
 
-// mlSearchReport is the answer.
-type mlSearchReport struct {
+// riskSearchReport is the answer.
+type riskSearchReport struct {
 	// ID identifies the run.
 	ID string `json:"id"`
 	// Status is "running", "done" or "refused".
@@ -1175,10 +1190,10 @@ type mlSearchReport struct {
 	// Events is how many historical observations were replayed.
 	Events int `json:"events"`
 	// Trials is every candidate tried, best-separating first.
-	Trials []mlTrial `json:"trials,omitempty"`
+	Trials []riskTrial `json:"trials,omitempty"`
 	// Winner is the best-separating topology that also honoured its stated
 	// appetite. Absent when no candidate did both.
-	Winner *mlCandidate `json:"winner,omitempty"`
+	Winner *riskCandidate `json:"winner,omitempty"`
 	// Curve is the winner's separation as a function of how much history it had
 	// seen, in ten steps — the learning curve.
 	Curve []float64 `json:"curve,omitempty"`
@@ -1188,8 +1203,8 @@ type mlSearchReport struct {
 	Refusal string `json:"refusal,omitempty"`
 }
 
-// mlSnapshotOut is the receipt for a pinned model.
-type mlSnapshotOut struct {
+// riskSnapshotOut is the receipt for a pinned model.
+type riskSnapshotOut struct {
 	// Digest is the model identity that was pinned.
 	Digest string `json:"digest"`
 	// Learned is how many observations that state had taken in.
@@ -1215,11 +1230,10 @@ type mlSnapshotOut struct {
 // both the commerce identity and the org header, which is the anti-cross-org
 // property.
 func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error) {
-	sc, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	stage := strings.ToLower(strings.TrimSpace(in.Stage))
 	if !stages[stage] {
 		return nil, zip.Errorf(400, "%q is not a lifecycle stage", in.Stage)
@@ -1267,7 +1281,7 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 	vel, model, since := res.arms()
 
 	out := decide(ctx, bench{
-		t: sc.tenant, vel: vel, model: model, rules: rules,
+		t: sc.tenant, vel: vel, model: model, rules: rules, room: res.room,
 		lists: func(name, value string) bool { return lists[name][strings.ToLower(value)] },
 		mute: func(h hit, ob observation) bool {
 			now := time.Now()
@@ -1305,6 +1319,17 @@ func (o ops) decide(ctx context.Context, in *riskDecideIn) (*riskDecision, error
 		return nil, err
 	}
 
+	// The log is a RING, and this is where it is trimmed: every tenant's file
+	// lives on the pod's one volume, so a log that only ever grows is one org
+	// filling the disk for every other. Paced by a per-cell counter rather than
+	// a row count, because counting the log inside an authorization window is
+	// the read the retention exists to keep cheap.
+	if res.recorded() {
+		if err := prune(db); err != nil {
+			o.s.Log.Error("risk: a tenant's decision log was not pruned to its retention", "tenant", sc.tenant.String(), "err", err)
+		}
+	}
+
 	// METER the screen on the caller's own ledger, after the work.
 	o.s.State.bill.Meter(sc.org, sc.project, "screen", screenCents, sc.request, sc.clientIP)
 
@@ -1332,16 +1357,19 @@ const screenCents = 1
 // an equality on a column the tenant's own file owns, so a filter can narrow the
 // caller's own log and can never widen it.
 func (o ops) decisions(ctx context.Context, in *riskDecisionsIn) (*riskDecisionPage, error) {
-	_, res, err := tenantState(ctx, o.s)
+	_, _, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	rows, err := decisionsPage(db, in.Kind, in.Subject, in.Action, in.Stage, in.Limit)
 	if err != nil {
 		return nil, err
 	}
-	page := &riskDecisionPage{Items: make([]riskDecisionBrief, 0, len(rows))}
+	held, oldest, err := retention(db)
+	if err != nil {
+		return nil, err
+	}
+	page := &riskDecisionPage{Items: make([]riskDecisionBrief, 0, len(rows)), Retained: held, Oldest: oldest}
 	for _, r := range rows {
 		page.Items = append(page.Items, brief(r))
 	}
@@ -1356,11 +1384,10 @@ func (o ops) decisions(ctx context.Context, in *riskDecisionsIn) (*riskDecisionP
 // does, because the tenant's file is the only place looked in: there is no query
 // that could reach another tenant's row, so a probe learns nothing.
 func (o ops) decision(ctx context.Context, in *riskRef) (*riskDecisionView, error) {
-	_, res, err := tenantState(ctx, o.s)
+	_, _, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	return o.decisionView(db, in.ID)
 }
 
@@ -1404,11 +1431,10 @@ func (o ops) decisionView(db *sql.DB, id string) (*riskDecisionView, error) {
 // about its own miss rate comes from these labels against the below-the-line
 // sample.
 func (o ops) label(ctx context.Context, in *riskLabelIn) (*riskDecisionView, error) {
-	sc, res, err := tenantState(ctx, o.s)
+	sc, _, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	v := strings.ToLower(strings.TrimSpace(in.Verdict))
 	if !labels[v] {
 		return nil, zip.Errorf(400, "%q is not a verdict", in.Verdict)
@@ -1434,11 +1460,10 @@ func (o ops) label(ctx context.Context, in *riskLabelIn) (*riskDecisionView, err
 // aggregate BY CONSTRUCTION: the table has no tenant column, so there is no
 // query — here or anywhere — that could return another tenant's rows.
 func (o ops) subject(ctx context.Context, in *riskSubjectRef) (*riskSubjectView, error) {
-	sc, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	kind := strings.ToLower(strings.TrimSpace(in.Kind))
 	if !subjectKinds[kind] {
 		return nil, zip.Errorf(400, "%q is not a subject kind", in.Kind)
@@ -1505,11 +1530,10 @@ func (o ops) subject(ctx context.Context, in *riskSubjectRef) (*riskSubjectView,
 // activation bus would be a third representation of one fact and a third thing
 // that can be behind.
 func (o ops) activity(ctx context.Context, in *riskActivityIn) (*riskActivityView, error) {
-	_, res, err := tenantState(ctx, o.s)
+	_, res, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	_, _, _, live, err := res.governance()
 	if err != nil {
 		return nil, err
@@ -1518,7 +1542,9 @@ func (o ops) activity(ctx context.Context, in *riskActivityIn) (*riskActivityVie
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
-	rows, err := decisionsPage(db, "", "", "", "", limit)
+	// ONE query for the page AND its evidence. Paging and then reading each row's
+	// detail was 501 queries per call on an ungated read.
+	rows, err := recent(db, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1536,11 +1562,7 @@ func (o ops) activity(ctx context.Context, in *riskActivityIn) (*riskActivityVie
 		if r.Refusal != "" {
 			view.Refusals[r.Refusal]++
 		}
-		_, hits, _, _, err := decisionDetail(db, r.ID)
-		if err != nil {
-			continue
-		}
-		for _, h := range hits {
+		for _, h := range r.Hits {
 			a := perRule[h.Rule]
 			if a == nil {
 				a = &riskActivityRule{Rule: h.Rule, Name: h.Name}
@@ -1585,22 +1607,27 @@ func (o ops) activity(ctx context.Context, in *riskActivityIn) (*riskActivityVie
 // the op a tenant runs BEFORE activating a rule, and charging for the rehearsal
 // is how you teach people to skip it.
 func (o ops) simulate(ctx context.Context, in *riskSimulateIn) (*riskSimulateReport, error) {
-	_, res, err := tenantState(ctx, o.s)
+	_, res, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	cand := fromWireRule(in.Candidate)
 	cand.Enabled = true // activated whatever the flag says: the question is what happens ON activation
 	if err := admit(cand); err != nil {
 		return nil, zip.Errorf(400, "%s", err.Error())
 	}
 	limit := in.Limit
-	if limit <= 0 || limit > 5000 {
-		limit = 1000
+	if limit <= 0 || limit > searchHistoryMax {
+		limit = searchHistoryDefault
 	}
-	hist, err := replayHistory(db, limit)
-	if err != nil {
+	// ONE replay at a time per tenant. See resident.alone: the rehearsal stays
+	// free, and the memory it can reach stays a fixed multiple of one replay.
+	var hist []replayed
+	if err := res.alone(func() error {
+		h, err := replayHistory(db, limit)
+		hist = h
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	if len(hist) == 0 {
@@ -1651,7 +1678,7 @@ func (o ops) simulate(ctx context.Context, in *riskSimulateIn) (*riskSimulateRep
 // disposable email, card testing, denied address, spend spike, payout velocity,
 // undeclared automation — all of which it may read, copy, edit and retire.
 func (o ops) rules(ctx context.Context, _ *riskNoInput) (*riskRuleList, error) {
-	_, res, err := tenantState(ctx, o.s)
+	_, res, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -1670,11 +1697,10 @@ func (o ops) rules(ctx context.Context, _ *riskNoInput) (*riskRuleList, error) {
 // no terms holds on everything, a rule naming a field that does not exist holds
 // on nothing, and both read as a working control from the outside.
 func (o ops) createRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) {
-	sc, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	r := fromWireRule(in.Rule)
 	r.ID = newID("rule")
 	if err := admit(r); err != nil {
@@ -1684,7 +1710,7 @@ func (o ops) createRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) 
 		return nil, err
 	}
 	res.dirty()
-	emit(sc.org, "risk.rule.created", map[string]any{"rule": r.ID, "stage": r.Stage, "action": r.Action})
+	emit(sc.org, "risk.rule.created", map[string]any{"rule": r.ID, "stage": r.Stage, "action": r.Action, "by": by(sc)})
 	w := toWireRule(r)
 	return &w, nil
 }
@@ -1693,11 +1719,10 @@ func (o ops) createRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) 
 // conjunction of terms, and merging a partial term list into an existing one is
 // a change nobody can read off the request.
 func (o ops) updateRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) {
-	_, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	if _, err := getRule(db, in.ID); err != nil {
 		return nil, err
 	}
@@ -1710,6 +1735,7 @@ func (o ops) updateRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) 
 		return nil, err
 	}
 	res.dirty()
+	emit(sc.org, "risk.rule.replaced", map[string]any{"rule": r.ID, "stage": r.Stage, "action": r.Action, "by": by(sc)})
 	w := toWireRule(r)
 	return &w, nil
 }
@@ -1717,15 +1743,15 @@ func (o ops) updateRule(ctx context.Context, in *riskRuleIn) (*riskRule, error) 
 // DeleteRule retires a detection. Answers 204, or 404 for an identifier this
 // tenant does not own.
 func (o ops) deleteRule(ctx context.Context, in *riskRef) (*struct{}, error) {
-	_, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	if err := dropRule(db, in.ID); err != nil {
 		return nil, err
 	}
 	res.dirty()
+	emit(sc.org, "risk.rule.retired", map[string]any{"rule": in.ID, "by": by(sc)})
 	return &struct{}{}, nil
 }
 
@@ -1735,11 +1761,10 @@ func (o ops) deleteRule(ctx context.Context, in *riskRef) (*struct{}, error) {
 // not here and are never merged into them: a tenant may add to its own deny
 // list, and a tenant may not edit OFAC.
 func (o ops) lists(ctx context.Context, _ *riskNoInput) (*riskListPage, error) {
-	_, res, err := tenantState(ctx, o.s)
+	_, _, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	items, err := listNames(db)
 	if err != nil {
 		return nil, err
@@ -1749,11 +1774,10 @@ func (o ops) lists(ctx context.Context, _ *riskNoInput) (*riskListPage, error) {
 
 // CreateList creates an allow or deny list a rule can name in an inlist term.
 func (o ops) createList(ctx context.Context, in *riskListIn) (*riskListView, error) {
-	_, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	name := strings.ToLower(strings.TrimSpace(in.Name))
 	if name == "" {
 		return nil, zip.Errorf(400, "a list needs a name")
@@ -1766,21 +1790,22 @@ func (o ops) createList(ctx context.Context, in *riskListIn) (*riskListView, err
 		return nil, err
 	}
 	res.dirty()
+	emit(sc.org, "risk.list.created", map[string]any{"list": name, "by": by(sc)})
 	return &riskListView{Name: name, Kind: kind, CreatedAt: stamp(time.Now())}, nil
 }
 
 // AddListEntries adds values to a list. Values are folded to lower case so a
 // value added in one case matches a signal sent in another.
 func (o ops) addEntries(ctx context.Context, in *riskListEntriesIn) (*riskListView, error) {
-	sc, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	if err := addEntries(db, strings.ToLower(in.Name), in.Values, by(sc)); err != nil {
 		return nil, err
 	}
 	res.dirty()
+	emit(sc.org, "risk.list.entries.added", map[string]any{"list": in.Name, "values": len(in.Values), "by": by(sc)})
 	items, err := listNames(db)
 	if err != nil {
 		return nil, err
@@ -1797,15 +1822,15 @@ func (o ops) addEntries(ctx context.Context, in *riskListEntriesIn) (*riskListVi
 // RemoveListEntry removes one value from a list. Answers 204, or 404 when the
 // list does not hold it.
 func (o ops) removeEntry(ctx context.Context, in *riskListEntryRef) (*struct{}, error) {
-	_, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	if err := dropEntry(db, strings.ToLower(in.Name), in.Value); err != nil {
 		return nil, err
 	}
 	res.dirty()
+	emit(sc.org, "risk.list.entry.removed", map[string]any{"list": in.Name, "by": by(sc)})
 	return &struct{}{}, nil
 }
 
@@ -1813,7 +1838,7 @@ func (o ops) removeEntry(ctx context.Context, in *riskListEntryRef) (*struct{}, 
 // listed and mutes nothing — a forgotten mute stops muting instead of quietly
 // staying on forever.
 func (o ops) suppressions(ctx context.Context, _ *riskNoInput) (*riskSuppressionPage, error) {
-	_, res, err := tenantState(ctx, o.s)
+	_, res, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -1840,11 +1865,10 @@ func (o ops) suppressions(ctx context.Context, _ *riskNoInput) (*riskSuppression
 // refusals: silence must never read as a clean result, and a compliance record
 // that can be silently muted by an operational knob is not a record.
 func (o ops) suppress(ctx context.Context, in *riskSuppressIn) (*riskSuppression, error) {
-	sc, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	if in.Rule == "" && in.Kind == "" && in.Subject == "" {
 		return nil, zip.Errorf(400, "a suppression that names nothing would mute everything")
 	}
@@ -1866,7 +1890,7 @@ func (o ops) suppress(ctx context.Context, in *riskSuppressIn) (*riskSuppression
 		return nil, err
 	}
 	res.dirty()
-	emit(sc.org, "risk.suppressed", map[string]any{"rule": s.Rule, "kind": s.Kind})
+	emit(sc.org, "risk.suppressed", map[string]any{"rule": s.Rule, "kind": s.Kind, "by": by(sc)})
 	w := wireSuppression(s)
 	return &w, nil
 }
@@ -1874,15 +1898,15 @@ func (o ops) suppress(ctx context.Context, in *riskSuppressIn) (*riskSuppression
 // Unsuppress lifts a mute. Answers 204, or 404 for an identifier this tenant
 // does not own.
 func (o ops) unsuppress(ctx context.Context, in *riskRef) (*struct{}, error) {
-	_, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	if err := dropSuppression(db, in.ID); err != nil {
 		return nil, err
 	}
 	res.dirty()
+	emit(sc.org, "risk.unsuppressed", map[string]any{"suppression": in.ID, "by": by(sc)})
 	return &struct{}{}, nil
 }
 
@@ -1895,11 +1919,10 @@ func (o ops) unsuppress(ctx context.Context, in *riskRef) (*struct{}, error) {
 // processor. That is what "processor-agnostic" is: a structural property, not a
 // feature.
 func (o ops) controls(ctx context.Context, in *riskControlsIn) (*riskControlPage, error) {
-	_, res, err := tenantState(ctx, o.s)
+	_, _, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	cs, err := loadControls(db, in.Kind, in.Subject)
 	if err != nil {
 		return nil, err
@@ -1913,11 +1936,10 @@ func (o ops) controls(ctx context.Context, in *riskControlsIn) (*riskControlPage
 
 // SetControl declares a reserve, a payout hold or a block on a subject.
 func (o ops) setControl(ctx context.Context, in *riskControlIn) (*riskControl, error) {
-	sc, res, err := tenantState(ctx, o.s)
+	sc, _, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	kind := strings.ToLower(strings.TrimSpace(in.Subject.Kind))
 	if !subjectKinds[kind] {
 		return nil, zip.Errorf(400, "%q is not a subject kind", in.Subject.Kind)
@@ -1942,7 +1964,7 @@ func (o ops) setControl(ctx context.Context, in *riskControlIn) (*riskControl, e
 	if err := putControl(db, c); err != nil {
 		return nil, err
 	}
-	emit(sc.org, "risk.control", map[string]any{"control": c.Control, "kind": c.Kind})
+	emit(sc.org, "risk.control", map[string]any{"control": c.Control, "kind": c.Kind, "by": by(sc)})
 	w := wireControl(c)
 	return &w, nil
 }
@@ -1950,14 +1972,14 @@ func (o ops) setControl(ctx context.Context, in *riskControlIn) (*riskControl, e
 // ReleaseControl lifts a control. Answers 204, or 404 for an identifier this
 // tenant does not own.
 func (o ops) releaseControl(ctx context.Context, in *riskRef) (*struct{}, error) {
-	_, res, err := tenantState(ctx, o.s)
+	sc, _, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	if err := dropControl(db, in.ID); err != nil {
 		return nil, err
 	}
+	emit(sc.org, "risk.control.released", map[string]any{"control": in.ID, "by": by(sc)})
 	return &struct{}{}, nil
 }
 
@@ -1970,11 +1992,10 @@ func (o ops) releaseControl(ctx context.Context, in *riskRef) (*struct{}, error)
 // off its recent decisions, which is what makes a rule builder able to offer the
 // fields that exist here rather than the fields that exist in general.
 func (o ops) dictionary(ctx context.Context, _ *riskNoInput) (*riskDictionaryView, error) {
-	_, res, err := tenantState(ctx, o.s)
+	_, _, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	view := &riskDictionaryView{
 		Stages:  keys(stages),
 		Actions: []string{ActionAllow, ActionChallenge, ActionReview, ActionRestrict, ActionBlock},
@@ -2003,11 +2024,10 @@ func (o ops) dictionary(ctx context.Context, _ *riskNoInput) (*riskDictionaryVie
 
 // Mode reports whether this tenant's decisions act or only observe.
 func (o ops) getMode(ctx context.Context, _ *riskNoInput) (*riskModeView, error) {
-	_, res, err := tenantState(ctx, o.s)
+	_, _, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	return &riskModeView{Mode: mode(db), Since: getSetting(db, "mode_at")}, nil
 }
 
@@ -2019,11 +2039,10 @@ func (o ops) getMode(ctx context.Context, _ *riskNoInput) (*riskModeView, error)
 // traffic before anyone depends on it. A model that quietly went live and
 // started declining payments is the worst failure available here.
 func (o ops) setMode(ctx context.Context, in *riskModeIn) (*riskModeView, error) {
-	sc, res, err := tenantState(ctx, o.s)
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	m := strings.ToLower(strings.TrimSpace(in.Mode))
 	if m != "shadow" && m != "live" {
 		return nil, zip.Errorf(400, "a tenant either observes or acts")
@@ -2040,14 +2059,14 @@ func (o ops) setMode(ctx context.Context, in *riskModeIn) (*riskModeView, error)
 	return &riskModeView{Mode: m, Since: now}, nil
 }
 
-// ── /v1/ml ──────────────────────────────────────────────────────────────────
+// ── learn ───────────────────────────────────────────────────────────────────
 
 // Score scores one observation and LEARNS NOTHING from it. It is how a candidate
 // is tried against a tenant's real behaviour before anything depends on the
 // answer, and it is the model's analogue of testing a rule: because it records
 // nothing, the aggregates it reads do not include the candidate.
-func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
-	sc, res, err := tenantState(ctx, o.s)
+func (o ops) score(ctx context.Context, in *riskScoreIn) (*riskScoreOut, error) {
+	sc, res, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -2058,7 +2077,11 @@ func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
 	_, model, _ := res.arms()
 	tx, ent := txOf(sc.tenant, obs)
 	a := model.Inspect(tx, ent)
-	return &mlScoreOut{
+	// METERED like a screen, because it IS one: the same model over the same
+	// rings, without the governance. An op that reads the product's expensive
+	// half for free is an op the product is giving away.
+	o.s.State.bill.Meter(sc.org, sc.project, "screen", screenCents, sc.request, sc.clientIP)
+	return &riskScoreOut{
 		Scored: a.Scored, Refusal: res.grade(a.Reason), Score: round4(a.Score), Cut: round4(a.Cut),
 		Alert: a.Alert, Shadow: a.Shadow, Causes: wireCauses(a.Causes),
 		Values: wireValues(a.Values), Model: o.s.State.digest,
@@ -2077,8 +2100,8 @@ func (o ops) score(ctx context.Context, in *mlScoreIn) (*mlScoreOut, error) {
 // tenants do not merely hold different counters — they hold different trees.
 // Any cross-org learning in this product is aggregate-only, lives in a table
 // with no tenant column, and is published only above a k-anonymity floor.
-func (o ops) train(ctx context.Context, in *mlTrainIn) (*mlTrainOut, error) {
-	sc, res, err := tenantState(ctx, o.s)
+func (o ops) train(ctx context.Context, in *riskTrainIn) (*riskTrainOut, error) {
+	sc, res, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -2097,14 +2120,14 @@ func (o ops) train(ctx context.Context, in *mlTrainIn) (*mlTrainOut, error) {
 	}
 
 	vel, model, _ := res.arms()
-	out := &mlTrainOut{Refused: map[string]int{}}
+	out := &riskTrainOut{Refused: map[string]int{}}
 	for _, w := range in.Observations {
 		obs, err := fromWireObservation(w)
 		if err != nil {
 			out.Refused["malformed"]++
 			continue
 		}
-		record(vel, sc.tenant, obs)
+		vel.record(sc.tenant, obs, res.room)
 		tx, ent := txOf(sc.tenant, obs)
 		a := model.Inspect(tx, ent)
 		if !a.Scored && a.Reason != "" && a.Reason != RefusalWarming {
@@ -2131,8 +2154,8 @@ const trainCents = 1
 // Stated against realised is the whole governance report. An appetite is a
 // measured commitment or it is nothing, and a fixed threshold on a drifting
 // distribution silently becomes either silence or a flood.
-func (o ops) modelState(ctx context.Context, _ *mlNoInput) (*mlModelState, error) {
-	sc, res, err := tenantState(ctx, o.s)
+func (o ops) modelState(ctx context.Context, _ *riskNoInput) (*riskModelState, error) {
+	sc, res, _, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -2146,19 +2169,18 @@ func (o ops) modelState(ctx context.Context, _ *mlNoInput) (*mlModelState, error
 // scores actually observed rather than fixed at a number someone liked. That is
 // what makes an alert level governed rather than tuned, and it is why the level
 // cannot be set to fit the size of the review team.
-func (o ops) setAppetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, error) {
-	sc, res, err := tenantState(ctx, o.s)
+func (o ops) setAppetite(ctx context.Context, in *riskAppetiteIn) (*riskModelState, error) {
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	if in.Review <= 0 || in.Review > 0.5 {
 		return nil, zip.Errorf(400, "review is a share in (0, 0.5]")
 	}
 	if in.Sample < 0 || in.Sample > 1 {
 		return nil, zip.Errorf(400, "sample is a share in [0, 1]")
 	}
-	body, _ := json.Marshal(mlAppetite{Review: in.Review, Sample: in.Sample})
+	body, _ := json.Marshal(riskAppetite{Review: in.Review, Sample: in.Sample})
 	if err := setSetting(db, "appetite", string(body)); err != nil {
 		return nil, err
 	}
@@ -2169,7 +2191,8 @@ func (o ops) setAppetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, 
 	// deployment-level change is measured from.
 	_, model, _ := res.arms()
 	out := wireState(model.State(sc.tenant.String()))
-	out.Appetite = mlAppetite{Review: in.Review, Sample: in.Sample, Warm: out.Appetite.Warm}
+	out.Appetite = riskAppetite{Review: in.Review, Sample: in.Sample, Warm: out.Appetite.Warm}
+	emit(sc.org, "risk.appetite", map[string]any{"review": in.Review, "sample": in.Sample, "by": by(sc)})
 	return out, nil
 }
 
@@ -2180,14 +2203,14 @@ func (o ops) setAppetite(ctx context.Context, in *mlAppetiteIn) (*mlModelState, 
 // It is code rather than a document because a mapping kept beside the model
 // cannot drift away from what the model actually reads — and the attributability
 // it makes possible is why this is a tree and not a net.
-func (o ops) features(ctx context.Context, _ *mlNoInput) (*mlFeatureInventory, error) {
-	if _, _, err := tenantState(ctx, o.s); err != nil {
+func (o ops) features(ctx context.Context, _ *riskNoInput) (*riskFeatureInventory, error) {
+	if _, _, _, err := tenantState(ctx, o.s); err != nil {
 		return nil, err
 	}
 	inv := anomaly.Inventory()
-	out := &mlFeatureInventory{Digest: o.s.State.digest}
+	out := &riskFeatureInventory{Digest: o.s.State.digest}
 	for _, f := range inv {
-		out.Items = append(out.Items, mlFeature{
+		out.Items = append(out.Items, riskFeature{
 			Name: f.Name, Window: f.Window, Typology: f.Typology, Indicator: f.Indicator,
 			Citation: f.Citation, Severity: f.Severity, Unit: f.Unit, Neutral: f.Neutral,
 		})
@@ -2213,13 +2236,12 @@ func (o ops) features(ctx context.Context, _ *mlNoInput) (*mlFeatureInventory, e
 // own ledger. See search.go.
 //
 // It answers 202 with a run identifier; read the report back at
-// GET /v1/ml/search/{id} and stop it at DELETE /v1/ml/search/{id}.
-func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
-	sc, res, err := tenantState(ctx, o.s)
+// GET /v1/risk/search/{id} and stop it at DELETE /v1/risk/search/{id}.
+func (o ops) search(ctx context.Context, in *riskSearchIn) (*riskSearchRun, error) {
+	sc, _, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	if err := o.s.State.bill.Gate(ctx, sc.org, sc.project, sc.validate, "search", searchCents); err != nil {
 		return nil, zip.Errorf(402, "%s", err.Error())
 	}
@@ -2227,38 +2249,37 @@ func (o ops) search(ctx context.Context, in *mlSearchIn) (*mlSearchRun, error) {
 	if limit <= 0 || limit > searchHistoryMax {
 		limit = searchHistoryDefault
 	}
-	hist, err := replayHistory(db, limit)
-	if err != nil {
-		return nil, err
-	}
-	obs := make([]observation, 0, len(hist))
-	for _, h := range hist {
-		obs = append(obs, h.obs)
-	}
 
+	// QUEUED BEFORE ANY OF THE WORK, and the queue is handed a way to LOAD the
+	// history rather than the history itself. Replaying up to 5,000 rows into
+	// observations and only then asking whether this tenant already had a run
+	// going meant thirty concurrent calls each paid the full read and
+	// twenty-nine of them answered 409 having paid it — unmetered, and holding
+	// thirty times 5,000 observations at once, which appears in no ceiling. A
+	// refusal now costs a map lookup, and at most searchWorkers loads exist at
+	// any instant.
 	id := newID("search")
-	run := &mlSearchRun{ID: id, Status: searchRunning, Candidates: len(candidates())}
-	if len(obs) == 0 {
-		run.Status = searchRefused
-		body, _ := json.Marshal(searchReport{Refusal: errNoHistory.Error()})
-		if err := putSearch(db, id, searchRefused, body); err != nil {
+	load := func() ([]observation, error) {
+		hist, err := replayHistory(db, limit)
+		if err != nil {
 			return nil, err
 		}
-		return run, nil
+		obs := make([]observation, 0, len(hist))
+		for _, h := range hist {
+			obs = append(obs, h.obs)
+		}
+		return obs, nil
 	}
-
-	// QUEUED BEFORE the row is written: a refusal must not leave a `running` row
-	// behind, and the caller must be told which refusal it is.
-	if err := o.s.State.runs.start(job{t: sc.tenant, id: id, db: db, obs: obs}); err != nil {
+	if err := o.s.State.runs.start(job{t: sc.tenant, id: id, db: db, load: load}); err != nil {
 		return nil, err
 	}
-	body, _ := json.Marshal(searchReport{Events: len(obs)})
+	body, _ := json.Marshal(searchReport{})
 	if err := putSearch(db, id, searchRunning, body); err != nil {
 		o.s.State.runs.cancel(sc.tenant, id)
 		return nil, err
 	}
 	o.s.State.bill.Meter(sc.org, sc.project, "search", searchCents, sc.request, sc.clientIP)
-	return run, nil
+	return &riskSearchRun{ID: id, Status: searchRunning, Candidates: len(candidates())}, nil
 }
 
 // searchHistoryMax and searchHistoryDefault bound how much of a tenant's own
@@ -2276,22 +2297,22 @@ const (
 // back — and the run holds a worker every other tenant is queued behind. It is
 // idempotent: cancelling a search that has already answered is not an error, and
 // the reply says which happened.
-func (o ops) cancelSearch(ctx context.Context, in *mlRef) (*mlSearchRun, error) {
-	sc, res, err := tenantState(ctx, o.s)
+func (o ops) cancelSearch(ctx context.Context, in *riskRef) (*riskSearchRun, error) {
+	sc, _, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
 	// Read it FIRST, out of this tenant's own file: an id belonging to another
 	// tenant is a 404 here exactly as it is on the read, so a cancel cannot be
 	// used to probe whether another tenant is running one.
-	status, _, err := getSearch(res.db, in.ID)
+	status, _, err := getSearch(db, in.ID)
 	if err != nil {
 		return nil, err
 	}
 	if o.s.State.runs.cancel(sc.tenant, in.ID) {
 		status = searchCancelled
 	}
-	return &mlSearchRun{ID: in.ID, Status: status, Candidates: len(candidates())}, nil
+	return &riskSearchRun{ID: in.ID, Status: status, Candidates: len(candidates())}, nil
 }
 
 // searchCents is what one exhaustive search costs. It is priced well above a
@@ -2300,12 +2321,11 @@ const searchCents = 100
 
 // SearchResult reads an exhaustive search's report: every candidate tried, the
 // winner, and the winner's learning curve.
-func (o ops) searchResult(ctx context.Context, in *mlRef) (*mlSearchReport, error) {
-	_, res, err := tenantState(ctx, o.s)
+func (o ops) searchResult(ctx context.Context, in *riskRef) (*riskSearchReport, error) {
+	_, _, db, err := tenantState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
-	db := res.db
 	status, body, err := getSearch(db, in.ID)
 	if err != nil {
 		return nil, err
@@ -2314,17 +2334,17 @@ func (o ops) searchResult(ctx context.Context, in *mlRef) (*mlSearchReport, erro
 	if err := json.Unmarshal(body, &rep); err != nil {
 		return nil, err
 	}
-	out := &mlSearchReport{
+	out := &riskSearchReport{
 		ID: in.ID, Status: status, Events: rep.Events, Curve: rep.Curve, Refusal: rep.Refusal,
 	}
 	for _, t := range rep.Trials {
-		out.Trials = append(out.Trials, mlTrial{
-			Candidate: mlCandidate(t.Candidate), Scored: t.Scored, Alerted: t.Alerted,
+		out.Trials = append(out.Trials, riskTrial{
+			Candidate: riskCandidate(t.Candidate), Scored: t.Scored, Alerted: t.Alerted,
 			Realised: t.Realised, Separation: t.Separation, Warm: t.Warm,
 		})
 	}
 	if rep.Winner != nil {
-		w := mlCandidate(*rep.Winner)
+		w := riskCandidate(*rep.Winner)
 		out.Winner = &w
 	}
 	return out, nil
@@ -2337,17 +2357,18 @@ func (o ops) searchResult(ctx context.Context, in *mlRef) (*mlSearchReport, erro
 // rollout survivable — the shutdown path snapshots every resident tenant,
 // because cloud deploys Recreate at one replica and a model that comes back with
 // nothing learned refuses to score for its whole warm period.
-func (o ops) snapshot(ctx context.Context, _ *mlNoInput) (*mlSnapshotOut, error) {
-	sc, res, err := tenantState(ctx, o.s)
+func (o ops) snapshot(ctx context.Context, _ *riskNoInput) (*riskSnapshotOut, error) {
+	sc, res, db, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
 	_, model, _ := res.arms()
-	if err := keep(res.db, sc.tenant, model); err != nil {
+	if err := keep(db, sc.tenant, model); err != nil {
 		return nil, err
 	}
 	st := model.State(sc.tenant.String())
-	return &mlSnapshotOut{Digest: st.Digest, Learned: st.Learned, At: stamp(time.Now())}, nil
+	emit(sc.org, "risk.snapshot", map[string]any{"by": by(sc)})
+	return &riskSnapshotOut{Digest: st.Digest, Learned: st.Learned, At: stamp(time.Now())}, nil
 }
 
 // Restore reinstates this tenant's learned state from its pinned snapshot.
@@ -2357,8 +2378,8 @@ func (o ops) snapshot(ctx context.Context, _ *mlNoInput) (*mlSnapshotOut, error)
 // by the tenant that asked, and again inside the engine. State the model would
 // treat as its own memory has to have come from this algorithm over this feature
 // set for this tenant.
-func (o ops) restore(ctx context.Context, _ *mlNoInput) (*mlModelState, error) {
-	sc, res, err := tenantState(ctx, o.s)
+func (o ops) restore(ctx context.Context, _ *riskNoInput) (*riskModelState, error) {
+	sc, res, _, err := governState(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -2366,6 +2387,7 @@ func (o ops) restore(ctx context.Context, _ *mlNoInput) (*mlModelState, error) {
 		return nil, zip.Errorf(409, "%s", err.Error())
 	}
 	_, model, _ := res.arms()
+	emit(sc.org, "risk.restore", map[string]any{"by": by(sc)})
 	return wireState(model.State(sc.tenant.String())), nil
 }
 
@@ -2402,10 +2424,10 @@ func wireCauses(cs []types.Cause) []riskCause {
 	return out
 }
 
-func wireValues(vs []anomaly.Value) []mlValue {
-	out := make([]mlValue, 0, len(vs))
+func wireValues(vs []anomaly.Value) []riskValue {
+	out := make([]riskValue, 0, len(vs))
 	for _, v := range vs {
-		out = append(out, mlValue{
+		out = append(out, riskValue{
 			Feature: v.Feature, X: round4(v.X), Observed: v.Observed,
 			Baseline: v.Baseline, Unit: v.Unit, Blind: v.Blind,
 		})
@@ -2413,9 +2435,9 @@ func wireValues(vs []anomaly.Value) []mlValue {
 	return out
 }
 
-func wireState(st anomaly.State) *mlModelState {
-	out := &mlModelState{
-		Appetite: mlAppetite{
+func wireState(st anomaly.State) *riskModelState {
+	out := &riskModelState{
+		Appetite: riskAppetite{
 			Review: st.Config.Appetite.Review,
 			Sample: st.Config.Appetite.Sample,
 			Warm:   st.Config.Appetite.Warm,
@@ -2427,7 +2449,7 @@ func wireState(st anomaly.State) *mlModelState {
 		Digest: st.Digest,
 	}
 	for _, f := range st.Inventory {
-		out.Inventory = append(out.Inventory, mlFeature{
+		out.Inventory = append(out.Inventory, riskFeature{
 			Name: f.Name, Window: f.Window, Typology: f.Typology, Indicator: f.Indicator,
 			Citation: f.Citation, Severity: f.Severity, Unit: f.Unit, Neutral: f.Neutral,
 		})
@@ -2479,7 +2501,7 @@ func fromWireRule(w riskRule) rule {
 	return r
 }
 
-func fromWireObservation(w mlObservation) (observation, error) {
+func fromWireObservation(w riskObservation) (observation, error) {
 	kind := strings.ToLower(strings.TrimSpace(w.Subject.Kind))
 	if !subjectKinds[kind] {
 		return observation{}, zip.Errorf(400, "%q is not a subject kind", w.Subject.Kind)
@@ -2545,14 +2567,14 @@ func by(sc scope) string {
 }
 
 // velocityOf renders every live aggregate a subject has.
-func velocityOf(vel *velocity.Store, t Tenant, o observation) []riskVelocity {
+func velocityOf(vel *rings, t Tenant, o observation) []riskVelocity {
 	out := []riskVelocity{}
 	for _, axis := range keys(velocityAxes) {
 		v := o.axisOf(axis)
 		if v == "" {
 			continue
 		}
-		for _, ob := range vel.Observe(velocity.Key{OrgID: t.String(), Kind: axis, Value: v}) {
+		for _, ob := range vel.observe(t, axis, v) {
 			out = append(out, riskVelocity{
 				Axis: axis, Window: ob.Window, Count: ob.Count,
 				Sum: ob.Sum, Near: ob.Near, Days: ob.Days,

@@ -430,11 +430,11 @@ func TestTrainIsOnlineAndPerTenant(t *testing.T) {
 		obs = append(obs, `{"subject":{"kind":"account","id":"a-1"},"amount":{"nano":1000000000,"currency":"USD","direction":"in"}}`)
 	}
 	body := `{"observations":[` + strings.Join(obs, ",") + `]}`
-	code, got := req(t, app, http.MethodPost, "/v1/ml/train", "acme", "u_acme", body)
+	code, got := req(t, app, http.MethodPost, "/v1/risk/train", "acme", "u_acme", body)
 	if code != http.StatusOK {
 		t.Fatalf("train = %d %s", code, got)
 	}
-	var out mlTrainOut
+	var out riskTrainOut
 	_ = json.Unmarshal(got, &out)
 	if out.Learned != 20 {
 		t.Fatalf("learned %d of 20", out.Learned)

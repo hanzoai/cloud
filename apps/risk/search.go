@@ -2,7 +2,7 @@ package risk
 
 // search.go bounds the one expensive thing this app will do on a caller's word.
 //
-// WHAT IT WAS. POST /v1/ml/search started a bare goroutine per call with a
+// WHAT IT WAS. POST /v1/risk/search started a bare goroutine per call with a
 // ten-minute budget, replaying 243 topologies over up to five thousand recorded
 // decisions. Nothing bounded how many ran at once, nothing could stop one, and a
 // rollout — Recreate at one replica — left the row saying `running` forever, which
@@ -20,15 +20,23 @@ package risk
 //	backlog          searchQueue deep. Full answers 429 — the honest word for
 //	                 "come back", and one a client can act on.
 //	deadline         searchBudget, enforced by the context every candidate polls.
-//	cancel           DELETE /v1/ml/search/{id} stops it and says so on the row.
-//	shutdown         teardown cancels every run and marks its row, so nothing
-//	                 survives a rollout claiming to be in progress.
+//	cancel           DELETE /v1/risk/search/{id} stops it and says so on the row.
+//	shutdown         a stopped runner does not run its backlog; every queued and
+//	                 in-flight run leaves a `cancelled` row.
 //	priced           gated before and metered after, on the caller's own ledger.
+//
+// THE INPUTS ARE THE WORKER'S TO LOAD, and that is a bound and not a style. The
+// handler used to replay up to 5,000 rows into observations and only THEN ask
+// whether this tenant already had a run going: thirty concurrent calls each paid
+// the full SQLite read and materialised 5,000 observations, twenty-nine of them
+// to answer 409. Now a refusal costs a map lookup, and at most searchWorkers
+// loads exist at any instant.
 
 import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -71,13 +79,14 @@ type runner struct {
 	wg      sync.WaitGroup
 }
 
-// job is one queued search: everything the worker needs, resolved at start time
-// so the worker touches no request.
+// job is one queued search. It carries how to LOAD its inputs rather than the
+// inputs themselves, so the expensive read happens on a worker that already has
+// a slot — never on a caller that is about to be refused one.
 type job struct {
-	t   Tenant
-	id  string
-	db  *sql.DB
-	obs []observation
+	t    Tenant
+	id   string
+	db   *sql.DB
+	load func() ([]observation, error)
 }
 
 // run is a search in flight, and the handle that stops it.
@@ -164,23 +173,66 @@ func (r *runner) work() {
 	}
 }
 
+// execute runs one job to its durable row.
+//
+// A PANIC IS THIS WORKER'S TO OWN. cloud runs ONE replica: an unrecovered panic
+// in a background goroutine takes the process down and with it every tenant on
+// the node, over one tenant's malformed history. The crash lands on the run's
+// own row, where the caller who started it can read it, and the pool keeps
+// serving.
 func (r *runner) execute(j job) {
+	defer func() {
+		if p := recover(); p != nil {
+			r.log.Error("risk: a search worker panicked; the run is refused and the pool keeps serving",
+				"tenant", j.t.String(), "search", j.id, "panic", fmt.Sprint(p))
+			r.write(j, searchRefused, searchReport{Refusal: fmt.Sprintf("this search stopped on an internal error: %v", p)})
+			r.done(j)
+		}
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), searchBudget)
 	defer cancel()
 
+	// THE STOP CHECK IS HERE, AT THE TOP, and it is what makes a rollout safe.
+	// stop() cancels the claims that HAVE a cancel func, but a job still in the
+	// backlog has none — execute installs it. Without this line the workers
+	// drained the remaining backlog, found each claim still present, installed a
+	// FRESH budget and ran the whole thing: worst case stop() blocked for
+	// backlog/workers x searchBudget while SIGTERM's grace period is ~40s, so the
+	// pod was killed before teardown snapshotted anything and EVERY tenant
+	// reverted to its last snapshot or to `warming`. Any authenticated tenant
+	// could arm that by queueing searches before a deploy.
 	r.mu.Lock()
-	if going, ok := r.running[j.t]; ok && going.id == j.id {
-		going.cancel = cancel
-	} else {
-		// Cancelled or superseded before a worker picked it up.
+	stopped := r.stopped
+	going, claimed := r.running[j.t]
+	switch {
+	case stopped || !claimed || going.id != j.id:
 		r.mu.Unlock()
-		record := searchReport{Refusal: "cancelled before it started"}
-		r.write(j, searchCancelled, record)
+		reason := "cancelled before it started"
+		if stopped {
+			reason = "this node stopped before the search started; start it again"
+		}
+		r.write(j, searchCancelled, searchReport{Refusal: reason})
+		r.done(j)
+		return
+	default:
+		going.cancel = cancel
+		r.mu.Unlock()
+	}
+
+	obs, err := j.load()
+	if err != nil {
+		r.write(j, searchRefused, searchReport{Refusal: err.Error()})
+		r.done(j)
 		return
 	}
-	r.mu.Unlock()
+	if len(obs) == 0 {
+		r.write(j, searchRefused, searchReport{Refusal: errNoHistory.Error()})
+		r.done(j)
+		return
+	}
 
-	rep, err := searchRun(ctx, j.t, j.obs)
+	rep, err := searchRun(ctx, j.t, obs)
 	status := searchDone
 	if err != nil {
 		status = searchRefused
@@ -189,8 +241,13 @@ func (r *runner) execute(j job) {
 		}
 		rep.Refusal = err.Error()
 	}
+	rep.Events = len(obs)
 	r.write(j, status, rep)
+	r.done(j)
+}
 
+// done drops this tenant's claim, if this run still holds it.
+func (r *runner) done(j job) {
 	r.mu.Lock()
 	if going, ok := r.running[j.t]; ok && going.id == j.id {
 		delete(r.running, j.t)
@@ -207,7 +264,10 @@ func (r *runner) write(j job, status string, rep searchReport) {
 
 // stop cancels every run and waits for the workers. A search that was in flight
 // leaves a `cancelled` row rather than a `running` one, because a rollout must
-// not be the reason a reader is told a search is still going.
+// not be the reason a reader is told a search is still going — and a search
+// still in the BACKLOG leaves the same row without being run, because a rollout
+// must not be the reason the node spends two more minutes per queued job while
+// its grace period runs out.
 func (r *runner) stop() {
 	r.mu.Lock()
 	if r.stopped {

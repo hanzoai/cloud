@@ -18,6 +18,12 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
+// node is the RISK_MEMORY value that holds n cells with a little counting room
+// each. The bound is BYTES, so a test that wants "room for n tenants" has to say
+// what those tenants hold — how many a node serves is an OUTCOME of that, which
+// is the whole point of the fix.
+func node(n int) string { return fmt.Sprint(n * (cellBytes + 64*bytesPerKey())) }
+
 // TestAFullNodeRefusesRatherThanEvicts pins the admission rule.
 //
 // When a pod is out of room there are two things it can do: turn the newcomer
@@ -25,7 +31,7 @@ import (
 // aimed at whoever happens to be quietest — so this asserts the first, and
 // asserts the incumbent is untouched afterwards.
 func TestAFullNodeRefusesRatherThanEvicts(t *testing.T) {
-	t.Setenv(envTenantMax, "1")
+	t.Setenv(envMemory, node(1))
 	_, s := wireApp(t)
 
 	a := Tenant("hanzo/acme")
@@ -34,10 +40,10 @@ func TestAFullNodeRefusesRatherThanEvicts(t *testing.T) {
 		t.Fatalf("the first tenant was refused: %v", err)
 	}
 	vel, model, _ := first.arms()
-	record(vel, a, observation{at: time.Now(), kind: "account", subject: "keep-me", amount: 1})
+	first.record(observation{at: time.Now(), kind: "account", subject: "keep-me", amount: 1})
 
 	if _, err := s.State.res.of(Tenant("hanzo/beta"), s.Log); err == nil {
-		t.Fatal("a second tenant was admitted past the armed ceiling — something was evicted to make room")
+		t.Fatal("a second tenant was admitted onto a full node — something was taken to make room")
 	}
 
 	// The incumbent still has everything.
@@ -45,12 +51,12 @@ func TestAFullNodeRefusesRatherThanEvicts(t *testing.T) {
 	if vel2 != vel || model2 != model {
 		t.Fatal("the incumbent's planes were replaced by the refused admission")
 	}
-	if vel2.Keys() == 0 {
+	if vel2.keys() == 0 {
 		t.Fatal("the incumbent's aggregates were dropped to make room for a tenant that was refused anyway")
 	}
 
 	// And the refusal is LOUD: the probe goes degraded and names it.
-	if _, refused, _ := s.State.res.count(); refused == 0 {
+	if _, refused, _, _ := s.State.res.count(); refused == 0 {
 		t.Fatal("the refusal was not counted, so nothing pages an operator about a node that is out of room")
 	}
 }
@@ -58,12 +64,12 @@ func TestAFullNodeRefusesRatherThanEvicts(t *testing.T) {
 // TestTheCeilingIsAWorkingSetAndNotAHighWaterMark.
 //
 // THE DEFECT: reclaim dropped a tenant's aggregates but KEPT its cell, and the
-// admission bound counted cells. So the count only ever went up: once tenantMax
+// admission bound counted cells. So the total only ever went up: once the node's
 // distinct tenants had passed through, the next one was refused for the life of
 // the process — with the pod completely idle and nothing to reclaim. A ceiling
 // that a tenant can raise by leaving is not a ceiling, it is a fuse.
 func TestTheCeilingIsAWorkingSetAndNotAHighWaterMark(t *testing.T) {
-	t.Setenv(envTenantMax, "2")
+	t.Setenv(envMemory, node(2))
 	_, s := wireApp(t)
 
 	for _, name := range []Tenant{"hanzo/one", "hanzo/two"} {
@@ -71,7 +77,7 @@ func TestTheCeilingIsAWorkingSetAndNotAHighWaterMark(t *testing.T) {
 			t.Fatalf("%s was refused: %v", name, err)
 		}
 	}
-	if n, _, _ := s.State.res.count(); n != 2 {
+	if n, _, _, _ := s.State.res.count(); n != 2 {
 		t.Fatalf("the node holds %d tenants, want 2", n)
 	}
 	// Both go silent. Retirement is driven by their OWN idleness.
@@ -82,7 +88,7 @@ func TestTheCeilingIsAWorkingSetAndNotAHighWaterMark(t *testing.T) {
 		r.mu.Unlock()
 	}
 	s.State.res.sweep(s.Log)
-	if n, _, _ := s.State.res.count(); n != 0 {
+	if n, _, _, _ := s.State.res.count(); n != 0 {
 		t.Fatalf("after both tenants went silent the node still holds %d cells — the map only grows, so the ceiling is a fuse", n)
 	}
 
@@ -92,7 +98,7 @@ func TestTheCeilingIsAWorkingSetAndNotAHighWaterMark(t *testing.T) {
 			t.Fatalf("%s was refused after the node emptied: %v", name, err)
 		}
 	}
-	if _, refused, _ := s.State.res.count(); refused != 0 {
+	if _, refused, _, _ := s.State.res.count(); refused != 0 {
 		t.Fatalf("%d admissions were refused by a node with room", refused)
 	}
 }
@@ -105,7 +111,7 @@ func TestRetirementLosesNothingDurable(t *testing.T) {
 	app, s := wireApp(t)
 	tn := Tenant("hanzo/acme")
 
-	code, body := req(t, app, http.MethodPost, "/v1/risk/rules", "acme", "u_acme",
+	code, body := reqAdmin(t, app, http.MethodPost, "/v1/risk/rules", "acme", "u_acme",
 		`{"rule":{"name":"keep me","stage":"signup","action":"review","weight":0.5,"enabled":true,`+
 			`"all":[{"field":"subject.kind","op":"eq","value":"account"}]}}`)
 	if code != http.StatusCreated {
@@ -123,7 +129,7 @@ func TestRetirementLosesNothingDurable(t *testing.T) {
 	before.touched = time.Now().Add(-24 * time.Hour)
 	before.mu.Unlock()
 	s.State.res.sweep(s.Log)
-	if n, _, _ := s.State.res.count(); n != 0 {
+	if n, _, _, _ := s.State.res.count(); n != 0 {
 		t.Fatalf("the silent tenant was not retired (%d cells)", n)
 	}
 
@@ -152,7 +158,7 @@ func TestRetirementLosesNothingDurable(t *testing.T) {
 // Concurrency is the only way to catch it and `go test -race -timeout` is the
 // assertion: a deadlock here does not fail, it hangs.
 func TestConcurrentAdmissionDoesNotStall(t *testing.T) {
-	t.Setenv(envTenantMax, "8")
+	t.Setenv(envMemory, node(8))
 	_, s := wireApp(t)
 
 	const workers, each = 16, 12
@@ -185,10 +191,12 @@ func TestConcurrentAdmissionDoesNotStall(t *testing.T) {
 		t.Fatal("nothing was admitted at all")
 	}
 	// Whatever the split, the node never holds more than it promised.
-	if n, _, _ := s.State.res.count(); n > tenantMax() {
-		t.Fatalf("the node holds %d tenants against a ceiling of %d", n, tenantMax())
+	if held, max := s.State.res.bytes(), memBytes(); held > max {
+		t.Fatalf("the node holds %d B against a budget of %d B", held, max)
 	}
-	t.Logf("admitted %d, refused %d, resident %d", admitted.Load(), refused.Load(), func() int { n, _, _ := s.State.res.count(); return n }())
+	n, _, reclaimed, _ := s.State.res.count()
+	t.Logf("admitted %d, refused %d, reclaimed %d, resident %d in %d B of %d B",
+		admitted.Load(), refused.Load(), reclaimed, n, s.State.res.bytes(), memBytes())
 }
 
 // TestReclaimIsDrivenOnlyByATenantsOwnIdleness pins the difference between
@@ -200,19 +208,17 @@ func TestReclaimIsDrivenOnlyByATenantsOwnIdleness(t *testing.T) {
 	a, b := Tenant("hanzo/acme"), Tenant("hanzo/beta")
 
 	ra, rb := resOf(t, s, a), resOf(t, s, b)
-	avel, _, _ := ra.arms()
-	bvel, _, _ := rb.arms()
-	record(avel, a, observation{at: time.Now(), kind: "account", subject: "a1", amount: 1})
-	record(bvel, b, observation{at: time.Now(), kind: "account", subject: "b1", amount: 1})
+	ra.record(observation{at: time.Now(), kind: "account", subject: "a1", amount: 1})
+	rb.record(observation{at: time.Now(), kind: "account", subject: "b1", amount: 1})
 
 	// A is made to look silent; B was touched just now.
 	ra.mu.Lock()
 	ra.touched = time.Now().Add(-24 * time.Hour)
 	ra.mu.Unlock()
 
-	s.State.res.mu.Lock()
-	s.State.res.retireLocked(time.Now(), time.Hour, s.Log)
-	s.State.res.mu.Unlock()
+	for _, r := range s.State.res.idle(time.Hour) {
+		s.State.res.retire(r, s.Log)
+	}
 
 	if v, m, _ := ra.arms(); v != nil || m != nil {
 		t.Fatal("the silent tenant was not reclaimed")
@@ -220,7 +226,7 @@ func TestReclaimIsDrivenOnlyByATenantsOwnIdleness(t *testing.T) {
 	if v, _, _ := rb.arms(); v == nil {
 		t.Fatal("a tenant that was active a moment ago had its aggregates reclaimed — the trigger is not its own idleness")
 	}
-	if v, _, _ := rb.arms(); v.Keys() == 0 {
+	if v, _, _ := rb.arms(); v.keys() == 0 {
 		t.Fatal("the active tenant's counters are gone")
 	}
 }
@@ -246,7 +252,7 @@ func TestAReclaimedTenantComesBackWithWhatItLearned(t *testing.T) {
 	if learned == 0 {
 		t.Fatal("the tenant learned nothing, so this test cannot tell a reload from a fresh start")
 	}
-	if err := keep(r.db, tn, model); err != nil {
+	if err := keep(dbOf(t, r), tn, model); err != nil {
 		t.Fatalf("keep: %v", err)
 	}
 
@@ -254,9 +260,9 @@ func TestAReclaimedTenantComesBackWithWhatItLearned(t *testing.T) {
 	r.mu.Lock()
 	r.touched = time.Now().Add(-24 * time.Hour)
 	r.mu.Unlock()
-	s.State.res.mu.Lock()
-	s.State.res.retireLocked(time.Now(), time.Hour, s.Log)
-	s.State.res.mu.Unlock()
+	for _, cell := range s.State.res.idle(time.Hour) {
+		s.State.res.retire(cell, s.Log)
+	}
 	if v, _, _ := r.arms(); v != nil {
 		t.Fatal("reclaim did not disarm")
 	}
@@ -384,7 +390,7 @@ func TestARolloutDoesNotSilentlyResetEveryTenant(t *testing.T) {
 // TestTheProbeGoesDegradedWhenTheNodeIsFull pins that capacity is an ALARM. A
 // counter nobody reads is how a pod quietly stops protecting new tenants.
 func TestTheProbeGoesDegradedWhenTheNodeIsFull(t *testing.T) {
-	t.Setenv(envTenantMax, "1")
+	t.Setenv(envMemory, node(1))
 	app, s := wireApp(t)
 
 	code, _ := req(t, app, http.MethodGet, "/v1/risk/health", "", "", "")
@@ -407,7 +413,9 @@ func TestTheProbeGoesDegradedWhenTheNodeIsFull(t *testing.T) {
 	if report["status"] != "degraded" {
 		t.Fatalf("probe status = %v, want degraded", report["status"])
 	}
-	if report["refused"] == nil || report["tenant_max"] == nil {
-		t.Fatalf("the probe does not carry the capacity facts: %s", body)
+	for _, k := range []string{"refused", "reclaimed", "strained", "bytes", "bytes_max"} {
+		if report[k] == nil {
+			t.Fatalf("the probe does not carry %q, so the saturation view is readable by nobody: %s", k, body)
+		}
 	}
 }

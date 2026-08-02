@@ -48,7 +48,7 @@ const healthWire = "a REAL probe: 503 carries the degraded REPORT as its body " 
 // AFTER instead: the screen is billed on the decision that was actually
 // produced, the hot path stays typed, and no existing client's parse moves.
 //
-// POST /v1/ml/train and POST /v1/ml/search ARE gated before the work, because
+// POST /v1/risk/train and POST /v1/risk/search ARE gated before the work, because
 // both are real CPU on a shared pod. They stay typed and return a typed 402:
 // they are NEW routes, so no client parses a nested body from them, and a new
 // route may as well carry the contract we want rather than the one we inherited.
@@ -114,7 +114,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		sort.Strings(untyped)
 		t.Errorf("operation(s) with no registry entry and no reason: %s\n"+
 			"A route that is not a typed op has no schema, no prose, no MCP tool, no CLI command and no "+
-			"SDK method. Convert it (zip.Get/Post/... on the /v1/risk or /v1/ml group), or add it to "+
+			"SDK method. Convert it (zip.Get/Post/... on the /v1/risk group), or add it to "+
 			"untypedByDesign with the reason typing it would move the wire.", strings.Join(untyped, ", "))
 	}
 	for key := range untypedByDesign {
@@ -160,12 +160,12 @@ func TestTheSurfaceIsWhatWasPromised(t *testing.T) {
 		"GET /v1/risk/mode", "PUT /v1/risk/mode",
 		"GET /v1/risk/health",
 		// learn
-		"POST /v1/ml/score",
-		"POST /v1/ml/train",
-		"GET /v1/ml/state", "PUT /v1/ml/state/appetite",
-		"GET /v1/ml/features",
-		"POST /v1/ml/search", "GET /v1/ml/search/{id}", "DELETE /v1/ml/search/{id}",
-		"POST /v1/ml/snapshot", "POST /v1/ml/restore",
+		"POST /v1/risk/score",
+		"POST /v1/risk/train",
+		"GET /v1/risk/state", "PUT /v1/risk/state/appetite",
+		"GET /v1/risk/features",
+		"POST /v1/risk/search", "GET /v1/risk/search/{id}", "DELETE /v1/risk/search/{id}",
+		"POST /v1/risk/snapshot", "POST /v1/risk/restore",
 	}
 	for _, w := range want {
 		if !served[w] {

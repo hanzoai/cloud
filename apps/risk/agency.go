@@ -29,12 +29,21 @@ package risk
 // what makes the bot lane reachable — it is entered by a fact, not by the absence
 // of a credential the surface already requires.
 //
-// AND THE LOOKUP CANNOT BE A LEVER. It happens only when the caller CLAIMS an
-// agent, so the cost lands on the claimant; answers are cached per tenant with
-// the tenant's own bound, negatives included, so a flood of invented references
-// costs one bounded map and not one call per request; and the call carries a
-// deadline measured against an authorization window, because a payment decision
-// waiting on a registry is a payment plane that fails when the registry does.
+// WHAT BOUNDS THE LOOKUP, EXACTLY. It happens only when the caller CLAIMS an
+// agent, so the cost lands on the claimant, and every decide that reaches it is
+// itself metered on that caller's ledger — the registry call is one per PAID
+// decision, never an amplification of one. A repeated reference costs nothing
+// after the first: answers are memoised per tenant, negatives included, under
+// that tenant's own bound. A NOVEL reference on every request is still a call on
+// every request, which is why the call carries a deadline measured against an
+// authorization window: a payment decision waiting on a registry is a payment
+// plane that fails when the registry does.
+//
+// A reference longer than the registry can name is answered HERE, without the
+// call. agents bounds an agent label at 128 bytes and answers "not declared" to
+// anything longer, so asking is a round trip whose answer is already known — and
+// taking that answer as a verdict would classify a legitimately long name as a
+// bot on a fact about our own field width rather than about the caller.
 
 import (
 	"context"
@@ -64,8 +73,14 @@ const (
 	agencyTTL = time.Minute
 	// agencyCacheMax bounds the per-tenant cache. It is per tenant like
 	// everything else here, so a tenant inventing references evicts its OWN
-	// oldest answers and nobody else's.
+	// oldest answers and nobody else's — and every entry is at most refMax
+	// bytes, so the count is a byte figure (agencyMemo in bound.go) and not a
+	// number over values the caller sizes.
 	agencyCacheMax = 1024
+	// refMax is the longest agent reference the registry can name: agents'
+	// own maxAgentLabel (apps/agents/sessions.go). Stated here because it is
+	// what makes a longer claim answerable without a call.
+	refMax = 128
 )
 
 // registry answers whether a reference names an agent in an org's own registry.
@@ -175,6 +190,13 @@ func agencyOf(ctx context.Context, reg registry, cache *agencyCache, user string
 			return AgencyHuman, ""
 		}
 		return AgencyUnknown, ""
+	}
+	if len(ref) > refMax {
+		// Longer than the registry can name, so there is no lookup to make and no
+		// verdict to reach. Unknown + unverified is the honest answer: the claim
+		// was not checked, and saying it was disproved would be a statement about
+		// a field width rather than about the caller.
+		return AgencyUnknown, RefusalUnverified
 	}
 	if reg == nil {
 		return AgencyUnknown, RefusalUnverified

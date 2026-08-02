@@ -12,24 +12,36 @@ package risk
 // process-wide store with a GLOBAL cap, where one org's volume silently deletes
 // another org's state.
 //
-// EVERY DEGRADATION IS SELF-INFLICTED AND LOUD.
+// A CELL IS BUILT COMPLETE AND ONLY THEN PUBLISHED, and that is what makes the
+// lifetime safe. An earlier cut published an empty cell, opened its file, and on
+// any failure called abandon() — which released whatever cell it found in the
+// map. For a concurrent first request on the same org that is the cell the OTHER
+// request is already holding: release() closed the handle and nil'd it, and the
+// winner's next query dereferenced a nil *sql.DB. cloud runs ONE replica, so a
+// transient SQLITE_BUSY on a cold tenant was a total outage for every tenant on
+// the pod. Here the only cell `of` can discard is one it built and nobody has
+// ever seen, so there is no abandon to get wrong, and the handle is read through
+// db() under the cell's own lock rather than off the struct.
 //
-//	own cardinality bound   evicts this tenant's own oldest key; counted, and
-//	                        reported as `strained` on the decision and the probe.
+// EVERY DEGRADATION IS SELF-INFLICTED OR LOUD.
+//
+//	own cardinality bound   the tenant's own gate refuses a NEW key, counts it,
+//	                        and reports `strained` on the decision and the probe.
+//	                        Its existing counters keep moving.
 //	own idleness            after idleReclaim of SILENCE the tenant is RETIRED:
 //	                        its model is snapshotted onto its own file first, then
 //	                        its aggregates, caches and file handle are released.
-//	                        The trigger is its own silence — no other tenant's
-//	                        traffic can cause it — and nothing durable is lost, so
-//	                        its next request comes back with what it learned.
-//	the pod is full         a NEW tenant is refused admission, loudly (503 + an
-//	                        error log + a degraded probe). No incumbent is touched.
-//	                        Admission pressure is a capacity event for an operator,
-//	                        never a quiet disarm for a victim.
+//	                        Nothing durable is lost, so its next request comes
+//	                        back with what it learned.
+//	the node is full        cells silent past idleFloor are reclaimed FIRST —
+//	                        counted, and readable on the probe. Only if there is
+//	                        nothing to reclaim is a newcomer refused, loudly
+//	                        (503 + an error log + a degraded probe). No tenant
+//	                        that is USING the node is ever taken from.
 //
 // RETIREMENT IS THE WHOLE LIFETIME, not a half of one. An earlier cut dropped a
 // tenant's aggregates but KEPT its cell forever, so the map only ever grew: once
-// tenantMax distinct tenants had passed through, tenant tenantMax+1 was refused
+// the ceiling of distinct tenants had passed through, the next one was refused
 // for the life of the process even with the pod idle. A high-water mark is not a
 // bound — it is the same "one tenant's presence denies another" defect wearing an
 // admission badge.
@@ -47,24 +59,32 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/luxfi/aml/pkg/anomaly"
-	"github.com/luxfi/aml/pkg/velocity"
 	"github.com/zap-proto/zip"
 )
 
 // resident is one tenant's live state.
 type resident struct {
-	t  Tenant
-	db *sql.DB
+	t Tenant
+	// res is the node budget this cell draws on. Nil for a cell nothing is
+	// accounting — a search sandbox — which is then bounded by its own maxKeys
+	// alone.
+	res *residency
 
 	mu sync.Mutex
+	// handle is the tenant's own encrypted file. Read through db() under this
+	// lock and never off the struct: release() writes it, and an unsynchronised
+	// read of a field another goroutine may be closing is how a nil dereference
+	// takes a one-replica pod down.
+	handle *sql.DB
 	// The ARM: the two in-memory planes and when they started. Nil when this
 	// tenant has been reclaimed; re-armed on its next request, which is also
 	// the path that reloads its model.
-	vel   *velocity.Store
+	vel   *rings
 	model *anomaly.Store
 	since time.Time
 	// touched is the last time this tenant asked for anything. The reclaim
@@ -81,6 +101,19 @@ type resident struct {
 	// made in that condition carries RefusalDisarmed, never RefusalWarming.
 	disarmed bool
 
+	// retired latches the ONE release of this cell. Two sweeps racing the same
+	// cell would otherwise each price it and each hand its bytes back, and a
+	// budget that can be credited twice is not a budget.
+	retired bool
+	// replaying is this tenant's ONE slot for a synchronous replay of its own
+	// history. Atomic rather than under mu because it is held across the replay
+	// itself, and holding the cell's lock for the length of a 5,000-row read
+	// would stall every other request for this tenant.
+	replaying atomic.Bool
+	// writes counts decisions recorded since this cell armed. It is what paces
+	// the decision log's prune without a table scan on the authorization path.
+	writes int
+
 	// The governance cache. Loaded once per change, not once per decision: three
 	// unbounded SELECTs on every authorization was the second defect. Every
 	// writer calls dirty, and both live under this same mutex, so a read can
@@ -90,105 +123,254 @@ type resident struct {
 	lists  map[string]map[string]bool
 	sups   []suppression
 	live   bool
+	// govern is what the loaded governance measures, in bytes. Priced live
+	// rather than reserved because a tenant with ten rules must not be charged
+	// for a budget it is not using — that pricing is the whole operating point.
+	govern int
 
 	// agency memoises this tenant's agent-registry answers, under this tenant's
 	// own bound. It has its own lock because a registry call must not be made
-	// while holding the lock a decision needs.
+	// while holding the lock a decision needs. Its ceiling is reserved in
+	// cellBytes.
 	agency agencyCache
 }
 
-// residency is the bounded set of residents.
+// residency is the set of residents, bounded in BYTES.
 type residency struct {
 	dataDir string
 
 	mu    sync.Mutex
 	cells map[Tenant]*resident
-	// refused counts admissions turned away at the cap, and refusedAt is when
-	// the last one was. Both are on the probe: a pod that is refusing tenants
-	// must page an operator rather than be discovered in a support ticket.
+	// held is the live sum of what the cells cost. Kept as a running total
+	// rather than recomputed, because a new key on the hot path must not walk
+	// every tenant on the node to find out whether it fits.
+	held int
+	// building serialises the first touch of a tenant, so two concurrent
+	// newcomers open one file rather than two. A second builder waits on the
+	// first's channel and then finds the published cell.
+	building map[Tenant]chan struct{}
+	// The saturation view. All three are on the probe: a node that is refusing
+	// tenants, or reclaiming them under pressure, must page an operator rather
+	// than be discovered in a support ticket.
 	refused   int64
+	reclaimed int64
 	refusedAt time.Time
 }
 
 func newResidency(dataDir string) *residency {
-	return &residency{dataDir: dataDir, cells: map[Tenant]*resident{}}
+	return &residency{dataDir: dataDir, cells: map[Tenant]*resident{}, building: map[Tenant]chan struct{}{}}
 }
 
 // errFull is the capacity refusal. 503 and not 403: nothing about the caller is
-// wrong, this pod is out of room, and a retry against a pod with room succeeds.
-var errFull = zip.Errorf(503, "this node is at its tenant capacity and will not evict another tenant's state to make room")
+// wrong, this node is out of memory and has nothing idle left to reclaim, and a
+// retry against a node with room succeeds.
+var errFull = zip.Errorf(503, "this node has no memory left for another tenant and will not take a live tenant's state to make room")
 
 // of resolves the caller's resident, admitting and arming it if this process has
 // not seen it. It is the ONE entry: every typed op reaches its tenant through
 // here, so admission, the bound, the reclaim and the model reload each have
 // exactly one site.
 func (rs *residency) of(t Tenant, log logger) (*resident, error) {
-	now := time.Now()
-	rs.mu.Lock()
-	r, held := rs.cells[t]
-	if !held {
-		if len(rs.cells) >= tenantMax() {
-			rs.retireLocked(now, idleReclaim(), log)
+	for {
+		r, wait := rs.lookup(t)
+		if r != nil {
+			r.touch()
+			return r, nil
 		}
-		if len(rs.cells) >= tenantMax() {
-			rs.refused, rs.refusedAt = rs.refused+1, now
-			rs.mu.Unlock()
-			log.Error("risk: refusing a new tenant — this node is at its tenant ceiling and will not evict an incumbent to make room",
-				"tenant", t.String(), "tenants", tenantMax())
-			return nil, errFull
+		if wait != nil {
+			<-wait // another request is opening this tenant's file; take its cell
+			continue
 		}
-		// Touched at BIRTH, so a sweep between this line and the tenant's first
-		// answer cannot retire a cell that has not served a request yet.
-		r = &resident{t: t, touched: now}
-		rs.cells[t] = r
+		return rs.build(t, log)
 	}
-	rs.mu.Unlock()
+}
 
-	// Touched again before the work, so the retire threshold is measured from
-	// the LAST time a request resolved this tenant, which is the fact the safety
-	// of closing its file rests on.
-	r.mu.Lock()
-	r.touched = now
-	r.mu.Unlock()
+// lookup answers with the published cell, or with the channel to wait on when
+// another request is building it, or with neither — in which case the caller
+// holds the build claim and must call build.
+func (rs *residency) lookup(t Tenant) (*resident, chan struct{}) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	if r, held := rs.cells[t]; held {
+		return r, nil
+	}
+	if ch, going := rs.building[t]; going {
+		return nil, ch
+	}
+	rs.building[t] = make(chan struct{})
+	return nil, nil
+}
 
+// build opens and arms a cell OFF the registry and publishes it whole. Nothing
+// can observe a half-built cell, so nothing has to be undone if it fails: the
+// handle this call opened is the only one that could be closed, and closing it
+// is safe precisely because no other request has ever been handed it.
+func (rs *residency) build(t Tenant, log logger) (*resident, error) {
+	defer rs.finish(t)
+
+	if err := rs.reserve(cellBytes, log); err != nil {
+		log.Error("risk: refusing a new tenant — this node has no memory left and nothing idle to reclaim",
+			"tenant", t.String(), "bytes", rs.bytes(), "bytes_max", memBytes())
+		return nil, err
+	}
+	r := &resident{t: t, res: rs, touched: time.Now()}
 	if err := rs.open(r); err != nil {
-		rs.abandon(t, r, held)
+		rs.release(cellBytes)
 		return nil, err
 	}
 	if err := rs.arm(r, log); err != nil {
-		rs.abandon(t, r, held)
+		r.close()
+		rs.release(cellBytes)
 		return nil, err
 	}
+
+	rs.mu.Lock()
+	rs.cells[t] = r
+	rs.mu.Unlock()
 	return r, nil
 }
 
-// abandon drops a cell this call CREATED and could not bring up. Only that one:
-// a cell an earlier call published is another request's resident, and removing
-// it because this one failed would be the cross-tenant reach in miniature.
-func (rs *residency) abandon(t Tenant, r *resident, held bool) {
-	if held {
-		return
+// finish publishes the build claim's completion to anyone waiting on it.
+func (rs *residency) finish(t Tenant) {
+	rs.mu.Lock()
+	ch := rs.building[t]
+	delete(rs.building, t)
+	rs.mu.Unlock()
+	if ch != nil {
+		close(ch)
+	}
+}
+
+// reserve takes n bytes of the node's budget, RECLAIMING tenants that have been
+// silent past the retire floor before it refuses.
+//
+// The order is the whole design. Reclaim first, refuse last: a node that turned
+// a newcomer away while holding cells nobody has touched for hours is denying
+// service to keep memory it is not using. But only cells past idleFloor may go,
+// and that threshold is the tenant's OWN silence — so no tenant's arrival can
+// ever cost a tenant that is working its rings, which is the difference between
+// reclaim and eviction.
+func (rs *residency) reserve(n int, log logger) error {
+	rs.mu.Lock()
+	if rs.held+n <= memBytes() {
+		rs.held += n
+		rs.mu.Unlock()
+		return nil
+	}
+	rs.mu.Unlock()
+
+	if freed := rs.pressure(n, log); freed {
+		rs.mu.Lock()
+		if rs.held+n <= memBytes() {
+			rs.held += n
+			rs.mu.Unlock()
+			return nil
+		}
+		rs.mu.Unlock()
+	}
+
+	rs.mu.Lock()
+	rs.refused, rs.refusedAt = rs.refused+1, time.Now()
+	rs.mu.Unlock()
+	return errFull
+}
+
+// release gives n bytes back to the node's budget.
+func (rs *residency) release(n int) {
+	rs.mu.Lock()
+	rs.held -= n
+	if rs.held < 0 {
+		rs.held = 0
+	}
+	rs.mu.Unlock()
+}
+
+// room is the node gate a tenant's rings ask before taking a new key. Same
+// budget, same reclaim, no refusal log: a key that does not fit is reported to
+// the tenant as `strained`, which is the honest word for it.
+func (rs *residency) room(n int) bool {
+	rs.mu.Lock()
+	if rs.held+n <= memBytes() {
+		rs.held += n
+		rs.mu.Unlock()
+		return true
+	}
+	rs.mu.Unlock()
+	if !rs.pressure(n, discard{}) {
+		return false
 	}
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	if rs.cells[t] != r {
-		return
+	if rs.held+n <= memBytes() {
+		rs.held += n
+		return true
 	}
-	delete(rs.cells, t)
+	return false
+}
+
+// pressure retires cells silent past idleFloor until n bytes are free, and
+// reports whether it freed anything. Counted, so `reclaimed` on the probe tells
+// an operator the node is running on reclamation rather than on headroom.
+func (rs *residency) pressure(n int, log logger) bool {
+	freed := false
+	for _, r := range rs.idle(idleFloor) {
+		if rs.retire(r, log) {
+			freed = true
+			rs.mu.Lock()
+			rs.reclaimed++
+			room := rs.held+n <= memBytes()
+			rs.mu.Unlock()
+			if room {
+				break
+			}
+		}
+	}
+	return freed
+}
+
+// idle snapshots the cells silent for at least d, OLDEST FIRST.
+//
+// A SNAPSHOT, taken under rs.mu and walked outside it. Holding the registry lock
+// while taking each cell's lock is a cross-tenant latency coupling on a path the
+// package itself describes as sitting inside a card processor's authorization
+// window: one cold tenant's file I/O would stall every other tenant's decide.
+func (rs *residency) idle(d time.Duration) []*resident {
+	now := time.Now()
+	rs.mu.Lock()
+	out := make([]*resident, 0, len(rs.cells))
+	for _, r := range rs.cells {
+		if now.Sub(r.idleFor()) >= d {
+			out = append(out, r)
+		}
+	}
+	rs.mu.Unlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].idleFor().Before(out[j].idleFor()) })
+	return out
+}
+
+// idleFor is when this cell was last touched.
+func (r *resident) idleFor() time.Time {
 	r.mu.Lock()
-	r.release()
+	defer r.mu.Unlock()
+	return r.touched
+}
+
+// touch records that a request resolved this tenant. The retire threshold is
+// measured from here, which is the fact the safety of closing its file rests on.
+func (r *resident) touch() {
+	r.mu.Lock()
+	r.touched = time.Now()
 	r.mu.Unlock()
 }
 
 // open resolves the tenant's file once. The ORG half is what cloud.OrgNamespace
 // takes — the deployment does its own brand scoping through DataDir, so handing
 // it the qualified key would put the brand in the name twice.
+//
+// It runs on an UNPUBLISHED cell, so no lock is taken across the file I/O:
+// creating and seeding an encrypted SQLite file under a lock a request needs is
+// how one cold tenant's first touch became every other tenant's latency.
 func (rs *residency) open(r *resident) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.db != nil {
-		return nil
-	}
 	ns, err := cloud.OrgNamespace(r.t.org(), "")
 	if err != nil {
 		return err
@@ -213,43 +395,35 @@ func (rs *residency) open(r *resident) error {
 		_ = db.Close()
 		return err
 	}
-	r.db = db
+	// The decision log is pruned to its retention here as well as every
+	// pruneEvery writes, so a tenant that writes fewer than that between
+	// rollouts still comes back inside its budget.
+	if err := prune(db); err != nil {
+		_ = db.Close()
+		return err
+	}
+	r.handle = db
 	return nil
 }
 
-// arm gives a resident its aggregates and its model, and restores what the
-// tenant had learned. Idempotent: an already-armed resident is untouched.
+// arm gives an unpublished resident its aggregates and its model, and restores
+// what the tenant had learned.
 //
-// THE RELOAD IS HERE AND ONLY HERE, which is what closes the third defect. The
-// process used to latch "restored" in a map that outlived the model, so a model
-// dropped by the shared store's LRU was never reloaded — the tenant scored
-// nothing for the rest of the process's life while reporting only "warming". A
-// cell that has no model has no latch either, because the latch IS the model.
-//
-// IT TAKES ONE LOCK, AND THAT IS A RULE. rs.mu is only ever taken OUTSIDE r.mu
-// (of, retireLocked, close); arming under both is what let an earlier cut call
-// retireLocked — which locks every cell — while already holding one of them, and
-// a process that deadlocks under its own admission path is a process that has
-// stopped deciding.
+// THE RELOAD IS HERE AND ONLY HERE, which is what closes the silent-disarm
+// defect. The process used to latch "restored" in a map that outlived the model,
+// so a model dropped by the shared store's LRU was never reloaded — the tenant
+// scored nothing for the rest of the process's life while reporting only
+// "warming". A cell that has no model has no latch either, because the latch IS
+// the model.
 func (rs *residency) arm(r *resident, log logger) error {
-	r.mu.Lock()
-	if r.vel != nil && r.model != nil {
-		r.mu.Unlock()
-		return nil
-	}
-	db := r.db
-	r.mu.Unlock()
-
 	vel := aggregates()
 	model, err := forest(anomaly.Config{}, vel)
 	if err != nil {
 		return err
 	}
 
-	// The durable snapshot, read before the cell is armed so a concurrent arm
-	// cannot see a half-restored model.
 	kept, disarmed := int64(0), false
-	if snap, ok, err := readSnapshot(db, r.t); err != nil {
+	if snap, ok, err := readSnapshot(r.handle, r.t); err != nil {
 		disarmed = true
 		log.Error("risk: a tenant's learned state is on file and could not be read; the model is DISARMED, not warming",
 			"tenant", r.t.String(), "err", err)
@@ -262,19 +436,14 @@ func (rs *residency) arm(r *resident, log logger) error {
 		}
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.vel != nil && r.model != nil { // lost the race; the winner's arm stands
-		return nil
-	}
 	r.vel, r.model, r.since = vel, model, time.Now().UTC()
 	r.kept, r.disarmed = kept, disarmed
 	return nil
 }
 
-// retireLocked releases every tenant that has been SILENT for at least idle: its
-// model is written to its own file, then its aggregates, its caches and its file
-// handle go and its cell is dropped. Caller holds rs.mu.
+// retire releases ONE tenant that has been silent: its model is written to its
+// own file, then its aggregates, its caches and its file handle go and its cell
+// is dropped. Answers whether it did.
 //
 // IT IS NOT EVICTION AND THE DIFFERENCE IS THE WHOLE POINT: the trigger is the
 // retired tenant's own silence, so no tenant's traffic can ever cost another
@@ -284,52 +453,83 @@ func (rs *residency) arm(r *resident, log logger) error {
 // one thing that does not survive, which is why `since` rides every decision
 // instead of the loss being left for someone to notice.
 //
-// CLOSING THE FILE IS SAFE WITHOUT A REFERENCE COUNT because idle is floored
-// above the longest any worker may hold one (see idleFloor): a cell reaches this
-// line only when no request has resolved it for at least that long.
-func (rs *residency) retireLocked(now time.Time, idle time.Duration, log logger) {
-	for t, r := range rs.cells {
-		r.mu.Lock()
-		if now.Sub(r.touched) < idle {
-			r.mu.Unlock()
-			continue
-		}
-		if err := keep(r.db, r.t, r.model); err != nil {
-			// Never drop a model we could not write down: the cell is HELD, and
-			// the next sweep tries again. Losing learned state to a housekeeping
-			// pass is exactly the silent disarm this file exists to prevent.
-			log.Error("risk: a retiring tenant's learned state was not kept, so its cell is held", "tenant", r.t.String(), "err", err)
-			r.mu.Unlock()
-			continue
-		}
-		idleFor := now.Sub(r.touched)
-		r.release()
+// CLOSING THE FILE IS SAFE WITHOUT A REFERENCE COUNT because the caller only
+// ever hands it cells idle past idleFloor, which is floored above the longest
+// any worker may hold one (see idleReclaim).
+func (rs *residency) retire(r *resident, log logger) bool {
+	r.mu.Lock()
+	if r.retired {
 		r.mu.Unlock()
-		delete(rs.cells, t)
-		log.Info("risk: a tenant was retired after its own idleness; its learned state is on its own file",
-			"tenant", r.t.String(), "idle", idleFor.String())
+		return false
+	}
+	if err := keep(r.handle, r.t, r.model); err != nil {
+		// Never drop a model we could not write down: the cell is HELD, and the
+		// next sweep tries again. Losing learned state to a housekeeping pass is
+		// exactly the silent disarm this file exists to prevent.
+		r.mu.Unlock()
+		log.Error("risk: a retiring tenant's learned state was not kept, so its cell is held", "tenant", r.t.String(), "err", err)
+		return false
+	}
+	idleFor := time.Since(r.touched)
+	cost := r.costLocked()
+	r.retired = true
+	r.releaseLocked()
+	r.mu.Unlock()
+
+	rs.mu.Lock()
+	if rs.cells[r.t] == r {
+		delete(rs.cells, r.t)
+	}
+	rs.mu.Unlock()
+	rs.release(cost)
+
+	log.Info("risk: a tenant was retired after its own idleness; its learned state is on its own file",
+		"tenant", r.t.String(), "idle", idleFor.String())
+	return true
+}
+
+// costLocked is what this cell is charged to the node's budget. Caller holds
+// r.mu.
+func (r *resident) costLocked() int {
+	n := cellBytes + r.govern
+	if r.vel != nil {
+		n += r.vel.keys() * bytesPerKey()
+	}
+	return n
+}
+
+// bytes is what this cell costs the node right now.
+func (r *resident) bytes() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.costLocked()
+}
+
+// releaseLocked drops everything this cell holds. Caller holds r.mu.
+func (r *resident) releaseLocked() {
+	r.vel, r.model = nil, nil
+	r.loaded, r.rules, r.lists, r.sups, r.govern = false, nil, nil, nil, 0
+	r.agency.clear()
+	if r.handle != nil {
+		_ = r.handle.Close()
+		r.handle = nil
 	}
 }
 
-// release drops everything this cell holds. Caller holds r.mu.
-func (r *resident) release() {
-	r.vel, r.model = nil, nil
-	r.loaded, r.rules, r.lists, r.sups = false, nil, nil, nil
-	r.agency.clear()
-	if r.db != nil {
-		_ = r.db.Close()
-		r.db = nil
-	}
+// close drops an UNPUBLISHED cell. The only caller is the build that made it,
+// which is what makes closing the handle safe: nobody else has ever held it.
+func (r *resident) close() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.releaseLocked()
 }
 
 // sweep is the background retire. It runs on a timer so memory comes back from a
-// silent tenant without waiting for a busy one to need it — the version that only
-// reclaimed under pressure would let one tenant's arrival be the reason another's
-// rings went away, which is the thing being ruled out.
+// silent tenant without waiting for a busy one to need it.
 func (rs *residency) sweep(log logger) {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	rs.retireLocked(time.Now(), idleReclaim(), log)
+	for _, r := range rs.idle(idleReclaim()) {
+		rs.retire(r, log)
+	}
 }
 
 // tenants lists the tenants this process holds, in a stable order.
@@ -344,12 +544,38 @@ func (rs *residency) tenants() []Tenant {
 	return out
 }
 
-// count reports how many tenants this process holds, how many admissions it has
-// refused, and when the last refusal was. All three are on the probe.
-func (rs *residency) count() (tenants int, refused int64, at time.Time) {
+// bytes is what every resident tenant costs this node right now.
+func (rs *residency) bytes() int {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return len(rs.cells), rs.refused, rs.refusedAt
+	return rs.held
+}
+
+// count reports the saturation view: how many tenants this process holds, how
+// many admissions it has refused, how many cells it has reclaimed under memory
+// pressure, and when the last refusal was. All four are on the probe — a
+// control that runs out of room quietly is a control nobody knows is off.
+func (rs *residency) count() (tenants int, refused, reclaimed int64, at time.Time) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return len(rs.cells), rs.refused, rs.reclaimed, rs.refusedAt
+}
+
+// strained is how many resident tenants are reading partial rings.
+func (rs *residency) strained() int {
+	rs.mu.Lock()
+	cells := make([]*resident, 0, len(rs.cells))
+	for _, r := range rs.cells {
+		cells = append(cells, r)
+	}
+	rs.mu.Unlock()
+	n := 0
+	for _, r := range cells {
+		if r.strained() {
+			n++
+		}
+	}
+	return n
 }
 
 // close snapshots every armed tenant and closes every file. It is what makes a
@@ -358,47 +584,121 @@ func (rs *residency) count() (tenants int, refused int64, at time.Time) {
 // score for its whole warm period.
 func (rs *residency) close(log logger) (kept, failed int) {
 	rs.mu.Lock()
-	defer rs.mu.Unlock()
+	cells := make(map[Tenant]*resident, len(rs.cells))
 	for t, r := range rs.cells {
+		cells[t] = r
+	}
+	rs.cells = map[Tenant]*resident{}
+	rs.held = 0
+	rs.mu.Unlock()
+
+	for t, r := range cells {
 		r.mu.Lock()
 		if r.model != nil {
-			if err := keep(r.db, r.t, r.model); err != nil {
+			if err := keep(r.handle, r.t, r.model); err != nil {
 				failed++
 				log.Error("risk: a tenant's learned state was not kept", "tenant", t.String(), "err", err)
 			} else {
 				kept++
 			}
 		}
-		r.release()
+		r.retired = true
+		r.releaseLocked()
 		r.mu.Unlock()
-		delete(rs.cells, t)
 	}
 	return kept, failed
 }
 
 // ── what an op reads off a resident ─────────────────────────────────────────
 
+// file is the tenant's own file handle, read under this cell's own lock.
+//
+// IT ANSWERS WITH AN ERROR RATHER THAN WITH A HANDLE NOBODY MAY USE, and that is
+// the whole of it. `(*sql.DB)(nil).QueryRow` locks a nil mutex, so a cell whose
+// file has been closed must never hand one out: on a one-replica pod that panic
+// is every tenant's outage. Two things close a cell — retire, after the tenant's
+// own idleFloor of silence, and teardown, which closes EVERY cell the instant
+// SIGTERM lands. The second has no idle requirement and cloud deploys Recreate,
+// so a request holding a cell it resolved a millisecond ago can find the handle
+// gone on every single rollout.
+//
+// Returning (handle, error) is what makes the nil unrepresentable downstream: an
+// op cannot obtain the file without also obtaining the reason it has none, and
+// the check lives at the ONE door (tenantState) instead of at 27 call sites that
+// each have to remember it.
+func (r *resident) file() (*sql.DB, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.handle == nil {
+		return nil, errRetired
+	}
+	return r.handle, nil
+}
+
 // arms returns the tenant's two in-memory planes and the instant they started.
-// A disarmed resident cannot be reached this way: `of` arms before returning.
-func (r *resident) arms() (*velocity.Store, *anomaly.Store, time.Time) {
+// A disarmed resident cannot be reached this way: `of` arms before publishing.
+func (r *resident) arms() (*rings, *anomaly.Store, time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.vel, r.model, r.since
 }
 
-// strained reports that this tenant's aggregates are at their own cardinality
-// bound, so a count it reads may be an under-count of its own traffic.
+// recorded says one decision was written, and answers whether the log is due
+// for its prune. Counted per cell, so nothing on the hot path counts rows.
+func (r *resident) recorded() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.writes++
+	return r.writes%pruneEvery == 0
+}
+
+// alone runs f while this tenant holds the ONE slot for a synchronous replay of
+// its own history, and refuses rather than queues when it is taken.
 //
-// It is published rather than logged because the consumer is the tenant: a rule
-// that fires on `velocity.ip.1h.count >= 5` stops firing when the key it counts
-// was dropped, and there is no other way for the tenant to learn that its
-// threshold is being measured against a partial ring.
-func (r *resident) strained() bool {
+// THE BOUND IS CONCURRENCY, NOT PRICE. /v1/risk/simulate reads up to 5,000 of
+// this tenant's decisions and materialises them, and it is deliberately UNPRICED
+// because it is the rehearsal a tenant runs before activating a rule — charging
+// for the safe path discourages the safe path. But nothing bounded how many ran
+// at once, so N connections held N x 5,000 rows, which appears in no ceiling.
+// One at a time per tenant is the honest bound: the rehearsal stays free, and
+// the memory it can reach is a fixed multiple of what one replay costs.
+func (r *resident) alone(f func() error) error {
+	if !r.replaying.CompareAndSwap(false, true) {
+		return zip.Errorf(409, "this tenant already has a replay of its own history running; it reads up to %d decisions and runs one at a time", searchHistoryMax)
+	}
+	defer r.replaying.Store(false)
+	return f()
+}
+
+// record writes an observation onto this tenant's rings, through this tenant's
+// own cardinality gate and the node's byte gate. It is the ONLY write path into
+// the aggregates, so a key that was never priced cannot exist.
+func (r *resident) record(o observation) {
 	vel, _, _ := r.arms()
 	if vel == nil {
-		return false
+		return
 	}
-	return vel.Keys() >= maxKeys()
+	vel.record(r.t, o, r.room)
+}
+
+// room is this cell's view of the node gate. A cell with no residency behind it
+// — a search sandbox replaying history — is bounded by its own maxKeys and
+// charges the node nothing, because the node already paid for the live rings the
+// sandbox is a copy of.
+func (r *resident) room(n int) bool {
+	if r.res == nil {
+		return true
+	}
+	return r.res.room(n)
+}
+
+// strained reports that this tenant's rings stopped tracking its own traffic:
+// a key it needed was refused, by its own cardinality bound or by the node's
+// memory. Either way a count it reads may be an under-count of its own traffic,
+// and a rule written on that count is measuring a partial ring.
+func (r *resident) strained() bool {
+	vel, _, _ := r.arms()
+	return vel != nil && vel.strained()
 }
 
 // grade turns THE MODEL'S OWN refusal into the word that is true of it, against
@@ -435,40 +735,84 @@ func (r *resident) grade(reason string) string {
 // dirty and both live under this mutex. cloud runs one replica of this app and
 // the shard router pins an org to one pod, so this process is the only writer of
 // this file — the cache cannot be stale with respect to a writer it cannot see.
+//
+// IT IS PRICED, NOT GATED. What it loads is bounded per tenant by the write-time
+// byte budgets (governMemo), and it is measured onto the node's total the moment
+// it lands — but it is never refused. Refusing to load a tenant's rules would
+// disarm that tenant's controls to save memory, which is the one degradation
+// this package will not do; the node answers instead by admitting no new cells
+// and no new counters until the total comes down.
 func (r *resident) governance() ([]rule, map[string]map[string]bool, []suppression, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.loaded {
 		return r.rules, r.lists, r.sups, r.live, nil
 	}
-	rules, err := loadRules(r.db)
+	if r.handle == nil {
+		// Retired out from under a request. idleFloor is what makes this
+		// unreachable — nothing in this process holds a cell for sixteen minutes
+		// — so say so loudly rather than dereference a nil handle and take the
+		// pod down with every tenant on it.
+		return nil, nil, nil, false, errRetired
+	}
+	rules, err := loadRules(r.handle)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
-	lists, err := loadLists(r.db)
+	lists, err := loadLists(r.handle)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
-	sups, err := loadSuppressions(r.db)
+	sups, err := loadSuppressions(r.handle)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
 	r.rules, r.lists, r.sups = rules, lists, sups
-	r.live = mode(r.db) == "live"
+	r.live = mode(r.handle) == "live"
 	r.loaded = true
+	was := r.govern
+	r.govern = governBytesOf(rules, lists, sups)
+	if r.res != nil {
+		r.res.charge(r.govern - was)
+	}
 	return r.rules, r.lists, r.sups, r.live, nil
+}
+
+// governBytesOf measures a loaded governance set. Each row is priced at what it
+// costs in the maps the authorization path holds it in, at the caps bound.go
+// publishes — so the node's total is the sum of real rows and never of budgets
+// nobody is using.
+func governBytesOf(rules []rule, lists map[string]map[string]bool, sups []suppression) int {
+	n := len(rules)*ruleMax + len(sups)*supMax
+	for _, l := range lists {
+		n += len(l) * entryMax
+	}
+	return n
+}
+
+// charge moves the node's running total by delta, which may be negative.
+func (rs *residency) charge(delta int) {
+	if delta == 0 {
+		return
+	}
+	rs.mu.Lock()
+	rs.held += delta
+	if rs.held < 0 {
+		rs.held = 0
+	}
+	rs.mu.Unlock()
 }
 
 // reload reinstates this tenant's learned state from its own pinned snapshot,
 // over whatever the live model holds.
 //
-// It is what POST /v1/ml/restore does, and it is also the honest recovery from a
-// disarmed model: a tenant told its control is off can put it back on with the
+// It is what POST /v1/risk/restore does, and it is also the honest recovery from
+// a disarmed model: a tenant told its control is off can put it back on with the
 // state it kept. A snapshot belonging to another tenant is refused twice — here,
 // by the tenant that asked, and again inside the engine.
 func (r *resident) reload() error {
 	r.mu.Lock()
-	db, model := r.db, r.model
+	db, model := r.handle, r.model
 	r.mu.Unlock()
 	if model == nil {
 		return fmt.Errorf("risk: this tenant holds no model to restore into")
@@ -494,8 +838,13 @@ func (r *resident) reload() error {
 // this line.
 func (r *resident) dirty() {
 	r.mu.Lock()
-	r.loaded, r.rules, r.lists, r.sups = false, nil, nil, nil
+	was := r.govern
+	r.loaded, r.rules, r.lists, r.sups, r.govern = false, nil, nil, nil, 0
+	res := r.res
 	r.mu.Unlock()
+	if res != nil {
+		res.charge(-was)
+	}
 }
 
 // ── the durable half of the model ───────────────────────────────────────────
@@ -541,6 +890,10 @@ func readSnapshot(db *sql.DB, t Tenant) (anomaly.Snapshot, bool, error) {
 	return snap, true, nil
 }
 
+// errRetired is what a cell answers when its file has already been closed. A
+// retry lands on a fresh cell, so it is a 503 and not a 500.
+var errRetired = zip.Errorf(503, "this tenant's state was reclaimed while the request was in flight; retry")
+
 // logger is the slice of the service's logger this file uses. Narrow on purpose:
 // residency is reached from teardown and from a background sweep as well as from
 // a request, and a package that took the whole service would be reaching for
@@ -549,3 +902,12 @@ type logger interface {
 	Info(msg string, args ...any)
 	Error(msg string, args ...any)
 }
+
+// discard is the logger the memory gate uses. A key that does not fit is
+// reported to the tenant as `strained` and counted on the probe; logging a line
+// per refused counter would be a log entry per request on exactly the node that
+// has no room to spare.
+type discard struct{}
+
+func (discard) Info(string, ...any)  {}
+func (discard) Error(string, ...any) {}

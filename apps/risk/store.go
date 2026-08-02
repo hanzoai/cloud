@@ -189,7 +189,7 @@ func unstamp(s string) time.Time {
 // decision. The cap is enforced at the write (putRule); the LIMIT here is the
 // second half of the same bound, for rows that arrived by any other route.
 func loadRules(db *sql.DB) ([]rule, error) {
-	rows, err := db.Query(`SELECT body FROM rule ORDER BY id LIMIT ?`, ruleCap)
+	rows, err := db.Query(`SELECT body FROM rule ORDER BY id LIMIT ?`, ruleCap())
 	if err != nil {
 		return nil, err
 	}
@@ -214,42 +214,62 @@ func putRule(db *sql.DB, r rule) error {
 	if err != nil {
 		return err
 	}
-	// The cap is a WRITE-time refusal and not a read-time truncation, because a
-	// truncated rule set is a tenant's controls silently switching off. Replacing
-	// an existing rule is always allowed: it adds nothing.
-	if err := room(db, "rule", "rules", ruleCap, r.ID); err != nil {
+	// The budget is a WRITE-time refusal and not a read-time truncation, because
+	// a truncated rule set is a tenant's controls silently switching off.
+	// Replacing an existing rule is always allowed: it adds no row.
+	return within(db, "rule", "rules", ruleCap(), ruleMax, len(body), r.ID, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`INSERT INTO rule (id, body, at) VALUES (?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET body = excluded.body, at = excluded.at`,
+			r.ID, string(body), stamp(time.Now()))
 		return err
-	}
-	_, err = db.Exec(`INSERT INTO rule (id, body, at) VALUES (?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET body = excluded.body, at = excluded.at`,
-		r.ID, string(body), stamp(time.Now()))
-	return err
+	})
 }
 
-// room refuses a write that would take a plane past its cap.
+// within runs a write inside the transaction that enforces the plane's budget.
+//
+// THE BUDGET IS BYTES AND THE COUNT IS DERIVED FROM IT (bound.go). Both halves
+// are checked here: this row is at most rowMax, and the plane holds at most
+// budget/rowMax rows. A count cap over rows the caller sizes is not a bound at
+// all, which is the defect class this file was held for.
+//
+// IN ONE TRANSACTION, and that is not decoration. Counting outside it let N
+// concurrent writes at cap-1 all see room and all commit: a bound that is read
+// before the write it bounds is a suggestion.
 //
 // `id` is the row being written: an UPDATE to a row that already exists is not a
 // growth and is never refused, which is what keeps a tenant at its cap able to
 // fix a rule rather than only able to delete one. Written once and taken by every
-// capped plane, so a new plane cannot get a subtly different rule.
-func room(db *sql.DB, table, what string, cap int, id string) error {
-	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
+// budgeted plane, so a new plane cannot get a subtly different rule.
+func within(db *sql.DB, table, plane string, cap, rowMax, size int, id string, write func(*sql.Tx) error) error {
+	if size > rowMax {
+		return zip.Errorf(413, "one of this tenant's %s is %d bytes; this plane stores at most %d per row", plane, size, rowMax)
+	}
+	tx, err := db.Begin()
+	if err != nil {
 		return err
 	}
-	if n < cap {
-		return nil
+	defer func() { _ = tx.Rollback() }()
+	var n int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
+		return err
 	}
-	if id != "" {
-		var exists int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE id = ?`, id).Scan(&exists); err != nil {
-			return err
+	if n >= cap {
+		grown := true
+		if id != "" {
+			var exists int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE id = ?`, id).Scan(&exists); err != nil {
+				return err
+			}
+			grown = exists == 0
 		}
-		if exists > 0 {
-			return nil
+		if grown {
+			return zip.Errorf(409, "%s", errCap(plane, cap).Error())
 		}
 	}
-	return zip.Errorf(409, "%s", errCap(what, cap).Error())
+	if err := write(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func getRule(db *sql.DB, id string) (rule, error) {
@@ -288,7 +308,7 @@ func dropRule(db *sql.DB, id string) error {
 // its second half. The order is stable so a truncation, if a row ever arrives by
 // another route, is deterministic rather than whatever the page cache offered.
 func loadLists(db *sql.DB) (map[string]map[string]bool, error) {
-	rows, err := db.Query(`SELECT list, value FROM entry ORDER BY list, value LIMIT ?`, listCap)
+	rows, err := db.Query(`SELECT list, value FROM entry ORDER BY list, value LIMIT ?`, listCap())
 	if err != nil {
 		return nil, err
 	}
@@ -361,8 +381,8 @@ func addEntries(db *sql.DB, name string, values []string, by string) error {
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM entry`).Scan(&held); err != nil {
 		return err
 	}
-	if held+len(values) > listCap {
-		return zip.Errorf(409, "%s", errCap("list entries", listCap).Error())
+	if held+len(values) > listCap() {
+		return zip.Errorf(409, "%s", errCap("list entries", listCap()).Error())
 	}
 	now := stamp(time.Now())
 	for _, v := range values {
@@ -405,7 +425,7 @@ type suppression struct {
 // Bounded like the other two, and for the same reason: every suppression is
 // matched against every hit of every decision.
 func loadSuppressions(db *sql.DB) ([]suppression, error) {
-	rows, err := db.Query(`SELECT id, rule, kind, subject, until, reason, by, at FROM suppression ORDER BY at DESC LIMIT ?`, suppressionCap)
+	rows, err := db.Query(`SELECT id, rule, kind, subject, until, reason, by, at FROM suppression ORDER BY at DESC LIMIT ?`, supCap())
 	if err != nil {
 		return nil, err
 	}
@@ -424,13 +444,13 @@ func loadSuppressions(db *sql.DB) ([]suppression, error) {
 }
 
 func putSuppression(db *sql.DB, s suppression) error {
-	if err := room(db, "suppression", "suppressions", suppressionCap, s.ID); err != nil {
+	size := len(s.ID) + len(s.Rule) + len(s.Kind) + len(s.Subject) + len(s.Reason) + len(s.By) + 64
+	return within(db, "suppression", "suppressions", supCap(), supMax, size, s.ID, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`INSERT INTO suppression (id, rule, kind, subject, until, reason, by, at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			s.ID, s.Rule, s.Kind, s.Subject, stamp(s.Until), s.Reason, s.By, stamp(s.At))
 		return err
-	}
-	_, err := db.Exec(`INSERT INTO suppression (id, rule, kind, subject, until, reason, by, at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.ID, s.Rule, s.Kind, s.Subject, stamp(s.Until), s.Reason, s.By, stamp(s.At))
-	return err
+	})
 }
 
 func dropSuppression(db *sql.DB, id string) error {
@@ -492,7 +512,7 @@ func loadControls(db *sql.DB, kind, subject string) ([]control, error) {
 		args = append(args, kind, subject)
 	}
 	q += ` ORDER BY at DESC LIMIT ?`
-	args = append(args, controlCap)
+	args = append(args, controlCap())
 	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, err
@@ -512,13 +532,13 @@ func loadControls(db *sql.DB, kind, subject string) ([]control, error) {
 }
 
 func putControl(db *sql.DB, c control) error {
-	if err := room(db, "control", "controls", controlCap, c.ID); err != nil {
+	size := len(c.ID) + len(c.Kind) + len(c.Subject) + len(c.Control) + len(c.Reason) + len(c.By) + 64
+	return within(db, "control", "controls", controlCap(), controlMax, size, c.ID, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`INSERT INTO control (id, kind, subject, control, rate, until, reason, by, at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			c.ID, c.Kind, c.Subject, c.Control, c.Rate, stamp(c.Until), c.Reason, c.By, stamp(c.At))
 		return err
-	}
-	_, err := db.Exec(`INSERT INTO control (id, kind, subject, control, rate, until, reason, by, at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.ID, c.Kind, c.Subject, c.Control, c.Rate, stamp(c.Until), c.Reason, c.By, stamp(c.At))
-	return err
+	})
 }
 
 func dropControl(db *sql.DB, id string) error {
@@ -561,6 +581,31 @@ func putDecision(db *sql.DB, o observation, out outcome, digest, idem string, si
 		return errIdemTaken
 	}
 	return err
+}
+
+// prune drops the oldest decisions past this tenant's retention.
+//
+// A RING, NOT A REFUSAL, and that is the difference between this plane and the
+// governed ones. Refusing a rule write costs the tenant a rule it can retry;
+// refusing a DECISION costs it the authorization it asked for, so the log gives
+// up its oldest rows instead — and says so, on the page, rather than leaving a
+// reader to wonder why last quarter is missing.
+func prune(db *sql.DB) error {
+	_, err := db.Exec(`DELETE FROM decision WHERE id IN (
+		SELECT id FROM decision ORDER BY at DESC, id DESC LIMIT -1 OFFSET ?)`, recordCap())
+	return err
+}
+
+// retention reports how many decisions this tenant's log holds and the instant
+// of the oldest one — the window every read of the log is a window into.
+func retention(db *sql.DB) (int, string, error) {
+	var n int
+	var oldest sql.NullString
+	err := db.QueryRow(`SELECT COUNT(*), MIN(at) FROM decision`).Scan(&n, &oldest)
+	if err != nil {
+		return 0, "", err
+	}
+	return n, oldest.String, nil
 }
 
 // errIdemTaken says another request already recorded a decision under this key.
@@ -738,6 +783,39 @@ func seenSignals(db *sql.DB) ([]string, error) {
 	return out, nil
 }
 
+// activityRow is one decision as the activity view reads it: the four columns
+// that view aggregates and nothing else.
+type activityRow struct {
+	Action  string
+	Agency  string
+	Refusal string
+	Hits    []hit
+}
+
+// recent reads the last n decisions WITH their evidence, in ONE query.
+//
+// The activity view used to page the decisions and then call decisionDetail per
+// row — 501 queries for a 500-row page, on an ungated read. The hits are a
+// column of the decision row, so there was never a second query to make.
+func recent(db *sql.DB, n int) ([]activityRow, error) {
+	rows, err := db.Query(`SELECT action, agency, refusal, hits FROM decision ORDER BY at DESC, id DESC LIMIT ?`, n)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []activityRow
+	for rows.Next() {
+		var a activityRow
+		var hitsJSON string
+		if err := rows.Scan(&a.Action, &a.Agency, &a.Refusal, &hitsJSON); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(hitsJSON), &a.Hits)
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 func decisionDetail(db *sql.DB, id string) (decisionRow, []hit, []byte, string, error) {
 	var d decisionRow
 	var shadow, strained int
@@ -896,12 +974,80 @@ func emit(org, name string, props map[string]any) {
 	if org == "" {
 		return
 	}
-	ev := analytics.SinkEvent{
+	ev := detach(org, name, props)
+	go analytics.PublishEvents(ev.DistinctID, []analytics.SinkEvent{ev})
+}
+
+// detach builds the event as a SELF-CONTAINED VALUE: nothing it returns points
+// at memory the request owns.
+//
+// THIS IS THE WHOLE REASON emit IS SAFE TO RUN IN A GOROUTINE. fasthttp owns the
+// byte buffers behind header values and the request path and REUSES them for the
+// next request on the connection, so `sc.org` (X-Org-Id), `by(sc)` (X-User-Id)
+// and every path parameter are strings pointing at memory the server is about to
+// overwrite. Publishing them from a goroutine that outlives the request marshals
+// whatever the NEXT request wrote there — on a shared pod, another tenant's user
+// id under this tenant's DistinctID. It is a data race under -race and a silent
+// wrong record without it.
+//
+// OWNERSHIP IS TAKEN HERE AND NOWHERE ELSE, for the same reason the wire door is
+// one middleware and not a rule per field: a caller cannot be asked to remember
+// which of its strings came off the request, and the caller that forgets is the
+// one that reopens the hole. The copy is O(the event), once per governance write
+// or decision, against a bus dial — it is not on any budget worth counting.
+func detach(org, name string, props map[string]any) analytics.SinkEvent {
+	return analytics.SinkEvent{
 		MessageID:  newID("ev"),
 		Name:       name,
-		DistinctID: org,
+		DistinctID: strings.Clone(org),
 		Time:       time.Now().UTC(),
-		Properties: props,
+		Properties: own(props),
 	}
-	go analytics.PublishEvents(org, []analytics.SinkEvent{ev})
+}
+
+// own returns a copy of the properties that shares no memory with the caller —
+// neither the map, which the caller may reuse, nor the text inside it.
+//
+// It recurs through the shapes JSON can carry rather than only the ones emit
+// happens to pass today. A property added next year as a []string would
+// otherwise arrive aliased with the fix already in the file, which is the defect
+// pattern this package keeps meeting: a rule written for the fields that exist.
+func own(v any) map[string]any {
+	m, _ := ownValue(v).(map[string]any)
+	return m
+}
+
+func ownValue(v any) any {
+	switch t := v.(type) {
+	case string:
+		return strings.Clone(t)
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[strings.Clone(k)] = ownValue(val)
+		}
+		return out
+	case map[string]string:
+		out := make(map[string]string, len(t))
+		for k, val := range t {
+			out[strings.Clone(k)] = strings.Clone(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, val := range t {
+			out[i] = ownValue(val)
+		}
+		return out
+	case []string:
+		out := make([]string, len(t))
+		for i, val := range t {
+			out[i] = strings.Clone(val)
+		}
+		return out
+	default:
+		// Numbers, booleans, times and nil are copied by assignment: there is no
+		// backing array for the server to reuse underneath them.
+		return v
+	}
 }

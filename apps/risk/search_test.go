@@ -2,7 +2,7 @@ package risk
 
 // search_test.go is the regression suite for the unbounded expensive op.
 //
-// THE DEFECT: POST /v1/ml/search spawned a bare goroutine per call with a
+// THE DEFECT: POST /v1/risk/search spawned a bare goroutine per call with a
 // ten-minute budget, replaying 243 topologies over up to five thousand recorded
 // decisions. Nothing bounded how many ran at once, nothing could stop one, and a
 // rollout left the durable row saying `running` for ever.
@@ -108,14 +108,14 @@ func TestARestartResolvesEverySearchItWasRunning(t *testing.T) {
 	r := resOf(t, s, tn)
 
 	body, _ := json.Marshal(searchReport{Events: 42})
-	if err := putSearch(r.db, "search_orphan", searchRunning, body); err != nil {
+	if err := putSearch(dbOf(t, r), "search_orphan", searchRunning, body); err != nil {
 		t.Fatalf("putSearch: %v", err)
 	}
 	// The rollout: the process is gone and the file is reopened.
-	if err := abandonSearches(r.db); err != nil {
+	if err := abandonSearches(dbOf(t, r)); err != nil {
 		t.Fatalf("abandonSearches: %v", err)
 	}
-	status, out, err := getSearch(r.db, "search_orphan")
+	status, out, err := getSearch(dbOf(t, r), "search_orphan")
 	if err != nil {
 		t.Fatalf("getSearch: %v", err)
 	}
@@ -147,11 +147,11 @@ func TestSearchIsGatedMeteredAndAnswersItsRun(t *testing.T) {
 		}
 	}
 
-	code, body := req(t, app, http.MethodPost, "/v1/ml/search", "acme", "u_acme", `{"limit":5}`)
+	code, body := req(t, app, http.MethodPost, "/v1/risk/search", "acme", "u_acme", `{"limit":5}`)
 	if code != http.StatusAccepted && code != http.StatusOK {
 		t.Fatalf("search = %d %s", code, body)
 	}
-	var run mlSearchRun
+	var run riskSearchRun
 	_ = json.Unmarshal(body, &run)
 	if run.ID == "" {
 		t.Fatalf("search answered no run identifier: %s", body)
@@ -161,11 +161,11 @@ func TestSearchIsGatedMeteredAndAnswersItsRun(t *testing.T) {
 	deadline := time.Now().Add(30 * time.Second)
 	var status string
 	for time.Now().Before(deadline) {
-		code, body = req(t, app, http.MethodGet, "/v1/ml/search/"+run.ID, "acme", "u_acme", "")
+		code, body = req(t, app, http.MethodGet, "/v1/risk/search/"+run.ID, "acme", "u_acme", "")
 		if code != http.StatusOK {
 			t.Fatalf("search result = %d %s", code, body)
 		}
-		var rep mlSearchReport
+		var rep riskSearchReport
 		_ = json.Unmarshal(body, &rep)
 		status = rep.Status
 		if status != searchRunning {
@@ -178,16 +178,16 @@ func TestSearchIsGatedMeteredAndAnswersItsRun(t *testing.T) {
 	}
 
 	// Another tenant cannot read it, and cannot cancel it.
-	code, _ = req(t, app, http.MethodGet, "/v1/ml/search/"+run.ID, "beta", "u_beta", "")
+	code, _ = req(t, app, http.MethodGet, "/v1/risk/search/"+run.ID, "beta", "u_beta", "")
 	if code != http.StatusNotFound {
 		t.Fatalf("B reading A's search = %d, want 404", code)
 	}
-	code, _ = req(t, app, http.MethodDelete, "/v1/ml/search/"+run.ID, "beta", "u_beta", "")
+	code, _ = req(t, app, http.MethodDelete, "/v1/risk/search/"+run.ID, "beta", "u_beta", "")
 	if code != http.StatusNotFound {
 		t.Fatalf("B cancelling A's search = %d, want 404", code)
 	}
 	// A can cancel its own, idempotently.
-	code, body = req(t, app, http.MethodDelete, "/v1/ml/search/"+run.ID, "acme", "u_acme", "")
+	code, body = req(t, app, http.MethodDelete, "/v1/risk/search/"+run.ID, "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("A cancelling its own search = %d %s", code, body)
 	}

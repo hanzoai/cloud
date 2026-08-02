@@ -17664,190 +17664,6 @@ components:
             stripped.
           type: string
       type: object
-    mlAppetite:
-      properties:
-        review:
-          description: |-
-            Review is the share of the stream that may be sent for examination. The
-            alert threshold is derived from it as a quantile of the scores actually
-            observed, rather than fixed at a number someone liked — so an alert level
-            is governed rather than tuned, and a drifting distribution does not turn
-            it into silence or a flood.
-          type: number
-        sample:
-          description: |-
-            Sample is the share of NON-alerting traffic retained for review below the
-            line. It is the only instrument that can measure what the model missed,
-            because nothing in the stream is labelled.
-          type: number
-        warm:
-          description: Warm is how many observations the model must learn before it
-            may score.
-          type: integer
-      type: object
-    mlAppetiteIn:
-      properties:
-        review:
-          description: Review is the share of the stream that may be examined, in
-            (0, 0.5].
-          type: number
-        sample:
-          description: Sample is the share of non-alerting traffic retained, in [0,
-            1].
-          type: number
-      type: object
-    mlCandidate:
-      properties:
-        blend:
-          description: Blend is how much of a closing window folds into the reference.
-          type: number
-        depth:
-          description: Depth is how deep each tree splits.
-          type: integer
-        review:
-          description: Review is the share of the stream this topology may examine.
-          type: number
-        trees:
-          description: Trees is how many half-space trees the model holds.
-          type: integer
-        window:
-          description: Window is how many observations make up one reference window.
-          type: integer
-      type: object
-    mlFeature:
-      properties:
-        citation:
-          description: Citation is where those words come from, so the claim is checkable.
-          type: string
-        indicator:
-          description: Indicator is the supervisor's own words for what is being looked
-            for.
-          type: string
-        name:
-          description: Name is the dimension.
-          type: string
-        neutral:
-          description: |-
-            Neutral is the value at which this feature is unremarkable — the
-            coordinate the counterfactual moves it to.
-          type: number
-        severity:
-          description: Severity is the grading a hit on this feature carries.
-          type: string
-        typology:
-          description: Typology is the pattern it expresses.
-          type: string
-        unit:
-          description: Unit is how to read the raw number.
-          type: string
-        window:
-          description: Window is the span it is measured over, when it has one.
-          type: string
-      type: object
-    mlFeatureInventory:
-      properties:
-        digest:
-          description: Digest is the identity of this shape.
-          type: string
-        items:
-          description: |-
-            Items is every dimension, in coordinate order. The ORDER is part of the
-            model's identity: adding, removing or reordering one invalidates learned
-            state, which the digest enforces.
-          items:
-            $ref: '#/components/schemas/mlFeature'
-          type: array
-      type: object
-    mlModelState:
-      properties:
-        alerted:
-          description: Alerted is how many of those it alerted on — the numerator
-            of Realised.
-          type: integer
-        appetite:
-          $ref: '#/components/schemas/mlAppetite'
-          description: Appetite is the stated share of the stream that may be examined.
-        blind:
-          additionalProperties:
-            type: integer
-          description: |-
-            Blind counts, per feature, how often it took its neutral value for want of
-            data.
-          type: object
-        digest:
-          description: Digest is the model identity an auditor pins.
-          type: string
-        distribution:
-          description: |-
-            Distribution is the score distribution the threshold is cut from, in 32
-            bands.
-          items:
-            type: number
-          type: array
-        inventory:
-          description: |-
-            Inventory is the feature set, so the state and the shape are read
-            together.
-          items:
-            $ref: '#/components/schemas/mlFeature'
-          type: array
-        learned:
-          description: Learned is how many observations this tenant's model has taken
-            in.
-          type: integer
-        realised:
-          description: |-
-            Realised is the share that ACTUALLY alerted. Stated against realised is
-            the governance report — an appetite is a measured commitment or it is
-            nothing.
-          type: number
-        refusals:
-          additionalProperties:
-            type: integer
-          description: |-
-            Refusals counts what the model declined to score, by reason. None of these
-            was examined by the model; all of them were examined by the rules.
-          type: object
-        saturated:
-          description: |-
-            Saturated means the appetite cannot be honoured by any threshold because
-            too much of the stream scores in the top band. It is the one state that
-            must never be mistaken for quiet.
-          type: boolean
-        scored:
-          description: |-
-            Scored is how many observations the model was able to score — the
-            denominator of Realised.
-          type: integer
-        threshold:
-          description: |-
-            Threshold is the score cut currently in force, recomputed each window as
-            the quantile that admits the stated share.
-          type: number
-        warming:
-          description: |-
-            Warming is true while the model has not learned enough to score. A warming
-            model REFUSES rather than scoring low, and the refusal is counted below.
-          type: boolean
-      type: object
-    mlObservation:
-      properties:
-        amount:
-          $ref: '#/components/schemas/riskAmount'
-          description: Amount is the money involved, if any.
-        at:
-          description: At is when it happened, RFC 3339. Absent means now.
-          type: string
-        signals:
-          additionalProperties:
-            type: string
-          description: 'Signals are the observations: ip, device, counterparty and
-            the rest.'
-          type: object
-        subject:
-          $ref: '#/components/schemas/riskSubject'
-          description: Subject is whose behaviour this is.
-      type: object
     mlResource:
       properties:
         createdAt:
@@ -17882,172 +17698,6 @@ components:
             $ref: '#/components/schemas/mlResource'
           type: array
       type: object
-    mlScoreIn:
-      properties:
-        observation:
-          $ref: '#/components/schemas/mlObservation'
-          description: Observation is what to score.
-      type: object
-    mlScoreOut:
-      properties:
-        alert:
-          description: Alert is whether this would become evidence.
-          type: boolean
-        causes:
-          description: Causes is the per-feature attribution, ordered by contribution.
-          items:
-            $ref: '#/components/schemas/riskCause'
-          type: array
-        cut:
-          description: Cut is the threshold in force, derived from the appetite.
-          type: number
-        model:
-          description: Model is the digest of the model that produced this.
-          type: string
-        refusal:
-          description: 'Refusal names the decline: warming or unidentified.'
-          type: string
-        score:
-          description: |-
-            Score is the anomaly score in [0,1]: 0 where this tenant's recent
-            behaviour is densest, 1 where there is none of it.
-          type: number
-        scored:
-          description: Scored is false when the model declined; Refusal says which
-            refusal.
-          type: boolean
-        shadow:
-          description: Shadow is whether the model is observing rather than contributing.
-          type: boolean
-        values:
-          description: Values is every coordinate, including the blind ones.
-          items:
-            $ref: '#/components/schemas/mlValue'
-          type: array
-      type: object
-    mlSearchIn:
-      properties:
-        limit:
-          description: |-
-            Limit bounds how many recorded observations are replayed, 1..5000. The
-            grid itself is closed and needs no bound from the caller.
-          type: integer
-      type: object
-    mlSearchReport:
-      properties:
-        curve:
-          description: |-
-            Curve is the winner's separation as a function of how much history it had
-            seen, in ten steps — the learning curve.
-          items:
-            type: number
-          type: array
-        events:
-          description: Events is how many historical observations were replayed.
-          type: integer
-        id:
-          description: ID identifies the run.
-          type: string
-        refusal:
-          description: |-
-            Refusal names why the report is empty when it is. An empty history is
-            refused rather than reported as zero alerts, because a quiet model and an
-            unrun model produce the same number.
-          type: string
-        status:
-          description: Status is "running", "done" or "refused".
-          type: string
-        trials:
-          description: Trials is every candidate tried, best-separating first.
-          items:
-            $ref: '#/components/schemas/mlTrial'
-          type: array
-        winner:
-          $ref: '#/components/schemas/mlCandidate'
-          description: |-
-            Winner is the best-separating topology that also honoured its stated
-            appetite. Absent when no candidate did both.
-      type: object
-    mlSearchRun:
-      properties:
-        candidates:
-          description: Candidates is how many topologies will be tried.
-          type: integer
-        id:
-          description: ID identifies the run; read it back at GET /v1/ml/search/{id}.
-          type: string
-        status:
-          description: Status is "running" or "done".
-          type: string
-      type: object
-    mlSnapshotOut:
-      properties:
-        at:
-          description: At is when it was pinned, RFC 3339 in UTC.
-          type: string
-        digest:
-          description: Digest is the model identity that was pinned.
-          type: string
-        learned:
-          description: Learned is how many observations that state had taken in.
-          type: integer
-      type: object
-    mlTrainIn:
-      properties:
-        observations:
-          description: |-
-            Observations are what to learn from. They are this tenant's own data and
-            nothing else: there is no cross-tenant training input and no way to
-            express one, because the model is indexed by the tenant key and its tree
-            GEOMETRY is seeded from it.
-          items:
-            $ref: '#/components/schemas/mlObservation'
-          type: array
-      type: object
-    mlTrainOut:
-      properties:
-        learned:
-          description: Learned is how many observations were incorporated.
-          type: integer
-        model:
-          description: Model is the digest of the model that learned them.
-          type: string
-        refused:
-          additionalProperties:
-            type: integer
-          description: Refused is how many were not, by reason.
-          type: object
-        warm:
-          description: |-
-            Warm is true once the model has learned enough of this tenant's behaviour
-            to score at all.
-          type: boolean
-      type: object
-    mlTrial:
-      properties:
-        alerted:
-          description: Alerted is how many of those it would have alerted on.
-          type: integer
-        candidate:
-          $ref: '#/components/schemas/mlCandidate'
-          description: Candidate is the topology tried.
-        realised:
-          description: Realised is Alerted over Scored, against the Review share intended.
-          type: number
-        scored:
-          description: Scored is how many observations it was able to score.
-          type: integer
-        separation:
-          description: |-
-            Separation is the mean score of the alerted set minus the mean of the
-            rest. It is the ranking objective: a topology that separates the tail from
-            the body is doing the job whatever its absolute scores look like.
-          type: number
-        warm:
-          description: Warm is how many observations passed before it would score
-            at all.
-          type: integer
-      type: object
     mlTrials:
       properties:
         experiment:
@@ -18059,30 +17709,6 @@ components:
           items:
             $ref: '#/components/schemas/mlResource'
           type: array
-      type: object
-    mlValue:
-      properties:
-        baseline:
-          description: Baseline is what is unremarkable here.
-          type: number
-        blind:
-          description: |-
-            Blind is true when this feature had no usable coordinate, so it took its
-            neutral value. A feature blind on most traffic is not contributing
-            whatever the inventory claims for it.
-          type: boolean
-        feature:
-          description: Feature is the dimension.
-          type: string
-        observed:
-          description: Observed is the raw number behind it.
-          type: number
-        unit:
-          description: Unit is how to read Observed and Baseline.
-          type: string
-        x:
-          description: X is the coordinate the model used, in [0,1].
-          type: number
       type: object
     moduleList:
       properties:
@@ -21381,6 +21007,38 @@ components:
           description: Nano is the amount in billionths of one unit of Currency.
           type: integer
       type: object
+    riskAppetite:
+      properties:
+        review:
+          description: |-
+            Review is the share of the stream that may be sent for examination. The
+            alert threshold is derived from it as a quantile of the scores actually
+            observed, rather than fixed at a number someone liked — so an alert level
+            is governed rather than tuned, and a drifting distribution does not turn
+            it into silence or a flood.
+          type: number
+        sample:
+          description: |-
+            Sample is the share of NON-alerting traffic retained for review below the
+            line. It is the only instrument that can measure what the model missed,
+            because nothing in the stream is labelled.
+          type: number
+        warm:
+          description: Warm is how many observations the model must learn before it
+            may score.
+          type: integer
+      type: object
+    riskAppetiteIn:
+      properties:
+        review:
+          description: Review is the share of the stream that may be examined, in
+            (0, 0.5].
+          type: number
+        sample:
+          description: Sample is the share of non-alerting traffic retained, in [0,
+            1].
+          type: number
+      type: object
     riskBaseline:
       properties:
         day:
@@ -21413,6 +21071,24 @@ components:
             Q99 is the ninety-ninth — where the tail this product is looking for
             begins.
           type: number
+      type: object
+    riskCandidate:
+      properties:
+        blend:
+          description: Blend is how much of a closing window folds into the reference.
+          type: number
+        depth:
+          description: Depth is how deep each tree splits.
+          type: integer
+        review:
+          description: Review is the share of the stream this topology may examine.
+          type: number
+        trees:
+          description: Trees is how many half-space trees the model holds.
+          type: integer
+        window:
+          description: Window is how many observations make up one reference window.
+          type: integer
       type: object
     riskCause:
       properties:
@@ -21662,6 +21338,21 @@ components:
           items:
             $ref: '#/components/schemas/riskDecisionBrief'
           type: array
+        oldest:
+          description: |-
+            Oldest is the instant of the oldest decision still retained, RFC 3339 in
+            UTC — the far edge of the window every read of this log looks through. It
+            is published rather than left to be inferred: a query that finds nothing
+            before a date and a period that was never retained are the same empty
+            answer and opposite facts.
+          type: string
+        retained:
+          description: |-
+            Retained is how many decisions this tenant's log holds. The log is a ring:
+            past its retention the OLDEST decisions are dropped so a new one can
+            always be recorded, because refusing a decision would be refusing the
+            authorization the caller asked for.
+          type: integer
       type: object
     riskDecisionView:
       properties:
@@ -21721,6 +21412,50 @@ components:
           description: Windows are the velocity spans.
           items:
             type: string
+          type: array
+      type: object
+    riskFeature:
+      properties:
+        citation:
+          description: Citation is where those words come from, so the claim is checkable.
+          type: string
+        indicator:
+          description: Indicator is the supervisor's own words for what is being looked
+            for.
+          type: string
+        name:
+          description: Name is the dimension.
+          type: string
+        neutral:
+          description: |-
+            Neutral is the value at which this feature is unremarkable — the
+            coordinate the counterfactual moves it to.
+          type: number
+        severity:
+          description: Severity is the grading a hit on this feature carries.
+          type: string
+        typology:
+          description: Typology is the pattern it expresses.
+          type: string
+        unit:
+          description: Unit is how to read the raw number.
+          type: string
+        window:
+          description: Window is the span it is measured over, when it has one.
+          type: string
+      type: object
+    riskFeatureInventory:
+      properties:
+        digest:
+          description: Digest is the identity of this shape.
+          type: string
+        items:
+          description: |-
+            Items is every dimension, in coordinate order. The ORDER is part of the
+            model's identity: adding, removing or reordering one invalidates learned
+            state, which the digest enforces.
+          items:
+            $ref: '#/components/schemas/riskFeature'
           type: array
       type: object
     riskField:
@@ -21856,6 +21591,96 @@ components:
             never.
           type: string
       type: object
+    riskModelState:
+      properties:
+        alerted:
+          description: Alerted is how many of those it alerted on — the numerator
+            of Realised.
+          type: integer
+        appetite:
+          $ref: '#/components/schemas/riskAppetite'
+          description: Appetite is the stated share of the stream that may be examined.
+        blind:
+          additionalProperties:
+            type: integer
+          description: |-
+            Blind counts, per feature, how often it took its neutral value for want of
+            data.
+          type: object
+        digest:
+          description: Digest is the model identity an auditor pins.
+          type: string
+        distribution:
+          description: |-
+            Distribution is the score distribution the threshold is cut from, in 32
+            bands.
+          items:
+            type: number
+          type: array
+        inventory:
+          description: |-
+            Inventory is the feature set, so the state and the shape are read
+            together.
+          items:
+            $ref: '#/components/schemas/riskFeature'
+          type: array
+        learned:
+          description: Learned is how many observations this tenant's model has taken
+            in.
+          type: integer
+        realised:
+          description: |-
+            Realised is the share that ACTUALLY alerted. Stated against realised is
+            the governance report — an appetite is a measured commitment or it is
+            nothing.
+          type: number
+        refusals:
+          additionalProperties:
+            type: integer
+          description: |-
+            Refusals counts what the model declined to score, by reason. None of these
+            was examined by the model; all of them were examined by the rules.
+          type: object
+        saturated:
+          description: |-
+            Saturated means the appetite cannot be honoured by any threshold because
+            too much of the stream scores in the top band. It is the one state that
+            must never be mistaken for quiet.
+          type: boolean
+        scored:
+          description: |-
+            Scored is how many observations the model was able to score — the
+            denominator of Realised.
+          type: integer
+        threshold:
+          description: |-
+            Threshold is the score cut currently in force, recomputed each window as
+            the quantile that admits the stated share.
+          type: number
+        warming:
+          description: |-
+            Warming is true while the model has not learned enough to score. A warming
+            model REFUSES rather than scoring low, and the refusal is counted below.
+          type: boolean
+      type: object
+    riskObservation:
+      properties:
+        amount:
+          $ref: '#/components/schemas/riskAmount'
+          description: Amount is the money involved, if any.
+        at:
+          description: At is when it happened, RFC 3339. Absent means now.
+          type: string
+        signals:
+          additionalProperties:
+            type: string
+          description: 'Signals are the observations: ip, device, counterparty and
+            the rest.'
+          type: object
+        subject:
+          $ref: '#/components/schemas/riskSubject'
+          description: Subject is whose behaviour this is.
+      type: object
     riskRule:
       properties:
         action:
@@ -21909,6 +21734,104 @@ components:
           items:
             $ref: '#/components/schemas/riskRule'
           type: array
+      type: object
+    riskScoreIn:
+      properties:
+        observation:
+          $ref: '#/components/schemas/riskObservation'
+          description: Observation is what to score.
+      type: object
+    riskScoreOut:
+      properties:
+        alert:
+          description: Alert is whether this would become evidence.
+          type: boolean
+        causes:
+          description: Causes is the per-feature attribution, ordered by contribution.
+          items:
+            $ref: '#/components/schemas/riskCause'
+          type: array
+        cut:
+          description: Cut is the threshold in force, derived from the appetite.
+          type: number
+        model:
+          description: Model is the digest of the model that produced this.
+          type: string
+        refusal:
+          description: 'Refusal names the decline: warming or unidentified.'
+          type: string
+        score:
+          description: |-
+            Score is the anomaly score in [0,1]: 0 where this tenant's recent
+            behaviour is densest, 1 where there is none of it.
+          type: number
+        scored:
+          description: Scored is false when the model declined; Refusal says which
+            refusal.
+          type: boolean
+        shadow:
+          description: Shadow is whether the model is observing rather than contributing.
+          type: boolean
+        values:
+          description: Values is every coordinate, including the blind ones.
+          items:
+            $ref: '#/components/schemas/riskValue'
+          type: array
+      type: object
+    riskSearchIn:
+      properties:
+        limit:
+          description: |-
+            Limit bounds how many recorded observations are replayed, 1..5000. The
+            grid itself is closed and needs no bound from the caller.
+          type: integer
+      type: object
+    riskSearchReport:
+      properties:
+        curve:
+          description: |-
+            Curve is the winner's separation as a function of how much history it had
+            seen, in ten steps — the learning curve.
+          items:
+            type: number
+          type: array
+        events:
+          description: Events is how many historical observations were replayed.
+          type: integer
+        id:
+          description: ID identifies the run.
+          type: string
+        refusal:
+          description: |-
+            Refusal names why the report is empty when it is. An empty history is
+            refused rather than reported as zero alerts, because a quiet model and an
+            unrun model produce the same number.
+          type: string
+        status:
+          description: Status is "running", "done" or "refused".
+          type: string
+        trials:
+          description: Trials is every candidate tried, best-separating first.
+          items:
+            $ref: '#/components/schemas/riskTrial'
+          type: array
+        winner:
+          $ref: '#/components/schemas/riskCandidate'
+          description: |-
+            Winner is the best-separating topology that also honoured its stated
+            appetite. Absent when no candidate did both.
+      type: object
+    riskSearchRun:
+      properties:
+        candidates:
+          description: Candidates is how many topologies will be tried.
+          type: integer
+        id:
+          description: ID identifies the run; read it back at GET /v1/risk/search/{id}.
+          type: string
+        status:
+          description: Status is "running" or "done".
+          type: string
       type: object
     riskSimulateIn:
       properties:
@@ -21970,6 +21893,18 @@ components:
             refused rather than reported as zero alerts, because a quiet rule and an
             unrun rule produce the same number.
           type: string
+      type: object
+    riskSnapshotOut:
+      properties:
+        at:
+          description: At is when it was pinned, RFC 3339 in UTC.
+          type: string
+        digest:
+          description: Digest is the model identity that was pinned.
+          type: string
+        learned:
+          description: Learned is how many observations that state had taken in.
+          type: integer
       type: object
     riskSubject:
       properties:
@@ -22122,6 +22057,86 @@ components:
           items:
             type: string
           type: array
+      type: object
+    riskTrainIn:
+      properties:
+        observations:
+          description: |-
+            Observations are what to learn from. They are this tenant's own data and
+            nothing else: there is no cross-tenant training input and no way to
+            express one, because the model is indexed by the tenant key and its tree
+            GEOMETRY is seeded from it.
+          items:
+            $ref: '#/components/schemas/riskObservation'
+          type: array
+      type: object
+    riskTrainOut:
+      properties:
+        learned:
+          description: Learned is how many observations were incorporated.
+          type: integer
+        model:
+          description: Model is the digest of the model that learned them.
+          type: string
+        refused:
+          additionalProperties:
+            type: integer
+          description: Refused is how many were not, by reason.
+          type: object
+        warm:
+          description: |-
+            Warm is true once the model has learned enough of this tenant's behaviour
+            to score at all.
+          type: boolean
+      type: object
+    riskTrial:
+      properties:
+        alerted:
+          description: Alerted is how many of those it would have alerted on.
+          type: integer
+        candidate:
+          $ref: '#/components/schemas/riskCandidate'
+          description: Candidate is the topology tried.
+        realised:
+          description: Realised is Alerted over Scored, against the Review share intended.
+          type: number
+        scored:
+          description: Scored is how many observations it was able to score.
+          type: integer
+        separation:
+          description: |-
+            Separation is the mean score of the alerted set minus the mean of the
+            rest. It is the ranking objective: a topology that separates the tail from
+            the body is doing the job whatever its absolute scores look like.
+          type: number
+        warm:
+          description: Warm is how many observations passed before it would score
+            at all.
+          type: integer
+      type: object
+    riskValue:
+      properties:
+        baseline:
+          description: Baseline is what is unremarkable here.
+          type: number
+        blind:
+          description: |-
+            Blind is true when this feature had no usable coordinate, so it took its
+            neutral value. A feature blind on most traffic is not contributing
+            whatever the inventory claims for it.
+          type: boolean
+        feature:
+          description: Feature is the dimension.
+          type: string
+        observed:
+          description: Observed is the raw number behind it.
+          type: number
+        unit:
+          description: Unit is how to read Observed and Baseline.
+          type: string
+        x:
+          description: X is the coordinate the model used, in [0,1].
+          type: number
       type: object
     riskVelocity:
       properties:
@@ -58129,28 +58144,6 @@ paths:
       tags:
       - metrics
       x-app: metrics
-  /v1/ml/features:
-    get:
-      description: |-
-        Features is the typology-to-feature inventory the model is built on: what each
-        dimension measures, the risk indicator it serves, and the published source
-        those words come from.
-
-        It is code rather than a document because a mapping kept beside the model
-        cannot drift away from what the model actually reads — and the attributability
-        it makes possible is why this is a tree and not a net.
-      operationId: mlFeatures
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlFeatureInventory'
-          description: ok
-      summary: Read the typology-to-feature inventory the model is built on
-      tags:
-      - ml
-      x-app: risk
   /v1/ml/health:
     get:
       description: |-
@@ -58285,247 +58278,6 @@ paths:
       tags:
       - ml
       x-app: ml
-  /v1/ml/restore:
-    post:
-      description: |-
-        Restore reinstates this tenant's learned state from its pinned snapshot.
-
-        A snapshot whose shape does not match the running inventory is REFUSED, not
-        coerced, and a snapshot belonging to another tenant is refused twice — here,
-        by the tenant that asked, and again inside the engine. State the model would
-        treat as its own memory has to have come from this algorithm over this feature
-        set for this tenant.
-      operationId: mlRestore
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlModelState'
-          description: ok
-      summary: Restore this tenant's learned state from its pinned snapshot
-      tags:
-      - ml
-      x-app: risk
-  /v1/ml/score:
-    post:
-      description: |-
-        Score scores one observation and LEARNS NOTHING from it. It is how a candidate
-        is tried against a tenant's real behaviour before anything depends on the
-        answer, and it is the model's analogue of testing a rule: because it records
-        nothing, the aggregates it reads do not include the candidate.
-      operationId: mlScore
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/mlScoreIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlScoreOut'
-          description: ok
-      summary: Score an observation without learning from it
-      tags:
-      - ml
-      x-app: risk
-  /v1/ml/search:
-    post:
-      description: |-
-        Search exhaustively tries the model topology over this tenant's own history
-        and returns the learning curve and the winning shape.
-
-        The grid is CLOSED — trees x depth x window x blend x appetite — because an
-        unbounded grid is an unbounded amount of a shared pod's CPU reachable by
-        anyone with a key. Each candidate runs in a sandbox over fresh counters
-        carrying the SAME per-tenant memory bound the live plane does, so a search can
-        never move the live model, can never cost more than a tenant is allowed to
-        cost, and can never see another tenant's history because the replay reads this
-        tenant's own file.
-
-        IT IS QUEUED, AND THE QUEUE IS THE BOUND. One run per tenant (a second answers
-        409 naming the one already going), a fixed number of workers for the whole
-        process, a short backlog beyond which a start answers 429, and a deadline every
-        candidate polls. Priced before the work and metered after it, on the caller's
-        own ledger. See search.go.
-
-        It answers 202 with a run identifier; read the report back at
-        GET /v1/ml/search/{id} and stop it at DELETE /v1/ml/search/{id}.
-      operationId: mlSearch
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/mlSearchIn'
-        required: true
-      responses:
-        "202":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlSearchRun'
-          description: accepted
-      summary: Exhaustively search the model topology over this tenant's own history
-      tags:
-      - ml
-      x-app: risk
-  /v1/ml/search/{id}:
-    delete:
-      description: |-
-        Stops a search this tenant started.
-
-        An expensive op that cannot be stopped is an expensive op a caller cannot take
-        back — and the run holds a worker every other tenant is queued behind. It is
-        idempotent: cancelling a search that has already answered is not an error, and
-        the reply says which happened.
-      operationId: mlCancelSearch
-      parameters:
-      - description: ID is the record to read, from the path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlSearchRun'
-          description: ok
-      summary: Stop a running exhaustive search
-      tags:
-      - ml
-      x-app: risk
-    get:
-      description: |-
-        Reads an exhaustive search's report: every candidate tried, the
-        winner, and the winner's learning curve.
-      operationId: mlSearchResult
-      parameters:
-      - description: ID is the record to read, from the path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlSearchReport'
-          description: ok
-      summary: Read an exhaustive search's report
-      tags:
-      - ml
-      x-app: risk
-  /v1/ml/snapshot:
-    post:
-      description: |-
-        Snapshot pins this tenant's learned state into its own encrypted file.
-
-        It is what an auditor asks for: the exact model that raised an alert, kept so
-        that the same input can be scored again a year later. It is also what makes a
-        rollout survivable — the shutdown path snapshots every resident tenant,
-        because cloud deploys Recreate at one replica and a model that comes back with
-        nothing learned refuses to score for its whole warm period.
-      operationId: mlSnapshot
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlSnapshotOut'
-          description: created
-      summary: Pin this tenant's learned state
-      tags:
-      - ml
-      x-app: risk
-  /v1/ml/state:
-    get:
-      description: |-
-        ModelState is what a review of the model reads: the appetite it was given, the
-        threshold that appetite produced, and the share it ACTUALLY reached.
-
-        Stated against realised is the whole governance report. An appetite is a
-        measured commitment or it is nothing, and a fixed threshold on a drifting
-        distribution silently becomes either silence or a flood.
-      operationId: mlState
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlModelState'
-          description: ok
-      summary: Read the model's governance state
-      tags:
-      - ml
-      x-app: risk
-  /v1/ml/state/appetite:
-    put:
-      description: |-
-        Sets how much of the stream the model may examine.
-
-        Review is the lever, and the threshold is derived from it as a quantile of the
-        scores actually observed rather than fixed at a number someone liked. That is
-        what makes an alert level governed rather than tuned, and it is why the level
-        cannot be set to fit the size of the review team.
-      operationId: mlSetAppetite
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/mlAppetiteIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlModelState'
-          description: ok
-      summary: Set the share of the stream the model may examine
-      tags:
-      - ml
-      x-app: risk
-  /v1/ml/train:
-    post:
-      description: |-
-        Train teaches this tenant's model from this tenant's own observations.
-
-        It is online: there is no job, no queue and no window in which the tenant is
-        protected by a stale model, because the half-space geometry is built before
-        any data arrives and the model IS a set of mass counters. One observation is
-        one increment.
-
-        THERE IS NO CROSS-TENANT TRAINING INPUT AND NO WAY TO EXPRESS ONE. The model
-        is indexed by the tenant key and its tree GEOMETRY is seeded from it, so two
-        tenants do not merely hold different counters — they hold different trees.
-        Any cross-org learning in this product is aggregate-only, lives in a table
-        with no tenant column, and is published only above a k-anonymity floor.
-      operationId: mlTrain
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/mlTrainIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mlTrainOut'
-          description: ok
-      summary: Train this tenant's model on its own observations
-      tags:
-      - ml
-      x-app: risk
   /v1/models:
     get:
       description: |-
@@ -64774,6 +64526,28 @@ paths:
       tags:
       - risk
       x-app: risk
+  /v1/risk/features:
+    get:
+      description: |-
+        Features is the typology-to-feature inventory the model is built on: what each
+        dimension measures, the risk indicator it serves, and the published source
+        those words come from.
+
+        It is code rather than a document because a mapping kept beside the model
+        cannot drift away from what the model actually reads — and the attributability
+        it makes possible is why this is a tree and not a net.
+      operationId: riskFeatures
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskFeatureInventory'
+          description: ok
+      summary: Read the typology-to-feature inventory the model is built on
+      tags:
+      - risk
+      x-app: risk
   /v1/risk/health:
     get:
       description: |-
@@ -64923,6 +64697,28 @@ paths:
       tags:
       - risk
       x-app: risk
+  /v1/risk/restore:
+    post:
+      description: |-
+        Restore reinstates this tenant's learned state from its pinned snapshot.
+
+        A snapshot whose shape does not match the running inventory is REFUSED, not
+        coerced, and a snapshot belonging to another tenant is refused twice — here,
+        by the tenant that asked, and again inside the engine. State the model would
+        treat as its own memory has to have come from this algorithm over this feature
+        set for this tenant.
+      operationId: riskRestore
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskModelState'
+          description: ok
+      summary: Restore this tenant's learned state from its pinned snapshot
+      tags:
+      - risk
+      x-app: risk
   /v1/risk/rules:
     get:
       description: |-
@@ -65017,6 +64813,122 @@ paths:
       tags:
       - risk
       x-app: risk
+  /v1/risk/score:
+    post:
+      description: |-
+        Score scores one observation and LEARNS NOTHING from it. It is how a candidate
+        is tried against a tenant's real behaviour before anything depends on the
+        answer, and it is the model's analogue of testing a rule: because it records
+        nothing, the aggregates it reads do not include the candidate.
+      operationId: riskScore
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskScoreIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskScoreOut'
+          description: ok
+      summary: Score an observation without learning from it
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/search:
+    post:
+      description: |-
+        Search exhaustively tries the model topology over this tenant's own history
+        and returns the learning curve and the winning shape.
+
+        The grid is CLOSED — trees x depth x window x blend x appetite — because an
+        unbounded grid is an unbounded amount of a shared pod's CPU reachable by
+        anyone with a key. Each candidate runs in a sandbox over fresh counters
+        carrying the SAME per-tenant memory bound the live plane does, so a search can
+        never move the live model, can never cost more than a tenant is allowed to
+        cost, and can never see another tenant's history because the replay reads this
+        tenant's own file.
+
+        IT IS QUEUED, AND THE QUEUE IS THE BOUND. One run per tenant (a second answers
+        409 naming the one already going), a fixed number of workers for the whole
+        process, a short backlog beyond which a start answers 429, and a deadline every
+        candidate polls. Priced before the work and metered after it, on the caller's
+        own ledger. See search.go.
+
+        It answers 202 with a run identifier; read the report back at
+        GET /v1/risk/search/{id} and stop it at DELETE /v1/risk/search/{id}.
+      operationId: riskSearch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskSearchIn'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskSearchRun'
+          description: accepted
+      summary: Exhaustively search the model topology over this tenant's own history
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/search/{id}:
+    delete:
+      description: |-
+        Stops a search this tenant started.
+
+        An expensive op that cannot be stopped is an expensive op a caller cannot take
+        back — and the run holds a worker every other tenant is queued behind. It is
+        idempotent: cancelling a search that has already answered is not an error, and
+        the reply says which happened.
+      operationId: riskCancelSearch
+      parameters:
+      - description: ID is the record to act on, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskSearchRun'
+          description: ok
+      summary: Stop a running exhaustive search
+      tags:
+      - risk
+      x-app: risk
+    get:
+      description: |-
+        Reads an exhaustive search's report: every candidate tried, the
+        winner, and the winner's learning curve.
+      operationId: riskSearchResult
+      parameters:
+      - description: ID is the record to act on, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskSearchReport'
+          description: ok
+      summary: Read an exhaustive search's report
+      tags:
+      - risk
+      x-app: risk
   /v1/risk/simulate:
     post:
       description: |-
@@ -65055,6 +64967,76 @@ paths:
                 $ref: '#/components/schemas/riskSimulateReport'
           description: ok
       summary: Replay a candidate rule over this tenant's own history
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/snapshot:
+    post:
+      description: |-
+        Snapshot pins this tenant's learned state into its own encrypted file.
+
+        It is what an auditor asks for: the exact model that raised an alert, kept so
+        that the same input can be scored again a year later. It is also what makes a
+        rollout survivable — the shutdown path snapshots every resident tenant,
+        because cloud deploys Recreate at one replica and a model that comes back with
+        nothing learned refuses to score for its whole warm period.
+      operationId: riskSnapshot
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskSnapshotOut'
+          description: created
+      summary: Pin this tenant's learned state
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/state:
+    get:
+      description: |-
+        ModelState is what a review of the model reads: the appetite it was given, the
+        threshold that appetite produced, and the share it ACTUALLY reached.
+
+        Stated against realised is the whole governance report. An appetite is a
+        measured commitment or it is nothing, and a fixed threshold on a drifting
+        distribution silently becomes either silence or a flood.
+      operationId: riskModelState
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskModelState'
+          description: ok
+      summary: Read the model's governance state
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/state/appetite:
+    put:
+      description: |-
+        Sets how much of the stream the model may examine.
+
+        Review is the lever, and the threshold is derived from it as a quantile of the
+        scores actually observed rather than fixed at a number someone liked. That is
+        what makes an alert level governed rather than tuned, and it is why the level
+        cannot be set to fit the size of the review team.
+      operationId: riskSetAppetite
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskAppetiteIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskModelState'
+          description: ok
+      summary: Set the share of the stream the model may examine
       tags:
       - risk
       x-app: risk
@@ -65161,6 +65143,39 @@ paths:
         "204":
           description: no content
       summary: Lift a suppression
+      tags:
+      - risk
+      x-app: risk
+  /v1/risk/train:
+    post:
+      description: |-
+        Train teaches this tenant's model from this tenant's own observations.
+
+        It is online: there is no job, no queue and no window in which the tenant is
+        protected by a stale model, because the half-space geometry is built before
+        any data arrives and the model IS a set of mass counters. One observation is
+        one increment.
+
+        THERE IS NO CROSS-TENANT TRAINING INPUT AND NO WAY TO EXPRESS ONE. The model
+        is indexed by the tenant key and its tree GEOMETRY is seeded from it, so two
+        tenants do not merely hold different counters — they hold different trees.
+        Any cross-org learning in this product is aggregate-only, lives in a table
+        with no tenant column, and is published only above a k-anonymity floor.
+      operationId: riskTrain
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/riskTrainIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/riskTrainOut'
+          description: ok
+      summary: Train this tenant's model on its own observations
       tags:
       - risk
       x-app: risk

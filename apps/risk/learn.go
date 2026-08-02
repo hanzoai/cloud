@@ -257,7 +257,7 @@ func replayCandidate(t Tenant, c candidate, history []observation) (trial, error
 	tr := trial{Candidate: c}
 	var alerted, rest []float64
 	for _, o := range history {
-		record(vel, t, o)
+		vel.record(t, o, nil)
 		tx := types.Transaction{
 			ID: o.id, OrgID: t.String(), UserID: o.subject, AccountID: o.subject,
 			Currency: o.currency, Direction: o.direction,

@@ -21,7 +21,7 @@ import (
 // write-time refusal is a tenant being told.
 func TestTheGovernedPlanesAreBoundedAtTheWrite(t *testing.T) {
 	_, s := wireApp(t)
-	db := resOf(t, s, Tenant("hanzo/acme")).db
+	db := dbOf(t, resOf(t, s, Tenant("hanzo/acme")))
 
 	// Rules, to the cap and one past it.
 	base := rule{Name: "r", Stage: StageSignup, Action: ActionReview, Weight: 0.2, Enabled: true,
@@ -30,17 +30,17 @@ func TestTheGovernedPlanesAreBoundedAtTheWrite(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM rule`).Scan(&held); err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	for i := held; i < ruleCap; i++ {
+	for i := held; i < ruleCap(); i++ {
 		r := base
 		r.ID = fmt.Sprintf("bulk-%d", i)
 		if err := putRule(db, r); err != nil {
-			t.Fatalf("rule %d of %d: %v", i, ruleCap, err)
+			t.Fatalf("rule %d of %d: %v", i, ruleCap(), err)
 		}
 	}
 	over := base
 	over.ID = "one-too-many"
 	if err := putRule(db, over); err == nil {
-		t.Fatalf("a tenant wrote rule %d past a cap of %d — the authorization path has no bound", ruleCap+1, ruleCap)
+		t.Fatalf("a tenant wrote rule %d past a cap of %d — the authorization path has no bound", ruleCap()+1, ruleCap())
 	} else if statusOf(err) != 409 {
 		t.Fatalf("the cap refusal answers %d, want 409", statusOf(err))
 	}
@@ -59,8 +59,8 @@ func TestTheGovernedPlanesAreBoundedAtTheWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadRules: %v", err)
 	}
-	if len(rules) > ruleCap {
-		t.Fatalf("the authorization path read %d rules against a cap of %d", len(rules), ruleCap)
+	if len(rules) > ruleCap() {
+		t.Fatalf("the authorization path read %d rules against a cap of %d", len(rules), ruleCap())
 	}
 }
 
@@ -70,18 +70,18 @@ func TestTheGovernedPlanesAreBoundedAtTheWrite(t *testing.T) {
 func TestListEntriesAreBoundedAcrossEveryList(t *testing.T) {
 	app, _ := wireApp(t)
 
-	values := make([]string, listCap+1)
+	values := make([]string, listCap()+1)
 	for i := range values {
 		values[i] = fmt.Sprintf("10.0.%d.%d", i/256, i%256)
 	}
 	body, _ := json.Marshal(struct {
 		Values []string `json:"values"`
 	}{values})
-	code, out := req(t, app, http.MethodPost, "/v1/risk/lists/ip-deny/entries", "acme", "u_acme", string(body))
+	code, out := reqAdmin(t, app, http.MethodPost, "/v1/risk/lists/ip-deny/entries", "acme", "u_acme", string(body))
 	if code != http.StatusConflict {
 		t.Fatalf("adding %d entries answered %d, want 409 — the map the authorization path builds has no bound", len(values), code)
 	}
-	if !strings.Contains(string(out), fmt.Sprint(listCap)) {
+	if !strings.Contains(string(out), fmt.Sprint(listCap())) {
 		t.Errorf("the refusal does not name the cap, so a tenant cannot act on it: %s", out)
 	}
 
@@ -89,7 +89,7 @@ func TestListEntriesAreBoundedAcrossEveryList(t *testing.T) {
 	body, _ = json.Marshal(struct {
 		Values []string `json:"values"`
 	}{[]string{"203.0.113.9"}})
-	code, out = req(t, app, http.MethodPost, "/v1/risk/lists/ip-deny/entries", "acme", "u_acme", string(body))
+	code, out = reqAdmin(t, app, http.MethodPost, "/v1/risk/lists/ip-deny/entries", "acme", "u_acme", string(body))
 	if code != http.StatusOK {
 		t.Fatalf("a normal add answered %d %s", code, out)
 	}
@@ -113,7 +113,7 @@ func TestGovernanceIsLoadedOncePerChange(t *testing.T) {
 
 	// A write BEHIND the cache — no dirty() — must not be seen. That is what
 	// proves there is a cache at all rather than a re-read every time.
-	if err := putRule(r.db, rule{ID: "behind-the-cache", Name: "unseen", Stage: StageSignup,
+	if err := putRule(dbOf(t, r), rule{ID: "behind-the-cache", Name: "unseen", Stage: StageSignup,
 		Action: ActionReview, Weight: 0.1, Enabled: true,
 		All: []term{{Field: "signal.ip", Op: OpEq, Value: "9.9.9.9"}}}); err != nil {
 		t.Fatalf("putRule: %v", err)
@@ -124,7 +124,7 @@ func TestGovernanceIsLoadedOncePerChange(t *testing.T) {
 	}
 
 	// A write THROUGH the op is seen immediately: every writer calls dirty.
-	code, body := req(t, app, http.MethodPost, "/v1/risk/rules", "acme", "u_acme",
+	code, body := reqAdmin(t, app, http.MethodPost, "/v1/risk/rules", "acme", "u_acme",
 		`{"rule":{"name":"through the op","stage":"signup","action":"review","weight":0.3,"enabled":true,
 		  "all":[{"field":"signal.ip","op":"eq","value":"8.8.8.8"}]}}`)
 	if code != http.StatusCreated {
@@ -139,7 +139,7 @@ func TestGovernanceIsLoadedOncePerChange(t *testing.T) {
 	if _, _, _, live, _ := r.governance(); live {
 		t.Fatal("a fresh tenant is live; shadow is the default and the default is not configurable")
 	}
-	code, body = req(t, app, http.MethodPut, "/v1/risk/mode", "acme", "u_acme", `{"mode":"live"}`)
+	code, body = reqAdmin(t, app, http.MethodPut, "/v1/risk/mode", "acme", "u_acme", `{"mode":"live"}`)
 	if code != http.StatusOK {
 		t.Fatalf("setMode = %d %s", code, body)
 	}
@@ -154,7 +154,7 @@ func TestGovernanceIsLoadedOncePerChange(t *testing.T) {
 func TestOneTenantsGovernanceCacheIsNotAnothers(t *testing.T) {
 	app, s := wireApp(t)
 
-	code, body := req(t, app, http.MethodPost, "/v1/risk/rules", "acme", "u_acme",
+	code, body := reqAdmin(t, app, http.MethodPost, "/v1/risk/rules", "acme", "u_acme",
 		`{"rule":{"name":"acme only","stage":"signup","action":"block","weight":0.9,"enabled":true,
 		  "all":[{"field":"signal.ip","op":"eq","value":"7.7.7.7"}]}}`)
 	if code != http.StatusCreated {

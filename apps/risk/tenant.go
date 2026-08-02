@@ -117,7 +117,13 @@ type scope struct {
 	// actor on every attribution this app writes and the one fact that tells a
 	// live person from a key, so it is resolved HERE with everything else the
 	// principal carries rather than by a second reader of the raw request.
-	user     string
+	user string
+	// admin is the IAM `isAdmin` bit for the caller's OWN org, and it is what
+	// separates USING this plane from GOVERNING it. It is org-scoped and says
+	// nothing about platform authority; principal.IsSuperAdmin is a different
+	// question this app never asks, because there is no cross-tenant surface
+	// here for one to reach.
+	admin    bool
 	request  string
 	clientIP string
 }
@@ -147,6 +153,7 @@ func tenantOf(ctx context.Context, brand string) (scope, error) {
 		project:  project,
 		validate: validated,
 		user:     c.User(),
+		admin:    principal.IsOrgAdmin(c),
 		request:  c.RequestID(),
 		clientIP: cloud.ClientIP(c),
 	}, nil

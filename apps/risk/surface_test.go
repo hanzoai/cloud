@@ -34,8 +34,8 @@ var theOps = []string{
 	"riskSuppressions", "riskSuppress", "riskUnsuppress",
 	"riskControls", "riskSetControl", "riskReleaseControl",
 	"riskDictionary", "riskMode", "riskSetMode",
-	"mlScore", "mlTrain", "mlState", "mlSetAppetite", "mlFeatures",
-	"mlSearch", "mlSearchResult", "mlCancelSearch", "mlSnapshot", "mlRestore",
+	"riskScore", "riskTrain", "riskModelState", "riskSetAppetite", "riskFeatures",
+	"riskSearch", "riskSearchResult", "riskCancelSearch", "riskSnapshot", "riskRestore",
 }
 
 func repoRoot(t *testing.T) string {
@@ -107,20 +107,34 @@ func TestFleetDocumentCarriesEveryPath(t *testing.T) {
 		"/v1/risk/lists/{name}/entries/{value}", "/v1/risk/suppressions",
 		"/v1/risk/suppressions/{id}", "/v1/risk/controls", "/v1/risk/controls/{id}",
 		"/v1/risk/dictionary", "/v1/risk/mode", "/v1/risk/health",
-		"/v1/ml/score", "/v1/ml/train", "/v1/ml/state", "/v1/ml/state/appetite",
-		"/v1/ml/features", "/v1/ml/search", "/v1/ml/search/{id}",
-		"/v1/ml/snapshot", "/v1/ml/restore",
+		"/v1/risk/score", "/v1/risk/train", "/v1/risk/state", "/v1/risk/state/appetite",
+		"/v1/risk/features", "/v1/risk/search", "/v1/risk/search/{id}",
+		"/v1/risk/snapshot", "/v1/risk/restore",
 	} {
 		if !strings.Contains(body, "\n  "+p+":") {
 			t.Errorf("%s is absent from the woven openapi.yaml — the SDK repos pull this file, so no "+
 				"generated client can reach it. Run: make describe", p)
 		}
 	}
-	// The ml app's own paths must still be there: risk claims LEAVES under
-	// /v1/ml, it does not take the stem.
-	for _, p := range []string{"/v1/ml/models", "/v1/ml/health", "/v1/train/jobs"} {
+	// /v1/ml IS A DIFFERENT PRODUCT AND IT IS LIVE. apps/ml serves
+	// InferenceServices there for customers today. This app claims nothing under
+	// it, so every one of those paths must still be in the document, and no path
+	// this app publishes may sit under it.
+	for _, p := range []string{
+		"/v1/ml/health", "/v1/ml/models", "/v1/ml/models/{name}",
+		"/v1/ml/models/{name}/predict", "/v1/train/jobs",
+	} {
 		if !strings.Contains(body, "\n  "+p+":") {
-			t.Errorf("%s disappeared from the fleet document — the risk row swallowed an ml route", p)
+			t.Errorf("%s disappeared from the fleet document — the risk row reached into a live serving plane", p)
+		}
+	}
+	for _, p := range []string{
+		"/v1/ml/score", "/v1/ml/train", "/v1/ml/state", "/v1/ml/state/appetite",
+		"/v1/ml/features", "/v1/ml/search", "/v1/ml/search/{id}",
+		"/v1/ml/snapshot", "/v1/ml/restore",
+	} {
+		if strings.Contains(body, "\n  "+p+":") {
+			t.Errorf("%s is published under a prefix that belongs to model SERVING — two concepts under one name", p)
 		}
 	}
 }
