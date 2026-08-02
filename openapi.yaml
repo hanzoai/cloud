@@ -21025,11 +21025,48 @@ components:
             no labels, so nothing else can.
           type: number
       type: object
+    riskBand:
+      properties:
+        day:
+          description: Day is the day the band covers.
+          format: date-time
+          type: string
+        dim:
+          description: Dim is the dimension, named as this API publishes it.
+          type: string
+        kind:
+          description: Kind is the subject kind it was computed over.
+          type: string
+        "n":
+          description: N is how many subject-days went into it.
+          type: integer
+        orgs:
+          description: |-
+            Orgs is how many organisations contributed, each weighted exactly one vote
+            whatever its size. It is published so a reader can judge the band rather
+            than trust it.
+          type: integer
+        q10:
+          description: |-
+            Q10 is the quiet end of the network's day: a tenth of contributing
+            organisations sit at or below it.
+          type: number
+        q50:
+          description: Q50 is the network's median day.
+          type: number
+        q90:
+          description: |-
+            Q90 is the busy end: a tenth of contributing organisations sit at or above
+            it. It is the highest level published.
+          type: number
+      type: object
     riskCatalog:
       properties:
         gap:
-          description: Gap says why the surface could not be measured, when that is
-            the case.
+          description: |-
+            Gap says why a lens could not be measured, when that is the case. Each
+            reason names its own lens, because "the surface is unreadable" and "the
+            network baseline is unreadable" are different facts.
           type: string
         model:
           description: |-
@@ -21039,6 +21076,19 @@ components:
             model's shape.
           items:
             $ref: '#/components/schemas/riskModelFeature'
+          type: array
+        network:
+          description: |-
+            Network is the published cross-organisation baseline over the same window,
+            so the surface above has something to be read AGAINST. It is the same for
+            every caller and it names nobody.
+
+            It carries no tenant and cannot be made to: the table it reads has no org
+            column, every figure is a quantile over at least kAnonOrgs organisations
+            weighted one vote each, and a band that does not meet that floor is dropped
+            on the way out.
+          items:
+            $ref: '#/components/schemas/riskBand'
           type: array
         surface:
           description: |-
