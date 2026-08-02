@@ -1000,7 +1000,31 @@ const buildkitRootlessImage = "moby/buildkit:v0.16.0-rootless"
 // matters far less than having one, because the failure it prevents is not this
 // build running out of room — it is the NODE running out, which the kubelet
 // answers by evicting every pod on it.
-const buildCacheLimit = "50Gi"
+//
+// The two consts below bound this package's OTHER two emptyDirs for the same
+// reason, and they are stated here together because "how much node disk may a
+// job take" is one question with three answers, not three unrelated numbers. An
+// uncapped emptyDir is the default, and the default is the bug: nothing about
+// `emptyDir: {}` says it is charged to the node's ephemeral storage, so every
+// one of these read as harmless scratch until a runaway filled a runner rootfs.
+const (
+	buildCacheLimit = "50Gi"
+
+	// artifactWorkspaceLimit bounds the artifact job's /w — the clone, HOME,
+	// GOPATH, the npm cache and every produced binary for every platform, for
+	// every recipe entry in turn, all in one volume. Same half-a-node bound as
+	// the build cache, and for the same reason: a recipe that loops is bounded
+	// by this or by the node.
+	artifactWorkspaceLimit = "50Gi"
+
+	// smokeDataLimit bounds the smoke job's /data. This one is scratch for a
+	// single 120s boot test — a fresh SQLite and whatever the image writes at
+	// startup — so it is small on purpose. It is capped anyway because the
+	// failure mode is not this pod's: an image that loops writing on boot would
+	// fill the runner's rootfs and evict its NEIGHBOURS while staying well
+	// inside its own resource limits.
+	smokeDataLimit = "10Gi"
+)
 
 // buildPushSecretPrefix + buildPushSecret select the PER-ORG push credential a
 // build mounts. The Secret is named push-<namespace> (push-hanzoai / push-luxfi /
@@ -1346,7 +1370,7 @@ func (k *k8sClient) smokeJobSpec(jobName, image, kmsKey string) *unstructured.Un
 						},
 						"volumeMounts": []any{map[string]any{"name": "data", "mountPath": "/data"}},
 					}},
-					"volumes": []any{map[string]any{"name": "data", "emptyDir": map[string]any{}}},
+					"volumes": []any{map[string]any{"name": "data", "emptyDir": map[string]any{"sizeLimit": smokeDataLimit}}},
 				},
 			},
 		},
