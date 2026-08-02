@@ -282,13 +282,15 @@ func sdkSpanRowsOf(spans []sdktrace.ReadOnlySpan) [][]any {
 			continue
 		}
 		attrs := map[string]string{}
-		service := ""
 		if res := s.Resource(); res != nil {
 			for _, kv := range res.Attributes() {
 				attrs[string(kv.Key)] = kv.Value.Emit()
 			}
-			service = attrs["service.name"]
 		}
+		// The SAME resolver the wire path uses — an SDK resource that names no
+		// service still carries its workload, and one function decides what a
+		// service IS for every row on the plane.
+		service := planeService(attrs, "")
 		for _, kv := range s.Attributes() {
 			attrs[string(kv.Key)] = kv.Value.Emit()
 		}
@@ -335,8 +337,37 @@ func planeOrg(attrs map[string]string) string {
 	return platformOrg
 }
 
-// planeService resolves the service column: the resource's own service.name,
-// else the wire batch's app name, else the resource's workload label.
+// k8sWorkloadKeys is OTel's own service.name recommendation for a resource that
+// declares none, in the spec's precedence order: the workload that OWNS the pod,
+// most-stable name first. `k8s.pod.name` sits between job and container in the
+// spec and is DELIBERATELY absent — it is per-replica (ingress-b7854888d-gb8xw),
+// so it would make `service` unbounded on a LowCardinality column and would never
+// match a workload-keyed read. Everything left here is stable across a rollout
+// except k8s.replicaset.name, which only ever fires for a bare ReplicaSet because
+// the Deployment above it wins whenever one exists.
+var k8sWorkloadKeys = []string{
+	"k8s.deployment.name",
+	"k8s.replicaset.name",
+	"k8s.statefulset.name",
+	"k8s.daemonset.name",
+	"k8s.cronjob.name",
+	"k8s.job.name",
+	"k8s.container.name",
+}
+
+// planeService resolves the service column — the WORKLOAD a row came from, which
+// is what every reader keys on (apps/o11y/logs.go binds `service = ?` to the
+// product's workload name, and the fleet board groups by it).
+//
+// The resource's own service.name wins, then the wire batch's app name, then the
+// legacy `app` label the retired SigNoz exporter path resolved. Past that we
+// DERIVE it from the Kubernetes resource, because the fleet's largest log
+// producer states no service.name at all: the otel-agent's filelog receiver
+// stamps k8s.* on every tailed container line and nothing else, so 91% of
+// event.log arrived with an empty service — and the infra log lens, which filters
+// on exactly that column, went dark for every product in the catalog. Deriving
+// the workload is the one place that can fix it for spans and logs at once, and
+// it is OTel's documented inference rather than a rule invented here.
 func planeService(resource map[string]string, appName string) string {
 	if s := resource["service.name"]; s != "" {
 		return s
@@ -344,7 +375,15 @@ func planeService(resource map[string]string, appName string) string {
 	if appName != "" {
 		return appName
 	}
-	return resource["app"]
+	if s := resource["app"]; s != "" {
+		return s
+	}
+	for _, k := range k8sWorkloadKeys {
+		if s := resource[k]; s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // planeSpanKind normalizes the wire kind onto the plane's lowercase vocabulary
