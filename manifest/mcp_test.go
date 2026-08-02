@@ -24,9 +24,12 @@ import (
 	"testing"
 )
 
-// mcpDoor is the ONE public MCP path. The host claims it exactly, so a plugin
-// prefix may be DEEPER (tools owns /v1/mcp/servers) but never equal.
-const mcpDoor = "/v1/mcp"
+// mcpDoor is the ONE public MCP path — MCPPath, not a literal restating it. This
+// file guards the door; a guard that spells the address itself can pass while the
+// door has moved, which is the drift these gates exist to make impossible. The
+// host claims the path exactly, so a plugin prefix may be DEEPER (tools owns
+// /v1/mcp/servers) but never equal.
+const mcpDoor = MCPPath
 
 // TestNoAppClaimsTheDoor: no manifest row may claim the exact door path.
 func TestNoAppClaimsTheDoor(t *testing.T) {
