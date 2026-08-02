@@ -430,7 +430,7 @@ func newPlane(base cloud.Base) (*plane, error) {
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		p.sweep(ctx)
+		p.sweep(ctx, saveInterval)
 	}()
 	return p, nil
 }
@@ -988,11 +988,18 @@ const saveEvery = 500
 // down.
 const saveInterval = 30 * time.Second
 
-// sweep writes down every resident that has learned since its last save. ONE
-// goroutine for the whole plane, and it takes no tenant's lock for longer than a
-// snapshot.
-func (p *plane) sweep(ctx context.Context) {
-	tick := time.NewTicker(saveInterval)
+// sweep writes down every resident that has learned since its last save, every
+// `every`. ONE goroutine for the whole plane, and it takes no tenant's lock for
+// longer than a snapshot.
+//
+// The schedule is a PARAMETER and not a constant read from inside, because it is
+// the one thing about this loop a caller decides — [newPlane] states
+// [saveInterval] at the call site, where a reader can see it. It is also what
+// makes the loop itself measurable: the alternative, a thirty-second constant
+// baked in, is a control whose only test would be a thirty-second wait, which is
+// to say no test at all.
+func (p *plane) sweep(ctx context.Context, every time.Duration) {
+	tick := time.NewTicker(every)
 	defer tick.Stop()
 	for {
 		select {
