@@ -45,7 +45,7 @@ type childView struct {
 }
 
 // TestMain gives this package the plugin-child half. The child runs the REAL
-// boot path — credz.Boot, exactly as cloud.Serve calls it — rather than a
+// boot path — credz.Boot, exactly as cloud.Listen calls it — rather than a
 // test-only accessor, so what this proves is what production does. A child is
 // identified by the token its LAUNCHER stamped on it, which is why it has to be
 // a real process this test really started (see bootAs).

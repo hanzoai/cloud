@@ -93,7 +93,7 @@ func aiProse() map[string]openapi.Said {
 // callback is left alone — cloud leaves one nil exactly when that subsystem
 // isn't co-resident, and the module's own fallback applies.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	// One provider, one wire. cloud.Serve installed the process-global tracer
+	// One provider, one wire. cloud.Listen installed the process-global tracer
 	// provider before MountAll; DECLARE it to ai here so ai emits every gen_ai span
 	// through THAT provider instead of forking its own. Without this ai's
 	// object.InitTelemetry (run inside ai.Mount, just below) finds no exporter
