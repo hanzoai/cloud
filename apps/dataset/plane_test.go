@@ -11,7 +11,11 @@ package dataset
 
 import (
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -195,6 +199,72 @@ func TestThePlaneNeverCreatesTheSourceTable(t *testing.T) {
 	}
 }
 
+// TestEveryReadOfTheSourceTakesAnAdmission is the bound as a property of the
+// TYPE rather than of anyone's memory.
+//
+// The source is the expensive thing this plane touches — an exact distinct-count
+// over up to 400 days of one tenant's rows — and every read of it must be priced,
+// counted and bounded. A rule saying so is worth nothing: `lineage` was added
+// later, read the source directly, and had no gate, no meter and no bound at all.
+// A [scan] parameter is worth something, because a scan exists only where
+// [plane.admit] returned one.
+//
+// This reads the package's own source: every function whose body names
+// sourceTable must take one.
+func TestEveryReadOfTheSourceTakesAnAdmission(t *testing.T) {
+	fset := token.NewFileSet()
+	pkg, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
+		return !strings.HasSuffix(fi.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var checked int
+	for _, p := range pkg {
+		for name, file := range p.Files {
+			for _, d := range file.Decls {
+				fn, ok := d.(*ast.FuncDecl)
+				if !ok || fn.Body == nil {
+					continue
+				}
+				var names, asks bool
+				ast.Inspect(fn.Body, func(n ast.Node) bool {
+					switch v := n.(type) {
+					case *ast.Ident:
+						names = names || v.Name == "sourceTable"
+					case *ast.SelectorExpr:
+						asks = asks || v.Sel.Name == "Query" || v.Sel.Name == "Exec"
+					}
+					return true
+				})
+				if !names || !asks || fn.Name.Name == exempt {
+					continue
+				}
+				checked++
+				var admitted bool
+				for _, param := range fn.Type.Params.List {
+					if id, ok := param.Type.(*ast.Ident); ok && id.Name == "scan" {
+						admitted = true
+					}
+				}
+				if !admitted {
+					t.Errorf("%s: %s reads the source and takes no admission — an unpriced, unbounded warehouse scan",
+						name, fn.Name.Name)
+				}
+			}
+		}
+	}
+	if checked < 2 {
+		t.Fatalf("only %d functions read the source; this test no longer covers the reads", checked)
+	}
+}
+
+// exempt is the ONE function that names the source table without reading anyone's
+// rows: it asks the CATALOGUE for that table's own TTL — a property of the store
+// (see [catalogue]). Named here so the exemption is a decision on the record
+// rather than a hole in the test above.
+const exempt = "retention"
+
 // TestAnUnkeyedCallReachesNoStatement. Every entry point takes a tenant.Key, and
 // the zero key — the value of a Key that was never minted — refuses before any
 // statement is built.
@@ -218,13 +288,15 @@ func TestAnUnkeyedCallReachesNoStatement(t *testing.T) {
 	if err := p.put(ctx, zero, entry{Name: "d"}); err == nil {
 		t.Error("put ran without a tenant")
 	}
-	if err := p.dispose(ctx, zero, "d"); err == nil {
+	if err := p.dispose(ctx, zero, "d", []entry{{Name: "d", Version: 1}}, "u"); err == nil {
 		t.Error("dispose ran without a tenant")
 	}
-	if _, err := p.census(ctx, zero, spec{From: time.Now(), To: time.Now()}, time.Now()); err == nil {
+	// The source reads take an ADMISSION, not a key, so the zero value that
+	// reaches them is a scan nobody claimed — which carries the zero key.
+	if _, err := p.census(ctx, scan{}, spec{From: time.Now(), To: time.Now()}, time.Now()); err == nil {
 		t.Error("census ran without a tenant")
 	}
-	if _, _, err := p.facts(ctx, zero, spec{Rows: 1}, time.Now(), shareDenominator); err == nil {
+	if _, _, err := p.facts(ctx, scan{}, spec{Rows: 1}, time.Now(), shareDenominator); err == nil {
 		t.Error("facts ran without a tenant")
 	}
 	for _, c := range f.seen() {

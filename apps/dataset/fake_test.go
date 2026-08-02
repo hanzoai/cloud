@@ -79,6 +79,21 @@ func (f *fake) Ready() bool {
 	return !f.down
 }
 
+// spent refuses a statement whose context is already over, exactly as the driver
+// does: a real client checks the deadline before it writes a byte and returns
+// context.DeadlineExceeded having sent nothing.
+//
+// The fake honours the context because one of this plane's properties is about
+// nothing but contexts — a job whose work ran out of time must still be able to
+// WRITE that it ran out of time. A store that ignored the deadline would make
+// that test pass with the two contexts fused back into one.
+func spent(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%w: the statement was not sent: %v", errStore, err)
+	}
+	return nil
+}
+
 func (f *fake) record(stmt string, args []any) {
 	f.calls = append(f.calls, call{Stmt: squash(stmt), Args: append([]any(nil), args...)})
 }
@@ -87,9 +102,12 @@ func (f *fake) record(stmt string, args []any) {
 // about a statement reads as one line.
 func squash(s string) string { return strings.Join(strings.Fields(s), " ") }
 
-func (f *fake) Exec(_ context.Context, stmt string, args ...any) error {
+func (f *fake) Exec(ctx context.Context, stmt string, args ...any) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := spent(ctx); err != nil {
+		return err
+	}
 	if f.down {
 		return errStore
 	}
@@ -146,9 +164,12 @@ func drop(in []map[string]any, a, b string, args []any) []map[string]any {
 	return out
 }
 
-func (f *fake) Query(_ context.Context, stmt string, args ...any) ([]map[string]any, error) {
+func (f *fake) Query(ctx context.Context, stmt string, args ...any) ([]map[string]any, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := spent(ctx); err != nil {
+		return nil, err
+	}
 	if f.down {
 		return nil, errStore
 	}
