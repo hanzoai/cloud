@@ -1,0 +1,189 @@
+[
+  {
+    "description": "Applies this tenant's retention, and only this tenant's.\n\nIt is bounded three ways, each a compliance property rather than a\nconvenience. It refuses a boundary younger than the platform floor, because a\nlabel can be the input to an adverse action and five years is what the\nretention ledger holds such a record for. It never touches a record under\nlitigation hold. And it disposes of whole records rather than redacting\nfields.\n\nIt removes the derived columnar copy BEFORE the record, and refuses the whole\ndisposal if the warehouse cannot be reached. The other order would leave rows\nin the warehouse that nothing can identify any more, which is a disposal that\ndid not happen and says it did.",
+    "inputSchema": {
+      "properties": {
+        "before": {
+          "description": "Before disposes of assertions WRITTEN before this instant, RFC 3339. It is\nmeasured against the server clock at the write and not against the event\nor observation times, both of which the asserting caller supplies — a\ntenant that could back-date could delete a compliance record on demand.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlDisposeLabels"
+  },
+  {
+    "description": "Places or releases a litigation hold on named records.\n\nA hold is a fact about the RECORD, not about the world: it says retention may\nnot dispose of this row, and it asserts nothing about what happened. So it is\nnot a field on an assertion and it is not folded into the content digest —\ncarried there it was silently a no-op on any record that already existed, since\nre-filing the same assertion with a hold flag produced the same digest, the\ninsert was ignored, and the caller was answered `duplicate` while the hold it\nasked for was never placed. This op is the one way a hold moves, in either\ndirection, and the move is written to the audit log.\n\nEvery named id is this tenant's or is nothing. The statement runs against the\ntenant's own file, which holds no other tenant's rows and has no column that\ncould name one.",
+    "inputSchema": {
+      "properties": {
+        "hold": {
+          "description": "Hold is the state to put them in: true places the hold, false releases it.\nOne op both ways, because a hold that can be placed and not released pins a\ncompliance record past every retention boundary with nothing able to let it\ngo — and an operator who cannot release a hold stops placing them.",
+          "type": "boolean"
+        },
+        "ids": {
+          "description": "IDs are the content digests of the records, as returned by the write and\nby the read. They name records in THIS tenant's plane; an id belonging to\nanybody else names nothing here, because the statement runs against this\ntenant's own file and there is no other file it could reach.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlHoldLabels"
+  },
+  {
+    "description": "Records a batch of ground truth against the entities it judges.\n\nEach assertion carries TWO times — when the judged event happened, and when\nthe assertion became knowable — and both are required. The second is what\nkeeps a chargeback that landed in June out of a model that had to decide in\nFebruary.\n\nIt is idempotent on the CONTENT of an assertion, so a webhook that redelivers\nis safe. It never overwrites: a source that corrects itself later files a NEW\nassertion, which wins from the moment it became knowable and leaves every\nearlier observation instant seeing exactly what it saw.\n\nThe asserter is stamped from the validated credential and is not a body field.",
+    "inputSchema": {
+      "$defs": {
+        "mlLabelFact": {
+          "properties": {
+            "at": {
+              "description": "At is when the judged event happened, RFC 3339.",
+              "type": "string"
+            },
+            "confidence": {
+              "description": "Confidence in [0,1]. A processor chargeback is 1; an analyst's hunch is\nnot. It breaks a tie WITHIN a precedence rank and can never lift a weak\nsource above a strong one — otherwise every caller would send 1.\n\nA litigation hold is NOT a field here. It is a fact about the record and\nnot about the world, so it is not part of what was asserted, it is not in\nthe content digest, and it has its own op — which is also the only way one\ncan be released. Carried here it was silently a no-op on any record that\nalready existed: the digest was the same, the insert was ignored, and the\ncaller was told `duplicate` while the hold it asked for was never placed.",
+              "type": "number"
+            },
+            "disposition": {
+              "description": "Disposition is productive, unproductive, or empty for an explicit\nunjudged — the AML engine's own vocabulary, verbatim.",
+              "type": "string"
+            },
+            "evidence": {
+              "description": "Evidence points at the record this conclusion came from: a dispute id, a\ncase id, a decision id. Required, because a label with no evidence cannot\nbe defended when the adverse action it fed is challenged.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "Kind is what the subject is: account, agent, merchant, payout, person,\nsession or transaction. Closed, because a typo in an open field would shard\na tenant's labels into a partition nothing reads and nothing would say so.",
+              "type": "string"
+            },
+            "seen": {
+              "description": "Seen is when this assertion became KNOWABLE, RFC 3339. It is required and\nit is not At: a chargeback lands 30 to 120 days after the transaction it\njudges, and a training set joined on At alone knows the future. Everything\nthis plane does to prevent leakage is computed from Seen.",
+              "type": "string"
+            },
+            "source": {
+              "description": "Source is who asserted: chargeoff, dispute, case, refund, review or\nsample. It is the primary term of the precedence rule, so it is closed —\nan unknown source has no rank and a conflict with it could not be resolved.",
+              "type": "string"
+            },
+            "subject": {
+              "description": "Subject identifies the thing being judged, in the tenant's own namespace.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "labels": {
+          "description": "Labels is the batch. Each member is judged on its own: one refusal does\nnot discard the rest, because a webhook redelivering five disputes must\nnot lose four of them to one malformed fifth.",
+          "items": {
+            "$ref": "#/$defs/mlLabelFact"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlLabel"
+  },
+  {
+    "description": "Reports how much of a window has matured and how much of that is\njudged, per source.\n\nIt is the gate on training. A supervised fit over a window whose judged count\nis near zero produces a number, and the number is meaningless; this op is what\nlets that be stated before the fit rather than discovered after it.\n\nIt reads the RECORD plane and folds every assertion at that event's OWN as-of,\nso the counts obey exactly the leakage rule a materialisation would. It counts\nonly what was ASSERTED: what share of the whole event STREAM carries a label is\na question about the feature plane's denominator and is not answerable here.",
+    "inputSchema": {
+      "properties": {
+        "from": {
+          "description": "From and To bound the EVENT window, half-open, RFC 3339.\n\nUnstated, the window is the 90 days ENDING where maturity begins — `to` is\nthe horizon ago, not now. A default window running to now under a default\nhorizon could not contain one matured event, so every count below it would\nbe zero however much ground truth the tenant held.",
+          "type": "string"
+        },
+        "horizon": {
+          "description": "Horizon is the maturity horizon in days the coverage is measured under.\nUnstated takes 120. It also moves the default window, which ends where\nmaturity begins.",
+          "type": "integer"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlLabelCoverage"
+  },
+  {
+    "description": "Publishes the closed vocabularies and the precedence rule that\nresolves a conflict between two sources.\n\nA precedence rule nobody can read is a rule nobody can audit or dispute, and\nthe whole defensibility of a contested label rests on being able to say why\none assertion beat another. The order returned here is derived from the same\ndeclaration the resolver reads — it is not a description of it.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "mlLabelVocabulary"
+  },
+  {
+    "description": "Reads the assertions this tenant has recorded, newest event first.\n\nIt reads the RECORD — the tenant's own store — and not the columnar copy, so\nwhat it returns is what would be produced in an audit. Narrow it by entity, by\nasserter, or by event window.",
+    "inputSchema": {
+      "properties": {
+        "from": {
+          "description": "From and To bound the EVENT time, half-open, RFC 3339.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind and Subject narrow to one entity.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Limit caps the page. Out of range takes the plane's own bound.",
+          "type": "integer"
+        },
+        "source": {
+          "description": "Source narrows to one asserter — the read that answers \"what has commerce\ntold us\", separately from \"what has an analyst told us\".",
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlLabels"
+  },
+  {
+    "description": "Answers, for each named event, which assertion was in force AS OF that\nevent's own horizon — and what disagreed with it.\n\nThis is the join surface: the dataset materialiser calls it to attach ground\ntruth to training rows, and the evaluator calls it to score a past decision\nagainst what was knowable when the decision had to be made. One mechanism for\nboth, so a model can never be trained under one leakage rule and scored under\nanother.\n\nThree answers are distinct and all three are honest: a resolved label, an\nevent that has not matured, and a matured event nobody has judged. The last is\nnever reported as unproductive.",
+    "inputSchema": {
+      "$defs": {
+        "mlEvent": {
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "horizon": {
+          "description": "Horizon is how many days an event must age before it may be resolved at\nall, and it is the whole of the no-leakage rule. 120 for the payment lane\n(past the Visa and Mastercard dispute windows), 14 for signup abuse.\nUnstated takes 120.",
+          "type": "integer"
+        },
+        "now": {
+          "description": "Now moves the observation instant BACKWARDS, RFC 3339. It exists so a\nBACKTEST can resolve labels as the plane stood at a past moment; without it,\nevery backtest would score a model against knowledge that arrived after the\ndecision it is being scored on. An instant after the server clock is\nrefused: a backtest resolves the past, and a future one would declare\nunmatured events matured and hand a training set negatives for rows whose\nchargeback has not had time to arrive.",
+          "type": "string"
+        },
+        "subjects": {
+          "description": "Subjects are the exact events being judged. Each carries its own event\ntime, because the as-of that keeps the future out is derived from that\ninstant plus the horizon — one as-of over a whole batch would give a\nJanuary row six extra months of hindsight.\n\nOne entry per DISTINCT (kind, subject, at): naming an event twice answers\nonce, because an event resolved twice would list its own winner as a\ncontrary claim and would hand a materialiser duplicate training rows.",
+          "items": {
+            "$ref": "#/$defs/mlEvent"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "mlResolveLabels"
+  }
+]

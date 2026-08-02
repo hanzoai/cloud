@@ -59,6 +59,13 @@ PS = "./apps/sites/"
 PM = "./apps/meet/"
 H = "cmd/cloud/main.go"
 PH = "./cmd/cloud/"
+LB = "apps/label/label.go"
+LT = "apps/label/typed.go"
+LF = "apps/label/fact.go"
+LS = "apps/label/store.go"
+LM = "apps/label/mirror.go"
+LR = "apps/label/resolve.go"
+PL = "./apps/label/"
 
 # A mutant is (name, edits, test regex, package). edits is a LIST of (file, old,
 # new) so a mutation that needs a helper injected alongside it is the same kind of
@@ -310,6 +317,140 @@ MUTANTS = [
         (H, '\t\t\tout["absent"] = a\n\t\t}\n\t\treturn c.JSON(200, out)',
             '\t\t\tout["absent"] = a\n\t\t\treturn c.JSON(503, out)\n\t\t}\n\t\treturn c.JSON(200, out)')],
      "TestAbsenceIsObservable", PH),
+
+    # ── the ground-truth plane: durability, delivery order, and the leakage guard ──
+    #
+    # These rows anchor on the FIX, so on a checkout that predates it they report
+    # ANCHOR-MISS rather than SURVIVED — the text they revert does not exist there,
+    # and neither do the tests. KILLED here is what says the assertion is doing the
+    # work. Each row reintroduces exactly one defect the plane was held for.
+
+    # DURABILITY. cloud is strategy Recreate at one replica: an acknowledged record
+    # that was never shipped is not merely at risk, the successor hydrates the older
+    # durable snapshot OVER it. `_ = sent` keeps the mutant compiling, which is the
+    # difference between a kill and an exit code.
+    ("label: acknowledge a record that was never shipped to its durable object", [
+        (LT, '\tif out.Recorded > 0 || sent > 0 {\n'
+             '\t\tif err := o.s.State.ship(sc.ns); err != nil {\n'
+             '\t\t\to.s.Log.Error("label: the record was written and could not be shipped",\n'
+             '\t\t\t\t"tenant", sc.tenant.String(), "err", err)\n'
+             '\t\t\treturn nil, zip.Errorf(http.StatusServiceUnavailable,\n'
+             '\t\t\t\t"the record was not acknowledged as durable, so it is not acknowledged at all; retry (every write here is idempotent on the assertion\'s content): %v", err)\n'
+             '\t\t}\n\t}\n',
+             '\t_ = sent\n')],
+     "TestAnAcknowledgedRecordSurvivesATakeover", PL),
+
+    # A DEPOSED writer's ship is refused at a stale round with NO error — Sync
+    # answers (false, nil). Checking the error alone acknowledges a record written
+    # on a pod whose file the next reader never opens: two divergent copies of one
+    # tenant's compliance record. TestAWriteOnANonOwnerFailsClosed does NOT guard
+    # this line (a replica that never held the lease gets ErrNotOwner and is caught
+    # by the error check), which is why the deposition test exists.
+    ("label: an unacked ship is a shrug rather than a refusal", [
+        (LB, '\tif !acked {\n\t\treturn fmt.Errorf("this replica is not the elected writer for the tenant, so the write is not acknowledged")\n\t}\n',
+             '\t_ = acked\n')],
+     "TestADeposedWriterDoesNotAcknowledge", PL),
+
+    ("label: acknowledge a disposal that was never shipped", [
+        (LT, '\t\tif err := o.s.State.ship(sc.ns); err != nil {\n'
+             '\t\t\to.s.Log.Error("label: records were disposed of and the disposal could not be shipped",\n'
+             '\t\t\t\t"tenant", sc.tenant.String(), "err", err)\n'
+             '\t\t\treturn nil, zip.Errorf(http.StatusServiceUnavailable,\n'
+             '\t\t\t\t"the disposal was not acknowledged as durable, so it is not acknowledged at all; retry: %v", err)\n'
+             '\t\t}\n', '')],
+     "TestADisposalIsShippedBeforeItIsAcknowledged", PL),
+
+    ("label: acknowledge a litigation hold that was never shipped", [
+        (LT, '\tif changed > 0 {\n'
+             '\t\t// SHIP BEFORE ACK. A hold that a rollout forgets is a record disposed of\n'
+             '\t\t// while somebody believed it was preserved.\n'
+             '\t\tif err := o.s.State.ship(sc.ns); err != nil {\n'
+             '\t\t\to.s.Log.Error("label: the hold was written and could not be shipped",\n'
+             '\t\t\t\t"tenant", sc.tenant.String(), "err", err)\n'
+             '\t\t\treturn nil, zip.Errorf(http.StatusServiceUnavailable,\n'
+             '\t\t\t\t"the hold was not acknowledged as durable, so it is not acknowledged at all; retry: %v", err)\n'
+             '\t\t}\n\t}\n', '')],
+     "TestAHoldIsShippedBeforeItIsAcknowledged", PL),
+
+    # DELIVERY ORDER. The cursor back on (wrote, id) over a write clock truncated to
+    # the second: a row that commits after a concurrent delivery has read, whose
+    # digest sorts lower inside the same second, is already behind the mark. It is
+    # never mirrored, the mark only moves forward so no retry reaches it, and
+    # pending() answers zero because it asks the same predicate.
+    ("label: the delivery cursor is a clock again, so it steps over a concurrent write", [
+        (LS, 'func (c cursor) after() (string, []any) { return "seq > ?", []any{int64(c)} }',
+             'func (c cursor) after() (string, []any) { return "wrote > ?", []any{int64(c)} }'),
+        (LS, 'FROM assert WHERE `+where+` ORDER BY seq ASC LIMIT ?`',
+             'FROM assert WHERE `+where+` ORDER BY wrote ASC, id ASC LIMIT ?`'),
+        (LM, '\tto := cursor(batch[len(batch)-1].Seq)',
+             '\tto := cursor(batch[len(batch)-1].Wrote.Unix())')],
+     "TestTheCursorCannotStepOverAWriteItNeverSaw|TestConcurrentWritesAreAllDelivered", PL),
+
+    # LEAKAGE. `seen` is the filer's claim, bounded only by At <= Seen <= now+skew.
+    # A dispute filed today with seen == at is then knowable a year before the row
+    # existed, and a backtest standing two days after the event resolves it.
+    ("label: the leakage guard takes the filer's word for when it was knowable", [
+        (LF, '\tf.Knowable = later(f.Seen, f.Wrote)', '\tf.Knowable = f.Seen')],
+     "TestTheGuardDoesNotTakeTheFilersWordForIt", PL),
+
+    ("label: the within-rank tie-break reads the caller's declared instant", [
+        (LR, '\tif !a.Knowable.Equal(b.Knowable) {\n\t\treturn a.Knowable.After(b.Knowable)\n\t}',
+             '\tif !a.Seen.Equal(b.Seen) {\n\t\treturn a.Seen.After(b.Seen)\n\t}')],
+     "TestTheWinnerWithinARankIsDecidedByAServerObservedInstant", PL),
+
+    # The warehouse half of the same guard: a materialiser joining there would
+    # resolve under a rule the record plane had already rejected.
+    ("label: the warehouse applies the horizon to the declared instant", [
+        (LM, '    AND knowable <= at + ?', '    AND seen <= at + ?')],
+     "TestTheColumnarOrderingNamesEverySource", PL),
+
+    ("label: the derived copy drops the server-observed instant entirely", [
+        (LM, '\tknowable    DateTime,\n', ''),
+        (LM, '\t\t\tt.String(), string(f.Kind), f.Subject, f.At, f.Seen, f.Knowable,',
+             '\t\t\tt.String(), string(f.Kind), f.Subject, f.At, f.Seen,'),
+        (LM, '\tconst width = 12', '\tconst width = 11'),
+        (LM, '\t\tvalues = append(values, "(?,?,?,?,?,?,?,?,?,?,?,?)")',
+             '\t\tvalues = append(values, "(?,?,?,?,?,?,?,?,?,?,?)")'),
+        (LM, '(org, kind, subject, at, seen, knowable, disposition, source, evidence, "by", confidence, id)',
+             '(org, kind, subject, at, seen, disposition, source, evidence, "by", confidence, id)')],
+     "TestTheDerivedInstantReachesTheWarehouse", PL),
+
+    # THE TRAINING GATE. A 90-day window running to NOW under a 120-day horizon can
+    # hold no matured event, so the op documented as the gate on training answered
+    # zero on its own defaults however much ground truth the tenant held.
+    ("label: the default coverage window runs to now, so nothing in it can mature", [
+        (LT, '\t\tto = now.Add(-horizonFor)', '\t\tto = now')],
+     "TestTheTrainingGateAnswersOnItsOwnDefaults", PL),
+
+    # `matured` is the DENOMINATOR an operator divides `judged` by. Dropping the
+    # cohort whose assertions all arrived after its own as-of makes the denominator
+    # exclude exactly the numerator's complement.
+    ("label: matured counts only what was labelled", [
+        (LR, '\t\tc.Label, c.Labelled = Resolve(by[k], c.AsOf)\n\t\tout = append(out, c)',
+             '\t\tc.Label, c.Labelled = Resolve(by[k], c.AsOf)\n\t\tif !c.Labelled {\n\t\t\tcontinue\n\t\t}\n\t\tout = append(out, c)')],
+     "TestCoverageCountsWhatMaturedAndWhoWon", PL),
+
+    # A hold requested and not applied is a compliance control that reports success.
+    ("label: a litigation hold on an existing record is silently dropped", [
+        (LT, '\tchanged, present, err := st.setHold(ctx, ids, in.Hold)',
+             '\tchanged, present, err := 0, len(ids), error(nil)')],
+     "TestAHoldCanBePlacedOnARecordThatExists", PL),
+
+    # PARTITION CARDINALITY. `<brand>/<org>` is the only unbounded-cardinality
+    # partition key the warehouse would carry: directories, part metadata and merge
+    # scheduling all grow with the customer count on a shared single-pod engine.
+    ("label: partition the shared warehouse table by tenant again", [
+        (LM, 'PARTITION BY toYYYYMM(at)', 'PARTITION BY org')],
+     "TestThePartitionKeyIsBoundedInCardinality", PL),
+
+    # An event named twice reads its own row twice, so the resolution lists the
+    # winner as a contrary claim and a materialiser gets duplicate training rows.
+    ("label: an event named twice is resolved twice, and becomes its own conflict", [
+        (LT, '\t\tkey := eventKey(ev.Kind, ev.Subject, ev.At)\n'
+             '\t\tif _, dup := named[key]; dup {\n\t\t\tcontinue\n\t\t}\n'
+             '\t\tnamed[key] = struct{}{}\n\t\twant = append(want, ev)',
+             '\t\t_ = named\n\t\twant = append(want, ev)')],
+     "TestAnAssertionIsNotItsOwnConflict", PL),
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)
