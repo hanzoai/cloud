@@ -78,7 +78,7 @@
     "flow": 8,
     "framework": 19,
     "functions": 11,
-    "gateway": 2,
+    "gateway": 3,
     "generate-text-to-speech-audio": 1,
     "generate-text-to-speech-audio-stream": 1,
     "git": 36,
